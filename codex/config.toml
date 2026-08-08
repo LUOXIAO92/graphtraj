@@ -1,3 +1,8 @@
+# Tracker scope: this file configures the portable Harness Master, not the
+# engineering workflow of the repository that stores this file. The repository
+# currently uses GitHub Issues (see docs/agents/issue-tracker.md), but the Master
+# must bind to each target project's own tracker instead of inheriting GitHub.
+
 model = "gpt-5.6-sol"
 model_reasoning_effort = "xhigh"
 personality = "pragmatic"
@@ -10,4 +15,3 @@ max_concurrent_threads_per_session = 10
 
 [mcp_servers.openaiDeveloperDocs]
 url = "https://developers.openai.com/mcp"
-

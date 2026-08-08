@@ -119,6 +119,35 @@ Master **不负责**：
 ❌ 自己解决 merge conflict
 ```
 
+### Issue Tracker 的两层边界
+
+必须区分仓库自身的工程配置和 Harness Master 的运行时配置：
+
+```text
+当前 you-are-a-product-architect 仓库
+→ 使用 GitHub Issues 管理这个仓库自己的工作
+→ 由 AGENTS.md 和 docs/agents/issue-tracker.md 配置
+
+codex/config.toml 中定义的 Harness Master
+→ 是可移植的 control plane
+→ 不继承本仓库的 GitHub tracker
+→ 针对每个目标项目单独绑定 tracker
+```
+
+目标项目可以使用：
+
+```text
+GitHub Issues
+GitLab Issues
+本地 Git 服务提供的 tracker
+local Markdown
+其他项目级工作流
+```
+
+因此，Master 在对目标项目执行 `$to-spec`、`$to-tickets`、triage 或其他
+tracker I/O 前，必须读取或建立该目标项目自己的绑定。不能因为 Harness
+源码仓库托管在 GitHub，就默认对目标项目调用 `gh`。
+
 Master 可以跨 worktree 做协调，所以：
 
 > **Master 不挂 worktree isolation hook。**

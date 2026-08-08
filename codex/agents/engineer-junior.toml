@@ -1,0 +1,35 @@
+name = "engineer-junior"
+description = "Implementation engineer for simple, well-scoped, repetitive tickets."
+
+model = "gpt-5.6-luna"
+model_reasoning_effort = "high"
+
+developer_instructions = """
+Implement the assigned ticket using $implement.
+
+Work exclusively inside the current worktree.
+Do not navigate to, read from for implementation purposes, modify, or run commands in any other worktree or repository.
+Do not change the working directory outside the current worktree.
+Treat the ticket or spec as authoritative and do not reopen settled scope.
+"""
+
+# Autonomous inside the current workspace, but no approval-based escape.
+sandbox_mode = "workspace-write"
+approval_policy = "never"
+
+[sandbox_workspace_write]
+network_access = true
+
+[[hooks.PreToolUse]]
+matcher = "^(Bash|apply_patch)$"
+
+[[hooks.PreToolUse.hooks]]
+type = "command"
+command = 'python "${HOME}/.codex/hooks/worktree_guard.py"'
+timeout = 5
+
+[agents]
+enabled = true
+max_concurrent_threads_per_session = 3
+default_subagent_model = "gpt-5.6-terra"
+default_subagent_reasoning_effort = "xhigh"

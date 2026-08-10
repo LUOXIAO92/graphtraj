@@ -58,12 +58,34 @@ worktree. They do not need the entire DAG or Main's historical reasoning.
 
 ### A Delivery State Agent maintains working state
 
-Delivery Run state lives in an uncommitted Markdown ledger at
+Delivery Run state lives in a project-level persistent **Harness State
+Directory** at `<worktree_root>/<project>/state/`, outside every Git worktree.
+The Integration Worktree exposes that directory through an ignored `.scratch`
+symlink, preserving the Matt Skills scratch convention; the ledger is visible
+to Main and the Delivery State Agent at
 `.scratch/task-delivery/<run-id>/ledger.md`. Main is the semantic authority but
 does not maintain the ledger or Mermaid itself. A Delivery State Agent acts on
 Main's behalf as the sole writer of both artifacts, reducing Main's output and
-context load. Its role is broader than record entry: it pulls and understands
-the current working state from the artifacts left by active Engineers.
+context load. When it initializes the accepted task graph, the Delivery State
+Agent creates the Delivery Run's short, stable `run_id` and returns it to Main.
+Main only relays that identifier at the top level of Runner batch input; the
+Runner treats it as an opaque grouping identifier and does not assign it
+semantic state. The ID uses the ASCII form `YYYYMMDD-short-name`, with a numeric
+suffix such as `-2` when necessary. The Delivery State Agent chooses the
+semantic short name and avoids a collision; the Runner only validates that the
+identifier is path-safe, within its allowed length, and not inconsistent with
+an existing run mapping. Its role is broader than record entry: it pulls and
+understands the current working state from the artifacts left by active
+Engineers.
+
+The Delivery State Agent is a project-level custom Agent role launched and
+coordinated directly by Main through the Agent Runtime's native agent tools. It
+shares Main's Integration Worktree context and does not cross the Agent Runner
+seam. The Merge Resolver is likewise a Main-coordinated custom role in the
+Integration Worktree. In V1, the Runner is limited to mechanically launching,
+isolating, and transporting Engineer sessions for the tickets and logical roles
+already selected by Main; it does not perform semantic scheduling, operate the
+Delivery State Agent, or replace Main as the orchestrator.
 
 At the start of a run, the Delivery State Agent reads the accepted tickets and
 their explicit dependencies and creates the working task map, ledger, and
@@ -80,14 +102,44 @@ evidence, and Git state itself; archives the evidence; updates the ledger and
 Mermaid; and returns a short summary, ready-task suggestions, and
 inconsistencies or semantic questions requiring Main attention.
 
-The Delivery State Agent is also the sole central archivist for review evidence.
-Engineers leave their final result and the two raw Reviewer reports under the
-run-specific `.scratch/task-delivery/` directory in their own worktree. The
-Delivery State Agent copies those reports verbatim into the corresponding
-central run directory in the `dev` worktree, organized by ticket, Engineer
-tier, and review round. Main reads the evidence to adjudicate but does not
-repeat or rewrite it for the Delivery State Agent. The ledger links to the
-archived evidence instead of embedding the reports.
+Each ticket has one persistent evidence directory at
+`state/task-delivery/<run-id>/tickets/<ticket-id>-<ticket-name>/`; retries and
+tier escalation reuse it rather than creating a directory per Engineer
+session. When provisioning the Ticket Worktree, the Runner creates a scoped
+`.scratch/task-delivery` symlink to that ticket directory and writes or updates
+`metadata.yml` with the hard launch facts it owns. The Engineer writes only the
+valuable semantic outputs: the current result, validation summary, and raw
+Standards and Spec Reviewer reports. Reviewer report filenames include the
+session alias and review round so prior evidence is not overwritten. Other
+Matt Skills scratch material remains local to the Ticket Worktree because only
+the `task-delivery` child is linked to persistent state.
+
+The Delivery State Agent reads this evidence directly through the Integration
+Worktree's persistent `.scratch` view and maintains the central ledger and
+Mermaid DAG; it no longer copies evidence out of Ticket Worktrees. Main reads
+the evidence to adjudicate but does not repeat or rewrite it for the Delivery
+State Agent. The ledger links to the evidence instead of embedding the reports.
+
+The central Delivery Run ledger, Mermaid task map, archived Engineer results,
+validation evidence, and Reviewer reports are not deleted automatically when a
+ticket is cleaned up or when the Delivery Run ends. Only the operator may
+explicitly remove these run artifacts, by deleting the corresponding directory
+through the filesystem or a file manager. V1 provides no Runner or product CLI
+command for deleting persistent Delivery Run state because the Runner is an
+Agent-facing Engineer transport tool, not a user-facing state manager. The
+persistent ticket evidence remains when successful integration makes the Ticket
+Worktree and its scoped symlink eligible for cleanup.
+
+The Engineer roles' static developer instructions define this evidence-output
+contract, including the required result, validation summary, and raw Standards
+and Spec Reviewer reports. The Delivery State Agent supplies the `run_id`, and
+the tracker binding supplies each `ticket_id`; the Runner validates these
+identities and writes the hard launch metadata it owns, including IDs, alias,
+role, session, branch, and worktree. The Engineer applies its developer
+instructions to that metadata and writes only the semantic result and review
+evidence. Main does not construct, append, or repeat an evidence contract for
+each ticket, and the Runtime Adapter does not own a second dynamic task
+description.
 
 The Delivery State Agent does not adjudicate review, choose an Engineer tier,
 dispatch work, change tickets or dependencies, accept integration, or
@@ -196,16 +248,36 @@ role bindings, but cannot name an arbitrary Adapter module, shell template, or
 raw runtime command. This keeps runtime variation behind the Runner seam while
 allowing setup to bind machine-specific configuration once.
 
+For the Codex Adapter, project setup keeps the external state writable without
+adding a separate Main launcher. Its project-local `.codex/config.toml` uses
+`workspace-write` and adds the Worktree-local `.scratch` path to
+`sandbox_workspace_write.writable_roots`. Main and its native Delivery State
+Agent therefore access the physical Harness State Directory through the
+Integration Worktree's symlink. When the Runner launches an Engineer, the
+Codex Adapter internally supplies both the Ticket Worktree with `-C` and the
+resolved persistent ticket-evidence directory with `--add-dir`; neither path nor
+raw Codex syntax enters Main's task object. Setup mechanically verifies that
+the configured path resolves to the registered Harness State Directory and is
+writable before reporting success. These settings take effect through the
+Runtime's normal project-config loading; the Harness does not introduce an
+interactive Main-start command.
+
 One invocation uses `agent-runner --batch-input <yaml-file>`. The YAML contains
-a list of one or more task objects; `batch` only disambiguates this from a
-one-ticket-per-file interpretation and does not add DAG, scheduling,
-transactional, or atomic-execution semantics. Each task supplies its ticket
-ID, short ticket name, logical Engineer role, canonical `ticket_file`
-reference, and an optional plain-text `instruction`. The ticket file contains
-the complete task definition, including its requirements, acceptance criteria,
-dependencies, and references to specs, ADRs, and design material. It is not a
-second dispatch document written by Main. Runtime choice and raw command syntax
-do not appear in each task object.
+the Delivery State Agent's `run_id` once at its top level and a list of one or
+more task objects; `batch` only disambiguates this from a one-ticket-per-file
+interpretation and does not add DAG, scheduling, transactional, or
+atomic-execution semantics. Each task supplies its ticket ID, short ticket
+name, logical Engineer role, canonical `ticket_file` reference, and an optional
+plain-text `instruction`. The ticket file contains the complete task
+definition, including its requirements, acceptance criteria, dependencies, and
+references to specs, ADRs, and design material. It is not a second dispatch
+document written by Main. Runtime choice and raw command syntax do not appear
+in each task object.
+
+The Runner attempts exactly the task objects present in that batch and no
+others. It does not query the tracker for more tickets, inspect the DAG for a
+ready frontier, add tasks that Main omitted, or change the logical Engineer
+role selected by Main.
 
 `ticket_file` is either the canonical local ticket or a complete local snapshot
 materialized by the target project's tracker binding for a remote GitHub,
@@ -226,13 +298,15 @@ complex belongs in the canonical ticket or its referenced planning artifacts;
 if it changes accepted work, delivery returns to the ticket/spec planning flow.
 This semantic limit is skill guidance rather than a Runner-enforced schema.
 
-The batch YAML, including any inline instruction, lives in a control-plane
-input directory outside every Git worktree and is retained until the whole
-Delivery Run ends. It is not cleaned after a successful launch and remains
-available whenever Main has not finished delivering or explicitly ended the
-run. Its lifetime is independent of both canonical ticket retention and Ticket
-Worktree retention; cleanup becomes eligible only after Main determines that
-the Delivery Run has ended.
+Main may create the `--batch-input` YAML as a temporary file. After validating
+it and before launching any Engineer, the Runner copies the exact input,
+including any inline instruction, into the Delivery Run's physical Harness
+State Directory outside every Git worktree and returns the retained path in its
+result. The caller may then remove the temporary source file. The retained copy
+is not cleaned after a successful launch, at the end of the Delivery Run, or
+during Ticket Worktree cleanup; only the operator may explicitly delete it. Its
+lifetime is independent of canonical ticket retention and Ticket Worktree
+retention.
 
 `ticket_id` is the stable identity supplied by the target project's tracker
 binding. It is stable within that target project but otherwise opaque to the
@@ -275,6 +349,13 @@ The process exits zero only when all launches succeed and nonzero for a partial
 or total launch failure. Because this command returns after starting the
 Engineer processes rather than waiting for their work to finish, V1 does not
 need streaming output.
+
+Every Runner command, including launch, `status`, `send`, `interrupt`, and
+`cleanup`, writes one YAML result document to standard output. Human-readable
+diagnostics go to standard error, and the process exit status independently
+indicates success or failure. V1 does not offer JSON, JSONL, or a selectable
+output format; YAML is both the machine contract and the readable operator
+representation.
 
 `alias` is the short, semantic reference to one immutable Engineer runtime
 session. It combines the ticket ID and short name with the Engineer tier and
@@ -339,6 +420,14 @@ runtime-session, process, role, and worktree mappings rather than a resident
 supervisor. The behavior of `send` against a running turn for other runtime
 Adapters remains to be settled.
 
+The Runner also enforces one mechanical worktree-safety invariant: at most one
+Engineer turn may be active in a Ticket Worktree at a time, regardless of how
+many historical aliases that ticket retains. A batch launch or `send` that
+would start a second active turn in the same Ticket Worktree is rejected with
+the alias of the turn already running. This does not decide whether a ticket is
+ready, which session Main should use, or whether escalation is warranted; it
+only prevents concurrent processes from modifying the same checkout.
+
 Main uses `alias`, not `ticket_name`, for follow-up, resume, interrupt, and
 session-status transport operations. The Runner owns the narrow mapping from
 alias to the underlying runtime session, role, worktree, and ticket-file
@@ -351,6 +440,14 @@ worktree; later transport against one of those aliases fails as an unknown
 alias. Any alias text already recorded with delivery evidence is historical
 ledger data, not a retained transport address. Alias escaping remains a
 separate implementation detail.
+
+Raw Runtime event output and standard error are transport diagnostics rather
+than durable delivery evidence. The Runner retains them with the machine-local
+session mapping under `<git-common-dir>/agent-runner/sessions/<alias>/` so its
+Adapter can observe, diagnose, and recover the background process. Successful
+ticket cleanup deletes these session diagnostics together with the aliases and
+worktree. Engineer results, validation summaries, and raw Reviewer reports
+remain separately preserved in the Harness State Directory.
 
 The Runner does not accept an arbitrary runtime command from Main. It does
 not read the ticket DAG, decide readiness or Engineer tier, adjudicate reviews,
@@ -390,11 +487,15 @@ Each target project has one long-lived **Integration Worktree** under
 `<worktree_root>/<project>/integration`, fixed to the `dev` branch. Ticket
 Worktrees remain run-scoped under
 `<worktree_root>/<project>/runs/<run-id>/<ticket-id>-<ticket-name>` and use
-their own ticket branches. The Integration Worktree is project-scoped rather
-than Delivery Run-scoped because Git permits a local branch to be checked out
-in only one worktree at a time and `dev` is the project's unique development
-integration state. Concurrent Delivery Runs for one project therefore share
-serialized integration through this worktree.
+their own ticket branches. The persistent Harness State Directory is their
+project-level sibling at `<worktree_root>/<project>/state`; setup creates an
+ignored `.scratch` symlink in the Integration Worktree that points to it. The
+Integration Worktree is project-scoped rather than Delivery Run-scoped because
+Git permits a local branch to be checked out in only one worktree at a time and
+`dev` is the project's unique development integration state. Concurrent
+Delivery Runs for one project therefore share serialized integration through
+this worktree and the persistent state directory without storing that state in
+Git.
 
 Ticket branches are created from the current validated `dev` state when Main
 dispatches them. Independent tickets may share the same `dev` base snapshot;
@@ -406,13 +507,21 @@ in the Integration Worktree. Promotion from `dev` to `main` is a release
 concern outside `task-delivery` and the Delivery Run.
 
 After a ticket's reviewed commit has been successfully merged into `dev`, Main
-instructs the Runner to clean up that ticket. The cleanup removes the Ticket
-Worktree, deletes its merged ticket branch, and deletes every Runner alias
-mapping bound to the removed worktree. It does not delete the canonical
-`ticket_file` or tracker ticket, which remains available to the Delivery State
-Agent and Main while the accepted DAG is still being delivered. Ticket
-retention remains owned by the target project's tracker binding rather than by
-worktree cleanup.
+instructs the Runner to clean up that ticket with
+`agent-runner cleanup --run-id <run-id> --ticket-id <ticket-id>`. Cleanup is an
+idempotent ticket-lifecycle operation rather than a fourth session-transport
+operation, and it is addressed by stable Delivery Run and Ticket identity
+rather than by one of the ticket's potentially many session aliases. It removes
+the Ticket Worktree, deletes its merged ticket branch, and deletes every Runner
+alias mapping bound to the removed worktree. Before deleting anything, the
+Runner mechanically verifies that the registered ticket branch is merged into
+the registered `dev` branch, the Ticket Worktree has no uncommitted changes,
+and the mapping and canonical path still belong to the supplied `run_id` and
+`ticket_id`. A failed check refuses cleanup with evidence; an already-cleaned
+ticket succeeds idempotently. It does not delete the canonical `ticket_file` or
+tracker ticket, which remains available to the Delivery State Agent and Main
+while the accepted DAG is still being delivered. Ticket retention remains
+owned by the target project's tracker binding rather than by worktree cleanup.
 
 The target-project setup establishes or registers the Integration Worktree;
 Main does not choose or type its physical path. The Runner may mechanically
@@ -422,6 +531,20 @@ when `dev` is already checked out in another worktree and report the conflict
 rather than silently switching the user's current branch. The repository's
 primary `main` worktree remains outside routine ticket implementation and
 development integration.
+
+Normal planning and delivery Main sessions run from this registered `dev`
+Integration Worktree. Main performs serialized merge and integration validation
+there without locating or changing into a separate worktree, while the primary
+`main` checkout remains reserved for release work. `task-delivery` verifies its
+current project workspace is the registered Integration Worktree before it
+starts dispatching a Delivery Run.
+
+If the configured `dev` branch does not yet exist, setup shows the exact base
+branch or commit it proposes to use and requires explicit operator confirmation
+before creating `dev` and its Integration Worktree. If `dev` already exists,
+setup validates and registers it. It never guesses the base, silently creates
+the integration branch, or switches the branch checked out in the user's
+primary worktree.
 
 Starting the Engineer process with the resolved worktree as its initial
 workspace lets the existing worktree guard derive the correct immutable root.
@@ -545,15 +668,18 @@ runtimes without changing Main or the `task-delivery` skill, as long as the
 Runner continues to expose the same logical roles and opaque session
 operations.
 
-The future setup workflow must install the skill, exclude
-`.scratch/task-delivery/` from version control, choose or derive the
-machine-local `worktree_root`, and ensure that root is writable under the active
-sandbox. It must generate and validate the Project Runner Config, including the
-default runtime and its allowlisted role bindings, and establish the
-project-level Integration Worktree on `dev`, while detecting an existing
-conflicting checkout without silently moving it. The Integration Worktree is
-durable, while a Ticket Worktree, its merged branch, and its Runner alias
-mappings are removed after its reviewed commit is successfully merged into
-`dev`. Experience from real Delivery Runs may later justify hardening a stable
+The future setup workflow must install the skill, choose or derive the
+machine-local `worktree_root`, create the persistent Harness State Directory,
+and ensure that root is writable through the selected Runtime's project-local
+sandbox configuration. It must generate and validate the Project Runner Config,
+including the default runtime and its allowlisted role bindings, establish the
+project-level Integration Worktree on `dev`, create its `.scratch` symlink to
+persistent state, exclude that link from version control, and verify the
+configured writable-root resolution, while detecting an existing conflicting
+checkout without silently moving it. The Integration Worktree and Harness
+State Directory are durable, while a Ticket Worktree, its merged branch, and
+its Runner alias mappings are removed after its reviewed commit is successfully
+merged into `dev`. Experience from real Delivery Runs may later justify
+hardening a stable
 part of the workflow, but that will require a separate architectural decision
 rather than being smuggled into this soft Harness.

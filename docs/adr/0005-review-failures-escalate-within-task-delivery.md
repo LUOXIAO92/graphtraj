@@ -23,11 +23,12 @@ The policy is:
   tier starts its own failure count while retaining canonical work and review
   evidence, not the previous conversation.
 - Three Expert review failures stop autonomous delivery and escalate the
-  exception to Main and the user.
+  exception to Main or the user for a decision.
 
 `task-delivery` does not prescribe `$implement`'s internal commit, amend, and
 review order; Engineer roles follow the Matt Skills workflow. A successful
-review only moves the ticket to `awaiting-integration`. Main performs serialized
-merge and validation in `dev` as described in
+review only moves the ticket to `awaiting-integration`. Outside the
+`task-delivery` Skill, Main performs serialized merge and validation in `dev`
+as described in
 [ADR 0009](0009-integrate-ticket-worktrees-through-dev.md); only work verified
 there unlocks dependent tickets.

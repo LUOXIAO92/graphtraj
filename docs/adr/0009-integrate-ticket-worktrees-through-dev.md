@@ -8,9 +8,8 @@ Engineers implement in isolated Ticket Worktrees while one long-lived
 project-level **Integration Worktree** owns serialized development integration.
 The Integration Worktree lives at
 `<harness-project-root>/.agent-worktrees/integration`, is fixed to `dev`, and
-is shared by concurrent Delivery Runs. The Source Repository checkout at
-`<harness-project-root>/repo` remains the primary `main` checkout reserved for
-release work.
+is shared by concurrent Delivery Runs. The operator-selected Source Repository
+directory remains the primary `main` checkout reserved for release work.
 
 Physical Worktrees live outside the Source Repository but inside its dedicated
 Harness Project Root, under the project-private `.agent-worktrees/` directory
@@ -28,20 +27,31 @@ Ticket Worktrees are run-scoped:
 <harness-project-root>/.agent-worktrees/runs/<run-id>/<ticket-id>-<ticket-name>
 ```
 
-The Runner derives branch names and paths from project, run, and stable ticket
-identity; `ticket_name` is only a readable suffix. A worktree is a complete
-isolated checkout and the Engineer's editable repository root, not a
-Main-designed file or directory allowlist. Retries and tier escalation reuse
-the same branch and worktree. A later batch for the same live ticket recovers
-and validates that worktree but creates a fresh Runtime session; only `send`
-resumes an existing alias.
+Project isolation is already supplied by the Harness Project Root, so the
+Runner derives branch names and paths only from the Delivery Run and stable
+ticket identity; `ticket_name` is a readable suffix rather than another
+identity key. No project name is repeated inside the project's branch or
+Worktree namespace. A Worktree is a complete isolated checkout and the
+Engineer's editable repository root, not a Main-designed file or directory
+allowlist.
+
+One `ticket_id` may have at most one live Ticket Worktree in a Harness Project,
+regardless of how many Delivery Runs are active. Runner preflight rejects a
+batch that assigns an already-live ticket to another Run. Retries and tier
+escalation reuse the same branch and Worktree, while a later batch in the same
+Run recovers and validates it but creates a fresh Runtime session; only `send`
+resumes an existing alias. If successful-merge cleanup already removed the
+Ticket Worktree, a later Run may create a new branch, Worktree, and Runtime
+session for that ticket from the then-current validated `dev` state.
 
 Ticket branches start from the current validated `dev` state. Independent
 tickets may share a base snapshot. A dependent ticket starts only after its
 prerequisites are merged and validated in `dev`. Review `PASS` makes work
 eligible for integration but does not update `dev`; Main performs merge,
 conflict reconciliation, and integration validation in the Integration
-Worktree. Promotion from `dev` to `main` is outside Task Delivery.
+Worktree outside the `task-delivery` Skill, then resumes the same Delivery Run.
+The Skill does not own or perform serialized integration. Promotion from `dev`
+to `main` is a release concern outside both Task Delivery and the Delivery Run.
 
 Normal planning and delivery Main sessions run from the registered Integration
 Worktree. `task-delivery` verifies that workspace before dispatch. Starting an
@@ -49,7 +59,7 @@ Engineer with its resolved Ticket Worktree lets the existing guard derive the
 correct immutable root; its native Reviewer children inherit that workspace.
 
 After a reviewed commit is successfully merged and validated in `dev`, Main
-may request:
+instructs the Runner to clean up the ticket:
 
 ```text
 agent-runner cleanup --run-id <run-id> --ticket-id <ticket-id>
@@ -68,7 +78,10 @@ Setup creates or registers the Integration Worktree. If `dev` exists, setup
 validates it and detects any conflicting checkout instead of silently moving or
 switching it. If `dev` does not exist, setup shows the exact proposed base and
 requires operator confirmation before creating the branch and worktree. Main
-does not choose or type physical paths.
+does not choose or type physical paths. After establishing the Integration
+Worktree, the same setup invocation writes the reviewable Runtime resources
+there as described in
+[ADR 0010](0010-configure-target-projects-locally.md).
 
 V1 targets at most four tickets concurrently: four Engineer processes and up
 to eight Reviewer threads, in addition to Main and the Delivery State Agent.

@@ -66,7 +66,9 @@ ID and short name with Engineer tier and that tier's session ordinal, for
 example `42-payment-retry@j1`, `42-payment-retry@s1`, and
 `42-payment-retry@e1`. The ordinal counts fresh sessions at that tier, not
 review failures. Rework that resumes a session retains the alias; replacement
-or tier escalation creates a new alias.
+or tier escalation creates a new alias. Because one ticket may have only one
+live Ticket Worktree across the Harness Project, the alias does not repeat the
+project or Delivery Run identity.
 
 The Runner persists the narrow alias-to-Runtime-session, process, role,
 worktree, and ticket-file mapping under the Git common directory. The Delivery
@@ -88,9 +90,12 @@ success or failure. V1 does not offer JSON, JSONL, or selectable output.
 Main decides when and why to use these operations. A transport result never
 updates the Delivery State Agent's semantic state or infers retry, escalation,
 or the meaning of a user's direction. Durable mappings remove the need for a
-resident Runner supervisor. This ADR does not yet decide Adapter-specific
-process reattachment after a host restart; durable identity and mapping are the
-accepted prerequisite rather than a claim of completed recovery semantics.
+resident Runner supervisor. Recovery uses the same accepted alias and Runtime
+session mapping as interruption: when both remain usable, `status`, `interrupt`,
+or `send` can observe, stop, or resume the session. A missing mapping, lost
+Runtime session, or non-resumable session produces a structured operation
+error; V1 adds no second recovery identity or reconstruction mechanism. Main
+decides whether to start a fresh session in the retained Ticket Worktree.
 
 ## Considered options
 

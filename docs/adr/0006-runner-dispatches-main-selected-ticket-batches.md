@@ -41,6 +41,9 @@ environment constraint, evidence reference, or point to check. It cannot
 restate the ticket, change scope or dependencies, add acceptance criteria, or
 become a detailed technical plan. Material changes return to spec or ticket
 planning. This is Skill guidance, not a machine-enforced semantic schema.
+The Runtime Adapter appends the note to the canonical ticket content when
+constructing the Engineer's initial task; it does not create or persist a
+second task specification.
 
 `ticket_id` is the stable identity supplied by the target project's tracker
 binding. It is stable within that project and otherwise opaque, allowing local

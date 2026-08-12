@@ -24,11 +24,12 @@ never appears in batch task objects. Unknown or unconfigured Runtimes fail
 preflight before launch.
 
 The selected Runtime name resolves only through the Runner's built-in Adapter
-registry. Project config may supply values understood by an Adapter, but it
-cannot name an arbitrary Python module, shell template, or raw command. Each
-Adapter privately resolves role configuration, renders its command, starts the
-Engineer in the Ticket Worktree, captures the Runtime session, and translates
-transport results to the shared Runner interface.
+registry, and only that selected Adapter is loaded. Project config may supply
+values understood by an Adapter, but it cannot name an arbitrary Python
+module, shell template, or raw command. Each Adapter privately resolves role
+configuration, renders its command, starts the Engineer in the Ticket Worktree,
+captures the Runtime session, and translates transport results to the shared
+Runner interface.
 
 V1 implements only the Codex Adapter. It privately performs the equivalent of:
 

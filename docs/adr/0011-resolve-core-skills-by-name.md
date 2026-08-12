@@ -32,8 +32,8 @@ other machine-output mode.
 
 When a core Skill is missing, interactive setup offers two paths:
 
-- install the release's backed-up supported copy into the target project's
-  `.agents/skills/` directory; or
+- install the release's backed-up supported copy into the Source Repository's
+  `.agents/skills/` directory through its `dev` Integration Worktree; or
 - stop before writing anything so the operator can install it independently at
   user scope and rerun setup.
 

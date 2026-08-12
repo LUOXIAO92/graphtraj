@@ -6,18 +6,32 @@ status: accepted
 
 After host installation, the operator runs
 `you-are-a-product-architect setup` from the Harness Project Root defined in
-[ADR 0012](0012-isolate-each-harness-project-at-its-own-root.md). The Source
-Repository is its `repo/` child. V1 setup is an interactive Click workflow; it
-does not offer a non-interactive mode that guesses Skill-install choices,
-integration-branch confirmation, or conflict handling.
+[ADR 0012](0012-isolate-each-harness-project-at-its-own-root.md) and identifies
+the existing Source Repository child by its operator-chosen directory name.
+V1 setup does not clone the repository. It is an interactive Click workflow;
+it does not offer a non-interactive mode that guesses the repository, Skill
+installation choices, integration-branch confirmation, or conflict handling.
 
-The selected Runtime Adapter writes reviewable resources into the Runtime's
-native layout within the Source Repository. For Codex V1 this includes
-`repo/.codex/config.toml`, `repo/.codex/agents/`, and `repo/.codex/hooks/`.
-These files are intended to be reviewed and committed so `dev`-derived
-Integration and Ticket Worktrees inherit the same role and isolation
-configuration. Setup does not write to `${HOME}/.codex`, create global
-profiles, alter credentials or user defaults, or silently trust a project.
+One setup invocation first creates or registers `dev` and its Integration
+Worktree, then writes reviewable Runtime resources into that Worktree using
+repository-relative native paths. For Codex V1 these include
+`.codex/config.toml`, `.codex/agents/`, and `.codex/hooks/`; locally installed
+Skills use `.agents/skills/`. Setup never writes these files into the primary
+`main` checkout. The operator reviews and commits them on `dev`, after which
+Ticket Worktrees inherit the same role, Skill, and isolation configuration.
+Setup does not commit for the operator and does not require a second successful
+invocation merely to finish initialization.
+
+Before the first Engineer dispatch, Runner preflight requires a clean
+Integration Worktree and verifies that the selected Adapter's required
+repository resources are available from the committed `dev` state. This keeps
+an uncommitted setup result from producing Ticket Worktrees that silently lack
+their Runtime configuration.
+
+Setup does not write to `${HOME}/.codex`, create global profiles, alter
+credentials or user defaults, or silently trust a project. If a Runtime
+requires project trust, the operator grants it through that Runtime's normal
+user-controlled trust flow.
 
 Codex project config uses `workspace-write` and names the stable Worktree-local
 `.scratch` path in `sandbox_workspace_write.writable_roots`. Setup creates the
@@ -28,12 +42,14 @@ It also creates and validates the machine-local Project Runner Config and
 and establishes `dev` and its Integration Worktree according to
 [ADR 0009](0009-integrate-ticket-worktrees-through-dev.md).
 
-Before changing files, setup runs the Skill check from
+Before changing anything, setup runs the Skill check from
 [ADR 0011](0011-resolve-core-skills-by-name.md) and preflights every target
 file and resource. An absent file may be created and an identical file is
 already configured. If any target exists with different content, setup aborts
-before every planned write; V1 never merges or overwrites the conflict. The
-operator resolves it and reruns setup.
+before creating the branch or Worktree and before every planned write; V1 never
+merges or overwrites the conflict. Setup can inspect an existing `dev` tree or
+the operator-confirmed base tree through Git before materializing the
+Integration Worktree. The operator resolves a conflict and reruns setup.
 
 Setup preflights every condition that can safely be checked before mutation,
 but it does not claim transactional rollback across filesystem and Git
@@ -41,9 +57,9 @@ operations. Operations are idempotent. An execution-time failure reports which
 actions completed and which did not, allowing correction and rerun.
 
 Machine-local paths, executable bindings, and Runner session mappings stay
-under `<git-common-dir>/agent-runner/`, outside committed Runtime configuration.
-The Runner is a shared host tool, not something installed into an Agent
-profile.
+under the selected Source Repository's `<git-common-dir>/agent-runner/`,
+outside committed Runtime configuration. The Runner is a shared host tool, not
+something installed into an Agent profile.
 
 Repository engineering metadata remains owned by
 `setup-matt-pocock-skills`. Product setup neither creates nor updates

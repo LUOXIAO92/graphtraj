@@ -38,6 +38,11 @@ decisions. Engineers receive the accepted ticket, an optional concise
 instruction, and the ticket's referenced material; they do not need the whole
 DAG or Main's historical reasoning.
 
+`task-delivery` does not merge reviewed commits into `dev`. Main performs the
+serialized integration and validation flow outside the Skill, records the
+result through the Delivery State Agent, and then continues the same Delivery
+Run from its updated ledger.
+
 Two supporting components remain deliberately narrower than Main:
 
 - The Delivery State Agent maintains the ledger and Mermaid task map as

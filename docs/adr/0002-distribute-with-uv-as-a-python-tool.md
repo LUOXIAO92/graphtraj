@@ -25,6 +25,9 @@ The distribution is named `you-are-a-product-architect`, its import package is
 
 The same distribution carries `task-delivery`, shared templates, role
 definitions, backed-up supported Skills, and Runtime-specific setup resources.
+The V1 `task-delivery` source template lives at `codex/skills/task-delivery`
+inside this product and setup installs it into the Source Repository's
+project-local Skill layout through the Integration Worktree.
 The host CLI uses Click. Project setup remains a separate responsibility
 described in [ADR 0010](0010-configure-target-projects-locally.md), while Skill
 dependency policy is described in

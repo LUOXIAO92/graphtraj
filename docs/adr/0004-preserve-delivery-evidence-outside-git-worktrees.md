@@ -6,10 +6,11 @@ status: accepted
 
 Delivery Run state must survive Ticket Worktree cleanup without entering
 product history. It lives in a project-level persistent **Harness State
-Directory** at `<harness-project-root>/state/`, outside the Source Repository
-and every Git Worktree. The Integration Worktree exposes it through an ignored
-`.scratch` symlink so Main and the Delivery State Agent retain the Matt Skills
-scratch convention. The containing project boundary is defined in
+Directory** at `<harness-project-root>/state/`, outside the Primary Worktree
+and every linked Git Worktree of the Source Repository. The Integration
+Worktree exposes it through an ignored `.scratch` symlink so Main and the
+Delivery State Agent retain the Matt Skills scratch convention. The containing
+project boundary is defined in
 [ADR 0012](0012-isolate-each-harness-project-at-its-own-root.md).
 
 One run occupies `state/task-delivery/<run-id>/`. Its ledger is visible from

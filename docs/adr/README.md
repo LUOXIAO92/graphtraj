@@ -39,3 +39,12 @@ the Harness do not require editing a single system-wide record.
   project-local Runtime configuration and machine-local Runner state.
 - [ADR 0011](0011-resolve-core-skills-by-name.md) — core Skill dependencies are
   checked and resolved by declared name.
+
+## Historical audit sources
+
+The pre-split files
+[`docs/task-delivery-adr-before-functional-split.md`](../task-delivery-adr-before-functional-split.md)
+and
+[`docs/distribution-adr-before-functional-split.md`](../distribution-adr-before-functional-split.md)
+are non-normative historical sources retained only for split-audit
+traceability. They are superseded by the active ADRs indexed above.

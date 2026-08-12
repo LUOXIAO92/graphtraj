@@ -9,9 +9,14 @@ shell job IDs, opaque Runtime session IDs, or Runtime-specific resume commands.
 The Runner exposes three transport operations: `status`, `send`, and
 `interrupt`.
 
+Although a successful launch result includes the raw Runtime session as opaque
+evidence, these operations accept the alias only. Main does not interpret or
+feed the raw identifier back to the Runtime.
+
 - `status` observes Runtime activity without choosing or changing a ticket
-  status. A successful result is `running` while a turn is active or `idle`
-  when no turn is active and `send` can continue the session.
+  status. For the addressed alias, a successful result is `running` while its
+  turn is active or `idle` when it has no active turn and is eligible to be
+  resumed by `send`.
 - `send` delivers a concise follow-up through the Adapter's live-input or
   resume mechanism.
 - `interrupt` requests that the current Runtime execution stop while
@@ -70,6 +75,12 @@ or tier escalation creates a new alias. Because one ticket may have only one
 live Ticket Worktree across the Harness Project, the alias does not repeat the
 project or Delivery Run identity.
 
+Alias uniqueness and immutability apply to live Runner mappings. Successful
+cleanup retires the mapping, so a later Delivery Run may reuse the same alias
+text for a new logical Runtime session. Persistent history identifies a
+session by `(run_id, alias)`; a historical alias without a live mapping is not
+a transport address.
+
 The Runner persists the narrow alias-to-Runtime-session, process, role,
 worktree, and ticket-file mapping under the Git common directory. The Delivery
 State Agent may record current and historical aliases, but this does not make
@@ -77,10 +88,12 @@ the Runner the semantic ticket ledger. Successful ticket cleanup deletes all
 live aliases and transport diagnostics bound to the removed worktree; aliases
 retained in evidence become history rather than transport addresses.
 
-At most one Engineer turn may actively write one Ticket Worktree. A batch
-launch or `send` that would start a second turn there is rejected with the
-alias already running. This is mechanical resource safety, not a decision
-about readiness, retries, or escalation.
+At most one Engineer turn may actively write one Ticket Worktree. `idle`
+describes only the addressed alias and does not reserve its Worktree. A batch
+launch or `send` must therefore pass the same Worktree exclusivity preflight;
+an operation that would start a second turn there is rejected with the alias
+already running. This is mechanical resource safety, not a decision about
+readiness, retries, or escalation.
 
 Every Runner command, including launch, `status`, `send`, `interrupt`, and
 `cleanup`, writes one YAML result document to stdout. Human-readable

@@ -5,9 +5,11 @@ status: accepted
 # A Delivery State Agent maintains Delivery Run state
 
 Main is the semantic authority for a Delivery Run, but it does not spend its
-context and output budget rewriting the ledger or Mermaid graph. A
-project-level Delivery State Agent is the sole writer of those artifacts and
-acts on Main's behalf.
+context and output budget rewriting the ledger or Mermaid graph. Each active
+Delivery Run has one Delivery State Agent acting on Main's behalf as the sole
+writer of that Run's ledger and Mermaid graph. Concurrent Runs may use
+different State Agents because their artifacts are run-scoped; no State Agent
+owns another Run's files.
 
 The Delivery State Agent is a custom Agent role launched and coordinated by
 Main through the Runtime's native agent tools. It shares Main's Integration
@@ -39,7 +41,7 @@ question that requires Main.
 Main must still trigger synchronization. V1 has no autonomous watcher,
 hook-triggered drawing Agent, or event-loop controller. If the original state
 session is unavailable, a fresh Delivery State Agent can recover by reading
-the persistent artifacts.
+the persistent artifacts and replace it as that Run's sole writer.
 
 The ledger uses this shared soft status vocabulary:
 

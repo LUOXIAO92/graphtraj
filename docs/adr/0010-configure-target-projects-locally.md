@@ -7,7 +7,8 @@ status: accepted
 After host installation, the operator runs
 `you-are-a-product-architect setup` from the Harness Project Root defined in
 [ADR 0012](0012-isolate-each-harness-project-at-its-own-root.md) and identifies
-the existing Source Repository child by its operator-chosen directory name.
+the Source Repository through its existing Primary Worktree child, using the
+operator-chosen directory name.
 V1 setup does not clone the repository. It is an interactive Click workflow;
 it does not offer a non-interactive mode that guesses the repository, Skill
 installation choices, integration-branch confirmation, or conflict handling.
@@ -17,7 +18,7 @@ Worktree, then writes reviewable Runtime resources into that Worktree using
 repository-relative native paths. For Codex V1 these include
 `.codex/config.toml`, `.codex/agents/`, and `.codex/hooks/`; locally installed
 Skills use `.agents/skills/`. Setup never writes these files into the primary
-`main` checkout. The operator reviews and commits them on `dev`, after which
+`main` Worktree. The operator reviews and commits them on `dev`, after which
 Ticket Worktrees inherit the same role, Skill, and isolation configuration.
 Setup does not commit for the operator and does not require a second successful
 invocation merely to finish initialization.
@@ -50,6 +51,12 @@ before creating the branch or Worktree and before every planned write; V1 never
 merges or overwrites the conflict. Setup can inspect an existing `dev` tree or
 the operator-confirmed base tree through Git before materializing the
 Integration Worktree. The operator resolves a conflict and reruns setup.
+
+For that Skill check, setup supplies the Integration Worktree context it has
+selected and preflighted, whether the Worktree is already registered or is
+about to be materialized. The shared checker also includes Skills discoverable
+from the selected Runtime's user scope. It does not treat the Harness Project
+Root or Primary Worktree as a substitute project-local Runtime context.
 
 Setup preflights every condition that can safely be checked before mutation,
 but it does not claim transactional rollback across filesystem and Git

@@ -1,6 +1,13 @@
 ---
-status: accepted
+status: superseded
+normative: false
 ---
+
+> [!IMPORTANT]
+> This is a historical pre-split audit source. The recovered decision text
+> below is preserved for traceability, but it is not an active ADR and must not
+> be used as current design authority. The active decisions are indexed in
+> [`docs/adr/README.md`](adr/README.md).
 
 # Task Delivery is soft Agent orchestration and owns review escalation
 

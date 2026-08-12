@@ -4,9 +4,12 @@ status: accepted
 
 # Hide Agent Runtime CLI details behind Runner Adapters
 
-Main addresses logical Engineer roles without knowing Runtime commands,
-profile paths, or machine-local worktree and state paths. Runtime differences
-are isolated behind the Runner's built-in, allowlisted Adapter registry.
+Main addresses logical Engineer roles without constructing or supplying
+Runtime commands, profile paths, or machine-local worktree and state paths.
+The Runner may return resolved paths and an opaque Runtime session as launch
+evidence, but Main uses the semantic alias rather than those values for normal
+transport. Runtime differences are isolated behind the Runner's built-in,
+allowlisted Adapter registry.
 
 Harness Project setup creates a machine-local Project Runner Config at the
 Source Repository's `<git-common-dir>/agent-runner/config.yml`. It is shared by
@@ -49,8 +52,10 @@ Codex syntax enter Main's task object.
 These settings use Codex's normal project configuration. The product does not
 add a mechanical or interactive Main launcher. OpenCode and other Runtime
 Adapters are explicit later work; their CLI flags, configuration layout,
-session identifiers, and live-input behavior must remain private behind the
-same logical interface.
+interpretation and reuse of session identifiers, and live-input behavior must
+remain private behind the same logical interface. An Adapter may surface a raw
+session identifier as opaque evidence without making it Main's transport
+address.
 
 ## Considered options
 

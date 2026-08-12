@@ -67,6 +67,16 @@ structured error code and message. Launch status is transport evidence, not a
 Delivery State Agent ticket status. The command returns after starting the
 Engineer processes, so V1 does not require streaming output or JSONL.
 
+After the valid input has been preserved, the result contains one top-level
+`retained_batch_file` for the exact submitted batch. It is returned once for
+the launch command, not repeated in every task result. A global preflight
+failure that occurs before preservation has no retained batch path.
+
+The returned paths and raw Runtime session are resolved launch evidence, not
+values Main must construct or supply on later calls. Main uses the semantic
+`alias` for normal session transport; the raw Runtime session remains opaque,
+and the Adapter alone interprets it or passes it back to the Runtime.
+
 The Runner resolves logical roles through an allowlisted registry, provisions
 or recovers the ticket branch and worktree, launches the Runtime Adapter, and
 collects transport results. Runtime selection and command construction stay

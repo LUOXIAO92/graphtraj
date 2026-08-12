@@ -7,8 +7,9 @@ execution support.
 ## Language
 
 **Harness Project**:
-One isolated unit operated by the Harness, containing its Runtime resources,
-Source Repository, Worktrees, and durable delivery state.
+One isolated unit operated by the Harness, containing one Source Repository,
+all of that repository's Worktrees, its Runtime resources, and durable delivery
+state.
 _Avoid_: Workspace, Source Repository
 
 **Harness Project Root**:
@@ -17,13 +18,20 @@ its resources from every other Harness Project.
 _Avoid_: Repository root, Workspace root
 
 **Source Repository**:
-The Git repository whose code is delivered by a Harness Project. It is a child
-of the Harness Project Root rather than the project root itself.
-_Avoid_: Harness Project, Project root
+The Git repository whose code is delivered by a Harness Project, including its
+Primary Worktree and linked Worktrees. The entire repository belongs to one
+Harness Project.
+_Avoid_: Harness Project, Primary Worktree, Repository directory
+
+**Primary Worktree**:
+The operator-cloned initial Worktree of the Source Repository, distinct from
+the linked Integration Worktree and Ticket Worktrees.
+_Avoid_: Source Repository, Primary checkout, Repository directory
 
 **Worktree Directory**:
-The project-private home for the Integration Worktree and Ticket Worktrees,
-separate from the Source Repository and from other Harness Projects.
+The project-private filesystem home for the linked Integration Worktree and
+Ticket Worktrees, separate from the Primary Worktree and from other Harness
+Projects.
 _Avoid_: Shared worktree root, Workspace worktrees
 
 **Harness State Directory**:

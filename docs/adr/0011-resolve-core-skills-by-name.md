@@ -25,15 +25,25 @@ The required core Skill names are:
 The standalone Click `doctor` command has one responsibility: report a
 human-readable `OK` or `MISSING` for every required name and exit zero only
 when all are discoverable. Missing non-core Skills do not fail it. `doctor`
-does not inspect Runtime files, Git state, Runner config, or worktrees; setup
-performs those separate preflights and directly reuses the same Python Skill
-check rather than spawning and parsing the command. `doctor` has no YAML or
-other machine-output mode.
+does not diagnose Runtime files, Git state, Runner config, or Worktree health;
+setup performs those separate preflights and directly reuses the same Python
+Skill check rather than spawning and parsing the command. `doctor` has no YAML
+or other machine-output mode.
+
+The operator invokes standalone `doctor` from the Harness Project Root. For a
+configured Harness Project, its Skill discovery context is the registered
+Integration Worktree plus the selected Runtime's normal user scope. It does
+not search neighboring projects or use the Primary Worktree as its
+project-local context. Resolving the registered Integration Worktree only
+selects where Skill discovery is evaluated; it does not broaden `doctor` into
+a check of Runner config, Git state, or Worktree health. During setup, the same
+Python check receives the selected, preflighted Integration context directly,
+including before that Worktree is materialized.
 
 When a core Skill is missing, interactive setup offers two paths:
 
-- install the release's backed-up supported copy into the Source Repository's
-  `.agents/skills/` directory through its `dev` Integration Worktree; or
+- install the release's backed-up supported copy at the repository-relative
+  `.agents/skills/` path through the `dev` Integration Worktree; or
 - stop before writing anything so the operator can install it independently at
   user scope and rerun setup.
 

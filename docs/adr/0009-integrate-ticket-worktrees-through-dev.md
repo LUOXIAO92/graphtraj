@@ -8,16 +8,23 @@ Engineers implement in isolated Ticket Worktrees while one long-lived
 project-level **Integration Worktree** owns serialized development integration.
 The Integration Worktree lives at
 `<harness-project-root>/.agent-worktrees/integration`, is fixed to `dev`, and
-is shared by concurrent Delivery Runs. The operator-selected Source Repository
-directory remains the primary `main` checkout reserved for release work.
+is shared by concurrent Delivery Runs. The operator-selected repository
+directory is the **Primary Worktree**, remains on `main`, and is reserved for
+release work.
 
-Physical Worktrees live outside the Source Repository but inside its dedicated
-Harness Project Root, under the project-private `.agent-worktrees/` directory
-defined by
+One Main orchestration context owns Integration Worktree writes for a Harness
+Project at a time and may interleave the serial integration work of several
+Delivery Runs. A Main-coordinated Merge Resolver writes there only under that
+same ownership. This is a soft-Harness operating responsibility, not a Runner
+lock, resident coordinator, or Delivery Run control state.
+
+The linked Integration and Ticket Worktrees remain part of the same Source
+Repository but live outside its Primary Worktree, inside the dedicated Harness
+Project Root under the project-private `.agent-worktrees/` directory defined by
 [ADR 0012](0012-isolate-each-harness-project-at-its-own-root.md). Setup ensures
 this directory is writable under the host and Runtime sandbox configuration.
 It is neither committed configuration nor batch input, must not resolve inside
-the Source Repository, and is canonicalized and checked against
+the Primary Worktree, and is canonicalized and checked against
 `git worktree list`. Setup and the Runner never treat the parent workspace as a
 shared project or authorization boundary.
 
@@ -91,13 +98,13 @@ launched Engineers.
 
 ## Considered options
 
-- Putting linked Worktrees inside the Source Repository, in a shared
+- Putting linked Worktrees inside the Primary Worktree, in a shared
   workspace-level project root, or in a system temp directory was rejected
   because of recursive discovery, cross-project access, accidental edits, and
   poor recovery durability.
 - Creating one `dev` worktree per run was rejected because Git permits one
   checkout of a local branch and `dev` is the unique integration state.
-- Integrating in the primary `main` checkout was rejected because routine
+- Integrating in the `main` Primary Worktree was rejected because routine
   development must not mutate the release worktree.
 - Starting dependent work from unintegrated commits was rejected because it
   bypasses `dev` and duplicates conflict handling.

@@ -41,7 +41,6 @@ def test_installed_placeholder_operations_fail_until_implemented(
     batch_file.write_text("run_id: test-run\ntasks: []\n", encoding="utf-8")
     operations = {
         "setup": [str(installed_commands.product), "setup"],
-        "doctor": [str(installed_commands.product), "doctor"],
         "launch": [str(installed_commands.runner), "--batch-input", str(batch_file)],
         "status": [str(installed_commands.runner), "status", "ticket-42@j1"],
         "send": [

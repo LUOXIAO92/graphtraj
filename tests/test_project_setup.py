@@ -57,6 +57,18 @@ def worktree_contents(root: Path) -> dict[str, bytes]:
     }
 
 
+def supported_skill_contents(name: str) -> dict[str, bytes]:
+    package_root = (
+        Path(__file__).resolve().parents[1]
+        / "src"
+        / "you_are_a_product_architect"
+        / "resources"
+    )
+    if name == "task-delivery":
+        return tree_contents(package_root / "skills" / name)
+    return tree_contents(package_root / "codex" / "skills" / name)
+
+
 def setup_environment(user_home: Path, fake_codex: FakeCodex) -> dict[str, str]:
     environment = os.environ.copy()
     environment.update(
@@ -271,3 +283,149 @@ def test_setup_registers_an_existing_valid_dev_as_the_integration_worktree(
     if not common_directory.is_absolute():
         common_directory = primary / common_directory
     assert (common_directory.resolve() / "agent-runner" / "config.yml").is_file()
+
+
+def test_setup_stops_before_any_mutation_for_independent_skill_installation(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    harness_root = temporary_git_repository.parent
+    primary = temporary_git_repository
+    user_home = tmp_path / "operator-home"
+    user_home.mkdir()
+    (user_home / "operator-note.txt").write_text(
+        "leave user scope alone\n", encoding="utf-8"
+    )
+    user_before = tree_contents(user_home)
+    primary_head = git_output(primary, "rev-parse", "HEAD")
+    primary_files = worktree_contents(primary)
+    common_directory = Path(git_output(primary, "rev-parse", "--git-common-dir"))
+    if not common_directory.is_absolute():
+        common_directory = primary / common_directory
+
+    result = run_setup(
+        installed_commands,
+        harness_root=harness_root,
+        user_home=user_home,
+        fake_codex=fake_codex,
+        answers="{0}\nindependent\n".format(primary.name),
+    )
+
+    assert result.returncode == 1
+    assert "Missing required core Skills:" in result.stdout
+    assert "project-local" in result.stdout
+    assert "independent" in result.stdout
+    assert "Setup stopped before any setup mutation." in result.stderr
+    for name in CORE_SKILL_NAMES:
+        assert name in "{0}{1}".format(result.stdout, result.stderr)
+
+    assert not (harness_root / ".agent-worktrees").exists()
+    assert not (harness_root / "state").exists()
+    assert not (
+        common_directory.resolve() / "agent-runner" / "config.yml"
+    ).exists()
+    assert git_output(primary, "rev-parse", "HEAD") == primary_head
+    assert git_output(primary, "branch", "--show-current") == "main"
+    assert git_output(primary, "status", "--porcelain") == ""
+    assert worktree_contents(primary) == primary_files
+    assert tree_contents(user_home) == user_before
+
+
+def test_setup_installs_only_missing_supported_skills_project_locally(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    harness_root = temporary_git_repository.parent
+    primary = temporary_git_repository
+    integration = harness_root / ".agent-worktrees" / "integration"
+    run_process(["git", "branch", "dev"], cwd=primary).check_returncode()
+    run_process(
+        ["git", "worktree", "add", str(integration), "dev"], cwd=primary
+    ).check_returncode()
+
+    project_skills = integration / ".agents" / "skills"
+    install_skills(project_skills, ("grilling",))
+    existing_grilling = project_skills / "grilling" / "SKILL.md"
+    existing_grilling.write_text(
+        "---\nname: grilling\ndescription: Existing project Skill.\n---\n",
+        encoding="utf-8",
+    )
+    grilling_before = existing_grilling.read_bytes()
+
+    user_home = tmp_path / "operator-home"
+    install_skills(user_home / ".agents" / "skills", ("tdd",))
+    user_before = tree_contents(user_home)
+    missing_names = tuple(
+        name for name in CORE_SKILL_NAMES if name not in {"grilling", "tdd"}
+    )
+
+    result = run_setup(
+        installed_commands,
+        harness_root=harness_root,
+        user_home=user_home,
+        fake_codex=fake_codex,
+        answers="{0}\nproject-local\n".format(primary.name),
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stderr == ""
+    assert "Missing required core Skills: {0}".format(
+        ", ".join(missing_names)
+    ) in result.stdout
+    assert "Core Skills: OK" in result.stdout
+    assert existing_grilling.read_bytes() == grilling_before
+    assert not (project_skills / "tdd").exists()
+    assert {
+        path.name for path in project_skills.iterdir()
+    } == set(CORE_SKILL_NAMES) - {"tdd"}
+    for name in missing_names:
+        assert tree_contents(project_skills / name) == supported_skill_contents(name)
+    assert not fake_codex.log_file.exists()
+    assert tree_contents(user_home) == user_before
+
+
+def test_setup_succeeds_when_rerun_after_user_scope_skill_installation(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    harness_root = temporary_git_repository.parent
+    primary = temporary_git_repository
+    integration = harness_root / ".agent-worktrees" / "integration"
+    user_home = tmp_path / "operator-home"
+    user_home.mkdir()
+
+    stopped = run_setup(
+        installed_commands,
+        harness_root=harness_root,
+        user_home=user_home,
+        fake_codex=fake_codex,
+        answers="{0}\nindependent\n".format(primary.name),
+    )
+
+    assert stopped.returncode == 1
+    assert not (harness_root / ".agent-worktrees").exists()
+    assert not (harness_root / "state").exists()
+
+    install_user_skills(user_home)
+
+    rerun = run_setup(
+        installed_commands,
+        harness_root=harness_root,
+        user_home=user_home,
+        fake_codex=fake_codex,
+        answers="{0}\ny\n".format(primary.name),
+    )
+
+    assert rerun.returncode == 0, rerun.stderr
+    assert rerun.stderr == ""
+    assert "Core Skills: OK" in rerun.stdout
+    assert integration.is_dir()
+    assert git_output(integration, "branch", "--show-current") == "dev"
+    assert not (integration / ".agents").exists()
+    assert not fake_codex.log_file.exists()

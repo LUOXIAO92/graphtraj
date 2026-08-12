@@ -1,0 +1,2 @@
+# Runtime setup resources are distributed with the host tool. Target-project
+# setup writes the concrete project configuration in a later implementation.

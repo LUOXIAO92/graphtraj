@@ -25,4 +25,5 @@ you_are_a_product_architect = [
     "resources/codex/config.toml",
     "resources/codex/agents/*.toml",
     "resources/codex/hooks/*.py",
+    "resources/codex/skills/**/*",
 ]

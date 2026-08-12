@@ -27,4 +27,5 @@ you_are_a_product_architect = [
     "resources/codex/hooks/*.py",
     "resources/skills/task-delivery/SKILL.md",
     "resources/skills/task-delivery/agents/openai.yaml",
+    "resources/codex/skills/**/*",
 ]

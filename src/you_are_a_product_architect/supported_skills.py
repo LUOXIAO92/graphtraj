@@ -22,6 +22,13 @@ def _resource_path(name: str) -> tuple[str, ...]:
     return ("codex", "skills", name)
 
 
+def _resource_at(root: Traversable, path: tuple[str, ...]) -> Traversable:
+    resource = root
+    for child in path:
+        resource = resource.joinpath(child)
+    return resource
+
+
 def _copy_resource_tree(source: Traversable, destination: Path) -> None:
     if source.is_dir():
         destination.mkdir()
@@ -47,7 +54,7 @@ class SupportedSkills:
     def load(cls) -> "SupportedSkills":
         root = resources.files("you_are_a_product_architect.resources")
         resources_by_name = {
-            name: root.joinpath(*_resource_path(name))
+            name: _resource_at(root, _resource_path(name))
             for name in CORE_SKILL_NAMES
         }
         missing_resources = tuple(

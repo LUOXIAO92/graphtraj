@@ -1,2 +1,19 @@
-# Runtime setup resources are distributed with the host tool. Target-project
-# setup writes the concrete project configuration in a later implementation.
+# This is committed into each configured Harness Project.  It intentionally
+# keeps machine-specific paths out of the project configuration.
+model = "gpt-5.6-sol"
+model_reasoning_effort = "xhigh"
+personality = "pragmatic"
+service_tier = "default"
+
+sandbox_mode = "workspace-write"
+
+[sandbox_workspace_write]
+writable_roots = [".scratch"]
+
+[agents]
+enabled = true
+# Four Engineers may each use two Reviewer children.
+max_concurrent_threads_per_session = 12
+
+[mcp_servers.openaiDeveloperDocs]
+url = "https://developers.openai.com/mcp"

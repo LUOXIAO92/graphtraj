@@ -10,8 +10,8 @@ service_tier = "default"
 
 [agents]
 enabled = true
-# Orchestrator x1 + (engineer x1 + reviewer x2) x3 = 10 agents
-max_concurrent_threads_per_session = 10
+# Orchestrator x1 + (engineer x1 + reviewer x2) x6 = 18 agents
+max_concurrent_threads_per_session = 18
 
 [mcp_servers.openaiDeveloperDocs]
 url = "https://developers.openai.com/mcp"

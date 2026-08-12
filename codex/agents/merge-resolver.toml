@@ -2,7 +2,7 @@ name = "merge-resolver"
 description = "Integration specialist for resolving textual or semantic conflicts between an accepted codebase state and an incoming ticket."
 
 model = "gpt-5.6-sol"
-model_reasoning_effort = "xhigh"
+model_reasoning_effort = "max"
 
 sandbox_mode = "workspace-write"
 approval_policy = "never"

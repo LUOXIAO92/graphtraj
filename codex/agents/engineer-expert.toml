@@ -2,7 +2,7 @@ name = "engineer-expert"
 description = "Implementation engineer for highly complex, ambiguous, or architecture-sensitive tickets requiring deep reasoning."
 
 model = "gpt-5.6-sol"
-model_reasoning_effort = "xhigh"
+model_reasoning_effort = "max"
 
 developer_instructions = """
 Implement the assigned ticket using $implement.
@@ -32,4 +32,4 @@ timeout = 5
 enabled = true
 max_concurrent_threads_per_session = 3
 default_subagent_model = "gpt-5.6-sol"
-default_subagent_reasoning_effort = "xhigh"
+default_subagent_reasoning_effort = "max"

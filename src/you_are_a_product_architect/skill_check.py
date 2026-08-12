@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Iterable, Optional, Tuple
 
 import click
+import yaml
 
 
 CORE_SKILL_NAMES = (
@@ -41,17 +42,26 @@ def _declared_skill_name(skill_file: Path) -> Optional[str]:
     if not lines or lines[0].strip() != "---":
         return None
 
-    for line in lines[1:]:
-        if line.strip() == "---":
-            break
-        key, separator, raw_value = line.partition(":")
-        if separator and key.strip() == "name":
-            value = raw_value.strip()
-            if len(value) >= 2 and value[0] == value[-1] and value[0] in "'\"":
-                value = value[1:-1]
-            return value or None
+    closing_index = next(
+        (
+            index
+            for index, line in enumerate(lines[1:], start=1)
+            if line.strip() == "---"
+        ),
+        None,
+    )
+    if closing_index is None:
+        return None
 
-    return None
+    try:
+        frontmatter = yaml.safe_load("\n".join(lines[1:closing_index]))
+    except yaml.YAMLError:
+        return None
+
+    if not isinstance(frontmatter, dict):
+        return None
+    name = frontmatter.get("name")
+    return name if isinstance(name, str) and name else None
 
 
 def _discover_names(skill_roots: Iterable[Path]) -> set[str]:

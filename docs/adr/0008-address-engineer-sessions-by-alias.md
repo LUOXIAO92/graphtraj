@@ -66,14 +66,15 @@ alias and then `send` to resume it. The Runner never performs this sequence
 automatically because interruption is a semantic decision. An Adapter with
 native live input may implement running-turn `send` directly.
 
-An alias identifies one immutable logical Runtime session. It combines ticket
-ID and short name with Engineer tier and that tier's session ordinal, for
-example `42-payment-retry@j1`, `42-payment-retry@s1`, and
-`42-payment-retry@e1`. The ordinal counts fresh sessions at that tier, not
-review failures. Rework that resumes a session retains the alias; replacement
-or tier escalation creates a new alias. Because one ticket may have only one
-live Ticket Worktree across the Harness Project, the alias does not repeat the
-project or Delivery Run identity.
+An alias identifies one immutable logical Runtime session. It combines the
+unambiguous `ticket-stem` from
+[ADR 0009](0009-integrate-ticket-worktrees-through-dev.md) with Engineer tier
+and that tier's session ordinal, for example `2-42-payment-retry@j1`,
+`2-42-payment-retry@s1`, and `2-42-payment-retry@e1`. The ordinal counts fresh
+sessions at that tier, not review failures. Rework that resumes a session
+retains the alias; replacement or tier escalation creates a new alias. Because
+one ticket may have only one live Ticket Worktree across the Harness Project,
+the alias does not repeat the project or Delivery Run identity.
 
 Alias uniqueness and immutability apply to live Runner mappings. Successful
 cleanup retires the mapping, so a later Delivery Run may reuse the same alias
@@ -94,6 +95,14 @@ launch or `send` must therefore pass the same Worktree exclusivity preflight;
 an operation that would start a second turn there is rejected with the alias
 already running. This is mechanical resource safety, not a decision about
 readiness, retries, or escalation.
+
+The launch path makes that preflight atomic across separate Runner processes:
+before provisioning or starting a turn it creates one project-private
+reservation for the derived Ticket Worktree under the Git common Runner state.
+The reservation records `starting`, becomes `running` with the durable session
+mapping, and is released by the owning worker only after the Runtime turn is
+terminal. An existing or unexpected reservation fails closed; it is never
+treated as permission to start a concurrent Engineer.
 
 Every Runner command, including launch, `status`, `send`, `interrupt`, and
 `cleanup`, writes one YAML result document to stdout. Human-readable

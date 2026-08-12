@@ -31,16 +31,21 @@ shared project or authorization boundary.
 Ticket Worktrees are run-scoped:
 
 ```text
-<harness-project-root>/.agent-worktrees/runs/<run-id>/<ticket-id>-<ticket-name>
+<harness-project-root>/.agent-worktrees/runs/<run-id>/<ticket-stem>
 ```
 
 Project isolation is already supplied by the Harness Project Root, so the
 Runner derives branch names and paths only from the Delivery Run and stable
-ticket identity; `ticket_name` is a readable suffix rather than another
-identity key. No project name is repeated inside the project's branch or
-Worktree namespace. A Worktree is a complete isolated checkout and the
-Engineer's editable repository root, not a Main-designed file or directory
-allowlist.
+ticket identity. The mechanical `ticket-stem` is
+`<ticket-id-length>-<encoded-ticket-id>-<ticket-name>`: the length is the
+decimal ASCII length of the validated original ID, and each dot in that ID is
+encoded as `%2E`. The length prefix makes the ID/name boundary unambiguous, so
+identities such as `(a-b, c)` and `(a, b-c)` cannot collide; `ticket_name`
+remains a readable suffix rather than another identity key. The same stem is
+used in branch, Worktree, evidence-directory, and session-alias names. No
+project name is repeated inside the project's branch or Worktree namespace. A
+Worktree is a complete isolated checkout and the Engineer's editable
+repository root, not a Main-designed file or directory allowlist.
 
 One `ticket_id` may have at most one live Ticket Worktree in a Harness Project,
 regardless of how many Delivery Runs are active. Runner preflight rejects a

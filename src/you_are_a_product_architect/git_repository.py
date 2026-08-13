@@ -5,7 +5,7 @@ from __future__ import annotations
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 
 class GitRepositoryError(Exception):
@@ -21,7 +21,11 @@ def _git(repository: Path, *arguments: str) -> str:
         capture_output=True,
     )
     if result.returncode != 0:
-        message = result.stderr.strip() or result.stdout.strip() or "Git command failed."
+        message = (
+            result.stderr.strip()
+            or result.stdout.strip()
+            or "Git command failed."
+        )
         raise GitRepositoryError(message)
     return result.stdout.strip()
 
@@ -37,6 +41,31 @@ def _git_succeeds(repository: Path, *arguments: str) -> bool:
         ).returncode
         == 0
     )
+
+
+def _git_bytes(repository: Path, *arguments: str) -> bytes:
+    result = subprocess.run(
+        ["git", *arguments],
+        cwd=repository,
+        check=False,
+        capture_output=True,
+    )
+    if result.returncode != 0:
+        message = (
+            result.stderr.decode(errors="replace").strip()
+            or result.stdout.decode(errors="replace").strip()
+            or "Git command failed."
+        )
+        raise GitRepositoryError(message)
+    return result.stdout
+
+
+@dataclass(frozen=True)
+class GitTreeEntry:
+    """One exact path observed without checking out a Git tree."""
+
+    kind: str
+    content: Optional[bytes] = None
 
 
 @dataclass(frozen=True)
@@ -81,6 +110,9 @@ class SourceRepository:
     def head(self) -> str:
         return _git(self.primary_worktree, "rev-parse", "HEAD")
 
+    def revision(self, ref: str) -> str:
+        return _git(self.primary_worktree, "rev-parse", ref)
+
     def branch_exists(self, branch: str) -> bool:
         return _git_succeeds(
             self.primary_worktree,
@@ -96,19 +128,13 @@ class SourceRepository:
                 return Path(record["worktree"]).resolve()
         return None
 
-    def add_new_branch_worktree(
-        self,
-        branch: str,
-        worktree: Path,
-        base: str,
-    ) -> None:
+    def create_branch(self, branch: str, base: str) -> None:
+        """Create one branch as a separately reportable Git mutation."""
+
         _git(
             self.primary_worktree,
-            "worktree",
-            "add",
-            "-b",
+            "branch",
             branch,
-            str(worktree),
             base,
         )
 
@@ -120,6 +146,60 @@ class SourceRepository:
             str(worktree),
             branch,
         )
+
+    def tree_entry(self, revision: str, relative_path: str) -> Optional[GitTreeEntry]:
+        """Read one exact path from a revision without materializing a Worktree."""
+
+        output = _git_bytes(
+            self.primary_worktree,
+            "ls-tree",
+            "-z",
+            revision,
+            "--",
+            relative_path,
+        )
+        records = tuple(record for record in output.split(b"\0") if record)
+        if not records:
+            return None
+
+        metadata, separator, encoded_path = records[0].partition(b"\t")
+        if not separator or encoded_path.decode() != relative_path:
+            return None
+        mode, object_type, _object_id = metadata.decode().split(" ", maxsplit=2)
+        if object_type == "tree":
+            return GitTreeEntry(kind="directory")
+        content = _git_bytes(
+            self.primary_worktree,
+            "show",
+            "{0}:{1}".format(revision, relative_path),
+        )
+        if mode == "120000":
+            return GitTreeEntry(kind="symlink", content=content)
+        if object_type == "blob":
+            return GitTreeEntry(kind="file", content=content)
+        return GitTreeEntry(kind="other")
+
+    def tree_paths(self, revision: str, relative_root: str) -> Tuple[str, ...]:
+        """List every descendant path in one fixed Git tree."""
+
+        output = _git_bytes(
+            self.primary_worktree,
+            "ls-tree",
+            "-r",
+            "-t",
+            "-z",
+            revision,
+            "--",
+            relative_root,
+        )
+        paths = []
+        for record in output.split(b"\0"):
+            if not record:
+                continue
+            _metadata, separator, encoded_path = record.partition(b"\t")
+            if separator:
+                paths.append(encoded_path.decode())
+        return tuple(paths)
 
     def _worktrees(self) -> List[Dict[str, str]]:
         records: List[Dict[str, str]] = []

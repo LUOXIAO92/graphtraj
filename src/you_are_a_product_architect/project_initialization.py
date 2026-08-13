@@ -3,14 +3,20 @@
 from __future__ import annotations
 
 import os
+import stat
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 from .codex_project import CodexProjectError, CodexProjectFiles
-from .git_repository import GitRepositoryError, SourceRepository
-from .skill_check import check_core_skills
-from .supported_skills import SupportedSkills, SupportedSkillsError
+from .git_repository import GitRepositoryError, GitTreeEntry, SourceRepository
+from .path_safety import relative_parent_paths
+from .skill_check import CORE_SKILL_NAMES, check_core_skills, declared_skill_name
+from .supported_skills import (
+    SupportedSkills,
+    SupportedSkillsError,
+    allowed_manifest_paths,
+)
 
 
 INTEGRATION_BRANCH = "dev"
@@ -20,12 +26,281 @@ class ProjectSetupError(Exception):
     """The selected Harness Project cannot be initialized as planned."""
 
 
+@dataclass(frozen=True)
+class PlannedSetupAction:
+    """One operator-reviewable action and its preflight disposition."""
+
+    disposition: str
+    description: str
+
+
+@dataclass(frozen=True)
+class ProjectSetupPreview:
+    """The complete conflict-free setup plan shown before mutation."""
+
+    actions: Tuple[PlannedSetupAction, ...]
+
+    def render(self) -> str:
+        lines = ["Setup plan:"]
+        lines.extend(
+            "- {0}: {1}".format(action.disposition, action.description)
+            for action in self.actions
+        )
+        return "\n".join(lines)
+
+
 def _is_within(path: Path, directory: Path) -> bool:
     try:
         path.relative_to(directory)
     except ValueError:
         return False
     return True
+
+
+def _filesystem_entry(path: Path) -> Optional[GitTreeEntry]:
+    try:
+        metadata = path.lstat()
+    except FileNotFoundError:
+        return None
+    if stat.S_ISLNK(metadata.st_mode):
+        return GitTreeEntry(kind="symlink", content=os.readlink(path).encode())
+    if stat.S_ISDIR(metadata.st_mode):
+        return GitTreeEntry(kind="directory")
+    if stat.S_ISREG(metadata.st_mode):
+        return GitTreeEntry(kind="file", content=path.read_bytes())
+    return GitTreeEntry(kind="other")
+
+
+@dataclass(frozen=True)
+class _TargetView:
+    root: Path
+    repository: Optional[SourceRepository] = None
+    revision: Optional[str] = None
+
+    def entry(self, relative_path: str) -> Optional[GitTreeEntry]:
+        if self.repository is None:
+            return _filesystem_entry(self.root / relative_path)
+        if self.revision is None:
+            raise ProjectSetupError("A Git tree view requires a fixed revision.")
+        return self.repository.tree_entry(self.revision, relative_path)
+
+    def display_path(self, relative_path: str) -> Path:
+        return self.root / relative_path
+
+    def paths_under(self, relative_root: str) -> Tuple[str, ...]:
+        if self.repository is not None:
+            if self.revision is None:
+                raise ProjectSetupError("A Git tree view requires a fixed revision.")
+            paths = self.repository.tree_paths(self.revision, relative_root)
+            prefix = "{0}/".format(relative_root.rstrip("/"))
+            return tuple(
+                path[len(prefix) :]
+                for path in paths
+                if path.startswith(prefix)
+            )
+
+        root = self.root / relative_root
+        entry = _filesystem_entry(root)
+        if entry is None or entry.kind != "directory":
+            return ()
+        return tuple(
+            path.relative_to(root).as_posix()
+            for path in root.rglob("*")
+        )
+
+
+def _append_conflict(conflicts: List[str], message: str) -> None:
+    if message not in conflicts:
+        conflicts.append(message)
+
+
+def _symlink_resolves_to(
+    link: Path,
+    encoded_target: Optional[bytes],
+    expected: Path,
+) -> bool:
+    if encoded_target is None:
+        return False
+    try:
+        target = Path(encoded_target.decode())
+    except UnicodeError:
+        return False
+    if not target.is_absolute():
+        target = link.parent / target
+    return target.resolve() == expected.resolve()
+
+
+def _preflight_file(
+    view: _TargetView,
+    relative_path: str,
+    expected: bytes,
+    description: str,
+    actions: List[PlannedSetupAction],
+    conflicts: List[str],
+) -> None:
+    for parent in relative_parent_paths(relative_path):
+        entry = view.entry(parent)
+        if entry is not None and entry.kind != "directory":
+            _append_conflict(
+                conflicts,
+                "{0} redirects through or is blocked by a non-directory path: "
+                "{1}".format(description, view.display_path(parent)),
+            )
+            return
+
+    entry = view.entry(relative_path)
+    target = view.display_path(relative_path)
+    if entry is None:
+        actions.append(
+            PlannedSetupAction(
+                "CREATE",
+                "{0}: {1}".format(description, target),
+            )
+        )
+        return
+    if entry.kind == "file" and entry.content == expected:
+        actions.append(
+            PlannedSetupAction(
+                "ALREADY CONFIGURED",
+                "{0}: {1}".format(description, target),
+            )
+        )
+        return
+    if entry.kind == "file":
+        detail = "different content"
+    elif entry.kind == "symlink":
+        detail = "a symlink that could redirect setup"
+    else:
+        detail = "a {0}, not the planned file".format(entry.kind)
+    _append_conflict(
+        conflicts,
+        "{0} conflicts at {1}: existing target is {2}.".format(
+            description,
+            target,
+            detail,
+        ),
+    )
+
+
+def _preflight_directory(
+    path: Path,
+    description: str,
+    actions: List[PlannedSetupAction],
+    conflicts: List[str],
+) -> None:
+    entry = _filesystem_entry(path)
+    if entry is None:
+        actions.append(
+            PlannedSetupAction(
+                "CREATE",
+                _directory_action(description, path),
+            )
+        )
+    elif entry.kind == "directory":
+        actions.append(
+            PlannedSetupAction(
+                "ALREADY CONFIGURED",
+                _directory_action(description, path),
+            )
+        )
+    else:
+        _append_conflict(
+            conflicts,
+            "{0} conflicts at {1}: existing target is {2}.".format(
+                description,
+                path,
+                entry.kind,
+            ),
+        )
+
+
+def _directory_action(description: str, path: Path) -> str:
+    return "{0}: {1}".format(description, path)
+
+
+def _new_dev_branch_action(base: str) -> str:
+    return "Create dev branch from {0}".format(base)
+
+
+def _existing_dev_branch_action(revision: str) -> str:
+    return "dev branch at {0}".format(revision)
+
+
+def _integration_worktree_action(path: Path) -> str:
+    return "Integration Worktree on dev: {0}".format(path)
+
+
+def _raise_conflicts(conflicts: List[str]) -> None:
+    if conflicts:
+        raise ProjectSetupError(
+            "Setup preflight found conflicts:\n{0}".format(
+                "\n".join("- {0}".format(conflict) for conflict in conflicts)
+            )
+        )
+
+
+def _git_project_skill_names(
+    repository: SourceRepository,
+    revision: str,
+) -> set[str]:
+    discovered = set()
+    for path in repository.tree_paths(revision, ".agents/skills"):
+        parts = Path(path).parts
+        if len(parts) != 4 or parts[:2] != (".agents", "skills"):
+            continue
+        if parts[-1] != "SKILL.md":
+            continue
+        entry = repository.tree_entry(revision, path)
+        if entry is None or entry.kind != "file" or entry.content is None:
+            continue
+        name = declared_skill_name(entry.content)
+        if name is not None:
+            discovered.add(name)
+    return discovered
+
+
+def _recoverable_supported_skills(
+    view: _TargetView,
+    supported_skills: SupportedSkills,
+) -> Tuple[str, ...]:
+    recoverable = []
+    for name in CORE_SKILL_NAMES:
+        manifest = supported_skills.manifest(name)
+        root = ".agents/skills/{0}".format(name)
+        root_entry = view.entry(root)
+        if root_entry is None or root_entry.kind != "directory":
+            continue
+        existing_paths = set(view.paths_under(root))
+        expected_directories = {
+            parent
+            for relative_path in manifest
+            for parent in relative_parent_paths(relative_path)
+        }
+        if not existing_paths or not existing_paths.issubset(
+            set(manifest).union(expected_directories)
+        ):
+            continue
+
+        matching_files = 0
+        valid_subset = True
+        for relative_path, content in manifest.items():
+            entry = view.entry("{0}/{1}".format(root, relative_path))
+            if entry is None:
+                continue
+            if entry.kind != "file" or entry.content != content:
+                valid_subset = False
+                break
+            matching_files += 1
+        if not valid_subset:
+            continue
+        for relative_path in expected_directories.intersection(existing_paths):
+            entry = view.entry("{0}/{1}".format(root, relative_path))
+            if entry is None or entry.kind != "directory":
+                valid_subset = False
+                break
+        if valid_subset and matching_files and matching_files < len(manifest):
+            recoverable.append(name)
+    return tuple(recoverable)
 
 
 @dataclass(frozen=True)
@@ -40,18 +315,337 @@ class ProjectSetupPlan:
     codex_files: CodexProjectFiles
     supported_skills: SupportedSkills
     missing_skills: Tuple[str, ...]
+    recoverable_skills: Tuple[str, ...]
     proposed_base: Optional[str]
     registered_dev_worktree: Optional[Path]
+    integration_revision: str
+
+    def _skill_names_to_install(
+        self,
+        install_missing_skills: bool,
+    ) -> Tuple[str, ...]:
+        selected = set(self.recoverable_skills)
+        if install_missing_skills:
+            selected.update(self.missing_skills)
+        return tuple(name for name in CORE_SKILL_NAMES if name in selected)
+
+    def preflight(
+        self,
+        *,
+        install_missing_skills: bool = False,
+    ) -> ProjectSetupPreview:
+        """Translate all read-only planning failures to the setup interface."""
+
+        try:
+            return self._preflight(
+                install_missing_skills=install_missing_skills,
+            )
+        except ProjectSetupError:
+            raise
+        except (
+            CodexProjectError,
+            GitRepositoryError,
+            OSError,
+            SupportedSkillsError,
+        ) as error:
+            raise ProjectSetupError(
+                "Setup preflight could not be completed: {0}".format(error)
+            ) from error
+
+    def _preflight(
+        self,
+        *,
+        install_missing_skills: bool = False,
+    ) -> ProjectSetupPreview:
+        """Check every safely observable target before setup mutates anything."""
+
+        actions: List[PlannedSetupAction] = []
+        conflicts: List[str] = []
+        _preflight_directory(
+            self.worktree_root,
+            "Worktree Directory",
+            actions,
+            conflicts,
+        )
+        _preflight_directory(
+            self.state_directory,
+            "Harness State Directory",
+            actions,
+            conflicts,
+        )
+
+        dev_exists = self.repository.branch_exists(INTEGRATION_BRANCH)
+        registered = self.repository.worktree_for_branch(INTEGRATION_BRANCH)
+        canonical_integration = self.integration_worktree.resolve()
+        if self.proposed_base is not None:
+            if dev_exists:
+                _append_conflict(
+                    conflicts,
+                    "dev was created after setup planning; rerun setup to review it.",
+                )
+            if self.repository.head != self.proposed_base:
+                _append_conflict(
+                    conflicts,
+                    "The proposed dev base changed after setup planning.",
+                )
+            actions.append(
+                PlannedSetupAction(
+                    "CREATE",
+                    _new_dev_branch_action(self.proposed_base),
+                )
+            )
+        else:
+            if not dev_exists:
+                _append_conflict(
+                    conflicts,
+                    "The preflighted dev branch no longer exists.",
+                )
+            elif (
+                self.repository.revision(INTEGRATION_BRANCH)
+                != self.integration_revision
+            ):
+                _append_conflict(
+                    conflicts,
+                    "dev changed after setup planning; rerun setup to review its "
+                    "targets.",
+                )
+            actions.append(
+                PlannedSetupAction(
+                    "ALREADY CONFIGURED",
+                    _existing_dev_branch_action(self.integration_revision),
+                )
+            )
+
+        if registered is not None and registered != canonical_integration:
+            _append_conflict(
+                conflicts,
+                "dev is already checked out at a different Worktree: {0}".format(
+                    registered
+                ),
+            )
+        if registered == canonical_integration:
+            integration_entry = _filesystem_entry(self.integration_worktree)
+            if integration_entry is None or integration_entry.kind != "directory":
+                _append_conflict(
+                    conflicts,
+                    "The registered Integration Worktree is not a real directory: "
+                    "{0}".format(self.integration_worktree),
+                )
+            else:
+                actions.append(
+                    PlannedSetupAction(
+                        "ALREADY CONFIGURED",
+                        _integration_worktree_action(self.integration_worktree),
+                    )
+                )
+        else:
+            integration_entry = _filesystem_entry(self.integration_worktree)
+            if integration_entry is not None:
+                _append_conflict(
+                    conflicts,
+                    "The Integration Worktree path exists without the expected dev "
+                    "registration: {0}".format(self.integration_worktree),
+                )
+            elif registered is None:
+                actions.append(
+                    PlannedSetupAction(
+                        "CREATE",
+                        _integration_worktree_action(self.integration_worktree),
+                    )
+                )
+
+        materialized = (
+            registered == canonical_integration
+            and _filesystem_entry(self.integration_worktree) is not None
+            and _filesystem_entry(self.integration_worktree).kind == "directory"
+        )
+        integration_view = (
+            _TargetView(self.integration_worktree)
+            if materialized
+            else _TargetView(
+                self.integration_worktree,
+                self.repository,
+                self.integration_revision,
+            )
+        )
+        skill_names = self._skill_names_to_install(install_missing_skills)
+        if skill_names:
+            for name in skill_names:
+                manifest = self.supported_skills.manifest(name)
+                skill_relative_root = ".agents/skills/{0}".format(name)
+                allowed_paths = allowed_manifest_paths(manifest)
+                unexpected_paths = tuple(
+                    path
+                    for path in integration_view.paths_under(skill_relative_root)
+                    if path not in allowed_paths
+                )
+                for unexpected_path in unexpected_paths:
+                    _append_conflict(
+                        conflicts,
+                        "Project-local Skill contains unsupported content: {0}".format(
+                            integration_view.display_path(
+                                "{0}/{1}".format(
+                                    skill_relative_root,
+                                    unexpected_path,
+                                )
+                            )
+                        ),
+                    )
+                for resource_path, content in manifest.items():
+                    _preflight_file(
+                        integration_view,
+                        "{0}/{1}".format(skill_relative_root, resource_path),
+                        content,
+                        "Project-local Skill {0}".format(name),
+                        actions,
+                        conflicts,
+                    )
+
+        for relative_path, content in self.codex_files.resources_by_path.items():
+            _preflight_file(
+                integration_view,
+                ".codex/{0}".format(relative_path),
+                content,
+                "Codex Runtime resource",
+                actions,
+                conflicts,
+            )
+
+        scratch_path = ".scratch"
+        scratch_entry = integration_view.entry(scratch_path)
+        if scratch_entry is None:
+            actions.append(
+                PlannedSetupAction(
+                    "CREATE",
+                    self.codex_files.scratch_action(
+                        self.integration_worktree,
+                        self.state_directory,
+                    ),
+                )
+            )
+        elif scratch_entry.kind == "symlink" and _symlink_resolves_to(
+            self.integration_worktree / scratch_path,
+            scratch_entry.content,
+            self.state_directory,
+        ):
+            actions.append(
+                PlannedSetupAction(
+                    "ALREADY CONFIGURED",
+                    self.codex_files.scratch_action(
+                        self.integration_worktree,
+                        self.state_directory,
+                    ),
+                )
+            )
+        else:
+            _append_conflict(
+                conflicts,
+                "Integration scratch link conflicts at {0}.".format(
+                    self.integration_worktree / scratch_path
+                ),
+            )
+
+        common_view = _TargetView(self.repository.common_directory)
+        exclude_parent = common_view.entry("info")
+        exclude_entry = common_view.entry("info/exclude")
+        exclude_path = self.repository.common_directory / "info" / "exclude"
+        if exclude_parent is not None and exclude_parent.kind != "directory":
+            _append_conflict(
+                conflicts,
+                "Git exclude registration is blocked or redirected at {0}.".format(
+                    self.repository.common_directory / "info"
+                ),
+            )
+        elif exclude_entry is None:
+            actions.append(
+                PlannedSetupAction(
+                    "REGISTER",
+                    self.codex_files.exclude_action(
+                        self.repository.common_directory
+                    ),
+                )
+            )
+        elif exclude_entry.kind == "file":
+            try:
+                exclude_lines = exclude_entry.content.decode().splitlines()
+            except UnicodeError:
+                _append_conflict(
+                    conflicts,
+                    "Git exclude file is not valid text: {0}".format(exclude_path),
+                )
+            else:
+                disposition = (
+                    "ALREADY CONFIGURED"
+                    if "/.scratch" in exclude_lines
+                    else "REGISTER"
+                )
+                actions.append(
+                    PlannedSetupAction(
+                        disposition,
+                        self.codex_files.exclude_action(
+                            self.repository.common_directory
+                        ),
+                    )
+                )
+        else:
+            _append_conflict(
+                conflicts,
+                "Git exclude file is blocked or redirected at {0}.".format(
+                    exclude_path
+                ),
+            )
+
+        runner_content = self.codex_files.runner_config_content(
+            self.worktree_root,
+            self.runtime_executable,
+        ).encode()
+        _preflight_file(
+            common_view,
+            "agent-runner/config.yml",
+            runner_content,
+            "Project Runner Config",
+            actions,
+            conflicts,
+        )
+
+        _raise_conflicts(conflicts)
+        return ProjectSetupPreview(tuple(actions))
 
     def apply(self, *, install_missing_skills: bool = False) -> str:
-        self.worktree_root.mkdir(parents=True, exist_ok=True)
-        self.state_directory.mkdir(parents=True, exist_ok=True)
+        preview = self.preflight(install_missing_skills=install_missing_skills)
+        skill_names = self._skill_names_to_install(install_missing_skills)
+        pending = tuple(
+            action.description
+            for action in preview.actions
+            if action.disposition != "ALREADY CONFIGURED"
+        )
+        completed: List[str] = []
+
+        def mark_completed(description: str) -> None:
+            if description in pending and description not in completed:
+                completed.append(description)
+
         try:
+            self.worktree_root.mkdir(parents=True, exist_ok=True)
+            mark_completed(
+                _directory_action("Worktree Directory", self.worktree_root)
+            )
+            self.state_directory.mkdir(parents=True, exist_ok=True)
+            mark_completed(
+                _directory_action("Harness State Directory", self.state_directory)
+            )
             if self.proposed_base is not None:
-                self.repository.add_new_branch_worktree(
+                self.repository.create_branch(
+                    INTEGRATION_BRANCH,
+                    self.proposed_base,
+                )
+                mark_completed(_new_dev_branch_action(self.proposed_base))
+                self.repository.add_existing_branch_worktree(
                     INTEGRATION_BRANCH,
                     self.integration_worktree,
-                    self.proposed_base,
+                )
+                mark_completed(
+                    _integration_worktree_action(self.integration_worktree)
                 )
                 result = "Created Integration Worktree on dev."
             elif self.registered_dev_worktree is None:
@@ -59,14 +653,18 @@ class ProjectSetupPlan:
                     INTEGRATION_BRANCH,
                     self.integration_worktree,
                 )
+                mark_completed(
+                    _integration_worktree_action(self.integration_worktree)
+                )
                 result = "Registered Integration Worktree on existing dev."
             else:
                 result = "Using registered Integration Worktree on dev."
 
-            if install_missing_skills:
+            for name in skill_names:
                 self.supported_skills.install_missing(
                     self.integration_worktree,
-                    self.missing_skills,
+                    (name,),
+                    on_action_complete=mark_completed,
                 )
             self.codex_files.install(
                 integration_worktree=self.integration_worktree,
@@ -74,6 +672,7 @@ class ProjectSetupPlan:
                 common_git_directory=self.repository.common_directory,
                 worktree_root=self.worktree_root,
                 runtime_executable=self.runtime_executable,
+                on_action_complete=mark_completed,
             )
         except (
             CodexProjectError,
@@ -81,7 +680,24 @@ class ProjectSetupPlan:
             OSError,
             SupportedSkillsError,
         ) as error:
-            raise ProjectSetupError(str(error)) from error
+            incomplete = tuple(
+                description
+                for description in pending
+                if description not in completed
+            )
+            completed_lines = completed or ["none"]
+            incomplete_lines = incomplete or ("none",)
+            raise ProjectSetupError(
+                "Setup execution stopped: {0}\n"
+                "Completed actions were not rolled back.\n"
+                "Completed actions:\n{1}\n"
+                "Incomplete actions:\n{2}\n"
+                "Correct the cause and rerun setup.".format(
+                    error,
+                    "\n".join("- {0}".format(action) for action in completed_lines),
+                    "\n".join("- {0}".format(action) for action in incomplete_lines),
+                )
+            ) from error
         return result
 
 
@@ -108,36 +724,48 @@ def plan_project_setup(
 
         codex_files = CodexProjectFiles.load()
         supported_skills = SupportedSkills.load()
-        missing_skills = tuple(
-            status.name
-            for status in check_core_skills(
-                integration_worktree,
-                Path.home() / ".agents" / "skills",
-            )
-            if not status.discovered
+        skill_statuses = check_core_skills(
+            integration_worktree,
+            Path.home() / ".agents" / "skills",
         )
+        discovered_skills = {
+            status.name for status in skill_statuses if status.discovered
+        }
         dev_exists = repository.branch_exists(INTEGRATION_BRANCH)
         registered_dev_worktree = repository.worktree_for_branch(
             INTEGRATION_BRANCH
         )
-        if (
-            registered_dev_worktree is not None
-            and registered_dev_worktree != integration_worktree.resolve()
-        ):
-            raise ProjectSetupError(
-                "dev is already checked out at a different Worktree: {0}".format(
-                    registered_dev_worktree
-                )
-            )
-        if (
-            dev_exists
-            and registered_dev_worktree is None
-            and os.path.lexists(str(integration_worktree))
-        ):
-            raise ProjectSetupError(
-                "The Integration Worktree path already exists but is not registered."
-            )
         proposed_base = None if dev_exists else repository.head
+        integration_revision = (
+            repository.revision(INTEGRATION_BRANCH)
+            if dev_exists
+            else proposed_base
+        )
+        materialized = (
+            registered_dev_worktree == integration_worktree.resolve()
+            and _filesystem_entry(integration_worktree) is not None
+            and _filesystem_entry(integration_worktree).kind == "directory"
+        )
+        integration_view = (
+            _TargetView(integration_worktree)
+            if materialized
+            else _TargetView(
+                integration_worktree,
+                repository,
+                integration_revision,
+            )
+        )
+        if not materialized:
+            discovered_skills.update(
+                _git_project_skill_names(repository, integration_revision)
+            )
+        missing_skills = tuple(
+            name for name in CORE_SKILL_NAMES if name not in discovered_skills
+        )
+        recoverable_skills = _recoverable_supported_skills(
+            integration_view,
+            supported_skills,
+        )
     except (GitRepositoryError, OSError, SupportedSkillsError) as error:
         raise ProjectSetupError(str(error)) from error
 
@@ -150,6 +778,8 @@ def plan_project_setup(
         codex_files=codex_files,
         supported_skills=supported_skills,
         missing_skills=missing_skills,
+        recoverable_skills=recoverable_skills,
         proposed_base=proposed_base,
         registered_dev_worktree=registered_dev_worktree,
+        integration_revision=integration_revision,
     )

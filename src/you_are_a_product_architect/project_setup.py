@@ -67,6 +67,14 @@ def setup() -> None:
     else:
         click.echo("Core Skills: OK")
 
+    try:
+        preview = plan.preflight(
+            install_missing_skills=install_missing_skills,
+        )
+    except ProjectSetupError as error:
+        raise click.ClickException(str(error)) from error
+    click.echo(preview.render())
+
     if plan.proposed_base is not None:
         click.echo("Proposed dev base: {0}".format(plan.proposed_base))
         if not click.confirm(

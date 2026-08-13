@@ -164,7 +164,10 @@ class SupportedSkills:
             for relative_path in file_order:
                 destination = target / relative_path
                 destination.parent.mkdir(parents=True, exist_ok=True)
-                if destination.exists() and destination.read_bytes() == manifest[relative_path]:
+                if (
+                    destination.exists()
+                    and destination.read_bytes() == manifest[relative_path]
+                ):
                     continue
                 destination.write_bytes(manifest[relative_path])
 

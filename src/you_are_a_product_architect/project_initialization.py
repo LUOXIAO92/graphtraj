@@ -109,6 +109,22 @@ def _append_conflict(conflicts: List[str], message: str) -> None:
         conflicts.append(message)
 
 
+def _symlink_resolves_to(
+    link: Path,
+    encoded_target: Optional[bytes],
+    expected: Path,
+) -> bool:
+    if encoded_target is None:
+        return False
+    try:
+        target = Path(encoded_target.decode())
+    except UnicodeError:
+        return False
+    if not target.is_absolute():
+        target = link.parent / target
+    return target.resolve() == expected.resolve()
+
+
 def _parent_paths(relative_path: str) -> Tuple[str, ...]:
     parts = Path(relative_path).parts
     return tuple(Path(*parts[:index]).as_posix() for index in range(1, len(parts)))
@@ -135,7 +151,12 @@ def _preflight_file(
     entry = view.entry(relative_path)
     target = view.display_path(relative_path)
     if entry is None:
-        actions.append(PlannedSetupAction("CREATE", "{0}: {1}".format(description, target)))
+        actions.append(
+            PlannedSetupAction(
+                "CREATE",
+                "{0}: {1}".format(description, target),
+            )
+        )
         return
     if entry.kind == "file" and entry.content == expected:
         actions.append(
@@ -169,7 +190,12 @@ def _preflight_directory(
 ) -> None:
     entry = _filesystem_entry(path)
     if entry is None:
-        actions.append(PlannedSetupAction("CREATE", "{0}: {1}".format(description, path)))
+        actions.append(
+            PlannedSetupAction(
+                "CREATE",
+                "{0}: {1}".format(description, path),
+            )
+        )
     elif entry.kind == "directory":
         actions.append(
             PlannedSetupAction(
@@ -278,7 +304,39 @@ class ProjectSetupPlan:
     registered_dev_worktree: Optional[Path]
     integration_revision: str
 
+    def _skill_names_to_install(
+        self,
+        install_missing_skills: bool,
+    ) -> Tuple[str, ...]:
+        selected = set(self.recoverable_skills)
+        if install_missing_skills:
+            selected.update(self.missing_skills)
+        return tuple(name for name in CORE_SKILL_NAMES if name in selected)
+
     def preflight(
+        self,
+        *,
+        install_missing_skills: bool = False,
+    ) -> ProjectSetupPreview:
+        """Translate all read-only planning failures to the setup interface."""
+
+        try:
+            return self._preflight(
+                install_missing_skills=install_missing_skills,
+            )
+        except ProjectSetupError:
+            raise
+        except (
+            CodexProjectError,
+            GitRepositoryError,
+            OSError,
+            SupportedSkillsError,
+        ) as error:
+            raise ProjectSetupError(
+                "Setup preflight could not be completed: {0}".format(error)
+            ) from error
+
+    def _preflight(
         self,
         *,
         install_missing_skills: bool = False,
@@ -316,11 +374,18 @@ class ProjectSetupPlan:
                 )
         else:
             if not dev_exists:
-                _append_conflict(conflicts, "The preflighted dev branch no longer exists.")
-            elif self.repository.revision(INTEGRATION_BRANCH) != self.integration_revision:
                 _append_conflict(
                     conflicts,
-                    "dev changed after setup planning; rerun setup to review its targets.",
+                    "The preflighted dev branch no longer exists.",
+                )
+            elif (
+                self.repository.revision(INTEGRATION_BRANCH)
+                != self.integration_revision
+            ):
+                _append_conflict(
+                    conflicts,
+                    "dev changed after setup planning; rerun setup to review its "
+                    "targets.",
                 )
 
         if registered is not None and registered != canonical_integration:
@@ -394,14 +459,7 @@ class ProjectSetupPlan:
                 conflicts,
             )
 
-        if install_missing_skills:
-            skill_names = tuple(
-                name
-                for name in CORE_SKILL_NAMES
-                if name in set(self.missing_skills).union(self.recoverable_skills)
-            )
-        else:
-            skill_names = self.recoverable_skills
+        skill_names = self._skill_names_to_install(install_missing_skills)
         if skill_names:
             for name in skill_names:
                 manifest = self.supported_skills.manifest(name)
@@ -441,10 +499,6 @@ class ProjectSetupPlan:
 
         scratch_path = ".scratch"
         scratch_entry = integration_view.entry(scratch_path)
-        expected_link = self.codex_files.scratch_link_text(
-            self.integration_worktree,
-            self.state_directory,
-        ).encode()
         if scratch_entry is None:
             actions.append(
                 PlannedSetupAction(
@@ -455,7 +509,11 @@ class ProjectSetupPlan:
                     ),
                 )
             )
-        elif scratch_entry.kind == "symlink" and scratch_entry.content == expected_link:
+        elif scratch_entry.kind == "symlink" and _symlink_resolves_to(
+            self.integration_worktree / scratch_path,
+            scratch_entry.content,
+            self.state_directory,
+        ):
             actions.append(
                 PlannedSetupAction(
                     "ALREADY CONFIGURED",
@@ -537,9 +595,22 @@ class ProjectSetupPlan:
 
     def apply(self, *, install_missing_skills: bool = False) -> str:
         self.preflight(install_missing_skills=install_missing_skills)
-        self.worktree_root.mkdir(parents=True, exist_ok=True)
-        self.state_directory.mkdir(parents=True, exist_ok=True)
+        skill_names = self._skill_names_to_install(install_missing_skills)
+        stages = [
+            "Worktree Directory",
+            "Harness State Directory",
+            "Integration Worktree",
+        ]
+        stages.extend(
+            "Project-local Skill {0}".format(name) for name in skill_names
+        )
+        stages.append("Runtime resources and project registration")
+        completed: List[str] = []
         try:
+            self.worktree_root.mkdir(parents=True, exist_ok=True)
+            completed.append("Worktree Directory")
+            self.state_directory.mkdir(parents=True, exist_ok=True)
+            completed.append("Harness State Directory")
             if self.proposed_base is not None:
                 self.repository.add_new_branch_worktree(
                     INTEGRATION_BRANCH,
@@ -555,22 +626,14 @@ class ProjectSetupPlan:
                 result = "Registered Integration Worktree on existing dev."
             else:
                 result = "Using registered Integration Worktree on dev."
+            completed.append("Integration Worktree")
 
-            skill_names = tuple(
-                name
-                for name in CORE_SKILL_NAMES
-                if name
-                in (
-                    set(self.recoverable_skills).union(self.missing_skills)
-                    if install_missing_skills
-                    else set(self.recoverable_skills)
-                )
-            )
-            if skill_names:
+            for name in skill_names:
                 self.supported_skills.install_missing(
                     self.integration_worktree,
-                    skill_names,
+                    (name,),
                 )
+                completed.append("Project-local Skill {0}".format(name))
             self.codex_files.install(
                 integration_worktree=self.integration_worktree,
                 state_directory=self.state_directory,
@@ -578,13 +641,27 @@ class ProjectSetupPlan:
                 worktree_root=self.worktree_root,
                 runtime_executable=self.runtime_executable,
             )
+            completed.append("Runtime resources and project registration")
         except (
             CodexProjectError,
             GitRepositoryError,
             OSError,
             SupportedSkillsError,
         ) as error:
-            raise ProjectSetupError(str(error)) from error
+            incomplete = tuple(stage for stage in stages if stage not in completed)
+            completed_lines = completed or ["none"]
+            incomplete_lines = incomplete or ("none",)
+            raise ProjectSetupError(
+                "Setup execution stopped: {0}\n"
+                "Completed actions were not rolled back.\n"
+                "Completed actions:\n{1}\n"
+                "Incomplete actions:\n{2}\n"
+                "Correct the cause and rerun setup.".format(
+                    error,
+                    "\n".join("- {0}".format(stage) for stage in completed_lines),
+                    "\n".join("- {0}".format(stage) for stage in incomplete_lines),
+                )
+            ) from error
         return result
 
 

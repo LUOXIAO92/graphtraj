@@ -21,7 +21,11 @@ def _git(repository: Path, *arguments: str) -> str:
         capture_output=True,
     )
     if result.returncode != 0:
-        message = result.stderr.strip() or result.stdout.strip() or "Git command failed."
+        message = (
+            result.stderr.strip()
+            or result.stdout.strip()
+            or "Git command failed."
+        )
         raise GitRepositoryError(message)
     return result.stdout.strip()
 

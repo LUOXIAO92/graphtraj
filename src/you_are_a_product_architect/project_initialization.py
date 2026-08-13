@@ -10,6 +10,7 @@ from typing import Optional, Tuple
 from .codex_project import CodexProjectError, CodexProjectFiles
 from .git_repository import GitRepositoryError, SourceRepository
 from .skill_check import check_core_skills
+from .supported_skills import SupportedSkills, SupportedSkillsError
 
 
 INTEGRATION_BRANCH = "dev"
@@ -37,11 +38,12 @@ class ProjectSetupPlan:
     state_directory: Path
     runtime_executable: Path
     codex_files: CodexProjectFiles
+    supported_skills: SupportedSkills
     missing_skills: Tuple[str, ...]
     proposed_base: Optional[str]
     registered_dev_worktree: Optional[Path]
 
-    def apply(self) -> str:
+    def apply(self, *, install_missing_skills: bool = False) -> str:
         self.worktree_root.mkdir(parents=True, exist_ok=True)
         self.state_directory.mkdir(parents=True, exist_ok=True)
         try:
@@ -61,6 +63,11 @@ class ProjectSetupPlan:
             else:
                 result = "Using registered Integration Worktree on dev."
 
+            if install_missing_skills:
+                self.supported_skills.install_missing(
+                    self.integration_worktree,
+                    self.missing_skills,
+                )
             self.codex_files.install(
                 integration_worktree=self.integration_worktree,
                 state_directory=self.state_directory,
@@ -68,7 +75,12 @@ class ProjectSetupPlan:
                 worktree_root=self.worktree_root,
                 runtime_executable=self.runtime_executable,
             )
-        except (CodexProjectError, GitRepositoryError, OSError) as error:
+        except (
+            CodexProjectError,
+            GitRepositoryError,
+            OSError,
+            SupportedSkillsError,
+        ) as error:
             raise ProjectSetupError(str(error)) from error
         return result
 
@@ -95,6 +107,7 @@ def plan_project_setup(
             )
 
         codex_files = CodexProjectFiles.load()
+        supported_skills = SupportedSkills.load()
         missing_skills = tuple(
             status.name
             for status in check_core_skills(
@@ -125,7 +138,7 @@ def plan_project_setup(
                 "The Integration Worktree path already exists but is not registered."
             )
         proposed_base = None if dev_exists else repository.head
-    except (GitRepositoryError, OSError) as error:
+    except (GitRepositoryError, OSError, SupportedSkillsError) as error:
         raise ProjectSetupError(str(error)) from error
 
     return ProjectSetupPlan(
@@ -135,6 +148,7 @@ def plan_project_setup(
         state_directory=state_directory,
         runtime_executable=runtime_executable,
         codex_files=codex_files,
+        supported_skills=supported_skills,
         missing_skills=missing_skills,
         proposed_base=proposed_base,
         registered_dev_worktree=registered_dev_worktree,

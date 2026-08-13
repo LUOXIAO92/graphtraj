@@ -24,6 +24,18 @@ def _primary_worktree_prompt() -> Path:
     ).resolve()
 
 
+def _missing_skill_action(missing_skills: tuple[str, ...]) -> str:
+    click.echo(
+        "Missing required core Skills: {0}".format(
+            ", ".join(missing_skills)
+        )
+    )
+    return click.prompt(
+        "Choose Skill installation",
+        type=click.Choice(("project-local", "independent")),
+    )
+
+
 @click.command()
 def setup() -> None:
     """Initialize a Harness Project from an existing Primary Worktree."""
@@ -43,13 +55,17 @@ def setup() -> None:
     except ProjectSetupError as error:
         raise click.ClickException(str(error)) from error
 
+    install_missing_skills = False
     if plan.missing_skills:
-        raise click.ClickException(
-            "Missing required core Skills: {0}".format(
-                ", ".join(plan.missing_skills)
+        action = _missing_skill_action(plan.missing_skills)
+        if action == "independent":
+            raise click.ClickException(
+                "Setup stopped before any setup mutation. Install the missing "
+                "Skills independently in the Runtime user scope and rerun setup."
             )
-        )
-    click.echo("Core Skills: OK")
+        install_missing_skills = True
+    else:
+        click.echo("Core Skills: OK")
 
     if plan.proposed_base is not None:
         click.echo("Proposed dev base: {0}".format(plan.proposed_base))
@@ -60,10 +76,13 @@ def setup() -> None:
             raise click.Abort()
 
     try:
-        click.echo(plan.apply())
+        result = plan.apply(install_missing_skills=install_missing_skills)
     except ProjectSetupError as error:
         raise click.ClickException(str(error)) from error
 
+    if install_missing_skills:
+        click.echo("Core Skills: OK")
+    click.echo(result)
     click.echo("Harness Project setup complete.")
     click.echo("Review and commit the Runtime resources on dev.")
     click.echo(

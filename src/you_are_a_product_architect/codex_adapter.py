@@ -120,14 +120,10 @@ class CodexTurn:
         """Own the process and translate its private JSONL protocol."""
 
         arguments, worktree = _validate_launch_request(self._request)
-        prompt_to_stdin = True
         if self._expected_session is not None:
             _verify_packaged_config(worktree)
             _verify_packaged_guard(worktree)
-            arguments = _resume_arguments(
-                arguments, self._expected_session, self._prompt
-            )
-            prompt_to_stdin = False
+            arguments = _resume_arguments(arguments, self._expected_session)
         events_file = self._session_directory / "events.jsonl"
         stderr_file = self._session_directory / "stderr.log"
         session: Optional[str] = None
@@ -144,8 +140,7 @@ class CodexTurn:
                 )
                 if self._process.stdin is None or self._process.stdout is None:
                     raise OSError("Codex pipes were not established")
-                if prompt_to_stdin:
-                    self._process.stdin.write(self._prompt)
+                self._process.stdin.write(self._prompt)
                 self._process.stdin.close()
 
                 with events_file.open("a", encoding="utf-8") as events:
@@ -304,21 +299,18 @@ def _validate_launch_request(
     return arguments, worktree
 
 
-def _resume_arguments(
-    launch_arguments: List[str], session: str, prompt: str
-) -> List[str]:
+def _resume_arguments(launch_arguments: List[str], session: str) -> List[str]:
     if (
         len(launch_arguments) < 4
         or launch_arguments[1] != "exec"
         or launch_arguments[-2:] != ["--json", "-"]
         or not session
-        or not prompt.strip()
     ):
         raise CodexAdapterError(
             "RUNTIME_SESSION_NOT_RESUMABLE",
             "The mapped Codex Runtime session cannot be resumed.",
         )
-    return [*launch_arguments[:-1], "resume", session, prompt]
+    return [*launch_arguments[:-1], "resume", session, "-"]
 
 
 def _session_from_event(line: str) -> Optional[str]:

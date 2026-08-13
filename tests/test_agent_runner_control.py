@@ -96,7 +96,7 @@ def test_installed_send_resumes_an_idle_runtime_session_under_the_same_alias(
     )
     wait_for_process_exit(original_mapping["worker_pid"])
     resume_release = tmp_path / "allow-resumed-turn-to-finish"
-    instruction = "Re-run the focused process test, then update the evidence."
+    instruction = "--dangerously-bypass-approvals-and-sandbox"
 
     resumed = send(
         installed_worktree_commands,
@@ -106,6 +106,7 @@ def test_installed_send_resumes_an_idle_runtime_session_under_the_same_alias(
             "FAKE_CODEX_EVENTS": json.dumps(
                 [{"type": "thread.started", "thread_id": session}]
             ),
+            "FAKE_CODEX_CAPTURE_STDIN": "1",
             "FAKE_CODEX_RELEASE_FILE": str(resume_release),
         },
         alias,
@@ -141,9 +142,10 @@ def test_installed_send_resumes_an_idle_runtime_session_under_the_same_alias(
             *original_runtime_record["argv"][:-1],
             "resume",
             session,
-            instruction,
+            "-",
         ],
         "cwd": resumed_mapping["worktree_path"],
+        "stdin": instruction,
     }
 
     resume_release.touch()
@@ -253,6 +255,7 @@ def test_installed_send_rejects_running_codex_without_deferring_instruction(
             "FAKE_CODEX_EVENTS": json.dumps(
                 [{"type": "thread.started", "thread_id": session}]
             ),
+            "FAKE_CODEX_CAPTURE_STDIN": "1",
             "FAKE_CODEX_RELEASE_FILE": str(resume_release),
         },
         alias,
@@ -269,9 +272,9 @@ def test_installed_send_rejects_running_codex_without_deferring_instruction(
     )
     assert resumed_mapping["session"] == session
     assert resumed_mapping["worker_pid"] != interrupted_mapping["worker_pid"]
-    runtime_record = fake_codex.log_file.read_text(encoding="utf-8")
-    assert accepted_instruction in runtime_record
-    assert rejected_instruction not in runtime_record
+    runtime_record = json.loads(fake_codex.log_file.read_text(encoding="utf-8"))
+    assert runtime_record["stdin"] == accepted_instruction
+    assert rejected_instruction not in runtime_record["stdin"]
     assert not release_file.exists()
 
     resume_release.touch()

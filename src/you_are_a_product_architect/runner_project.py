@@ -179,13 +179,6 @@ def provision_worktree(
             "The derived Ticket Worktree path exists but is not registered.",
         )
 
-    try:
-        worktree.parent.mkdir(parents=True, exist_ok=True)
-    except OSError as error:
-        raise RunnerError(
-            "WORKTREE_PROVISION_FAILED",
-            "The derived Ticket Worktree could not be provisioned from dev.",
-        ) from error
     branch_exists = _git_succeeds(
         project.repository,
         "show-ref",
@@ -193,6 +186,22 @@ def provision_worktree(
         "--quiet",
         expected_branch,
     )
+    if (
+        branch_exists
+        and _git(project.repository, "rev-parse", expected_branch)
+        != project.dev_commit
+    ):
+        raise RunnerError(
+            "WORKTREE_CONFLICT",
+            "The existing Ticket branch is not at the current validated dev state.",
+        )
+    try:
+        worktree.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as error:
+        raise RunnerError(
+            "WORKTREE_PROVISION_FAILED",
+            "The derived Ticket Worktree could not be provisioned from dev.",
+        ) from error
     try:
         if branch_exists:
             _git(project.repository, "worktree", "add", str(worktree), branch)
@@ -223,6 +232,10 @@ def provision_worktree(
         record is None
         or record.get("branch") != expected_branch
         or _git(worktree, "rev-parse", "--git-common-dir") == ""
+        or (
+            branch_exists
+            and _git(worktree, "rev-parse", "HEAD") != project.dev_commit
+        )
     ):
         raise RunnerError(
             "WORKTREE_PROVISION_FAILED",

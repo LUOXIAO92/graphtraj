@@ -261,6 +261,7 @@ def _stop_process(process: Optional[subprocess.Popen]) -> bool:
 def resolve_codex_role(worktree: Path, binding: str) -> CodexRole:
     """Resolve and vet one project custom-Agent name from a Worktree."""
 
+    _verify_packaged_config(worktree)
     agent_directory = worktree / ".codex" / "agents"
     if not agent_directory.is_dir() or agent_directory.is_symlink():
         raise CodexAdapterError(
@@ -406,6 +407,28 @@ def _verify_packaged_guard(worktree: Path) -> None:
         raise CodexAdapterError(
             "ROLE_GUARD_MISMATCH",
             "The project Worktree Guard does not match the installed resource.",
+        )
+
+
+def _verify_packaged_config(worktree: Path) -> None:
+    resource = resources.files("you_are_a_product_architect.resources").joinpath(
+        "codex", "config.toml"
+    )
+    config = worktree / ".codex" / "config.toml"
+    try:
+        if config.is_symlink() or not config.is_file():
+            raise OSError("config is not a regular file")
+        installed = resource.read_bytes()
+        project = config.read_bytes()
+    except OSError as error:
+        raise CodexAdapterError(
+            "PROJECT_CONFIG_MISMATCH",
+            "The project Codex config does not match the installed resource.",
+        ) from error
+    if project != installed:
+        raise CodexAdapterError(
+            "PROJECT_CONFIG_MISMATCH",
+            "The project Codex config does not match the installed resource.",
         )
 
 

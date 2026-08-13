@@ -22,6 +22,19 @@ LOGICAL_ROLES = frozenset(
 )
 
 
+def _valid_run_id(value: object) -> bool:
+    if not isinstance(value, str) or len(value) > 64 or not RUN_ID.fullmatch(value):
+        return False
+    semantic_name = value[9:]
+    name_and_suffix = semantic_name.rsplit("-", 1)
+    if (
+        len(name_and_suffix) == 2
+        and re.fullmatch(r"[1-9][0-9]*", name_and_suffix[1])
+    ):
+        semantic_name = name_and_suffix[0]
+    return len(semantic_name) <= 48
+
+
 def read_batch(
     batch_file: Path,
     cwd: Path,
@@ -53,14 +66,14 @@ def read_batch(
             "Batch input must contain only run_id and tasks.",
         )
     run_id = document["run_id"]
-    if (
-        not isinstance(run_id, str)
-        or len(run_id) > 64
-        or not RUN_ID.fullmatch(run_id)
-    ):
+    if not _valid_run_id(run_id):
         raise RunnerError(
             "RUN_ID_INVALID",
-            "run_id must be at most 64 ASCII characters in YYYYMMDD-short-name form.",
+            (
+                "run_id must use YYYYMMDD-short-name form with a semantic "
+                "short name of at most 48 ASCII characters and at most 64 "
+                "characters overall."
+            ),
         )
     tasks = document["tasks"]
     if not isinstance(tasks, list) or len(tasks) != 1:

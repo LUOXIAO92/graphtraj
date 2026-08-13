@@ -404,7 +404,7 @@ def test_installed_runner_launches_one_isolated_engineer_and_returns_early(
                     "ticket_file": str(ticket_file.resolve()),
                     "launch_status": "failed",
                     "error": {
-                        "code": "WORKTREE_TURN_ACTIVE",
+                        "code": "worktree-busy",
                         "message": (
                             "The Ticket Worktree already has an active Engineer turn."
                         ),
@@ -459,18 +459,23 @@ def test_installed_runner_launches_one_isolated_engineer_and_returns_early(
     (
         (
             "unsupported-role-key",
-            "ROLE_CONFIG_UNSUPPORTED",
+            "invalid-config",
             "The configured Codex role uses an unsupported top-level schema.",
         ),
         (
             "changed-hook-command",
-            "ROLE_HOOK_MISMATCH",
+            "invalid-config",
             "The configured Codex role does not contain the packaged Worktree Guard hooks.",
         ),
         (
             "changed-guard-script",
-            "ROLE_GUARD_MISMATCH",
+            "invalid-config",
             "The project Worktree Guard does not match the installed resource.",
+        ),
+        (
+            "changed-project-config",
+            "invalid-config",
+            "The project Codex config does not match the installed resource.",
         ),
     ),
 )
@@ -498,6 +503,7 @@ def test_installed_runner_rejects_unvetted_role_or_guard_before_runtime_launch(
 
     role_file = integration / ".codex" / "agents" / "engineer-expert.toml"
     guard_file = integration / ".codex" / "hooks" / "worktree_guard.py"
+    config_file = integration / ".codex" / "config.toml"
     if mutation == "unsupported-role-key":
         role_file.write_text(
             role_file.read_text(encoding="utf-8").replace(
@@ -514,9 +520,17 @@ def test_installed_runner_rejects_unvetted_role_or_guard_before_runtime_launch(
             ),
             encoding="utf-8",
         )
-    else:
+    elif mutation == "changed-guard-script":
         guard_file.write_text(
             guard_file.read_text(encoding="utf-8") + "\n# unvetted change\n",
+            encoding="utf-8",
+        )
+    else:
+        config_file.write_text(
+            config_file.read_text(encoding="utf-8").replace(
+                'writable_roots = [".scratch"]',
+                'writable_roots = [".scratch", "../outside"]',
+            ),
             encoding="utf-8",
         )
     run_process(["git", "add", ".codex"], cwd=integration).check_returncode()
@@ -610,16 +624,32 @@ def test_installed_runner_rejects_invalid_logical_input_without_launch_artifacts
     }
     cases = (
         (
+            {
+                "run_id": "20260813-" + "a" * 49,
+                "tasks": [base_task],
+            },
+            "invalid-input",
+            (
+                "run_id must use YYYYMMDD-short-name form with a semantic "
+                "short name of at most 48 ASCII characters and at most 64 "
+                "characters overall."
+            ),
+        ),
+        (
             {"run_id": "not-a-dated-run", "tasks": [base_task]},
-            "RUN_ID_INVALID",
-            "run_id must be at most 64 ASCII characters in YYYYMMDD-short-name form.",
+            "invalid-input",
+            (
+                "run_id must use YYYYMMDD-short-name form with a semantic "
+                "short name of at most 48 ASCII characters and at most 64 "
+                "characters overall."
+            ),
         ),
         (
             {
                 "run_id": "20260813-invalid-ticket-id",
                 "tasks": [{**base_task, "ticket_id": "invalid/ticket"}],
             },
-            "TICKET_ID_INVALID",
+            "invalid-input",
             "ticket_id must be 1-32 ASCII letters, digits, dots, underscores, or hyphens.",
         ),
         (
@@ -627,7 +657,7 @@ def test_installed_runner_rejects_invalid_logical_input_without_launch_artifacts
                 "run_id": "20260813-invalid-ticket-name",
                 "tasks": [{**base_task, "ticket_name": "Launch-Engineer"}],
             },
-            "TICKET_NAME_INVALID",
+            "invalid-input",
             "ticket_name must be 1-64 ASCII lowercase kebab-case characters.",
         ),
         (
@@ -635,7 +665,7 @@ def test_installed_runner_rejects_invalid_logical_input_without_launch_artifacts
                 "run_id": "20260813-invalid-role",
                 "tasks": [{**base_task, "role": "engineer-principal"}],
             },
-            "ROLE_NOT_CONFIGURED",
+            "invalid-input",
             "The selected logical Engineer role is not configured.",
         ),
         (
@@ -643,7 +673,7 @@ def test_installed_runner_rejects_invalid_logical_input_without_launch_artifacts
                 "run_id": "20260813-physical-input",
                 "tasks": [{**base_task, "worktree_path": "/tmp/main-selected"}],
             },
-            "TASK_SCHEMA_INVALID",
+            "invalid-input",
             "A task must contain ticket identity, role, and ticket_file only.",
         ),
         (
@@ -651,7 +681,7 @@ def test_installed_runner_rejects_invalid_logical_input_without_launch_artifacts
                 "run_id": "20260813-multiple-tasks",
                 "tasks": [base_task, {**base_task, "ticket_id": "11"}],
             },
-            "TASK_COUNT_UNSUPPORTED",
+            "invalid-input",
             "This Runner release accepts exactly one task per batch.",
         ),
     )
@@ -681,6 +711,82 @@ def test_installed_runner_rejects_invalid_logical_input_without_launch_artifacts
     assert not fake_codex.log_file.exists()
     assert not (harness_root / ".agent-worktrees" / "runs").exists()
     assert not (harness_root / "state" / "task-delivery").exists()
+
+
+def test_installed_runner_rejects_preexisting_ticket_branch_off_validated_dev(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    harness_root = temporary_git_repository.parent
+    integration = harness_root / ".agent-worktrees" / "integration"
+    user_home = tmp_path / "operator-home"
+    install_user_skills(user_home)
+    setup_result = run_setup(
+        installed_commands,
+        harness_root=harness_root,
+        user_home=user_home,
+        fake_codex=fake_codex,
+        answers="{0}\ny\n".format(temporary_git_repository.name),
+    )
+    assert setup_result.returncode == 0, setup_result.stderr
+    run_process(["git", "add", ".codex"], cwd=integration).check_returncode()
+    run_process(
+        ["git", "commit", "-m", "Configure Codex on dev"], cwd=integration
+    ).check_returncode()
+    dev_head = git_output(integration, "rev-parse", "HEAD")
+    main_head = git_output(temporary_git_repository, "rev-parse", "main")
+    assert main_head != dev_head
+
+    run_id = "20260813-conflicting-ticket-branch"
+    branch = "agent/{0}/2-10-launch-engineer".format(run_id)
+    run_process(
+        ["git", "branch", branch, main_head], cwd=integration
+    ).check_returncode()
+    ticket_file = harness_root / "ticket.md"
+    ticket_file.write_text("# Canonical ticket\n", encoding="utf-8")
+    batch_file = harness_root / "batch.yml"
+    batch_file.write_text(
+        yaml.safe_dump(
+            {
+                "run_id": run_id,
+                "tasks": [
+                    {
+                        "ticket_id": "10",
+                        "ticket_name": "launch-engineer",
+                        "role": "engineer-expert",
+                        "ticket_file": str(ticket_file),
+                    }
+                ],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    environment = os.environ.copy()
+    environment.update(
+        {"HOME": str(user_home), "FAKE_CODEX_LOG": str(fake_codex.log_file)}
+    )
+
+    result = run_process(
+        [str(installed_commands.runner), "--batch-input", str(batch_file)],
+        cwd=integration,
+        env=environment,
+    )
+
+    assert result.returncode == 1
+    failed_task = yaml.safe_load(result.stdout)["tasks"][0]
+    assert failed_task["error"] == {
+        "code": "worktree-conflict",
+        "message": (
+            "The existing Ticket branch is not at the current validated dev state."
+        ),
+    }
+    assert result.stderr == failed_task["error"]["message"] + "\n"
+    assert not Path(failed_task["worktree_path"]).exists()
+    assert git_output(integration, "rev-parse", branch) == main_head
+    assert not fake_codex.log_file.exists()
 
 
 def test_installed_runner_separates_ambiguous_ticket_identity_pairs(
@@ -855,7 +961,7 @@ def test_concurrent_runner_processes_atomically_reserve_one_ticket_worktree(
         failed_task = yaml.safe_load(failures[0][0])["tasks"][0]
         assert failed_task["launch_status"] == "failed"
         assert failed_task["error"] == {
-            "code": "WORKTREE_TURN_ACTIVE",
+            "code": "worktree-busy",
             "message": "The Ticket Worktree already has an active Engineer turn.",
         }
         assert failures[0][1] == (
@@ -988,7 +1094,7 @@ def test_failed_launch_retains_reservation_until_worker_and_runtime_terminate(
 
         assert second.returncode == 1
         assert yaml.safe_load(second.stdout)["tasks"][0]["error"] == {
-            "code": "WORKTREE_TURN_ACTIVE",
+            "code": "worktree-busy",
             "message": "The Ticket Worktree already has an active Engineer turn.",
         }
         assert len(list(active_root.iterdir())) == 1
@@ -998,7 +1104,7 @@ def test_failed_launch_retains_reservation_until_worker_and_runtime_terminate(
     first_stdout, first_stderr = first.communicate(timeout=12)
     assert first.returncode == 1
     assert yaml.safe_load(first_stdout)["tasks"][0]["error"] == {
-        "code": "METADATA_WRITE_FAILED",
+        "code": "launch-failed",
         "message": "The Runner could not persist mechanical ticket metadata.",
     }
     assert first_stderr == (

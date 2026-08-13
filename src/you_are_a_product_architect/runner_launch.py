@@ -241,6 +241,7 @@ def _start_turn(
                     executable=project.runtime_executable,
                     worktree=worktree,
                     evidence=evidence,
+                    git_common_directory=project.common_directory,
                 ),
                 "active_turn_key": active_turn_key,
                 "mapping": mapping,

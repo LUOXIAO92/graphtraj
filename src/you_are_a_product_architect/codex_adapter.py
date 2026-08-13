@@ -66,6 +66,7 @@ class CodexRole:
         executable: Path,
         worktree: Path,
         evidence: Path,
+        git_common_directory: Path,
     ) -> Dict[str, Any]:
         """Render the private request consumed by this Adapter's worker."""
 
@@ -76,6 +77,8 @@ class CodexRole:
             str(worktree),
             "--add-dir",
             str(evidence),
+            "--add-dir",
+            str(git_common_directory),
             "--model",
             self.model,
             "--sandbox",

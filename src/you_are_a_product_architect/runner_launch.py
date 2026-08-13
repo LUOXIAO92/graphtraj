@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import signal
 import subprocess
 import sys
 import time
@@ -16,13 +15,16 @@ import yaml
 from .codex_adapter import CodexAdapterError, CodexRole, resolve_codex_role
 from .runner_batch import prepare_evidence, read_batch, retain_batch
 from .runner_io import (
+    ActiveTurnBusyError,
+    ActiveTurnReservationError,
     active_turn_key,
-    active_turn_directory,
     confirm_alias_mapping_durable,
     release_active_turn,
+    reserve_active_turn,
     write_yaml_durably,
 )
 from .runner_models import LaunchResponse, Project, RunnerError, Task
+from .runner_process import OPERATION_TIMEOUT_SECONDS, stop_worker
 from .runner_project import (
     discover_project,
     preflight_worktree,
@@ -35,8 +37,7 @@ ROLE_ALIAS = {
     "engineer-senior": "s",
     "engineer-expert": "e",
 }
-LAUNCH_TIMEOUT_SECONDS = 10.0
-TERMINATION_TIMEOUT_SECONDS = 10.0
+LAUNCH_TIMEOUT_SECONDS = OPERATION_TIMEOUT_SECONDS
 
 
 @dataclass
@@ -158,7 +159,7 @@ def _launch_task(
         if mapping is not None:
             worker_pid = mapping.get("worker_pid")
             if isinstance(worker_pid, int):
-                _stop_worker(worker_pid)
+                stop_worker(worker_pid)
             release_reservation = False
         if release_reservation:
             release_active_turn(
@@ -238,38 +239,24 @@ def _reserve_active_turn(
     worktree: Path,
 ) -> str:
     runner_directory = project.common_directory / "agent-runner"
-    active_root = runner_directory / "active-worktrees"
+    key = active_turn_key(task.ticket_id)
     try:
-        if active_root.is_symlink():
-            raise OSError("active-turn root is a symlink")
-        active_root.mkdir(parents=True, exist_ok=True)
-        key = active_turn_key(task.ticket_id)
-        reservation = active_turn_directory(runner_directory, key)
-        reservation.mkdir(mode=0o700)
-    except FileExistsError as error:
-        raise RunnerError(
-            "WORKTREE_TURN_ACTIVE",
-            "The Ticket Worktree already has an active Engineer turn.",
-        ) from error
-    except (OSError, ValueError) as error:
-        raise RunnerError(
-            "ACTIVE_TURN_RESERVATION_FAILED",
-            "The Ticket Worktree could not be reserved for an Engineer turn.",
-        ) from error
-
-    try:
-        write_yaml_durably(
-            reservation / "reservation.yml",
+        reserve_active_turn(
+            runner_directory,
+            key,
             {
-                "activity": "starting",
                 "run_id": run_id,
                 "ticket_id": task.ticket_id,
                 "worktree_path": str(worktree),
                 "launcher_pid": os.getpid(),
             },
         )
-    except (OSError, yaml.YAMLError) as error:
-        release_active_turn(runner_directory, key)
+    except ActiveTurnBusyError as error:
+        raise RunnerError(
+            "WORKTREE_TURN_ACTIVE",
+            error.message,
+        ) from error
+    except ActiveTurnReservationError as error:
         raise RunnerError(
             "ACTIVE_TURN_RESERVATION_FAILED",
             "The Ticket Worktree could not be reserved for an Engineer turn.",
@@ -370,7 +357,7 @@ def _start_turn(
     except (OSError, BrokenPipeError, yaml.YAMLError) as error:
         worker_started = "worker" in locals()
         if worker_started:
-            _stop_worker(worker.pid)
+            stop_worker(worker.pid)
         raise RunnerError(
             "RUNTIME_WORKER_START_FAILED",
             "The internal Runtime worker could not be started.",
@@ -387,7 +374,7 @@ def _start_turn(
                     mapping_file.read_text(encoding="utf-8")
                 )
             except (OSError, UnicodeError, yaml.YAMLError) as error:
-                _stop_worker(worker.pid)
+                stop_worker(worker.pid)
                 raise RunnerError(
                     "RUNTIME_MAPPING_INVALID",
                     "The Runtime session mapping could not be read.",
@@ -398,7 +385,7 @@ def _start_turn(
                 or not isinstance(durable_mapping.get("session"), str)
                 or not durable_mapping["session"]
             ):
-                _stop_worker(worker.pid)
+                stop_worker(worker.pid)
                 raise RunnerError(
                     "RUNTIME_MAPPING_INVALID",
                     "The Runtime session mapping is invalid.",
@@ -407,7 +394,7 @@ def _start_turn(
             try:
                 confirm_alias_mapping_durable(mapping_file)
             except OSError as error:
-                _stop_worker(worker.pid)
+                stop_worker(worker.pid)
                 raise RunnerError(
                     "RUNTIME_MAPPING_INVALID",
                     "The Runtime session mapping is not crash-durable.",
@@ -437,7 +424,7 @@ def _start_turn(
                 release_reservation=False,
             )
         time.sleep(0.01)
-    _stop_worker(worker.pid)
+    stop_worker(worker.pid)
     raise RunnerError(
         "RUNTIME_LAUNCH_TIMEOUT",
         "Codex did not report a Runtime session before the launch timeout.",
@@ -509,36 +496,3 @@ def _resolve_role(worktree: Path, binding: str) -> CodexRole:
         return resolve_codex_role(worktree, binding)
     except CodexAdapterError as error:
         raise RunnerError(error.code, error.message) from error
-
-
-def _stop_worker(pid: int) -> bool:
-    if _reap_worker(pid):
-        return True
-    try:
-        os.killpg(pid, signal.SIGTERM)
-    except ProcessLookupError:
-        return True
-    except OSError:
-        return False
-    deadline = time.monotonic() + TERMINATION_TIMEOUT_SECONDS
-    while time.monotonic() < deadline:
-        if _reap_worker(pid):
-            return True
-        time.sleep(0.01)
-    return False
-
-
-def _reap_worker(pid: int) -> bool:
-    try:
-        waited_pid, _ = os.waitpid(pid, os.WNOHANG)
-    except ChildProcessError:
-        try:
-            os.kill(pid, 0)
-        except ProcessLookupError:
-            return True
-        except OSError:
-            return False
-        return False
-    except OSError:
-        return False
-    return waited_pid == pid

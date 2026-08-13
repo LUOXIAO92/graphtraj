@@ -41,3 +41,6 @@ class RuntimeTurn(Protocol):
 RuntimeAdapter = Callable[
     [Mapping[str, Any], str, Path, SessionStarted], RuntimeTurn
 ]
+ResumeRuntimeAdapter = Callable[
+    [Mapping[str, Any], str, str, Path, SessionStarted], RuntimeTurn
+]

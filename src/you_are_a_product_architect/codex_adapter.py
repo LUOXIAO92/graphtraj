@@ -107,17 +107,23 @@ class CodexTurn:
         prompt: str,
         session_directory: Path,
         session_started: SessionStarted,
+        expected_session: Optional[str] = None,
     ) -> None:
         self._request = request
         self._prompt = prompt
         self._session_directory = session_directory
         self._session_started = session_started
+        self._expected_session = expected_session
         self._process: Optional[subprocess.Popen] = None
 
     def run(self) -> Dict[str, Any]:
         """Own the process and translate its private JSONL protocol."""
 
         arguments, worktree = _validate_launch_request(self._request)
+        if self._expected_session is not None:
+            _verify_packaged_config(worktree)
+            _verify_packaged_guard(worktree)
+            arguments = _resume_arguments(arguments, self._expected_session)
         events_file = self._session_directory / "events.jsonl"
         stderr_file = self._session_directory / "stderr.log"
         session: Optional[str] = None
@@ -145,6 +151,14 @@ class CodexTurn:
                         if session is None:
                             session = _session_from_event(line)
                             if session is not None:
+                                if (
+                                    self._expected_session is not None
+                                    and session != self._expected_session
+                                ):
+                                    raise CodexAdapterError(
+                                        "RUNTIME_SESSION_NOT_RESUMABLE",
+                                        "Codex did not resume the mapped Runtime session.",
+                                    )
                                 self._session_started(
                                     session, self._process.pid
                                 )
@@ -205,6 +219,54 @@ def create_codex_turn(
     return CodexTurn(request, prompt, session_directory, session_started)
 
 
+def create_codex_resume_turn(
+    request: Mapping[str, Any],
+    prompt: str,
+    session: str,
+    session_directory: Path,
+    session_started: SessionStarted,
+) -> CodexTurn:
+    """Resume exactly one mapped Codex session in a fresh invocation."""
+
+    return CodexTurn(
+        request,
+        prompt,
+        session_directory,
+        session_started,
+        expected_session=session,
+    )
+
+
+def read_codex_session_identity(session_directory: Path) -> str:
+    """Attest one durable Codex session identity from Adapter-owned events."""
+
+    events_file = session_directory / "events.jsonl"
+    identity: Optional[str] = None
+    try:
+        if events_file.is_symlink() or not events_file.is_file():
+            raise OSError("Codex events are not a regular file")
+        with events_file.open("r", encoding="utf-8") as events:
+            for line in events:
+                session = _session_from_event(line)
+                if session is None:
+                    continue
+                if identity is None:
+                    identity = session
+                elif session != identity:
+                    raise ValueError("Codex events contain multiple sessions")
+    except (OSError, UnicodeError, ValueError) as error:
+        raise CodexAdapterError(
+            "RUNTIME_SESSION_NOT_RESUMABLE",
+            "The mapped Codex Runtime session cannot be attested.",
+        ) from error
+    if identity is None:
+        raise CodexAdapterError(
+            "RUNTIME_SESSION_NOT_RESUMABLE",
+            "The mapped Codex Runtime session cannot be attested.",
+        )
+    return identity
+
+
 def _validate_launch_request(
     request: Mapping[str, Any],
 ) -> Tuple[List[str], Path]:
@@ -237,6 +299,20 @@ def _validate_launch_request(
     return arguments, worktree
 
 
+def _resume_arguments(launch_arguments: List[str], session: str) -> List[str]:
+    if (
+        len(launch_arguments) < 4
+        or launch_arguments[1] != "exec"
+        or launch_arguments[-2:] != ["--json", "-"]
+        or not session
+    ):
+        raise CodexAdapterError(
+            "RUNTIME_SESSION_NOT_RESUMABLE",
+            "The mapped Codex Runtime session cannot be resumed.",
+        )
+    return [*launch_arguments[:-1], "resume", session, "-"]
+
+
 def _session_from_event(line: str) -> Optional[str]:
     try:
         event = json.loads(line)
@@ -249,25 +325,55 @@ def _session_from_event(line: str) -> Optional[str]:
 
 
 def _stop_process(process: Optional[subprocess.Popen]) -> bool:
-    if process is None or process.poll() is not None:
+    if process is None:
+        return True
+    process_group = process.pid
+    process.poll()
+    if not _process_group_is_alive(process_group):
+        return process.poll() is not None
+    try:
+        os.killpg(process_group, signal.SIGTERM)
+    except ProcessLookupError:
+        process.poll()
+        return not _process_group_is_alive(process_group)
+    except OSError:
+        return False
+    if _await_process_group_exit(process, process_group, timeout=5):
         return True
     try:
-        os.killpg(process.pid, signal.SIGTERM)
-        process.wait(timeout=5)
-        return True
+        os.killpg(process_group, signal.SIGKILL)
     except ProcessLookupError:
-        try:
-            process.wait(timeout=0.1)
-        except (OSError, subprocess.TimeoutExpired):
-            return False
-        return True
-    except (OSError, subprocess.TimeoutExpired):
-        try:
-            os.killpg(process.pid, signal.SIGKILL)
-            process.wait(timeout=5)
-        except (OSError, subprocess.TimeoutExpired):
+        process.poll()
+        return not _process_group_is_alive(process_group)
+    except OSError:
+        return False
+    return _await_process_group_exit(process, process_group, timeout=5)
+
+
+def _await_process_group_exit(
+    process: subprocess.Popen, process_group: int, timeout: float
+) -> bool:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        process.poll()
+        if not _process_group_is_alive(process_group):
             return process.poll() is not None
+        time.sleep(0.01)
+    process.poll()
+    return (
+        process.poll() is not None
+        and not _process_group_is_alive(process_group)
+    )
+
+
+def _process_group_is_alive(process_group: int) -> bool:
+    try:
+        os.killpg(process_group, 0)
+    except ProcessLookupError:
+        return False
+    except OSError:
         return True
+    return True
 
 
 def resolve_codex_role(worktree: Path, binding: str) -> CodexRole:

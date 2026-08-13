@@ -5,6 +5,7 @@ from pathlib import Path
 import click
 import yaml
 
+from .runner_control import interrupt_session, send_instruction
 from .runner_launch import launch_batch
 from .runner_models import RunnerError
 from .runner_status import status_aliases
@@ -73,15 +74,27 @@ def status(aliases):
 @click.argument("alias")
 @click.option("--instruction", required=True)
 def send(alias, instruction):
-    """Send a follow-up to one session (not implemented yet)."""
-    _not_implemented("Send")
+    """Send a follow-up to one recoverable Engineer session."""
+    try:
+        response = send_instruction(alias, instruction, Path.cwd().resolve())
+    except RunnerError as error:
+        _emit_result({"alias": alias, "error": error.as_document()})
+        click.echo(error.message, err=True)
+        raise click.exceptions.Exit(1)
+    _emit_result(response)
 
 
 @main.command()
 @click.argument("alias")
 def interrupt(alias):
-    """Interrupt one session (not implemented yet)."""
-    _not_implemented("Interrupt")
+    """Interrupt one active Engineer turn while preserving its alias."""
+    try:
+        response = interrupt_session(alias, Path.cwd().resolve())
+    except RunnerError as error:
+        _emit_result({"alias": alias, "error": error.as_document()})
+        click.echo(error.message, err=True)
+        raise click.exceptions.Exit(1)
+    _emit_result(response)
 
 
 @main.command()

@@ -15,6 +15,29 @@ import yaml
 ACTIVE_TURN_KEY = re.compile(r"^[0-9a-f]{64}$")
 
 
+class ActiveTurnBusyError(Exception):
+    """The project-wide Ticket Worktree reservation already exists."""
+
+    def __init__(self, active_alias: str | None = None) -> None:
+        super().__init__(active_alias)
+        self.active_alias = active_alias
+
+    @property
+    def message(self) -> str:
+        """Describe the active reservation without trusting partial state."""
+
+        if self.active_alias is None:
+            return "The Ticket Worktree already has an active Engineer turn."
+        return (
+            "The Ticket Worktree already has an active Engineer turn under "
+            "alias {0}.".format(self.active_alias)
+        )
+
+
+class ActiveTurnReservationError(Exception):
+    """The project-wide Ticket Worktree reservation could not be created."""
+
+
 def active_turn_key(ticket_id: str) -> str:
     """Return the project-wide reservation key for one validated ticket ID."""
 
@@ -55,6 +78,37 @@ def active_turn_directory(runner_directory: Path, key: str) -> Path:
     return runner_directory / "active-worktrees" / key
 
 
+def reserve_active_turn(
+    runner_directory: Path,
+    key: str,
+    starting: dict[str, Any],
+) -> None:
+    """Atomically reserve one Ticket Worktree for a new Engineer turn."""
+
+    active_root = runner_directory / "active-worktrees"
+    try:
+        reservation = active_turn_directory(runner_directory, key)
+        if active_root.is_symlink():
+            raise OSError("active-turn root is a symlink")
+        active_root.mkdir(parents=True, exist_ok=True)
+        reservation.mkdir(mode=0o700)
+    except FileExistsError as error:
+        if active_root.is_symlink() or not active_root.is_dir():
+            raise ActiveTurnReservationError from error
+        raise ActiveTurnBusyError(_read_reserved_alias(reservation)) from error
+    except (OSError, ValueError) as error:
+        raise ActiveTurnReservationError from error
+
+    try:
+        write_yaml_durably(
+            reservation / "reservation.yml",
+            {"activity": "starting", **starting},
+        )
+    except (OSError, yaml.YAMLError) as error:
+        release_active_turn(runner_directory, key)
+        raise ActiveTurnReservationError from error
+
+
 def confirm_alias_mapping_durable(mapping_file: Path) -> None:
     """Sync a mapping and every new directory entry before launch success."""
 
@@ -84,6 +138,28 @@ def release_active_turn(runner_directory: Path, key: str) -> None:
         # A stale reservation fails closed on later launches. Never recurse or
         # remove an unexpected entry from machine-local Runner state.
         return
+
+
+def _read_reserved_alias(reservation: Path) -> str | None:
+    owner = reservation / "reservation.yml"
+    try:
+        if (
+            reservation.is_symlink()
+            or not reservation.is_dir()
+            or owner.is_symlink()
+            or not owner.is_file()
+        ):
+            return None
+        document = yaml.safe_load(owner.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, yaml.YAMLError):
+        return None
+    if not isinstance(document, dict) or document.get("activity") not in {
+        "starting",
+        "running",
+    }:
+        return None
+    alias = document.get("alias")
+    return alias if isinstance(alias, str) and alias else None
 
 
 def _sync_file(path: Path) -> None:

@@ -15,6 +15,14 @@ import yaml
 ACTIVE_TURN_KEY = re.compile(r"^[0-9a-f]{64}$")
 
 
+class ActiveTurnBusyError(Exception):
+    """The project-wide Ticket Worktree reservation already exists."""
+
+
+class ActiveTurnReservationError(Exception):
+    """The project-wide Ticket Worktree reservation could not be created."""
+
+
 def active_turn_key(ticket_id: str) -> str:
     """Return the project-wide reservation key for one validated ticket ID."""
 
@@ -53,6 +61,35 @@ def active_turn_directory(runner_directory: Path, key: str) -> Path:
     if not ACTIVE_TURN_KEY.fullmatch(key):
         raise ValueError("invalid active-turn reservation key")
     return runner_directory / "active-worktrees" / key
+
+
+def reserve_active_turn(
+    runner_directory: Path,
+    key: str,
+    starting: dict[str, Any],
+) -> None:
+    """Atomically reserve one Ticket Worktree for a new Engineer turn."""
+
+    active_root = runner_directory / "active-worktrees"
+    try:
+        if active_root.is_symlink():
+            raise OSError("active-turn root is a symlink")
+        active_root.mkdir(parents=True, exist_ok=True)
+        reservation = active_turn_directory(runner_directory, key)
+        reservation.mkdir(mode=0o700)
+    except FileExistsError as error:
+        raise ActiveTurnBusyError from error
+    except (OSError, ValueError) as error:
+        raise ActiveTurnReservationError from error
+
+    try:
+        write_yaml_durably(
+            reservation / "reservation.yml",
+            {"activity": "starting", **starting},
+        )
+    except (OSError, yaml.YAMLError) as error:
+        release_active_turn(runner_directory, key)
+        raise ActiveTurnReservationError from error
 
 
 def confirm_alias_mapping_durable(mapping_file: Path) -> None:

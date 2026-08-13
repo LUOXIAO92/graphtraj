@@ -11,6 +11,7 @@ import yaml
 
 from .runner_io import active_turn_directory, active_turn_key
 from .runner_models import RunnerError, StatusResponse
+from .runner_process import process_is_alive
 from .runner_project import discover_runner_directory
 
 
@@ -55,21 +56,23 @@ def status_aliases(aliases: Sequence[str], cwd: Path) -> StatusResponse:
 
 
 def _status_alias(runner_directory: Path, alias: str) -> Dict[str, str]:
-    mapping, session_directory = _read_mapping(runner_directory, alias)
+    mapping, session_directory = read_alias_mapping(runner_directory, alias)
     turn_file = session_directory / "turn.yml"
     if os.path.lexists(str(turn_file)):
-        outcome = _read_terminal_outcome(turn_file)
+        outcome = read_terminal_outcome(turn_file)
         return {
             "alias": alias,
             "activity": "idle",
             "last_outcome": outcome,
         }
 
-    _require_active_turn(runner_directory, alias, mapping)
+    require_active_turn(runner_directory, alias, mapping)
     return {"alias": alias, "activity": "running"}
 
 
-def _read_mapping(runner_directory: Path, alias: str) -> Tuple[Dict[str, Any], Path]:
+def read_alias_mapping(
+    runner_directory: Path, alias: str
+) -> Tuple[Dict[str, Any], Path]:
     if not ALIAS.fullmatch(alias):
         raise _alias_not_found()
     session_root = runner_directory / "sessions"
@@ -111,7 +114,7 @@ def _valid_mapping(mapping: object, alias: str) -> bool:
     )
 
 
-def _read_terminal_outcome(turn_file: Path) -> str:
+def read_terminal_outcome(turn_file: Path) -> str:
     if turn_file.is_symlink() or not turn_file.is_file():
         raise _invalid_activity()
     try:
@@ -127,7 +130,7 @@ def _read_terminal_outcome(turn_file: Path) -> str:
     return turn["outcome"]
 
 
-def _require_active_turn(
+def require_active_turn(
     runner_directory: Path,
     alias: str,
     mapping: Dict[str, Any],
@@ -152,24 +155,22 @@ def _require_active_turn(
     if (
         not isinstance(activity, dict)
         or activity.get("activity") != "running"
-        or activity.get("alias") != alias
-        or activity.get("ticket_id") != mapping["ticket_id"]
+        or any(
+            activity.get(field) != mapping[field]
+            for field in (
+                "alias",
+                "run_id",
+                "ticket_id",
+                "worktree_path",
+                "session",
+                "worker_pid",
+                "runtime_pid",
+            )
+        )
     ):
         raise _invalid_activity()
-    if not _process_is_alive(mapping["worker_pid"]):
+    if not process_is_alive(mapping["worker_pid"]):
         raise _invalid_activity()
-
-
-def _process_is_alive(pid: int) -> bool:
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
-    except OSError:
-        return False
-    return True
 
 
 def _alias_not_found() -> RunnerError:

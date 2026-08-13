@@ -107,17 +107,25 @@ class CodexTurn:
         prompt: str,
         session_directory: Path,
         session_started: SessionStarted,
+        expected_session: Optional[str] = None,
     ) -> None:
         self._request = request
         self._prompt = prompt
         self._session_directory = session_directory
         self._session_started = session_started
+        self._expected_session = expected_session
         self._process: Optional[subprocess.Popen] = None
 
     def run(self) -> Dict[str, Any]:
         """Own the process and translate its private JSONL protocol."""
 
         arguments, worktree = _validate_launch_request(self._request)
+        prompt_to_stdin = True
+        if self._expected_session is not None:
+            arguments = _resume_arguments(
+                arguments, self._expected_session, self._prompt
+            )
+            prompt_to_stdin = False
         events_file = self._session_directory / "events.jsonl"
         stderr_file = self._session_directory / "stderr.log"
         session: Optional[str] = None
@@ -134,7 +142,8 @@ class CodexTurn:
                 )
                 if self._process.stdin is None or self._process.stdout is None:
                     raise OSError("Codex pipes were not established")
-                self._process.stdin.write(self._prompt)
+                if prompt_to_stdin:
+                    self._process.stdin.write(self._prompt)
                 self._process.stdin.close()
 
                 with events_file.open("a", encoding="utf-8") as events:
@@ -145,6 +154,14 @@ class CodexTurn:
                         if session is None:
                             session = _session_from_event(line)
                             if session is not None:
+                                if (
+                                    self._expected_session is not None
+                                    and session != self._expected_session
+                                ):
+                                    raise CodexAdapterError(
+                                        "RUNTIME_SESSION_NOT_RESUMABLE",
+                                        "Codex did not resume the mapped Runtime session.",
+                                    )
                                 self._session_started(
                                     session, self._process.pid
                                 )
@@ -205,6 +222,24 @@ def create_codex_turn(
     return CodexTurn(request, prompt, session_directory, session_started)
 
 
+def create_codex_resume_turn(
+    request: Mapping[str, Any],
+    prompt: str,
+    session: str,
+    session_directory: Path,
+    session_started: SessionStarted,
+) -> CodexTurn:
+    """Resume exactly one mapped Codex session in a fresh invocation."""
+
+    return CodexTurn(
+        request,
+        prompt,
+        session_directory,
+        session_started,
+        expected_session=session,
+    )
+
+
 def _validate_launch_request(
     request: Mapping[str, Any],
 ) -> Tuple[List[str], Path]:
@@ -235,6 +270,22 @@ def _validate_launch_request(
             "The durable Codex launch request is invalid.",
         )
     return arguments, worktree
+
+
+def _resume_arguments(
+    launch_arguments: List[str], session: str, prompt: str
+) -> List[str]:
+    if (
+        len(launch_arguments) < 2
+        or launch_arguments[1] != "exec"
+        or not session
+        or not prompt.strip()
+    ):
+        raise CodexAdapterError(
+            "RUNTIME_SESSION_NOT_RESUMABLE",
+            "The mapped Codex Runtime session cannot be resumed.",
+        )
+    return [launch_arguments[0], "exec", "resume", session, prompt]
 
 
 def _session_from_event(line: str) -> Optional[str]:

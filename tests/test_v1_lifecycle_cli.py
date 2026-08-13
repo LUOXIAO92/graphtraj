@@ -18,6 +18,69 @@ from test_project_setup import (
 )
 
 
+def write_fake_engineer_action(path: Path) -> None:
+    path.write_text(
+        """\
+import os
+import subprocess
+from pathlib import Path
+
+
+def git_run(*arguments: str) -> subprocess.CompletedProcess[str]:
+    result = subprocess.run(
+        ["git", *arguments],
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+    if result.returncode != 0:
+        raise SystemExit(result.returncode)
+    return result
+
+
+worktree = Path.cwd()
+delivered = worktree / "V1_DELIVERED.txt"
+delivered.write_text("representative delivery\\n", encoding="utf-8")
+git_run("add", delivered.name)
+git_run("commit", "-m", "Deliver representative V1 ticket")
+candidate = git_run("rev-parse", "HEAD").stdout.strip()
+git_run("diff", "--check", "HEAD^", "HEAD")
+
+evidence = (worktree / ".scratch" / "task-delivery").resolve()
+reviews = evidence / "reviews"
+reviews.mkdir()
+(evidence / "result.md").write_text(
+    (
+        "Candidate commit: {0}\\n"
+        "Outcome: representative ticket delivered.\\n"
+        "Outstanding concern: Main must adjudicate the raw reviews.\\n"
+    ).format(candidate),
+    encoding="utf-8",
+)
+(evidence / "validation.md").write_text(
+    (
+        "Candidate commit: {0}\\n"
+        "Command: git diff --check HEAD^ HEAD\\n"
+        "Result: passed.\\n"
+    ).format(candidate),
+    encoding="utf-8",
+)
+alias = os.environ["FAKE_CODEX_ACTION_ALIAS"]
+(reviews / "{0}-r1-standards.md".format(alias)).write_text(
+    "Raw Standards review for the representative candidate.\\n"
+    "Main must adjudicate this evidence.\\n",
+    encoding="utf-8",
+)
+(reviews / "{0}-r1-spec.md".format(alias)).write_text(
+    "Raw Spec review for the representative candidate.\\n"
+    "Main must adjudicate this evidence.\\n",
+    encoding="utf-8",
+)
+""",
+        encoding="utf-8",
+    )
+
+
 def test_operator_guide_covers_the_complete_v1_lifecycle() -> None:
     guide = (Path(__file__).resolve().parents[1] / "README.md").read_text(
         encoding="utf-8"
@@ -110,6 +173,7 @@ def test_pinned_install_exercises_the_complete_v1_delivery_lifecycle(
         integration / ".codex" / "agents" / "engineer-senior.toml",
         integration / ".codex" / "agents" / "engineer-expert.toml",
         integration / ".codex" / "agents" / "merge-resolver.toml",
+        integration / ".codex" / "agents" / "delivery-state.toml",
     ):
         assert resource.is_file()
 
@@ -191,6 +255,7 @@ def test_pinned_install_exercises_the_complete_v1_delivery_lifecycle(
         ticket_worktree / ".codex" / "agents" / "engineer-senior.toml",
         ticket_worktree / ".codex" / "agents" / "engineer-expert.toml",
         ticket_worktree / ".codex" / "agents" / "merge-resolver.toml",
+        ticket_worktree / ".codex" / "agents" / "delivery-state.toml",
     ):
         assert resource.is_file()
     assert {
@@ -238,6 +303,8 @@ def test_pinned_install_exercises_the_complete_v1_delivery_lifecycle(
     }
 
     instruction = "Resume this representative ticket and finish it."
+    engineer_action = tmp_path / "fake-engineer-action.py"
+    write_fake_engineer_action(engineer_action)
     resumed = run_process(
         [
             str(installed_commands.runner),
@@ -250,6 +317,8 @@ def test_pinned_install_exercises_the_complete_v1_delivery_lifecycle(
         env={
             **environment,
             "FAKE_CODEX_CAPTURE_STDIN": "1",
+            "FAKE_CODEX_ACTION": str(engineer_action),
+            "FAKE_CODEX_ACTION_ALIAS": alias,
             "FAKE_CODEX_EVENTS": json.dumps(
                 [
                     {"type": "thread.started", "thread_id": session},
@@ -294,32 +363,24 @@ def test_pinned_install_exercises_the_complete_v1_delivery_lifecycle(
     assert runtime_record["stdin"] == instruction
     assert "resume" in runtime_record["argv"]
     assert session in runtime_record["argv"]
+    assert runtime_record["cwd"] == str(ticket_worktree)
 
     delivered = ticket_worktree / "V1_DELIVERED.txt"
-    delivered.write_text("representative delivery\n", encoding="utf-8")
-    run_process(["git", "add", delivered.name], cwd=ticket_worktree).check_returncode()
-    run_process(
-        ["git", "commit", "-m", "Deliver representative V1 ticket"],
-        cwd=ticket_worktree,
-    ).check_returncode()
+    assert delivered.read_text(encoding="utf-8") == "representative delivery\n"
     candidate = git_output(ticket_worktree, "rev-parse", "HEAD")
-
     reviews = evidence / "reviews"
-    reviews.mkdir()
-    (evidence / "result.md").write_text(
-        "Candidate commit: {0}\nOutstanding concern: none.\n".format(candidate),
-        encoding="utf-8",
-    )
-    (evidence / "validation.md").write_text(
-        "Validation: representative target Git checks passed.\n",
-        encoding="utf-8",
-    )
-    (reviews / "2-15-v1-lifecycle@e1-r1-standards.md").write_text(
-        "Raw Standards review evidence.\n", encoding="utf-8"
-    )
-    (reviews / "2-15-v1-lifecycle@e1-r1-spec.md").write_text(
-        "Raw Spec review evidence.\n", encoding="utf-8"
-    )
+    assert (evidence / "result.md").read_text(encoding="utf-8") == (
+        "Candidate commit: {0}\n"
+        "Outcome: representative ticket delivered.\n"
+        "Outstanding concern: Main must adjudicate the raw reviews.\n"
+    ).format(candidate)
+    assert (evidence / "validation.md").read_text(encoding="utf-8") == (
+        "Candidate commit: {0}\n"
+        "Command: git diff --check HEAD^ HEAD\n"
+        "Result: passed.\n"
+    ).format(candidate)
+    assert (reviews / "{0}-r1-standards.md".format(alias)).is_file()
+    assert (reviews / "{0}-r1-spec.md".format(alias)).is_file()
     evidence_before_cleanup = tree_contents(evidence)
     retained_batch_before_cleanup = retained_batch.read_bytes()
 

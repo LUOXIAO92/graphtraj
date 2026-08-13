@@ -175,6 +175,12 @@ def fake_codex(tmp_path: Path) -> FakeCodex:
         "        while not Path(release_file).exists():\n"
         "            time.sleep(0.01)\n"
         "\n"
+        "action = os.environ.get('FAKE_CODEX_ACTION')\n"
+        "if action is not None:\n"
+        "    action_result = subprocess.run([sys.executable, action], check=False)\n"
+        "    if action_result.returncode != 0:\n"
+        "        raise SystemExit(action_result.returncode)\n"
+        "\n"
         "raise SystemExit(int(os.environ.get('FAKE_CODEX_EXIT_CODE', '0')))\n"
     )
     executable.write_text(script, encoding="utf-8")

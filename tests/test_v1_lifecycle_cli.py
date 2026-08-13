@@ -1,0 +1,445 @@
+from __future__ import annotations
+
+import json
+import sys
+import time
+from pathlib import Path
+
+import yaml
+
+from conftest import FakeCodex, InstalledCommands, run_process
+from test_project_setup import (
+    CORE_SKILL_NAMES,
+    git_output,
+    run_setup,
+    setup_environment,
+    tree_contents,
+    worktree_contents,
+)
+
+
+def wait_for_idle_outcome(
+    installed_commands: InstalledCommands,
+    *,
+    integration: Path,
+    environment: dict[str, str],
+    alias: str,
+    outcome: str,
+) -> None:
+    expected = {
+        "aliases": [
+            {
+                "alias": alias,
+                "activity": "idle",
+                "last_outcome": outcome,
+            }
+        ]
+    }
+    deadline = time.monotonic() + 5.0
+    last_document: object = None
+    while time.monotonic() < deadline:
+        result = run_process(
+            [str(installed_commands.runner), "status", alias],
+            cwd=integration,
+            env=environment,
+        )
+        assert result.returncode == 0, result.stderr
+        last_document = yaml.safe_load(result.stdout)
+        if last_document == expected:
+            return
+        time.sleep(0.01)
+    raise AssertionError(
+        "Timed out waiting for {0} to become idle with {1}: {2}".format(
+            alias,
+            outcome,
+            last_document,
+        )
+    )
+
+
+def test_operator_guide_covers_the_complete_v1_lifecycle() -> None:
+    guide = (Path(__file__).resolve().parents[1] / "README.md").read_text(
+        encoding="utf-8"
+    )
+
+    for required_text in (
+        "Pinned installation",
+        "Harness Project Root",
+        "Primary Worktree",
+        "Integration Worktree",
+        "Harness State Directory",
+        "you-are-a-product-architect doctor",
+        "you-are-a-product-architect setup",
+        "Review and commit",
+        "agent-runner --batch-input",
+        "agent-runner status",
+        "agent-runner send",
+        "agent-runner interrupt",
+        "agent-runner cleanup",
+        "state/task-delivery",
+        "manually delete",
+        "GitHub, GitLab, local Markdown",
+        "Codex-only",
+        "name-only",
+        "duplicate Skill names",
+        "scheduler or queue",
+        "automatic state watcher",
+        "multiple Source Repositories",
+        "automatic promotion from `dev` to `main`",
+    ):
+        assert required_text in guide
+
+
+def test_pinned_install_exercises_the_complete_v1_delivery_lifecycle(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    harness_root = temporary_git_repository.parent
+    primary = temporary_git_repository
+    integration = harness_root / ".agent-worktrees" / "integration"
+    state = harness_root / "state"
+    target_validation = primary / "validate_v1_delivery.py"
+    target_validation.write_text(
+        """\
+from pathlib import Path
+
+
+assert Path("V1_DELIVERED.txt").read_text(encoding="utf-8") == (
+    "representative delivery\\n"
+)
+print("target validation passed")
+""",
+        encoding="utf-8",
+    )
+    run_process(
+        ["git", "add", target_validation.name], cwd=primary
+    ).check_returncode()
+    run_process(
+        ["git", "commit", "-m", "Add target validation command"],
+        cwd=primary,
+    ).check_returncode()
+    user_home = tmp_path / "operator-home"
+    (user_home / ".codex").mkdir(parents=True)
+    (user_home / ".codex" / "config.toml").write_text(
+        "operator_owned = true\n", encoding="utf-8"
+    )
+    (user_home / ".codex" / "credentials.json").write_text(
+        "{\"credential\": \"unchanged\"}\n", encoding="utf-8"
+    )
+    primary_before = worktree_contents(primary)
+    user_before = tree_contents(user_home)
+    main_before = git_output(primary, "rev-parse", "main")
+    environment = setup_environment(user_home, fake_codex)
+
+    before_setup = run_process(
+        [str(installed_commands.product), "doctor"],
+        cwd=harness_root,
+        env=environment,
+    )
+    assert before_setup.returncode == 1
+    assert "implement: MISSING" in before_setup.stdout
+
+    setup = run_setup(
+        installed_commands,
+        harness_root=harness_root,
+        user_home=user_home,
+        fake_codex=fake_codex,
+        answers="{0}\nproject-local\ny\n".format(primary.name),
+    )
+
+    assert setup.returncode == 0, setup.stderr
+    assert "Review and commit the Runtime resources on dev." in setup.stdout
+    assert git_output(primary, "branch", "--show-current") == "main"
+    assert git_output(primary, "rev-parse", "HEAD") == main_before
+    assert git_output(primary, "status", "--porcelain") == ""
+    assert worktree_contents(primary) == primary_before
+    assert tree_contents(user_home) == user_before
+    assert integration.is_dir()
+    assert git_output(integration, "branch", "--show-current") == "dev"
+    assert (integration / ".scratch").resolve() == state.resolve()
+    assert {
+        path.name for path in (integration / ".agents" / "skills").iterdir()
+    } == set(CORE_SKILL_NAMES)
+    for resource in (
+        integration / ".codex" / "config.toml",
+        integration / ".codex" / "hooks" / "worktree_guard.py",
+        integration / ".codex" / "agents" / "engineer-junior.toml",
+        integration / ".codex" / "agents" / "engineer-senior.toml",
+        integration / ".codex" / "agents" / "engineer-expert.toml",
+        integration / ".codex" / "agents" / "merge-resolver.toml",
+        integration / ".codex" / "agents" / "delivery-state.toml",
+    ):
+        assert resource.is_file()
+
+    after_setup = run_process(
+        [str(installed_commands.product), "doctor"],
+        cwd=harness_root,
+        env=environment,
+    )
+    assert after_setup.returncode == 0, after_setup.stderr
+    for name in CORE_SKILL_NAMES:
+        assert "{0}: OK".format(name) in after_setup.stdout
+
+    run_process(["git", "add", ".codex", ".agents"], cwd=integration).check_returncode()
+    run_process(
+        ["git", "commit", "-m", "Configure Codex resources on dev"],
+        cwd=integration,
+    ).check_returncode()
+    assert git_output(integration, "status", "--porcelain") == ""
+
+    ticket_file = harness_root / "tickets" / "15-v1-lifecycle.md"
+    ticket_file.parent.mkdir()
+    ticket_content = "# Representative V1 ticket\n\nWrite one delivery marker.\n"
+    ticket_file.write_text(ticket_content, encoding="utf-8")
+    ticket_before = ticket_file.read_bytes()
+    run_id = "20260814-v1-lifecycle"
+    batch_file = harness_root / "batch.yml"
+    batch_content = yaml.safe_dump(
+        {
+            "run_id": run_id,
+            "tasks": [
+                {
+                    "ticket_id": "15",
+                    "ticket_name": "v1-lifecycle",
+                    "role": "engineer-expert",
+                    "ticket_file": str(ticket_file),
+                }
+            ],
+        },
+        sort_keys=False,
+    )
+    batch_file.write_text(batch_content, encoding="utf-8")
+    release_file = tmp_path / "allow-initial-turn-to-finish"
+    session = "fake-v1-lifecycle-session"
+    launch_environment = {
+        **environment,
+        "FAKE_CODEX_EVENTS": json.dumps(
+            [{"type": "thread.started", "thread_id": session}]
+        ),
+        "FAKE_CODEX_RELEASE_FILE": str(release_file),
+    }
+
+    launch = run_process(
+        [str(installed_commands.runner), "--batch-input", str(batch_file)],
+        cwd=integration,
+        env=launch_environment,
+        timeout=10,
+    )
+
+    assert launch.returncode == 0, launch.stderr
+    launch_document = yaml.safe_load(launch.stdout)
+    task = launch_document["tasks"][0]
+    assert task["launch_status"] == "launched"
+    assert task["session"] == session
+    assert ticket_file.read_bytes() == ticket_before
+    ticket_worktree = Path(task["worktree_path"])
+    alias = task["alias"]
+    assert ticket_worktree.name == "2-15-v1-lifecycle"
+    assert alias == "2-15-v1-lifecycle@e1"
+    ticket_branch = "agent/{0}/2-15-v1-lifecycle".format(run_id)
+    assert git_output(ticket_worktree, "branch", "--show-current") == ticket_branch
+    evidence = state / "task-delivery" / run_id / "tickets" / ticket_worktree.name
+    retained_batch = Path(launch_document["retained_batch_file"])
+    assert retained_batch.read_bytes() == batch_content.encode("utf-8")
+    assert (ticket_worktree / ".scratch" / "task-delivery").resolve() == evidence.resolve()
+    for resource in (
+        ticket_worktree / ".codex" / "hooks" / "worktree_guard.py",
+        ticket_worktree / ".codex" / "agents" / "engineer-junior.toml",
+        ticket_worktree / ".codex" / "agents" / "engineer-senior.toml",
+        ticket_worktree / ".codex" / "agents" / "engineer-expert.toml",
+        ticket_worktree / ".codex" / "agents" / "merge-resolver.toml",
+        ticket_worktree / ".codex" / "agents" / "delivery-state.toml",
+    ):
+        assert resource.is_file()
+    assert {
+        path.name for path in (ticket_worktree / ".agents" / "skills").iterdir()
+    } == set(CORE_SKILL_NAMES)
+
+    running = run_process(
+        [str(installed_commands.runner), "status", alias],
+        cwd=integration,
+        env=environment,
+    )
+    assert running.returncode == 0, running.stderr
+    assert yaml.safe_load(running.stdout) == {
+        "aliases": [{"alias": alias, "activity": "running"}]
+    }
+
+    interrupted = run_process(
+        [str(installed_commands.runner), "interrupt", alias],
+        cwd=integration,
+        env=environment,
+        timeout=10,
+    )
+    assert interrupted.returncode == 0, interrupted.stderr
+    assert yaml.safe_load(interrupted.stdout) == {
+        "alias": alias,
+        "interrupt_status": "interrupted",
+    }
+    wait_for_idle_outcome(
+        installed_commands,
+        integration=integration,
+        environment=environment,
+        alias=alias,
+        outcome="interrupted",
+    )
+
+    instruction = "Resume this representative ticket and finish it."
+    resumed = run_process(
+        [
+            str(installed_commands.runner),
+            "send",
+            alias,
+            "--instruction",
+            instruction,
+        ],
+        cwd=integration,
+        env={
+            **environment,
+            "FAKE_CODEX_CAPTURE_STDIN": "1",
+            "FAKE_CODEX_LIFECYCLE_ACTION": "deliver-representative-ticket",
+            "FAKE_CODEX_LIFECYCLE_ALIAS": alias,
+            "FAKE_CODEX_EVENTS": json.dumps(
+                [
+                    {"type": "thread.started", "thread_id": session},
+                    {"type": "turn.started"},
+                    {
+                        "type": "turn.completed",
+                        "usage": {
+                            "cached_input_tokens": 0,
+                            "input_tokens": 1,
+                            "output_tokens": 1,
+                        },
+                    },
+                ]
+            ),
+        },
+        timeout=10,
+    )
+    assert resumed.returncode == 0, resumed.stderr
+    assert yaml.safe_load(resumed.stdout) == {"alias": alias, "send_status": "sent"}
+    wait_for_idle_outcome(
+        installed_commands,
+        integration=integration,
+        environment=environment,
+        alias=alias,
+        outcome="completed",
+    )
+    runtime_record = json.loads(fake_codex.log_file.read_text(encoding="utf-8"))
+    assert runtime_record["stdin"] == instruction
+    assert "resume" in runtime_record["argv"]
+    assert session in runtime_record["argv"]
+    assert runtime_record["cwd"] == str(ticket_worktree)
+
+    delivered = ticket_worktree / "V1_DELIVERED.txt"
+    assert delivered.read_text(encoding="utf-8") == "representative delivery\n"
+    candidate = git_output(ticket_worktree, "rev-parse", "HEAD")
+    reviews = evidence / "reviews"
+    assert (evidence / "result.md").read_text(encoding="utf-8") == (
+        "Candidate commit: {0}\n"
+        "Outcome: representative ticket delivered.\n"
+        "Outstanding concern: Main must adjudicate the raw reviews.\n"
+    ).format(candidate)
+    assert (evidence / "validation.md").read_text(encoding="utf-8") == (
+        "Candidate commit: {0}\n"
+        "Command: git diff --check HEAD^ HEAD\n"
+        "Result: passed.\n"
+    ).format(candidate)
+    assert (reviews / "{0}-r1-standards.md".format(alias)).is_file()
+    assert (reviews / "{0}-r1-spec.md".format(alias)).is_file()
+    evidence_before_cleanup = tree_contents(evidence)
+    retained_batch_before_cleanup = retained_batch.read_bytes()
+
+    merged = run_process(
+        ["git", "merge", "--no-ff", candidate, "-m", "Integrate representative ticket"],
+        cwd=integration,
+    )
+    assert merged.returncode == 0, merged.stderr
+    validation = run_process(
+        ["git", "diff", "--check", "HEAD^", "HEAD"], cwd=integration
+    )
+    assert validation.returncode == 0, validation.stderr
+    assert (integration / delivered.name).read_text(encoding="utf-8") == (
+        "representative delivery\n"
+    )
+    validated = run_process(
+        [sys.executable, target_validation.name], cwd=integration
+    )
+    assert validated.returncode == 0, validated.stderr
+    assert validated.stdout == "target validation passed\n"
+    assert git_output(primary, "rev-parse", "main") == main_before
+    assert not (primary / delivered.name).exists()
+
+    cleanup = run_process(
+        [
+            str(installed_commands.runner),
+            "cleanup",
+            "--run-id",
+            run_id,
+            "--ticket-id",
+            "15",
+        ],
+        cwd=integration,
+        env=environment,
+        timeout=10,
+    )
+    assert cleanup.returncode == 0, cleanup.stderr
+    assert yaml.safe_load(cleanup.stdout)["cleanup_status"] == "cleaned"
+    assert not ticket_worktree.exists()
+    branch_gone = run_process(
+        [
+            "git",
+            "show-ref",
+            "--verify",
+            "--quiet",
+            "refs/heads/{0}".format(ticket_branch),
+        ],
+        cwd=integration,
+    )
+    assert branch_gone.returncode == 1
+    alias_gone = run_process(
+        [str(installed_commands.runner), "status", alias],
+        cwd=integration,
+        env=environment,
+    )
+    alias_not_found = "The requested Engineer alias was not found."
+    assert alias_gone.returncode == 1
+    assert yaml.safe_load(alias_gone.stdout) == {
+        "aliases": [
+            {
+                "alias": alias,
+                "error": {
+                    "code": "alias-not-found",
+                    "message": alias_not_found,
+                },
+            }
+        ]
+    }
+    assert alias_gone.stderr == alias_not_found + "\n"
+    assert tree_contents(evidence) == evidence_before_cleanup
+    assert retained_batch.read_bytes() == retained_batch_before_cleanup
+
+    repeated_cleanup = run_process(
+        [
+            str(installed_commands.runner),
+            "cleanup",
+            "--run-id",
+            run_id,
+            "--ticket-id",
+            "15",
+        ],
+        cwd=integration,
+        env=environment,
+        timeout=10,
+    )
+    assert repeated_cleanup.returncode == 0, repeated_cleanup.stderr
+    assert yaml.safe_load(repeated_cleanup.stdout)["cleanup_status"] == "already-cleaned"
+    assert tree_contents(evidence) == evidence_before_cleanup
+    assert retained_batch.read_bytes() == retained_batch_before_cleanup
+    assert git_output(primary, "branch", "--show-current") == "main"
+    assert git_output(primary, "rev-parse", "HEAD") == main_before
+    assert git_output(primary, "status", "--porcelain") == ""
+    assert worktree_contents(primary) == primary_before
+    assert tree_contents(user_home) == user_before

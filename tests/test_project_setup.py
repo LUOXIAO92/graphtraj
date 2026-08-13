@@ -108,6 +108,95 @@ def git_output(repository: Path, *arguments: str) -> str:
     return result.stdout.strip()
 
 
+def common_git_directory(repository: Path) -> Path:
+    common = Path(git_output(repository, "rev-parse", "--git-common-dir"))
+    if not common.is_absolute():
+        common = repository / common
+    return common.resolve()
+
+
+def commit_dev_files_without_leaving_dev_checked_out(
+    primary: Path,
+    seed_worktree: Path,
+    files: dict[str, str],
+) -> None:
+    run_process(["git", "branch", "dev"], cwd=primary).check_returncode()
+    run_process(
+        ["git", "worktree", "add", str(seed_worktree), "dev"], cwd=primary
+    ).check_returncode()
+    for relative_path, content in files.items():
+        target = seed_worktree / relative_path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
+    run_process(["git", "add", "."], cwd=seed_worktree).check_returncode()
+    run_process(
+        ["git", "commit", "-m", "Seed conflicting dev resources"],
+        cwd=seed_worktree,
+    ).check_returncode()
+    run_process(
+        ["git", "worktree", "remove", str(seed_worktree)], cwd=primary
+    ).check_returncode()
+
+
+def test_setup_reports_all_preflight_conflicts_without_mutation(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    harness_root = temporary_git_repository.parent
+    primary = temporary_git_repository
+    integration = harness_root / ".agent-worktrees" / "integration"
+    user_home = tmp_path / "operator-home"
+    install_user_skills(user_home)
+    user_before = tree_contents(user_home)
+
+    commit_dev_files_without_leaving_dev_checked_out(
+        primary,
+        tmp_path / "seed-dev",
+        {".codex/config.toml": "operator-owned = true\n"},
+    )
+    runner_config = common_git_directory(primary) / "agent-runner" / "config.yml"
+    runner_config.parent.mkdir(parents=True)
+    runner_config.write_text("operator-owned: true\n", encoding="utf-8")
+
+    neighbor = harness_root / "neighbor-project"
+    neighbor.mkdir()
+    (neighbor / "marker.txt").write_text("leave me alone\n", encoding="utf-8")
+    neighbor_before = tree_contents(neighbor)
+    primary_head = git_output(primary, "rev-parse", "HEAD")
+    dev_head = git_output(primary, "rev-parse", "dev")
+    primary_files = worktree_contents(primary)
+    worktrees_before = git_output(primary, "worktree", "list", "--porcelain")
+    runner_before = runner_config.read_bytes()
+
+    result = run_setup(
+        installed_commands,
+        harness_root=harness_root,
+        user_home=user_home,
+        fake_codex=fake_codex,
+        answers="{0}\n".format(primary.name),
+    )
+
+    assert result.returncode == 1
+    assert "Setup preflight found conflicts" in result.stderr
+    assert ".codex/config.toml" in result.stderr
+    assert str(runner_config) in result.stderr
+    assert not integration.exists()
+    assert not (harness_root / ".agent-worktrees").exists()
+    assert not (harness_root / "state").exists()
+    assert git_output(primary, "worktree", "list", "--porcelain") == worktrees_before
+    assert git_output(primary, "rev-parse", "HEAD") == primary_head
+    assert git_output(primary, "rev-parse", "dev") == dev_head
+    assert git_output(primary, "branch", "--show-current") == "main"
+    assert git_output(primary, "status", "--porcelain") == ""
+    assert worktree_contents(primary) == primary_files
+    assert runner_config.read_bytes() == runner_before
+    assert tree_contents(user_home) == user_before
+    assert tree_contents(neighbor) == neighbor_before
+    assert not fake_codex.log_file.exists()
+
+
 def test_setup_confirms_the_exact_base_and_initializes_one_harness_project(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,

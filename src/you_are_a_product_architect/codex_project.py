@@ -70,6 +70,36 @@ class CodexProjectFiles:
             runtime_executable,
         )
 
+    @staticmethod
+    def scratch_link_text(
+        integration_worktree: Path,
+        state_directory: Path,
+    ) -> str:
+        """Return the stable repository-local link text setup will install."""
+
+        return os.path.relpath(state_directory, integration_worktree)
+
+    @staticmethod
+    def runner_config_content(
+        worktree_root: Path,
+        runtime_executable: Path,
+    ) -> str:
+        """Render the exact machine-local Runner registration."""
+
+        config = {
+            "version": RUNNER_CONFIG_VERSION,
+            "default_runtime": "codex",
+            "worktree_root": str(worktree_root.resolve()),
+            "integration_branch": "dev",
+            "runtimes": {
+                "codex": {
+                    "executable": str(runtime_executable.resolve()),
+                    "roles": ROLE_BINDINGS,
+                }
+            },
+        }
+        return yaml.safe_dump(config, sort_keys=False)
+
     def _write_resources(self, integration_worktree: Path) -> None:
         for relative_path, content in self.resources_by_path.items():
             target = integration_worktree / ".codex" / relative_path
@@ -97,7 +127,10 @@ class CodexProjectFiles:
                 "Directory."
             )
         scratch.symlink_to(
-            os.path.relpath(state_directory, integration_worktree),
+            CodexProjectFiles.scratch_link_text(
+                integration_worktree,
+                state_directory,
+            ),
             target_is_directory=True,
         )
         if scratch.resolve() != state_directory.resolve():
@@ -127,19 +160,10 @@ class CodexProjectFiles:
         worktree_root: Path,
         runtime_executable: Path,
     ) -> None:
-        config = {
-            "version": RUNNER_CONFIG_VERSION,
-            "default_runtime": "codex",
-            "worktree_root": str(worktree_root.resolve()),
-            "integration_branch": "dev",
-            "runtimes": {
-                "codex": {
-                    "executable": str(runtime_executable.resolve()),
-                    "roles": ROLE_BINDINGS,
-                }
-            },
-        }
-        content = yaml.safe_dump(config, sort_keys=False)
+        content = CodexProjectFiles.runner_config_content(
+            worktree_root,
+            runtime_executable,
+        )
         config_file = common_git_directory / "agent-runner" / "config.yml"
         if config_file.exists():
             if (

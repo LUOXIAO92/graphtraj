@@ -11,6 +11,8 @@ RUNTIME_DIAGNOSTIC_FILES = frozenset(
         "launch-error.yml",
         "launch.yml",
         "mapping.yml",
+        "resume-error.yml",
+        "resume.yml",
         "stderr.log",
         "turn.yml",
         "worker-stderr.log",
@@ -32,6 +34,13 @@ def valid_runtime_turn_outcome(document: Any) -> bool:
 
     if not isinstance(document, dict):
         return False
+    if document.get("outcome") == "interrupted":
+        if "runtime_exit_code" not in document:
+            return True
+        interrupted_exit_code = document["runtime_exit_code"]
+        return isinstance(interrupted_exit_code, int) and not isinstance(
+            interrupted_exit_code, bool
+        )
     runtime_exit_code = document.get("runtime_exit_code")
     if not isinstance(runtime_exit_code, int) or isinstance(runtime_exit_code, bool):
         return False

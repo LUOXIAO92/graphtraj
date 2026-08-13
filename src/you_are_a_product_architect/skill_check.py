@@ -33,10 +33,12 @@ class SkillStatus:
     discovered: bool
 
 
-def _declared_skill_name(skill_file: Path) -> Optional[str]:
+def declared_skill_name(content: bytes) -> Optional[str]:
+    """Read one Skill's declared name without depending on a filesystem path."""
+
     try:
-        lines = skill_file.read_text(encoding="utf-8").splitlines()
-    except (OSError, UnicodeError):
+        lines = content.decode("utf-8").splitlines()
+    except UnicodeError:
         return None
 
     if not lines or lines[0].strip() != "---":
@@ -62,6 +64,14 @@ def _declared_skill_name(skill_file: Path) -> Optional[str]:
         return None
     name = frontmatter.get("name")
     return name if isinstance(name, str) and name else None
+
+
+def _declared_skill_name(skill_file: Path) -> Optional[str]:
+    try:
+        content = skill_file.read_bytes()
+    except OSError:
+        return None
+    return declared_skill_name(content)
 
 
 def _discover_names(skill_roots: Iterable[Path]) -> set[str]:

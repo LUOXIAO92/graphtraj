@@ -10,7 +10,7 @@ from typing import List, Optional, Tuple
 
 from .codex_project import CodexProjectError, CodexProjectFiles
 from .git_repository import GitRepositoryError, GitTreeEntry, SourceRepository
-from .skill_check import check_core_skills
+from .skill_check import CORE_SKILL_NAMES, check_core_skills, declared_skill_name
 from .supported_skills import SupportedSkills, SupportedSkillsError
 
 
@@ -81,6 +81,27 @@ class _TargetView:
 
     def display_path(self, relative_path: str) -> Path:
         return self.root / relative_path
+
+    def paths_under(self, relative_root: str) -> Tuple[str, ...]:
+        if self.repository is not None:
+            if self.revision is None:
+                raise ProjectSetupError("A Git tree view requires a fixed revision.")
+            paths = self.repository.tree_paths(self.revision, relative_root)
+            prefix = "{0}/".format(relative_root.rstrip("/"))
+            return tuple(
+                path[len(prefix) :]
+                for path in paths
+                if path.startswith(prefix)
+            )
+
+        root = self.root / relative_root
+        entry = _filesystem_entry(root)
+        if entry is None or entry.kind != "directory":
+            return ()
+        return tuple(
+            path.relative_to(root).as_posix()
+            for path in root.rglob("*")
+        )
 
 
 def _append_conflict(conflicts: List[str], message: str) -> None:
@@ -176,6 +197,70 @@ def _raise_conflicts(conflicts: List[str]) -> None:
         )
 
 
+def _git_project_skill_names(
+    repository: SourceRepository,
+    revision: str,
+) -> set[str]:
+    discovered = set()
+    for path in repository.tree_paths(revision, ".agents/skills"):
+        parts = Path(path).parts
+        if len(parts) != 4 or parts[:2] != (".agents", "skills"):
+            continue
+        if parts[-1] != "SKILL.md":
+            continue
+        entry = repository.tree_entry(revision, path)
+        if entry is None or entry.kind != "file" or entry.content is None:
+            continue
+        name = declared_skill_name(entry.content)
+        if name is not None:
+            discovered.add(name)
+    return discovered
+
+
+def _recoverable_supported_skills(
+    view: _TargetView,
+    supported_skills: SupportedSkills,
+) -> Tuple[str, ...]:
+    recoverable = []
+    for name in CORE_SKILL_NAMES:
+        manifest = supported_skills.manifest(name)
+        root = ".agents/skills/{0}".format(name)
+        root_entry = view.entry(root)
+        if root_entry is None or root_entry.kind != "directory":
+            continue
+        existing_paths = set(view.paths_under(root))
+        expected_directories = {
+            parent
+            for relative_path in manifest
+            for parent in _parent_paths(relative_path)
+        }
+        if not existing_paths or not existing_paths.issubset(
+            set(manifest).union(expected_directories)
+        ):
+            continue
+
+        matching_files = 0
+        valid_subset = True
+        for relative_path, content in manifest.items():
+            entry = view.entry("{0}/{1}".format(root, relative_path))
+            if entry is None:
+                continue
+            if entry.kind != "file" or entry.content != content:
+                valid_subset = False
+                break
+            matching_files += 1
+        if not valid_subset:
+            continue
+        for relative_path in expected_directories.intersection(existing_paths):
+            entry = view.entry("{0}/{1}".format(root, relative_path))
+            if entry is None or entry.kind != "directory":
+                valid_subset = False
+                break
+        if valid_subset and matching_files and matching_files < len(manifest):
+            recoverable.append(name)
+    return tuple(recoverable)
+
+
 @dataclass(frozen=True)
 class ProjectSetupPlan:
     """One preflighted setup action with a single explicit mutation step."""
@@ -188,6 +273,7 @@ class ProjectSetupPlan:
     codex_files: CodexProjectFiles
     supported_skills: SupportedSkills
     missing_skills: Tuple[str, ...]
+    recoverable_skills: Tuple[str, ...]
     proposed_base: Optional[str]
     registered_dev_worktree: Optional[Path]
     integration_revision: str
@@ -308,6 +394,51 @@ class ProjectSetupPlan:
                 conflicts,
             )
 
+        if install_missing_skills:
+            skill_names = tuple(
+                name
+                for name in CORE_SKILL_NAMES
+                if name in set(self.missing_skills).union(self.recoverable_skills)
+            )
+        else:
+            skill_names = self.recoverable_skills
+        if skill_names:
+            for name in skill_names:
+                manifest = self.supported_skills.manifest(name)
+                skill_relative_root = ".agents/skills/{0}".format(name)
+                allowed_paths = set(manifest)
+                allowed_paths.update(
+                    parent
+                    for resource_path in manifest
+                    for parent in _parent_paths(resource_path)
+                )
+                unexpected_paths = tuple(
+                    path
+                    for path in integration_view.paths_under(skill_relative_root)
+                    if path not in allowed_paths
+                )
+                for unexpected_path in unexpected_paths:
+                    _append_conflict(
+                        conflicts,
+                        "Project-local Skill contains unsupported content: {0}".format(
+                            integration_view.display_path(
+                                "{0}/{1}".format(
+                                    skill_relative_root,
+                                    unexpected_path,
+                                )
+                            )
+                        ),
+                    )
+                for resource_path, content in manifest.items():
+                    _preflight_file(
+                        integration_view,
+                        "{0}/{1}".format(skill_relative_root, resource_path),
+                        content,
+                        "Project-local Skill {0}".format(name),
+                        actions,
+                        conflicts,
+                    )
+
         scratch_path = ".scratch"
         scratch_entry = integration_view.entry(scratch_path)
         expected_link = self.codex_files.scratch_link_text(
@@ -425,10 +556,20 @@ class ProjectSetupPlan:
             else:
                 result = "Using registered Integration Worktree on dev."
 
-            if install_missing_skills:
+            skill_names = tuple(
+                name
+                for name in CORE_SKILL_NAMES
+                if name
+                in (
+                    set(self.recoverable_skills).union(self.missing_skills)
+                    if install_missing_skills
+                    else set(self.recoverable_skills)
+                )
+            )
+            if skill_names:
                 self.supported_skills.install_missing(
                     self.integration_worktree,
-                    self.missing_skills,
+                    skill_names,
                 )
             self.codex_files.install(
                 integration_worktree=self.integration_worktree,
@@ -470,19 +611,48 @@ def plan_project_setup(
 
         codex_files = CodexProjectFiles.load()
         supported_skills = SupportedSkills.load()
-        missing_skills = tuple(
-            status.name
-            for status in check_core_skills(
-                integration_worktree,
-                Path.home() / ".agents" / "skills",
-            )
-            if not status.discovered
+        skill_statuses = check_core_skills(
+            integration_worktree,
+            Path.home() / ".agents" / "skills",
         )
+        discovered_skills = {
+            status.name for status in skill_statuses if status.discovered
+        }
         dev_exists = repository.branch_exists(INTEGRATION_BRANCH)
         registered_dev_worktree = repository.worktree_for_branch(
             INTEGRATION_BRANCH
         )
         proposed_base = None if dev_exists else repository.head
+        integration_revision = (
+            repository.revision(INTEGRATION_BRANCH)
+            if dev_exists
+            else proposed_base
+        )
+        materialized = (
+            registered_dev_worktree == integration_worktree.resolve()
+            and _filesystem_entry(integration_worktree) is not None
+            and _filesystem_entry(integration_worktree).kind == "directory"
+        )
+        integration_view = (
+            _TargetView(integration_worktree)
+            if materialized
+            else _TargetView(
+                integration_worktree,
+                repository,
+                integration_revision,
+            )
+        )
+        if not materialized:
+            discovered_skills.update(
+                _git_project_skill_names(repository, integration_revision)
+            )
+        missing_skills = tuple(
+            name for name in CORE_SKILL_NAMES if name not in discovered_skills
+        )
+        recoverable_skills = _recoverable_supported_skills(
+            integration_view,
+            supported_skills,
+        )
     except (GitRepositoryError, OSError, SupportedSkillsError) as error:
         raise ProjectSetupError(str(error)) from error
 
@@ -495,11 +665,8 @@ def plan_project_setup(
         codex_files=codex_files,
         supported_skills=supported_skills,
         missing_skills=missing_skills,
+        recoverable_skills=recoverable_skills,
         proposed_base=proposed_base,
         registered_dev_worktree=registered_dev_worktree,
-        integration_revision=(
-            repository.revision(INTEGRATION_BRANCH)
-            if dev_exists
-            else proposed_base
-        ),
+        integration_revision=integration_revision,
     )

@@ -197,6 +197,172 @@ def test_setup_reports_all_preflight_conflicts_without_mutation(
     assert not fake_codex.log_file.exists()
 
 
+def test_setup_rejects_runtime_and_skill_symlink_redirection_before_mutation(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    harness_root = temporary_git_repository.parent
+    primary = temporary_git_repository
+    integration = harness_root / ".agent-worktrees" / "integration"
+    run_process(["git", "branch", "dev"], cwd=primary).check_returncode()
+    run_process(
+        ["git", "worktree", "add", str(integration), "dev"], cwd=primary
+    ).check_returncode()
+
+    neighbor = harness_root / "neighbor-project"
+    runtime_redirect = neighbor / "runtime"
+    skill_redirect = neighbor / "skill"
+    runtime_redirect.mkdir(parents=True)
+    skill_redirect.mkdir()
+    (neighbor / "marker.txt").write_text("leave me alone\n", encoding="utf-8")
+    (integration / ".codex").symlink_to(runtime_redirect, target_is_directory=True)
+    skill_root = integration / ".agents" / "skills"
+    skill_root.mkdir(parents=True)
+    (skill_root / "domain-modeling").symlink_to(
+        skill_redirect,
+        target_is_directory=True,
+    )
+
+    user_home = tmp_path / "operator-home"
+    install_skills(
+        user_home / ".agents" / "skills",
+        tuple(name for name in CORE_SKILL_NAMES if name != "domain-modeling"),
+    )
+    neighbor_before = tree_contents(neighbor)
+    primary_before = worktree_contents(primary)
+    integration_before = tree_contents(integration)
+    worktrees_before = git_output(primary, "worktree", "list", "--porcelain")
+
+    result = run_setup(
+        installed_commands,
+        harness_root=harness_root,
+        user_home=user_home,
+        fake_codex=fake_codex,
+        answers="{0}\nproject-local\n".format(primary.name),
+    )
+
+    assert result.returncode == 1
+    assert "Setup preflight found conflicts" in result.stderr
+    assert ".codex" in result.stderr
+    assert ".agents/skills/domain-modeling" in result.stderr
+    assert not (harness_root / "state").exists()
+    assert not (
+        common_git_directory(primary) / "agent-runner" / "config.yml"
+    ).exists()
+    assert git_output(primary, "worktree", "list", "--porcelain") == worktrees_before
+    assert git_output(primary, "status", "--porcelain") == ""
+    assert worktree_contents(primary) == primary_before
+    assert tree_contents(integration) == integration_before
+    assert tree_contents(neighbor) == neighbor_before
+    assert not fake_codex.log_file.exists()
+
+
+def test_setup_recovers_a_byte_identical_partial_supported_skill_copy(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    harness_root = temporary_git_repository.parent
+    primary = temporary_git_repository
+    integration = harness_root / ".agent-worktrees" / "integration"
+    run_process(["git", "branch", "dev"], cwd=primary).check_returncode()
+    run_process(
+        ["git", "worktree", "add", str(integration), "dev"], cwd=primary
+    ).check_returncode()
+
+    partial_skill = integration / ".agents" / "skills" / "domain-modeling"
+    partial_skill.mkdir(parents=True)
+    supported = supported_skill_contents("domain-modeling")
+    partial_file = partial_skill / "ADR-FORMAT.md"
+    partial_file.write_bytes(supported["ADR-FORMAT.md"])
+    partial_mtime = partial_file.stat().st_mtime_ns
+
+    user_home = tmp_path / "operator-home"
+    install_skills(
+        user_home / ".agents" / "skills",
+        tuple(name for name in CORE_SKILL_NAMES if name != "domain-modeling"),
+    )
+
+    result = run_setup(
+        installed_commands,
+        harness_root=harness_root,
+        user_home=user_home,
+        fake_codex=fake_codex,
+        answers="{0}\nproject-local\n".format(primary.name),
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "ALREADY CONFIGURED: Project-local Skill domain-modeling" in result.stdout
+    assert "CREATE: Project-local Skill domain-modeling" in result.stdout
+    assert tree_contents(partial_skill) == supported
+    assert partial_file.stat().st_mtime_ns == partial_mtime
+    assert not fake_codex.log_file.exists()
+
+
+def test_setup_rerun_reports_an_already_configured_plan_without_rewriting(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    harness_root = temporary_git_repository.parent
+    primary = temporary_git_repository
+    integration = harness_root / ".agent-worktrees" / "integration"
+    user_home = tmp_path / "operator-home"
+    install_user_skills(user_home)
+
+    first = run_setup(
+        installed_commands,
+        harness_root=harness_root,
+        user_home=user_home,
+        fake_codex=fake_codex,
+        answers="{0}\ny\n".format(primary.name),
+    )
+    assert first.returncode == 0, first.stderr
+
+    runner_config = common_git_directory(primary) / "agent-runner" / "config.yml"
+    exclude_file = common_git_directory(primary) / "info" / "exclude"
+    watched_files = tuple(
+        path for path in (integration / ".codex").rglob("*") if path.is_file()
+    ) + (runner_config, exclude_file)
+    before_bytes = {path: path.read_bytes() for path in watched_files}
+    before_mtimes = {path: path.stat().st_mtime_ns for path in watched_files}
+    scratch_before = (integration / ".scratch").lstat().st_mtime_ns
+    worktrees_before = git_output(primary, "worktree", "list", "--porcelain")
+    integration_status = git_output(integration, "status", "--porcelain")
+
+    second = run_setup(
+        installed_commands,
+        harness_root=harness_root,
+        user_home=user_home,
+        fake_codex=fake_codex,
+        answers="{0}\n".format(primary.name),
+    )
+
+    assert second.returncode == 0, second.stderr
+    for planned_target in (
+        "Worktree Directory",
+        "Harness State Directory",
+        "Integration Worktree on dev",
+        "Codex Runtime resource",
+        "Integration scratch link",
+        "Project Runner Config",
+        "Ignore Integration .scratch",
+    ):
+        assert "ALREADY CONFIGURED: {0}".format(planned_target) in second.stdout
+    assert {path: path.read_bytes() for path in watched_files} == before_bytes
+    assert {path: path.stat().st_mtime_ns for path in watched_files} == before_mtimes
+    assert (integration / ".scratch").lstat().st_mtime_ns == scratch_before
+    assert git_output(primary, "worktree", "list", "--porcelain") == worktrees_before
+    assert git_output(integration, "status", "--porcelain") == integration_status
+    assert git_output(primary, "branch", "--show-current") == "main"
+    assert git_output(primary, "status", "--porcelain") == ""
+    assert not fake_codex.log_file.exists()
+
+
 def test_setup_confirms_the_exact_base_and_initializes_one_harness_project(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,

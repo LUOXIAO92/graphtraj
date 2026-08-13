@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from importlib import resources
 from importlib.abc import Traversable
 from pathlib import Path
-from typing import Dict, Iterable
+from typing import Dict, Iterable, Tuple
 
 from .skill_check import CORE_SKILL_NAMES
 
@@ -29,19 +29,45 @@ def _resource_at(root: Traversable, path: tuple[str, ...]) -> Traversable:
     return resource
 
 
-def _copy_resource_tree(source: Traversable, destination: Path) -> None:
-    if source.is_dir():
-        destination.mkdir()
-        for child in source.iterdir():
-            _copy_resource_tree(child, destination / child.name)
-        return
-    if source.is_file():
-        destination.write_bytes(source.read_bytes())
-        return
-    raise SupportedSkillsError(
-        "Release-supported Skill resource is neither a file nor directory: "
-        "{0}".format(source)
-    )
+def _resource_manifest(
+    source: Traversable,
+    prefix: str = "",
+) -> Dict[str, bytes]:
+    if not source.is_dir():
+        raise SupportedSkillsError(
+            "Release-supported Skill resource is not a directory: {0}".format(
+                source
+            )
+        )
+
+    manifest: Dict[str, bytes] = {}
+    for child in source.iterdir():
+        relative_path = "{0}/{1}".format(prefix, child.name) if prefix else child.name
+        if child.is_dir():
+            manifest.update(_resource_manifest(child, relative_path))
+        elif child.is_file():
+            manifest[relative_path] = child.read_bytes()
+        else:
+            raise SupportedSkillsError(
+                "Release-supported Skill resource is neither a file nor "
+                "directory: {0}".format(child)
+            )
+    return manifest
+
+
+def _parents(relative_path: str) -> Tuple[str, ...]:
+    parts = Path(relative_path).parts
+    return tuple(Path(*parts[:index]).as_posix() for index in range(1, len(parts)))
+
+
+def _existing_kind(path: Path) -> str:
+    if path.is_symlink():
+        return "symlink"
+    if path.is_dir():
+        return "directory"
+    if path.is_file():
+        return "file"
+    return "other"
 
 
 @dataclass(frozen=True)
@@ -88,18 +114,67 @@ class SupportedSkills:
                 )
             )
 
+        manifests = {name: self.manifest(name) for name in names}
         skill_root = integration_worktree / ".agents" / "skills"
-        targets = tuple(skill_root / name for name in names)
-        existing_targets = tuple(
-            target for target in targets if os.path.lexists(str(target))
-        )
-        if existing_targets:
-            raise SupportedSkillsError(
-                "Project-local Skill already exists: {0}".format(
-                    ", ".join(str(target) for target in existing_targets)
+        for name, manifest in manifests.items():
+            target = skill_root / name
+            if os.path.lexists(str(target)) and _existing_kind(target) != "directory":
+                raise SupportedSkillsError(
+                    "Project-local Skill target is not a real directory: {0}".format(
+                        target
+                    )
                 )
+            allowed_paths = set(manifest)
+            allowed_paths.update(
+                parent
+                for relative_path in manifest
+                for parent in _parents(relative_path)
             )
+            if target.is_dir():
+                for existing in target.rglob("*"):
+                    relative_path = existing.relative_to(target).as_posix()
+                    if existing.is_symlink() or relative_path not in allowed_paths:
+                        raise SupportedSkillsError(
+                            "Project-local Skill contains unsupported or redirected "
+                            "content: {0}".format(existing)
+                        )
+                for relative_path, content in manifest.items():
+                    existing = target / relative_path
+                    if not os.path.lexists(str(existing)):
+                        continue
+                    if (
+                        _existing_kind(existing) != "file"
+                        or existing.read_bytes() != content
+                    ):
+                        raise SupportedSkillsError(
+                            "Project-local Skill resource differs: {0}".format(
+                                existing
+                            )
+                        )
 
         skill_root.mkdir(parents=True, exist_ok=True)
-        for name, target in zip(names, targets):
-            _copy_resource_tree(self.resources_by_name[name], target)
+        for name in names:
+            target = skill_root / name
+            target.mkdir(parents=True, exist_ok=True)
+            manifest = manifests[name]
+            file_order = sorted(
+                manifest,
+                key=lambda path: (Path(path).name == "SKILL.md", path),
+            )
+            for relative_path in file_order:
+                destination = target / relative_path
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                if destination.exists() and destination.read_bytes() == manifest[relative_path]:
+                    continue
+                destination.write_bytes(manifest[relative_path])
+
+    def manifest(self, name: str) -> Dict[str, bytes]:
+        """Return one supported Skill as exact relative file content."""
+
+        try:
+            resource = self.resources_by_name[name]
+        except KeyError as error:
+            raise SupportedSkillsError(
+                "No release-supported Skill resource exists for: {0}".format(name)
+            ) from error
+        return _resource_manifest(resource)

@@ -5,7 +5,7 @@ from __future__ import annotations
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 
 class GitRepositoryError(Exception):
@@ -180,6 +180,28 @@ class SourceRepository:
         if object_type == "blob":
             return GitTreeEntry(kind="file", content=content)
         return GitTreeEntry(kind="other")
+
+    def tree_paths(self, revision: str, relative_root: str) -> Tuple[str, ...]:
+        """List every descendant path in one fixed Git tree."""
+
+        output = _git_bytes(
+            self.primary_worktree,
+            "ls-tree",
+            "-r",
+            "-t",
+            "-z",
+            revision,
+            "--",
+            relative_root,
+        )
+        paths = []
+        for record in output.split(b"\0"):
+            if not record:
+                continue
+            _metadata, separator, encoded_path = record.partition(b"\t")
+            if separator:
+                paths.append(encoded_path.decode())
+        return tuple(paths)
 
     def _worktrees(self) -> List[Dict[str, str]]:
         records: List[Dict[str, str]] = []

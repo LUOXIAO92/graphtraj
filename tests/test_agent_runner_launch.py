@@ -48,7 +48,7 @@ def test_background_worker_keeps_codex_process_protocol_inside_adapter() -> None
     assert "thread.started" in adapter_source
 
 
-def test_alias_mapping_durability_syncs_file_alias_then_sessions(
+def test_alias_mapping_durability_syncs_file_and_every_directory_entry(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -80,6 +80,7 @@ def test_alias_mapping_durability_syncs_file_alias_then_sessions(
         ("file", mapping),
         ("directory", mapping.parent),
         ("directory", mapping.parent.parent),
+        ("directory", mapping.parent.parent.parent),
     ]
 
 

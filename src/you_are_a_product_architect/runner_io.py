@@ -49,13 +49,14 @@ def active_turn_directory(runner_directory: Path, key: str) -> Path:
 
 
 def confirm_alias_mapping_durable(mapping_file: Path) -> None:
-    """Sync a mapping and both directory entries before launch success."""
+    """Sync a mapping and every new directory entry before launch success."""
 
     if mapping_file.is_symlink() or not mapping_file.is_file():
         raise OSError("alias mapping is not a regular file")
     _sync_file(mapping_file)
     _sync_directory(mapping_file.parent)
     _sync_directory(mapping_file.parent.parent)
+    _sync_directory(mapping_file.parent.parent.parent)
 
 
 def release_active_turn(runner_directory: Path, key: str) -> None:

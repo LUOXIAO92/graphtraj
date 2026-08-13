@@ -15,12 +15,12 @@ import yaml
 from .codex_adapter import read_codex_session_identity
 from .runner_io import (
     ActiveTurnBusyError,
-    ActiveTurnReservationError,
+    ActiveTurnReservation,
     active_turn_directory,
     active_turn_key,
     confirm_alias_mapping_durable,
+    create_active_turn_reservation,
     release_active_turn,
-    reserve_active_turn,
     write_yaml_durably,
 )
 from .runner_models import RunnerError
@@ -81,9 +81,9 @@ def send_instruction(alias: str, instruction: str, cwd: Path) -> Dict[str, str]:
     request = _read_resume_request(session_directory, mapping)
     _attest_runtime_session(session_directory, mapping)
     try:
-        reserve_active_turn(
+        reservation = create_active_turn_reservation(
             runner_directory,
-            key,
+            mapping["ticket_id"],
             {
                 "run_id": mapping["run_id"],
                 "ticket_id": mapping["ticket_id"],
@@ -97,7 +97,7 @@ def send_instruction(alias: str, instruction: str, cwd: Path) -> Dict[str, str]:
             "WORKTREE_TURN_ACTIVE",
             error.message,
         ) from error
-    except ActiveTurnReservationError as error:
+    except (OSError, ValueError, yaml.YAMLError) as error:
         raise RunnerError(
             "operation-failed",
             "The Ticket Worktree could not be reserved for an Engineer turn.",
@@ -112,6 +112,8 @@ def send_instruction(alias: str, instruction: str, cwd: Path) -> Dict[str, str]:
                 "runtime": mapping["runtime"],
                 "adapter_request": request,
                 "active_turn_key": key,
+                "active_turn_device": reservation.device,
+                "active_turn_inode": reservation.inode,
                 "expected_session": mapping["session"],
                 "mapping": mapping,
             },
@@ -148,13 +150,13 @@ def send_instruction(alias: str, instruction: str, cwd: Path) -> Dict[str, str]:
         if worker_started:
             stop_worker(worker.pid)
         else:
-            release_active_turn(runner_directory, key)
+            release_active_turn(runner_directory, reservation)
         raise
     except (OSError, BrokenPipeError, yaml.YAMLError) as error:
         if worker_started:
             stop_worker(worker.pid)
         else:
-            release_active_turn(runner_directory, key)
+            release_active_turn(runner_directory, reservation)
         raise RunnerError(
             "operation-failed",
             "The mapped Engineer session could not be resumed.",

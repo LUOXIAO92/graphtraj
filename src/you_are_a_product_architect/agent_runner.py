@@ -5,15 +5,11 @@ from pathlib import Path
 import click
 import yaml
 
+from .runner_cleanup import cleanup_ticket
 from .runner_control import interrupt_session, send_instruction
 from .runner_launch import launch_batch
 from .runner_models import RunnerError
 from .runner_status import status_aliases
-
-
-def _not_implemented(operation):
-    click.echo("{0} is not implemented yet.".format(operation), err=True)
-    raise click.exceptions.Exit(1)
 
 
 @click.group(invoke_without_command=True)
@@ -98,8 +94,26 @@ def interrupt(alias):
 
 
 @main.command()
-@click.option("--run-id", required=True)
-@click.option("--ticket-id", required=True)
+@click.option("--run-id")
+@click.option("--ticket-id")
 def cleanup(run_id, ticket_id):
-    """Clean up one integrated ticket (not implemented yet)."""
-    _not_implemented("Cleanup")
+    """Clean up one safely integrated ticket by stable identity."""
+    if run_id is None or ticket_id is None:
+        error = RunnerError(
+            "invalid-input",
+            "Cleanup requires --run-id and --ticket-id.",
+        )
+        _emit_result({"error": error.as_document()})
+        click.echo(error.message, err=True)
+        raise click.exceptions.Exit(1)
+    try:
+        response = cleanup_ticket(Path.cwd().resolve(), run_id, ticket_id)
+    except RunnerError as error:
+        _emit_result({"error": error.as_document()})
+        click.echo(error.message, err=True)
+        raise click.exceptions.Exit(1)
+    _emit_result(response.document)
+    if not response.succeeded:
+        error = response.document["error"]
+        click.echo(error["message"], err=True)
+        raise click.exceptions.Exit(1)

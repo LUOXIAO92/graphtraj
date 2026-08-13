@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from .runtime_adapter import RuntimeAdapterError, SessionStarted
+from .runner_transport import runtime_turn_outcome
 
 
 SUPPORTED_ROLE_KEYS = frozenset(
@@ -189,10 +190,7 @@ class CodexTurn:
                 "RUNTIME_SESSION_MISSING",
                 "Codex exited before reporting a Runtime session.",
             )
-        return {
-            "outcome": "completed" if return_code == 0 else "runtime-error",
-            "runtime_exit_code": return_code,
-        }
+        return runtime_turn_outcome(return_code)
 
     def terminate(self) -> bool:
         """Signal only this Codex process group and confirm its exit."""

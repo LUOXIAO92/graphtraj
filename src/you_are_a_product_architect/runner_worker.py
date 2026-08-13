@@ -12,10 +12,12 @@ import yaml
 
 from .codex_adapter import create_codex_resume_turn, create_codex_turn
 from .runner_io import (
-    active_turn_directory,
+    ActiveTurnReservation,
     release_active_turn,
+    write_active_turn_owner,
     write_yaml_durably,
 )
+from .runner_transport import runtime_launch_failure
 from .runtime_adapter import (
     ResumeRuntimeAdapter,
     RuntimeAdapter,
@@ -33,7 +35,7 @@ RESUME_ADAPTERS: Mapping[str, ResumeRuntimeAdapter] = {
 def run(launch_file: Path) -> int:
     session_directory = launch_file.parent
     runner_directory = session_directory.parent.parent
-    active_turn_key = ""
+    active_turn: ActiveTurnReservation | None = None
     turn_handle: RuntimeTurn | None = None
     mapping_recorded = False
     terminal_turn: dict[str, object] | None = None
@@ -53,7 +55,11 @@ def run(launch_file: Path) -> int:
             launch = yaml.safe_load(launch_file.read_text(encoding="utf-8"))
             if not isinstance(launch, dict):
                 raise ValueError("launch document is not a mapping")
-            active_turn_key = launch["active_turn_key"]
+            active_turn = ActiveTurnReservation(
+                key=launch["active_turn_key"],
+                device=launch["active_turn_device"],
+                inode=launch["active_turn_inode"],
+            )
             runtime = launch["runtime"]
             operation = launch.get("operation", "launch")
             if operation not in {"launch", "resume"}:
@@ -77,11 +83,10 @@ def run(launch_file: Path) -> int:
                 )
                 if operation == "resume":
                     (session_directory / "turn.yml").unlink()
-                reservation = active_turn_directory(
-                    runner_directory, active_turn_key
-                )
-                write_yaml_durably(
-                    reservation / "reservation.yml",
+                assert active_turn is not None
+                write_active_turn_owner(
+                    runner_directory,
+                    active_turn,
                     {"activity": "running", **mapping},
                 )
                 write_yaml_durably(session_directory / "mapping.yml", mapping)
@@ -118,12 +123,15 @@ def run(launch_file: Path) -> int:
                 }
             else:
                 _write_worker_error(
-                    session_directory, operation, error.code, error.message
+                    session_directory,
+                    operation,
+                    error.code,
+                    error.message,
+                    terminal_confirmed=runtime_terminal,
                 )
         except (KeyError, OSError, TypeError, ValueError, yaml.YAMLError) as error:
-            if operation == "resume":
-                if turn_handle is not None:
-                    turn_handle.terminate_until_terminal()
+            if turn_handle is not None:
+                turn_handle.terminate_until_terminal()
                 runtime_terminal = True
             if mapping_recorded and runtime_terminal:
                 terminal_turn = {"outcome": "runtime-error"}
@@ -134,6 +142,7 @@ def run(launch_file: Path) -> int:
                     "RUNTIME_WORKER_FAILED",
                     "The internal Runtime worker could not own the Engineer turn.",
                     str(error),
+                    terminal_confirmed=runtime_terminal,
                 )
         if terminal_turn is not None:
             try:
@@ -146,15 +155,13 @@ def run(launch_file: Path) -> int:
                     "RUNTIME_WORKER_FAILED",
                     "The internal Runtime worker could not persist its terminal outcome.",
                     str(error),
+                    terminal_confirmed=runtime_terminal,
                 )
     finally:
         if previous_sigterm is not None:
             signal.signal(signal.SIGTERM, previous_sigterm)
-        if active_turn_key and (
-            terminal_persisted
-            or (operation == "resume" and runtime_terminal)
-        ):
-            release_active_turn(runner_directory, active_turn_key)
+        if active_turn is not None and (terminal_persisted or runtime_terminal):
+            release_active_turn(runner_directory, active_turn)
     return 0 if terminal_persisted else 1
 
 
@@ -177,10 +184,15 @@ def _write_worker_error(
     code: str,
     message: str,
     diagnostic: str = "",
+    *,
+    terminal_confirmed: bool,
 ) -> None:
-    failure = {"code": code, "message": message}
-    if diagnostic:
-        failure["diagnostic"] = diagnostic
+    failure = runtime_launch_failure(
+        code,
+        message,
+        diagnostic,
+        terminal_confirmed=terminal_confirmed,
+    )
     name = "resume-error.yml" if operation == "resume" else "launch-error.yml"
     write_yaml_durably(session_directory / name, failure)
 

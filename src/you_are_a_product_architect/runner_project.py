@@ -55,23 +55,40 @@ def registered_worktree_owns_branch(worktree: Path, branch: str) -> bool:
     expected_branch = "refs/heads/{0}".format(branch)
     matches = [
         record
-        for record in _worktrees(worktree)
+        for record in registered_worktrees(worktree)
         if Path(record["worktree"]).resolve() == expected_worktree
     ]
     return len(matches) == 1 and matches[0].get("branch") == expected_branch
 
 
-def discover_project(cwd: Path) -> Project:
+def discover_project(
+    cwd: Path,
+    *,
+    require_clean_integration: bool = True,
+    require_runtime_executable: bool = True,
+) -> Project:
     """Discover and validate machine-local Runner configuration from Git."""
 
     try:
-        repository = Path(_git(cwd, "rev-parse", "--show-toplevel")).resolve()
+        repository = _resolve_path(
+            Path(run_git(cwd, "rev-parse", "--show-toplevel")),
+            code="PROJECT_NOT_FOUND",
+            message="Agent Runner must be invoked from a configured Source Repository.",
+        )
+        common_text = run_git(cwd, "rev-parse", "--git-common-dir")
+        common = Path(common_text)
+        if not common.is_absolute():
+            common = cwd / common
+        common = _resolve_path(
+            common,
+            code="PROJECT_NOT_FOUND",
+            message="Agent Runner must be invoked from a configured Source Repository.",
+        )
     except RunnerError as error:
         raise RunnerError(
             "PROJECT_NOT_FOUND",
             "Agent Runner must be invoked from a configured Source Repository.",
         ) from error
-    common = discover_runner_directory(cwd).parent
     config_file = common / "agent-runner" / "config.yml"
     try:
         config = yaml.safe_load(config_file.read_text(encoding="utf-8"))
@@ -135,43 +152,74 @@ def discover_project(cwd: Path) -> Project:
             "RUNNER_CONFIG_INVALID",
             "Project Runner Config contains invalid project or Codex settings.",
         )
-    worktree_root = Path(worktree_value).resolve()
+    invalid_config = (
+        "Project Runner Config contains invalid project or Codex settings."
+    )
+    worktree_root = _resolve_path(
+        Path(worktree_value),
+        code="RUNNER_CONFIG_INVALID",
+        message=invalid_config,
+    )
     if worktree_root.name != ".agent-worktrees" or not worktree_root.is_dir():
         raise RunnerError(
             "RUNNER_CONFIG_INVALID",
             "The configured Worktree Directory is invalid.",
         )
-    runtime_executable = Path(executable_value).resolve()
-    if not runtime_executable.is_file() or not os.access(runtime_executable, os.X_OK):
+    runtime_executable = _resolve_path(
+        Path(executable_value),
+        code="RUNNER_CONFIG_INVALID",
+        message=invalid_config,
+        allow_missing=True,
+    )
+    if require_runtime_executable and (
+        not runtime_executable.is_file()
+        or not os.access(runtime_executable, os.X_OK)
+    ):
         raise RunnerError(
             "RUNTIME_EXECUTABLE_INVALID",
             "The configured Codex Runtime executable is unavailable.",
         )
 
     integration = _worktree_for_branch(repository, branch)
-    expected_integration = (worktree_root / "integration").resolve()
+    expected_integration = _resolve_path(
+        worktree_root / "integration",
+        code="INTEGRATION_WORKTREE_INVALID",
+        message="The registered dev Integration Worktree is invalid.",
+    )
     if integration != expected_integration or not integration.is_dir():
         raise RunnerError(
             "INTEGRATION_WORKTREE_INVALID",
             "The registered dev Integration Worktree is invalid.",
         )
-    if _git(integration, "status", "--porcelain"):
+    if require_clean_integration and run_git(
+        integration, "status", "--porcelain"
+    ):
         raise RunnerError(
             "INTEGRATION_WORKTREE_DIRTY",
             "The dev Integration Worktree must be clean before launch.",
         )
-    dev_commit = _git(repository, "rev-parse", "refs/heads/{0}".format(branch))
-    if _git(integration, "rev-parse", "HEAD") != dev_commit:
+    dev_commit = run_git(
+        repository, "rev-parse", "refs/heads/{0}".format(branch)
+    )
+    if run_git(integration, "rev-parse", "HEAD") != dev_commit:
         raise RunnerError(
             "INTEGRATION_WORKTREE_INVALID",
             "The dev Integration Worktree is not at the registered dev state.",
         )
 
+    lexical_state = worktree_root.parent / "state"
+    if lexical_state.is_symlink():
+        raise RunnerError("RUNNER_CONFIG_INVALID", invalid_config)
     return Project(
         repository=repository,
         common_directory=common,
         worktree_root=worktree_root,
-        state_directory=(worktree_root.parent / "state").resolve(),
+        state_directory=_resolve_path(
+            lexical_state,
+            code="RUNNER_CONFIG_INVALID",
+            message=invalid_config,
+            allow_missing=True,
+        ),
         integration_branch=branch,
         integration_worktree=integration,
         dev_commit=dev_commit,
@@ -184,7 +232,7 @@ def discover_runner_directory(cwd: Path) -> Path:
     """Find the Runner-owned common Git directory without launch preflight."""
 
     try:
-        common_text = _git(cwd, "rev-parse", "--git-common-dir")
+        common_text = run_git(cwd, "rev-parse", "--git-common-dir")
     except RunnerError as error:
         raise RunnerError(
             "PROJECT_NOT_FOUND",
@@ -207,7 +255,7 @@ def provision_worktree(
     if preflight_worktree(project, task, branch, worktree):
         return
     expected_branch = "refs/heads/{0}".format(branch)
-    branch_exists = _git_succeeds(
+    branch_exists = git_succeeds(
         project.repository,
         "show-ref",
         "--verify",
@@ -223,9 +271,9 @@ def provision_worktree(
         ) from error
     try:
         if branch_exists:
-            _git(project.repository, "worktree", "add", str(worktree), branch)
+            run_git(project.repository, "worktree", "add", str(worktree), branch)
         else:
-            _git(
+            run_git(
                 project.repository,
                 "worktree",
                 "add",
@@ -242,18 +290,23 @@ def provision_worktree(
     record = next(
         (
             item
-            for item in _worktrees(project.repository)
-            if Path(item["worktree"]).resolve() == worktree
+            for item in registered_worktrees(project.repository)
+            if _resolve_path(
+                Path(item["worktree"]),
+                code="GIT_FAILED",
+                message="A required Git operation failed.",
+            )
+            == worktree
         ),
         None,
     )
     if (
         record is None
         or record.get("branch") != expected_branch
-        or _git(worktree, "rev-parse", "--git-common-dir") == ""
+        or run_git(worktree, "rev-parse", "--git-common-dir") == ""
         or (
             branch_exists
-            and _git(worktree, "rev-parse", "HEAD") != project.dev_commit
+            and run_git(worktree, "rev-parse", "HEAD") != project.dev_commit
         )
     ):
         raise RunnerError(
@@ -273,7 +326,7 @@ def preflight_worktree(
     Return whether the exact registered Ticket Worktree already exists.
     """
 
-    records = _worktrees(project.repository)
+    records = registered_worktrees(project.repository)
     expected_branch = "refs/heads/{0}".format(branch)
     ticket_runs = (project.worktree_root / "runs").resolve()
     registered = None
@@ -317,7 +370,7 @@ def preflight_worktree(
             "The derived Ticket Worktree path exists but is not registered.",
         )
 
-    branch_exists = _git_succeeds(
+    branch_exists = git_succeeds(
         project.repository,
         "show-ref",
         "--verify",
@@ -326,7 +379,7 @@ def preflight_worktree(
     )
     if (
         branch_exists
-        and _git(project.repository, "rev-parse", expected_branch)
+        and run_git(project.repository, "rev-parse", expected_branch)
         != project.dev_commit
     ):
         raise RunnerError(
@@ -351,12 +404,14 @@ def _registered_ticket_path_matches(
         len(relative.parts) == 2
         and relative.parts[1].startswith(task.id_stem_prefix)
     )
-
-
 def _worktree_for_branch(repository: Path, branch: str) -> Path:
     matches = [
-        Path(record["worktree"]).resolve()
-        for record in _worktrees(repository)
+        _resolve_path(
+            Path(record["worktree"]),
+            code="GIT_FAILED",
+            message="A required Git operation failed.",
+        )
+        for record in registered_worktrees(repository)
         if record.get("branch") == "refs/heads/{0}".format(branch)
     ]
     if len(matches) != 1:
@@ -367,8 +422,10 @@ def _worktree_for_branch(repository: Path, branch: str) -> Path:
     return matches[0]
 
 
-def _worktrees(repository: Path) -> List[Dict[str, str]]:
-    output = _git(repository, "worktree", "list", "--porcelain")
+def registered_worktrees(repository: Path) -> List[Dict[str, str]]:
+    """Return the Source Repository's current porcelain Worktree records."""
+
+    output = run_git(repository, "worktree", "list", "--porcelain")
     records: List[Dict[str, str]] = []
     record: Dict[str, str] = {}
     for line in output.splitlines():
@@ -384,11 +441,18 @@ def _worktrees(repository: Path) -> List[Dict[str, str]]:
     return records
 
 
-def _git(repository: Path, *arguments: str) -> str:
+def run_git(
+    repository: Path,
+    *arguments: str,
+    input_text: str | None = None,
+) -> str:
+    """Run a required Git operation with stable Runner failure semantics."""
+
     try:
         result = subprocess.run(
             ["git", *arguments],
             cwd=repository,
+            input=input_text,
             check=False,
             text=True,
             capture_output=True,
@@ -400,17 +464,36 @@ def _git(repository: Path, *arguments: str) -> str:
     return result.stdout.strip()
 
 
-def _git_succeeds(repository: Path, *arguments: str) -> bool:
+def git_succeeds(repository: Path, *arguments: str) -> bool:
+    """Run a Git predicate, distinguishing a negative result from an error."""
+
     try:
-        return (
-            subprocess.run(
-                ["git", *arguments],
-                cwd=repository,
-                check=False,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            ).returncode
-            == 0
+        result = subprocess.run(
+            ["git", *arguments],
+            cwd=repository,
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
         )
-    except OSError:
-        return False
+    except OSError as error:
+        raise RunnerError("GIT_FAILED", "A required Git operation failed.") from error
+    if result.returncode not in (0, 1):
+        raise RunnerError("GIT_FAILED", "A required Git operation failed.")
+    return result.returncode == 0
+
+
+def _resolve_path(
+    path: Path,
+    *,
+    code: str,
+    message: str,
+    allow_missing: bool = False,
+) -> Path:
+    """Resolve one trusted path or translate every resolution failure."""
+
+    try:
+        if allow_missing and not os.path.lexists(str(path)):
+            return path.absolute()
+        return path.resolve(strict=True)
+    except (OSError, RuntimeError) as error:
+        raise RunnerError(code, message) from error

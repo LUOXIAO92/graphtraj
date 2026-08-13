@@ -9,7 +9,7 @@ from typing import Any, Dict, Sequence, Tuple
 
 import yaml
 
-from .runner_io import active_turn_directory, active_turn_key
+from .runner_io import active_turn_key, read_active_turn_owner
 from .runner_models import RunnerError, StatusResponse
 from .runner_process import process_is_alive
 from .runner_project import discover_runner_directory
@@ -139,18 +139,9 @@ def require_active_turn(
         key = active_turn_key(mapping["ticket_id"])
     except UnicodeEncodeError as error:
         raise _invalid_mapping() from error
-    reservation = active_turn_directory(runner_directory, key)
-    owner = reservation / "reservation.yml"
-    if (
-        reservation.is_symlink()
-        or not reservation.is_dir()
-        or owner.is_symlink()
-        or not owner.is_file()
-    ):
-        raise _invalid_activity()
     try:
-        activity = yaml.safe_load(owner.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, yaml.YAMLError) as error:
+        activity = read_active_turn_owner(runner_directory, key)
+    except OSError as error:
         raise _invalid_activity() from error
     if (
         not isinstance(activity, dict)

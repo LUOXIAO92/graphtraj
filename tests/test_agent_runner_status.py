@@ -493,7 +493,20 @@ def test_installed_worker_owns_an_unconfirmed_runtime_until_it_is_terminal(
     reservation_key = hashlib.sha256(ticket_id.encode("ascii")).hexdigest()
     session_directory = runner_directory / "sessions" / alias
     session_directory.mkdir(parents=True)
-    (runner_directory / "active-worktrees" / reservation_key).mkdir(parents=True)
+    reservation_file = runner_directory / "active-worktrees" / reservation_key
+    reservation_file.parent.mkdir(parents=True)
+    reservation_file.write_text(
+        yaml.safe_dump(
+            {
+                "activity": "starting",
+                "run_id": "20260813-recovery",
+                "ticket_id": ticket_id,
+                "worktree_path": str(integration),
+            }
+        ),
+        encoding="utf-8",
+    )
+    reservation_identity = reservation_file.stat()
     launch_file = session_directory / "launch.yml"
     launch_file.write_text(
         yaml.safe_dump(
@@ -501,6 +514,8 @@ def test_installed_worker_owns_an_unconfirmed_runtime_until_it_is_terminal(
                 "runtime": "codex",
                 "adapter_request": {},
                 "active_turn_key": reservation_key,
+                "active_turn_device": reservation_identity.st_dev,
+                "active_turn_inode": reservation_identity.st_ino,
                 "mapping": {
                     "alias": alias,
                     "runtime": "codex",

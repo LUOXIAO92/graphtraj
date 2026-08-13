@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 
 import yaml
 
-from conftest import FakeCodex, InstalledCommands, run_process, wait_for_file
-from test_agent_runner_status import wait_for_process_exit
+from conftest import FakeCodex, InstalledCommands, run_process
 from test_project_setup import (
     CORE_SKILL_NAMES,
     common_git_directory,
@@ -18,66 +18,42 @@ from test_project_setup import (
 )
 
 
-def write_fake_engineer_action(path: Path) -> None:
-    path.write_text(
-        """\
-import os
-import subprocess
-from pathlib import Path
-
-
-def git_run(*arguments: str) -> subprocess.CompletedProcess[str]:
-    result = subprocess.run(
-        ["git", *arguments],
-        check=False,
-        text=True,
-        capture_output=True,
-    )
-    if result.returncode != 0:
-        raise SystemExit(result.returncode)
-    return result
-
-
-worktree = Path.cwd()
-delivered = worktree / "V1_DELIVERED.txt"
-delivered.write_text("representative delivery\\n", encoding="utf-8")
-git_run("add", delivered.name)
-git_run("commit", "-m", "Deliver representative V1 ticket")
-candidate = git_run("rev-parse", "HEAD").stdout.strip()
-git_run("diff", "--check", "HEAD^", "HEAD")
-
-evidence = (worktree / ".scratch" / "task-delivery").resolve()
-reviews = evidence / "reviews"
-reviews.mkdir()
-(evidence / "result.md").write_text(
-    (
-        "Candidate commit: {0}\\n"
-        "Outcome: representative ticket delivered.\\n"
-        "Outstanding concern: Main must adjudicate the raw reviews.\\n"
-    ).format(candidate),
-    encoding="utf-8",
-)
-(evidence / "validation.md").write_text(
-    (
-        "Candidate commit: {0}\\n"
-        "Command: git diff --check HEAD^ HEAD\\n"
-        "Result: passed.\\n"
-    ).format(candidate),
-    encoding="utf-8",
-)
-alias = os.environ["FAKE_CODEX_ACTION_ALIAS"]
-(reviews / "{0}-r1-standards.md".format(alias)).write_text(
-    "Raw Standards review for the representative candidate.\\n"
-    "Main must adjudicate this evidence.\\n",
-    encoding="utf-8",
-)
-(reviews / "{0}-r1-spec.md".format(alias)).write_text(
-    "Raw Spec review for the representative candidate.\\n"
-    "Main must adjudicate this evidence.\\n",
-    encoding="utf-8",
-)
-""",
-        encoding="utf-8",
+def wait_for_idle_outcome(
+    installed_commands: InstalledCommands,
+    *,
+    integration: Path,
+    environment: dict[str, str],
+    alias: str,
+    outcome: str,
+) -> None:
+    expected = {
+        "aliases": [
+            {
+                "alias": alias,
+                "activity": "idle",
+                "last_outcome": outcome,
+            }
+        ]
+    }
+    deadline = time.monotonic() + 5.0
+    last_document: object = None
+    while time.monotonic() < deadline:
+        result = run_process(
+            [str(installed_commands.runner), "status", alias],
+            cwd=integration,
+            env=environment,
+        )
+        assert result.returncode == 0, result.stderr
+        last_document = yaml.safe_load(result.stdout)
+        if last_document == expected:
+            return
+        time.sleep(0.01)
+    raise AssertionError(
+        "Timed out waiting for {0} to become idle with {1}: {2}".format(
+            alias,
+            outcome,
+            last_document,
+        )
     )
 
 
@@ -284,27 +260,15 @@ def test_pinned_install_exercises_the_complete_v1_delivery_lifecycle(
         "alias": alias,
         "interrupt_status": "interrupted",
     }
-    turn_file = session_directory / "turn.yml"
-    wait_for_file(turn_file)
-    after_interrupt = run_process(
-        [str(installed_commands.runner), "status", alias],
-        cwd=integration,
-        env=environment,
+    wait_for_idle_outcome(
+        installed_commands,
+        integration=integration,
+        environment=environment,
+        alias=alias,
+        outcome="interrupted",
     )
-    assert after_interrupt.returncode == 0, after_interrupt.stderr
-    assert yaml.safe_load(after_interrupt.stdout) == {
-        "aliases": [
-            {
-                "alias": alias,
-                "activity": "idle",
-                "last_outcome": "interrupted",
-            }
-        ]
-    }
 
     instruction = "Resume this representative ticket and finish it."
-    engineer_action = tmp_path / "fake-engineer-action.py"
-    write_fake_engineer_action(engineer_action)
     resumed = run_process(
         [
             str(installed_commands.runner),
@@ -317,8 +281,8 @@ def test_pinned_install_exercises_the_complete_v1_delivery_lifecycle(
         env={
             **environment,
             "FAKE_CODEX_CAPTURE_STDIN": "1",
-            "FAKE_CODEX_ACTION": str(engineer_action),
-            "FAKE_CODEX_ACTION_ALIAS": alias,
+            "FAKE_CODEX_LIFECYCLE_ACTION": "deliver-representative-ticket",
+            "FAKE_CODEX_LIFECYCLE_ALIAS": alias,
             "FAKE_CODEX_EVENTS": json.dumps(
                 [
                     {"type": "thread.started", "thread_id": session},
@@ -338,27 +302,13 @@ def test_pinned_install_exercises_the_complete_v1_delivery_lifecycle(
     )
     assert resumed.returncode == 0, resumed.stderr
     assert yaml.safe_load(resumed.stdout) == {"alias": alias, "send_status": "sent"}
-    resumed_mapping = yaml.safe_load(
-        (session_directory / "mapping.yml").read_text(encoding="utf-8")
+    wait_for_idle_outcome(
+        installed_commands,
+        integration=integration,
+        environment=environment,
+        alias=alias,
+        outcome="completed",
     )
-    wait_for_process_exit(resumed_mapping["worker_pid"])
-    wait_for_file(turn_file)
-    assert yaml.safe_load(turn_file.read_text(encoding="utf-8"))["outcome"] == "completed"
-    after_resume = run_process(
-        [str(installed_commands.runner), "status", alias],
-        cwd=integration,
-        env=environment,
-    )
-    assert after_resume.returncode == 0, after_resume.stderr
-    assert yaml.safe_load(after_resume.stdout) == {
-        "aliases": [
-            {
-                "alias": alias,
-                "activity": "idle",
-                "last_outcome": "completed",
-            }
-        ]
-    }
     runtime_record = json.loads(fake_codex.log_file.read_text(encoding="utf-8"))
     assert runtime_record["stdin"] == instruction
     assert "resume" in runtime_record["argv"]

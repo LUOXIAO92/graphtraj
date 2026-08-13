@@ -33,14 +33,11 @@ def test_installed_commands_advertise_the_bootstrap_interfaces(
     assert "not implemented" in runner_help.stdout.lower()
 
 
-def test_installed_runner_placeholder_operations_fail_until_implemented(
+def test_installed_runner_future_operations_fail_until_implemented(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
 ) -> None:
-    batch_file = temporary_git_repository / "batch.yml"
-    batch_file.write_text("run_id: test-run\ntasks: []\n", encoding="utf-8")
     operations = {
-        "launch": [str(installed_commands.runner), "--batch-input", str(batch_file)],
         "status": [str(installed_commands.runner), "status", "ticket-42@j1"],
         "send": [
             str(installed_commands.runner),

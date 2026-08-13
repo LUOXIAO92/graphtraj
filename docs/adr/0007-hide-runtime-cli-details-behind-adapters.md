@@ -34,6 +34,18 @@ configuration, renders its command, starts the Engineer in the Ticket Worktree,
 captures the Runtime session, and translates transport results to the shared
 Runner interface.
 
+For Codex, a configured role binding names one project-local custom Agent in
+`.codex/agents/`. The Adapter validates an explicit supported role schema and
+materializes its session settings as top-level `codex exec` arguments and
+configuration overrides. It never translates the binding to `--profile`:
+Codex profiles layer files from `CODEX_HOME` and are not project custom-Agent
+selectors. Before using Codex's invocation-scoped hook-trust bypass, the
+Adapter verifies that the role contains the exact packaged Engineer Hook
+declaration and that `.codex/hooks/worktree_guard.py` is byte-for-byte the
+installed packaged guard. A mismatch fails closed before Runtime launch. This
+does not persist trust, write global Runtime configuration, or bypass the
+configured sandbox, approval, or network controls.
+
 V1 implements only the Codex Adapter. It privately performs the equivalent of:
 
 ```text

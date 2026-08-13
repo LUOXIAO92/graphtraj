@@ -23,7 +23,9 @@ Mermaid DAG. It also creates a short stable `run_id` in the ASCII form
 `YYYYMMDD-short-name`, adding a numeric suffix such as `-2` on collision. The
 Agent chooses the semantic short name and resolves collisions; the Runner only
 validates that the ID is path-safe, within its allowed length, and consistent
-with any existing mapping.
+with any existing mapping. V1 bounds the complete identifier at 64 ASCII
+characters as a filesystem-nesting limit; this does not transfer naming or
+collision authority to the Runner.
 
 Each task is keyed by its tracker-supplied `ticket_id` and receives a short,
 stable `ticket_name` for the Delivery Run. An accepted ticket may supply that

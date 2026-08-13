@@ -31,6 +31,7 @@ def run_process(
     *,
     cwd: Path,
     env: Optional[Mapping[str, str]] = None,
+    timeout: Optional[float] = None,
 ) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         command,
@@ -39,6 +40,7 @@ def run_process(
         check=False,
         text=True,
         capture_output=True,
+        timeout=timeout,
     )
 
 
@@ -85,7 +87,9 @@ def fake_codex(tmp_path: Path) -> FakeCodex:
     script = "#!{0}\n".format(sys.executable) + (
         "import json\n"
         "import os\n"
+        "import signal\n"
         "import sys\n"
+        "import time\n"
         "from pathlib import Path\n"
         "\n"
         "configured_events = os.environ.get('FAKE_CODEX_EVENTS')\n"
@@ -105,12 +109,42 @@ def fake_codex(tmp_path: Path) -> FakeCodex:
         "else:\n"
         "    events = json.loads(configured_events)\n"
         "\n"
+        "termination_seen = os.environ.get('FAKE_CODEX_TERMINATION_SEEN')\n"
+        "termination_release = os.environ.get('FAKE_CODEX_TERMINATION_RELEASE')\n"
+        "if termination_seen is not None and termination_release is not None:\n"
+        "    def delay_termination(signum, frame):\n"
+        "        signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
+        "        Path(termination_seen).touch()\n"
+        "        while not Path(termination_release).exists():\n"
+        "            time.sleep(0.01)\n"
+        "        raise SystemExit(128 + signum)\n"
+        "    signal.signal(signal.SIGTERM, delay_termination)\n"
+        "    ready_file = os.environ.get('FAKE_CODEX_TERMINATION_READY')\n"
+        "    if ready_file is not None:\n"
+        "        Path(ready_file).touch()\n"
+        "\n"
+        "mapping_release = os.environ.get('FAKE_CODEX_MAPPING_RELEASE')\n"
+        "if mapping_release is not None:\n"
+        "    while not Path(mapping_release).exists():\n"
+        "        time.sleep(0.01)\n"
+        "\n"
+        "event_release = os.environ.get('FAKE_CODEX_EVENT_RELEASE')\n"
+        "record = {'cwd': os.getcwd(), 'argv': sys.argv[1:]}\n"
+        "if os.environ.get('FAKE_CODEX_CAPTURE_STDIN') == '1':\n"
+        "    record['stdin'] = sys.stdin.read()\n"
         "Path(os.environ['FAKE_CODEX_LOG']).write_text(\n"
-        "    json.dumps({'cwd': os.getcwd(), 'argv': sys.argv[1:]}, sort_keys=True) + '\\n',\n"
+        "    json.dumps(record, sort_keys=True) + '\\n',\n"
         "    encoding='utf-8',\n"
         ")\n"
-        "for event in events:\n"
-        "    print(json.dumps(event, sort_keys=True))\n"
+        "release_file = os.environ.get('FAKE_CODEX_RELEASE_FILE')\n"
+        "for index, event in enumerate(events):\n"
+        "    print(json.dumps(event, sort_keys=True), flush=True)\n"
+        "    if index == 0 and event_release is not None:\n"
+        "        while not Path(event_release).exists():\n"
+        "            time.sleep(0.01)\n"
+        "    if index == 0 and release_file is not None:\n"
+        "        while not Path(release_file).exists():\n"
+        "            time.sleep(0.01)\n"
         "\n"
         "raise SystemExit(int(os.environ.get('FAKE_CODEX_EXIT_CODE', '0')))\n"
     )

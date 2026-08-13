@@ -7,6 +7,7 @@ import yaml
 
 from .runner_launch import launch_batch
 from .runner_models import RunnerError
+from .runner_status import status_aliases
 
 
 def _not_implemented(operation):
@@ -52,8 +53,18 @@ def _emit_result(document):
 @main.command()
 @click.argument("aliases", nargs=-1, required=True)
 def status(aliases):
-    """Inspect session aliases (not implemented yet)."""
-    _not_implemented("Status")
+    """Inspect the explicitly supplied Engineer aliases."""
+    try:
+        response = status_aliases(aliases, Path.cwd().resolve())
+    except RunnerError as error:
+        _emit_result({"error": error.as_document()})
+        click.echo(error.message, err=True)
+        raise click.exceptions.Exit(1)
+    _emit_result(response.document)
+    if not response.succeeded:
+        for error in response.errors:
+            click.echo(error.message, err=True)
+        raise click.exceptions.Exit(1)
 
 
 @main.command()

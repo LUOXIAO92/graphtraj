@@ -38,7 +38,6 @@ def test_installed_runner_future_operations_fail_until_implemented(
     temporary_git_repository: Path,
 ) -> None:
     operations = {
-        "status": [str(installed_commands.runner), "status", "ticket-42@j1"],
         "send": [
             str(installed_commands.runner),
             "send",

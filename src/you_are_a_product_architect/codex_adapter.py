@@ -7,6 +7,7 @@ import os
 import re
 import signal
 import subprocess
+import time
 import tomllib
 from dataclasses import dataclass
 from importlib import resources
@@ -179,7 +180,15 @@ class CodexTurn:
     def terminate(self) -> bool:
         """Signal only this Codex process group and confirm its exit."""
 
+        if self._process is None or self._process.poll() is not None:
+            return False
         return _stop_process(self._process)
+
+    def terminate_until_terminal(self) -> None:
+        """Retain ownership until this Codex process group has stopped."""
+
+        while not _stop_process(self._process):
+            time.sleep(0.01)
 
 
 def create_codex_turn(

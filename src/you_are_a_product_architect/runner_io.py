@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 import tempfile
@@ -12,6 +13,12 @@ import yaml
 
 
 ACTIVE_TURN_KEY = re.compile(r"^[0-9a-f]{64}$")
+
+
+def active_turn_key(ticket_id: str) -> str:
+    """Return the project-wide reservation key for one validated ticket ID."""
+
+    return hashlib.sha256(ticket_id.encode("ascii")).hexdigest()
 
 
 def write_yaml_durably(path: Path, document: Any) -> None:

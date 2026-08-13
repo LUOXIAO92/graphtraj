@@ -20,16 +20,12 @@ def discover_project(cwd: Path) -> Project:
 
     try:
         repository = Path(_git(cwd, "rev-parse", "--show-toplevel")).resolve()
-        common_text = _git(cwd, "rev-parse", "--git-common-dir")
     except RunnerError as error:
         raise RunnerError(
             "PROJECT_NOT_FOUND",
             "Agent Runner must be invoked from a configured Source Repository.",
         ) from error
-    common = Path(common_text)
-    if not common.is_absolute():
-        common = cwd / common
-    common = common.resolve()
+    common = discover_runner_directory(cwd).parent
     config_file = common / "agent-runner" / "config.yml"
     try:
         config = yaml.safe_load(config_file.read_text(encoding="utf-8"))
@@ -136,6 +132,22 @@ def discover_project(cwd: Path) -> Project:
         runtime_executable=runtime_executable,
         role_bindings=roles,
     )
+
+
+def discover_runner_directory(cwd: Path) -> Path:
+    """Find the Runner-owned common Git directory without launch preflight."""
+
+    try:
+        common_text = _git(cwd, "rev-parse", "--git-common-dir")
+    except RunnerError as error:
+        raise RunnerError(
+            "PROJECT_NOT_FOUND",
+            "Agent Runner must be invoked from a configured Source Repository.",
+        ) from error
+    common = Path(common_text)
+    if not common.is_absolute():
+        common = cwd / common
+    return common.resolve() / "agent-runner"
 
 
 def provision_worktree(

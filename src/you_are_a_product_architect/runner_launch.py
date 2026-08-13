@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import os
 import signal
 import subprocess
@@ -16,6 +15,7 @@ import yaml
 from .codex_adapter import CodexAdapterError, CodexRole, resolve_codex_role
 from .runner_batch import prepare_evidence, read_batch, retain_batch
 from .runner_io import (
+    active_turn_key,
     active_turn_directory,
     confirm_alias_mapping_durable,
     release_active_turn,
@@ -146,7 +146,7 @@ def _reserve_active_turn(
         if active_root.is_symlink():
             raise OSError("active-turn root is a symlink")
         active_root.mkdir(parents=True, exist_ok=True)
-        key = hashlib.sha256(batch.task.ticket_id.encode("ascii")).hexdigest()
+        key = active_turn_key(batch.task.ticket_id)
         reservation = active_turn_directory(runner_directory, key)
         reservation.mkdir(mode=0o700)
     except FileExistsError as error:

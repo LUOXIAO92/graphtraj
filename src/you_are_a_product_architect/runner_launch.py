@@ -254,7 +254,7 @@ def _reserve_active_turn(
     except ActiveTurnBusyError as error:
         raise RunnerError(
             "WORKTREE_TURN_ACTIVE",
-            "The Ticket Worktree already has an active Engineer turn.",
+            error.message,
         ) from error
     except ActiveTurnReservationError as error:
         raise RunnerError(

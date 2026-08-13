@@ -121,6 +121,10 @@ def run(launch_file: Path) -> int:
                     session_directory, operation, error.code, error.message
                 )
         except (KeyError, OSError, TypeError, ValueError, yaml.YAMLError) as error:
+            if operation == "resume":
+                if turn_handle is not None:
+                    turn_handle.terminate_until_terminal()
+                runtime_terminal = True
             if mapping_recorded and runtime_terminal:
                 terminal_turn = {"outcome": "runtime-error"}
             else:

@@ -398,12 +398,14 @@ def test_installed_runner_launches_one_isolated_engineer_and_returns_early(
             "error": {
                 "code": "worktree-busy",
                 "message": (
-                    "The Ticket Worktree already has an active Engineer turn."
+                    "The Ticket Worktree already has an active Engineer turn under "
+                    "alias 2-10-launch-engineer@e1."
                 ),
             }
         }
         assert second_launch.stderr == (
-            "The Ticket Worktree already has an active Engineer turn.\n"
+            "The Ticket Worktree already has an active Engineer turn under "
+            "alias 2-10-launch-engineer@e1.\n"
         )
         assert not (
             common_directory
@@ -1098,7 +1100,10 @@ def test_failed_launch_retains_reservation_until_worker_and_runtime_terminate(
         assert yaml.safe_load(second.stdout) == {
             "error": {
                 "code": "worktree-busy",
-                "message": "The Ticket Worktree already has an active Engineer turn.",
+                "message": (
+                    "The Ticket Worktree already has an active Engineer turn under "
+                    "alias 2-10-launch-engineer@e1."
+                ),
             }
         }
         assert len(list(active_root.iterdir())) == 1

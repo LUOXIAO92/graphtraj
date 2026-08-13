@@ -677,7 +677,10 @@ def test_installed_runner_rejects_later_busy_or_already_live_ticket_globally(
         env=live_environment,
         timeout=5,
     )
-    busy_message = "The Ticket Worktree already has an active Engineer turn."
+    busy_message = (
+        "The Ticket Worktree already has an active Engineer turn under "
+        "alias 2-11-live-ticket@e1."
+    )
     assert busy_result.returncode == 1
     assert yaml.safe_load(busy_result.stdout) == {
         "error": {"code": "worktree-busy", "message": busy_message}

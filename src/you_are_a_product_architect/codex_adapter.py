@@ -240,6 +240,36 @@ def create_codex_resume_turn(
     )
 
 
+def read_codex_session_identity(session_directory: Path) -> str:
+    """Attest one durable Codex session identity from Adapter-owned events."""
+
+    events_file = session_directory / "events.jsonl"
+    identity: Optional[str] = None
+    try:
+        if events_file.is_symlink() or not events_file.is_file():
+            raise OSError("Codex events are not a regular file")
+        with events_file.open("r", encoding="utf-8") as events:
+            for line in events:
+                session = _session_from_event(line)
+                if session is None:
+                    continue
+                if identity is None:
+                    identity = session
+                elif session != identity:
+                    raise ValueError("Codex events contain multiple sessions")
+    except (OSError, UnicodeError, ValueError) as error:
+        raise CodexAdapterError(
+            "RUNTIME_SESSION_NOT_RESUMABLE",
+            "The mapped Codex Runtime session cannot be attested.",
+        ) from error
+    if identity is None:
+        raise CodexAdapterError(
+            "RUNTIME_SESSION_NOT_RESUMABLE",
+            "The mapped Codex Runtime session cannot be attested.",
+        )
+    return identity
+
+
 def _validate_launch_request(
     request: Mapping[str, Any],
 ) -> Tuple[List[str], Path]:
@@ -276,8 +306,9 @@ def _resume_arguments(
     launch_arguments: List[str], session: str, prompt: str
 ) -> List[str]:
     if (
-        len(launch_arguments) < 2
+        len(launch_arguments) < 4
         or launch_arguments[1] != "exec"
+        or launch_arguments[-2:] != ["--json", "-"]
         or not session
         or not prompt.strip()
     ):
@@ -285,7 +316,7 @@ def _resume_arguments(
             "RUNTIME_SESSION_NOT_RESUMABLE",
             "The mapped Codex Runtime session cannot be resumed.",
         )
-    return [launch_arguments[0], "exec", "resume", session, prompt]
+    return [*launch_arguments[:-1], "resume", session, prompt]
 
 
 def _session_from_event(line: str) -> Optional[str]:

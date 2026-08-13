@@ -12,6 +12,7 @@ from typing import Any, Dict
 
 import yaml
 
+from .codex_adapter import read_codex_session_identity
 from .runner_io import (
     ActiveTurnBusyError,
     ActiveTurnReservationError,
@@ -34,6 +35,7 @@ from .runner_status import (
     read_terminal_outcome,
     require_active_turn,
 )
+from .runtime_adapter import RuntimeAdapterError
 
 
 LIVE_INPUT_GUIDANCE = (
@@ -52,6 +54,7 @@ IMMUTABLE_MAPPING_FIELDS = (
     "ticket_file",
     "evidence_path",
 )
+SESSION_IDENTITY_READERS = {"codex": read_codex_session_identity}
 
 
 def send_instruction(alias: str, instruction: str, cwd: Path) -> Dict[str, str]:
@@ -71,6 +74,8 @@ def send_instruction(alias: str, instruction: str, cwd: Path) -> Dict[str, str]:
 
     worktree = _mapped_worktree(mapping, runner_directory)
     key = _mapping_active_turn_key(mapping)
+    request = _read_resume_request(session_directory, mapping)
+    _attest_runtime_session(session_directory, mapping)
     try:
         reserve_active_turn(
             runner_directory,
@@ -86,7 +91,7 @@ def send_instruction(alias: str, instruction: str, cwd: Path) -> Dict[str, str]:
     except ActiveTurnBusyError as error:
         raise RunnerError(
             "WORKTREE_TURN_ACTIVE",
-            "The Ticket Worktree already has an active Engineer turn.",
+            error.message,
         ) from error
     except ActiveTurnReservationError as error:
         raise RunnerError(
@@ -95,7 +100,6 @@ def send_instruction(alias: str, instruction: str, cwd: Path) -> Dict[str, str]:
         ) from error
     worker_started = False
     try:
-        request = _read_resume_request(session_directory, mapping)
         resume_file = session_directory / "resume.yml"
         write_yaml_durably(
             resume_file,
@@ -139,12 +143,14 @@ def send_instruction(alias: str, instruction: str, cwd: Path) -> Dict[str, str]:
     except RunnerError:
         if worker_started:
             stop_worker(worker.pid)
-        release_active_turn(runner_directory, key)
+        else:
+            release_active_turn(runner_directory, key)
         raise
     except (OSError, BrokenPipeError, yaml.YAMLError) as error:
         if worker_started:
             stop_worker(worker.pid)
-        release_active_turn(runner_directory, key)
+        else:
+            release_active_turn(runner_directory, key)
         raise RunnerError(
             "operation-failed",
             "The mapped Engineer session could not be resumed.",
@@ -252,6 +258,20 @@ def _read_resume_request(
     ):
         raise _invalid_mapping()
     return request
+
+
+def _attest_runtime_session(
+    session_directory: Path, mapping: Dict[str, Any]
+) -> None:
+    reader = SESSION_IDENTITY_READERS.get(mapping["runtime"])
+    if reader is None:
+        raise _not_resumable()
+    try:
+        identity = reader(session_directory)
+    except RuntimeAdapterError as error:
+        raise _not_resumable() from error
+    if identity != mapping["session"]:
+        raise _invalid_mapping()
 
 
 def _await_resumed_mapping(

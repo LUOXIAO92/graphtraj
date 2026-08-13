@@ -91,6 +91,9 @@ def test_installed_send_resumes_an_idle_runtime_session_under_the_same_alias(
     original_mapping = yaml.safe_load(
         (session_directory / "mapping.yml").read_text(encoding="utf-8")
     )
+    original_runtime_record = json.loads(
+        fake_codex.log_file.read_text(encoding="utf-8")
+    )
     wait_for_process_exit(original_mapping["worker_pid"])
     resume_release = tmp_path / "allow-resumed-turn-to-finish"
     instruction = "Re-run the focused process test, then update the evidence."
@@ -134,7 +137,12 @@ def test_installed_send_resumes_an_idle_runtime_session_under_the_same_alias(
     }
     runtime_record = json.loads(fake_codex.log_file.read_text(encoding="utf-8"))
     assert runtime_record == {
-        "argv": ["exec", "resume", session, instruction],
+        "argv": [
+            *original_runtime_record["argv"][:-1],
+            "resume",
+            session,
+            instruction,
+        ],
         "cwd": resumed_mapping["worktree_path"],
     }
 
@@ -441,7 +449,10 @@ def test_launch_and_idle_send_share_ticket_worktree_exclusivity(
 
     busy_error = {
         "code": "worktree-busy",
-        "message": "The Ticket Worktree already has an active Engineer turn.",
+        "message": (
+            "The Ticket Worktree already has an active Engineer turn under "
+            "alias {0}.".format(second_alias)
+        ),
     }
     assert rejected_send.returncode == 1
     assert yaml.safe_load(rejected_send.stdout) == {
@@ -486,7 +497,15 @@ def test_launch_and_idle_send_share_ticket_worktree_exclusivity(
     )
 
     assert rejected_launch.returncode == 1
-    assert yaml.safe_load(rejected_launch.stdout) == {"error": busy_error}
+    assert yaml.safe_load(rejected_launch.stdout) == {
+        "error": {
+            "code": "worktree-busy",
+            "message": (
+                "The Ticket Worktree already has an active Engineer turn under "
+                "alias {0}.".format(first_alias)
+            ),
+        }
+    }
     resume_release.touch()
     resumed_mapping = yaml.safe_load(
         first_mapping_file.read_text(encoding="utf-8")
@@ -560,10 +579,11 @@ def test_session_operations_return_structured_recovery_errors_without_reidentity
     corrupt_document = yaml.safe_load(corrupt_mapping.read_text(encoding="utf-8"))
     corrupt_worker = corrupt_document["worker_pid"]
     wait_for_process_exit(corrupt_worker)
-    corrupt_document["worktree_path"] = str(integration)
+    corrupt_document["session"] = "replacement-thread"
     corrupt_mapping.write_text(
         yaml.safe_dump(corrupt_document, sort_keys=False), encoding="utf-8"
     )
+    runtime_before_corrupt_send = fake_codex.log_file.read_bytes()
 
     corrupt = send(
         installed_worktree_commands,
@@ -581,6 +601,7 @@ def test_session_operations_return_structured_recovery_errors_without_reidentity
             "message": "The requested Engineer alias mapping is invalid.",
         },
     }
+    assert fake_codex.log_file.read_bytes() == runtime_before_corrupt_send
 
     lost_alias, _ = launch_turn(
         installed_worktree_commands,

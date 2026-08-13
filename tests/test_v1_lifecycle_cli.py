@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sys
 import time
 from pathlib import Path
 
@@ -9,7 +10,6 @@ import yaml
 from conftest import FakeCodex, InstalledCommands, run_process
 from test_project_setup import (
     CORE_SKILL_NAMES,
-    common_git_directory,
     git_output,
     run_setup,
     setup_environment,
@@ -100,6 +100,26 @@ def test_pinned_install_exercises_the_complete_v1_delivery_lifecycle(
     primary = temporary_git_repository
     integration = harness_root / ".agent-worktrees" / "integration"
     state = harness_root / "state"
+    target_validation = primary / "validate_v1_delivery.py"
+    target_validation.write_text(
+        """\
+from pathlib import Path
+
+
+assert Path("V1_DELIVERED.txt").read_text(encoding="utf-8") == (
+    "representative delivery\\n"
+)
+print("target validation passed")
+""",
+        encoding="utf-8",
+    )
+    run_process(
+        ["git", "add", target_validation.name], cwd=primary
+    ).check_returncode()
+    run_process(
+        ["git", "commit", "-m", "Add target validation command"],
+        cwd=primary,
+    ).check_returncode()
     user_home = tmp_path / "operator-home"
     (user_home / ".codex").mkdir(parents=True)
     (user_home / ".codex" / "config.toml").write_text(
@@ -218,9 +238,8 @@ def test_pinned_install_exercises_the_complete_v1_delivery_lifecycle(
     alias = task["alias"]
     assert ticket_worktree.name == "2-15-v1-lifecycle"
     assert alias == "2-15-v1-lifecycle@e1"
-    assert git_output(ticket_worktree, "branch", "--show-current") == (
-        "agent/{0}/2-15-v1-lifecycle".format(run_id)
-    )
+    ticket_branch = "agent/{0}/2-15-v1-lifecycle".format(run_id)
+    assert git_output(ticket_worktree, "branch", "--show-current") == ticket_branch
     evidence = state / "task-delivery" / run_id / "tickets" / ticket_worktree.name
     retained_batch = Path(launch_document["retained_batch_file"])
     assert retained_batch.read_bytes() == batch_content.encode("utf-8")
@@ -238,7 +257,6 @@ def test_pinned_install_exercises_the_complete_v1_delivery_lifecycle(
         path.name for path in (ticket_worktree / ".agents" / "skills").iterdir()
     } == set(CORE_SKILL_NAMES)
 
-    session_directory = common_git_directory(primary) / "agent-runner" / "sessions" / alias
     running = run_process(
         [str(installed_commands.runner), "status", alias],
         cwd=integration,
@@ -346,6 +364,11 @@ def test_pinned_install_exercises_the_complete_v1_delivery_lifecycle(
     assert (integration / delivered.name).read_text(encoding="utf-8") == (
         "representative delivery\n"
     )
+    validated = run_process(
+        [sys.executable, target_validation.name], cwd=integration
+    )
+    assert validated.returncode == 0, validated.stderr
+    assert validated.stdout == "target validation passed\n"
     assert git_output(primary, "rev-parse", "main") == main_before
     assert not (primary / delivered.name).exists()
 
@@ -365,7 +388,36 @@ def test_pinned_install_exercises_the_complete_v1_delivery_lifecycle(
     assert cleanup.returncode == 0, cleanup.stderr
     assert yaml.safe_load(cleanup.stdout)["cleanup_status"] == "cleaned"
     assert not ticket_worktree.exists()
-    assert not session_directory.exists()
+    branch_gone = run_process(
+        [
+            "git",
+            "show-ref",
+            "--verify",
+            "--quiet",
+            "refs/heads/{0}".format(ticket_branch),
+        ],
+        cwd=integration,
+    )
+    assert branch_gone.returncode == 1
+    alias_gone = run_process(
+        [str(installed_commands.runner), "status", alias],
+        cwd=integration,
+        env=environment,
+    )
+    alias_not_found = "The requested Engineer alias was not found."
+    assert alias_gone.returncode == 1
+    assert yaml.safe_load(alias_gone.stdout) == {
+        "aliases": [
+            {
+                "alias": alias,
+                "error": {
+                    "code": "alias-not-found",
+                    "message": alias_not_found,
+                },
+            }
+        ]
+    }
+    assert alias_gone.stderr == alias_not_found + "\n"
     assert tree_contents(evidence) == evidence_before_cleanup
     assert retained_batch.read_bytes() == retained_batch_before_cleanup
 

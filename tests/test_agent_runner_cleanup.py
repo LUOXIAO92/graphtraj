@@ -190,6 +190,35 @@ def cleanup_ticket(
     )
 
 
+def send_instruction(
+    installed_commands: InstalledCommands,
+    launched: LaunchedTicket,
+    instruction: str,
+) -> subprocess.CompletedProcess[str]:
+    return run_process(
+        [
+            str(installed_commands.runner),
+            "send",
+            launched.alias,
+            "--instruction",
+            instruction,
+        ],
+        cwd=launched.integration,
+        env=launched.environment,
+    )
+
+
+def interrupt_ticket(
+    installed_commands: InstalledCommands,
+    launched: LaunchedTicket,
+) -> subprocess.CompletedProcess[str]:
+    return run_process(
+        [str(installed_commands.runner), "interrupt", launched.alias],
+        cwd=launched.integration,
+        env=launched.environment,
+    )
+
+
 def test_alias_removal_preserves_a_final_diagnostic_path_replacement(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -661,6 +690,96 @@ def test_installed_cleanup_refuses_unexpected_nested_alias_diagnostics(
     assert marker.read_text(encoding="utf-8") == "do not remove\n"
     assert launched.worktree.is_dir()
     assert launched.session_directory.is_dir()
+
+
+def test_installed_cleanup_removes_a_successfully_resumed_alias(
+    installed_cleanup_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    launched = launch_ticket(
+        installed_cleanup_commands,
+        temporary_git_repository,
+        fake_codex,
+        tmp_path,
+    )
+
+    sent = send_instruction(
+        installed_cleanup_commands,
+        launched,
+        "Finish the final integration validation.",
+    )
+
+    assert sent.returncode == 0, sent.stderr
+    assert yaml.safe_load(sent.stdout) == {
+        "alias": launched.alias,
+        "send_status": "sent",
+    }
+    wait_for_file(launched.session_directory / "turn.yml")
+    assert (launched.session_directory / "resume.yml").is_file()
+
+    result = cleanup_ticket(installed_cleanup_commands, launched)
+
+    assert result.returncode == 0, result.stderr
+    assert yaml.safe_load(result.stdout)["cleanup_status"] == "cleaned"
+    assert not launched.worktree.exists()
+    assert not launched.session_directory.exists()
+
+
+def test_installed_cleanup_removes_an_interrupted_alias_after_a_replacement_turn(
+    installed_cleanup_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    release_file = tmp_path / "allow-replacement-turn-to-finish"
+    launched = launch_ticket(
+        installed_cleanup_commands,
+        temporary_git_repository,
+        fake_codex,
+        tmp_path,
+        runtime_environment={"FAKE_CODEX_RELEASE_FILE": str(release_file)},
+        wait_until_idle=False,
+    )
+
+    interrupted = interrupt_ticket(installed_cleanup_commands, launched)
+
+    assert interrupted.returncode == 0, interrupted.stderr
+    assert yaml.safe_load(interrupted.stdout) == {
+        "alias": launched.alias,
+        "interrupt_status": "interrupted",
+    }
+    assert yaml.safe_load(
+        (launched.session_directory / "turn.yml").read_text(encoding="utf-8")
+    )["outcome"] == "interrupted"
+
+    release_file.touch()
+    replacement = run_process(
+        [
+            str(installed_cleanup_commands.runner),
+            "--batch-input",
+            str(launched.batch_file),
+        ],
+        cwd=launched.integration,
+        env=launched.environment,
+    )
+    assert replacement.returncode == 0, replacement.stderr
+    replacement_alias = yaml.safe_load(replacement.stdout)["tasks"][0]["alias"]
+    assert replacement_alias != launched.alias
+    replacement_session = launched.session_directory.parent / replacement_alias
+    wait_for_file(replacement_session / "turn.yml")
+
+    result = cleanup_ticket(installed_cleanup_commands, launched)
+
+    assert result.returncode == 0, result.stderr
+    assert yaml.safe_load(result.stdout)["aliases_removed"] == [
+        launched.alias,
+        replacement_alias,
+    ]
+    assert not launched.worktree.exists()
+    assert not launched.session_directory.exists()
+    assert not replacement_session.exists()
 
 
 def test_installed_cleanup_removes_only_integrated_disposable_state(

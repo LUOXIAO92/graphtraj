@@ -122,6 +122,8 @@ class CodexTurn:
         arguments, worktree = _validate_launch_request(self._request)
         prompt_to_stdin = True
         if self._expected_session is not None:
+            _verify_packaged_config(worktree)
+            _verify_packaged_guard(worktree)
             arguments = _resume_arguments(
                 arguments, self._expected_session, self._prompt
             )
@@ -331,25 +333,55 @@ def _session_from_event(line: str) -> Optional[str]:
 
 
 def _stop_process(process: Optional[subprocess.Popen]) -> bool:
-    if process is None or process.poll() is not None:
+    if process is None:
+        return True
+    process_group = process.pid
+    process.poll()
+    if not _process_group_is_alive(process_group):
+        return process.poll() is not None
+    try:
+        os.killpg(process_group, signal.SIGTERM)
+    except ProcessLookupError:
+        process.poll()
+        return not _process_group_is_alive(process_group)
+    except OSError:
+        return False
+    if _await_process_group_exit(process, process_group, timeout=5):
         return True
     try:
-        os.killpg(process.pid, signal.SIGTERM)
-        process.wait(timeout=5)
-        return True
+        os.killpg(process_group, signal.SIGKILL)
     except ProcessLookupError:
-        try:
-            process.wait(timeout=0.1)
-        except (OSError, subprocess.TimeoutExpired):
-            return False
-        return True
-    except (OSError, subprocess.TimeoutExpired):
-        try:
-            os.killpg(process.pid, signal.SIGKILL)
-            process.wait(timeout=5)
-        except (OSError, subprocess.TimeoutExpired):
+        process.poll()
+        return not _process_group_is_alive(process_group)
+    except OSError:
+        return False
+    return _await_process_group_exit(process, process_group, timeout=5)
+
+
+def _await_process_group_exit(
+    process: subprocess.Popen, process_group: int, timeout: float
+) -> bool:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        process.poll()
+        if not _process_group_is_alive(process_group):
             return process.poll() is not None
+        time.sleep(0.01)
+    process.poll()
+    return (
+        process.poll() is not None
+        and not _process_group_is_alive(process_group)
+    )
+
+
+def _process_group_is_alive(process_group: int) -> bool:
+    try:
+        os.killpg(process_group, 0)
+    except ProcessLookupError:
+        return False
+    except OSError:
         return True
+    return True
 
 
 def resolve_codex_role(worktree: Path, binding: str) -> CodexRole:

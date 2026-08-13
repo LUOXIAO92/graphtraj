@@ -299,6 +299,8 @@ def test_installed_interrupt_stops_only_the_addressed_runtime_process_group(
     )
     first_release = tmp_path / "allow-first-runtime-to-finish"
     second_release = tmp_path / "allow-second-runtime-to-finish"
+    group_child_pid_file = tmp_path / "addressed-group-child.pid"
+    group_child_release = tmp_path / "allow-addressed-group-child-to-finish"
     first_alias, _ = launch_turn(
         installed_worktree_commands,
         harness_root,
@@ -309,6 +311,8 @@ def test_installed_interrupt_stops_only_the_addressed_runtime_process_group(
                 [{"type": "thread.started", "thread_id": "thread-10"}]
             ),
             "FAKE_CODEX_RELEASE_FILE": str(first_release),
+            "FAKE_CODEX_GROUP_CHILD_PID": str(group_child_pid_file),
+            "FAKE_CODEX_GROUP_CHILD_RELEASE": str(group_child_release),
         },
         ticket_id="10",
         ticket_name="interrupt-exact-group",
@@ -339,6 +343,8 @@ def test_installed_interrupt_stops_only_the_addressed_runtime_process_group(
     second_mapping = yaml.safe_load(
         (second_directory / "mapping.yml").read_text(encoding="utf-8")
     )
+    wait_for_file(group_child_pid_file)
+    group_child_pid = int(group_child_pid_file.read_text(encoding="utf-8"))
 
     try:
         stopped = interrupt(
@@ -357,6 +363,7 @@ def test_installed_interrupt_stops_only_the_addressed_runtime_process_group(
         wait_for_file(first_directory / "turn.yml")
         wait_for_process_exit(first_mapping["worker_pid"])
         wait_for_process_exit(first_mapping["runtime_pid"])
+        wait_for_process_exit(group_child_pid, timeout=7)
         assert first_mapping_file.read_bytes() == first_mapping_bytes
         assert Path(first_mapping["worktree_path"]).is_dir()
         observed = status(
@@ -380,6 +387,7 @@ def test_installed_interrupt_stops_only_the_addressed_runtime_process_group(
         assert not first_release.exists()
         assert not second_release.exists()
     finally:
+        group_child_release.touch()
         first_release.touch()
         second_release.touch()
         wait_for_file(second_directory / "turn.yml")
@@ -693,3 +701,200 @@ def test_session_operations_return_structured_recovery_errors_without_reidentity
         "error": not_resumable,
     }
     assert list((runner_directory / "active-worktrees").iterdir()) == []
+
+
+def test_idle_send_revalidates_codex_guard_and_project_config_before_runtime(
+    installed_worktree_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    (
+        harness_root,
+        integration,
+        runner_directory,
+        _,
+        environment,
+    ) = configured_runner(
+        installed_worktree_commands,
+        temporary_git_repository,
+        fake_codex,
+        tmp_path,
+    )
+    alias, _ = launch_turn(
+        installed_worktree_commands,
+        harness_root,
+        integration,
+        environment,
+        ticket_id="20",
+        ticket_name="revalidate-codex-safety",
+        role="engineer-expert",
+        run_id="20260814-revalidate-codex-safety",
+    )
+    session_directory = runner_directory / "sessions" / alias
+    wait_for_file(session_directory / "turn.yml")
+    mapping = yaml.safe_load(
+        (session_directory / "mapping.yml").read_text(encoding="utf-8")
+    )
+    wait_for_process_exit(mapping["worker_pid"])
+    worktree = Path(mapping["worktree_path"])
+    runtime_before = fake_codex.log_file.read_bytes()
+    not_resumable = {
+        "code": "session-not-resumable",
+        "message": "The mapped Runtime session is unavailable or cannot be resumed.",
+    }
+
+    for relative_path in (
+        Path(".codex/hooks/worktree_guard.py"),
+        Path(".codex/config.toml"),
+    ):
+        protected_file = worktree / relative_path
+        original = protected_file.read_bytes()
+        protected_file.write_bytes(original + b"\n# changed after launch\n")
+        try:
+            rejected = send(
+                installed_worktree_commands,
+                integration,
+                environment,
+                alias,
+                "Do not trust changed Runtime safety files.",
+            )
+        finally:
+            protected_file.write_bytes(original)
+
+        assert rejected.returncode == 1
+        assert yaml.safe_load(rejected.stdout) == {
+            "alias": alias,
+            "error": not_resumable,
+        }
+        assert fake_codex.log_file.read_bytes() == runtime_before
+
+
+def test_idle_send_rejects_detached_or_rebranched_mapped_worktree(
+    installed_worktree_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    (
+        harness_root,
+        integration,
+        runner_directory,
+        _,
+        environment,
+    ) = configured_runner(
+        installed_worktree_commands,
+        temporary_git_repository,
+        fake_codex,
+        tmp_path,
+    )
+    alias, _ = launch_turn(
+        installed_worktree_commands,
+        harness_root,
+        integration,
+        environment,
+        ticket_id="21",
+        ticket_name="validate-recovery-worktree",
+        role="engineer-senior",
+        run_id="20260814-validate-recovery-worktree",
+    )
+    session_directory = runner_directory / "sessions" / alias
+    wait_for_file(session_directory / "turn.yml")
+    mapping = yaml.safe_load(
+        (session_directory / "mapping.yml").read_text(encoding="utf-8")
+    )
+    wait_for_process_exit(mapping["worker_pid"])
+    worktree = Path(mapping["worktree_path"])
+    runtime_before = fake_codex.log_file.read_bytes()
+    invalid_mapping = {
+        "code": "operation-failed",
+        "message": "The requested Engineer alias mapping is invalid.",
+    }
+
+    run_process(["git", "switch", "--detach"], cwd=worktree).check_returncode()
+    detached = send(
+        installed_worktree_commands,
+        integration,
+        environment,
+        alias,
+        "Do not resume a detached Worktree.",
+    )
+    assert detached.returncode == 1
+    assert yaml.safe_load(detached.stdout) == {
+        "alias": alias,
+        "error": invalid_mapping,
+    }
+
+    run_process(
+        ["git", "switch", "-c", "unexpected-recovery-branch"], cwd=worktree
+    ).check_returncode()
+    rebranched = send(
+        installed_worktree_commands,
+        integration,
+        environment,
+        alias,
+        "Do not resume a rebranched Worktree.",
+    )
+    assert rebranched.returncode == 1
+    assert yaml.safe_load(rebranched.stdout) == {
+        "alias": alias,
+        "error": invalid_mapping,
+    }
+    assert fake_codex.log_file.read_bytes() == runtime_before
+
+
+def test_idle_send_returns_yaml_when_active_reservation_root_is_not_a_directory(
+    installed_worktree_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    (
+        harness_root,
+        integration,
+        runner_directory,
+        _,
+        environment,
+    ) = configured_runner(
+        installed_worktree_commands,
+        temporary_git_repository,
+        fake_codex,
+        tmp_path,
+    )
+    alias, _ = launch_turn(
+        installed_worktree_commands,
+        harness_root,
+        integration,
+        environment,
+        ticket_id="22",
+        ticket_name="malformed-reservation-root",
+        role="engineer-junior",
+        run_id="20260814-malformed-reservation-root",
+    )
+    session_directory = runner_directory / "sessions" / alias
+    wait_for_file(session_directory / "turn.yml")
+    mapping = yaml.safe_load(
+        (session_directory / "mapping.yml").read_text(encoding="utf-8")
+    )
+    wait_for_process_exit(mapping["worker_pid"])
+    active_root = runner_directory / "active-worktrees"
+    active_root.rmdir()
+    active_root.write_text("unexpected\n", encoding="utf-8")
+    runtime_before = fake_codex.log_file.read_bytes()
+
+    rejected = send(
+        installed_worktree_commands,
+        integration,
+        environment,
+        alias,
+        "Do not start without a valid reservation root.",
+    )
+
+    message = "The Ticket Worktree could not be reserved for an Engineer turn."
+    assert rejected.returncode == 1
+    assert yaml.safe_load(rejected.stdout) == {
+        "alias": alias,
+        "error": {"code": "operation-failed", "message": message},
+    }
+    assert rejected.stderr == message + "\n"
+    assert fake_codex.log_file.read_bytes() == runtime_before

@@ -29,7 +29,11 @@ from .runner_process import (
     process_is_alive,
     stop_worker,
 )
-from .runner_project import discover_runner_directory
+from .runner_project import (
+    configured_worktree_root,
+    discover_runner_directory,
+    registered_worktree_owns_branch,
+)
 from .runner_status import (
     read_alias_mapping,
     read_terminal_outcome,
@@ -209,13 +213,35 @@ def _mapped_worktree(
     mapping: Dict[str, Any], runner_directory: Path
 ) -> Path:
     worktree = Path(mapping["worktree_path"])
-    if not worktree.is_absolute() or worktree.is_symlink() or not worktree.is_dir():
+    encoded_id = mapping["ticket_id"].replace(".", "%2E")
+    ticket_stem = "{0}-{1}-{2}".format(
+        len(mapping["ticket_id"]), encoded_id, mapping["ticket_name"]
+    )
+    expected_branch = "agent/{0}/{1}".format(mapping["run_id"], ticket_stem)
+    try:
+        worktree_root = configured_worktree_root(runner_directory)
+        expected_worktree = (
+            worktree_root / "runs" / mapping["run_id"] / ticket_stem
+        ).resolve()
+    except (OSError, RunnerError) as error:
+        raise _invalid_mapping() from error
+    if (
+        not worktree.is_absolute()
+        or worktree.is_symlink()
+        or not worktree.is_dir()
+        or worktree.resolve() != expected_worktree
+        or mapping["branch"] != expected_branch
+        or not mapping["alias"].startswith("{0}@".format(ticket_stem))
+    ):
         raise _invalid_mapping()
     try:
         mapped_runner = discover_runner_directory(worktree)
+        owns_branch = registered_worktree_owns_branch(
+            worktree, mapping["branch"]
+        )
     except RunnerError as error:
         raise _invalid_mapping() from error
-    if mapped_runner != runner_directory:
+    if mapped_runner != runner_directory or not owns_branch:
         raise _invalid_mapping()
     return worktree
 
@@ -321,6 +347,8 @@ def _read_resume_error(error_file: Path) -> RunnerError:
     except (OSError, UnicodeError, yaml.YAMLError):
         failure = None
     if isinstance(failure, dict) and failure.get("code") in {
+        "PROJECT_CONFIG_MISMATCH",
+        "ROLE_GUARD_MISMATCH",
         "RUNTIME_REQUEST_INVALID",
         "RUNTIME_SESSION_MISSING",
         "RUNTIME_SESSION_NOT_RESUMABLE",

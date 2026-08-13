@@ -87,12 +87,14 @@ def reserve_active_turn(
 
     active_root = runner_directory / "active-worktrees"
     try:
+        reservation = active_turn_directory(runner_directory, key)
         if active_root.is_symlink():
             raise OSError("active-turn root is a symlink")
         active_root.mkdir(parents=True, exist_ok=True)
-        reservation = active_turn_directory(runner_directory, key)
         reservation.mkdir(mode=0o700)
     except FileExistsError as error:
+        if active_root.is_symlink() or not active_root.is_dir():
+            raise ActiveTurnReservationError from error
         raise ActiveTurnBusyError(_read_reserved_alias(reservation)) from error
     except (OSError, ValueError) as error:
         raise ActiveTurnReservationError from error

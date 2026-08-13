@@ -15,6 +15,52 @@ from .runner_models import Project, RunnerError, Task
 RUNNER_CONFIG_VERSION = 1
 
 
+def configured_worktree_root(runner_directory: Path) -> Path:
+    """Read the canonical Ticket Worktree root needed by recovery checks."""
+
+    config_file = runner_directory / "config.yml"
+    try:
+        if config_file.is_symlink() or not config_file.is_file():
+            raise OSError("Runner Config is not a regular file")
+        config = yaml.safe_load(config_file.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, yaml.YAMLError) as error:
+        raise RunnerError(
+            "RUNNER_CONFIG_INVALID",
+            "Project Runner Config is not readable valid YAML.",
+        ) from error
+    if (
+        not isinstance(config, dict)
+        or config.get("version") != RUNNER_CONFIG_VERSION
+    ):
+        raise RunnerError(
+            "RUNNER_CONFIG_INVALID", "Project Runner Config is invalid."
+        )
+    value = config.get("worktree_root")
+    if not isinstance(value, str) or not Path(value).is_absolute():
+        raise RunnerError(
+            "RUNNER_CONFIG_INVALID", "Project Runner Config is invalid."
+        )
+    root = Path(value).resolve()
+    if root.name != ".agent-worktrees" or not root.is_dir():
+        raise RunnerError(
+            "RUNNER_CONFIG_INVALID", "Project Runner Config is invalid."
+        )
+    return root
+
+
+def registered_worktree_owns_branch(worktree: Path, branch: str) -> bool:
+    """Return whether Git registers this exact Worktree on this exact branch."""
+
+    expected_worktree = worktree.resolve()
+    expected_branch = "refs/heads/{0}".format(branch)
+    matches = [
+        record
+        for record in _worktrees(worktree)
+        if Path(record["worktree"]).resolve() == expected_worktree
+    ]
+    return len(matches) == 1 and matches[0].get("branch") == expected_branch
+
+
 def discover_project(cwd: Path) -> Project:
     """Discover and validate machine-local Runner configuration from Git."""
 

@@ -84,6 +84,76 @@ def test_alias_mapping_durability_syncs_file_and_every_directory_entry(
     ]
 
 
+def test_active_reservation_is_project_wide_for_ticket_across_delivery_runs(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.syspath_prepend(str(PROJECT_ROOT / "src"))
+    from you_are_a_product_architect.runner_io import release_active_turn
+    from you_are_a_product_architect.runner_launch import _reserve_active_turn
+    from you_are_a_product_architect.runner_models import (
+        Batch,
+        Project,
+        RunnerError,
+        Task,
+    )
+
+    common_directory = tmp_path / "git-common"
+    project = Project(
+        repository=tmp_path / "repository",
+        common_directory=common_directory,
+        worktree_root=tmp_path / "worktrees",
+        state_directory=tmp_path / "state",
+        integration_branch="dev",
+        integration_worktree=tmp_path / "integration",
+        dev_commit="0" * 40,
+        runtime_executable=tmp_path / "codex",
+        role_bindings={"engineer-expert": "engineer-expert"},
+    )
+    task = Task(
+        ticket_id="10",
+        ticket_name="launch-engineer",
+        role="engineer-expert",
+        ticket_file=tmp_path / "ticket.md",
+        ticket_content="# Launch Engineer\n",
+        instruction=None,
+    )
+    first_batch = Batch(
+        run_id="20260813-first-run",
+        task=task,
+        source_bytes=b"first",
+    )
+    second_batch = Batch(
+        run_id="20260813-second-run",
+        task=task,
+        source_bytes=b"second",
+    )
+    first_worktree = project.worktree_root / "runs" / first_batch.run_id / task.stem
+    second_worktree = (
+        project.worktree_root / "runs" / second_batch.run_id / task.stem
+    )
+
+    key = _reserve_active_turn(project, first_batch, first_worktree)
+    try:
+        with pytest.raises(RunnerError) as raised:
+            _reserve_active_turn(project, second_batch, second_worktree)
+
+        assert raised.value.code == "WORKTREE_TURN_ACTIVE"
+        reservation = yaml.safe_load(
+            (
+                common_directory
+                / "agent-runner"
+                / "active-worktrees"
+                / key
+                / "reservation.yml"
+            ).read_text(encoding="utf-8")
+        )
+        assert reservation["run_id"] == first_batch.run_id
+        assert reservation["worktree_path"] == str(first_worktree)
+    finally:
+        release_active_turn(common_directory / "agent-runner", key)
+
+
 def test_installed_runner_launches_one_isolated_engineer_and_returns_early(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,

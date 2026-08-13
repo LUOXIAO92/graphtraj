@@ -146,7 +146,7 @@ def _reserve_active_turn(
         if active_root.is_symlink():
             raise OSError("active-turn root is a symlink")
         active_root.mkdir(parents=True, exist_ok=True)
-        key = hashlib.sha256(str(worktree).encode("utf-8")).hexdigest()
+        key = hashlib.sha256(batch.task.ticket_id.encode("ascii")).hexdigest()
         reservation = active_turn_directory(runner_directory, key)
         reservation.mkdir(mode=0o700)
     except FileExistsError as error:

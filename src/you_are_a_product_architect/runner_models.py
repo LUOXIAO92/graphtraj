@@ -157,3 +157,10 @@ class Project:
 class LaunchResponse:
     document: Dict[str, Any]
     succeeded: bool
+
+
+@dataclass(frozen=True)
+class StatusResponse:
+    document: Dict[str, Any]
+    succeeded: bool
+    errors: tuple[RunnerError, ...]

@@ -478,11 +478,25 @@ def test_setup_reports_partial_execution_and_rerun_recovers(
     assert "injected git worktree failure" in failed.stderr
     assert "Setup execution stopped" in failed.stderr
     assert "Completed actions were not rolled back" in failed.stderr
-    assert (
-        "Completed actions:\n- Worktree Directory\n- Harness State Directory"
-        in failed.stderr
-    )
-    assert "Incomplete actions:\n- Integration Worktree" in failed.stderr
+    completed = failed.stderr.split("Completed actions:\n", maxsplit=1)[1].split(
+        "\nIncomplete actions:\n",
+        maxsplit=1,
+    )[0]
+    incomplete = failed.stderr.split("\nIncomplete actions:\n", maxsplit=1)[1]
+    assert "Worktree Directory: {0}".format(
+        harness_root / ".agent-worktrees"
+    ) in completed
+    assert "Harness State Directory: {0}".format(
+        harness_root / "state"
+    ) in completed
+    assert "Create dev branch from {0}".format(primary_head) in completed
+    assert "Integration Worktree on dev: {0}".format(
+        harness_root / ".agent-worktrees" / "integration"
+    ) in incomplete
+    assert "Codex Runtime resource:" in incomplete
+    assert "Integration scratch link:" in incomplete
+    assert "Ignore Integration .scratch" in incomplete
+    assert "Project Runner Config:" in incomplete
     assert "Correct the cause and rerun setup" in failed.stderr
     assert (harness_root / ".agent-worktrees").is_dir()
     assert (harness_root / "state").is_dir()
@@ -491,7 +505,8 @@ def test_setup_reports_partial_execution_and_rerun_recovers(
     assert run_process(
         ["git", "show-ref", "--verify", "--quiet", "refs/heads/dev"],
         cwd=primary,
-    ).returncode != 0
+    ).returncode == 0
+    assert git_output(primary, "rev-parse", "dev") == primary_head
     assert not (
         common_git_directory(primary) / "agent-runner" / "config.yml"
     ).exists()
@@ -508,7 +523,7 @@ def test_setup_reports_partial_execution_and_rerun_recovers(
         harness_root=harness_root,
         user_home=user_home,
         fake_codex=fake_codex,
-        answers="{0}\ny\n".format(primary.name),
+        answers="{0}\n".format(primary.name),
     )
 
     assert rerun.returncode == 0, rerun.stderr
@@ -526,6 +541,185 @@ def test_setup_reports_partial_execution_and_rerun_recovers(
     assert tree_contents(neighbor) == neighbor_before
     assert not fake_codex.log_file.exists()
 
+
+def test_setup_reports_each_completed_and_incomplete_skill_file(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    harness_root = temporary_git_repository.parent
+    primary = temporary_git_repository
+    integration = harness_root / ".agent-worktrees" / "integration"
+    run_process(["git", "branch", "dev"], cwd=primary).check_returncode()
+    run_process(
+        ["git", "worktree", "add", str(integration), "dev"], cwd=primary
+    ).check_returncode()
+
+    skill = integration / ".agents" / "skills" / "domain-modeling"
+    blocked_directory = skill / "agents"
+    blocked_directory.mkdir(parents=True)
+    blocked_directory.chmod(0o555)
+
+    user_home = tmp_path / "operator-home"
+    install_skills(
+        user_home / ".agents" / "skills",
+        tuple(name for name in CORE_SKILL_NAMES if name != "domain-modeling"),
+    )
+    user_before = tree_contents(user_home)
+    primary_before = worktree_contents(primary)
+
+    failed = run_setup(
+        installed_commands,
+        harness_root=harness_root,
+        user_home=user_home,
+        fake_codex=fake_codex,
+        answers="{0}\nproject-local\n".format(primary.name),
+    )
+    blocked_directory.chmod(0o755)
+
+    assert failed.returncode == 1
+    assert "Setup execution stopped" in failed.stderr
+    completed = failed.stderr.split("Completed actions:\n", maxsplit=1)[1].split(
+        "\nIncomplete actions:\n",
+        maxsplit=1,
+    )[0]
+    incomplete = failed.stderr.split("\nIncomplete actions:\n", maxsplit=1)[1]
+    for relative_path in ("ADR-FORMAT.md", "CONTEXT-FORMAT.md"):
+        action = "Project-local Skill domain-modeling: {0}".format(
+            skill / relative_path
+        )
+        assert "- {0}".format(action) in completed
+        assert "- {0}".format(action) not in incomplete
+    for relative_path in ("agents/openai.yaml", "SKILL.md"):
+        action = "Project-local Skill domain-modeling: {0}".format(
+            skill / relative_path
+        )
+        assert "- {0}".format(action) in incomplete
+        assert "- {0}".format(action) not in completed
+    assert "Codex Runtime resource:" in incomplete
+    assert "Integration scratch link:" in incomplete
+    assert "Ignore Integration .scratch" in incomplete
+    assert "Project Runner Config:" in incomplete
+    assert git_output(primary, "branch", "--show-current") == "main"
+    assert git_output(primary, "status", "--porcelain") == ""
+    assert worktree_contents(primary) == primary_before
+    assert tree_contents(user_home) == user_before
+    assert not fake_codex.log_file.exists()
+
+    rerun = run_setup(
+        installed_commands,
+        harness_root=harness_root,
+        user_home=user_home,
+        fake_codex=fake_codex,
+        answers="{0}\nproject-local\n".format(primary.name),
+    )
+
+    assert rerun.returncode == 0, rerun.stderr
+    assert tree_contents(skill) == supported_skill_contents("domain-modeling")
+    assert git_output(primary, "branch", "--show-current") == "main"
+    assert git_output(primary, "status", "--porcelain") == ""
+    assert worktree_contents(primary) == primary_before
+    assert tree_contents(user_home) == user_before
+    assert not fake_codex.log_file.exists()
+
+
+def test_setup_reports_inner_codex_actions_before_registration_failure(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    harness_root = temporary_git_repository.parent
+    primary = temporary_git_repository
+    integration = harness_root / ".agent-worktrees" / "integration"
+    state = harness_root / "state"
+    user_home = tmp_path / "operator-home"
+    install_user_skills(user_home)
+    user_before = tree_contents(user_home)
+    primary_head = git_output(primary, "rev-parse", "HEAD")
+    primary_before = worktree_contents(primary)
+
+    neighbor = harness_root / "neighbor-project"
+    neighbor.mkdir()
+    (neighbor / "marker.txt").write_text("leave me alone\n", encoding="utf-8")
+    neighbor_before = tree_contents(neighbor)
+
+    exclude_file = common_git_directory(primary) / "info" / "exclude"
+    exclude_before = exclude_file.read_bytes()
+    exclude_file.chmod(0o444)
+
+    failed = run_setup(
+        installed_commands,
+        harness_root=harness_root,
+        user_home=user_home,
+        fake_codex=fake_codex,
+        answers="{0}\ny\n".format(primary.name),
+    )
+    exclude_file.chmod(0o644)
+
+    assert failed.returncode == 1
+    assert "Setup execution stopped" in failed.stderr
+    completed = failed.stderr.split("Completed actions:\n", maxsplit=1)[1].split(
+        "\nIncomplete actions:\n",
+        maxsplit=1,
+    )[0]
+    incomplete = failed.stderr.split("\nIncomplete actions:\n", maxsplit=1)[1]
+    assert "Worktree Directory:" in completed
+    assert "Harness State Directory:" in completed
+    assert "dev branch from {0}".format(primary_head) in completed
+    assert "Integration Worktree on dev:" in completed
+    for relative_path in (
+        "config.toml",
+        "agents/delivery-state.toml",
+        "agents/engineer-expert.toml",
+        "agents/engineer-junior.toml",
+        "agents/engineer-senior.toml",
+        "agents/merge-resolver.toml",
+        "hooks/worktree_guard.py",
+    ):
+        action = "Codex Runtime resource: {0}".format(
+            integration / ".codex" / relative_path
+        )
+        assert "- {0}".format(action) in completed
+        assert "- {0}".format(action) not in incomplete
+    assert "Integration scratch link: {0} -> {1}".format(
+        integration / ".scratch",
+        state,
+    ) in completed
+    assert "Ignore Integration .scratch in {0}".format(exclude_file) in incomplete
+    assert "Project Runner Config:" in incomplete
+    assert exclude_file.read_bytes() == exclude_before
+    assert not (
+        common_git_directory(primary) / "agent-runner" / "config.yml"
+    ).exists()
+    assert git_output(primary, "branch", "--show-current") == "main"
+    assert git_output(primary, "status", "--porcelain") == ""
+    assert worktree_contents(primary) == primary_before
+    assert tree_contents(user_home) == user_before
+    assert tree_contents(neighbor) == neighbor_before
+    assert not fake_codex.log_file.exists()
+
+    rerun = run_setup(
+        installed_commands,
+        harness_root=harness_root,
+        user_home=user_home,
+        fake_codex=fake_codex,
+        answers="{0}\n".format(primary.name),
+    )
+
+    assert rerun.returncode == 0, rerun.stderr
+    assert git_output(integration, "branch", "--show-current") == "dev"
+    assert (integration / ".scratch").resolve() == state.resolve()
+    assert (
+        common_git_directory(primary) / "agent-runner" / "config.yml"
+    ).is_file()
+    assert git_output(primary, "branch", "--show-current") == "main"
+    assert git_output(primary, "status", "--porcelain") == ""
+    assert worktree_contents(primary) == primary_before
+    assert tree_contents(user_home) == user_before
+    assert tree_contents(neighbor) == neighbor_before
+    assert not fake_codex.log_file.exists()
 
 def test_setup_confirms_the_exact_base_and_initializes_one_harness_project(
     installed_commands: InstalledCommands,

@@ -128,19 +128,13 @@ class SourceRepository:
                 return Path(record["worktree"]).resolve()
         return None
 
-    def add_new_branch_worktree(
-        self,
-        branch: str,
-        worktree: Path,
-        base: str,
-    ) -> None:
+    def create_branch(self, branch: str, base: str) -> None:
+        """Create one branch as a separately reportable Git mutation."""
+
         _git(
             self.primary_worktree,
-            "worktree",
-            "add",
-            "-b",
+            "branch",
             branch,
-            str(worktree),
             base,
         )
 

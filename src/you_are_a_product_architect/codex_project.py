@@ -6,7 +6,7 @@ import os
 from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path
-from typing import Dict
+from typing import Callable, Dict, Optional
 
 import yaml
 
@@ -38,6 +38,42 @@ class CodexProjectFiles:
 
     resources_by_path: Dict[str, bytes]
 
+    @staticmethod
+    def resource_action(integration_worktree: Path, relative_path: str) -> str:
+        """Describe one exact Codex Runtime file mutation."""
+
+        return "Codex Runtime resource: {0}".format(
+            integration_worktree / ".codex" / relative_path
+        )
+
+    @staticmethod
+    def scratch_action(
+        integration_worktree: Path,
+        state_directory: Path,
+    ) -> str:
+        """Describe the Integration scratch symlink mutation."""
+
+        return "Integration scratch link: {0} -> {1}".format(
+            integration_worktree / ".scratch",
+            state_directory,
+        )
+
+    @staticmethod
+    def exclude_action(common_git_directory: Path) -> str:
+        """Describe the machine-local Git exclude registration."""
+
+        return "Ignore Integration .scratch in {0}".format(
+            common_git_directory / "info" / "exclude"
+        )
+
+    @staticmethod
+    def runner_config_action(common_git_directory: Path) -> str:
+        """Describe the machine-local Runner configuration write."""
+
+        return "Project Runner Config: {0}".format(
+            common_git_directory / "agent-runner" / "config.yml"
+        )
+
     @classmethod
     def load(cls) -> "CodexProjectFiles":
         root = resources.files("you_are_a_product_architect.resources").joinpath(
@@ -60,14 +96,23 @@ class CodexProjectFiles:
         common_git_directory: Path,
         worktree_root: Path,
         runtime_executable: Path,
+        on_action_complete: Optional[Callable[[str], None]] = None,
     ) -> None:
-        self._write_resources(integration_worktree)
-        self._ensure_scratch_link(integration_worktree, state_directory)
-        self._ensure_scratch_is_ignored(common_git_directory)
+        self._write_resources(integration_worktree, on_action_complete)
+        self._ensure_scratch_link(
+            integration_worktree,
+            state_directory,
+            on_action_complete,
+        )
+        self._ensure_scratch_is_ignored(
+            common_git_directory,
+            on_action_complete,
+        )
         self._write_runner_config(
             common_git_directory,
             worktree_root,
             runtime_executable,
+            on_action_complete,
         )
 
     @staticmethod
@@ -100,7 +145,11 @@ class CodexProjectFiles:
         }
         return yaml.safe_dump(config, sort_keys=False)
 
-    def _write_resources(self, integration_worktree: Path) -> None:
+    def _write_resources(
+        self,
+        integration_worktree: Path,
+        on_action_complete: Optional[Callable[[str], None]],
+    ) -> None:
         for relative_path, content in self.resources_by_path.items():
             target = integration_worktree / ".codex" / relative_path
             if target.exists():
@@ -112,11 +161,16 @@ class CodexProjectFiles:
                 )
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(content)
+            if on_action_complete is not None:
+                on_action_complete(
+                    self.resource_action(integration_worktree, relative_path)
+                )
 
     @staticmethod
     def _ensure_scratch_link(
         integration_worktree: Path,
         state_directory: Path,
+        on_action_complete: Optional[Callable[[str], None]],
     ) -> None:
         scratch = integration_worktree / ".scratch"
         if os.path.lexists(str(scratch)):
@@ -133,6 +187,13 @@ class CodexProjectFiles:
             ),
             target_is_directory=True,
         )
+        if on_action_complete is not None:
+            on_action_complete(
+                CodexProjectFiles.scratch_action(
+                    integration_worktree,
+                    state_directory,
+                )
+            )
         if scratch.resolve() != state_directory.resolve():
             raise CodexProjectError(
                 "Integration .scratch does not resolve to the Harness State "
@@ -140,7 +201,10 @@ class CodexProjectFiles:
             )
 
     @staticmethod
-    def _ensure_scratch_is_ignored(common_git_directory: Path) -> None:
+    def _ensure_scratch_is_ignored(
+        common_git_directory: Path,
+        on_action_complete: Optional[Callable[[str], None]],
+    ) -> None:
         exclude_file = common_git_directory / "info" / "exclude"
         exclude_file.parent.mkdir(parents=True, exist_ok=True)
         existing = (
@@ -153,12 +217,17 @@ class CodexProjectFiles:
         separator = "" if not existing or existing.endswith("\n") else "\n"
         with exclude_file.open("a", encoding="utf-8") as stream:
             stream.write("{0}/.scratch\n".format(separator))
+        if on_action_complete is not None:
+            on_action_complete(
+                CodexProjectFiles.exclude_action(common_git_directory)
+            )
 
     @staticmethod
     def _write_runner_config(
         common_git_directory: Path,
         worktree_root: Path,
         runtime_executable: Path,
+        on_action_complete: Optional[Callable[[str], None]],
     ) -> None:
         content = CodexProjectFiles.runner_config_content(
             worktree_root,
@@ -177,3 +246,7 @@ class CodexProjectFiles:
             )
         config_file.parent.mkdir(parents=True, exist_ok=True)
         config_file.write_text(content, encoding="utf-8")
+        if on_action_complete is not None:
+            on_action_complete(
+                CodexProjectFiles.runner_config_action(common_git_directory)
+            )

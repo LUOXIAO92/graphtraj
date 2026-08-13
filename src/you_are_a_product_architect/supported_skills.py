@@ -7,8 +7,9 @@ from dataclasses import dataclass
 from importlib import resources
 from importlib.abc import Traversable
 from pathlib import Path
-from typing import Dict, Iterable, Tuple
+from typing import Callable, Dict, Iterable, Mapping, Optional, Set
 
+from .path_safety import relative_parent_paths
 from .skill_check import CORE_SKILL_NAMES
 
 
@@ -55,9 +56,16 @@ def _resource_manifest(
     return manifest
 
 
-def _parents(relative_path: str) -> Tuple[str, ...]:
-    parts = Path(relative_path).parts
-    return tuple(Path(*parts[:index]).as_posix() for index in range(1, len(parts)))
+def allowed_manifest_paths(manifest: Mapping[str, bytes]) -> Set[str]:
+    """Return every file and directory a supported manifest may contain."""
+
+    allowed = set(manifest)
+    allowed.update(
+        parent
+        for relative_path in manifest
+        for parent in relative_parent_paths(relative_path)
+    )
+    return allowed
 
 
 def _existing_kind(path: Path) -> str:
@@ -75,6 +83,19 @@ class SupportedSkills:
     """The fixed release-supported copies of every required core Skill."""
 
     resources_by_name: Dict[str, Traversable]
+
+    @staticmethod
+    def resource_action(
+        integration_worktree: Path,
+        name: str,
+        relative_path: str,
+    ) -> str:
+        """Describe one exact project-local Skill file mutation."""
+
+        return "Project-local Skill {0}: {1}".format(
+            name,
+            integration_worktree / ".agents" / "skills" / name / relative_path,
+        )
 
     @classmethod
     def load(cls) -> "SupportedSkills":
@@ -100,6 +121,7 @@ class SupportedSkills:
         self,
         integration_worktree: Path,
         missing_names: Iterable[str],
+        on_action_complete: Optional[Callable[[str], None]] = None,
     ) -> None:
         """Copy only preflighted missing names to the Integration Worktree."""
 
@@ -124,12 +146,7 @@ class SupportedSkills:
                         target
                     )
                 )
-            allowed_paths = set(manifest)
-            allowed_paths.update(
-                parent
-                for relative_path in manifest
-                for parent in _parents(relative_path)
-            )
+            allowed_paths = allowed_manifest_paths(manifest)
             if target.is_dir():
                 for existing in target.rglob("*"):
                     relative_path = existing.relative_to(target).as_posix()
@@ -170,6 +187,14 @@ class SupportedSkills:
                 ):
                     continue
                 destination.write_bytes(manifest[relative_path])
+                if on_action_complete is not None:
+                    on_action_complete(
+                        self.resource_action(
+                            integration_worktree,
+                            name,
+                            relative_path,
+                        )
+                    )
 
     def manifest(self, name: str) -> Dict[str, bytes]:
         """Return one supported Skill as exact relative file content."""

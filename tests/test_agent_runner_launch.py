@@ -5,24 +5,20 @@ import importlib.util
 import json
 import os
 import subprocess
-import time
 import tomllib
 from pathlib import Path
 
 import pytest
 import yaml
 
-from conftest import PROJECT_ROOT, FakeCodex, InstalledCommands, run_process
+from conftest import (
+    PROJECT_ROOT,
+    FakeCodex,
+    InstalledCommands,
+    run_process,
+    wait_for_file,
+)
 from test_project_setup import git_output, install_user_skills, run_setup
-
-
-def wait_for_file(path: Path, timeout: float = 5.0) -> None:
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        if path.is_file():
-            return
-        time.sleep(0.01)
-    raise AssertionError("Timed out waiting for {0}".format(path))
 
 
 def test_background_worker_keeps_codex_process_protocol_inside_adapter() -> None:
@@ -120,12 +116,12 @@ def test_active_reservation_is_project_wide_for_ticket_across_delivery_runs(
     )
     first_batch = Batch(
         run_id="20260813-first-run",
-        task=task,
+        tasks=(task,),
         source_bytes=b"first",
     )
     second_batch = Batch(
         run_id="20260813-second-run",
-        task=task,
+        tasks=(task,),
         source_bytes=b"second",
     )
     first_worktree = project.worktree_root / "runs" / first_batch.run_id / task.stem
@@ -133,10 +129,14 @@ def test_active_reservation_is_project_wide_for_ticket_across_delivery_runs(
         project.worktree_root / "runs" / second_batch.run_id / task.stem
     )
 
-    key = _reserve_active_turn(project, first_batch, first_worktree)
+    key = _reserve_active_turn(
+        project, first_batch.run_id, task, first_worktree
+    )
     try:
         with pytest.raises(RunnerError) as raised:
-            _reserve_active_turn(project, second_batch, second_worktree)
+            _reserve_active_turn(
+                project, second_batch.run_id, task, second_worktree
+            )
 
         assert raised.value.code == "WORKTREE_TURN_ACTIVE"
         reservation = yaml.safe_load(
@@ -395,24 +395,12 @@ def test_installed_runner_launches_one_isolated_engineer_and_returns_early(
         )
         assert second_launch.returncode == 1
         assert yaml.safe_load(second_launch.stdout) == {
-            "run_id": run_id,
-            "retained_batch_file": str(retained_batch.resolve()),
-            "tasks": [
-                {
-                    "ticket_id": "10",
-                    "ticket_name": "launch-engineer",
-                    "role": "engineer-expert",
-                    "worktree_path": str(ticket_worktree),
-                    "ticket_file": str(ticket_file.resolve()),
-                    "launch_status": "failed",
-                    "error": {
-                        "code": "worktree-busy",
-                        "message": (
-                            "The Ticket Worktree already has an active Engineer turn."
-                        ),
-                    },
-                }
-            ],
+            "error": {
+                "code": "worktree-busy",
+                "message": (
+                    "The Ticket Worktree already has an active Engineer turn."
+                ),
+            }
         }
         assert second_launch.stderr == (
             "The Ticket Worktree already has an active Engineer turn.\n"
@@ -681,10 +669,16 @@ def test_installed_runner_rejects_invalid_logical_input_without_launch_artifacts
         (
             {
                 "run_id": "20260813-multiple-tasks",
-                "tasks": [base_task, {**base_task, "ticket_id": "11"}],
+                "tasks": [
+                    base_task,
+                    {**base_task, "ticket_id": "11"},
+                    {**base_task, "ticket_id": "12"},
+                    {**base_task, "ticket_id": "13"},
+                    {**base_task, "ticket_id": "14"},
+                ],
             },
             "invalid-input",
-            "This Runner release accepts exactly one task per batch.",
+            "A batch must contain between one and four tasks.",
         ),
     )
     environment = os.environ.copy()
@@ -778,15 +772,21 @@ def test_installed_runner_rejects_preexisting_ticket_branch_off_validated_dev(
     )
 
     assert result.returncode == 1
-    failed_task = yaml.safe_load(result.stdout)["tasks"][0]
-    assert failed_task["error"] == {
+    error = {
         "code": "worktree-conflict",
         "message": (
             "The existing Ticket branch is not at the current validated dev state."
         ),
     }
-    assert result.stderr == failed_task["error"]["message"] + "\n"
-    assert not Path(failed_task["worktree_path"]).exists()
+    assert yaml.safe_load(result.stdout) == {"error": error}
+    assert result.stderr == error["message"] + "\n"
+    assert not (
+        harness_root
+        / ".agent-worktrees"
+        / "runs"
+        / run_id
+        / "2-10-launch-engineer"
+    ).exists()
     assert git_output(integration, "rev-parse", branch) == main_head
     assert not fake_codex.log_file.exists()
 
@@ -960,11 +960,11 @@ def test_concurrent_runner_processes_atomically_reserve_one_ticket_worktree(
         assert yaml.safe_load(successes[0][0])["tasks"][0]["alias"] == (
             "2-10-launch-engineer@e1"
         )
-        failed_task = yaml.safe_load(failures[0][0])["tasks"][0]
-        assert failed_task["launch_status"] == "failed"
-        assert failed_task["error"] == {
-            "code": "worktree-busy",
-            "message": "The Ticket Worktree already has an active Engineer turn.",
+        assert yaml.safe_load(failures[0][0]) == {
+            "error": {
+                "code": "worktree-busy",
+                "message": "The Ticket Worktree already has an active Engineer turn.",
+            }
         }
         assert failures[0][1] == (
             "The Ticket Worktree already has an active Engineer turn.\n"
@@ -1095,9 +1095,11 @@ def test_failed_launch_retains_reservation_until_worker_and_runtime_terminate(
         second = run_process(command, cwd=integration, env=environment, timeout=5)
 
         assert second.returncode == 1
-        assert yaml.safe_load(second.stdout)["tasks"][0]["error"] == {
-            "code": "worktree-busy",
-            "message": "The Ticket Worktree already has an active Engineer turn.",
+        assert yaml.safe_load(second.stdout) == {
+            "error": {
+                "code": "worktree-busy",
+                "message": "The Ticket Worktree already has an active Engineer turn.",
+            }
         }
         assert len(list(active_root.iterdir())) == 1
     finally:

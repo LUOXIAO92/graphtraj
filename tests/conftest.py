@@ -4,6 +4,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping, Optional, Sequence
@@ -42,6 +43,15 @@ def run_process(
         capture_output=True,
         timeout=timeout,
     )
+
+
+def wait_for_file(path: Path, timeout: float = 5.0) -> None:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if path.is_file():
+            return
+        time.sleep(0.01)
+    raise AssertionError("Timed out waiting for {0}".format(path))
 
 
 def find_uv() -> Optional[Path]:

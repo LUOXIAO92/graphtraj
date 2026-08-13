@@ -40,8 +40,10 @@ def main(context, batch_input):
             raise click.exceptions.Exit(1)
         _emit_result(response.document)
         if not response.succeeded:
-            error = response.document["tasks"][0]["error"]
-            click.echo(error["message"], err=True)
+            for task in response.document["tasks"]:
+                error = task.get("error")
+                if error is not None:
+                    click.echo(error["message"], err=True)
             raise click.exceptions.Exit(1)
 
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Mapping, Optional
+from typing import Any, Dict, Mapping, Optional, Tuple
 
 
 PUBLIC_ERROR_CODES = frozenset(
@@ -38,6 +38,7 @@ DETAIL_ERROR_CATEGORIES = {
     "TASK_COUNT_UNSUPPORTED": "invalid-input",
     "TASK_SCHEMA_INVALID": "invalid-input",
     "TICKET_ID_INVALID": "invalid-input",
+    "TICKET_ID_DUPLICATE": "invalid-input",
     "TICKET_NAME_INVALID": "invalid-input",
     "ROLE_NOT_CONFIGURED": "invalid-input",
     "INSTRUCTION_INVALID": "invalid-input",
@@ -135,7 +136,7 @@ class Task:
 @dataclass(frozen=True)
 class Batch:
     run_id: str
-    task: Task
+    tasks: Tuple[Task, ...]
     source_bytes: bytes
 
 

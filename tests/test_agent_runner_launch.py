@@ -327,12 +327,14 @@ def test_installed_runner_launches_one_isolated_engineer_and_returns_early(
         assert runtime_call["cwd"] == str(ticket_worktree)
         assert runtime_call["stdin"] == expected_task
         runtime_argv = runtime_call["argv"]
-        assert runtime_argv[:10] == [
+        assert runtime_argv[:12] == [
                 "exec",
                 "-C",
                 str(ticket_worktree),
                 "--add-dir",
                 str(evidence),
+                "--add-dir",
+                str(common_directory),
                 "--model",
                 "gpt-5.6-sol",
                 "--sandbox",
@@ -340,10 +342,10 @@ def test_installed_runner_launches_one_isolated_engineer_and_returns_early(
                 "--dangerously-bypass-hook-trust",
         ]
         assert runtime_argv[-2:] == ["--json", "-"]
-        assert runtime_argv.count("--add-dir") == 1
+        assert runtime_argv.count("--add-dir") == 2
         assert "--profile" not in runtime_argv
 
-        config_argv = runtime_argv[10:-2]
+        config_argv = runtime_argv[12:-2]
         assert config_argv[::2] == ["-c", "-c", "-c", "-c"]
         parsed_overrides = {}
         for override in config_argv[1::2]:

@@ -9,7 +9,7 @@ from typing import Mapping
 
 import yaml
 
-from .runner_models import Batch, RunnerError, Task
+from .runner_models import ROLE_ALIAS_MARKERS, Batch, RunnerError, Task
 
 
 RUN_ID = re.compile(
@@ -17,12 +17,10 @@ RUN_ID = re.compile(
 )
 TICKET_ID = re.compile(r"^[A-Za-z0-9._-]{1,32}$")
 TICKET_NAME = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
-LOGICAL_ROLES = frozenset(
-    {"engineer-junior", "engineer-senior", "engineer-expert"}
-)
+LOGICAL_ROLES = frozenset(ROLE_ALIAS_MARKERS)
 
 
-def _valid_run_id(value: object) -> bool:
+def valid_run_id(value: object) -> bool:
     if not isinstance(value, str) or len(value) > 64 or not RUN_ID.fullmatch(value):
         return False
     semantic_name = value[9:]
@@ -33,6 +31,22 @@ def _valid_run_id(value: object) -> bool:
     ):
         semantic_name = name_and_suffix[0]
     return len(semantic_name) <= 48
+
+
+def valid_ticket_id(value: object) -> bool:
+    """Return whether a value is one accepted stable ticket identity."""
+
+    return isinstance(value, str) and TICKET_ID.fullmatch(value) is not None
+
+
+def valid_ticket_name(value: object) -> bool:
+    """Return whether a value is one accepted ticket artifact name."""
+
+    return (
+        isinstance(value, str)
+        and len(value) <= 64
+        and TICKET_NAME.fullmatch(value) is not None
+    )
 
 
 def read_batch(
@@ -66,7 +80,7 @@ def read_batch(
             "Batch input must contain only run_id and tasks.",
         )
     run_id = document["run_id"]
-    if not _valid_run_id(run_id):
+    if not valid_run_id(run_id):
         raise RunnerError(
             "RUN_ID_INVALID",
             (
@@ -94,17 +108,13 @@ def read_batch(
             "A task must contain ticket identity, role, and ticket_file only.",
         )
     ticket_id = task_document["ticket_id"]
-    if not isinstance(ticket_id, str) or not TICKET_ID.fullmatch(ticket_id):
+    if not valid_ticket_id(ticket_id):
         raise RunnerError(
             "TICKET_ID_INVALID",
             "ticket_id must be 1-32 ASCII letters, digits, dots, underscores, or hyphens.",
         )
     ticket_name = task_document["ticket_name"]
-    if (
-        not isinstance(ticket_name, str)
-        or len(ticket_name) > 64
-        or not TICKET_NAME.fullmatch(ticket_name)
-    ):
+    if not valid_ticket_name(ticket_name):
         raise RunnerError(
             "TICKET_NAME_INVALID",
             "ticket_name must be 1-64 ASCII lowercase kebab-case characters.",

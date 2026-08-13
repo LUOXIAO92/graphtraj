@@ -47,14 +47,6 @@ def test_installed_runner_future_operations_fail_until_implemented(
             "continue",
         ],
         "interrupt": [str(installed_commands.runner), "interrupt", "ticket-42@j1"],
-        "cleanup": [
-            str(installed_commands.runner),
-            "cleanup",
-            "--run-id",
-            "test-run",
-            "--ticket-id",
-            "42",
-        ],
     }
 
     for operation, command in operations.items():

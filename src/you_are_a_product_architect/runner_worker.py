@@ -12,11 +12,13 @@ import yaml
 
 from .codex_adapter import create_codex_turn
 from .runner_io import (
-    active_turn_directory,
+    ActiveTurnReservation,
     release_active_turn,
+    write_active_turn_owner,
     write_yaml_durably,
 )
 from .runtime_adapter import RuntimeAdapter, RuntimeAdapterError, RuntimeTurn
+from .runner_transport import runtime_launch_failure
 
 
 ADAPTERS: Mapping[str, RuntimeAdapter] = {"codex": create_codex_turn}
@@ -25,7 +27,7 @@ ADAPTERS: Mapping[str, RuntimeAdapter] = {"codex": create_codex_turn}
 def run(launch_file: Path) -> int:
     session_directory = launch_file.parent
     runner_directory = session_directory.parent.parent
-    active_turn_key = ""
+    active_turn: ActiveTurnReservation | None = None
     turn_handle: RuntimeTurn | None = None
     turn_terminal = False
     previous_sigterm = None
@@ -39,7 +41,11 @@ def run(launch_file: Path) -> int:
         launch = yaml.safe_load(launch_file.read_text(encoding="utf-8"))
         if not isinstance(launch, dict):
             raise ValueError("launch document is not a mapping")
-        active_turn_key = launch["active_turn_key"]
+        active_turn = ActiveTurnReservation(
+            key=launch["active_turn_key"],
+            device=launch["active_turn_device"],
+            inode=launch["active_turn_inode"],
+        )
         runtime = launch["runtime"]
         adapter = ADAPTERS[runtime]
         request = launch["adapter_request"]
@@ -57,11 +63,10 @@ def run(launch_file: Path) -> int:
                     "runtime_pid": runtime_pid,
                 }
             )
-            reservation = active_turn_directory(
-                runner_directory, active_turn_key
-            )
-            write_yaml_durably(
-                reservation / "reservation.yml",
+            assert active_turn is not None
+            write_active_turn_owner(
+                runner_directory,
+                active_turn,
                 {"activity": "running", **mapping},
             )
             write_yaml_durably(session_directory / "mapping.yml", mapping)
@@ -72,9 +77,15 @@ def run(launch_file: Path) -> int:
         previous_sigterm = signal.signal(signal.SIGTERM, request_termination)
         turn = turn_handle.run()
         turn_terminal = True
+        write_yaml_durably(session_directory / "turn.yml", turn)
     except RuntimeAdapterError as error:
         turn_terminal = error.terminal_confirmed
-        _write_launch_error(session_directory, error.code, error.message)
+        _write_launch_error(
+            session_directory,
+            error.code,
+            error.message,
+            terminal_confirmed=error.terminal_confirmed,
+        )
         return 1
     except (KeyError, OSError, TypeError, ValueError, yaml.YAMLError) as error:
         _write_launch_error(
@@ -82,15 +93,15 @@ def run(launch_file: Path) -> int:
             "RUNTIME_WORKER_FAILED",
             "The internal Runtime worker could not own the Engineer turn.",
             str(error),
+            terminal_confirmed=False,
         )
         return 1
     finally:
         if previous_sigterm is not None:
             signal.signal(signal.SIGTERM, previous_sigterm)
-        if active_turn_key and turn_terminal:
-            release_active_turn(runner_directory, active_turn_key)
+        if active_turn is not None and turn_terminal:
+            release_active_turn(runner_directory, active_turn)
 
-    write_yaml_durably(session_directory / "turn.yml", turn)
     return 0
 
 
@@ -99,10 +110,15 @@ def _write_launch_error(
     code: str,
     message: str,
     diagnostic: str = "",
+    *,
+    terminal_confirmed: bool,
 ) -> None:
-    failure = {"code": code, "message": message}
-    if diagnostic:
-        failure["diagnostic"] = diagnostic
+    failure = runtime_launch_failure(
+        code,
+        message,
+        diagnostic,
+        terminal_confirmed=terminal_confirmed,
+    )
     write_yaml_durably(session_directory / "launch-error.yml", failure)
 
 

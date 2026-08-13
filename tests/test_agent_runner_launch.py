@@ -84,6 +84,92 @@ def test_alias_mapping_durability_syncs_file_and_every_directory_entry(
     ]
 
 
+def test_active_reservation_is_an_atomically_owned_regular_file(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.syspath_prepend(str(PROJECT_ROOT / "src"))
+    from you_are_a_product_architect.runner_io import (
+        create_active_turn_reservation,
+        release_active_turn,
+    )
+
+    runner_directory = tmp_path / "agent-runner"
+    runner_directory.mkdir()
+    owner = {
+        "activity": "starting",
+        "run_id": "20260813-atomic-reservation",
+        "ticket_id": "14",
+        "worktree_path": str(tmp_path / "worktree"),
+    }
+
+    reservation = create_active_turn_reservation(
+        runner_directory,
+        owner["ticket_id"],
+        owner,
+    )
+    reservation_file = (
+        runner_directory / "active-worktrees" / reservation.key
+    )
+    identity = reservation_file.stat()
+
+    assert reservation_file.is_file()
+    assert yaml.safe_load(reservation_file.read_text(encoding="utf-8")) == owner
+    assert (reservation.device, reservation.inode) == (
+        identity.st_dev,
+        identity.st_ino,
+    )
+    assert release_active_turn(runner_directory, reservation)
+    assert not reservation_file.exists()
+
+
+def test_active_reservation_release_preserves_a_final_path_replacement(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.syspath_prepend(str(PROJECT_ROOT / "src"))
+    from you_are_a_product_architect import runner_io
+
+    runner_directory = tmp_path / "agent-runner"
+    runner_directory.mkdir()
+    owner = {
+        "activity": "cleanup",
+        "run_id": "20260813-release-race",
+        "ticket_id": "14",
+        "worktree_path": str(tmp_path / "worktree"),
+    }
+    reservation = runner_io.create_active_turn_reservation(
+        runner_directory, owner["ticket_id"], owner
+    )
+    active_root = runner_directory / "active-worktrees"
+    reservation_file = active_root / reservation.key
+    retained = active_root / "retained-original"
+    replacement = b"replacement: preserve\n"
+    real_stat = os.stat
+    real_rename = os.rename
+    injected = False
+
+    def replace_after_validation(
+        path: str,
+        *args: object,
+        **kwargs: object,
+    ) -> os.stat_result:
+        nonlocal injected
+        identity = real_stat(path, *args, **kwargs)
+        if path == reservation.key and not injected:
+            injected = True
+            real_rename(str(reservation_file), str(retained))
+            reservation_file.write_bytes(replacement)
+        return identity
+
+    monkeypatch.setattr(runner_io.os, "stat", replace_after_validation)
+
+    assert not runner_io.release_active_turn(runner_directory, reservation)
+    assert retained.is_file()
+    assert yaml.safe_load(retained.read_text(encoding="utf-8")) == owner
+    assert replacement in [path.read_bytes() for path in active_root.iterdir()]
+
+
 def test_active_reservation_is_project_wide_for_ticket_across_delivery_runs(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -99,6 +185,7 @@ def test_active_reservation_is_project_wide_for_ticket_across_delivery_runs(
     )
 
     common_directory = tmp_path / "git-common"
+    (common_directory / "agent-runner").mkdir(parents=True)
     project = Project(
         repository=tmp_path / "repository",
         common_directory=common_directory,
@@ -133,25 +220,26 @@ def test_active_reservation_is_project_wide_for_ticket_across_delivery_runs(
         project.worktree_root / "runs" / second_batch.run_id / task.stem
     )
 
-    key = _reserve_active_turn(project, first_batch, first_worktree)
+    reservation = _reserve_active_turn(project, first_batch, first_worktree)
     try:
         with pytest.raises(RunnerError) as raised:
             _reserve_active_turn(project, second_batch, second_worktree)
 
         assert raised.value.code == "WORKTREE_TURN_ACTIVE"
-        reservation = yaml.safe_load(
+        owner = yaml.safe_load(
             (
                 common_directory
                 / "agent-runner"
                 / "active-worktrees"
-                / key
-                / "reservation.yml"
+                / reservation.key
             ).read_text(encoding="utf-8")
         )
-        assert reservation["run_id"] == first_batch.run_id
-        assert reservation["worktree_path"] == str(first_worktree)
+        assert owner["run_id"] == first_batch.run_id
+        assert owner["worktree_path"] == str(first_worktree)
     finally:
-        release_active_turn(common_directory / "agent-runner", key)
+        release_active_turn(
+            common_directory / "agent-runner", reservation
+        )
 
 
 def test_installed_runner_launches_one_isolated_engineer_and_returns_early(
@@ -431,6 +519,7 @@ def test_installed_runner_launches_one_isolated_engineer_and_returns_early(
             "ticket_id": "10",
             "ticket_name": "launch-engineer",
             "alias": alias,
+            "aliases": [alias],
             "role": "engineer-expert",
             "runtime": "codex",
             "session": "thread-ticket-10",
@@ -971,7 +1060,7 @@ def test_concurrent_runner_processes_atomically_reserve_one_ticket_worktree(
         active = list((runner_directory / "active-worktrees").iterdir())
         assert len(active) == 1
         reservation = yaml.safe_load(
-            (active[0] / "reservation.yml").read_text(encoding="utf-8")
+            active[0].read_text(encoding="utf-8")
         )
         assert reservation["activity"] == "running"
         assert reservation["alias"] == "2-10-launch-engineer@e1"

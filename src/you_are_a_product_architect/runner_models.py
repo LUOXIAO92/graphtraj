@@ -7,6 +7,26 @@ from pathlib import Path
 from typing import Any, Dict, Mapping, Optional
 
 
+ROLE_ALIAS_MARKERS = {
+    "engineer-junior": "j",
+    "engineer-senior": "s",
+    "engineer-expert": "e",
+}
+
+
+def ticket_id_stem_prefix(ticket_id: str) -> str:
+    """Return the unambiguous artifact prefix for one stable ticket ID."""
+
+    encoded_id = ticket_id.replace(".", "%2E")
+    return "{0}-{1}-".format(len(ticket_id), encoded_id)
+
+
+def ticket_stem(ticket_id: str, ticket_name: str) -> str:
+    """Return the injective, Git-safe visible ticket artifact stem."""
+
+    return "{0}{1}".format(ticket_id_stem_prefix(ticket_id), ticket_name)
+
+
 PUBLIC_ERROR_CODES = frozenset(
     {
         "invalid-input",
@@ -119,17 +139,13 @@ class Task:
     def stem(self) -> str:
         """Return the injective, Git-safe visible ticket artifact stem."""
 
-        encoded_id = self.ticket_id.replace(".", "%2E")
-        return "{0}-{1}-{2}".format(
-            len(self.ticket_id), encoded_id, self.ticket_name
-        )
+        return ticket_stem(self.ticket_id, self.ticket_name)
 
     @property
     def id_stem_prefix(self) -> str:
         """Return the unambiguous branch prefix for this stable ticket ID."""
 
-        encoded_id = self.ticket_id.replace(".", "%2E")
-        return "{0}-{1}-".format(len(self.ticket_id), encoded_id)
+        return ticket_id_stem_prefix(self.ticket_id)
 
 
 @dataclass(frozen=True)
@@ -154,5 +170,11 @@ class Project:
 
 @dataclass(frozen=True)
 class LaunchResponse:
+    document: Dict[str, Any]
+    succeeded: bool
+
+
+@dataclass(frozen=True)
+class CleanupResponse:
     document: Dict[str, Any]
     succeeded: bool

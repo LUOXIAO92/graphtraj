@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import os
 import signal
 import subprocess
@@ -16,20 +15,23 @@ import yaml
 from .codex_adapter import CodexAdapterError, CodexRole, resolve_codex_role
 from .runner_batch import prepare_evidence, read_batch, retain_batch
 from .runner_io import (
-    active_turn_directory,
+    ActiveTurnReservation,
     confirm_alias_mapping_durable,
+    create_active_turn_reservation,
     release_active_turn,
     write_yaml_durably,
 )
-from .runner_models import Batch, LaunchResponse, Project, RunnerError, Task
+from .runner_models import (
+    ROLE_ALIAS_MARKERS,
+    Batch,
+    LaunchResponse,
+    Project,
+    RunnerError,
+    Task,
+)
 from .runner_project import discover_project, provision_worktree
 
 
-ROLE_ALIAS = {
-    "engineer-junior": "j",
-    "engineer-senior": "s",
-    "engineer-expert": "e",
-}
 LAUNCH_TIMEOUT_SECONDS = 10.0
 TERMINATION_TIMEOUT_SECONDS = 10.0
 
@@ -58,11 +60,12 @@ def launch_batch(batch_file: Path, cwd: Path) -> LaunchResponse:
         "ticket_file": str(batch.task.ticket_file),
     }
 
-    active_turn_key: Optional[str] = None
+    active_turn: Optional[ActiveTurnReservation] = None
     mapping: Optional[Dict[str, Any]] = None
     try:
-        active_turn_key = _reserve_active_turn(project, batch, worktree)
+        active_turn = _reserve_active_turn(project, batch, worktree)
         evidence = prepare_evidence(project.state_directory, batch)
+        alias_history = _read_alias_history(evidence, batch)
         provision_worktree(project, batch.task, branch, worktree)
         _ensure_scoped_scratch(worktree, evidence)
         role = _resolve_role(worktree, binding)
@@ -73,7 +76,8 @@ def launch_batch(batch_file: Path, cwd: Path) -> LaunchResponse:
             branch=branch,
             worktree=worktree,
             evidence=evidence,
-            active_turn_key=active_turn_key,
+            active_turn=active_turn,
+            alias_history=alias_history,
         )
         _write_metadata(
             evidence=evidence,
@@ -82,6 +86,7 @@ def launch_batch(batch_file: Path, cwd: Path) -> LaunchResponse:
             session=mapping["session"],
             branch=branch,
             worktree=worktree,
+            aliases=alias_history + (alias,),
         )
     except RunnerError as error:
         release_reservation = error.release_reservation
@@ -90,9 +95,9 @@ def launch_batch(batch_file: Path, cwd: Path) -> LaunchResponse:
             if isinstance(worker_pid, int):
                 _stop_worker(worker_pid)
             release_reservation = False
-        if active_turn_key is not None and release_reservation:
+        if active_turn is not None and release_reservation:
             release_active_turn(
-                project.common_directory / "agent-runner", active_turn_key
+                project.common_directory / "agent-runner", active_turn
             )
         result["launch_status"] = "failed"
         result["error"] = error.as_document()
@@ -139,30 +144,12 @@ def _reserve_active_turn(
     project: Project,
     batch: Batch,
     worktree: Path,
-) -> str:
+) -> ActiveTurnReservation:
     runner_directory = project.common_directory / "agent-runner"
-    active_root = runner_directory / "active-worktrees"
     try:
-        if active_root.is_symlink():
-            raise OSError("active-turn root is a symlink")
-        active_root.mkdir(parents=True, exist_ok=True)
-        key = hashlib.sha256(batch.task.ticket_id.encode("ascii")).hexdigest()
-        reservation = active_turn_directory(runner_directory, key)
-        reservation.mkdir(mode=0o700)
-    except FileExistsError as error:
-        raise RunnerError(
-            "WORKTREE_TURN_ACTIVE",
-            "The Ticket Worktree already has an active Engineer turn.",
-        ) from error
-    except (OSError, ValueError) as error:
-        raise RunnerError(
-            "ACTIVE_TURN_RESERVATION_FAILED",
-            "The Ticket Worktree could not be reserved for an Engineer turn.",
-        ) from error
-
-    try:
-        write_yaml_durably(
-            reservation / "reservation.yml",
+        return create_active_turn_reservation(
+            runner_directory,
+            batch.task.ticket_id,
             {
                 "activity": "starting",
                 "run_id": batch.run_id,
@@ -171,13 +158,16 @@ def _reserve_active_turn(
                 "launcher_pid": os.getpid(),
             },
         )
-    except (OSError, yaml.YAMLError) as error:
-        release_active_turn(runner_directory, key)
+    except FileExistsError as error:
+        raise RunnerError(
+            "WORKTREE_TURN_ACTIVE",
+            "The Ticket Worktree already has an active Engineer turn.",
+        ) from error
+    except (OSError, ValueError, yaml.YAMLError) as error:
         raise RunnerError(
             "ACTIVE_TURN_RESERVATION_FAILED",
             "The Ticket Worktree could not be reserved for an Engineer turn.",
         ) from error
-    return key
 
 
 def _ensure_scoped_scratch(worktree: Path, evidence: Path) -> None:
@@ -212,13 +202,17 @@ def _start_turn(
     branch: str,
     worktree: Path,
     evidence: Path,
-    active_turn_key: str,
+    active_turn: ActiveTurnReservation,
+    alias_history: Tuple[str, ...],
 ) -> Tuple[str, Dict[str, Any]]:
     session_root = project.common_directory / "agent-runner" / "sessions"
     try:
         session_root.mkdir(parents=True, exist_ok=True)
         alias, session_directory = _reserve_alias(
-            session_root, batch.task, ROLE_ALIAS[batch.task.role]
+            session_root,
+            batch.task,
+            ROLE_ALIAS_MARKERS[batch.task.role],
+            alias_history,
         )
         mapping = {
             "alias": alias,
@@ -242,7 +236,9 @@ def _start_turn(
                     worktree=worktree,
                     evidence=evidence,
                 ),
-                "active_turn_key": active_turn_key,
+                "active_turn_key": active_turn.key,
+                "active_turn_device": active_turn.device,
+                "active_turn_inode": active_turn.inode,
                 "mapping": mapping,
             },
         )
@@ -346,9 +342,79 @@ def _start_turn(
     )
 
 
-def _reserve_alias(session_root: Path, task: Task, tier: str) -> Tuple[str, Path]:
+def _read_alias_history(evidence: Path, batch: Batch) -> Tuple[str, ...]:
+    metadata_file = evidence / "metadata.yml"
+    if not os.path.lexists(str(metadata_file)):
+        return ()
+    try:
+        if metadata_file.is_symlink() or not metadata_file.is_file():
+            raise OSError("metadata is not a regular file")
+        metadata = yaml.safe_load(metadata_file.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, yaml.YAMLError) as error:
+        raise RunnerError(
+            "METADATA_INVALID",
+            "The retained mechanical ticket metadata is invalid.",
+        ) from error
+    if not isinstance(metadata, dict):
+        raise RunnerError(
+            "METADATA_INVALID",
+            "The retained mechanical ticket metadata is invalid.",
+        )
+    current = metadata.get("alias")
+    stored = metadata.get("aliases")
+    if stored is None:
+        aliases = (current,)
+    elif isinstance(stored, list):
+        aliases = tuple(stored)
+    else:
+        aliases = ()
+    if (
+        metadata.get("run_id") != batch.run_id
+        or metadata.get("ticket_id") != batch.task.ticket_id
+        or metadata.get("ticket_name") != batch.task.ticket_name
+        or not aliases
+        or current != aliases[-1]
+        or any(not isinstance(alias, str) for alias in aliases)
+        or len(set(aliases)) != len(aliases)
+        or any(
+            not _historical_alias_is_valid(batch.task, alias)
+            for alias in aliases
+        )
+    ):
+        raise RunnerError(
+            "METADATA_INVALID",
+            "The retained mechanical ticket metadata is invalid.",
+        )
+    return aliases
+
+
+def _historical_alias_is_valid(task: Task, alias: str) -> bool:
+    prefix = "{0}@".format(task.stem)
+    if not alias.startswith(prefix):
+        return False
+    suffix = alias[len(prefix) :]
+    if len(suffix) < 2 or suffix[0] not in ROLE_ALIAS_MARKERS.values():
+        return False
+    ordinal = suffix[1:]
+    return (
+        ordinal.isascii()
+        and ordinal.isdigit()
+        and ordinal[0] != "0"
+        and int(ordinal) < 10000
+    )
+
+
+def _reserve_alias(
+    session_root: Path,
+    task: Task,
+    tier: str,
+    alias_history: Tuple[str, ...],
+) -> Tuple[str, Path]:
+    historical = frozenset(alias_history)
     for ordinal in range(1, 10000):
         alias = "{0}@{1}{2}".format(task.stem, tier, ordinal)
+        if alias in historical:
+            continue
         directory = session_root / alias
         try:
             directory.mkdir()
@@ -380,6 +446,7 @@ def _write_metadata(
     session: str,
     branch: str,
     worktree: Path,
+    aliases: Tuple[str, ...],
 ) -> None:
     try:
         write_yaml_durably(
@@ -389,6 +456,7 @@ def _write_metadata(
                 "ticket_id": batch.task.ticket_id,
                 "ticket_name": batch.task.ticket_name,
                 "alias": alias,
+                "aliases": list(aliases),
                 "role": batch.task.role,
                 "runtime": "codex",
                 "session": session,

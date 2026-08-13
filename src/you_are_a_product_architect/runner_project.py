@@ -15,6 +15,52 @@ from .runner_models import Project, RunnerError, Task
 RUNNER_CONFIG_VERSION = 1
 
 
+def configured_worktree_root(runner_directory: Path) -> Path:
+    """Read the canonical Ticket Worktree root needed by recovery checks."""
+
+    config_file = runner_directory / "config.yml"
+    try:
+        if config_file.is_symlink() or not config_file.is_file():
+            raise OSError("Runner Config is not a regular file")
+        config = yaml.safe_load(config_file.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, yaml.YAMLError) as error:
+        raise RunnerError(
+            "RUNNER_CONFIG_INVALID",
+            "Project Runner Config is not readable valid YAML.",
+        ) from error
+    if (
+        not isinstance(config, dict)
+        or config.get("version") != RUNNER_CONFIG_VERSION
+    ):
+        raise RunnerError(
+            "RUNNER_CONFIG_INVALID", "Project Runner Config is invalid."
+        )
+    value = config.get("worktree_root")
+    if not isinstance(value, str) or not Path(value).is_absolute():
+        raise RunnerError(
+            "RUNNER_CONFIG_INVALID", "Project Runner Config is invalid."
+        )
+    root = Path(value).resolve()
+    if root.name != ".agent-worktrees" or not root.is_dir():
+        raise RunnerError(
+            "RUNNER_CONFIG_INVALID", "Project Runner Config is invalid."
+        )
+    return root
+
+
+def registered_worktree_owns_branch(worktree: Path, branch: str) -> bool:
+    """Return whether Git registers this exact Worktree on this exact branch."""
+
+    expected_worktree = worktree.resolve()
+    expected_branch = "refs/heads/{0}".format(branch)
+    matches = [
+        record
+        for record in registered_worktrees(worktree)
+        if Path(record["worktree"]).resolve() == expected_worktree
+    ]
+    return len(matches) == 1 and matches[0].get("branch") == expected_branch
+
+
 def discover_project(
     cwd: Path,
     *,
@@ -182,6 +228,22 @@ def discover_project(
     )
 
 
+def discover_runner_directory(cwd: Path) -> Path:
+    """Find the Runner-owned common Git directory without launch preflight."""
+
+    try:
+        common_text = run_git(cwd, "rev-parse", "--git-common-dir")
+    except RunnerError as error:
+        raise RunnerError(
+            "PROJECT_NOT_FOUND",
+            "Agent Runner must be invoked from a configured Source Repository.",
+        ) from error
+    common = Path(common_text)
+    if not common.is_absolute():
+        common = cwd / common
+    return common.resolve() / "agent-runner"
+
+
 def provision_worktree(
     project: Project,
     task: Task,
@@ -190,43 +252,9 @@ def provision_worktree(
 ) -> None:
     """Reuse or create the one deterministic Ticket Worktree from validated dev."""
 
-    records = registered_worktrees(project.repository)
-    expected_branch = "refs/heads/{0}".format(branch)
-    registered = None
-    for record in records:
-        record_path = _resolve_path(
-            Path(record["worktree"]),
-            code="GIT_FAILED",
-            message="A required Git operation failed.",
-        )
-        record_branch = record.get("branch")
-        if record_path == worktree:
-            registered = record
-        if (
-            record_branch is not None
-            and record_branch.startswith("refs/heads/agent/")
-            and record_branch != expected_branch
-        ):
-            relative_branch = record_branch[len("refs/heads/agent/") :]
-            _, separator, ticket_part = relative_branch.partition("/")
-            if separator and ticket_part.startswith(task.id_stem_prefix):
-                raise RunnerError(
-                    "TICKET_ALREADY_ACTIVE",
-                    "This ticket already has a live Ticket Worktree in another Run.",
-                )
-    if registered is not None:
-        if registered.get("branch") != expected_branch or not worktree.is_dir():
-            raise RunnerError(
-                "WORKTREE_CONFLICT",
-                "The derived Ticket Worktree does not match its registered branch.",
-            )
+    if preflight_worktree(project, task, branch, worktree):
         return
-    if os.path.lexists(str(worktree)):
-        raise RunnerError(
-            "WORKTREE_CONFLICT",
-            "The derived Ticket Worktree path exists but is not registered.",
-        )
-
+    expected_branch = "refs/heads/{0}".format(branch)
     branch_exists = git_succeeds(
         project.repository,
         "show-ref",
@@ -234,15 +262,6 @@ def provision_worktree(
         "--quiet",
         expected_branch,
     )
-    if (
-        branch_exists
-        and run_git(project.repository, "rev-parse", expected_branch)
-        != project.dev_commit
-    ):
-        raise RunnerError(
-            "WORKTREE_CONFLICT",
-            "The existing Ticket branch is not at the current validated dev state.",
-        )
     try:
         worktree.parent.mkdir(parents=True, exist_ok=True)
     except OSError as error:
@@ -296,6 +315,95 @@ def provision_worktree(
         )
 
 
+def preflight_worktree(
+    project: Project,
+    task: Task,
+    branch: str,
+    worktree: Path,
+) -> bool:
+    """Validate one derived Worktree without provisioning it.
+
+    Return whether the exact registered Ticket Worktree already exists.
+    """
+
+    records = registered_worktrees(project.repository)
+    expected_branch = "refs/heads/{0}".format(branch)
+    ticket_runs = (project.worktree_root / "runs").resolve()
+    registered = None
+    for record in records:
+        record_path = Path(record["worktree"]).resolve()
+        record_branch = record.get("branch")
+        if record_path == worktree:
+            registered = record
+        elif _registered_ticket_path_matches(record_path, ticket_runs, task):
+            raise RunnerError(
+                "TICKET_ALREADY_ACTIVE",
+                "This ticket already has a live Ticket Worktree in another Run.",
+            )
+        if record_branch == expected_branch and record_path != worktree:
+            raise RunnerError(
+                "WORKTREE_CONFLICT",
+                "The derived Ticket branch is registered at a different Worktree.",
+            )
+        if (
+            record_branch is not None
+            and record_branch.startswith("refs/heads/agent/")
+            and record_branch != expected_branch
+        ):
+            relative_branch = record_branch[len("refs/heads/agent/") :]
+            _, separator, ticket_part = relative_branch.partition("/")
+            if separator and ticket_part.startswith(task.id_stem_prefix):
+                raise RunnerError(
+                    "TICKET_ALREADY_ACTIVE",
+                    "This ticket already has a live Ticket Worktree in another Run.",
+                )
+    if registered is not None:
+        if registered.get("branch") != expected_branch or not worktree.is_dir():
+            raise RunnerError(
+                "WORKTREE_CONFLICT",
+                "The derived Ticket Worktree does not match its registered branch.",
+            )
+        return True
+    if os.path.lexists(str(worktree)):
+        raise RunnerError(
+            "WORKTREE_CONFLICT",
+            "The derived Ticket Worktree path exists but is not registered.",
+        )
+
+    branch_exists = git_succeeds(
+        project.repository,
+        "show-ref",
+        "--verify",
+        "--quiet",
+        expected_branch,
+    )
+    if (
+        branch_exists
+        and run_git(project.repository, "rev-parse", expected_branch)
+        != project.dev_commit
+    ):
+        raise RunnerError(
+            "WORKTREE_CONFLICT",
+            "The existing Ticket branch is not at the current validated dev state.",
+        )
+    return False
+
+
+def _registered_ticket_path_matches(
+    worktree: Path,
+    ticket_runs: Path,
+    task: Task,
+) -> bool:
+    """Return whether a registered run-scoped path owns the task identity."""
+
+    try:
+        relative = worktree.relative_to(ticket_runs)
+    except ValueError:
+        return False
+    return (
+        len(relative.parts) == 2
+        and relative.parts[1].startswith(task.id_stem_prefix)
+    )
 def _worktree_for_branch(repository: Path, branch: str) -> Path:
     matches = [
         _resolve_path(

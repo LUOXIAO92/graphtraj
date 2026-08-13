@@ -30,31 +30,6 @@ def test_installed_commands_advertise_the_bootstrap_interfaces(
     assert runner_help.returncode == 0, runner_help.stderr
     for command in ("launch", "status", "send", "interrupt", "cleanup"):
         assert command in runner_help.stdout
-    assert "not implemented" in runner_help.stdout.lower()
-
-
-def test_installed_runner_future_operations_fail_until_implemented(
-    installed_commands: InstalledCommands,
-    temporary_git_repository: Path,
-) -> None:
-    operations = {
-        "status": [str(installed_commands.runner), "status", "ticket-42@j1"],
-        "send": [
-            str(installed_commands.runner),
-            "send",
-            "ticket-42@j1",
-            "--instruction",
-            "continue",
-        ],
-        "interrupt": [str(installed_commands.runner), "interrupt", "ticket-42@j1"],
-    }
-
-    for operation, command in operations.items():
-        result = run_process(command, cwd=temporary_git_repository)
-
-        assert result.returncode != 0, operation
-        assert result.stdout == "", operation
-        assert "not implemented" in result.stderr.lower(), operation
 
 
 def test_fake_codex_records_jsonl_events_and_exact_argv(

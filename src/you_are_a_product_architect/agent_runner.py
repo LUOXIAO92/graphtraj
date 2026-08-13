@@ -6,13 +6,10 @@ import click
 import yaml
 
 from .runner_cleanup import cleanup_ticket
+from .runner_control import interrupt_session, send_instruction
 from .runner_launch import launch_batch
 from .runner_models import RunnerError
-
-
-def _not_implemented(operation):
-    click.echo("{0} is not implemented yet.".format(operation), err=True)
-    raise click.exceptions.Exit(1)
+from .runner_status import status_aliases
 
 
 @click.group(invoke_without_command=True)
@@ -41,8 +38,10 @@ def main(context, batch_input):
             raise click.exceptions.Exit(1)
         _emit_result(response.document)
         if not response.succeeded:
-            error = response.document["tasks"][0]["error"]
-            click.echo(error["message"], err=True)
+            for task in response.document["tasks"]:
+                error = task.get("error")
+                if error is not None:
+                    click.echo(error["message"], err=True)
             raise click.exceptions.Exit(1)
 
 
@@ -53,23 +52,45 @@ def _emit_result(document):
 @main.command()
 @click.argument("aliases", nargs=-1, required=True)
 def status(aliases):
-    """Inspect session aliases (not implemented yet)."""
-    _not_implemented("Status")
+    """Inspect the explicitly supplied Engineer aliases."""
+    try:
+        response = status_aliases(aliases, Path.cwd().resolve())
+    except RunnerError as error:
+        _emit_result({"error": error.as_document()})
+        click.echo(error.message, err=True)
+        raise click.exceptions.Exit(1)
+    _emit_result(response.document)
+    if not response.succeeded:
+        for error in response.errors:
+            click.echo(error.message, err=True)
+        raise click.exceptions.Exit(1)
 
 
 @main.command()
 @click.argument("alias")
 @click.option("--instruction", required=True)
 def send(alias, instruction):
-    """Send a follow-up to one session (not implemented yet)."""
-    _not_implemented("Send")
+    """Send a follow-up to one recoverable Engineer session."""
+    try:
+        response = send_instruction(alias, instruction, Path.cwd().resolve())
+    except RunnerError as error:
+        _emit_result({"alias": alias, "error": error.as_document()})
+        click.echo(error.message, err=True)
+        raise click.exceptions.Exit(1)
+    _emit_result(response)
 
 
 @main.command()
 @click.argument("alias")
 def interrupt(alias):
-    """Interrupt one session (not implemented yet)."""
-    _not_implemented("Interrupt")
+    """Interrupt one active Engineer turn while preserving its alias."""
+    try:
+        response = interrupt_session(alias, Path.cwd().resolve())
+    except RunnerError as error:
+        _emit_result({"alias": alias, "error": error.as_document()})
+        click.echo(error.message, err=True)
+        raise click.exceptions.Exit(1)
+    _emit_result(response)
 
 
 @main.command()

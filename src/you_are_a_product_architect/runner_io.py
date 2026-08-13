@@ -25,6 +25,35 @@ class ActiveTurnReservation(NamedTuple):
     inode: int
 
 
+class ActiveTurnBusyError(FileExistsError):
+    """The project-wide Ticket Worktree reservation already exists."""
+
+    def __init__(self, active_alias: str | None = None) -> None:
+        super().__init__(active_alias)
+        self.active_alias = active_alias
+
+    @property
+    def message(self) -> str:
+        """Describe the active reservation without trusting partial state."""
+
+        if self.active_alias is None:
+            return "The Ticket Worktree already has an active Engineer turn."
+        return (
+            "The Ticket Worktree already has an active Engineer turn under "
+            "alias {0}.".format(self.active_alias)
+        )
+
+
+class ActiveTurnReservationError(Exception):
+    """The project-wide Ticket Worktree reservation could not be created."""
+
+
+def active_turn_key(ticket_id: str) -> str:
+    """Return the project-wide reservation key for one validated ticket ID."""
+
+    return hashlib.sha256(ticket_id.encode("ascii")).hexdigest()
+
+
 def write_yaml_durably(path: Path, document: Any) -> None:
     """Atomically replace one YAML document and sync its directory entry."""
 
@@ -59,12 +88,6 @@ def active_turn_directory(runner_directory: Path, key: str) -> Path:
     return runner_directory / "active-worktrees" / key
 
 
-def active_turn_key(ticket_id: str) -> str:
-    """Derive the one project-wide reservation key for a ticket identity."""
-
-    return hashlib.sha256(ticket_id.encode("ascii")).hexdigest()
-
-
 def create_active_turn_reservation(
     runner_directory: Path,
     ticket_id: str,
@@ -80,19 +103,22 @@ def create_active_turn_reservation(
             os.mkdir("active-worktrees", mode=0o700, dir_fd=runner_descriptor)
         except FileExistsError:
             pass
-        active_descriptor = os.open(
-            "active-worktrees", flags, dir_fd=runner_descriptor
-        )
+        active_descriptor = os.open("active-worktrees", flags, dir_fd=runner_descriptor)
         try:
-            reservation_descriptor = os.open(
-                key,
-                os.O_RDWR
-                | os.O_CREAT
-                | os.O_EXCL
-                | getattr(os, "O_NOFOLLOW", 0),
-                0o600,
-                dir_fd=active_descriptor,
-            )
+            try:
+                reservation_descriptor = os.open(
+                    key,
+                    os.O_RDWR
+                    | os.O_CREAT
+                    | os.O_EXCL
+                    | getattr(os, "O_NOFOLLOW", 0),
+                    0o600,
+                    dir_fd=active_descriptor,
+                )
+            except FileExistsError as error:
+                raise ActiveTurnBusyError(
+                    _read_reserved_alias(active_turn_directory(runner_directory, key))
+                ) from error
             try:
                 identity = os.fstat(reservation_descriptor)
                 if not stat.S_ISREG(identity.st_mode):
@@ -262,6 +288,37 @@ def directory_open_flags() -> int:
         | getattr(os, "O_DIRECTORY", 0)
         | getattr(os, "O_NOFOLLOW", 0)
     )
+
+
+def read_active_turn_owner(runner_directory: Path, key: str) -> dict[str, Any]:
+    """Read one regular-file reservation without following redirected state."""
+
+    reservation = active_turn_directory(runner_directory, key)
+    try:
+        if reservation.is_symlink() or not reservation.is_file():
+            raise OSError("active-turn reservation is not a regular file")
+        document = yaml.safe_load(reservation.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, yaml.YAMLError) as error:
+        raise OSError("active-turn reservation is unreadable") from error
+    if not isinstance(document, dict):
+        raise OSError("active-turn reservation is malformed")
+    return document
+
+
+def _read_reserved_alias(reservation: Path) -> str | None:
+    try:
+        if reservation.is_symlink() or not reservation.is_file():
+            return None
+        document = yaml.safe_load(reservation.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, yaml.YAMLError):
+        return None
+    if not isinstance(document, dict) or document.get("activity") not in {
+        "starting",
+        "running",
+    }:
+        return None
+    alias = document.get("alias")
+    return alias if isinstance(alias, str) and alias else None
 
 
 def _sync_file(path: Path) -> None:

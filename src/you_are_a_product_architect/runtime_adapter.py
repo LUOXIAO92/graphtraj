@@ -32,9 +32,15 @@ class RuntimeTurn(Protocol):
         """Run the invocation until its Runtime reaches a terminal state."""
 
     def terminate(self) -> bool:
-        """Request termination and confirm whether the Runtime stopped."""
+        """Request termination and confirm that it stopped a live Runtime."""
+
+    def terminate_until_terminal(self) -> None:
+        """Keep ownership until the Runtime process group is terminal."""
 
 
 RuntimeAdapter = Callable[
     [Mapping[str, Any], str, Path, SessionStarted], RuntimeTurn
+]
+ResumeRuntimeAdapter = Callable[
+    [Mapping[str, Any], str, str, Path, SessionStarted], RuntimeTurn
 ]

@@ -1,4 +1,4 @@
-"""Validation and durable storage for one-task Agent Runner batches."""
+"""Validation and durable storage for Agent Runner batches."""
 
 from __future__ import annotations
 
@@ -20,7 +20,37 @@ TICKET_NAME = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 LOGICAL_ROLES = frozenset(ROLE_ALIAS_MARKERS)
 
 
+class _UniqueKeyLoader(yaml.SafeLoader):
+    """Safe YAML loader that treats repeated mapping keys as malformed."""
+
+    def construct_mapping(self, node: yaml.Node, deep: bool = False) -> object:
+        self.flatten_mapping(node)
+        mapping = {}
+        for key_node, value_node in node.value:
+            key = self.construct_object(key_node, deep=deep)
+            try:
+                duplicate = key in mapping
+            except TypeError as error:
+                raise yaml.constructor.ConstructorError(
+                    "while constructing a mapping",
+                    node.start_mark,
+                    "found unhashable key",
+                    key_node.start_mark,
+                ) from error
+            if duplicate:
+                raise yaml.constructor.ConstructorError(
+                    "while constructing a mapping",
+                    node.start_mark,
+                    "found duplicate key",
+                    key_node.start_mark,
+                )
+            mapping[key] = self.construct_object(value_node, deep=deep)
+        return mapping
+
+
 def valid_run_id(value: object) -> bool:
+    """Return whether a value is one accepted Delivery Run identity."""
+
     if not isinstance(value, str) or len(value) > 64 or not RUN_ID.fullmatch(value):
         return False
     semantic_name = value[9:]
@@ -54,7 +84,7 @@ def read_batch(
     cwd: Path,
     role_bindings: Mapping[str, str],
 ) -> Batch:
-    """Read and strictly validate the one-task YAML input."""
+    """Read and strictly validate one complete YAML batch input."""
 
     source = batch_file if batch_file.is_absolute() else cwd / batch_file
     try:
@@ -69,7 +99,7 @@ def read_batch(
             "Batch input must resolve to a readable UTF-8 regular file.",
         ) from error
     try:
-        document = yaml.safe_load(source_text)
+        document = yaml.load(source_text, Loader=_UniqueKeyLoader)
     except yaml.YAMLError as error:
         raise RunnerError(
             "BATCH_YAML_INVALID", "Batch input is not valid YAML."
@@ -90,12 +120,35 @@ def read_batch(
             ),
         )
     tasks = document["tasks"]
-    if not isinstance(tasks, list) or len(tasks) != 1:
+    if not isinstance(tasks, list) or not 1 <= len(tasks) <= 4:
         raise RunnerError(
             "TASK_COUNT_UNSUPPORTED",
-            "This Runner release accepts exactly one task per batch.",
+            "A batch must contain between one and four tasks.",
         )
-    task_document = tasks[0]
+    validated_tasks = tuple(
+        _read_task(task_document, cwd, role_bindings)
+        for task_document in tasks
+    )
+    ticket_ids = [task.ticket_id for task in validated_tasks]
+    if len(ticket_ids) != len(set(ticket_ids)):
+        raise RunnerError(
+            "TICKET_ID_DUPLICATE",
+            "ticket_id values must be unique within a batch.",
+        )
+    return Batch(
+        run_id=run_id,
+        tasks=validated_tasks,
+        source_bytes=source_bytes,
+    )
+
+
+def _read_task(
+    task_document: object,
+    cwd: Path,
+    role_bindings: Mapping[str, str],
+) -> Task:
+    """Validate and resolve one task without changing the supplied choices."""
+
     required = {"ticket_id", "ticket_name", "role", "ticket_file"}
     allowed = required | {"instruction"}
     if (
@@ -156,17 +209,13 @@ def read_batch(
             "INSTRUCTION_INVALID",
             "instruction must be non-empty plain text when supplied.",
         )
-    return Batch(
-        run_id=run_id,
-        task=Task(
-            ticket_id=ticket_id,
-            ticket_name=ticket_name,
-            role=role,
-            ticket_file=ticket_path,
-            ticket_content=ticket_content,
-            instruction=instruction,
-        ),
-        source_bytes=source_bytes,
+    return Task(
+        ticket_id=ticket_id,
+        ticket_name=ticket_name,
+        role=role,
+        ticket_file=ticket_path,
+        ticket_content=ticket_content,
+        instruction=instruction,
     )
 
 
@@ -207,15 +256,15 @@ def retain_batch(state: Path, batch: Batch) -> Path:
     )
 
 
-def prepare_evidence(state: Path, batch: Batch) -> Path:
+def prepare_evidence(state: Path, run_id: str, task: Task) -> Path:
     """Create the one persistent evidence directory for a validated ticket."""
 
     evidence = (
         state
         / "task-delivery"
-        / batch.run_id
+        / run_id
         / "tickets"
-        / batch.task.stem
+        / task.stem
     )
     _safe_directory(evidence, state)
     return evidence.resolve()

@@ -1328,9 +1328,11 @@ def test_installed_cleanup_reservation_blocks_a_concurrent_ticket_launch(
         )
 
         assert concurrent_launch.returncode == 1
-        assert yaml.safe_load(concurrent_launch.stdout)["tasks"][0]["error"] == {
-            "code": "worktree-busy",
-            "message": "The Ticket Worktree already has an active Engineer turn.",
+        assert yaml.safe_load(concurrent_launch.stdout) == {
+            "error": {
+                "code": "worktree-busy",
+                "message": "The Ticket Worktree already has an active Engineer turn.",
+            }
         }
     finally:
         hook_release.touch()
@@ -2042,11 +2044,14 @@ def test_terminal_turn_is_durable_before_the_worker_releases_ownership(
     )
 
     class CompletedTurn:
-        def run(self) -> dict[str, str]:
-            return {"turn_status": "completed"}
+        def run(self) -> dict[str, object]:
+            return {"outcome": "completed", "runtime_exit_code": 0}
 
         def terminate(self) -> bool:
             return True
+
+        def terminate_until_terminal(self) -> None:
+            return None
 
     def create_turn(
         request: object,

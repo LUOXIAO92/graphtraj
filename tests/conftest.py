@@ -4,6 +4,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping, Optional, Sequence
@@ -42,6 +43,15 @@ def run_process(
         capture_output=True,
         timeout=timeout,
     )
+
+
+def wait_for_file(path: Path, timeout: float = 5.0) -> None:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if path.is_file():
+            return
+        time.sleep(0.01)
+    raise AssertionError("Timed out waiting for {0}".format(path))
 
 
 def find_uv() -> Optional[Path]:
@@ -88,6 +98,7 @@ def fake_codex(tmp_path: Path) -> FakeCodex:
         "import json\n"
         "import os\n"
         "import signal\n"
+        "import subprocess\n"
         "import sys\n"
         "import time\n"
         "from pathlib import Path\n"
@@ -122,6 +133,24 @@ def fake_codex(tmp_path: Path) -> FakeCodex:
         "    ready_file = os.environ.get('FAKE_CODEX_TERMINATION_READY')\n"
         "    if ready_file is not None:\n"
         "        Path(ready_file).touch()\n"
+        "\n"
+        "group_child_pid = os.environ.get('FAKE_CODEX_GROUP_CHILD_PID')\n"
+        "if group_child_pid is not None:\n"
+        "    group_child_release = os.environ['FAKE_CODEX_GROUP_CHILD_RELEASE']\n"
+        "    child_program = (\n"
+        "        'import os, signal, sys, time\\n'\n"
+        "        'from pathlib import Path\\n'\n"
+        "        'signal.signal(signal.SIGTERM, signal.SIG_IGN)\\n'\n"
+        "        'Path(sys.argv[1]).write_text(str(os.getpid()), encoding=\\\"utf-8\\\")\\n'\n"
+        "        'while not Path(sys.argv[2]).exists():\\n'\n"
+        "        '    time.sleep(0.01)\\n'\n"
+        "    )\n"
+        "    subprocess.Popen(\n"
+        "        [sys.executable, '-c', child_program, group_child_pid, group_child_release],\n"
+        "        stdin=subprocess.DEVNULL,\n"
+        "        stdout=subprocess.DEVNULL,\n"
+        "        stderr=subprocess.DEVNULL,\n"
+        "    )\n"
         "\n"
         "mapping_release = os.environ.get('FAKE_CODEX_MAPPING_RELEASE')\n"
         "if mapping_release is not None:\n"

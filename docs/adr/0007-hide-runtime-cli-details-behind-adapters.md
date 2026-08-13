@@ -49,7 +49,9 @@ configured sandbox, approval, or network controls.
 V1 implements only the Codex Adapter. It privately performs the equivalent of:
 
 ```text
-codex exec -C <ticket-worktree> --add-dir <ticket-evidence-dir>
+codex exec -C <ticket-worktree> \
+  --add-dir <ticket-evidence-dir> \
+  --add-dir <git-common-dir>
 ```
 
 The Source Repository's `.codex/config.toml` uses `workspace-write` and adds
@@ -57,9 +59,13 @@ the Worktree-local `.scratch` path to
 `sandbox_workspace_write.writable_roots`. Main and the native Delivery State
 Agent therefore reach the external Harness State Directory through the
 Integration Worktree symlink, while each Engineer receives its exact evidence
-directory through the Adapter's `--add-dir`. Setup verifies that `.scratch`
-resolves to the registered writable state directory. Neither the paths nor raw
-Codex syntax enter Main's task object.
+directory and the Source Repository's Git common directory through the
+Adapter's invocation-local `--add-dir` arguments. The Git common directory is
+required for a linked Ticket Worktree to stage and create its candidate
+commit; the Worktree Guard still rejects explicit paths outside the current
+Ticket Worktree and rejects unmodelled Git commands. Setup verifies that
+`.scratch` resolves to the registered writable state directory. None of these
+paths or raw Codex syntax enter Main's task object.
 
 These settings use Codex's normal project configuration. The product does not
 add a mechanical or interactive Main launcher. OpenCode and other Runtime

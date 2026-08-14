@@ -48,15 +48,18 @@ reconstruct their SOPs from memory or replace them with ad hoc prompts.
   documented minimal semantic reconciliation. Main does not resolve conflicts
   inline, invent a substitute Resolver prompt, or let the Resolver change merge
   order, ticket scope, or final integration acceptance.
-- Treat the installed copies in the Harness Runtime Store and the canonical
-  resources committed on `dev` as authoritative. If a required Skill is not
-  exposed in the active Runtime, diagnose its selection or Harness-local
-  installation first; never install it globally on the user's behalf. For an
-  explicitly authorized native-transport fallback, read and follow the exact
-  canonical `SKILL.md` from `dev/.codex/skills/<name>/` (or its packaged
-  `dev` resource) and record that transport fact. This is the only permitted
-  fallback: do not paraphrase, copy-edit, or substitute a hand-written
-  approximation of the Skill.
+- Skill ownership is explicit. `$task-delivery` is this project's own Skill,
+  sourced from
+  `src/you_are_a_product_architect/resources/skills/task-delivery/SKILL.md`
+  and installed into the Harness Runtime Store. `$implement`, `$tdd`,
+  `$code-review`, `$to-spec`, `$to-tickets`, `$grilling`, `$domain-modeling`,
+  `$codebase-design`, and `$resolving-merge-conflicts` are Matt Pocock global
+  Skills. Use their exact active global installation; do not treat copies on
+  `dev` as project-owned replacements or rewrite their semantics locally.
+- A global Skill with model invocation disabled is still invoked by explicitly
+  reading its complete global `SKILL.md` and required references. If the exact
+  global Skill is absent, stop and diagnose it; never install globally on the
+  user's behalf or substitute a hand-written approximation.
 
 ## Harness delivery workflow
 

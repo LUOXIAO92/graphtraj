@@ -4,6 +4,11 @@ status: accepted
 
 # Isolate each Harness Project at its own root
 
+> **Partial supersession:** [ADR 0013](0013-own-runtime-resources-at-the-harness-root.md)
+> replaces this record's Source-Repository-owned Runtime-resource placement.
+> The one-project root boundary, one-Source-Repository scope, and physical
+> Worktree/state isolation remain accepted.
+
 The Harness Project Root, not a workspace directory and not the Primary
 Worktree, is the isolation boundary for one Harness Project. V1 contains one
 Source Repository whose existing Primary Worktree is at

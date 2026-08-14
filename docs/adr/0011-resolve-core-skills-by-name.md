@@ -4,6 +4,12 @@ status: accepted
 
 # Resolve core Harness Skills by declared name
 
+> **Partial supersession:** [ADR 0013](0013-own-runtime-resources-at-the-harness-root.md)
+> and [ADR 0015](0015-select-repository-skills-explicitly.md) replace the
+> Integration Worktree discovery context and the two-path setup wording. The
+> core name set, name-only dependency rule, narrow `doctor` responsibility,
+> and manual upstream-compatibility policy remain accepted.
+
 Harness workflows and roles identify Skill dependencies only by declared name.
 V1 does not add a target-project Skill lock file, content hashes, source-path
 attestation, or automatic semantic compatibility checking.

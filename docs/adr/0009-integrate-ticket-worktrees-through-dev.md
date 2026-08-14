@@ -4,6 +4,11 @@ status: accepted
 
 # Integrate isolated Ticket Worktrees through dev
 
+> **Partial supersession:** [ADR 0013](0013-own-runtime-resources-at-the-harness-root.md)
+> replaces the requirement that normal Main sessions run from Integration and
+> that setup write Harness Runtime resources there. Integration's Git, merge,
+> validation, and Worktree-lifecycle responsibilities remain accepted.
+
 Engineers implement in isolated Ticket Worktrees while one long-lived
 project-level **Integration Worktree** owns serialized development integration.
 The Integration Worktree lives at

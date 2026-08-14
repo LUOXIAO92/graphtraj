@@ -17,6 +17,36 @@ Master. See `docs/agents/triage-labels.md`.
 
 This repository uses the single-context layout. See `docs/agents/domain.md`.
 
+## Required Skill pipeline
+
+Use the repository's existing Skills as the workflow interfaces. Do not
+reconstruct their SOPs from memory or replace them with ad hoc prompts.
+
+- Planning uses `$to-spec` to synthesize and publish the agreed specification,
+  then `$to-tickets` to propose vertical tracer-bullet tickets with explicit
+  blockers. Obtain the user approvals required by those Skills before
+  publishing. `$grilling`, `$domain-modeling`, and `$codebase-design` may feed
+  planning when their documented trigger applies.
+- Delivery of an accepted Ticket DAG uses `$task-delivery`. Planning Skills stay
+  outside Delivery: `$task-delivery` must not silently rewrite or re-split an
+  accepted ticket. If an escalated ticket is explicitly returned to planning,
+  preserve the original ticket and evidence while `$to-spec`/`$to-tickets`
+  produce a separately approved replacement DAG.
+- Every dispatched Engineer runs `$implement` in its exact Ticket Worktree.
+  `$implement` owns the implementation loop, uses `$tdd` at agreed public
+  seams, runs focused/type/full validation, commits the candidate, and invokes
+  `$code-review` when the candidate is frozen.
+- `$code-review` always launches its Standards and Spec axes as two independent
+  parallel Reviewers against one fixed baseline and candidate. Do not manually
+  recreate either Reviewer prompt, serialize the axes, merge their reports, or
+  let the Engineer self-adjudicate.
+- Textual or semantic Integration conflicts go to a fresh Merge Resolver using
+  `$resolving-merge-conflicts`; Main does not resolve them inline.
+- Treat the installed copies in the Harness Runtime Store and the canonical
+  resources committed on `dev` as authoritative. If a required Skill is not
+  exposed in the active Runtime, stop that workflow and diagnose/install the
+  Skill. Do not silently substitute a hand-written approximation.
+
 ## Harness delivery workflow
 
 These rules apply whenever an accepted ticket DAG is delivered through the

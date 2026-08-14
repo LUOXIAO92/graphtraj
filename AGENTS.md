@@ -47,10 +47,12 @@ transport is Agent Runner or native subagents.
   type check (or a documented compile substitute), the full relevant suite, and
   committed candidate changes.
 - After freezing a candidate, that Engineer creates exactly two independent
-  child reviews: one Standards review against repository rules and one Spec
-  review against the accepted ticket. Reviewers inspect a fixed baseline and
-  candidate and write their raw reports; the Engineer cannot declare its own
-  review result.
+  child reviews in parallel: one Standards review against repository rules and
+  one Spec review against the accepted ticket. Reviewers inspect a fixed
+  baseline and candidate and write their raw reports; the Engineer cannot
+  declare its own review result. A transport or thread-capacity error must be
+  reported and corrected; it must not silently degrade the two reviews to
+  serial execution.
 - The Main/Master reads both raw reports and alone adjudicates PASS or FAIL. A
   PASS may advance to `awaiting-integration`; review comments are not silently
   waived or reinterpreted by the Engineer.
@@ -88,7 +90,15 @@ transport is Agent Runner or native subagents.
   marking a ticket `integrated` and unlocking dependents.
 - Preserve persistent evidence, then clean up disposable transport and
   Worktrees only after successful integration when cleanup is appropriate.
-- Run at most four implementation Engineers and two Reviewers concurrently.
-  The Delivery State Agent is separate from this six-agent work capacity. Fill
-  only the accepted ready frontier and continue through subsequent frontiers
-  until the DAG is integrated, externally blocked, or explicitly escalated.
+- Size ticket concurrency from the configured work-subagent limit. Each
+  in-flight ticket reserves one Engineer plus its own two parallel Reviewers,
+  so `max_concurrent_tickets = floor(work_subagent_limit / 3)`. With a limit of
+  six, run at most two ticket groups concurrently. Reviewers are fresh,
+  ticket-scoped children; they are never shared or inherited between tickets.
+  Do not start more Engineers merely because a ticket has not reached review
+  yet: preserve its two-slot review fan-out capacity. The Main/Master and
+  Delivery State Agent are separate from this work-subagent limit.
+- Fill the accepted ready frontier up to that calculated ticket capacity and
+  continue through subsequent frontiers until the DAG is integrated,
+  externally blocked, or explicitly escalated. Only Integration into `dev`,
+  not ticket implementation or the two-axis review, is serialized.

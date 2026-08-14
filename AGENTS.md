@@ -19,6 +19,15 @@ This repository uses the single-context layout. See `docs/agents/domain.md`.
 
 ## Harness execution
 
+- Until Runtime installation exposes the project-owned `$task-delivery` Skill,
+  use its authoritative temporary source in the registered `dev` Integration
+  Worktree at
+  `src/you_are_a_product_architect/resources/skills/task-delivery/SKILL.md`.
+  In this Harness checkout, that file is
+  `<home>/workspace/you-are-a-product-architect-delivery/.agent-worktrees/integration/src/you_are_a_product_architect/resources/skills/task-delivery/SKILL.md`;
+  resolve `<home>` from the current session and read the file in full before
+  delivery. Do not mistake its absence from `main` or the injected Skill list
+  for absence from the project.
 - Invoke the project-owned `$task-delivery` Skill directly for an accepted
   Ticket DAG. Follow the Skill; do not restate or recreate its SOP here.
 - Invoke Matt Pocock's global Skills directly when their workflow applies,
@@ -33,3 +42,26 @@ This repository uses the single-context layout. See `docs/agents/domain.md`.
   reinterpret its capacity outside the Harness workflow.
 - If a required Skill or role is unavailable, stop that operation and repair
   Runtime selection or installation. Do not improvise a substitute workflow.
+
+### Expert-failure exception
+
+This target project selects `$task-delivery`'s delegated Main authority path,
+not human-in-the-loop adjudication, after three Main-adjudicated Expert review
+failures on one ticket.
+
+- Stop autonomous delivery of the failed ticket. Do not dispatch another
+  Engineer against it or keep revising the same accepted ticket.
+- Treat the repeated highest-tier failures as a defect in Main's ticket
+  definition or decomposition, not in the accepted Spec or user requirements.
+  Main must inspect the retained implementation and review evidence, explain
+  which ticket boundaries, dependencies, acceptance mapping, or complexity
+  assumptions failed, and return the work to ticket planning.
+- Keep the accepted Spec and user requirements unchanged. Main must not invoke
+  `$to-spec`, revise the Spec, reinterpret requirements, or otherwise change
+  product scope while handling this exception. Use `$to-tickets` against the
+  same accepted Spec to replace and re-split the failed ticket into a newly
+  accepted Ticket DAG before delivery restarts. Preserve the failed ticket and
+  its evidence as history; do not silently rewrite or retry it.
+- If the evidence appears to require a product or Spec change, stop and ask the
+  user for an explicit decision. Delegated Main authority does not authorize
+  changing requirements.

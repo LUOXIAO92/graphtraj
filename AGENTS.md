@@ -50,8 +50,13 @@ reconstruct their SOPs from memory or replace them with ad hoc prompts.
   order, ticket scope, or final integration acceptance.
 - Treat the installed copies in the Harness Runtime Store and the canonical
   resources committed on `dev` as authoritative. If a required Skill is not
-  exposed in the active Runtime, stop that workflow and diagnose/install the
-  Skill. Do not silently substitute a hand-written approximation.
+  exposed in the active Runtime, diagnose its selection or Harness-local
+  installation first; never install it globally on the user's behalf. For an
+  explicitly authorized native-transport fallback, read and follow the exact
+  canonical `SKILL.md` from `dev/.codex/skills/<name>/` (or its packaged
+  `dev` resource) and record that transport fact. This is the only permitted
+  fallback: do not paraphrase, copy-edit, or substitute a hand-written
+  approximation of the Skill.
 
 ## Harness delivery workflow
 

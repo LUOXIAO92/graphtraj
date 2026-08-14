@@ -90,14 +90,18 @@ transport is Agent Runner or native subagents.
   marking a ticket `integrated` and unlocking dependents.
 - Preserve persistent evidence, then clean up disposable transport and
   Worktrees only after successful integration when cleanup is appropriate.
-- Size ticket concurrency from the configured work-subagent limit. Each
+- Read the spawned-thread limit from
+  `codex/config.toml`'s `agents.max_concurrent_threads_per_session`. Each
   in-flight ticket reserves one Engineer plus its own two parallel Reviewers,
-  so `max_concurrent_tickets = floor(work_subagent_limit / 3)`. With a limit of
-  six, run at most two ticket groups concurrently. Reviewers are fresh,
-  ticket-scoped children; they are never shared or inherited between tickets.
-  Do not start more Engineers merely because a ticket has not reached review
-  yet: preserve its two-slot review fan-out capacity. The Main/Master and
-  Delivery State Agent are separate from this work-subagent limit.
+  so `max_concurrent_tickets = floor(max_concurrent_threads_per_session / 3)`.
+  This repository configures 18 spawned threads, therefore its capacity is six
+  concurrent ticket groups: six Engineers and up to twelve ticket-scoped
+  Reviewers. Reviewers are fresh children; they are never shared or inherited
+  between tickets. Do not start a seventh Engineer merely because earlier
+  tickets have not reached review yet: preserve every ticket's two-thread
+  review fan-out capacity. The primary Main/Master is not counted by Codex's
+  spawned-thread limit; the event-driven Delivery State Agent is separate from
+  ticket-group capacity.
 - Fill the accepted ready frontier up to that calculated ticket capacity and
   continue through subsequent frontiers until the DAG is integrated,
   externally blocked, or explicitly escalated. Only Integration into `dev`,

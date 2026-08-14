@@ -40,8 +40,14 @@ reconstruct their SOPs from memory or replace them with ad hoc prompts.
   parallel Reviewers against one fixed baseline and candidate. Do not manually
   recreate either Reviewer prompt, serialize the axes, merge their reports, or
   let the Engineer self-adjudicate.
-- Textual or semantic Integration conflicts go to a fresh Merge Resolver using
-  `$resolving-merge-conflicts`; Main does not resolve them inline.
+- Textual or semantic Integration conflicts go to a fresh canonical
+  `merge-resolver` role from `codex/agents/merge-resolver.toml` (installed into
+  the Harness Runtime Store). It remains inside the Integration Worktree and
+  uses `$resolving-merge-conflicts` for an in-progress Git conflict; a clean Git
+  merge followed by failing integration validation receives only the role's
+  documented minimal semantic reconciliation. Main does not resolve conflicts
+  inline, invent a substitute Resolver prompt, or let the Resolver change merge
+  order, ticket scope, or final integration acceptance.
 - Treat the installed copies in the Harness Runtime Store and the canonical
   resources committed on `dev` as authoritative. If a required Skill is not
   exposed in the active Runtime, stop that workflow and diagnose/install the

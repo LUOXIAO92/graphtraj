@@ -4,6 +4,13 @@ status: accepted
 
 # Configure Harness Projects locally and interactively
 
+> **Partial supersession:** [ADR 0013](0013-own-runtime-resources-at-the-harness-root.md)
+> replaces Integration-owned Runtime placement, while
+> [ADR 0015](0015-select-repository-skills-explicitly.md) replaces the missing-
+> Skill prompt and installation destination. The single interactive setup,
+> complete preflight, conflict refusal, idempotence, and failure-reporting
+> decisions remain accepted.
+
 After host installation, the operator runs
 `you-are-a-product-architect setup` from the Harness Project Root defined in
 [ADR 0012](0012-isolate-each-harness-project-at-its-own-root.md) and identifies

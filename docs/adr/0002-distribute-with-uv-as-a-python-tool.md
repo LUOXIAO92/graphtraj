@@ -4,6 +4,12 @@ status: accepted
 
 # Distribute you-are-a-product-architect with uv as a Python tool
 
+> **Partial supersession:** [ADR 0013](0013-own-runtime-resources-at-the-harness-root.md)
+> and [ADR 0015](0015-select-repository-skills-explicitly.md) replace this
+> record's project-local Skill destination and installation-choice wording.
+> The package, command, bundled-resource, and Adapter-support decisions remain
+> accepted.
+
 `you-are-a-product-architect` is distributed as one auditable Python package
 rather than through npm or a mixed Node-to-Python launcher. A persistent host
 installation uses:

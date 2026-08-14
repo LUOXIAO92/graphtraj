@@ -38,3 +38,25 @@ _Avoid_: Shared worktree root, Workspace worktrees
 The durable project-level home for Delivery Run ledgers, task maps, batch
 inputs, and evidence, independent of any Worktree's lifecycle.
 _Avoid_: Scratch directory, Integration Worktree state
+
+**Harness Runtime Store**:
+The Harness Project-owned control-plane source for Main configuration, Harness
+roles, Harness Skills, and Runtime policy, independent of Source Repository
+history and Worktree lifecycles.
+_Avoid_: Source Repository Runtime configuration, Integration Worktree
+configuration
+
+**Harness Skill**:
+A Skill installed and owned by a Harness Project for Main or selected Harness
+roles.
+_Avoid_: Repository Skill
+
+**Repository Skill**:
+A Skill authored by the Source Repository and made available to an Engineer
+only through explicit task selection or Harness Project policy.
+_Avoid_: Harness Skill, Automatically trusted Skill
+
+**Engineer Runtime Context**:
+The immutable Adapter-resolved role, Runtime settings, selected Skills, and
+task access used to launch or resume one Engineer session.
+_Avoid_: Runtime profile, Source Repository configuration

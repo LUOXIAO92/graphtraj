@@ -4,6 +4,13 @@ status: accepted
 
 # Hide Agent Runtime CLI details behind Runner Adapters
 
+> **Partial supersession:** [ADR 0013](0013-own-runtime-resources-at-the-harness-root.md)
+> replaces current-Git-project discovery as Main's control-plane entrypoint,
+> and [ADR 0014](0014-inject-engineer-runtime-through-the-adapter.md)
+> replaces the Source Repository `.codex` loading model. The Runner/Adapter
+> abstraction, semantic role selection, and private Runtime transport remain
+> accepted.
+
 Main addresses logical Engineer roles without constructing or supplying
 Runtime commands, profile paths, or machine-local worktree and state paths.
 The Runner may return resolved paths and an opaque Runtime session as launch

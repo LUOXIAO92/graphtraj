@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 import click
 import yaml
@@ -74,46 +74,59 @@ def _declared_skill_name(skill_file: Path) -> Optional[str]:
     return declared_skill_name(content)
 
 
-def _discover_names(skill_roots: Iterable[Path]) -> set[str]:
-    discovered = set()
-    for skill_root in skill_roots:
+def core_skill_paths(
+    runtime_store: Path,
+    user_skill_root: Path,
+) -> Dict[str, Path]:
+    """Resolve each core Skill to its root-store or Runtime-user file path."""
+
+    resolved: Dict[str, Path] = {}
+    for skill_root in (runtime_store / "skills", user_skill_root):
         try:
-            candidates = tuple(skill_root.iterdir())
+            candidates = tuple(sorted(skill_root.iterdir()))
         except OSError:
             continue
-
         for candidate in candidates:
-            name = _declared_skill_name(candidate / "SKILL.md")
-            if name is not None:
-                discovered.add(name)
-    return discovered
+            skill_file = candidate / "SKILL.md"
+            name = _declared_skill_name(skill_file)
+            if name not in CORE_SKILL_NAMES or name in resolved:
+                continue
+            try:
+                resolved[name] = skill_file.resolve(strict=True)
+            except OSError:
+                continue
+    return resolved
 
 
 def check_core_skills(
-    integration_worktree: Path,
+    runtime_store: Path,
     user_skill_root: Path,
 ) -> Tuple[SkillStatus, ...]:
-    """Check core names in the exact project-local and Runtime user scopes."""
+    """Check core names in the Runtime Store and Runtime user scopes."""
 
-    discovered = _discover_names(
-        (
-            integration_worktree / ".agents" / "skills",
-            user_skill_root,
-        )
-    )
+    discovered = core_skill_paths(runtime_store, user_skill_root)
     return tuple(
         SkillStatus(name=name, discovered=name in discovered)
         for name in CORE_SKILL_NAMES
     )
 
 
+def _doctor_runtime_store(cwd: Path) -> Path:
+    """Return the root store, rejecting a known Harness child worktree."""
+
+    for ancestor in cwd.parents:
+        if (ancestor / ".codex" / "agent-runner" / "config.yml").is_file():
+            raise click.UsageError("Run doctor from the Harness Project Root.")
+    return cwd / ".codex"
+
+
 @click.command()
 def doctor() -> None:
     """Report required core Skills from the active Harness Project context."""
 
-    harness_root = Path.cwd()
+    runtime_store = _doctor_runtime_store(Path.cwd())
     statuses = check_core_skills(
-        harness_root / ".agent-worktrees" / "integration",
+        runtime_store,
         Path.home() / ".agents" / "skills",
     )
     for status in statuses:

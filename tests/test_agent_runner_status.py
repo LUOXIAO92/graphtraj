@@ -197,17 +197,8 @@ def configured_runner(
         answers="{0}\ny\n".format(temporary_git_repository.name),
     )
     assert setup_result.returncode == 0, setup_result.stderr
-    run_process(["git", "add", ".codex"], cwd=integration).check_returncode()
-    run_process(
-        ["git", "commit", "-m", "Configure Codex on dev"], cwd=integration
-    ).check_returncode()
 
-    common_directory = Path(
-        git_output(temporary_git_repository, "rev-parse", "--git-common-dir")
-    )
-    if not common_directory.is_absolute():
-        common_directory = temporary_git_repository / common_directory
-    runner_directory = common_directory.resolve() / "agent-runner"
+    runner_directory = harness_root / ".codex" / "agent-runner"
     environment = os.environ.copy()
     environment.update(
         {
@@ -251,7 +242,7 @@ def launch_turn(
     )
     result = run_process(
         [str(installed_commands.runner), "--batch-input", str(batch_file)],
-        cwd=integration,
+        cwd=harness_root,
         env=environment,
         timeout=5,
     )
@@ -268,7 +259,7 @@ def status(
 ):
     return run_process(
         [str(installed_commands.runner), "status", *aliases],
-        cwd=integration,
+        cwd=integration.parents[1],
         env=environment,
         timeout=5,
     )

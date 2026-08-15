@@ -1,4 +1,4 @@
-"""Install the release-supported core Skill resources project-locally."""
+"""Install the release-supported core Skill resources in the Runtime Store."""
 
 from __future__ import annotations
 
@@ -86,15 +86,15 @@ class SupportedSkills:
 
     @staticmethod
     def resource_action(
-        integration_worktree: Path,
+        runtime_store: Path,
         name: str,
         relative_path: str,
     ) -> str:
-        """Describe one exact project-local Skill file mutation."""
+        """Describe one exact Harness Runtime Store Skill mutation."""
 
-        return "Project-local Skill {0}: {1}".format(
+        return "Harness Skill {0}: {1}".format(
             name,
-            integration_worktree / ".agents" / "skills" / name / relative_path,
+            runtime_store / "skills" / name / relative_path,
         )
 
     @classmethod
@@ -119,11 +119,11 @@ class SupportedSkills:
 
     def install_missing(
         self,
-        integration_worktree: Path,
+        runtime_store: Path,
         missing_names: Iterable[str],
         on_action_complete: Optional[Callable[[str], None]] = None,
     ) -> None:
-        """Copy only preflighted missing names to the Integration Worktree."""
+        """Copy only preflighted missing names to the Runtime Store."""
 
         names = tuple(missing_names)
         unknown_names = tuple(
@@ -137,12 +137,12 @@ class SupportedSkills:
             )
 
         manifests = {name: self.manifest(name) for name in names}
-        skill_root = integration_worktree / ".agents" / "skills"
+        skill_root = runtime_store / "skills"
         for name, manifest in manifests.items():
             target = skill_root / name
             if os.path.lexists(str(target)) and _existing_kind(target) != "directory":
                 raise SupportedSkillsError(
-                    "Project-local Skill target is not a real directory: {0}".format(
+                    "Harness Skill target is not a real directory: {0}".format(
                         target
                     )
                 )
@@ -152,7 +152,7 @@ class SupportedSkills:
                     relative_path = existing.relative_to(target).as_posix()
                     if existing.is_symlink() or relative_path not in allowed_paths:
                         raise SupportedSkillsError(
-                            "Project-local Skill contains unsupported or redirected "
+                            "Harness Skill contains unsupported or redirected "
                             "content: {0}".format(existing)
                         )
                 for relative_path, content in manifest.items():
@@ -164,7 +164,7 @@ class SupportedSkills:
                         or existing.read_bytes() != content
                     ):
                         raise SupportedSkillsError(
-                            "Project-local Skill resource differs: {0}".format(
+                            "Harness Skill resource differs: {0}".format(
                                 existing
                             )
                         )
@@ -190,7 +190,7 @@ class SupportedSkills:
                 if on_action_complete is not None:
                     on_action_complete(
                         self.resource_action(
-                            integration_worktree,
+                            runtime_store,
                             name,
                             relative_path,
                         )

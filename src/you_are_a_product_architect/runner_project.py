@@ -61,189 +61,6 @@ def registered_worktree_owns_branch(worktree: Path, branch: str) -> bool:
     return len(matches) == 1 and matches[0].get("branch") == expected_branch
 
 
-def discover_project(
-    cwd: Path,
-    *,
-    require_clean_integration: bool = True,
-    require_runtime_executable: bool = True,
-) -> Project:
-    """Discover and validate machine-local Runner configuration from Git."""
-
-    try:
-        repository = _resolve_path(
-            Path(run_git(cwd, "rev-parse", "--show-toplevel")),
-            code="PROJECT_NOT_FOUND",
-            message="Agent Runner must be invoked from a configured Source Repository.",
-        )
-        common_text = run_git(cwd, "rev-parse", "--git-common-dir")
-        common = Path(common_text)
-        if not common.is_absolute():
-            common = cwd / common
-        common = _resolve_path(
-            common,
-            code="PROJECT_NOT_FOUND",
-            message="Agent Runner must be invoked from a configured Source Repository.",
-        )
-    except RunnerError as error:
-        raise RunnerError(
-            "PROJECT_NOT_FOUND",
-            "Agent Runner must be invoked from a configured Source Repository.",
-        ) from error
-    config_file = common / "agent-runner" / "config.yml"
-    try:
-        config = yaml.safe_load(config_file.read_text(encoding="utf-8"))
-    except FileNotFoundError as error:
-        raise RunnerError(
-            "RUNNER_CONFIG_NOT_FOUND",
-            "Project Runner Config was not found for this Source Repository.",
-        ) from error
-    except (OSError, UnicodeError, yaml.YAMLError) as error:
-        raise RunnerError(
-            "RUNNER_CONFIG_INVALID",
-            "Project Runner Config is not readable valid YAML.",
-        ) from error
-    if not isinstance(config, dict):
-        raise RunnerError(
-            "RUNNER_CONFIG_INVALID",
-            "Project Runner Config must be a mapping.",
-        )
-    if config.get("version") != RUNNER_CONFIG_VERSION:
-        raise RunnerError(
-            "RUNNER_CONFIG_VERSION_UNSUPPORTED",
-            "Project Runner Config version is not supported.",
-        )
-
-    runtime_name = os.environ.get("AGENT_RUNTIME", config.get("default_runtime"))
-    runtimes = config.get("runtimes")
-    if not isinstance(runtime_name, str) or not isinstance(runtimes, dict):
-        raise RunnerError(
-            "RUNNER_CONFIG_INVALID",
-            "Project Runner Config does not define a valid default Runtime.",
-        )
-    runtime = runtimes.get(runtime_name)
-    if not isinstance(runtime, dict):
-        raise RunnerError(
-            "RUNTIME_NOT_CONFIGURED",
-            "The selected Agent Runtime is not configured for this project.",
-        )
-    if runtime_name != "codex":
-        raise RunnerError(
-            "RUNTIME_UNSUPPORTED",
-            "The selected Agent Runtime is not supported by this Runner.",
-        )
-
-    worktree_value = config.get("worktree_root")
-    branch = config.get("integration_branch")
-    executable_value = runtime.get("executable")
-    roles = runtime.get("roles")
-    if (
-        not isinstance(worktree_value, str)
-        or not Path(worktree_value).is_absolute()
-        or branch != "dev"
-        or not isinstance(executable_value, str)
-        or not Path(executable_value).is_absolute()
-        or not isinstance(roles, dict)
-        or any(
-            not isinstance(key, str) or not isinstance(value, str)
-            for key, value in roles.items()
-        )
-    ):
-        raise RunnerError(
-            "RUNNER_CONFIG_INVALID",
-            "Project Runner Config contains invalid project or Codex settings.",
-        )
-    invalid_config = (
-        "Project Runner Config contains invalid project or Codex settings."
-    )
-    worktree_root = _resolve_path(
-        Path(worktree_value),
-        code="RUNNER_CONFIG_INVALID",
-        message=invalid_config,
-    )
-    if worktree_root.name != ".agent-worktrees" or not worktree_root.is_dir():
-        raise RunnerError(
-            "RUNNER_CONFIG_INVALID",
-            "The configured Worktree Directory is invalid.",
-        )
-    runtime_executable = _resolve_path(
-        Path(executable_value),
-        code="RUNNER_CONFIG_INVALID",
-        message=invalid_config,
-        allow_missing=True,
-    )
-    if require_runtime_executable and (
-        not runtime_executable.is_file()
-        or not os.access(runtime_executable, os.X_OK)
-    ):
-        raise RunnerError(
-            "RUNTIME_EXECUTABLE_INVALID",
-            "The configured Codex Runtime executable is unavailable.",
-        )
-
-    integration = _worktree_for_branch(repository, branch)
-    expected_integration = _resolve_path(
-        worktree_root / "integration",
-        code="INTEGRATION_WORKTREE_INVALID",
-        message="The registered dev Integration Worktree is invalid.",
-    )
-    if integration != expected_integration or not integration.is_dir():
-        raise RunnerError(
-            "INTEGRATION_WORKTREE_INVALID",
-            "The registered dev Integration Worktree is invalid.",
-        )
-    if require_clean_integration and run_git(
-        integration, "status", "--porcelain"
-    ):
-        raise RunnerError(
-            "INTEGRATION_WORKTREE_DIRTY",
-            "The dev Integration Worktree must be clean before launch.",
-        )
-    dev_commit = run_git(
-        repository, "rev-parse", "refs/heads/{0}".format(branch)
-    )
-    if run_git(integration, "rev-parse", "HEAD") != dev_commit:
-        raise RunnerError(
-            "INTEGRATION_WORKTREE_INVALID",
-            "The dev Integration Worktree is not at the registered dev state.",
-        )
-
-    lexical_state = worktree_root.parent / "state"
-    if lexical_state.is_symlink():
-        raise RunnerError("RUNNER_CONFIG_INVALID", invalid_config)
-    return Project(
-        repository=repository,
-        common_directory=common,
-        worktree_root=worktree_root,
-        state_directory=_resolve_path(
-            lexical_state,
-            code="RUNNER_CONFIG_INVALID",
-            message=invalid_config,
-            allow_missing=True,
-        ),
-        integration_branch=branch,
-        integration_worktree=integration,
-        dev_commit=dev_commit,
-        runtime_executable=runtime_executable,
-        role_bindings=roles,
-    )
-
-
-def discover_runner_directory(cwd: Path) -> Path:
-    """Find the Runner-owned common Git directory without launch preflight."""
-
-    try:
-        common_text = run_git(cwd, "rev-parse", "--git-common-dir")
-    except RunnerError as error:
-        raise RunnerError(
-            "PROJECT_NOT_FOUND",
-            "Agent Runner must be invoked from a configured Source Repository.",
-        ) from error
-    common = Path(common_text)
-    if not common.is_absolute():
-        common = cwd / common
-    return common.resolve() / "agent-runner"
-
-
 def provision_worktree(
     project: Project,
     task: Task,
@@ -404,6 +221,8 @@ def _registered_ticket_path_matches(
         len(relative.parts) == 2
         and relative.parts[1].startswith(task.id_stem_prefix)
     )
+
+
 def _worktree_for_branch(repository: Path, branch: str) -> Path:
     matches = [
         _resolve_path(
@@ -497,3 +316,226 @@ def _resolve_path(
         return path.resolve(strict=True)
     except (OSError, RuntimeError) as error:
         raise RunnerError(code, message) from error
+
+
+_ROOT_RUNNER_CONFIG = (".codex", "agent-runner", "config.yml")
+_ROOT_RUNNER_KEYS = frozenset(
+    {
+        "version",
+        "harness_root",
+        "repository",
+        "common_directory",
+        "default_runtime",
+        "worktree_root",
+        "integration_branch",
+        "runtimes",
+        "repository_skill_allowlist",
+    }
+)
+
+
+def discover_project(
+    cwd: Path,
+    *,
+    require_clean_integration: bool = True,
+    require_runtime_executable: bool = True,
+) -> Project:
+    """Discover one configured Harness Project only from its root entrypoint."""
+    harness_root, config = _load_harness_runner_config(cwd)
+    invalid = "Project Runner Config contains invalid project or Codex settings."
+    if (
+        set(config) != _ROOT_RUNNER_KEYS
+        or config.get("version") != RUNNER_CONFIG_VERSION
+    ):
+        raise RunnerError("RUNNER_CONFIG_INVALID", invalid)
+    if config.get("harness_root") != str(harness_root):
+        raise RunnerError("RUNNER_CONFIG_INVALID", invalid)
+    repository = _configured_absolute_directory(
+        config.get("repository"),
+        code="RUNNER_CONFIG_INVALID",
+        message=invalid,
+    )
+    common = _configured_absolute_directory(
+        config.get("common_directory"),
+        code="RUNNER_CONFIG_INVALID",
+        message=invalid,
+    )
+    worktree_root = _configured_absolute_directory(
+        config.get("worktree_root"),
+        code="RUNNER_CONFIG_INVALID",
+        message=invalid,
+    )
+    if (
+        repository.parent != harness_root
+        or worktree_root != harness_root / ".agent-worktrees"
+        or worktree_root.name != ".agent-worktrees"
+    ):
+        raise RunnerError("RUNNER_CONFIG_INVALID", invalid)
+    _validate_source_repository(repository, common, invalid)
+    runtime_name = os.environ.get("AGENT_RUNTIME", config.get("default_runtime"))
+    runtimes = config.get("runtimes")
+    if not isinstance(runtime_name, str) or not isinstance(runtimes, dict):
+        raise RunnerError(
+            "RUNNER_CONFIG_INVALID",
+            "Harness Runner Config does not define a valid default Runtime.",
+        )
+    runtime = runtimes.get(runtime_name)
+    if not isinstance(runtime, dict):
+        raise RunnerError(
+            "RUNTIME_NOT_CONFIGURED",
+            "The selected Agent Runtime is not configured for this project.",
+        )
+    if runtime_name != "codex":
+        raise RunnerError(
+            "RUNTIME_UNSUPPORTED",
+            "The selected Agent Runtime is not supported by this Runner.",
+        )
+    branch = config.get("integration_branch")
+    executable_value = runtime.get("executable")
+    roles = runtime.get("roles")
+    allowlist = config.get("repository_skill_allowlist")
+    if (
+        branch != "dev"
+        or not isinstance(executable_value, str)
+        or not Path(executable_value).is_absolute()
+        or not isinstance(roles, dict)
+        or any(
+            not isinstance(key, str) or not isinstance(value, str)
+            for key, value in roles.items()
+        )
+        or not isinstance(allowlist, list)
+        or any(not isinstance(name, str) or not name.strip() for name in allowlist)
+        or len(allowlist) != len(set(allowlist))
+    ):
+        raise RunnerError("RUNNER_CONFIG_INVALID", invalid)
+    runtime_executable = _resolve_path(
+        Path(executable_value),
+        code="RUNNER_CONFIG_INVALID",
+        message=invalid,
+        allow_missing=True,
+    )
+    if require_runtime_executable and (
+        not runtime_executable.is_file()
+        or not os.access(runtime_executable, os.X_OK)
+    ):
+        raise RunnerError(
+            "RUNTIME_EXECUTABLE_INVALID",
+            "The configured Codex Runtime executable is unavailable.",
+        )
+    integration = _worktree_for_branch(repository, branch)
+    expected_integration = _resolve_path(
+        worktree_root / "integration",
+        code="INTEGRATION_WORKTREE_INVALID",
+        message="The registered dev Integration Worktree is invalid.",
+    )
+    if integration != expected_integration or not integration.is_dir():
+        raise RunnerError(
+            "INTEGRATION_WORKTREE_INVALID",
+            "The registered dev Integration Worktree is invalid.",
+        )
+    if require_clean_integration and run_git(
+        integration, "status", "--porcelain"
+    ):
+        raise RunnerError(
+            "INTEGRATION_WORKTREE_DIRTY",
+            "The dev Integration Worktree must be clean before launch.",
+        )
+    dev_commit = run_git(repository, "rev-parse", "refs/heads/{0}".format(branch))
+    if run_git(integration, "rev-parse", "HEAD") != dev_commit:
+        raise RunnerError(
+            "INTEGRATION_WORKTREE_INVALID",
+            "The dev Integration Worktree is not at the registered dev state.",
+        )
+    state_directory = harness_root / "state"
+    if state_directory.is_symlink():
+        raise RunnerError("RUNNER_CONFIG_INVALID", invalid)
+    return Project(
+        harness_root=harness_root,
+        repository=repository,
+        common_directory=common,
+        runner_directory=harness_root / ".codex" / "agent-runner",
+        worktree_root=worktree_root,
+        state_directory=_resolve_path(
+            state_directory,
+            code="RUNNER_CONFIG_INVALID",
+            message=invalid,
+            allow_missing=True,
+        ),
+        integration_branch=branch,
+        integration_worktree=integration,
+        dev_commit=dev_commit,
+        runtime_executable=runtime_executable,
+        role_bindings=roles,
+        repository_skill_allowlist=tuple(allowlist),
+    )
+
+
+def discover_runner_directory(cwd: Path) -> Path:
+    """Locate Runner-owned transport state from the Harness Project Root."""
+    harness_root, _ = _load_harness_runner_config(cwd)
+    return harness_root / ".codex" / "agent-runner"
+
+
+def _load_harness_runner_config(cwd: Path) -> tuple[Path, Dict[str, object]]:
+    root = _resolve_path(
+        cwd,
+        code="PROJECT_NOT_FOUND",
+        message="Agent Runner must be invoked from the Harness Project Root.",
+    )
+    config_file = root.joinpath(*_ROOT_RUNNER_CONFIG)
+    try:
+        if config_file.is_symlink() or not config_file.is_file():
+            raise FileNotFoundError(config_file)
+        config = yaml.safe_load(config_file.read_text(encoding="utf-8"))
+    except FileNotFoundError as error:
+        raise RunnerError(
+            "RUNNER_CONFIG_NOT_FOUND",
+            "Harness Runner Config was not found at the Harness Project Root.",
+        ) from error
+    except (OSError, UnicodeError, yaml.YAMLError) as error:
+        raise RunnerError(
+            "RUNNER_CONFIG_INVALID",
+            "Harness Runner Config is not readable valid YAML.",
+        ) from error
+    if not isinstance(config, dict):
+        raise RunnerError(
+            "RUNNER_CONFIG_INVALID", "Harness Runner Config must be a mapping."
+        )
+    return root, config
+
+
+def _configured_absolute_directory(
+    value: object,
+    *,
+    code: str,
+    message: str,
+) -> Path:
+    if not isinstance(value, str) or not Path(value).is_absolute():
+        raise RunnerError(code, message)
+    return _resolve_path(Path(value), code=code, message=message)
+
+
+def _validate_source_repository(
+    repository: Path,
+    common: Path,
+    invalid: str,
+) -> None:
+    try:
+        top_level = _resolve_path(
+            Path(run_git(repository, "rev-parse", "--show-toplevel")),
+            code="RUNNER_CONFIG_INVALID",
+            message=invalid,
+        )
+        common_text = run_git(repository, "rev-parse", "--git-common-dir")
+        discovered_common = Path(common_text)
+        if not discovered_common.is_absolute():
+            discovered_common = repository / discovered_common
+        discovered_common = _resolve_path(
+            discovered_common,
+            code="RUNNER_CONFIG_INVALID",
+            message=invalid,
+        )
+    except RunnerError as error:
+        raise RunnerError("RUNNER_CONFIG_INVALID", invalid) from error
+    if top_level != repository or discovered_common != common:
+        raise RunnerError("RUNNER_CONFIG_INVALID", invalid)

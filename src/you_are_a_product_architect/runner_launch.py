@@ -12,7 +12,13 @@ from typing import Any, Dict, Optional, Tuple
 
 import yaml
 
-from .codex_adapter import CodexAdapterError, CodexRole, resolve_codex_role
+from .codex_adapter import (
+    CodexAdapterError,
+    CodexRole,
+    EffectiveSkill,
+    resolve_codex_role,
+    resolve_effective_skills,
+)
 from .runner_batch import prepare_evidence, read_batch, retain_batch
 from .runner_io import (
     ActiveTurnBusyError,
@@ -67,15 +73,20 @@ def launch_batch(batch_file: Path, cwd: Path) -> LaunchResponse:
         )
     _preflight_plan_collisions(project, launch_plans)
     for plan in launch_plans:
-        _resolve_role(project.integration_worktree, plan.binding)
+        _resolve_role(project.runtime_store, plan.binding)
         exists = preflight_worktree(
             project,
             plan.task,
             plan.branch,
             plan.worktree,
         )
+        _resolve_skills(
+            project,
+            plan.worktree if exists else project.integration_worktree,
+            plan.task,
+        )
         if exists:
-            _resolve_role(plan.worktree, plan.binding)
+            _resolve_role(project.runtime_store, plan.binding)
 
     try:
         for plan in launch_plans:
@@ -87,7 +98,7 @@ def launch_batch(batch_file: Path, cwd: Path) -> LaunchResponse:
         for plan in launch_plans:
             if plan.active_turn is not None:
                 release_active_turn(
-                    project.common_directory / "agent-runner",
+                    project.runner_directory,
                     plan.active_turn,
                 )
         raise
@@ -135,7 +146,8 @@ def _launch_task(
         alias_history = _read_alias_history(evidence, run_id, task)
         provision_worktree(project, task, plan.branch, plan.worktree)
         _ensure_scoped_scratch(plan.worktree, evidence)
-        role = _resolve_role(plan.worktree, plan.binding)
+        role = _resolve_role(project.runtime_store, plan.binding)
+        effective_skills = _resolve_skills(project, plan.worktree, task)
         alias, mapping = _start_turn(
             project=project,
             run_id=run_id,
@@ -146,6 +158,7 @@ def _launch_task(
             evidence=evidence,
             active_turn=active_turn,
             alias_history=alias_history,
+            effective_skills=effective_skills,
         )
         _write_metadata(
             evidence=evidence,
@@ -156,6 +169,8 @@ def _launch_task(
             aliases=alias_history + (alias,),
             branch=plan.branch,
             worktree=plan.worktree,
+            requested_skills=task.requested_skills,
+            effective_skills=effective_skills,
         )
     except RunnerError as error:
         release_reservation = error.release_reservation
@@ -166,7 +181,7 @@ def _launch_task(
             release_reservation = False
         if release_reservation:
             release_active_turn(
-                project.common_directory / "agent-runner", active_turn
+                project.runner_directory, active_turn
             )
         result["launch_status"] = "failed"
         result["error"] = error.as_document()
@@ -241,7 +256,7 @@ def _reserve_active_turn(
     task: Task,
     worktree: Path,
 ) -> ActiveTurnReservation:
-    runner_directory = project.common_directory / "agent-runner"
+    runner_directory = project.runner_directory
     try:
         return create_active_turn_reservation(
             runner_directory,
@@ -300,8 +315,9 @@ def _start_turn(
     evidence: Path,
     active_turn: ActiveTurnReservation,
     alias_history: Tuple[str, ...],
+    effective_skills: Tuple[EffectiveSkill, ...],
 ) -> Tuple[str, Dict[str, Any]]:
-    session_root = project.common_directory / "agent-runner" / "sessions"
+    session_root = project.runner_directory / "sessions"
     try:
         session_root.mkdir(parents=True, exist_ok=True)
         alias, session_directory = _reserve_alias(
@@ -332,6 +348,8 @@ def _start_turn(
                     worktree=worktree,
                     evidence=evidence,
                     git_common_directory=project.common_directory,
+                    runtime_store=project.runtime_store,
+                    effective_skills=effective_skills,
                 ),
                 "active_turn_key": active_turn.key,
                 "active_turn_device": active_turn.device,
@@ -551,6 +569,8 @@ def _write_metadata(
     branch: str,
     worktree: Path,
     aliases: Tuple[str, ...],
+    requested_skills: Tuple[str, ...],
+    effective_skills: Tuple[EffectiveSkill, ...],
 ) -> None:
     try:
         write_yaml_durably(
@@ -567,6 +587,10 @@ def _write_metadata(
                 "branch": branch,
                 "worktree_path": str(worktree),
                 "ticket_file": str(task.ticket_file),
+                "requested_skills": list(requested_skills),
+                "effective_skills": [
+                    skill.evidence_entry() for skill in effective_skills
+                ],
             },
         )
     except (OSError, yaml.YAMLError) as error:
@@ -576,8 +600,24 @@ def _write_metadata(
         ) from error
 
 
-def _resolve_role(worktree: Path, binding: str) -> CodexRole:
+def _resolve_role(runtime_store: Path, binding: str) -> CodexRole:
     try:
-        return resolve_codex_role(worktree, binding)
+        return resolve_codex_role(runtime_store, binding)
+    except CodexAdapterError as error:
+        raise RunnerError(error.code, error.message) from error
+
+
+def _resolve_skills(
+    project: Project,
+    worktree: Path,
+    task: Task,
+) -> Tuple[EffectiveSkill, ...]:
+    try:
+        return resolve_effective_skills(
+            project.runtime_store,
+            worktree,
+            task.role,
+            task.requested_skills,
+        )
     except CodexAdapterError as error:
         raise RunnerError(error.code, error.message) from error

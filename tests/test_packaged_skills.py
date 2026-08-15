@@ -34,6 +34,9 @@ SUPPORTED_UPSTREAM_SKILL_FILES = {
 
 
 def installed_python(installed_commands: InstalledCommands) -> Path:
+    candidate = installed_commands.product.parent / "python"
+    if candidate.is_file():
+        return candidate
     for line in installed_commands.product.read_text(encoding="utf-8").splitlines():
         prefix = "'''exec' '"
         if line.startswith(prefix):

@@ -23,6 +23,10 @@ Repository and its disposable and durable Harness material:
 
 ```text
 <harness-project-root>/
+├── .codex/                               Harness Runtime Store
+│   ├── agents/                            canonical Harness roles
+│   ├── hooks/                             Harness Worktree Guard
+│   └── skills/                            supported Harness Skills
 ├── <repository-directory>/                  Primary Worktree on main
 ├── .agent-worktrees/
 │   ├── integration/                         Integration Worktree on dev
@@ -49,18 +53,17 @@ you-are-a-product-architect setup
 ```
 
 Select the existing Primary Worktree when prompted. If required Skills are
-missing, choose `project-local` to copy the release-supported Skills into the
-Integration Worktree, or stop and install them through the Runtime's normal
-user scope before rerunning setup. Setup creates or registers `dev`, writes
-the Codex roles and Worktree Guard only in the Integration Worktree, and makes
-`.scratch` point at the Harness State Directory. It does not clone a source
-repository, write `~/.codex`, alter credentials, or change the Primary
-Worktree.
+missing, setup asks once whether to install the supported copies in the
+Harness Runtime Store; declining stops before setup writes anything. Setup
+creates or registers `dev`, installs configuration, roles, Hooks, and supported
+Skills under the root `.codex/` Runtime Store, and makes the Integration
+Worktree's ignored `.scratch` point at the Harness State Directory. It does
+not clone a source repository, write `~/.codex`, alter credentials, or change
+the Primary Worktree or Source Repository Runtime files.
 
-Setup deliberately stops before committing. Review and commit the generated
-`.codex/` and selected `.agents/skills/` resources on `dev` before dispatching
-an Engineer. Runner preflight requires that clean, committed state so Ticket
-Worktrees inherit the reviewed configuration.
+The Runtime Store is Harness-owned rather than committed into `dev`; Ticket
+Worktrees do not inherit Harness roles, Hooks, or Harness Skills. Runner still
+requires a clean `dev` Integration Worktree before dispatching an Engineer.
 
 Treat tracker binding, repository instructions, and domain documentation as
 target-project concerns; setup does not impose this repository's choices on a
@@ -72,14 +75,16 @@ Main selects the ticket, tier, and integration order. The Runner is mechanical
 transport only: it neither reads a tracker nor discovers a queue.
 
 Create a YAML batch containing one `run_id` and one to four selected tasks
-(`ticket_id`, `ticket_name`, `role`, `ticket_file`, and optionally a concise
-`instruction`), then launch it from the Integration Worktree:
+(`ticket_id`, `ticket_name`, `role`, `ticket_file`, optional semantic `skills`,
+and optionally a concise `instruction`), then launch it from the Harness
+Project Root:
 
 ```text
 agent-runner --batch-input <batch.yml>
 ```
 
-The public Runner commands all emit one YAML result document on stdout:
+Run every public Runner command from the Harness Project Root; each emits one
+YAML result document on stdout:
 
 ```text
 agent-runner status <alias> [<alias>...]
@@ -88,11 +93,17 @@ agent-runner interrupt <alias>
 agent-runner cleanup --run-id <run-id> --ticket-id <ticket-id>
 ```
 
+Repository Skills are disabled by default. A task may name only the Repository
+Skills it needs; Runner resolves each name in the Ticket Worktree and records
+both requested and effective selections in durable ticket evidence. The
+root-owned Runner configuration exposes a persistent Repository Skill allowlist
+for Main, but allowlisting never enables a Skill by itself.
+
 Use `status` only for aliases Main explicitly supplies. With the Codex V1
 Runtime, `send` can resume an idle session but cannot inject live input into a
 running turn; Main may explicitly interrupt and then send when that is the
-intended recovery. A candidate is committed in its Ticket Worktree. After
-review evidence is adjudicated by Main, Main merges the candidate into `dev`
+intended recovery. Review and commit the candidate in its Ticket Worktree.
+After review evidence is adjudicated by Main, Main merges the candidate into `dev`
 in the Integration Worktree and runs the target project's validation there.
 
 After that validation succeeds, run `agent-runner cleanup` for the stable run

@@ -24,15 +24,15 @@ def _primary_worktree_prompt() -> Path:
     ).resolve()
 
 
-def _missing_skill_action(missing_skills: tuple[str, ...]) -> str:
+def _confirm_missing_skill_installation(missing_skills: tuple[str, ...]) -> bool:
     click.echo(
         "Missing required core Skills: {0}".format(
             ", ".join(missing_skills)
         )
     )
-    return click.prompt(
-        "Choose Skill installation",
-        type=click.Choice(("project-local", "independent")),
+    return click.confirm(
+        "Install the missing Skills into this Harness Project?",
+        default=True,
     )
 
 
@@ -57,8 +57,7 @@ def setup() -> None:
 
     install_missing_skills = False
     if plan.missing_skills:
-        action = _missing_skill_action(plan.missing_skills)
-        if action == "independent":
+        if not _confirm_missing_skill_installation(plan.missing_skills):
             raise click.ClickException(
                 "Setup stopped before any setup mutation. Install the missing "
                 "Skills independently in the Runtime user scope and rerun setup."
@@ -92,7 +91,7 @@ def setup() -> None:
         click.echo("Core Skills: OK")
     click.echo(result)
     click.echo("Harness Project setup complete.")
-    click.echo("Review and commit the Runtime resources on dev.")
+    click.echo("Harness Runtime Store installed at {0}.".format(Path.cwd() / ".codex"))
     click.echo(
         "Invoke $setup-matt-pocock-skills separately if repository metadata "
         "still needs configuration."

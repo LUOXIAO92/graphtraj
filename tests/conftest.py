@@ -66,12 +66,6 @@ def find_uv() -> Optional[Path]:
     return None
 
 
-def current_revision() -> str:
-    result = run_process(["git", "rev-parse", "HEAD"], cwd=PROJECT_ROOT)
-    result.check_returncode()
-    return result.stdout.strip()
-
-
 @pytest.fixture
 def temporary_git_repository(tmp_path: Path) -> Path:
     repository = tmp_path / "target-project"
@@ -234,40 +228,44 @@ def fake_codex(tmp_path: Path) -> FakeCodex:
 
 @pytest.fixture
 def installed_commands(tmp_path: Path) -> InstalledCommands:
-    uv = find_uv()
-    if uv is None:
-        pytest.skip("uv is unavailable; set UV to its executable or add uv to PATH")
+    """Install the local candidate before exercising its public CLIs."""
 
-    tool_directory = tmp_path / "uv-tools"
-    bin_directory = tmp_path / "uv-bin"
-    environment = os.environ.copy()
-    environment.update(
-        {
-            "UV_TOOL_DIR": str(tool_directory),
-            "UV_TOOL_BIN_DIR": str(bin_directory),
-            "UV_CACHE_DIR": str(tmp_path / "uv-cache"),
-            "UV_NO_MANAGED_PYTHON": "1",
-        }
-    )
-    source = "git+{0}@{1}".format(PROJECT_ROOT.resolve().as_uri(), current_revision())
-    result = run_process(
+    environment = tmp_path / "installed-environment"
+    subprocess.run(
         [
-            str(uv),
-            "tool",
-            "install",
-            "--force",
-            "--python",
             sys.executable,
-            source,
+            "-m",
+            "venv",
+            "--system-site-packages",
+            str(environment),
         ],
         cwd=PROJECT_ROOT,
-        env=environment,
+        check=True,
+    )
+    python = environment / "bin" / "python"
+    result = run_process(
+        [
+            str(python),
+            "-m",
+            "pip",
+            "install",
+            "--disable-pip-version-check",
+            "--no-build-isolation",
+            "--no-deps",
+            str(PROJECT_ROOT),
+        ],
+        cwd=PROJECT_ROOT,
     )
     result.check_returncode()
-    assert sorted(path.name for path in bin_directory.iterdir()) == [
+    bin_directory = environment / "bin"
+    assert {
+        path.name for path in bin_directory.iterdir()
+    }.issuperset(
+        {
         "agent-runner",
         "you-are-a-product-architect",
-    ]
+        }
+    )
     return InstalledCommands(
         product=bin_directory / "you-are-a-product-architect",
         runner=bin_directory / "agent-runner",

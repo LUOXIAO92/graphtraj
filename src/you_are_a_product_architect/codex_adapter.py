@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 import re
+import shlex
 import signal
 import subprocess
 import time
@@ -16,6 +18,7 @@ from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from .runtime_adapter import RuntimeAdapterError, SessionStarted
 from .runner_transport import runtime_turn_outcome
+from .skill_check import CORE_SKILL_NAMES, core_skill_paths, declared_skill_name
 
 
 SUPPORTED_ROLE_KEYS = frozenset(
@@ -51,8 +54,29 @@ class CodexAdapterError(RuntimeAdapterError):
 
 
 @dataclass(frozen=True)
+class EffectiveSkill:
+    """One explicit Codex Skill selection persisted with a launch request."""
+
+    name: str
+    path: Path
+    enabled: bool
+    source: str
+
+    def config_entry(self) -> Dict[str, Any]:
+        return {"path": str(self.path), "enabled": self.enabled}
+
+    def evidence_entry(self) -> Dict[str, str | bool]:
+        return {
+            "name": self.name,
+            "path": str(self.path),
+            "enabled": self.enabled,
+            "source": self.source,
+        }
+
+
+@dataclass(frozen=True)
 class CodexRole:
-    """Validated effective settings for one project-local custom Agent."""
+    """Validated effective settings for one Harness-owned custom Agent."""
 
     name: str
     model: str
@@ -69,6 +93,8 @@ class CodexRole:
         worktree: Path,
         evidence: Path,
         git_common_directory: Path,
+        runtime_store: Path,
+        effective_skills: Tuple[EffectiveSkill, ...],
     ) -> Dict[str, Any]:
         """Render the private request consumed by this Adapter's worker."""
 
@@ -90,8 +116,16 @@ class CodexRole:
         overrides = (
             ("model_reasoning_effort", self.reasoning_effort),
             ("developer_instructions", self.developer_instructions),
-            ("hooks", self.hooks),
+            ("hooks", _root_owned_hooks(self.hooks, runtime_store)),
             ("agents", self.agents),
+            (
+                "projects",
+                {str(worktree): {"trust_level": "untrusted"}},
+            ),
+            (
+                "skills",
+                {"config": [skill.config_entry() for skill in effective_skills]},
+            ),
         )
         for key, value in overrides:
             arguments.extend(("-c", "{0}={1}".format(key, _toml_value(value))))
@@ -122,8 +156,6 @@ class CodexTurn:
 
         arguments, worktree = _validate_launch_request(self._request)
         if self._expected_session is not None:
-            _verify_packaged_config(worktree)
-            _verify_packaged_guard(worktree)
             arguments = _resume_arguments(arguments, self._expected_session)
         events_file = self._session_directory / "events.jsonl"
         stderr_file = self._session_directory / "stderr.log"
@@ -374,15 +406,15 @@ def _process_group_is_alive(process_group: int) -> bool:
     return True
 
 
-def resolve_codex_role(worktree: Path, binding: str) -> CodexRole:
-    """Resolve and vet one project custom-Agent name from a Worktree."""
+def resolve_codex_role(runtime_store: Path, binding: str) -> CodexRole:
+    """Resolve and vet one canonical role from the Harness Runtime Store."""
 
-    _verify_packaged_config(worktree)
-    agent_directory = worktree / ".codex" / "agents"
+    _verify_packaged_config(runtime_store)
+    agent_directory = runtime_store / "agents"
     if not agent_directory.is_dir() or agent_directory.is_symlink():
         raise CodexAdapterError(
             "ROLE_NOT_FOUND",
-            "The configured Codex role was not found in project Agent files.",
+            "The configured Codex role was not found in Harness Agent files.",
         )
 
     matching: List[Tuple[Path, Dict[str, Any]]] = []
@@ -390,14 +422,14 @@ def resolve_codex_role(worktree: Path, binding: str) -> CodexRole:
         if path.is_symlink() or not path.is_file():
             raise CodexAdapterError(
                 "ROLE_CONFIG_INVALID",
-                "Project Codex Agent files must be regular files.",
+                "Harness Codex Agent files must be regular files.",
             )
         try:
             document = tomllib.loads(path.read_text(encoding="utf-8"))
         except (OSError, UnicodeError, tomllib.TOMLDecodeError) as error:
             raise CodexAdapterError(
                 "ROLE_CONFIG_INVALID",
-                "A project Codex Agent file is not valid readable TOML.",
+                "A Harness Codex Agent file is not valid readable TOML.",
             ) from error
         if document.get("name") == binding:
             matching.append((path, document))
@@ -405,12 +437,12 @@ def resolve_codex_role(worktree: Path, binding: str) -> CodexRole:
     if not matching:
         raise CodexAdapterError(
             "ROLE_NOT_FOUND",
-            "The configured Codex role was not found in project Agent files.",
+            "The configured Codex role was not found in Harness Agent files.",
         )
     if len(matching) != 1:
         raise CodexAdapterError(
             "ROLE_DUPLICATE",
-            "The configured Codex role resolves to more than one project Agent file.",
+            "The configured Codex role resolves to more than one Harness Agent file.",
         )
 
     _, document = matching[0]
@@ -421,7 +453,7 @@ def resolve_codex_role(worktree: Path, binding: str) -> CodexRole:
             "ROLE_HOOK_MISMATCH",
             "The configured Codex role does not contain the packaged Worktree Guard hooks.",
         )
-    _verify_packaged_guard(worktree)
+    _verify_packaged_guard(runtime_store)
 
     return CodexRole(
         name=binding,
@@ -504,11 +536,11 @@ def _packaged_role(binding: str) -> Dict[str, Any]:
         ) from error
 
 
-def _verify_packaged_guard(worktree: Path) -> None:
+def _verify_packaged_guard(runtime_store: Path) -> None:
     resource = resources.files("you_are_a_product_architect.resources").joinpath(
         "codex", "hooks", "worktree_guard.py"
     )
-    guard = worktree / ".codex" / "hooks" / "worktree_guard.py"
+    guard = runtime_store / "hooks" / "worktree_guard.py"
     try:
         if guard.is_symlink() or not guard.is_file():
             raise OSError("guard is not a regular file")
@@ -517,35 +549,185 @@ def _verify_packaged_guard(worktree: Path) -> None:
     except OSError as error:
         raise CodexAdapterError(
             "ROLE_GUARD_MISMATCH",
-            "The project Worktree Guard does not match the installed resource.",
+            "The Harness Worktree Guard does not match the installed resource.",
         ) from error
     if project != installed:
         raise CodexAdapterError(
             "ROLE_GUARD_MISMATCH",
-            "The project Worktree Guard does not match the installed resource.",
+            "The Harness Worktree Guard does not match the installed resource.",
         )
 
 
-def _verify_packaged_config(worktree: Path) -> None:
+def _verify_packaged_config(runtime_store: Path) -> None:
     resource = resources.files("you_are_a_product_architect.resources").joinpath(
         "codex", "config.toml"
     )
-    config = worktree / ".codex" / "config.toml"
+    config = runtime_store / "config.toml"
     try:
         if config.is_symlink() or not config.is_file():
             raise OSError("config is not a regular file")
-        installed = resource.read_bytes()
-        project = config.read_bytes()
-    except OSError as error:
-        raise CodexAdapterError(
-            "PROJECT_CONFIG_MISMATCH",
-            "The project Codex config does not match the installed resource.",
-        ) from error
-    if project != installed:
-        raise CodexAdapterError(
-            "PROJECT_CONFIG_MISMATCH",
-            "The project Codex config does not match the installed resource.",
+        installed = tomllib.loads(resource.read_text(encoding="utf-8"))
+        runtime_config = tomllib.loads(config.read_text(encoding="utf-8"))
+        skill_paths = core_skill_paths(
+            runtime_store,
+            Path.home() / ".agents" / "skills",
         )
+        if set(skill_paths) != set(CORE_SKILL_NAMES):
+            raise OSError("required core Skills are unavailable")
+    except (OSError, UnicodeError, tomllib.TOMLDecodeError) as error:
+        raise CodexAdapterError(
+            "PROJECT_CONFIG_MISMATCH",
+            "The Harness Codex config does not match the installed resource.",
+        ) from error
+    installed["skills"] = {
+        "config": [
+            {"path": str(skill_paths[name]), "enabled": True}
+            for name in CORE_SKILL_NAMES
+        ]
+    }
+    if runtime_config != installed:
+        raise CodexAdapterError(
+            "PROJECT_CONFIG_MISMATCH",
+            "The Harness Codex config does not match the installed resource.",
+        )
+
+
+ENGINEER_ROLES = frozenset(
+    {"engineer-junior", "engineer-senior", "engineer-expert"}
+)
+ENGINEER_REQUIRED_SKILLS = ("implement", "tdd", "code-review")
+
+
+def resolve_effective_skills(
+    runtime_store: Path,
+    worktree: Path,
+    role: str,
+    requested_names: Tuple[str, ...],
+) -> Tuple[EffectiveSkill, ...]:
+    """Build the one explicit per-Skill configuration for an Engineer turn."""
+    if role not in ENGINEER_ROLES:
+        raise CodexAdapterError(
+            "ROLE_NOT_SUPPORTED",
+            "The configured Codex role is not supported by this Runner.",
+        )
+    required_names = ENGINEER_REQUIRED_SKILLS
+    runtime_skills = _discover_skill_files(runtime_store / "skills")
+    user_skills = _discover_skill_files(Path.home() / ".agents" / "skills")
+    effective: List[EffectiveSkill] = []
+    for name in required_names:
+        matches = runtime_skills.get(name, ())
+        source = "harness"
+        if not matches:
+            matches = user_skills.get(name, ())
+            source = "runtime-user"
+        if len(matches) != 1:
+            raise CodexAdapterError(
+                "HARNESS_SKILL_NOT_FOUND",
+                "The required Harness Skill {0} is not uniquely available.".format(
+                    name
+                ),
+            )
+        effective.append(
+            EffectiveSkill(
+                name=name,
+                path=matches[0],
+                enabled=True,
+                source=source,
+            )
+        )
+    repository_skills = _discover_skill_files(
+        worktree / ".agents" / "skills"
+    )
+    selected_paths = set()
+    for name in requested_names:
+        matches = repository_skills.get(name, ())
+        if not matches:
+            raise CodexAdapterError(
+                "REPOSITORY_SKILL_NOT_FOUND",
+                "The requested Repository Skill {0} was not found in the Ticket Worktree.".format(
+                    name
+                ),
+            )
+        if len(matches) != 1:
+            raise CodexAdapterError(
+                "REPOSITORY_SKILL_AMBIGUOUS",
+                "The requested Repository Skill {0} is ambiguous: {1}.".format(
+                    name,
+                    ", ".join(str(path) for path in matches),
+                ),
+            )
+        selected_paths.add(matches[0])
+    repository_entries = [
+        (name, path)
+        for name, paths in repository_skills.items()
+        for path in paths
+    ]
+    for name, path in sorted(repository_entries, key=lambda entry: str(entry[1])):
+        effective.append(
+            EffectiveSkill(
+                name=name,
+                path=path,
+                enabled=path in selected_paths,
+                source="repository",
+            )
+        )
+    return tuple(effective)
+
+
+def _discover_skill_files(root: Path) -> Dict[str, Tuple[Path, ...]]:
+    """Return valid declared Skills beneath one explicit Runtime boundary."""
+    try:
+        if root.is_symlink() or not root.is_dir():
+            return {}
+        resolved_root = root.resolve(strict=True)
+        candidates = tuple(sorted(root.rglob("SKILL.md")))
+    except OSError:
+        return {}
+    discovered: Dict[str, List[Path]] = {}
+    for candidate in candidates:
+        try:
+            if candidate.is_symlink() or not candidate.is_file():
+                continue
+            resolved = candidate.resolve(strict=True)
+            if resolved_root not in (resolved, *resolved.parents):
+                continue
+            name = declared_skill_name(candidate.read_bytes())
+        except OSError:
+            continue
+        if name is not None:
+            discovered.setdefault(name, []).append(resolved)
+    return {name: tuple(paths) for name, paths in discovered.items()}
+
+
+def _root_owned_hooks(
+    packaged_hooks: Mapping[str, Any],
+    runtime_store: Path,
+) -> Mapping[str, Any]:
+    """Translate canonical Hooks to the root-owned Worktree Guard."""
+    _verify_packaged_guard(runtime_store)
+    hooks = copy.deepcopy(dict(packaged_hooks))
+    command = "python3 {0}".format(
+        shlex.quote(str(runtime_store / "hooks" / "worktree_guard.py"))
+    )
+    try:
+        for event in ("PreToolUse", "SubagentStart"):
+            entries = hooks[event]
+            if not isinstance(entries, list):
+                raise ValueError("Hook entries must be a list")
+            for entry in entries:
+                commands = entry["hooks"]
+                if not isinstance(commands, list):
+                    raise ValueError("Nested Hook entries must be a list")
+                for hook in commands:
+                    if not isinstance(hook, dict) or hook.get("type") != "command":
+                        raise ValueError("Hook must be a command")
+                    hook["command"] = command
+    except (KeyError, TypeError, ValueError) as error:
+        raise CodexAdapterError(
+            "ROLE_HOOK_MISMATCH",
+            "The configured Codex role does not contain the packaged Worktree Guard hooks.",
+        ) from error
+    return hooks
 
 
 def _toml_value(value: Any) -> str:

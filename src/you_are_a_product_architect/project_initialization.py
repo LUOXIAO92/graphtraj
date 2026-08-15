@@ -11,7 +11,7 @@ from typing import List, Optional, Tuple
 from .codex_project import CodexProjectError, CodexProjectFiles
 from .git_repository import GitRepositoryError, GitTreeEntry, SourceRepository
 from .path_safety import relative_parent_paths
-from .skill_check import CORE_SKILL_NAMES, check_core_skills, declared_skill_name
+from .skill_check import CORE_SKILL_NAMES, check_core_skills, core_skill_paths
 from .supported_skills import (
     SupportedSkills,
     SupportedSkillsError,
@@ -239,26 +239,6 @@ def _raise_conflicts(conflicts: List[str]) -> None:
         )
 
 
-def _git_project_skill_names(
-    repository: SourceRepository,
-    revision: str,
-) -> set[str]:
-    discovered = set()
-    for path in repository.tree_paths(revision, ".agents/skills"):
-        parts = Path(path).parts
-        if len(parts) != 4 or parts[:2] != (".agents", "skills"):
-            continue
-        if parts[-1] != "SKILL.md":
-            continue
-        entry = repository.tree_entry(revision, path)
-        if entry is None or entry.kind != "file" or entry.content is None:
-            continue
-        name = declared_skill_name(entry.content)
-        if name is not None:
-            discovered.add(name)
-    return discovered
-
-
 def _recoverable_supported_skills(
     view: _TargetView,
     supported_skills: SupportedSkills,
@@ -266,7 +246,7 @@ def _recoverable_supported_skills(
     recoverable = []
     for name in CORE_SKILL_NAMES:
         manifest = supported_skills.manifest(name)
-        root = ".agents/skills/{0}".format(name)
+        root = "skills/{0}".format(name)
         root_entry = view.entry(root)
         if root_entry is None or root_entry.kind != "directory":
             continue
@@ -307,6 +287,9 @@ def _recoverable_supported_skills(
 class ProjectSetupPlan:
     """One preflighted setup action with a single explicit mutation step."""
 
+    harness_root: Path
+    runtime_store: Path
+    runtime_user_skill_root: Path
     repository: SourceRepository
     worktree_root: Path
     integration_worktree: Path
@@ -328,6 +311,29 @@ class ProjectSetupPlan:
         if install_missing_skills:
             selected.update(self.missing_skills)
         return tuple(name for name in CORE_SKILL_NAMES if name in selected)
+
+    def _runtime_skill_paths(
+        self,
+        installed_skill_names: Tuple[str, ...],
+    ) -> tuple[Path, ...]:
+        """Choose the exact root-or-user core Skill paths Main will receive."""
+
+        available = core_skill_paths(
+            self.runtime_store,
+            self.runtime_user_skill_root,
+        )
+        installed = set(installed_skill_names)
+        return tuple(
+            (
+                self.runtime_store / "skills" / name / "SKILL.md"
+            ).resolve()
+            if name in installed
+            else available.get(
+                name,
+                (self.runtime_store / "skills" / name / "SKILL.md").resolve(),
+            )
+            for name in CORE_SKILL_NAMES
+        )
 
     def preflight(
         self,
@@ -370,6 +376,12 @@ class ProjectSetupPlan:
         _preflight_directory(
             self.state_directory,
             "Harness State Directory",
+            actions,
+            conflicts,
+        )
+        _preflight_directory(
+            self.runtime_store,
+            "Harness Runtime Store",
             actions,
             conflicts,
         )
@@ -468,22 +480,24 @@ class ProjectSetupPlan:
                 self.integration_revision,
             )
         )
+        runtime_view = _TargetView(self.runtime_store)
         skill_names = self._skill_names_to_install(install_missing_skills)
+        runtime_skill_paths = self._runtime_skill_paths(skill_names)
         if skill_names:
             for name in skill_names:
                 manifest = self.supported_skills.manifest(name)
-                skill_relative_root = ".agents/skills/{0}".format(name)
+                skill_relative_root = "skills/{0}".format(name)
                 allowed_paths = allowed_manifest_paths(manifest)
                 unexpected_paths = tuple(
                     path
-                    for path in integration_view.paths_under(skill_relative_root)
+                    for path in runtime_view.paths_under(skill_relative_root)
                     if path not in allowed_paths
                 )
                 for unexpected_path in unexpected_paths:
                     _append_conflict(
                         conflicts,
-                        "Project-local Skill contains unsupported content: {0}".format(
-                            integration_view.display_path(
+                        "Harness Skill contains unsupported content: {0}".format(
+                            runtime_view.display_path(
                                 "{0}/{1}".format(
                                     skill_relative_root,
                                     unexpected_path,
@@ -493,20 +507,22 @@ class ProjectSetupPlan:
                     )
                 for resource_path, content in manifest.items():
                     _preflight_file(
-                        integration_view,
+                        runtime_view,
                         "{0}/{1}".format(skill_relative_root, resource_path),
                         content,
-                        "Project-local Skill {0}".format(name),
+                        "Harness Skill {0}".format(name),
                         actions,
                         conflicts,
                     )
 
-        for relative_path, content in self.codex_files.resources_by_path.items():
+        for relative_path, content in self.codex_files.runtime_resources(
+            runtime_skill_paths
+        ).items():
             _preflight_file(
-                integration_view,
-                ".codex/{0}".format(relative_path),
+                runtime_view,
+                relative_path,
                 content,
-                "Codex Runtime resource",
+                "Harness Runtime resource",
                 actions,
                 conflicts,
             )
@@ -596,14 +612,17 @@ class ProjectSetupPlan:
             )
 
         runner_content = self.codex_files.runner_config_content(
+            self.harness_root,
+            self.repository.primary_worktree,
+            self.repository.common_directory,
             self.worktree_root,
             self.runtime_executable,
         ).encode()
         _preflight_file(
-            common_view,
+            runtime_view,
             "agent-runner/config.yml",
             runner_content,
-            "Project Runner Config",
+            "Harness Runner Config",
             actions,
             conflicts,
         )
@@ -614,6 +633,7 @@ class ProjectSetupPlan:
     def apply(self, *, install_missing_skills: bool = False) -> str:
         preview = self.preflight(install_missing_skills=install_missing_skills)
         skill_names = self._skill_names_to_install(install_missing_skills)
+        runtime_skill_paths = self._runtime_skill_paths(skill_names)
         pending = tuple(
             action.description
             for action in preview.actions
@@ -633,6 +653,10 @@ class ProjectSetupPlan:
             self.state_directory.mkdir(parents=True, exist_ok=True)
             mark_completed(
                 _directory_action("Harness State Directory", self.state_directory)
+            )
+            self.runtime_store.mkdir(parents=True, exist_ok=True)
+            mark_completed(
+                _directory_action("Harness Runtime Store", self.runtime_store)
             )
             if self.proposed_base is not None:
                 self.repository.create_branch(
@@ -662,11 +686,14 @@ class ProjectSetupPlan:
 
             for name in skill_names:
                 self.supported_skills.install_missing(
-                    self.integration_worktree,
+                    self.runtime_store,
                     (name,),
                     on_action_complete=mark_completed,
                 )
             self.codex_files.install(
+                harness_root=self.harness_root,
+                source_repository=self.repository.primary_worktree,
+                skill_paths=runtime_skill_paths,
                 integration_worktree=self.integration_worktree,
                 state_directory=self.state_directory,
                 common_git_directory=self.repository.common_directory,
@@ -711,6 +738,8 @@ def plan_project_setup(
     worktree_root = harness_root / ".agent-worktrees"
     integration_worktree = worktree_root / "integration"
     state_directory = harness_root / "state"
+    runtime_store = harness_root / ".codex"
+    runtime_user_skill_root = Path.home() / ".agents" / "skills"
     try:
         repository = SourceRepository.from_primary(
             harness_root,
@@ -725,8 +754,8 @@ def plan_project_setup(
         codex_files = CodexProjectFiles.load()
         supported_skills = SupportedSkills.load()
         skill_statuses = check_core_skills(
-            integration_worktree,
-            Path.home() / ".agents" / "skills",
+            runtime_store,
+            runtime_user_skill_root,
         )
         discovered_skills = {
             status.name for status in skill_statuses if status.discovered
@@ -741,35 +770,20 @@ def plan_project_setup(
             if dev_exists
             else proposed_base
         )
-        materialized = (
-            registered_dev_worktree == integration_worktree.resolve()
-            and _filesystem_entry(integration_worktree) is not None
-            and _filesystem_entry(integration_worktree).kind == "directory"
-        )
-        integration_view = (
-            _TargetView(integration_worktree)
-            if materialized
-            else _TargetView(
-                integration_worktree,
-                repository,
-                integration_revision,
-            )
-        )
-        if not materialized:
-            discovered_skills.update(
-                _git_project_skill_names(repository, integration_revision)
-            )
         missing_skills = tuple(
             name for name in CORE_SKILL_NAMES if name not in discovered_skills
         )
         recoverable_skills = _recoverable_supported_skills(
-            integration_view,
+            _TargetView(runtime_store),
             supported_skills,
         )
     except (GitRepositoryError, OSError, SupportedSkillsError) as error:
         raise ProjectSetupError(str(error)) from error
 
     return ProjectSetupPlan(
+        harness_root=harness_root,
+        runtime_store=runtime_store,
+        runtime_user_skill_root=runtime_user_skill_root,
         repository=repository,
         worktree_root=worktree_root,
         integration_worktree=integration_worktree,

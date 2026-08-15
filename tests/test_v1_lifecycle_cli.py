@@ -21,7 +21,7 @@ from test_project_setup import (
 def wait_for_idle_outcome(
     installed_commands: InstalledCommands,
     *,
-    integration: Path,
+    harness_root: Path,
     environment: dict[str, str],
     alias: str,
     outcome: str,
@@ -40,7 +40,7 @@ def wait_for_idle_outcome(
     while time.monotonic() < deadline:
         result = run_process(
             [str(installed_commands.runner), "status", alias],
-            cwd=integration,
+            cwd=harness_root,
             env=environment,
         )
         assert result.returncode == 0, result.stderr
@@ -146,11 +146,13 @@ print("target validation passed")
         harness_root=harness_root,
         user_home=user_home,
         fake_codex=fake_codex,
-        answers="{0}\nproject-local\ny\n".format(primary.name),
+        answers="{0}\ny\ny\n".format(primary.name),
     )
 
     assert setup.returncode == 0, setup.stderr
-    assert "Review and commit the Runtime resources on dev." in setup.stdout
+    assert "Harness Runtime Store installed at {0}/.codex.".format(
+        harness_root
+    ) in setup.stdout
     assert git_output(primary, "branch", "--show-current") == "main"
     assert git_output(primary, "rev-parse", "HEAD") == main_before
     assert git_output(primary, "status", "--porcelain") == ""
@@ -160,18 +162,20 @@ print("target validation passed")
     assert git_output(integration, "branch", "--show-current") == "dev"
     assert (integration / ".scratch").resolve() == state.resolve()
     assert {
-        path.name for path in (integration / ".agents" / "skills").iterdir()
+        path.name for path in (harness_root / ".codex" / "skills").iterdir()
     } == set(CORE_SKILL_NAMES)
     for resource in (
-        integration / ".codex" / "config.toml",
-        integration / ".codex" / "hooks" / "worktree_guard.py",
-        integration / ".codex" / "agents" / "engineer-junior.toml",
-        integration / ".codex" / "agents" / "engineer-senior.toml",
-        integration / ".codex" / "agents" / "engineer-expert.toml",
-        integration / ".codex" / "agents" / "merge-resolver.toml",
-        integration / ".codex" / "agents" / "delivery-state.toml",
+        harness_root / ".codex" / "config.toml",
+        harness_root / ".codex" / "hooks" / "worktree_guard.py",
+        harness_root / ".codex" / "agents" / "engineer-junior.toml",
+        harness_root / ".codex" / "agents" / "engineer-senior.toml",
+        harness_root / ".codex" / "agents" / "engineer-expert.toml",
+        harness_root / ".codex" / "agents" / "merge-resolver.toml",
+        harness_root / ".codex" / "agents" / "delivery-state.toml",
     ):
         assert resource.is_file()
+    assert not (integration / ".codex").exists()
+    assert not (integration / ".agents").exists()
 
     after_setup = run_process(
         [str(installed_commands.product), "doctor"],
@@ -182,11 +186,6 @@ print("target validation passed")
     for name in CORE_SKILL_NAMES:
         assert "{0}: OK".format(name) in after_setup.stdout
 
-    run_process(["git", "add", ".codex", ".agents"], cwd=integration).check_returncode()
-    run_process(
-        ["git", "commit", "-m", "Configure Codex resources on dev"],
-        cwd=integration,
-    ).check_returncode()
     assert git_output(integration, "status", "--porcelain") == ""
 
     ticket_file = harness_root / "tickets" / "15-v1-lifecycle.md"
@@ -223,7 +222,7 @@ print("target validation passed")
 
     launch = run_process(
         [str(installed_commands.runner), "--batch-input", str(batch_file)],
-        cwd=integration,
+        cwd=harness_root,
         env=launch_environment,
         timeout=10,
     )
@@ -244,22 +243,12 @@ print("target validation passed")
     retained_batch = Path(launch_document["retained_batch_file"])
     assert retained_batch.read_bytes() == batch_content.encode("utf-8")
     assert (ticket_worktree / ".scratch" / "task-delivery").resolve() == evidence.resolve()
-    for resource in (
-        ticket_worktree / ".codex" / "hooks" / "worktree_guard.py",
-        ticket_worktree / ".codex" / "agents" / "engineer-junior.toml",
-        ticket_worktree / ".codex" / "agents" / "engineer-senior.toml",
-        ticket_worktree / ".codex" / "agents" / "engineer-expert.toml",
-        ticket_worktree / ".codex" / "agents" / "merge-resolver.toml",
-        ticket_worktree / ".codex" / "agents" / "delivery-state.toml",
-    ):
-        assert resource.is_file()
-    assert {
-        path.name for path in (ticket_worktree / ".agents" / "skills").iterdir()
-    } == set(CORE_SKILL_NAMES)
+    assert not (ticket_worktree / ".codex").exists()
+    assert not (ticket_worktree / ".agents").exists()
 
     running = run_process(
         [str(installed_commands.runner), "status", alias],
-        cwd=integration,
+        cwd=harness_root,
         env=environment,
     )
     assert running.returncode == 0, running.stderr
@@ -269,7 +258,7 @@ print("target validation passed")
 
     interrupted = run_process(
         [str(installed_commands.runner), "interrupt", alias],
-        cwd=integration,
+        cwd=harness_root,
         env=environment,
         timeout=10,
     )
@@ -280,7 +269,7 @@ print("target validation passed")
     }
     wait_for_idle_outcome(
         installed_commands,
-        integration=integration,
+        harness_root=harness_root,
         environment=environment,
         alias=alias,
         outcome="interrupted",
@@ -295,7 +284,7 @@ print("target validation passed")
             "--instruction",
             instruction,
         ],
-        cwd=integration,
+        cwd=harness_root,
         env={
             **environment,
             "FAKE_CODEX_CAPTURE_STDIN": "1",
@@ -322,7 +311,7 @@ print("target validation passed")
     assert yaml.safe_load(resumed.stdout) == {"alias": alias, "send_status": "sent"}
     wait_for_idle_outcome(
         installed_commands,
-        integration=integration,
+        harness_root=harness_root,
         environment=environment,
         alias=alias,
         outcome="completed",
@@ -381,7 +370,7 @@ print("target validation passed")
             "--ticket-id",
             "15",
         ],
-        cwd=integration,
+        cwd=harness_root,
         env=environment,
         timeout=10,
     )
@@ -401,7 +390,7 @@ print("target validation passed")
     assert branch_gone.returncode == 1
     alias_gone = run_process(
         [str(installed_commands.runner), "status", alias],
-        cwd=integration,
+        cwd=harness_root,
         env=environment,
     )
     alias_not_found = "The requested Engineer alias was not found."
@@ -430,7 +419,7 @@ print("target validation passed")
             "--ticket-id",
             "15",
         ],
-        cwd=integration,
+        cwd=harness_root,
         env=environment,
         timeout=10,
     )

@@ -1,5 +1,5 @@
-# This is committed into each configured Harness Project.  It intentionally
-# keeps machine-specific paths out of the project configuration.
+# This template lives in the Harness Runtime Store. Setup adds the
+# resolved core-Skill paths for its root-or-user Runtime scope.
 model = "gpt-5.6-sol"
 model_reasoning_effort = "xhigh"
 personality = "pragmatic"

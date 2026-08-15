@@ -29,11 +29,6 @@ def configure_harness(
         answers="{0}\ny\n".format(temporary_git_repository.name),
     )
     assert setup_result.returncode == 0, setup_result.stderr
-    run_process(["git", "add", ".codex"], cwd=integration).check_returncode()
-    run_process(
-        ["git", "commit", "-m", "Configure Codex on dev"],
-        cwd=integration,
-    ).check_returncode()
     environment = os.environ.copy()
     environment.update(
         {
@@ -92,7 +87,7 @@ def test_installed_runner_launches_four_exact_main_selected_tasks_in_order(
 
     result = run_process(
         [str(installed_commands.runner), "--batch-input", str(batch_file)],
-        cwd=integration,
+        cwd=harness_root,
         env=environment,
         timeout=10,
     )
@@ -140,17 +135,10 @@ def test_installed_runner_launches_four_exact_main_selected_tasks_in_order(
             "session": "fake-thread",
         }
 
-    common_directory = Path(
-        run_process(
-            ["git", "rev-parse", "--git-common-dir"],
-            cwd=temporary_git_repository,
-        ).stdout.strip()
-    )
-    if not common_directory.is_absolute():
-        common_directory = temporary_git_repository / common_directory
     for alias in aliases:
         wait_for_file(
-            common_directory.resolve()
+            harness_root
+            / ".codex"
             / "agent-runner"
             / "sessions"
             / alias
@@ -200,7 +188,7 @@ def test_installed_runner_rejects_duplicate_ticket_ids_before_any_start(
 
     result = run_process(
         [str(installed_commands.runner), "--batch-input", str(batch_file)],
-        cwd=integration,
+        cwd=harness_root,
         env=environment,
     )
 
@@ -267,7 +255,7 @@ def test_installed_runner_rejects_intra_batch_worktree_collision_before_any_star
 
     result = run_process(
         [str(installed_commands.runner), "--batch-input", str(batch_file)],
-        cwd=integration,
+        cwd=harness_root,
         env=environment,
     )
 
@@ -302,12 +290,16 @@ def test_installed_runner_preflights_later_worktree_conflict_before_any_start(
     first_ticket.write_text("# First ticket\n", encoding="utf-8")
     second_ticket.write_text("# Second ticket\n", encoding="utf-8")
     conflicting_branch = "agent/{0}/2-12-second-ticket".format(run_id)
+    run_process(
+        ["git", "commit", "--allow-empty", "-m", "Advance primary"],
+        cwd=temporary_git_repository,
+    ).check_returncode()
     main_commit = run_process(
-        ["git", "rev-parse", "main"], cwd=integration
+        ["git", "rev-parse", "main"], cwd=temporary_git_repository
     ).stdout.strip()
     run_process(
         ["git", "branch", conflicting_branch, main_commit],
-        cwd=integration,
+        cwd=temporary_git_repository,
     ).check_returncode()
     batch_file = harness_root / "conflicting-batch.yml"
     batch_file.write_text(
@@ -336,7 +328,7 @@ def test_installed_runner_preflights_later_worktree_conflict_before_any_start(
 
     result = run_process(
         [str(installed_commands.runner), "--batch-input", str(batch_file)],
-        cwd=integration,
+        cwd=harness_root,
         env=environment,
     )
 
@@ -365,7 +357,7 @@ def test_installed_runner_preflights_later_worktree_conflict_before_any_start(
             str(misplaced_worktree),
             "dev",
         ],
-        cwd=integration,
+        cwd=temporary_git_repository,
     ).check_returncode()
     third_ticket = harness_root / "third.md"
     third_ticket.write_text("# Third ticket\n", encoding="utf-8")
@@ -394,7 +386,7 @@ def test_installed_runner_preflights_later_worktree_conflict_before_any_start(
             "--batch-input",
             str(misplaced_batch),
         ],
-        cwd=integration,
+        cwd=harness_root,
         env=environment,
     )
 
@@ -442,7 +434,7 @@ def test_installed_runner_rejects_later_live_ticket_without_expected_branch(
             str(live_worktree),
             "dev",
         ],
-        cwd=integration,
+        cwd=temporary_git_repository,
     ).check_returncode()
     if live_worktree_state == "detached":
         state_result = run_process(
@@ -485,7 +477,7 @@ def test_installed_runner_rejects_later_live_ticket_without_expected_branch(
 
     result = run_process(
         [str(installed_commands.runner), "--batch-input", str(batch_file)],
-        cwd=integration,
+        cwd=harness_root,
         env=environment,
     )
 
@@ -552,7 +544,7 @@ def test_installed_runner_reports_mixed_post_preflight_launch_outcomes(
 
     result = run_process(
         [str(installed_commands.runner), "--batch-input", str(batch_file)],
-        cwd=integration,
+        cwd=harness_root,
         env=environment,
         timeout=10,
     )
@@ -638,7 +630,7 @@ def test_installed_runner_rejects_later_busy_or_already_live_ticket_globally(
     )
     live_result = run_process(
         [str(installed_commands.runner), "--batch-input", str(live_batch)],
-        cwd=integration,
+        cwd=harness_root,
         env=live_environment,
         timeout=5,
     )
@@ -673,7 +665,7 @@ def test_installed_runner_rejects_later_busy_or_already_live_ticket_globally(
     )
     busy_result = run_process(
         [str(installed_commands.runner), "--batch-input", str(same_run_batch)],
-        cwd=integration,
+        cwd=harness_root,
         env=live_environment,
         timeout=5,
     )
@@ -731,7 +723,7 @@ def test_installed_runner_rejects_later_busy_or_already_live_ticket_globally(
                 "--batch-input",
                 str(rejected_batch),
             ],
-            cwd=integration,
+            cwd=harness_root,
             env=live_environment,
             timeout=5,
         )
@@ -749,16 +741,9 @@ def test_installed_runner_rejects_later_busy_or_already_live_ticket_globally(
         ).exists()
     finally:
         release_file.touch()
-        common_directory = Path(
-            run_process(
-                ["git", "rev-parse", "--git-common-dir"],
-                cwd=temporary_git_repository,
-            ).stdout.strip()
-        )
-        if not common_directory.is_absolute():
-            common_directory = temporary_git_repository / common_directory
         wait_for_file(
-            common_directory.resolve()
+            harness_root
+            / ".codex"
             / "agent-runner"
             / "sessions"
             / "2-11-live-ticket@e1"
@@ -808,7 +793,7 @@ def test_installed_runner_rejects_global_file_runtime_and_integration_failures(
     )
     missing_result = run_process(
         [str(installed_commands.runner), "--batch-input", str(missing_batch)],
-        cwd=integration,
+        cwd=harness_root,
         env=environment,
     )
     missing_message = "ticket_file must resolve to a readable UTF-8 regular file."
@@ -830,7 +815,7 @@ def test_installed_runner_rejects_global_file_runtime_and_integration_failures(
     runtime_environment["AGENT_RUNTIME"] = "unknown-runtime"
     runtime_result = run_process(
         [str(installed_commands.runner), "--batch-input", str(runtime_batch)],
-        cwd=integration,
+        cwd=harness_root,
         env=runtime_environment,
     )
     runtime_message = "The selected Agent Runtime is not configured for this project."
@@ -853,7 +838,7 @@ def test_installed_runner_rejects_global_file_runtime_and_integration_failures(
     try:
         dirty_result = run_process(
             [str(installed_commands.runner), "--batch-input", str(dirty_batch)],
-            cwd=integration,
+            cwd=harness_root,
             env=environment,
         )
     finally:
@@ -881,7 +866,7 @@ def test_installed_runner_rejects_global_file_runtime_and_integration_failures(
     )
     malformed_result = run_process(
         [str(installed_commands.runner), "--batch-input", str(malformed_batch)],
-        cwd=integration,
+        cwd=harness_root,
         env=environment,
     )
     malformed_message = "Batch input is not valid YAML."

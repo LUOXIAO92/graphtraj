@@ -41,11 +41,6 @@ def test_installed_worktree_guard_is_an_independent_ticket_process(
         answers="{0}\ny\n".format(temporary_git_repository.name),
     )
     assert setup.returncode == 0, setup.stderr
-    run_process(["git", "add", ".codex"], cwd=integration).check_returncode()
-    run_process(
-        ["git", "commit", "-m", "Configure Codex resources on dev"],
-        cwd=integration,
-    ).check_returncode()
 
     ticket_file = harness_root / "ticket.md"
     ticket_file.write_text("# Hook process ticket\n", encoding="utf-8")
@@ -69,17 +64,15 @@ def test_installed_worktree_guard_is_an_independent_ticket_process(
     )
     launch = run_process(
         [str(installed_commands.runner), "--batch-input", str(batch_file)],
-        cwd=integration,
+        cwd=harness_root,
         env=environment,
         timeout=10,
     )
     assert launch.returncode == 0, launch.stderr
     task = yaml.safe_load(launch.stdout)["tasks"][0]
     ticket_worktree = Path(task["worktree_path"])
-    hook = ticket_worktree / ".codex" / "hooks" / "worktree_guard.py"
-    assert hook.read_bytes() == (
-        integration / ".codex" / "hooks" / "worktree_guard.py"
-    ).read_bytes()
+    hook = harness_root / ".codex" / "hooks" / "worktree_guard.py"
+    assert not (ticket_worktree / ".codex").exists()
     start = run_guard(
         hook,
         {"hook_event_name": "SubagentStart", "cwd": str(ticket_worktree)},

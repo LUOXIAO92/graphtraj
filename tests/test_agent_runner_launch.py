@@ -181,10 +181,13 @@ def test_active_reservation_is_project_wide_for_ticket_across_delivery_runs(
     )
 
     common_directory = tmp_path / "git-common"
-    (common_directory / "agent-runner").mkdir(parents=True)
+    runner_directory = tmp_path / ".codex" / "agent-runner"
+    runner_directory.mkdir(parents=True)
     project = Project(
+        harness_root=tmp_path,
         repository=tmp_path / "repository",
         common_directory=common_directory,
+        runner_directory=runner_directory,
         worktree_root=tmp_path / "worktrees",
         state_directory=tmp_path / "state",
         integration_branch="dev",
@@ -228,9 +231,7 @@ def test_active_reservation_is_project_wide_for_ticket_across_delivery_runs(
         assert raised.value.code == "WORKTREE_TURN_ACTIVE"
         owner = yaml.safe_load(
             (
-                common_directory
-                / "agent-runner"
-                / "active-worktrees"
+                runner_directory / "active-worktrees"
                 / reservation.key
             ).read_text(encoding="utf-8")
         )
@@ -238,7 +239,7 @@ def test_active_reservation_is_project_wide_for_ticket_across_delivery_runs(
         assert owner["worktree_path"] == str(first_worktree)
     finally:
         release_active_turn(
-            common_directory / "agent-runner", reservation
+            runner_directory, reservation
         )
 
 
@@ -264,9 +265,19 @@ def test_installed_runner_launches_one_isolated_engineer_and_returns_early(
         answers="{0}\ny\n".format(primary.name),
     )
     assert setup_result.returncode == 0, setup_result.stderr
-    run_process(["git", "add", ".codex"], cwd=integration).check_returncode()
+    repository_skills = integration / ".agents" / "skills"
+    for name in ("repo-selected", "repo-disabled"):
+        document = repository_skills / name / "SKILL.md"
+        document.parent.mkdir(parents=True, exist_ok=True)
+        document.write_text(
+            "---\nname: {0}\ndescription: Repository test Skill.\n---\n".format(
+                name
+            ),
+            encoding="utf-8",
+        )
+    run_process(["git", "add", ".agents"], cwd=integration).check_returncode()
     run_process(
-        ["git", "commit", "-m", "Configure Codex on dev"],
+        ["git", "commit", "-m", "Add repository Skills"],
         cwd=integration,
     ).check_returncode()
     dev_head = git_output(integration, "rev-parse", "HEAD")
@@ -294,9 +305,10 @@ def test_installed_runner_launches_one_isolated_engineer_and_returns_early(
                 {
                     "ticket_id": "10",
                     "ticket_name": "launch-engineer",
-                    "role": "engineer-expert",
-                    "ticket_file": str(ticket_file),
-                    "instruction": instruction,
+                        "role": "engineer-expert",
+                        "ticket_file": str(ticket_file),
+                        "instruction": instruction,
+                        "skills": ["repo-selected"],
                 }
             ],
         },
@@ -333,7 +345,9 @@ def test_installed_runner_launches_one_isolated_engineer_and_returns_early(
     if not common_directory.is_absolute():
         common_directory = primary / common_directory
     common_directory = common_directory.resolve()
-    session_directory = common_directory / "agent-runner" / "sessions" / alias
+    session_directory = (
+        harness_root / ".codex" / "agent-runner" / "sessions" / alias
+    )
 
     try:
         launch_result = run_process(
@@ -342,7 +356,7 @@ def test_installed_runner_launches_one_isolated_engineer_and_returns_early(
                 "--batch-input",
                 str(batch_file),
             ],
-            cwd=integration,
+            cwd=harness_root,
             env=environment,
             timeout=5,
         )
@@ -434,24 +448,51 @@ def test_installed_runner_launches_one_isolated_engineer_and_returns_early(
         assert "--profile" not in runtime_argv
 
         config_argv = runtime_argv[12:-2]
-        assert config_argv[::2] == ["-c", "-c", "-c", "-c"]
+        assert config_argv[::2] == ["-c"] * 6
         parsed_overrides = {}
         for override in config_argv[1::2]:
             parsed_overrides.update(tomllib.loads(override))
         role_config = tomllib.loads(
             (
-                ticket_worktree
+                harness_root
                 / ".codex"
                 / "agents"
                 / "engineer-expert.toml"
             ).read_text(encoding="utf-8")
         )
-        assert parsed_overrides == {
+        expected_role_overrides = {
             "model_reasoning_effort": role_config["model_reasoning_effort"],
             "developer_instructions": role_config["developer_instructions"],
-            "hooks": role_config["hooks"],
             "agents": role_config["agents"],
         }
+        for key, value in expected_role_overrides.items():
+            assert parsed_overrides[key] == value
+        assert parsed_overrides["projects"] == {
+            str(ticket_worktree): {"trust_level": "untrusted"}
+        }
+        configured_skills = {
+            entry["path"]: entry["enabled"]
+            for entry in parsed_overrides["skills"]["config"]
+        }
+        assert configured_skills[
+            str(ticket_worktree / ".agents" / "skills" / "repo-selected" / "SKILL.md")
+        ] is True
+        assert configured_skills[
+            str(ticket_worktree / ".agents" / "skills" / "repo-disabled" / "SKILL.md")
+        ] is False
+        assert all(
+            configured_skills[
+                str(user_home / ".agents" / "skills" / name / "SKILL.md")
+            ]
+            is True
+            for name in ("implement", "tdd", "code-review")
+        )
+        for event in ("PreToolUse", "SubagentStart"):
+            for entry in parsed_overrides["hooks"][event]:
+                for hook in entry["hooks"]:
+                    assert str(
+                        harness_root / ".codex" / "hooks" / "worktree_guard.py"
+                    ) in hook["command"]
         assert role_config["name"] not in runtime_argv
         assert role_config["description"] not in runtime_argv
 
@@ -477,7 +518,7 @@ def test_installed_runner_launches_one_isolated_engineer_and_returns_early(
                 "--batch-input",
                 str(batch_file),
             ],
-            cwd=integration,
+            cwd=harness_root,
             env=environment,
             timeout=5,
         )
@@ -496,7 +537,8 @@ def test_installed_runner_launches_one_isolated_engineer_and_returns_early(
             "alias 2-10-launch-engineer@e1.\n"
         )
         assert not (
-            common_directory
+            harness_root
+            / ".codex"
             / "agent-runner"
             / "sessions"
             / "2-10-launch-engineer@e2"
@@ -518,6 +560,44 @@ def test_installed_runner_launches_one_isolated_engineer_and_returns_early(
             "branch": branch,
             "worktree_path": str(ticket_worktree),
             "ticket_file": str(ticket_file.resolve()),
+            "requested_skills": ["repo-selected"],
+            "effective_skills": [
+                {
+                    "name": name,
+                    "path": str(
+                        user_home / ".agents" / "skills" / name / "SKILL.md"
+                    ),
+                    "enabled": True,
+                    "source": "runtime-user",
+                }
+                for name in ("implement", "tdd", "code-review")
+            ]
+            + [
+                {
+                    "name": "repo-disabled",
+                    "path": str(
+                        ticket_worktree
+                        / ".agents"
+                        / "skills"
+                        / "repo-disabled"
+                        / "SKILL.md"
+                    ),
+                    "enabled": False,
+                    "source": "repository",
+                },
+                {
+                    "name": "repo-selected",
+                    "path": str(
+                        ticket_worktree
+                        / ".agents"
+                        / "skills"
+                        / "repo-selected"
+                        / "SKILL.md"
+                    ),
+                    "enabled": True,
+                    "source": "repository",
+                },
+            ],
         }
 
         event_lines = (session_directory / "events.jsonl").read_text(
@@ -531,8 +611,99 @@ def test_installed_runner_launches_one_isolated_engineer_and_returns_early(
         turn_file = session_directory / "turn.yml"
         if session_directory.exists():
             wait_for_file(turn_file)
-    active_root = common_directory / "agent-runner" / "active-worktrees"
+    active_root = harness_root / ".codex" / "agent-runner" / "active-worktrees"
     assert list(active_root.iterdir()) == []
+
+
+def test_installed_runner_rejects_invalid_skills_before_starting_any_task(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    harness_root = temporary_git_repository.parent
+    primary = temporary_git_repository
+    integration = harness_root / ".agent-worktrees" / "integration"
+    user_home = tmp_path / "operator-home"
+    install_user_skills(user_home)
+    setup = run_setup(
+        installed_commands,
+        harness_root=harness_root,
+        user_home=user_home,
+        fake_codex=fake_codex,
+        answers="{0}\ny\n".format(primary.name),
+    )
+    assert setup.returncode == 0, setup.stderr
+
+    selected = integration / ".agents" / "skills" / "repo-selected" / "SKILL.md"
+    selected.parent.mkdir(parents=True)
+    selected.write_text(
+        "---\nname: repo-selected\ndescription: Selected test Skill.\n---\n",
+        encoding="utf-8",
+    )
+    run_process(["git", "add", ".agents"], cwd=integration).check_returncode()
+    run_process(
+        ["git", "commit", "-m", "Add selected repository Skill"],
+        cwd=integration,
+    ).check_returncode()
+
+    ticket_root = harness_root / "tickets"
+    ticket_root.mkdir()
+    first_ticket = ticket_root / "first.md"
+    second_ticket = ticket_root / "second.md"
+    first_ticket.write_text("# First ticket\n", encoding="utf-8")
+    second_ticket.write_text("# Second ticket\n", encoding="utf-8")
+    batch_file = harness_root / "invalid-skill-batch.yml"
+    batch_file.write_text(
+        yaml.safe_dump(
+            {
+                "run_id": "20260816-skill-preflight",
+                "tasks": [
+                    {
+                        "ticket_id": "16.1",
+                        "ticket_name": "valid-first-task",
+                        "role": "engineer-expert",
+                        "ticket_file": str(first_ticket),
+                        "skills": ["repo-selected"],
+                    },
+                    {
+                        "ticket_id": "16.2",
+                        "ticket_name": "invalid-second-task",
+                        "role": "engineer-expert",
+                        "ticket_file": str(second_ticket),
+                        "skills": ["missing-skill"],
+                    },
+                ],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    environment = os.environ.copy()
+    environment.update(
+        {
+            "HOME": str(user_home),
+            "FAKE_CODEX_LOG": str(fake_codex.log_file),
+        }
+    )
+
+    rejected = run_process(
+        [str(installed_commands.runner), "--batch-input", str(batch_file)],
+        cwd=harness_root,
+        env=environment,
+    )
+
+    message = (
+        "The requested Repository Skill missing-skill was not found in the "
+        "Ticket Worktree."
+    )
+    assert rejected.returncode == 1
+    assert yaml.safe_load(rejected.stdout) == {
+        "error": {"code": "invalid-input", "message": message}
+    }
+    assert rejected.stderr == message + "\n"
+    assert not fake_codex.log_file.exists()
+    assert not (harness_root / ".agent-worktrees" / "runs").exists()
 
 
 @pytest.mark.parametrize(
@@ -551,12 +722,12 @@ def test_installed_runner_launches_one_isolated_engineer_and_returns_early(
         (
             "changed-guard-script",
             "invalid-config",
-            "The project Worktree Guard does not match the installed resource.",
+            "The Harness Worktree Guard does not match the installed resource.",
         ),
         (
             "changed-project-config",
             "invalid-config",
-            "The project Codex config does not match the installed resource.",
+            "The Harness Codex config does not match the installed resource.",
         ),
     ),
 )
@@ -570,7 +741,6 @@ def test_installed_runner_rejects_unvetted_role_or_guard_before_runtime_launch(
     expected_message: str,
 ) -> None:
     harness_root = temporary_git_repository.parent
-    integration = harness_root / ".agent-worktrees" / "integration"
     user_home = tmp_path / "operator-home"
     install_user_skills(user_home)
     setup_result = run_setup(
@@ -582,9 +752,9 @@ def test_installed_runner_rejects_unvetted_role_or_guard_before_runtime_launch(
     )
     assert setup_result.returncode == 0, setup_result.stderr
 
-    role_file = integration / ".codex" / "agents" / "engineer-expert.toml"
-    guard_file = integration / ".codex" / "hooks" / "worktree_guard.py"
-    config_file = integration / ".codex" / "config.toml"
+    role_file = harness_root / ".codex" / "agents" / "engineer-expert.toml"
+    guard_file = harness_root / ".codex" / "hooks" / "worktree_guard.py"
+    config_file = harness_root / ".codex" / "config.toml"
     if mutation == "unsupported-role-key":
         role_file.write_text(
             role_file.read_text(encoding="utf-8").replace(
@@ -614,11 +784,6 @@ def test_installed_runner_rejects_unvetted_role_or_guard_before_runtime_launch(
             ),
             encoding="utf-8",
         )
-    run_process(["git", "add", ".codex"], cwd=integration).check_returncode()
-    run_process(
-        ["git", "commit", "-m", "Mutate the selected role"], cwd=integration
-    ).check_returncode()
-
     ticket_file = harness_root / "ticket.md"
     ticket_file.write_text("# Canonical ticket\n", encoding="utf-8")
     batch_file = harness_root / "batch.yml"
@@ -646,7 +811,7 @@ def test_installed_runner_rejects_unvetted_role_or_guard_before_runtime_launch(
 
     result = run_process(
         [str(installed_commands.runner), "--batch-input", str(batch_file)],
-        cwd=integration,
+        cwd=harness_root,
         env=environment,
     )
 
@@ -680,7 +845,6 @@ def test_installed_runner_rejects_invalid_logical_input_without_launch_artifacts
     tmp_path: Path,
 ) -> None:
     harness_root = temporary_git_repository.parent
-    integration = harness_root / ".agent-worktrees" / "integration"
     user_home = tmp_path / "operator-home"
     install_user_skills(user_home)
     setup_result = run_setup(
@@ -691,10 +855,6 @@ def test_installed_runner_rejects_invalid_logical_input_without_launch_artifacts
         answers="{0}\ny\n".format(temporary_git_repository.name),
     )
     assert setup_result.returncode == 0, setup_result.stderr
-    run_process(["git", "add", ".codex"], cwd=integration).check_returncode()
-    run_process(
-        ["git", "commit", "-m", "Configure Codex on dev"], cwd=integration
-    ).check_returncode()
     ticket_file = harness_root / "ticket.md"
     ticket_file.write_text("# Canonical ticket\n", encoding="utf-8")
     base_task = {
@@ -755,7 +915,7 @@ def test_installed_runner_rejects_invalid_logical_input_without_launch_artifacts
                 "tasks": [{**base_task, "worktree_path": "/tmp/main-selected"}],
             },
             "invalid-input",
-            "A task must contain ticket identity, role, and ticket_file only.",
+            "A task must contain ticket identity, role, ticket_file, and optional instruction and Skills only.",
         ),
         (
             {
@@ -785,7 +945,7 @@ def test_installed_runner_rejects_invalid_logical_input_without_launch_artifacts
 
         result = run_process(
             [str(installed_commands.runner), "--batch-input", str(batch_file)],
-            cwd=integration,
+            cwd=harness_root,
             env=environment,
         )
 
@@ -818,11 +978,11 @@ def test_installed_runner_rejects_preexisting_ticket_branch_off_validated_dev(
         answers="{0}\ny\n".format(temporary_git_repository.name),
     )
     assert setup_result.returncode == 0, setup_result.stderr
-    run_process(["git", "add", ".codex"], cwd=integration).check_returncode()
-    run_process(
-        ["git", "commit", "-m", "Configure Codex on dev"], cwd=integration
-    ).check_returncode()
     dev_head = git_output(integration, "rev-parse", "HEAD")
+    run_process(
+        ["git", "commit", "--allow-empty", "-m", "Advance primary"],
+        cwd=temporary_git_repository,
+    ).check_returncode()
     main_head = git_output(temporary_git_repository, "rev-parse", "main")
     assert main_head != dev_head
 
@@ -858,7 +1018,7 @@ def test_installed_runner_rejects_preexisting_ticket_branch_off_validated_dev(
 
     result = run_process(
         [str(installed_commands.runner), "--batch-input", str(batch_file)],
-        cwd=integration,
+        cwd=harness_root,
         env=environment,
     )
 
@@ -900,10 +1060,6 @@ def test_installed_runner_separates_ambiguous_ticket_identity_pairs(
         answers="{0}\ny\n".format(temporary_git_repository.name),
     )
     assert setup_result.returncode == 0, setup_result.stderr
-    run_process(["git", "add", ".codex"], cwd=integration).check_returncode()
-    run_process(
-        ["git", "commit", "-m", "Configure Codex on dev"], cwd=integration
-    ).check_returncode()
 
     run_id = "20260813-identity-boundary"
     environment = os.environ.copy()
@@ -941,7 +1097,7 @@ def test_installed_runner_separates_ambiguous_ticket_identity_pairs(
 
         result = run_process(
             [str(installed_commands.runner), "--batch-input", str(batch_file)],
-            cwd=integration,
+            cwd=harness_root,
             env=environment,
         )
 
@@ -982,10 +1138,6 @@ def test_concurrent_runner_processes_atomically_reserve_one_ticket_worktree(
         answers="{0}\ny\n".format(temporary_git_repository.name),
     )
     assert setup_result.returncode == 0, setup_result.stderr
-    run_process(["git", "add", ".codex"], cwd=integration).check_returncode()
-    run_process(
-        ["git", "commit", "-m", "Configure Codex on dev"], cwd=integration
-    ).check_returncode()
 
     ticket_file = harness_root / "ticket.md"
     ticket_file.write_text("# Canonical ticket\n", encoding="utf-8")
@@ -1021,7 +1173,7 @@ def test_concurrent_runner_processes_atomically_reserve_one_ticket_worktree(
     processes = [
         subprocess.Popen(
             command,
-            cwd=integration,
+            cwd=harness_root,
             env=environment,
             text=True,
             stdout=subprocess.PIPE,
@@ -1029,12 +1181,7 @@ def test_concurrent_runner_processes_atomically_reserve_one_ticket_worktree(
         )
         for _ in range(2)
     ]
-    common_directory = Path(
-        git_output(temporary_git_repository, "rev-parse", "--git-common-dir")
-    )
-    if not common_directory.is_absolute():
-        common_directory = temporary_git_repository / common_directory
-    runner_directory = common_directory.resolve() / "agent-runner"
+    runner_directory = harness_root / ".codex" / "agent-runner"
     session_directory = (
         runner_directory / "sessions" / "2-10-launch-engineer@e1"
     )
@@ -1099,10 +1246,6 @@ def test_failed_launch_retains_reservation_until_worker_and_runtime_terminate(
         answers="{0}\ny\n".format(temporary_git_repository.name),
     )
     assert setup_result.returncode == 0, setup_result.stderr
-    run_process(["git", "add", ".codex"], cwd=integration).check_returncode()
-    run_process(
-        ["git", "commit", "-m", "Configure Codex on dev"], cwd=integration
-    ).check_returncode()
 
     ticket_file = harness_root / "ticket.md"
     ticket_file.write_text("# Canonical ticket\n", encoding="utf-8")
@@ -1145,18 +1288,13 @@ def test_failed_launch_retains_reservation_until_worker_and_runtime_terminate(
     command = [str(installed_commands.runner), "--batch-input", str(batch_file)]
     first = subprocess.Popen(
         command,
-        cwd=integration,
+        cwd=harness_root,
         env=environment,
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
-    common_directory = Path(
-        git_output(temporary_git_repository, "rev-parse", "--git-common-dir")
-    )
-    if not common_directory.is_absolute():
-        common_directory = temporary_git_repository / common_directory
-    active_root = common_directory.resolve() / "agent-runner" / "active-worktrees"
+    active_root = harness_root / ".codex" / "agent-runner" / "active-worktrees"
     evidence = (
         harness_root
         / "state"
@@ -1172,7 +1310,8 @@ def test_failed_launch_retains_reservation_until_worker_and_runtime_terminate(
         metadata_conflict.mkdir()
         mapping_release.touch()
         mapping_file = (
-            common_directory.resolve()
+            harness_root
+            / ".codex"
             / "agent-runner"
             / "sessions"
             / "2-10-launch-engineer@e1"
@@ -1183,7 +1322,7 @@ def test_failed_launch_retains_reservation_until_worker_and_runtime_terminate(
         assert first.poll() is None
         assert len(list(active_root.iterdir())) == 1
 
-        second = run_process(command, cwd=integration, env=environment, timeout=5)
+        second = run_process(command, cwd=harness_root, env=environment, timeout=5)
 
         assert second.returncode == 1
         assert yaml.safe_load(second.stdout) == {
@@ -1220,7 +1359,7 @@ def test_failed_launch_retains_reservation_until_worker_and_runtime_terminate(
         "FAKE_CODEX_EVENT_RELEASE",
     ):
         clean_environment.pop(name)
-    third = run_process(command, cwd=integration, env=clean_environment, timeout=5)
+    third = run_process(command, cwd=harness_root, env=clean_environment, timeout=5)
     assert third.returncode == 0, third.stderr
     assert yaml.safe_load(third.stdout)["tasks"][0]["alias"] == (
         "2-10-launch-engineer@e2"

@@ -150,7 +150,7 @@ def _read_task(
     """Validate and resolve one task without changing the supplied choices."""
 
     required = {"ticket_id", "ticket_name", "role", "ticket_file"}
-    allowed = required | {"instruction"}
+    allowed = required | {"instruction", "skills"}
     if (
         not isinstance(task_document, dict)
         or not required.issubset(task_document)
@@ -158,7 +158,7 @@ def _read_task(
     ):
         raise RunnerError(
             "TASK_SCHEMA_INVALID",
-            "A task must contain ticket identity, role, and ticket_file only.",
+            "A task must contain ticket identity, role, ticket_file, and optional instruction and Skills only.",
         )
     ticket_id = task_document["ticket_id"]
     if not valid_ticket_id(ticket_id):
@@ -209,6 +209,19 @@ def _read_task(
             "INSTRUCTION_INVALID",
             "instruction must be non-empty plain text when supplied.",
         )
+    requested_skills = task_document.get("skills", [])
+    if (
+        not isinstance(requested_skills, list)
+        or any(
+            not isinstance(name, str) or not name.strip()
+            for name in requested_skills
+        )
+        or len(requested_skills) != len(set(requested_skills))
+    ):
+        raise RunnerError(
+            "SKILL_SELECTION_INVALID",
+            "skills must be a list of unique non-empty semantic Skill names.",
+        )
     return Task(
         ticket_id=ticket_id,
         ticket_name=ticket_name,
@@ -216,6 +229,7 @@ def _read_task(
         ticket_file=ticket_path,
         ticket_content=ticket_content,
         instruction=instruction,
+        requested_skills=tuple(requested_skills),
     )
 
 

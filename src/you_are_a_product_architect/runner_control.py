@@ -222,6 +222,9 @@ def _mapped_worktree(
     expected_branch = "agent/{0}/{1}".format(mapping["run_id"], ticket_stem)
     try:
         worktree_root = configured_worktree_root(runner_directory)
+        expected_runner = (
+            worktree_root.parent / ".codex" / "agent-runner"
+        )
         expected_worktree = (
             worktree_root / "runs" / mapping["run_id"] / ticket_stem
         ).resolve()
@@ -232,18 +235,16 @@ def _mapped_worktree(
         or worktree.is_symlink()
         or not worktree.is_dir()
         or worktree.resolve() != expected_worktree
+        or runner_directory != expected_runner
         or mapping["branch"] != expected_branch
         or not mapping["alias"].startswith("{0}@".format(ticket_stem))
     ):
         raise _invalid_mapping()
     try:
-        mapped_runner = discover_runner_directory(worktree)
-        owns_branch = registered_worktree_owns_branch(
-            worktree, mapping["branch"]
-        )
+        owns_branch = registered_worktree_owns_branch(worktree, mapping["branch"])
     except RunnerError as error:
         raise _invalid_mapping() from error
-    if mapped_runner != runner_directory or not owns_branch:
+    if not owns_branch:
         raise _invalid_mapping()
     return worktree
 

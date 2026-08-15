@@ -62,6 +62,10 @@ DETAIL_ERROR_CATEGORIES = {
     "TICKET_NAME_INVALID": "invalid-input",
     "ROLE_NOT_CONFIGURED": "invalid-input",
     "INSTRUCTION_INVALID": "invalid-input",
+    "SKILL_SELECTION_INVALID": "invalid-input",
+    "REPOSITORY_SKILL_NOT_FOUND": "invalid-input",
+    "REPOSITORY_SKILL_AMBIGUOUS": "invalid-input",
+    "HARNESS_SKILL_NOT_FOUND": "invalid-config",
     "PROJECT_NOT_FOUND": "invalid-config",
     "RUNNER_CONFIG_NOT_FOUND": "invalid-config",
     "RUNNER_CONFIG_INVALID": "invalid-config",
@@ -135,6 +139,7 @@ class Task:
     ticket_file: Path
     ticket_content: str
     instruction: Optional[str]
+    requested_skills: Tuple[str, ...] = ()
 
     @property
     def stem(self) -> str:
@@ -158,8 +163,10 @@ class Batch:
 
 @dataclass(frozen=True)
 class Project:
+    harness_root: Path
     repository: Path
     common_directory: Path
+    runner_directory: Path
     worktree_root: Path
     state_directory: Path
     integration_branch: str
@@ -167,6 +174,12 @@ class Project:
     dev_commit: str
     runtime_executable: Path
     role_bindings: Mapping[str, str]
+    repository_skill_allowlist: Tuple[str, ...] = ()
+
+    @property
+    def runtime_store(self) -> Path:
+        """Return the Harness-owned Runtime Store for this project."""
+        return self.harness_root / ".codex"
 
 
 @dataclass(frozen=True)

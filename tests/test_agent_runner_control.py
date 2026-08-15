@@ -31,7 +31,7 @@ def send(
             "--instruction",
             instruction,
         ],
-        cwd=integration,
+        cwd=integration.parents[1],
         env=environment,
         timeout=5,
     )
@@ -45,7 +45,7 @@ def interrupt(
 ):
     return run_process(
         [str(installed_commands.runner), "interrupt", alias],
-        cwd=integration,
+        cwd=integration.parents[1],
         env=environment,
         timeout=10,
     )
@@ -502,7 +502,7 @@ def test_launch_and_idle_send_share_ticket_worktree_exclusivity(
             "--batch-input",
             str(harness_root / "batch-10.yml"),
         ],
-        cwd=integration,
+        cwd=harness_root,
         env=environment,
         timeout=5,
     )
@@ -706,7 +706,7 @@ def test_session_operations_return_structured_recovery_errors_without_reidentity
     assert list((runner_directory / "active-worktrees").iterdir()) == []
 
 
-def test_idle_send_revalidates_codex_guard_and_project_config_before_runtime(
+def test_idle_send_reuses_the_persisted_request_after_runtime_store_changes(
     installed_worktree_commands: InstalledCommands,
     temporary_git_repository: Path,
     fake_codex: FakeCodex,
@@ -740,37 +740,43 @@ def test_idle_send_revalidates_codex_guard_and_project_config_before_runtime(
         (session_directory / "mapping.yml").read_text(encoding="utf-8")
     )
     wait_for_process_exit(mapping["worker_pid"])
-    worktree = Path(mapping["worktree_path"])
-    runtime_before = fake_codex.log_file.read_bytes()
-    not_resumable = {
-        "code": "session-not-resumable",
-        "message": "The mapped Runtime session is unavailable or cannot be resumed.",
-    }
+    initial_request = json.loads(fake_codex.log_file.read_text(encoding="utf-8"))
+    runtime_store = harness_root / ".codex"
 
     for relative_path in (
-        Path(".codex/hooks/worktree_guard.py"),
-        Path(".codex/config.toml"),
+        Path("hooks/worktree_guard.py"),
+        Path("config.toml"),
     ):
-        protected_file = worktree / relative_path
+        protected_file = runtime_store / relative_path
         original = protected_file.read_bytes()
         protected_file.write_bytes(original + b"\n# changed after launch\n")
         try:
-            rejected = send(
+            resumed = send(
                 installed_worktree_commands,
                 integration,
                 environment,
                 alias,
-                "Do not trust changed Runtime safety files.",
+                "Reuse the persisted launch request.",
             )
         finally:
             protected_file.write_bytes(original)
 
-        assert rejected.returncode == 1
-        assert yaml.safe_load(rejected.stdout) == {
+        assert resumed.returncode == 0, resumed.stderr
+        assert yaml.safe_load(resumed.stdout) == {
             "alias": alias,
-            "error": not_resumable,
+            "send_status": "sent",
         }
-        assert fake_codex.log_file.read_bytes() == runtime_before
+        wait_for_file(session_directory / "turn.yml")
+        resumed_request = json.loads(fake_codex.log_file.read_text(encoding="utf-8"))
+        assert resumed_request == {
+            "argv": [
+                *initial_request["argv"][:-1],
+                "resume",
+                mapping["session"],
+                "-",
+            ],
+            "cwd": mapping["worktree_path"],
+        }
 
 
 def test_idle_send_rejects_detached_or_rebranched_mapped_worktree(

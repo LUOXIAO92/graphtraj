@@ -221,7 +221,7 @@ def cleanup_ticket(cwd: Path, run_id: str, ticket_id: str) -> CleanupResponse:
             evidence={"reservation": "failed"},
         )
 
-    runner_directory = project.common_directory / "agent-runner"
+    runner_directory = project.runner_directory
     released = False
     try:
         try:
@@ -522,7 +522,7 @@ def _reserve_cleanup(
     Dict[str, str] | None,
     bool,
 ]:
-    runner_directory = project.common_directory / "agent-runner"
+    runner_directory = project.runner_directory
     for _attempt in range(2):
         try:
             reservation = create_active_turn_reservation(
@@ -554,7 +554,7 @@ def _active_turn(
     ticket_id: str,
 ) -> Tuple[Dict[str, str] | None, bool]:
     key = active_turn_key(ticket_id)
-    runner_directory = project.common_directory / "agent-runner"
+    runner_directory = project.runner_directory
     reservation = runner_directory / "active-worktrees" / key
     if runner_directory.is_symlink():
         return None, True
@@ -591,7 +591,7 @@ def _orphaned_active_turn(
     ticket_id: str,
     worktree: Path,
 ) -> Tuple[bool, bool]:
-    runner_directory = project.common_directory / "agent-runner"
+    runner_directory = project.runner_directory
     active_root = runner_directory / "active-worktrees"
     if not os.path.lexists(str(active_root)):
         return False, False
@@ -808,7 +808,7 @@ def _inspect_aliases(
     registration = target.registration
     worktree = target.worktree
     branch = target.branch
-    runner_directory = project.common_directory / "agent-runner"
+    runner_directory = project.runner_directory
     session_root = runner_directory / "sessions"
     if runner_directory.is_symlink():
         return [], ["session-root-invalid"], None
@@ -1026,6 +1026,7 @@ def _ticket_file_is_safe(
         return False
     destructive_roots = (
         project.common_directory,
+        project.runner_directory,
         project.worktree_root / "runs",
     )
     return all(root not in (resolved, *resolved.parents) for root in destructive_roots)

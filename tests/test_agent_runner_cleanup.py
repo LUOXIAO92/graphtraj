@@ -105,11 +105,6 @@ def launch_ticket(
         answers="{0}\ny\n".format(primary.name),
     )
     assert setup_result.returncode == 0, setup_result.stderr
-    run_process(["git", "add", ".codex"], cwd=integration).check_returncode()
-    run_process(
-        ["git", "commit", "-m", "Configure Codex on dev"],
-        cwd=integration,
-    ).check_returncode()
 
     ticket_file = harness_root / "tickets" / "14-cleanup.md"
     ticket_file.parent.mkdir()
@@ -143,7 +138,7 @@ def launch_ticket(
         environment.update(runtime_environment)
     launch = run_process(
         [str(installed_commands.runner), "--batch-input", str(batch_file)],
-        cwd=integration,
+        cwd=harness_root,
         env=environment,
     )
     assert launch.returncode == 0, launch.stderr
@@ -151,9 +146,7 @@ def launch_ticket(
     worktree = Path(task["worktree_path"])
     branch = git_output(worktree, "branch", "--show-current")
     alias = task["alias"]
-    session_directory = (
-        common_git_directory(primary) / "agent-runner" / "sessions" / alias
-    )
+    session_directory = harness_root / ".codex" / "agent-runner" / "sessions" / alias
     if wait_until_idle:
         wait_for_file(session_directory / "turn.yml")
     return LaunchedTicket(
@@ -185,7 +178,7 @@ def cleanup_ticket(
             "--ticket-id",
             launched.ticket_id,
         ],
-        cwd=launched.integration,
+        cwd=launched.harness_root,
         env=launched.environment,
     )
 
@@ -203,7 +196,7 @@ def send_instruction(
             "--instruction",
             instruction,
         ],
-        cwd=launched.integration,
+        cwd=launched.harness_root,
         env=launched.environment,
     )
 
@@ -214,7 +207,7 @@ def interrupt_ticket(
 ) -> subprocess.CompletedProcess[str]:
     return run_process(
         [str(installed_commands.runner), "interrupt", launched.alias],
-        cwd=launched.integration,
+        cwd=launched.harness_root,
         env=launched.environment,
     )
 
@@ -482,7 +475,8 @@ def test_installed_cleanup_allows_an_active_different_ticket_in_the_same_run(
     )
     other_ticket_id = "99"
     other_reservation = (
-        common_git_directory(launched.primary)
+        launched.harness_root
+        / ".codex"
         / "agent-runner"
         / "active-worktrees"
         / hashlib.sha256(other_ticket_id.encode("ascii")).hexdigest()
@@ -526,7 +520,8 @@ def test_installed_cleanup_refuses_a_noncanonical_other_turn_worktree_path(
     )
     other_ticket_id = "99"
     reservation = (
-        common_git_directory(launched.primary)
+        launched.harness_root
+        / ".codex"
         / "agent-runner"
         / "active-worktrees"
         / hashlib.sha256(other_ticket_id.encode("ascii")).hexdigest()
@@ -761,7 +756,7 @@ def test_installed_cleanup_removes_an_interrupted_alias_after_a_replacement_turn
             "--batch-input",
             str(launched.batch_file),
         ],
-        cwd=launched.integration,
+        cwd=launched.harness_root,
         env=launched.environment,
     )
     assert replacement.returncode == 0, replacement.stderr
@@ -808,7 +803,7 @@ def test_installed_cleanup_removes_only_integrated_disposable_state(
             "--batch-input",
             str(second_batch),
         ],
-        cwd=launched.integration,
+        cwd=launched.harness_root,
         env=launched.environment,
     )
     assert second_launch.returncode == 0, second_launch.stderr
@@ -1004,7 +999,7 @@ def test_retired_alias_text_is_reusable_without_losing_run_scoped_history(
             "--batch-input",
             str(later_batch),
         ],
-        cwd=launched.integration,
+        cwd=launched.harness_root,
         env=later_environment,
     )
     assert later_launch.returncode == 0, later_launch.stderr
@@ -1057,7 +1052,7 @@ def test_same_run_relaunch_after_cleanup_allocates_a_new_historical_alias(
             "--batch-input",
             str(launched.batch_file),
         ],
-        cwd=launched.integration,
+        cwd=launched.harness_root,
         env=launched.environment,
     )
 
@@ -1105,7 +1100,7 @@ def test_installed_cleanup_refuses_an_unregistered_supplied_ticket_identity(
             "--ticket-id",
             "99",
         ],
-        cwd=launched.integration,
+        cwd=launched.harness_root,
         env=launched.environment,
     )
 
@@ -1310,7 +1305,7 @@ def test_installed_cleanup_refuses_a_new_alias_during_branch_only_recovery(
             "--ticket-id",
             launched.ticket_id,
         ],
-        cwd=launched.integration,
+        cwd=launched.harness_root,
         env=environment,
         text=True,
         stdout=subprocess.PIPE,
@@ -1427,7 +1422,7 @@ def test_installed_cleanup_reservation_blocks_a_concurrent_ticket_launch(
     ]
     cleanup_process = subprocess.Popen(
         cleanup_command,
-        cwd=launched.integration,
+        cwd=launched.harness_root,
         env=cleanup_environment,
         text=True,
         stdout=subprocess.PIPE,
@@ -1442,7 +1437,7 @@ def test_installed_cleanup_reservation_blocks_a_concurrent_ticket_launch(
                 "--batch-input",
                 str(launched.batch_file),
             ],
-            cwd=launched.integration,
+            cwd=launched.harness_root,
             env=launched.environment,
         )
 
@@ -1516,7 +1511,7 @@ def test_installed_cleanup_refuses_a_replaced_reservation_identity(
             "--ticket-id",
             launched.ticket_id,
         ],
-        cwd=launched.integration,
+        cwd=launched.harness_root,
         env=environment,
         text=True,
         stdout=subprocess.PIPE,
@@ -1524,7 +1519,8 @@ def test_installed_cleanup_refuses_a_replaced_reservation_identity(
     )
 
     active_root = (
-        common_git_directory(launched.primary)
+        launched.harness_root
+        / ".codex"
         / "agent-runner"
         / "active-worktrees"
     )
@@ -1618,7 +1614,7 @@ def test_installed_cleanup_refuses_a_replaced_bound_alias_identity(
             "--ticket-id",
             launched.ticket_id,
         ],
-        cwd=launched.integration,
+        cwd=launched.harness_root,
         env=environment,
         text=True,
         stdout=subprocess.PIPE,
@@ -1704,7 +1700,7 @@ def test_installed_cleanup_refuses_a_new_bound_alias_after_inspection(
             "--ticket-id",
             launched.ticket_id,
         ],
-        cwd=launched.integration,
+        cwd=launched.harness_root,
         env=environment,
         text=True,
         stdout=subprocess.PIPE,
@@ -1789,7 +1785,7 @@ def test_installed_cleanup_refuses_an_in_place_mapping_rewrite_after_inspection(
             "--ticket-id",
             launched.ticket_id,
         ],
-        cwd=launched.integration,
+        cwd=launched.harness_root,
         env=environment,
         text=True,
         stdout=subprocess.PIPE,
@@ -1882,9 +1878,7 @@ def test_installed_cleanup_reports_a_cyclic_runtime_path_as_one_yaml_error(
     )
     cyclic_runtime = tmp_path / "cyclic-runtime"
     cyclic_runtime.symlink_to(cyclic_runtime)
-    config_file = (
-        common_git_directory(launched.primary) / "agent-runner" / "config.yml"
-    )
+    config_file = launched.harness_root / ".codex" / "agent-runner" / "config.yml"
     config = yaml.safe_load(config_file.read_text(encoding="utf-8"))
     config["runtimes"]["codex"]["executable"] = str(cyclic_runtime)
     config_file.write_text(
@@ -2016,7 +2010,8 @@ def test_installed_cleanup_refuses_an_unattributable_turn_reservation(
         launched.ticket_id.encode("ascii")
     ).hexdigest()
     reservation = (
-        common_git_directory(launched.primary)
+        launched.harness_root
+        / ".codex"
         / "agent-runner"
         / "active-worktrees"
         / reservation_key
@@ -2077,7 +2072,7 @@ def test_installed_cleanup_removes_aliases_from_every_engineer_tier(
             "--batch-input",
             str(senior_batch),
         ],
-        cwd=launched.integration,
+        cwd=launched.harness_root,
         env=launched.environment,
     )
     assert senior_launch.returncode == 0, senior_launch.stderr
@@ -2117,7 +2112,7 @@ def test_installed_cleanup_removes_failed_alias_diagnostics_with_a_valid_launch_
             "--batch-input",
             str(launched.batch_file),
         ],
-        cwd=launched.integration,
+        cwd=launched.harness_root,
         env=failed_environment,
     )
     assert failed_launch.returncode == 1
@@ -2394,7 +2389,7 @@ def test_installed_cleanup_reports_early_git_inspection_failure_with_identity_ev
             "--ticket-id",
             launched.ticket_id,
         ],
-        cwd=launched.integration,
+        cwd=launched.harness_root,
         env=environment,
     )
 
@@ -2575,7 +2570,7 @@ def test_installed_cleanup_refuses_a_later_retained_batch_redirected_into_the_wo
             "--batch-input",
             str(second_batch),
         ],
-        cwd=launched.integration,
+        cwd=launched.harness_root,
         env=launched.environment,
     )
     assert second_launch.returncode == 0, second_launch.stderr
@@ -2841,7 +2836,7 @@ def test_installed_cleanup_returns_structured_refusal_for_a_worktree_symlink_loo
             "--ticket-id",
             launched.ticket_id,
         ],
-        cwd=launched.integration,
+        cwd=launched.harness_root,
         env=environment,
     )
 
@@ -2923,7 +2918,7 @@ def test_installed_cleanup_refuses_if_dev_moves_before_branch_deletion(
             "--ticket-id",
             launched.ticket_id,
         ],
-        cwd=launched.integration,
+        cwd=launched.harness_root,
         env=environment,
         text=True,
         stdout=subprocess.PIPE,
@@ -3008,7 +3003,7 @@ def test_installed_cleanup_accepts_bound_aliases_with_distinct_safe_ticket_snaps
             "--batch-input",
             str(launched.batch_file),
         ],
-        cwd=launched.integration,
+        cwd=launched.harness_root,
         env=launched.environment,
     )
     assert second_launch.returncode == 0, second_launch.stderr

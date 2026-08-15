@@ -113,9 +113,20 @@ class CodexRole:
             self.sandbox_mode,
             "--dangerously-bypass-hook-trust",
         ]
+        developer_instructions = self.developer_instructions
+        for skill in effective_skills:
+            if (
+                skill.enabled
+                and skill.source in ("harness", "runtime-user")
+                and skill.name in ENGINEER_REQUIRED_SKILLS
+            ):
+                developer_instructions = developer_instructions.replace(
+                    "${0}".format(skill.name),
+                    "[${0}]({1})".format(skill.name, skill.path),
+                )
         overrides = (
             ("model_reasoning_effort", self.reasoning_effort),
-            ("developer_instructions", self.developer_instructions),
+            ("developer_instructions", developer_instructions),
             ("hooks", _root_owned_hooks(self.hooks, runtime_store)),
             ("agents", self.agents),
             (

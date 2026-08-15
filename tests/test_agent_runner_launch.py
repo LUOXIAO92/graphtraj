@@ -462,7 +462,6 @@ def test_installed_runner_launches_one_isolated_engineer_and_returns_early(
         )
         expected_role_overrides = {
             "model_reasoning_effort": role_config["model_reasoning_effort"],
-            "developer_instructions": role_config["developer_instructions"],
             "agents": role_config["agents"],
         }
         for key, value in expected_role_overrides.items():

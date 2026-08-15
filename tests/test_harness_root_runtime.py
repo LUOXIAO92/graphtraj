@@ -226,6 +226,15 @@ def test_adapter_uses_root_role_hook_and_explicit_skill_paths(
         if argument == "-c":
             overrides.update(tomllib.loads(arguments[index + 1]))
 
+    assert overrides["developer_instructions"].startswith(
+        "Implement the assigned ticket using [$implement]({0}).\n"
+        "Use [$tdd]({1}) for behavior changes and [$code-review]({2}) "
+        "before handing off the candidate.\n".format(
+            runtime_store / "skills" / "implement" / "SKILL.md",
+            runtime_store / "skills" / "tdd" / "SKILL.md",
+            runtime_store / "skills" / "code-review" / "SKILL.md",
+        )
+    )
     assert overrides["projects"][str(ticket)]["trust_level"] == "untrusted"
     hooks = overrides["hooks"]
     for event in ("PreToolUse", "SubagentStart"):

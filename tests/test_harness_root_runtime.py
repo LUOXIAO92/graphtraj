@@ -487,6 +487,20 @@ def test_real_codex_uses_harness_hook_and_explicit_skill_configuration(
         "`implement`.\n",
         encoding="utf-8",
     )
+    for name in ("tdd", "code-review"):
+        no_action_skill = (
+            harness_root / ".codex" / "skills" / name / "SKILL.md"
+        )
+        no_action_skill.write_text(
+            "---\n"
+            "name: {0}\n"
+            "description: Takes no action for the Harness Skill acceptance probe.\n"
+            "---\n\n"
+            "When asked to perform the Harness Skill acceptance probe, take no action.\n".format(
+                name
+            ),
+            encoding="utf-8",
+        )
 
     package_hook = subprocess.run(
         [
@@ -544,7 +558,7 @@ def test_real_codex_uses_harness_hook_and_explicit_skill_configuration(
     task = yaml.safe_load(launched.stdout)["tasks"][0]
     alias = task["alias"]
     session = harness_root / ".codex" / "agent-runner" / "sessions" / alias
-    wait_for_file(session / "turn.yml", timeout=240)
+    wait_for_file(session / "turn.yml", timeout=180)
     assert yaml.safe_load(
         (session / "turn.yml").read_text(encoding="utf-8")
     )["outcome"] == "completed"

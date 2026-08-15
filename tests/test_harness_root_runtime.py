@@ -430,6 +430,11 @@ def test_real_codex_uses_harness_hook_and_explicit_skill_configuration(
             "--sandbox",
             "read-only",
             "--dangerously-bypass-hook-trust",
+            "-c",
+            "hooks={ PreToolUse = [{ matcher = \"Bash\", hooks = "
+            + "[{ type = \"command\", command = "
+            + json.dumps("python3 {0}".format(source_hook))
+            + ", timeout = 5 }] }] }",
             "--json",
             "-",
         ],

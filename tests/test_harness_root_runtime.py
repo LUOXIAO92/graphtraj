@@ -390,14 +390,6 @@ def test_real_codex_uses_harness_hook_and_explicit_skill_configuration(
         + "timeout = 5\n",
         encoding="utf-8",
     )
-    source_agent = (
-        primary / ".codex" / "agents" / "source-isolation-probe.toml"
-    )
-    source_agent.parent.mkdir()
-    source_agent.write_text(
-        "name =\n",
-        encoding="utf-8",
-    )
     for name, proof_file in (
         ("repository-selected", ".repository-selected-skill-proof"),
         ("repository-disabled", ".repository-disabled-skill-proof"),
@@ -442,16 +434,19 @@ def test_real_codex_uses_harness_hook_and_explicit_skill_configuration(
             "-",
         ],
         env=environment,
-        input="Reply with `SOURCE_AGENT_CONTROL`.\n",
+        input=(
+            "Use Bash to run `pwd` once, then reply with "
+            "`SOURCE_HOOK_CONTROL`.\n"
+        ),
         check=False,
         text=True,
         capture_output=True,
         timeout=60,
     )
-    assert trusted_control.returncode != 0
-    assert source_agent.name in (
+    assert trusted_control.returncode == 0, (
         trusted_control.stdout + trusted_control.stderr
     )
+    assert source_hook_marker.is_file()
     source_hook_marker.unlink(missing_ok=True)
     setup = subprocess.run(
         [str(installed_commands.product), "setup"],

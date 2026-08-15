@@ -906,7 +906,7 @@ def test_setup_registers_an_existing_valid_dev_as_the_integration_worktree(
     assert (harness_root / ".codex" / "agent-runner" / "config.yml").is_file()
 
 
-def test_setup_stops_before_any_mutation_for_independent_skill_installation(
+def test_setup_stops_before_any_mutation_for_runtime_user_scope_skill_installation(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
     fake_codex: FakeCodex,
@@ -954,7 +954,7 @@ def test_setup_stops_before_any_mutation_for_independent_skill_installation(
     assert tree_contents(user_home) == user_before
 
 
-def test_setup_installs_only_missing_supported_skills_project_locally(
+def test_setup_installs_only_missing_supported_skills_in_harness_runtime_store(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
     fake_codex: FakeCodex,

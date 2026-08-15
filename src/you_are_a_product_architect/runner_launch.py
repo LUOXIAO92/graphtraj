@@ -85,8 +85,6 @@ def launch_batch(batch_file: Path, cwd: Path) -> LaunchResponse:
             plan.worktree if exists else project.integration_worktree,
             plan.task,
         )
-        if exists:
-            _resolve_role(project.runtime_store, plan.binding)
 
     try:
         for plan in launch_plans:

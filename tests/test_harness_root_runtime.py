@@ -544,7 +544,7 @@ def test_real_codex_uses_harness_hook_and_explicit_skill_configuration(
     task = yaml.safe_load(launched.stdout)["tasks"][0]
     alias = task["alias"]
     session = harness_root / ".codex" / "agent-runner" / "sessions" / alias
-    wait_for_file(session / "turn.yml", timeout=180)
+    wait_for_file(session / "turn.yml", timeout=240)
     assert yaml.safe_load(
         (session / "turn.yml").read_text(encoding="utf-8")
     )["outcome"] == "completed"

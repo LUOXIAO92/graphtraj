@@ -1,0 +1,141 @@
+"""Discover the core Skills required by a Harness Project."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Dict, Optional, Tuple
+
+import click
+import yaml
+
+
+CORE_SKILL_NAMES = (
+    "setup-matt-pocock-skills",
+    "grill-with-docs",
+    "grilling",
+    "domain-modeling",
+    "to-spec",
+    "to-tickets",
+    "task-delivery",
+    "implement",
+    "tdd",
+    "code-review",
+    "resolving-merge-conflicts",
+)
+
+
+@dataclass(frozen=True)
+class SkillStatus:
+    """One required Skill's name-only discovery result."""
+
+    name: str
+    discovered: bool
+
+
+def declared_skill_name(content: bytes) -> Optional[str]:
+    """Read one Skill's declared name without depending on a filesystem path."""
+
+    try:
+        lines = content.decode("utf-8").splitlines()
+    except UnicodeError:
+        return None
+
+    if not lines or lines[0].strip() != "---":
+        return None
+
+    closing_index = next(
+        (
+            index
+            for index, line in enumerate(lines[1:], start=1)
+            if line.strip() == "---"
+        ),
+        None,
+    )
+    if closing_index is None:
+        return None
+
+    try:
+        frontmatter = yaml.safe_load("\n".join(lines[1:closing_index]))
+    except yaml.YAMLError:
+        return None
+
+    if not isinstance(frontmatter, dict):
+        return None
+    name = frontmatter.get("name")
+    return name if isinstance(name, str) and name else None
+
+
+def _declared_skill_name(skill_file: Path) -> Optional[str]:
+    try:
+        content = skill_file.read_bytes()
+    except OSError:
+        return None
+    return declared_skill_name(content)
+
+
+def core_skill_paths(
+    runtime_store: Path,
+    user_skill_root: Path,
+) -> Dict[str, Path]:
+    """Resolve each core Skill to its root-store or Runtime-user file path."""
+
+    resolved: Dict[str, Path] = {}
+    for skill_root in (runtime_store / "skills", user_skill_root):
+        try:
+            candidates = tuple(sorted(skill_root.iterdir()))
+        except OSError:
+            continue
+        for candidate in candidates:
+            skill_file = candidate / "SKILL.md"
+            name = _declared_skill_name(skill_file)
+            if name not in CORE_SKILL_NAMES or name in resolved:
+                continue
+            try:
+                resolved[name] = skill_file.resolve(strict=True)
+            except OSError:
+                continue
+    return resolved
+
+
+def check_core_skills(
+    runtime_store: Path,
+    user_skill_root: Path,
+) -> Tuple[SkillStatus, ...]:
+    """Check core names in the Runtime Store and Runtime user scopes."""
+
+    discovered = core_skill_paths(runtime_store, user_skill_root)
+    return tuple(
+        SkillStatus(name=name, discovered=name in discovered)
+        for name in CORE_SKILL_NAMES
+    )
+
+
+def _doctor_runtime_store(cwd: Path) -> Path:
+    """Return the root store, rejecting a known Harness child worktree."""
+
+    for ancestor in cwd.parents:
+        if (ancestor / ".codex" / "agent-runner" / "config.yml").is_file():
+            raise click.UsageError("Run doctor from the Harness Project Root.")
+    return cwd / ".codex"
+
+
+@click.command()
+def doctor() -> None:
+    """Report required core Skills from the active Harness Project context."""
+
+    runtime_store = _doctor_runtime_store(Path.cwd())
+    statuses = check_core_skills(
+        runtime_store,
+        Path.home() / ".agents" / "skills",
+    )
+    for status in statuses:
+        click.echo(
+            "{0}: {1}".format(
+                status.name,
+                "OK" if status.discovered else "MISSING",
+            )
+        )
+
+    if not all(status.discovered for status in statuses):
+        raise click.exceptions.Exit(1)

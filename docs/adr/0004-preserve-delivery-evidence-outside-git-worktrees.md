@@ -19,8 +19,11 @@ the Integration Worktree at
 persistent evidence directory:
 
 ```text
-state/task-delivery/<run-id>/tickets/<ticket-id>-<ticket-name>/
+state/task-delivery/<run-id>/tickets/<ticket-stem>/
 ```
+
+`ticket-stem` is the unambiguous mechanical encoding defined by
+[ADR 0009](0009-integrate-ticket-worktrees-through-dev.md).
 
 Retries and tier escalation reuse this directory rather than creating a
 directory per Engineer session. When provisioning a Ticket Worktree, the

@@ -1,0 +1,771 @@
+"""The allowlisted Codex Runtime adapter used by Agent Runner."""
+
+from __future__ import annotations
+
+import copy
+import json
+import os
+import re
+import shlex
+import signal
+import subprocess
+import time
+import tomllib
+from dataclasses import dataclass
+from importlib import resources
+from pathlib import Path
+from typing import Any, Dict, List, Mapping, Optional, Tuple
+
+from .runtime_adapter import RuntimeAdapterError, SessionStarted
+from .runner_transport import runtime_turn_outcome
+from .skill_check import CORE_SKILL_NAMES, core_skill_paths, declared_skill_name
+
+
+SUPPORTED_ROLE_KEYS = frozenset(
+    {
+        "name",
+        "description",
+        "model",
+        "model_reasoning_effort",
+        "developer_instructions",
+        "sandbox_mode",
+        "hooks",
+        "agents",
+    }
+)
+REQUIRED_ROLE_KEYS = SUPPORTED_ROLE_KEYS - {"description"}
+SUPPORTED_AGENT_KEYS = frozenset(
+    {
+        "enabled",
+        "max_concurrent_threads_per_session",
+        "default_subagent_model",
+        "default_subagent_reasoning_effort",
+    }
+)
+REASONING_EFFORTS = frozenset(
+    {"none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"}
+)
+SANDBOX_MODES = frozenset({"read-only", "workspace-write", "danger-full-access"})
+BARE_TOML_KEY = re.compile(r"^[A-Za-z0-9_-]+$")
+
+
+class CodexAdapterError(RuntimeAdapterError):
+    """A selected Codex role cannot be launched safely."""
+
+
+@dataclass(frozen=True)
+class EffectiveSkill:
+    """One explicit Codex Skill selection persisted with a launch request."""
+
+    name: str
+    path: Path
+    enabled: bool
+    source: str
+
+    def config_entry(self) -> Dict[str, Any]:
+        return {"path": str(self.path), "enabled": self.enabled}
+
+    def evidence_entry(self) -> Dict[str, str | bool]:
+        return {
+            "name": self.name,
+            "path": str(self.path),
+            "enabled": self.enabled,
+            "source": self.source,
+        }
+
+
+@dataclass(frozen=True)
+class CodexRole:
+    """Validated effective settings for one Harness-owned custom Agent."""
+
+    name: str
+    model: str
+    reasoning_effort: str
+    developer_instructions: str
+    sandbox_mode: str
+    hooks: Mapping[str, Any]
+    agents: Mapping[str, Any]
+
+    def launch_request(
+        self,
+        *,
+        executable: Path,
+        worktree: Path,
+        evidence: Path,
+        git_common_directory: Path,
+        runtime_store: Path,
+        effective_skills: Tuple[EffectiveSkill, ...],
+    ) -> Dict[str, Any]:
+        """Render the private request consumed by this Adapter's worker."""
+
+        arguments = [
+            str(executable),
+            "exec",
+            "-C",
+            str(worktree),
+            "--add-dir",
+            str(evidence),
+            "--add-dir",
+            str(git_common_directory),
+            "--model",
+            self.model,
+            "--sandbox",
+            self.sandbox_mode,
+            "--dangerously-bypass-hook-trust",
+        ]
+        developer_instructions = self.developer_instructions
+        for skill in effective_skills:
+            if (
+                skill.enabled
+                and skill.source in ("harness", "runtime-user")
+                and skill.name in ENGINEER_REQUIRED_SKILLS
+            ):
+                developer_instructions = developer_instructions.replace(
+                    "${0}".format(skill.name),
+                    "[${0}]({1})".format(skill.name, skill.path),
+                )
+        overrides = (
+            ("model_reasoning_effort", self.reasoning_effort),
+            ("developer_instructions", developer_instructions),
+            ("hooks", _root_owned_hooks(self.hooks, runtime_store)),
+            ("agents", self.agents),
+            (
+                "projects",
+                {str(worktree): {"trust_level": "untrusted"}},
+            ),
+            (
+                "skills",
+                {"config": [skill.config_entry() for skill in effective_skills]},
+            ),
+        )
+        for key, value in overrides:
+            arguments.extend(("-c", "{0}={1}".format(key, _toml_value(value))))
+        arguments.extend(("--json", "-"))
+        return {"arguments": arguments, "worktree_path": str(worktree)}
+
+
+class CodexTurn:
+    """Adapter-owned lifecycle for one Codex process group."""
+
+    def __init__(
+        self,
+        request: Mapping[str, Any],
+        prompt: str,
+        session_directory: Path,
+        session_started: SessionStarted,
+        expected_session: Optional[str] = None,
+    ) -> None:
+        self._request = request
+        self._prompt = prompt
+        self._session_directory = session_directory
+        self._session_started = session_started
+        self._expected_session = expected_session
+        self._process: Optional[subprocess.Popen] = None
+
+    def run(self) -> Dict[str, Any]:
+        """Own the process and translate its private JSONL protocol."""
+
+        arguments, worktree = _validate_launch_request(self._request)
+        if self._expected_session is not None:
+            arguments = _resume_arguments(arguments, self._expected_session)
+        events_file = self._session_directory / "events.jsonl"
+        stderr_file = self._session_directory / "stderr.log"
+        session: Optional[str] = None
+        try:
+            with stderr_file.open("w", encoding="utf-8") as runtime_stderr:
+                self._process = subprocess.Popen(
+                    arguments,
+                    cwd=worktree,
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=runtime_stderr,
+                    text=True,
+                    start_new_session=True,
+                )
+                if self._process.stdin is None or self._process.stdout is None:
+                    raise OSError("Codex pipes were not established")
+                self._process.stdin.write(self._prompt)
+                self._process.stdin.close()
+
+                with events_file.open("a", encoding="utf-8") as events:
+                    for line in self._process.stdout:
+                        events.write(line)
+                        events.flush()
+                        os.fsync(events.fileno())
+                        if session is None:
+                            session = _session_from_event(line)
+                            if session is not None:
+                                if (
+                                    self._expected_session is not None
+                                    and session != self._expected_session
+                                ):
+                                    raise CodexAdapterError(
+                                        "RUNTIME_SESSION_NOT_RESUMABLE",
+                                        "Codex did not resume the mapped Runtime session.",
+                                    )
+                                self._session_started(
+                                    session, self._process.pid
+                                )
+
+                return_code = self._process.wait()
+        except CodexAdapterError as error:
+            terminal = _stop_process(self._process)
+            if terminal or not error.terminal_confirmed:
+                raise
+            raise CodexAdapterError(
+                error.code,
+                error.message,
+                terminal_confirmed=False,
+            ) from error
+        except (OSError, BrokenPipeError) as error:
+            terminal = _stop_process(self._process)
+            raise CodexAdapterError(
+                "RUNTIME_START_FAILED",
+                "The Codex Runtime could not be started.",
+                terminal_confirmed=terminal,
+            ) from error
+        except BaseException:
+            _stop_process(self._process)
+            raise
+
+        if session is None:
+            raise CodexAdapterError(
+                "RUNTIME_SESSION_MISSING",
+                "Codex exited before reporting a Runtime session.",
+            )
+        return runtime_turn_outcome(return_code)
+
+    def terminate(self) -> bool:
+        """Signal only this Codex process group and confirm its exit."""
+
+        if self._process is None or self._process.poll() is not None:
+            return False
+        return _stop_process(self._process)
+
+    def terminate_until_terminal(self) -> None:
+        """Retain ownership until this Codex process group has stopped."""
+
+        while not _stop_process(self._process):
+            time.sleep(0.01)
+
+
+def create_codex_turn(
+    request: Mapping[str, Any],
+    prompt: str,
+    session_directory: Path,
+    session_started: SessionStarted,
+) -> CodexTurn:
+    """Create an invocation without exposing Codex mechanics to the worker."""
+
+    return CodexTurn(request, prompt, session_directory, session_started)
+
+
+def create_codex_resume_turn(
+    request: Mapping[str, Any],
+    prompt: str,
+    session: str,
+    session_directory: Path,
+    session_started: SessionStarted,
+) -> CodexTurn:
+    """Resume exactly one mapped Codex session in a fresh invocation."""
+
+    return CodexTurn(
+        request,
+        prompt,
+        session_directory,
+        session_started,
+        expected_session=session,
+    )
+
+
+def read_codex_session_identity(session_directory: Path) -> str:
+    """Attest one durable Codex session identity from Adapter-owned events."""
+
+    events_file = session_directory / "events.jsonl"
+    identity: Optional[str] = None
+    try:
+        if events_file.is_symlink() or not events_file.is_file():
+            raise OSError("Codex events are not a regular file")
+        with events_file.open("r", encoding="utf-8") as events:
+            for line in events:
+                session = _session_from_event(line)
+                if session is None:
+                    continue
+                if identity is None:
+                    identity = session
+                elif session != identity:
+                    raise ValueError("Codex events contain multiple sessions")
+    except (OSError, UnicodeError, ValueError) as error:
+        raise CodexAdapterError(
+            "RUNTIME_SESSION_NOT_RESUMABLE",
+            "The mapped Codex Runtime session cannot be attested.",
+        ) from error
+    if identity is None:
+        raise CodexAdapterError(
+            "RUNTIME_SESSION_NOT_RESUMABLE",
+            "The mapped Codex Runtime session cannot be attested.",
+        )
+    return identity
+
+
+def _validate_launch_request(
+    request: Mapping[str, Any],
+) -> Tuple[List[str], Path]:
+    if not isinstance(request, dict) or set(request) != {
+        "arguments",
+        "worktree_path",
+    }:
+        raise CodexAdapterError(
+            "RUNTIME_REQUEST_INVALID",
+            "The durable Codex launch request is invalid.",
+        )
+    arguments = request["arguments"]
+    worktree_value = request["worktree_path"]
+    if (
+        not isinstance(arguments, list)
+        or not arguments
+        or any(not isinstance(argument, str) for argument in arguments)
+        or not isinstance(worktree_value, str)
+    ):
+        raise CodexAdapterError(
+            "RUNTIME_REQUEST_INVALID",
+            "The durable Codex launch request is invalid.",
+        )
+    worktree = Path(worktree_value)
+    if not worktree.is_absolute() or not worktree.is_dir():
+        raise CodexAdapterError(
+            "RUNTIME_REQUEST_INVALID",
+            "The durable Codex launch request is invalid.",
+        )
+    return arguments, worktree
+
+
+def _resume_arguments(launch_arguments: List[str], session: str) -> List[str]:
+    if (
+        len(launch_arguments) < 4
+        or launch_arguments[1] != "exec"
+        or launch_arguments[-2:] != ["--json", "-"]
+        or not session
+    ):
+        raise CodexAdapterError(
+            "RUNTIME_SESSION_NOT_RESUMABLE",
+            "The mapped Codex Runtime session cannot be resumed.",
+        )
+    return [*launch_arguments[:-1], "resume", session, "-"]
+
+
+def _session_from_event(line: str) -> Optional[str]:
+    try:
+        event = json.loads(line)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    if not isinstance(event, dict) or event.get("type") != "thread.started":
+        return None
+    session = event.get("thread_id")
+    return session if isinstance(session, str) and session else None
+
+
+def _stop_process(process: Optional[subprocess.Popen]) -> bool:
+    if process is None:
+        return True
+    process_group = process.pid
+    process.poll()
+    if not _process_group_is_alive(process_group):
+        return process.poll() is not None
+    try:
+        os.killpg(process_group, signal.SIGTERM)
+    except ProcessLookupError:
+        process.poll()
+        return not _process_group_is_alive(process_group)
+    except OSError:
+        return False
+    if _await_process_group_exit(process, process_group, timeout=5):
+        return True
+    try:
+        os.killpg(process_group, signal.SIGKILL)
+    except ProcessLookupError:
+        process.poll()
+        return not _process_group_is_alive(process_group)
+    except OSError:
+        return False
+    return _await_process_group_exit(process, process_group, timeout=5)
+
+
+def _await_process_group_exit(
+    process: subprocess.Popen, process_group: int, timeout: float
+) -> bool:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        process.poll()
+        if not _process_group_is_alive(process_group):
+            return process.poll() is not None
+        time.sleep(0.01)
+    process.poll()
+    return (
+        process.poll() is not None
+        and not _process_group_is_alive(process_group)
+    )
+
+
+def _process_group_is_alive(process_group: int) -> bool:
+    try:
+        os.killpg(process_group, 0)
+    except ProcessLookupError:
+        return False
+    except OSError:
+        return True
+    return True
+
+
+def resolve_codex_role(runtime_store: Path, binding: str) -> CodexRole:
+    """Resolve and vet one canonical role from the Harness Runtime Store."""
+
+    _verify_packaged_config(runtime_store)
+    agent_directory = runtime_store / "agents"
+    if not agent_directory.is_dir() or agent_directory.is_symlink():
+        raise CodexAdapterError(
+            "ROLE_NOT_FOUND",
+            "The configured Codex role was not found in Harness Agent files.",
+        )
+
+    matching: List[Tuple[Path, Dict[str, Any]]] = []
+    for path in sorted(agent_directory.glob("*.toml")):
+        if path.is_symlink() or not path.is_file():
+            raise CodexAdapterError(
+                "ROLE_CONFIG_INVALID",
+                "Harness Codex Agent files must be regular files.",
+            )
+        try:
+            document = tomllib.loads(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, tomllib.TOMLDecodeError) as error:
+            raise CodexAdapterError(
+                "ROLE_CONFIG_INVALID",
+                "A Harness Codex Agent file is not valid readable TOML.",
+            ) from error
+        if document.get("name") == binding:
+            matching.append((path, document))
+
+    if not matching:
+        raise CodexAdapterError(
+            "ROLE_NOT_FOUND",
+            "The configured Codex role was not found in Harness Agent files.",
+        )
+    if len(matching) != 1:
+        raise CodexAdapterError(
+            "ROLE_DUPLICATE",
+            "The configured Codex role resolves to more than one Harness Agent file.",
+        )
+
+    _, document = matching[0]
+    _validate_role_schema(document)
+    expected = _packaged_role(binding)
+    if document["hooks"] != expected.get("hooks"):
+        raise CodexAdapterError(
+            "ROLE_HOOK_MISMATCH",
+            "The configured Codex role does not contain the packaged Worktree Guard hooks.",
+        )
+    _verify_packaged_guard(runtime_store)
+
+    return CodexRole(
+        name=binding,
+        model=document["model"],
+        reasoning_effort=document["model_reasoning_effort"],
+        developer_instructions=document["developer_instructions"],
+        sandbox_mode=document["sandbox_mode"],
+        hooks=document["hooks"],
+        agents=document["agents"],
+    )
+
+
+def _validate_role_schema(document: Mapping[str, Any]) -> None:
+    keys = frozenset(document)
+    if not REQUIRED_ROLE_KEYS.issubset(keys) or not keys.issubset(
+        SUPPORTED_ROLE_KEYS
+    ):
+        raise CodexAdapterError(
+            "ROLE_CONFIG_UNSUPPORTED",
+            "The configured Codex role uses an unsupported top-level schema.",
+        )
+    if not isinstance(document["name"], str):
+        raise _invalid_role_value("name")
+    if "description" in document and not isinstance(document["description"], str):
+        raise _invalid_role_value("description")
+    if not _nonempty_string(document["model"]):
+        raise _invalid_role_value("model")
+    if document["model_reasoning_effort"] not in REASONING_EFFORTS:
+        raise _invalid_role_value("model_reasoning_effort")
+    if not _nonempty_string(document["developer_instructions"]):
+        raise _invalid_role_value("developer_instructions")
+    if document["sandbox_mode"] not in SANDBOX_MODES:
+        raise _invalid_role_value("sandbox_mode")
+    if not isinstance(document["hooks"], dict):
+        raise _invalid_role_value("hooks")
+
+    agents = document["agents"]
+    if not isinstance(agents, dict) or frozenset(agents) != SUPPORTED_AGENT_KEYS:
+        raise CodexAdapterError(
+            "ROLE_CONFIG_UNSUPPORTED",
+            "The configured Codex role uses an unsupported agents schema.",
+        )
+    if not isinstance(agents["enabled"], bool):
+        raise _invalid_role_value("agents.enabled")
+    maximum = agents["max_concurrent_threads_per_session"]
+    if isinstance(maximum, bool) or not isinstance(maximum, int) or maximum < 1:
+        raise _invalid_role_value("agents.max_concurrent_threads_per_session")
+    if not _nonempty_string(agents["default_subagent_model"]):
+        raise _invalid_role_value("agents.default_subagent_model")
+    if agents["default_subagent_reasoning_effort"] not in REASONING_EFFORTS:
+        raise _invalid_role_value("agents.default_subagent_reasoning_effort")
+
+
+def _invalid_role_value(field: str) -> CodexAdapterError:
+    return CodexAdapterError(
+        "ROLE_CONFIG_INVALID",
+        "The configured Codex role has an invalid {0} value.".format(field),
+    )
+
+
+def _nonempty_string(value: Any) -> bool:
+    return isinstance(value, str) and bool(value.strip())
+
+
+def _packaged_role(binding: str) -> Dict[str, Any]:
+    if not re.fullmatch(r"engineer-(?:junior|senior|expert)", binding):
+        raise CodexAdapterError(
+            "ROLE_NOT_SUPPORTED",
+            "The configured Codex role is not supported by this Runner.",
+        )
+    resource = resources.files("you_are_a_product_architect.resources").joinpath(
+        "codex", "agents", "{0}.toml".format(binding)
+    )
+    try:
+        return tomllib.loads(resource.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, tomllib.TOMLDecodeError) as error:
+        raise CodexAdapterError(
+            "PACKAGED_ROLE_INVALID",
+            "The installed Codex role resource is invalid.",
+        ) from error
+
+
+def _verify_packaged_guard(runtime_store: Path) -> None:
+    resource = resources.files("you_are_a_product_architect.resources").joinpath(
+        "codex", "hooks", "worktree_guard.py"
+    )
+    guard = runtime_store / "hooks" / "worktree_guard.py"
+    try:
+        if guard.is_symlink() or not guard.is_file():
+            raise OSError("guard is not a regular file")
+        installed = resource.read_bytes()
+        project = guard.read_bytes()
+    except OSError as error:
+        raise CodexAdapterError(
+            "ROLE_GUARD_MISMATCH",
+            "The Harness Worktree Guard does not match the installed resource.",
+        ) from error
+    if project != installed:
+        raise CodexAdapterError(
+            "ROLE_GUARD_MISMATCH",
+            "The Harness Worktree Guard does not match the installed resource.",
+        )
+
+
+def _verify_packaged_config(runtime_store: Path) -> None:
+    resource = resources.files("you_are_a_product_architect.resources").joinpath(
+        "codex", "config.toml"
+    )
+    config = runtime_store / "config.toml"
+    try:
+        if config.is_symlink() or not config.is_file():
+            raise OSError("config is not a regular file")
+        installed = tomllib.loads(resource.read_text(encoding="utf-8"))
+        runtime_config = tomllib.loads(config.read_text(encoding="utf-8"))
+        skill_paths = core_skill_paths(
+            runtime_store,
+            Path.home() / ".agents" / "skills",
+        )
+        if set(skill_paths) != set(CORE_SKILL_NAMES):
+            raise OSError("required core Skills are unavailable")
+    except (OSError, UnicodeError, tomllib.TOMLDecodeError) as error:
+        raise CodexAdapterError(
+            "PROJECT_CONFIG_MISMATCH",
+            "The Harness Codex config does not match the installed resource.",
+        ) from error
+    installed["skills"] = {
+        "config": [
+            {"path": str(skill_paths[name]), "enabled": True}
+            for name in CORE_SKILL_NAMES
+        ]
+    }
+    if runtime_config != installed:
+        raise CodexAdapterError(
+            "PROJECT_CONFIG_MISMATCH",
+            "The Harness Codex config does not match the installed resource.",
+        )
+
+
+ENGINEER_ROLES = frozenset(
+    {"engineer-junior", "engineer-senior", "engineer-expert"}
+)
+ENGINEER_REQUIRED_SKILLS = ("implement", "tdd", "code-review")
+
+
+def resolve_effective_skills(
+    runtime_store: Path,
+    worktree: Path,
+    role: str,
+    requested_names: Tuple[str, ...],
+) -> Tuple[EffectiveSkill, ...]:
+    """Build the one explicit per-Skill configuration for an Engineer turn."""
+    if role not in ENGINEER_ROLES:
+        raise CodexAdapterError(
+            "ROLE_NOT_SUPPORTED",
+            "The configured Codex role is not supported by this Runner.",
+        )
+    required_names = ENGINEER_REQUIRED_SKILLS
+    runtime_skills = _discover_skill_files(runtime_store / "skills")
+    user_skills = _discover_skill_files(Path.home() / ".agents" / "skills")
+    effective: List[EffectiveSkill] = []
+    for name in required_names:
+        matches = runtime_skills.get(name, ())
+        source = "harness"
+        if not matches:
+            matches = user_skills.get(name, ())
+            source = "runtime-user"
+        if len(matches) != 1:
+            raise CodexAdapterError(
+                "HARNESS_SKILL_NOT_FOUND",
+                "The required Harness Skill {0} is not uniquely available.".format(
+                    name
+                ),
+            )
+        effective.append(
+            EffectiveSkill(
+                name=name,
+                path=matches[0],
+                enabled=True,
+                source=source,
+            )
+        )
+    repository_skills = _discover_skill_files(
+        worktree / ".agents" / "skills"
+    )
+    selected_paths = set()
+    for name in requested_names:
+        matches = repository_skills.get(name, ())
+        if not matches:
+            raise CodexAdapterError(
+                "REPOSITORY_SKILL_NOT_FOUND",
+                "The requested Repository Skill {0} was not found in the Ticket Worktree.".format(
+                    name
+                ),
+            )
+        if len(matches) != 1:
+            raise CodexAdapterError(
+                "REPOSITORY_SKILL_AMBIGUOUS",
+                "The requested Repository Skill {0} is ambiguous: {1}.".format(
+                    name,
+                    ", ".join(str(path) for path in matches),
+                ),
+            )
+        selected_paths.add(matches[0])
+    repository_entries = [
+        (name, path)
+        for name, paths in repository_skills.items()
+        for path in paths
+    ]
+    for name, path in sorted(repository_entries, key=lambda entry: str(entry[1])):
+        effective.append(
+            EffectiveSkill(
+                name=name,
+                path=path,
+                enabled=path in selected_paths,
+                source="repository",
+            )
+        )
+    return tuple(effective)
+
+
+def _discover_skill_files(root: Path) -> Dict[str, Tuple[Path, ...]]:
+    """Return valid declared Skills beneath one explicit Runtime boundary."""
+    try:
+        if root.is_symlink() or not root.is_dir():
+            return {}
+        resolved_root = root.resolve(strict=True)
+        candidates = tuple(sorted(root.rglob("SKILL.md")))
+    except OSError:
+        return {}
+    discovered: Dict[str, List[Path]] = {}
+    for candidate in candidates:
+        try:
+            if candidate.is_symlink() or not candidate.is_file():
+                continue
+            resolved = candidate.resolve(strict=True)
+            if resolved_root not in (resolved, *resolved.parents):
+                continue
+            name = declared_skill_name(candidate.read_bytes())
+        except OSError:
+            continue
+        if name is not None:
+            discovered.setdefault(name, []).append(resolved)
+    return {name: tuple(paths) for name, paths in discovered.items()}
+
+
+def _root_owned_hooks(
+    packaged_hooks: Mapping[str, Any],
+    runtime_store: Path,
+) -> Mapping[str, Any]:
+    """Translate canonical Hooks to the root-owned Worktree Guard."""
+    _verify_packaged_guard(runtime_store)
+    hooks = copy.deepcopy(dict(packaged_hooks))
+    command = "python3 {0}".format(
+        shlex.quote(str(runtime_store / "hooks" / "worktree_guard.py"))
+    )
+    try:
+        for event in ("PreToolUse", "SubagentStart"):
+            entries = hooks[event]
+            if not isinstance(entries, list):
+                raise ValueError("Hook entries must be a list")
+            for entry in entries:
+                commands = entry["hooks"]
+                if not isinstance(commands, list):
+                    raise ValueError("Nested Hook entries must be a list")
+                for hook in commands:
+                    if not isinstance(hook, dict) or hook.get("type") != "command":
+                        raise ValueError("Hook must be a command")
+                    hook["command"] = command
+    except (KeyError, TypeError, ValueError) as error:
+        raise CodexAdapterError(
+            "ROLE_HOOK_MISMATCH",
+            "The configured Codex role does not contain the packaged Worktree Guard hooks.",
+        ) from error
+    return hooks
+
+
+def _toml_value(value: Any) -> str:
+    if isinstance(value, str):
+        return json.dumps(value, ensure_ascii=False)
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, list):
+        return "[{0}]".format(", ".join(_toml_value(item) for item in value))
+    if isinstance(value, dict):
+        pairs = (
+            "{0} = {1}".format(_toml_key(key), _toml_value(item))
+            for key, item in value.items()
+        )
+        return "{{ {0} }}".format(", ".join(pairs))
+    raise CodexAdapterError(
+        "ROLE_CONFIG_UNSUPPORTED",
+        "The configured Codex role contains a value that cannot be translated.",
+    )
+
+
+def _toml_key(value: Any) -> str:
+    if not isinstance(value, str):
+        raise CodexAdapterError(
+            "ROLE_CONFIG_UNSUPPORTED",
+            "The configured Codex role contains a non-string key.",
+        )
+    return value if BARE_TOML_KEY.fullmatch(value) else json.dumps(value)

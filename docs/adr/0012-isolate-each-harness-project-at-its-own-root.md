@@ -37,7 +37,7 @@ The project-private Worktree Directory has no additional project-name layer:
 <harness-project-root>/
 ├── .agent-worktrees/
 │   ├── integration/                         # dev checkout
-│   └── runs/<run-id>/<ticket-id>-<ticket-name>/
+│   └── runs/<run-id>/<ticket-stem>/
 ├── <repository-directory>/                  # Primary Worktree on main
 │   └── .git/
 └── state/

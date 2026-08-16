@@ -37,7 +37,8 @@ project-local installation, setup writes the release's supported copy to the
 repository-relative `.agents/skills/task-delivery/` path through the
 Integration Worktree. An already discoverable same-name Skill satisfies the
 name-only check and is not replaced.
-The host CLI uses Click. Project setup remains a separate responsibility
+The minimum supported interpreter is Python 3.12. The host CLI uses Click.
+Project setup remains a separate responsibility
 described in [ADR 0010](0010-configure-target-projects-locally.md), while Skill
 dependency policy is described in
 [ADR 0011](0011-resolve-core-skills-by-name.md).

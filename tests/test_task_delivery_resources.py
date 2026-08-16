@@ -1,0 +1,209 @@
+from __future__ import annotations
+
+import json
+import os
+import sys
+from typing import Dict
+
+import pytest
+
+from conftest import PROJECT_ROOT, find_uv, run_process
+
+
+RESOURCE_PATHS = {
+    "skill": "resources/skills/task-delivery/SKILL.md",
+    "skill_metadata": "resources/skills/task-delivery/agents/openai.yaml",
+    "delivery_state_role": "resources/codex/agents/delivery-state.toml",
+}
+
+
+def normalized(text: str) -> str:
+    return " ".join(text.split()).lower()
+
+
+@pytest.fixture(scope="module")
+def installed_task_delivery_resources(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> Dict[str, str]:
+    """Read release resources from an installed distribution, not the source tree."""
+    uv = find_uv()
+    if uv is None:
+        pytest.skip("uv is unavailable; set UV to its executable or add uv to PATH")
+
+    temporary_directory = tmp_path_factory.mktemp("installed-task-delivery")
+    install_directory = temporary_directory / "site-packages"
+    environment = os.environ.copy()
+    environment["UV_CACHE_DIR"] = str(temporary_directory / "uv-cache")
+    install = run_process(
+        [
+            str(uv),
+            "pip",
+            "install",
+            "--python",
+            sys.executable,
+            "--target",
+            str(install_directory),
+            "--no-deps",
+            "--no-build-isolation",
+            str(PROJECT_ROOT),
+        ],
+        cwd=temporary_directory,
+        env=environment,
+    )
+    assert install.returncode == 0, install.stderr
+
+    probe = """
+import importlib.resources
+import json
+import sys
+
+sys.path.insert(0, sys.argv[1])
+package = importlib.resources.files("you_are_a_product_architect")
+paths = json.loads(sys.argv[2])
+print(json.dumps({
+    name: package.joinpath(*path.split("/")).read_text(encoding="utf-8")
+    for name, path in paths.items()
+}))
+"""
+    result = run_process(
+        [
+            sys.executable,
+            "-I",
+            "-c",
+            probe,
+            str(install_directory),
+            json.dumps(RESOURCE_PATHS),
+        ],
+        cwd=temporary_directory,
+    )
+    assert result.returncode == 0, result.stderr
+    return json.loads(result.stdout)
+
+
+def test_installed_task_delivery_skill_has_complete_interface_metadata(
+    installed_task_delivery_resources: Dict[str, str],
+) -> None:
+    skill = installed_task_delivery_resources["skill"]
+    metadata = installed_task_delivery_resources["skill_metadata"]
+
+    assert skill.startswith("---\nname: task-delivery\ndescription:")
+    assert "TODO" not in skill
+    assert 'display_name: "Task Delivery"' in metadata
+    assert "Use $task-delivery" in metadata
+
+
+def test_installed_task_delivery_keeps_semantic_orchestration_with_main(
+    installed_task_delivery_resources: Dict[str, str],
+) -> None:
+    skill = installed_task_delivery_resources["skill"]
+    guidance = normalized(skill)
+
+    for required_guidance in (
+        "accepted ticket dag",
+        "grilling",
+        "$to-spec",
+        "$to-tickets",
+        "complete accepted DAG",
+        "plain-language",
+        "readiness",
+        "tier",
+        "dispatch",
+        "review",
+        "retry",
+        "escalation",
+        "integration",
+        "exceptions",
+        "mechanical transport",
+    ):
+        assert required_guidance.lower() in guidance
+
+    assert "Do not merge into `dev`" in skill
+    assert "Do not normalize" in skill
+    assert "automatically re-split" in skill
+
+
+def test_installed_task_delivery_preserves_review_escalation_policy(
+    installed_task_delivery_resources: Dict[str, str],
+) -> None:
+    skill = installed_task_delivery_resources["skill"]
+    guidance = normalized(skill)
+
+    assert "Main-adjudicated `FAIL`" in skill
+    for required_guidance in (
+        "three",
+        "Junior",
+        "Senior",
+        "Expert",
+        "fresh context",
+        "same Ticket Worktree",
+        "same evidence",
+        "delegated Main",
+        "human-in-the-loop",
+    ):
+        assert required_guidance.lower() in guidance
+
+
+def test_installed_task_delivery_assigns_only_mechanical_evidence_work_to_runner(
+    installed_task_delivery_resources: Dict[str, str],
+) -> None:
+    skill = normalized(installed_task_delivery_resources["skill"])
+
+    for required_guidance in (
+        "provision or reuse the persistent ticket evidence directory",
+        "scoped `.scratch/task-delivery` symlink",
+        "write or update `metadata.yml`",
+        "mechanically known launch facts",
+    ):
+        assert required_guidance.lower() in skill
+
+
+def test_installed_resources_define_delivery_state_identity_and_runner_seam(
+    installed_task_delivery_resources: Dict[str, str],
+) -> None:
+    skill = normalized(installed_task_delivery_resources["skill"])
+    role = normalized(installed_task_delivery_resources["delivery_state_role"])
+
+    for guidance in (skill, role):
+        for required_contract in (
+            "`run_id`",
+            "ascii `yyyymmdd-short-name`",
+            "semantic lowercase kebab-case short name",
+            "optional positive numeric collision suffix such as `-2`",
+            "resolve",
+            "runner only validates",
+        ):
+            assert required_contract in guidance
+
+    assert "only when main supplies them from runner results" in role
+    assert "ledger references to runner-provisioned evidence" in role
+    assert "do not create evidence directories or physical links" in role
+    assert "supplied by main or runner" not in role
+    assert (
+        "create the working task map, ledger, mermaid dag, and ticket evidence links"
+        not in role
+    )
+
+
+def test_installed_delivery_state_role_maintains_records_without_deciding(
+    installed_task_delivery_resources: Dict[str, str],
+) -> None:
+    role = installed_task_delivery_resources["delivery_state_role"]
+    guidance = normalized(role)
+
+    assert 'name = "delivery-state"' in role
+    assert "developer_instructions" in role
+    for required_guidance in (
+        "one active Delivery Run",
+        "sole writer",
+        "ledger",
+        "Mermaid",
+        "read evidence directly",
+        "only when Main asks",
+        "recover",
+        "persistent artifacts",
+        "Do not adjudicate reviews",
+        "Do not choose",
+        "Do not dispatch",
+        "Do not accept integration",
+    ):
+        assert required_guidance.lower() in guidance

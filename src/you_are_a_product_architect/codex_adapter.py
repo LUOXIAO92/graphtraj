@@ -595,12 +595,6 @@ def _verify_packaged_config(runtime_store: Path) -> None:
             "PROJECT_CONFIG_MISMATCH",
             "The Harness Codex config does not match the installed resource.",
         ) from error
-    installed["skills"] = {
-        "config": [
-            {"path": str(skill_paths[name]), "enabled": True}
-            for name in CORE_SKILL_NAMES
-        ]
-    }
     if runtime_config != installed:
         raise CodexAdapterError(
             "PROJECT_CONFIG_MISMATCH",

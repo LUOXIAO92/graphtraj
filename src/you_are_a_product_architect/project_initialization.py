@@ -14,7 +14,6 @@ from .path_safety import relative_parent_paths
 from .skill_check import (
     CORE_SKILL_NAMES,
     check_core_skills,
-    core_skill_paths,
     harness_skill_root,
 )
 from .supported_skills import (
@@ -294,7 +293,6 @@ class ProjectSetupPlan:
 
     harness_root: Path
     runtime_store: Path
-    runtime_user_skill_root: Path
     repository: SourceRepository
     worktree_root: Path
     integration_worktree: Path
@@ -316,30 +314,6 @@ class ProjectSetupPlan:
         if install_missing_skills:
             selected.update(self.missing_skills)
         return tuple(name for name in CORE_SKILL_NAMES if name in selected)
-
-    def _runtime_skill_paths(
-        self,
-        installed_skill_names: Tuple[str, ...],
-    ) -> tuple[Path, ...]:
-        """Choose the exact root-or-user core Skill paths Main will receive."""
-
-        available = core_skill_paths(
-            self.runtime_store,
-            self.runtime_user_skill_root,
-        )
-        installed = set(installed_skill_names)
-        skill_root = harness_skill_root(self.runtime_store)
-        return tuple(
-            (
-                skill_root / name / "SKILL.md"
-            ).resolve()
-            if name in installed
-            else available.get(
-                name,
-                (skill_root / name / "SKILL.md").resolve(),
-            )
-            for name in CORE_SKILL_NAMES
-        )
 
     def preflight(
         self,
@@ -499,7 +473,6 @@ class ProjectSetupPlan:
         runtime_view = _TargetView(self.runtime_store)
         skill_view = _TargetView(harness_skill_root(self.runtime_store).parent)
         skill_names = self._skill_names_to_install(install_missing_skills)
-        runtime_skill_paths = self._runtime_skill_paths(skill_names)
         if skill_names:
             for name in skill_names:
                 manifest = self.supported_skills.manifest(name)
@@ -532,9 +505,7 @@ class ProjectSetupPlan:
                         conflicts,
                     )
 
-        for relative_path, content in self.codex_files.runtime_resources(
-            runtime_skill_paths
-        ).items():
+        for relative_path, content in self.codex_files.runtime_resources().items():
             _preflight_file(
                 runtime_view,
                 relative_path,
@@ -650,7 +621,6 @@ class ProjectSetupPlan:
     def apply(self, *, install_missing_skills: bool = False) -> str:
         preview = self.preflight(install_missing_skills=install_missing_skills)
         skill_names = self._skill_names_to_install(install_missing_skills)
-        runtime_skill_paths = self._runtime_skill_paths(skill_names)
         pending = tuple(
             action.description
             for action in preview.actions
@@ -710,7 +680,6 @@ class ProjectSetupPlan:
             self.codex_files.install(
                 harness_root=self.harness_root,
                 source_repository=self.repository.primary_worktree,
-                skill_paths=runtime_skill_paths,
                 integration_worktree=self.integration_worktree,
                 state_directory=self.state_directory,
                 common_git_directory=self.repository.common_directory,
@@ -800,7 +769,6 @@ def plan_project_setup(
     return ProjectSetupPlan(
         harness_root=harness_root,
         runtime_store=runtime_store,
-        runtime_user_skill_root=runtime_user_skill_root,
         repository=repository,
         worktree_root=worktree_root,
         integration_worktree=integration_worktree,

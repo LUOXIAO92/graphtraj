@@ -81,16 +81,13 @@ def test_setup_creates_a_root_owned_runtime_and_runner_discovers_it(
     assert {path.name for path in harness_skills.iterdir()} == set(
         CORE_SKILL_NAMES
     )
-    runtime_config = tomllib.loads(
-        (runtime_store / "config.toml").read_text(encoding="utf-8")
-    )
-    assert runtime_config["skills"]["config"] == [
-        {
-            "path": str(harness_skills / name / "SKILL.md"),
-            "enabled": True,
-        }
-        for name in CORE_SKILL_NAMES
+    runtime_config = runtime_store / "config.toml"
+    assert runtime_config.read_bytes() == plan.codex_files.resources_by_path[
+        "config.toml"
     ]
+    assert "skills" not in tomllib.loads(
+        runtime_config.read_text(encoding="utf-8")
+    )
     assert (primary / ".codex" / "config.toml").read_text(encoding="utf-8") == (
         "model = \"source-owned\"\n"
     )
@@ -116,7 +113,7 @@ def test_setup_creates_a_root_owned_runtime_and_runner_discovers_it(
     assert non_root.value.code == "RUNNER_CONFIG_NOT_FOUND"
 
 
-def test_setup_configures_main_skills_from_the_runtime_user_scope(
+def test_setup_uses_runtime_user_core_skills_without_root_skill_config(
     monkeypatch,
     temporary_git_repository: Path,
     tmp_path: Path,
@@ -141,22 +138,57 @@ def test_setup_configures_main_skills_from_the_runtime_user_scope(
     assert plan.apply() == "Created Integration Worktree on dev."
 
     runtime_store = harness_root / ".codex"
-    runtime_config = tomllib.loads(
-        (runtime_store / "config.toml").read_text(encoding="utf-8")
-    )
-    assert runtime_config["skills"]["config"] == [
-        {
-            "path": str(
-                user_home / ".agents" / "skills" / name / "SKILL.md"
-            ),
-            "enabled": True,
-        }
-        for name in CORE_SKILL_NAMES
+    runtime_config = runtime_store / "config.toml"
+    assert runtime_config.read_bytes() == plan.codex_files.resources_by_path[
+        "config.toml"
     ]
+    assert "skills" not in tomllib.loads(
+        runtime_config.read_text(encoding="utf-8")
+    )
     assert not (harness_root / ".agents" / "skills").exists()
     assert resolve_codex_role(runtime_store, "engineer-expert").name == (
         "engineer-expert"
     )
+
+
+def test_adapter_accepts_packaged_root_config_and_requires_core_skills(
+    monkeypatch,
+    temporary_git_repository: Path,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.syspath_prepend(
+        str(Path(__file__).resolve().parents[1] / "src")
+    )
+    from you_are_a_product_architect.codex_adapter import (
+        CodexAdapterError,
+        resolve_codex_role,
+    )
+    from you_are_a_product_architect.project_initialization import plan_project_setup
+
+    harness_root = temporary_git_repository.parent
+    user_home = tmp_path / "runtime-user"
+    user_home.mkdir()
+    monkeypatch.setenv("HOME", str(user_home))
+    plan = plan_project_setup(
+        harness_root,
+        temporary_git_repository,
+        _runtime_executable(tmp_path),
+    )
+    plan.apply(install_missing_skills=True)
+
+    runtime_store = harness_root / ".codex"
+    assert (runtime_store / "config.toml").read_bytes() == (
+        plan.codex_files.resources_by_path["config.toml"]
+    )
+    assert resolve_codex_role(runtime_store, "engineer-expert").name == (
+        "engineer-expert"
+    )
+
+    (harness_root / ".agents" / "skills" / "implement" / "SKILL.md").unlink()
+
+    with pytest.raises(CodexAdapterError) as unavailable:
+        resolve_codex_role(runtime_store, "engineer-expert")
+    assert unavailable.value.code == "PROJECT_CONFIG_MISMATCH"
 
 
 def test_adapter_uses_root_role_hook_and_explicit_skill_paths(

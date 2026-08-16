@@ -10,8 +10,11 @@ Runtime user's global Skill scope under
 use those two scopes for core Skill discovery, and setup installs only missing
 names so globally installed Skills are not duplicated.
 
-The Harness-root `.codex/` directory continues to own Runtime configuration,
-roles, Hooks, and Runner configuration. Source Repository Skills remain a
-separate explicitly selected capability. This supersedes only the Harness
-Skill installation and discovery directory statements in ADR 0013 and ADR
-0015.
+The Harness-root `.codex/` directory continues to own the packaged
+orchestration Runtime configuration, roles, Hooks, and Runner configuration.
+Its root config has no persistent `[skills]` or `skills.config` list regardless
+of whether required core Skills are available from the Harness Project Root or
+Runtime-user scope; the Adapter verifies availability separately. Source
+Repository Skills remain a separate explicitly selected Engineer capability.
+This supersedes only the Harness Skill installation and discovery directory
+statements in ADR 0013 and ADR 0015.

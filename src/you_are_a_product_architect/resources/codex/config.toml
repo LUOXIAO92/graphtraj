@@ -1,5 +1,5 @@
-# This template lives in the Harness Runtime Store. Setup adds the
-# resolved core-Skill paths for its root-or-user Runtime scope.
+# This orchestration template lives in the Harness Runtime Store. Engineer
+# Skill selection is supplied dynamically by the Adapter for each launch.
 model = "gpt-5.6-sol"
 model_reasoning_effort = "xhigh"
 personality = "pragmatic"

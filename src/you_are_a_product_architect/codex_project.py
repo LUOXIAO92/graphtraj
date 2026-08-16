@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 from dataclasses import dataclass
 from importlib import resources
@@ -94,7 +93,6 @@ class CodexProjectFiles:
         *,
         harness_root: Path,
         source_repository: Path,
-        skill_paths: tuple[Path, ...],
         integration_worktree: Path,
         state_directory: Path,
         common_git_directory: Path,
@@ -103,7 +101,7 @@ class CodexProjectFiles:
         on_action_complete: Optional[Callable[[str], None]] = None,
     ) -> None:
         runtime_store = harness_root / ".codex"
-        self._write_resources(runtime_store, skill_paths, on_action_complete)
+        self._write_resources(runtime_store, on_action_complete)
         self._ensure_scratch_link(
             integration_worktree,
             state_directory,
@@ -160,36 +158,17 @@ class CodexProjectFiles:
         }
         return yaml.safe_dump(config, sort_keys=False)
 
-    def runtime_config_content(self, skill_paths: tuple[Path, ...]) -> bytes:
-        """Render the root Codex configuration with its resolved core Skills."""
-
-        base = self.resources_by_path["config.toml"].decode("utf-8")
-        entries = "\n".join(
-            "  {{ path = {0}, enabled = true }},".format(
-                json.dumps(str(path))
-            )
-            for path in skill_paths
-        )
-        return (base + "\n[skills]\nconfig = [\n" + entries + "\n]\n").encode()
-
-    def runtime_resources(
-        self,
-        skill_paths: tuple[Path, ...],
-    ) -> Dict[str, bytes]:
+    def runtime_resources(self) -> Dict[str, bytes]:
         """Return the exact root-owned resources to install for this Runtime."""
 
-        return {
-            **self.resources_by_path,
-            "config.toml": self.runtime_config_content(skill_paths),
-        }
+        return dict(self.resources_by_path)
 
     def _write_resources(
         self,
         runtime_store: Path,
-        skill_paths: tuple[Path, ...],
         on_action_complete: Optional[Callable[[str], None]],
     ) -> None:
-        for relative_path, content in self.runtime_resources(skill_paths).items():
+        for relative_path, content in self.runtime_resources().items():
             target = runtime_store / relative_path
             if target.exists():
                 if target.is_file() and target.read_bytes() == content:

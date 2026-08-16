@@ -5,30 +5,34 @@ status: accepted
 # Select Repository Skills explicitly for Engineer tasks
 
 Harness-installed Skills are canonical resources under
-`<harness-project-root>/.codex/skills/`. Main's Harness-root configuration and
-Runner-launched roles reference them explicitly with `skills.config`; they are
-not copied into the Source Repository or linked Worktrees. Main remains
-unrestricted by Engineer role guidance.
+`<harness-project-root>/.agents/skills/`. Required core Skills may instead be
+provided by the Runtime user's automatically discovered Skill scope. The
+packaged Harness-root `.codex/config.toml` belongs to the orchestration Agent
+and contains no persistent `[skills]` or `skills.config` list; setup writes it
+unchanged and the Adapter verifies required core Skill availability separately.
+Harness Skills are not copied into the Source Repository or linked Worktrees.
+Main remains unrestricted by Engineer role guidance.
 
 Interactive setup asks one user-facing question when supported core Skills are
 missing:
 
 > Install the missing Skills into this Harness Project? `[Y/n]`
 
-On yes, setup installs only the missing backed-up supported copies into the
-Harness Runtime Store. On no, setup stops before every write, lists the missing
-names, tells the operator to install them through the Runtime's user scope,
-and asks them to rerun setup. The interface does not expose the former
-`project-local` versus `independent` terminology. `doctor` continues to check
-only required core Skill names, but evaluates the Harness Runtime Store and
-the selected Runtime's user scope rather than the Integration Worktree.
+On yes, setup installs only the missing backed-up supported copies under the
+Harness Project Root's `.agents/skills/` directory. On no, setup stops before
+every write, lists the missing names, tells the operator to install them
+through the Runtime's user scope, and asks them to rerun setup. The interface
+does not expose the former `project-local` versus `independent` terminology.
+`doctor` continues to check only required core Skill names, but evaluates the
+Harness Project Root and the selected Runtime's user scope rather than the
+Integration Worktree.
 
 Source Repository Skills under `.agents/skills/` are not automatically trusted
 as Engineer capabilities. Runner enumerates the Skills discoverable in the
 Ticket Worktree and constructs one explicit per-path `skills.config` result:
 
 - the selected role's required Harness Skills are enabled from the Harness
-  Runtime Store;
+  Project Root, falling back to the Runtime user's Skill scope when needed;
 - Repository Skills are disabled by default;
 - Repository Skills selected for the current task are enabled by their exact
   resolved paths; and

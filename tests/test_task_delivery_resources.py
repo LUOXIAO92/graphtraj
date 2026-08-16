@@ -191,6 +191,8 @@ def test_installed_delivery_state_role_maintains_records_without_deciding(
     guidance = normalized(role)
 
     assert 'name = "delivery-state"' in role
+    assert 'model = "gpt-5.6-luna"' in role
+    assert 'model_reasoning_effort = "high"' in role
     assert "developer_instructions" in role
     for required_guidance in (
         "one active Delivery Run",

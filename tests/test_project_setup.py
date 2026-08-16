@@ -255,6 +255,81 @@ def test_setup_refuses_a_dev_checkout_owned_by_another_worktree(
     assert not fake_codex.log_file.exists()
 
 
+def test_setup_reports_a_prunable_dev_registration_without_mutation(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    harness_root = temporary_git_repository.parent
+    primary = temporary_git_repository
+    worktree_root = harness_root / ".agent-worktrees"
+    integration = worktree_root / "integration"
+    runtime_store = harness_root / ".codex"
+    state = harness_root / "state"
+    run_process(["git", "branch", "dev"], cwd=primary).check_returncode()
+    run_process(
+        ["git", "worktree", "add", str(integration), "dev"], cwd=primary
+    ).check_returncode()
+    shutil.rmtree(integration)
+
+    user_home = tmp_path / "operator-home"
+    install_skills(
+        user_home / ".agents" / "skills",
+        tuple(name for name in CORE_SKILL_NAMES if name != "task-delivery"),
+    )
+    user_before = tree_contents(user_home)
+    harness_entries_before = tuple(
+        sorted(path.name for path in harness_root.iterdir())
+    )
+    primary_head = git_output(primary, "rev-parse", "HEAD")
+    dev_head = git_output(primary, "rev-parse", "dev")
+    primary_status = git_output(primary, "status", "--porcelain")
+    primary_files = worktree_contents(primary)
+    worktrees_before = git_output(primary, "worktree", "list", "--porcelain")
+    assert "worktree {0}".format(integration) in worktrees_before
+    assert "branch refs/heads/dev" in worktrees_before
+    assert "prunable" in worktrees_before
+
+    result = run_setup(
+        installed_commands,
+        harness_root=harness_root,
+        user_home=user_home,
+        fake_codex=fake_codex,
+        answers="{0}\ny\n".format(primary.name),
+    )
+
+    expected_error = (
+        "The dev Integration Worktree is registered at {0}, but that directory "
+        "is missing; this is a stale or prunable Git Worktree registration. "
+        "Setup made no changes. Inspect `git worktree list --porcelain`, then "
+        "manually restore the directory at {0} or remove the exact stale "
+        "registration for {0} before rerunning setup."
+    ).format(integration)
+    assert result.returncode == 1
+    assert "Missing required core Skills: task-delivery" in result.stdout
+    assert "Install the missing Skills into this Harness Project?" in result.stdout
+    assert expected_error in result.stderr
+    assert git_output(primary, "worktree", "list", "--porcelain") == (
+        worktrees_before
+    )
+    assert git_output(primary, "rev-parse", "HEAD") == primary_head
+    assert git_output(primary, "rev-parse", "dev") == dev_head
+    assert git_output(primary, "branch", "--show-current") == "main"
+    assert git_output(primary, "status", "--porcelain") == primary_status == ""
+    assert worktree_contents(primary) == primary_files
+    assert tuple(sorted(path.name for path in harness_root.iterdir())) == (
+        harness_entries_before
+    )
+    assert worktree_root.is_dir()
+    assert tuple(worktree_root.iterdir()) == ()
+    assert not integration.exists()
+    assert not runtime_store.exists()
+    assert not state.exists()
+    assert tree_contents(user_home) == user_before
+    assert not fake_codex.log_file.exists()
+
+
 def test_setup_rejects_runtime_and_skill_symlink_redirection_before_mutation(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,

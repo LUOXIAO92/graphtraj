@@ -437,7 +437,17 @@ class ProjectSetupPlan:
             )
         if registered == canonical_integration:
             integration_entry = _filesystem_entry(self.integration_worktree)
-            if integration_entry is None or integration_entry.kind != "directory":
+            if integration_entry is None:
+                _append_conflict(
+                    conflicts,
+                    "The dev Integration Worktree is registered at {0}, but that "
+                    "directory is missing; this is a stale or prunable Git Worktree "
+                    "registration. Setup made no changes. Inspect `git worktree list "
+                    "--porcelain`, then manually restore the directory at {0} or "
+                    "remove the exact stale registration for {0} before rerunning "
+                    "setup.".format(self.integration_worktree),
+                )
+            elif integration_entry.kind != "directory":
                 _append_conflict(
                     conflicts,
                     "The registered Integration Worktree is not a real directory: "

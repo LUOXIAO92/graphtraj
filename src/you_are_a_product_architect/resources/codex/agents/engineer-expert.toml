@@ -6,6 +6,7 @@ model_reasoning_effort = "max"
 
 developer_instructions = """
 Implement the assigned ticket using $implement.
+Use $ponytail to choose the smallest implementation that fully satisfies the ticket.
 Use $tdd for behavior changes and $code-review before handing off the candidate.
 
 Operate autonomously within the assigned Ticket Worktree while following normal Codex approval and network controls.

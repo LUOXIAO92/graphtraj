@@ -310,7 +310,7 @@ def test_packaged_engineer_roles_keep_the_accepted_models_and_review_defaults() 
         assert 'model_reasoning_effort = "max"' in role
         assert 'default_subagent_model = "{0}"'.format(reviewer_model) in role
         assert 'default_subagent_reasoning_effort = "max"' in role
-        for skill in ("$implement", "$tdd", "$code-review"):
+        for skill in ("$implement", "$ponytail", "$tdd", "$code-review"):
             assert skill in role
         assert 'sandbox_mode = "workspace-write"' in role
         assert "approval_policy" not in role

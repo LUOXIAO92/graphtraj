@@ -605,7 +605,7 @@ def _verify_packaged_config(runtime_store: Path) -> None:
 ENGINEER_ROLES = frozenset(
     {"engineer-junior", "engineer-senior", "engineer-expert"}
 )
-ENGINEER_REQUIRED_SKILLS = ("implement", "tdd", "code-review")
+ENGINEER_REQUIRED_SKILLS = ("implement", "ponytail", "tdd", "code-review")
 
 
 def resolve_effective_skills(

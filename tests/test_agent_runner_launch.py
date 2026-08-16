@@ -484,7 +484,7 @@ def test_installed_runner_launches_one_isolated_engineer_and_returns_early(
                 str(user_home / ".agents" / "skills" / name / "SKILL.md")
             ]
             is True
-            for name in ("implement", "tdd", "code-review")
+            for name in ("implement", "ponytail", "tdd", "code-review")
         )
         for event in ("PreToolUse", "SubagentStart"):
             for entry in parsed_overrides["hooks"][event]:
@@ -569,7 +569,7 @@ def test_installed_runner_launches_one_isolated_engineer_and_returns_early(
                     "enabled": True,
                     "source": "runtime-user",
                 }
-                for name in ("implement", "tdd", "code-review")
+                for name in ("implement", "ponytail", "tdd", "code-review")
             ]
             + [
                 {

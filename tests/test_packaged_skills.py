@@ -27,6 +27,7 @@ SUPPORTED_UPSTREAM_SKILL_FILES = {
     "to-spec": ("SKILL.md", "agents/openai.yaml"),
     "to-tickets": ("SKILL.md", "agents/openai.yaml"),
     "implement": ("SKILL.md", "agents/openai.yaml"),
+    "ponytail": ("SKILL.md",),
     "tdd": ("SKILL.md", "agents/openai.yaml", "mocking.md", "tests.md"),
     "code-review": ("SKILL.md", "agents/openai.yaml"),
     "resolving-merge-conflicts": ("SKILL.md", "agents/openai.yaml"),

@@ -24,6 +24,7 @@ The required core Skill names are:
 - `to-tickets`
 - `task-delivery`
 - `implement`
+- `ponytail`
 - `tdd`
 - `code-review`
 - `resolving-merge-conflicts`
@@ -59,10 +60,14 @@ Setup never installs a Skill globally. It installs or verifies
 Named dependencies are workflow guidance, not per-role allowlists. V1 does not
 isolate Skill discovery by role or prevent roles from seeing other available
 Skills. Main is deliberately unrestricted. Engineer developer instructions
-direct Junior, Senior, and Expert toward `implement`, `tdd`, and `code-review`;
-the Merge Resolver is directed toward `resolving-merge-conflicts`. Reviewer
+direct Junior, Senior, and Expert toward `implement`, `ponytail`, `tdd`, and
+`code-review`; the Merge Resolver is directed toward
+`resolving-merge-conflicts`. Reviewer
 threads and the Delivery State Agent have no required Skill. These are soft
 developer-instruction responsibilities, not Runtime-enforced isolation.
+
+`ponytail` constrains implementation complexity; it does not relax accepted
+ticket scope, trust-boundary checks, safety requirements, TDD, or review.
 
 Duplicate discoverable Skill names may resolve differently across Runtimes.
 Exhaustive collision detection is not a V1 priority; this is documented as a

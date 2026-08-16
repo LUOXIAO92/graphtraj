@@ -261,9 +261,12 @@ def test_adapter_uses_root_role_hook_and_explicit_skill_paths(
 
     assert overrides["developer_instructions"].startswith(
         "Implement the assigned ticket using [$implement]({0}).\n"
-        "Use [$tdd]({1}) for behavior changes and [$code-review]({2}) "
+        "Use [$ponytail]({1}) to choose the smallest implementation that "
+        "fully satisfies the ticket.\n"
+        "Use [$tdd]({2}) for behavior changes and [$code-review]({3}) "
         "before handing off the candidate.\n".format(
             harness_root / ".agents" / "skills" / "implement" / "SKILL.md",
+            harness_root / ".agents" / "skills" / "ponytail" / "SKILL.md",
             harness_root / ".agents" / "skills" / "tdd" / "SKILL.md",
             harness_root / ".agents" / "skills" / "code-review" / "SKILL.md",
         )
@@ -287,7 +290,7 @@ def test_adapter_uses_root_role_hook_and_explicit_skill_paths(
         by_path[
             str(harness_root / ".agents" / "skills" / name / "SKILL.md")
         ] is True
-        for name in ("implement", "tdd", "code-review")
+        for name in ("implement", "ponytail", "tdd", "code-review")
     )
     assert [skill.name for skill in effective if skill.source == "repository"] == [
         "repo-disabled",

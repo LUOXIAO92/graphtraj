@@ -21,6 +21,7 @@ CORE_SKILL_NAMES = (
     "to-tickets",
     "task-delivery",
     "implement",
+    "ponytail",
     "tdd",
     "code-review",
     "resolving-merge-conflicts",

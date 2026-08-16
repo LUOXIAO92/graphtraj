@@ -18,7 +18,12 @@ from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from .runtime_adapter import RuntimeAdapterError, SessionStarted
 from .runner_transport import runtime_turn_outcome
-from .skill_check import CORE_SKILL_NAMES, core_skill_paths, declared_skill_name
+from .skill_check import (
+    CORE_SKILL_NAMES,
+    core_skill_paths,
+    declared_skill_name,
+    harness_skill_root,
+)
 
 
 SUPPORTED_ROLE_KEYS = frozenset(
@@ -622,7 +627,7 @@ def resolve_effective_skills(
             "The configured Codex role is not supported by this Runner.",
         )
     required_names = ENGINEER_REQUIRED_SKILLS
-    runtime_skills = _discover_skill_files(runtime_store / "skills")
+    runtime_skills = _discover_skill_files(harness_skill_root(runtime_store))
     user_skills = _discover_skill_files(Path.home() / ".agents" / "skills")
     effective: List[EffectiveSkill] = []
     for name in required_names:

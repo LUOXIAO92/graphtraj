@@ -18,12 +18,7 @@ from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from .runtime_adapter import RuntimeAdapterError, SessionStarted
 from .runner_transport import runtime_turn_outcome
-from .skill_check import (
-    CORE_SKILL_NAMES,
-    core_skill_paths,
-    declared_skill_name,
-    harness_skill_root,
-)
+from .skill_check import declared_skill_name, harness_skill_root
 
 
 SUPPORTED_ROLE_KEYS = frozenset(
@@ -425,7 +420,6 @@ def _process_group_is_alive(process_group: int) -> bool:
 def resolve_codex_role(runtime_store: Path, binding: str) -> CodexRole:
     """Resolve and vet one canonical role from the Harness Runtime Store."""
 
-    _verify_packaged_config(runtime_store)
     agent_directory = runtime_store / "agents"
     if not agent_directory.is_dir() or agent_directory.is_symlink():
         raise CodexAdapterError(
@@ -571,34 +565,6 @@ def _verify_packaged_guard(runtime_store: Path) -> None:
         raise CodexAdapterError(
             "ROLE_GUARD_MISMATCH",
             "The Harness Worktree Guard does not match the installed resource.",
-        )
-
-
-def _verify_packaged_config(runtime_store: Path) -> None:
-    resource = resources.files("you_are_a_product_architect.resources").joinpath(
-        "codex", "config.toml"
-    )
-    config = runtime_store / "config.toml"
-    try:
-        if config.is_symlink() or not config.is_file():
-            raise OSError("config is not a regular file")
-        installed = tomllib.loads(resource.read_text(encoding="utf-8"))
-        runtime_config = tomllib.loads(config.read_text(encoding="utf-8"))
-        skill_paths = core_skill_paths(
-            runtime_store,
-            Path.home() / ".agents" / "skills",
-        )
-        if set(skill_paths) != set(CORE_SKILL_NAMES):
-            raise OSError("required core Skills are unavailable")
-    except (OSError, UnicodeError, tomllib.TOMLDecodeError) as error:
-        raise CodexAdapterError(
-            "PROJECT_CONFIG_MISMATCH",
-            "The Harness Codex config does not match the installed resource.",
-        ) from error
-    if runtime_config != installed:
-        raise CodexAdapterError(
-            "PROJECT_CONFIG_MISMATCH",
-            "The Harness Codex config does not match the installed resource.",
         )
 
 

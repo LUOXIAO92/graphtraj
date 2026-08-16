@@ -9,7 +9,9 @@ Harness-installed Skills are canonical resources under
 provided by the Runtime user's automatically discovered Skill scope. The
 packaged Harness-root `.codex/config.toml` belongs to the orchestration Agent
 and contains no persistent `[skills]` or `skills.config` list; setup writes it
-unchanged and the Adapter verifies required core Skill availability separately.
+unchanged. For each Engineer launch, `resolve_effective_skills()` verifies
+required core Skill availability from the Harness Project Root or Runtime-user
+scope.
 Harness Skills are not copied into the Source Repository or linked Worktrees.
 Main remains unrestricted by Engineer role guidance.
 

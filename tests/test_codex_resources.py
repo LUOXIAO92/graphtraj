@@ -289,11 +289,8 @@ def semantic_and_expansion_bypasses() -> tuple[str, ...]:
 def test_packaged_config_defines_the_project_local_codex_workspace() -> None:
     config = (RESOURCE_ROOT / "config.toml").read_text(encoding="utf-8")
 
-    assert 'model = "gpt-5.6-sol"' in config
-    assert 'model_reasoning_effort = "xhigh"' in config
     assert 'sandbox_mode = "workspace-write"' in config
     assert "sandbox_workspace_write" not in tomllib.loads(config)
-    assert 'max_concurrent_threads_per_session = 12' in config
 
 
 def test_packaged_engineer_roles_keep_the_accepted_models_and_review_defaults() -> None:

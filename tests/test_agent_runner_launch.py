@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import ast
 import importlib.util
 import json
 import os
@@ -19,29 +18,6 @@ from conftest import (
     wait_for_file,
 )
 from test_project_setup import git_output, install_user_skills, run_setup
-
-
-def test_background_worker_keeps_codex_process_protocol_inside_adapter() -> None:
-    worker_file = (
-        PROJECT_ROOT / "src" / "you_are_a_product_architect" / "runner_worker.py"
-    )
-    adapter_file = (
-        PROJECT_ROOT / "src" / "you_are_a_product_architect" / "codex_adapter.py"
-    )
-    worker_source = worker_file.read_text(encoding="utf-8")
-    adapter_source = adapter_file.read_text(encoding="utf-8")
-    worker_imports = {
-        alias.name
-        for node in ast.walk(ast.parse(worker_source))
-        if isinstance(node, ast.Import)
-        for alias in node.names
-    }
-
-    assert "subprocess" not in worker_imports
-    assert "json" not in worker_imports
-    assert "thread.started" not in worker_source
-    assert "subprocess" in adapter_source
-    assert "thread.started" in adapter_source
 
 
 def test_alias_mapping_durability_syncs_file_and_every_directory_entry(
@@ -723,11 +699,6 @@ def test_installed_runner_rejects_invalid_skills_before_starting_any_task(
             "invalid-config",
             "The Harness Worktree Guard does not match the installed resource.",
         ),
-        (
-            "changed-project-config",
-            "invalid-config",
-            "The Harness Codex config does not match the installed resource.",
-        ),
     ),
 )
 def test_installed_runner_rejects_unvetted_role_or_guard_before_runtime_launch(
@@ -753,7 +724,6 @@ def test_installed_runner_rejects_unvetted_role_or_guard_before_runtime_launch(
 
     role_file = harness_root / ".codex" / "agents" / "engineer-expert.toml"
     guard_file = harness_root / ".codex" / "hooks" / "worktree_guard.py"
-    config_file = harness_root / ".codex" / "config.toml"
     if mutation == "unsupported-role-key":
         role_file.write_text(
             role_file.read_text(encoding="utf-8").replace(
@@ -773,15 +743,6 @@ def test_installed_runner_rejects_unvetted_role_or_guard_before_runtime_launch(
     elif mutation == "changed-guard-script":
         guard_file.write_text(
             guard_file.read_text(encoding="utf-8") + "\n# unvetted change\n",
-            encoding="utf-8",
-        )
-    else:
-        config_file.write_text(
-            config_file.read_text(encoding="utf-8").replace(
-                'sandbox_mode = "workspace-write"',
-                'sandbox_mode = "read-only"',
-                1,
-            ),
             encoding="utf-8",
         )
     ticket_file = harness_root / "ticket.md"

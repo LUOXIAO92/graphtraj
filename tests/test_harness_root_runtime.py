@@ -151,7 +151,7 @@ def test_setup_uses_runtime_user_core_skills_without_root_skill_config(
     )
 
 
-def test_adapter_accepts_packaged_root_config_and_requires_core_skills(
+def test_adapter_keeps_main_root_config_out_of_engineer_preflight(
     monkeypatch,
     temporary_git_repository: Path,
     tmp_path: Path,
@@ -162,6 +162,7 @@ def test_adapter_accepts_packaged_root_config_and_requires_core_skills(
     from you_are_a_product_architect.codex_adapter import (
         CodexAdapterError,
         resolve_codex_role,
+        resolve_effective_skills,
     )
     from you_are_a_product_architect.project_initialization import plan_project_setup
 
@@ -177,18 +178,22 @@ def test_adapter_accepts_packaged_root_config_and_requires_core_skills(
     plan.apply(install_missing_skills=True)
 
     runtime_store = harness_root / ".codex"
-    assert (runtime_store / "config.toml").read_bytes() == (
-        plan.codex_files.resources_by_path["config.toml"]
-    )
-    assert resolve_codex_role(runtime_store, "engineer-expert").name == (
-        "engineer-expert"
+    (runtime_store / "config.toml").unlink()
+    assert (
+        resolve_codex_role(runtime_store, "engineer-expert").name
+        == "engineer-expert"
     )
 
     (harness_root / ".agents" / "skills" / "implement" / "SKILL.md").unlink()
 
     with pytest.raises(CodexAdapterError) as unavailable:
-        resolve_codex_role(runtime_store, "engineer-expert")
-    assert unavailable.value.code == "PROJECT_CONFIG_MISMATCH"
+        resolve_effective_skills(
+            runtime_store,
+            tmp_path / "ticket-worktree",
+            "engineer-expert",
+            (),
+        )
+    assert unavailable.value.code == "HARNESS_SKILL_NOT_FOUND"
 
 
 def test_adapter_uses_root_role_hook_and_explicit_skill_paths(

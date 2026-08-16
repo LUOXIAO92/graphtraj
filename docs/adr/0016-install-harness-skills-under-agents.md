@@ -14,7 +14,9 @@ The Harness-root `.codex/` directory continues to own the packaged
 orchestration Runtime configuration, roles, Hooks, and Runner configuration.
 Its root config has no persistent `[skills]` or `skills.config` list regardless
 of whether required core Skills are available from the Harness Project Root or
-Runtime-user scope; the Adapter verifies availability separately. Source
-Repository Skills remain a separate explicitly selected Engineer capability.
+Runtime-user scope; it is not read or compared as an Engineer preflight
+contract. `resolve_effective_skills()` verifies Engineer-required Skill
+availability separately for each launch. Source Repository Skills remain a
+separate explicitly selected Engineer capability.
 This supersedes only the Harness Skill installation and discovery directory
 statements in ADR 0013 and ADR 0015.

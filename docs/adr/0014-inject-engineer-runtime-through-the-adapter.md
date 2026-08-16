@@ -20,6 +20,11 @@ are not Runtime configuration. Repository Skills are governed separately by
 ADR 0015.
 
 Canonical role files live under `<harness-project-root>/.codex/agents/`.
+The Harness-root `.codex/config.toml` is Main's orchestration configuration,
+not an Engineer role or preflight contract; `resolve_codex_role()` neither
+reads it nor compares it with the packaged root template. Engineer-required
+Skill availability is resolved separately for each launch by
+`resolve_effective_skills()`.
 Codex V1 has no supported top-level `--agent` or arbitrary `--config-file`
 selector for `codex exec`, so the Adapter mechanically serializes the selected
 role's supported TOML configuration into dedicated CLI flags and repeated

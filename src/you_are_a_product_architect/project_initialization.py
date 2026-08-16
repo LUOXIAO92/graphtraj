@@ -11,7 +11,12 @@ from typing import List, Optional, Tuple
 from .codex_project import CodexProjectError, CodexProjectFiles
 from .git_repository import GitRepositoryError, GitTreeEntry, SourceRepository
 from .path_safety import relative_parent_paths
-from .skill_check import CORE_SKILL_NAMES, check_core_skills, core_skill_paths
+from .skill_check import (
+    CORE_SKILL_NAMES,
+    check_core_skills,
+    core_skill_paths,
+    harness_skill_root,
+)
 from .supported_skills import (
     SupportedSkills,
     SupportedSkillsError,
@@ -323,14 +328,15 @@ class ProjectSetupPlan:
             self.runtime_user_skill_root,
         )
         installed = set(installed_skill_names)
+        skill_root = harness_skill_root(self.runtime_store)
         return tuple(
             (
-                self.runtime_store / "skills" / name / "SKILL.md"
+                skill_root / name / "SKILL.md"
             ).resolve()
             if name in installed
             else available.get(
                 name,
-                (self.runtime_store / "skills" / name / "SKILL.md").resolve(),
+                (skill_root / name / "SKILL.md").resolve(),
             )
             for name in CORE_SKILL_NAMES
         )
@@ -491,6 +497,7 @@ class ProjectSetupPlan:
             )
         )
         runtime_view = _TargetView(self.runtime_store)
+        skill_view = _TargetView(harness_skill_root(self.runtime_store).parent)
         skill_names = self._skill_names_to_install(install_missing_skills)
         runtime_skill_paths = self._runtime_skill_paths(skill_names)
         if skill_names:
@@ -500,14 +507,14 @@ class ProjectSetupPlan:
                 allowed_paths = allowed_manifest_paths(manifest)
                 unexpected_paths = tuple(
                     path
-                    for path in runtime_view.paths_under(skill_relative_root)
+                    for path in skill_view.paths_under(skill_relative_root)
                     if path not in allowed_paths
                 )
                 for unexpected_path in unexpected_paths:
                     _append_conflict(
                         conflicts,
                         "Harness Skill contains unsupported content: {0}".format(
-                            runtime_view.display_path(
+                            skill_view.display_path(
                                 "{0}/{1}".format(
                                     skill_relative_root,
                                     unexpected_path,
@@ -517,7 +524,7 @@ class ProjectSetupPlan:
                     )
                 for resource_path, content in manifest.items():
                     _preflight_file(
-                        runtime_view,
+                        skill_view,
                         "{0}/{1}".format(skill_relative_root, resource_path),
                         content,
                         "Harness Skill {0}".format(name),
@@ -784,7 +791,7 @@ def plan_project_setup(
             name for name in CORE_SKILL_NAMES if name not in discovered_skills
         )
         recoverable_skills = _recoverable_supported_skills(
-            _TargetView(runtime_store),
+            _TargetView(harness_skill_root(runtime_store).parent),
             supported_skills,
         )
     except (GitRepositoryError, OSError, SupportedSkillsError) as error:

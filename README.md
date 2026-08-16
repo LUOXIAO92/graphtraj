@@ -25,8 +25,8 @@ Repository and its disposable and durable Harness material:
 <harness-project-root>/
 ├── .codex/                               Harness Runtime Store
 │   ├── agents/                            canonical Harness roles
-│   ├── hooks/                             Harness Worktree Guard
-│   └── skills/                            supported Harness Skills
+│   └── hooks/                             Harness Worktree Guard
+├── .agents/skills/                        supported Harness Skills
 ├── <repository-directory>/                  Primary Worktree on main
 ├── .agent-worktrees/
 │   ├── integration/                         Integration Worktree on dev
@@ -54,9 +54,11 @@ you-are-a-product-architect setup
 
 Select the existing Primary Worktree when prompted. If required Skills are
 missing, setup asks once whether to install the supported copies in the
-Harness Runtime Store; declining stops before setup writes anything. Setup
-creates or registers `dev`, installs configuration, roles, Hooks, and supported
-Skills under the root `.codex/` Runtime Store, and makes the Integration
+Harness Project's `.agents/skills/`; declining stops before setup writes
+anything. Setup
+creates or registers `dev`, installs configuration, roles, and Hooks under the
+root `.codex/` Runtime Store, installs supported Skills under the root
+`.agents/skills/`, and makes the Integration
 Worktree's ignored `.scratch` point at the Harness State Directory. It does
 not clone a source repository, write `~/.codex`, alter credentials, or change
 the Primary Worktree or Source Repository Runtime files.

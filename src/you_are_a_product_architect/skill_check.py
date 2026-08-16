@@ -33,6 +33,12 @@ class SkillStatus:
     discovered: bool
 
 
+def harness_skill_root(runtime_store: Path) -> Path:
+    """Return the Harness Project's root-owned Skill directory."""
+
+    return runtime_store.parent / ".agents" / "skills"
+
+
 def declared_skill_name(content: bytes) -> Optional[str]:
     """Read one Skill's declared name without depending on a filesystem path."""
 
@@ -78,10 +84,10 @@ def core_skill_paths(
     runtime_store: Path,
     user_skill_root: Path,
 ) -> Dict[str, Path]:
-    """Resolve each core Skill to its root-store or Runtime-user file path."""
+    """Resolve each core Skill to its Harness-root or Runtime-user file path."""
 
     resolved: Dict[str, Path] = {}
-    for skill_root in (runtime_store / "skills", user_skill_root):
+    for skill_root in (harness_skill_root(runtime_store), user_skill_root):
         try:
             candidates = tuple(sorted(skill_root.iterdir()))
         except OSError:
@@ -102,7 +108,7 @@ def check_core_skills(
     runtime_store: Path,
     user_skill_root: Path,
 ) -> Tuple[SkillStatus, ...]:
-    """Check core names in the Runtime Store and Runtime user scopes."""
+    """Check core names in the Harness-root and Runtime user scopes."""
 
     discovered = core_skill_paths(runtime_store, user_skill_root)
     return tuple(

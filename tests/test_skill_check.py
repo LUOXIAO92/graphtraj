@@ -49,7 +49,7 @@ def test_doctor_finds_core_skills_in_project_and_user_scopes(
     tmp_path: Path,
 ) -> None:
     harness_root = tmp_path / "harness-project"
-    project_skills = harness_root / ".codex" / "skills"
+    project_skills = harness_root / ".agents" / "skills"
     user_home = tmp_path / "operator-home"
     user_skills = user_home / ".agents" / "skills"
     harness_root.mkdir()
@@ -81,7 +81,8 @@ def test_doctor_reports_one_and_multiple_missing_core_skills(
         ("multiple-missing", {"grilling", "task-delivery", "tdd"}),
     ):
         harness_root = tmp_path / case_name
-        project_skills = harness_root / ".codex" / "skills"
+        project_skills = harness_root / ".agents" / "skills"
+        legacy_skills = harness_root / ".codex" / "skills"
         user_home = tmp_path / "{0}-home".format(case_name)
         harness_root.mkdir()
 
@@ -93,6 +94,8 @@ def test_doctor_reports_one_and_multiple_missing_core_skills(
                     directory_name="skill-{0}".format(index),
                 )
         install_skill(project_skills, "unrelated-skill")
+        for name in missing_names:
+            install_skill(legacy_skills, name)
 
         result = run_process(
             [str(installed_commands.product), "doctor"],
@@ -144,7 +147,7 @@ def test_doctor_rejects_a_source_worktree_beneath_a_harness_root(
 ) -> None:
     harness_root = tmp_path / "harness-project"
     source_worktree = harness_root / "source-repository"
-    source_skills = source_worktree / ".codex" / "skills"
+    source_skills = source_worktree / ".agents" / "skills"
     user_home = tmp_path / "operator-home"
     (
         harness_root / ".codex" / "agent-runner" / "config.yml"
@@ -200,7 +203,7 @@ def test_doctor_uses_only_valid_top_level_yaml_names(
     tmp_path: Path,
 ) -> None:
     harness_root = tmp_path / "harness-project"
-    project_skills = harness_root / ".codex" / "skills"
+    project_skills = harness_root / ".agents" / "skills"
     user_home = tmp_path / "operator-home"
     harness_root.mkdir()
 

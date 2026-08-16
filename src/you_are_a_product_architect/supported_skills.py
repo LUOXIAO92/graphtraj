@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Callable, Dict, Iterable, Mapping, Optional, Set
 
 from .path_safety import relative_parent_paths
-from .skill_check import CORE_SKILL_NAMES
+from .skill_check import CORE_SKILL_NAMES, harness_skill_root
 
 
 class SupportedSkillsError(Exception):
@@ -90,11 +90,11 @@ class SupportedSkills:
         name: str,
         relative_path: str,
     ) -> str:
-        """Describe one exact Harness Runtime Store Skill mutation."""
+        """Describe one exact Harness-root Skill mutation."""
 
         return "Harness Skill {0}: {1}".format(
             name,
-            runtime_store / "skills" / name / relative_path,
+            harness_skill_root(runtime_store) / name / relative_path,
         )
 
     @classmethod
@@ -137,7 +137,7 @@ class SupportedSkills:
             )
 
         manifests = {name: self.manifest(name) for name in names}
-        skill_root = runtime_store / "skills"
+        skill_root = harness_skill_root(runtime_store)
         for name, manifest in manifests.items():
             target = skill_root / name
             if os.path.lexists(str(target)) and _existing_kind(target) != "directory":

@@ -77,15 +77,16 @@ def test_setup_creates_a_root_owned_runtime_and_runner_discovers_it(
     assert (runtime_store / "hooks" / "worktree_guard.py").is_file()
     assert (runtime_store / "agents" / "engineer-expert.toml").is_file()
     assert (runtime_store / "agent-runner" / "config.yml").is_file()
-    assert {
-        path.name for path in (runtime_store / "skills").iterdir()
-    } == set(CORE_SKILL_NAMES)
+    harness_skills = harness_root / ".agents" / "skills"
+    assert {path.name for path in harness_skills.iterdir()} == set(
+        CORE_SKILL_NAMES
+    )
     runtime_config = tomllib.loads(
         (runtime_store / "config.toml").read_text(encoding="utf-8")
     )
     assert runtime_config["skills"]["config"] == [
         {
-            "path": str(runtime_store / "skills" / name / "SKILL.md"),
+            "path": str(harness_skills / name / "SKILL.md"),
             "enabled": True,
         }
         for name in CORE_SKILL_NAMES
@@ -152,7 +153,7 @@ def test_setup_configures_main_skills_from_the_runtime_user_scope(
         }
         for name in CORE_SKILL_NAMES
     ]
-    assert not (runtime_store / "skills").exists()
+    assert not (harness_root / ".agents" / "skills").exists()
     assert resolve_codex_role(runtime_store, "engineer-expert").name == (
         "engineer-expert"
     )
@@ -230,9 +231,9 @@ def test_adapter_uses_root_role_hook_and_explicit_skill_paths(
         "Implement the assigned ticket using [$implement]({0}).\n"
         "Use [$tdd]({1}) for behavior changes and [$code-review]({2}) "
         "before handing off the candidate.\n".format(
-            runtime_store / "skills" / "implement" / "SKILL.md",
-            runtime_store / "skills" / "tdd" / "SKILL.md",
-            runtime_store / "skills" / "code-review" / "SKILL.md",
+            harness_root / ".agents" / "skills" / "implement" / "SKILL.md",
+            harness_root / ".agents" / "skills" / "tdd" / "SKILL.md",
+            harness_root / ".agents" / "skills" / "code-review" / "SKILL.md",
         )
     )
     assert overrides["projects"][str(ticket)]["trust_level"] == "untrusted"
@@ -251,7 +252,9 @@ def test_adapter_uses_root_role_hook_and_explicit_skill_paths(
     assert by_path[str(selected.resolve())] is True
     assert by_path[str(disabled.resolve())] is False
     assert all(
-        by_path[str(runtime_store / "skills" / name / "SKILL.md")] is True
+        by_path[
+            str(harness_root / ".agents" / "skills" / name / "SKILL.md")
+        ] is True
         for name in ("implement", "tdd", "code-review")
     )
     assert [skill.name for skill in effective if skill.source == "repository"] == [
@@ -475,7 +478,7 @@ def test_real_codex_uses_harness_hook_and_explicit_skill_configuration(
     assert setup.returncode == 0, setup.stderr
 
     harness_skill = (
-        harness_root / ".codex" / "skills" / "implement" / "SKILL.md"
+        harness_root / ".agents" / "skills" / "implement" / "SKILL.md"
     )
     harness_skill.write_text(
         "---\n"
@@ -489,7 +492,7 @@ def test_real_codex_uses_harness_hook_and_explicit_skill_configuration(
     )
     for name in ("tdd", "code-review"):
         no_action_skill = (
-            harness_root / ".codex" / "skills" / name / "SKILL.md"
+            harness_root / ".agents" / "skills" / name / "SKILL.md"
         )
         no_action_skill.write_text(
             "---\n"

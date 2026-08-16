@@ -360,8 +360,8 @@ def test_setup_rejects_runtime_and_skill_symlink_redirection_before_mutation(
     runtime_store = harness_root / ".codex"
     runtime_store.mkdir()
     (runtime_store / "config.toml").symlink_to(runtime_redirect / "config.toml")
-    root_skill_directory = runtime_store / "skills"
-    root_skill_directory.mkdir()
+    root_skill_directory = harness_root / ".agents" / "skills"
+    root_skill_directory.mkdir(parents=True)
     (root_skill_directory / "domain-modeling").symlink_to(
         skill_redirect,
         target_is_directory=True,
@@ -419,7 +419,7 @@ def test_setup_recovers_a_byte_identical_partial_supported_skill_copy(
         ["git", "worktree", "add", str(integration), "dev"], cwd=primary
     ).check_returncode()
 
-    partial_skill = harness_root / ".codex" / "skills" / "domain-modeling"
+    partial_skill = harness_root / ".agents" / "skills" / "domain-modeling"
     partial_skill.mkdir(parents=True)
     supported = supported_skill_contents("domain-modeling")
     partial_file = partial_skill / "ADR-FORMAT.md"
@@ -642,7 +642,7 @@ def test_setup_reports_each_completed_and_incomplete_skill_file(
         ["git", "worktree", "add", str(integration), "dev"], cwd=primary
     ).check_returncode()
 
-    skill = harness_root / ".codex" / "skills" / "domain-modeling"
+    skill = harness_root / ".agents" / "skills" / "domain-modeling"
     blocked_directory = skill / "agents"
     blocked_directory.mkdir(parents=True)
     blocked_directory.chmod(0o555)
@@ -1076,7 +1076,8 @@ def test_setup_installs_only_missing_supported_skills_in_harness_runtime_store(
     assert existing_grilling.read_bytes() == grilling_before
     assert not (project_skills / "tdd").exists()
     assert {path.name for path in project_skills.iterdir()} == {"grilling"}
-    runtime_skills = harness_root / ".codex" / "skills"
+    runtime_skills = harness_root / ".agents" / "skills"
+    assert not (harness_root / ".codex" / "skills").exists()
     for name in missing_names:
         assert tree_contents(runtime_skills / name) == supported_skill_contents(name)
     assert not (runtime_skills / "tdd").exists()

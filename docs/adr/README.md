@@ -49,6 +49,9 @@ the Harness do not require editing a single system-wide record.
 - [ADR 0015](0015-select-repository-skills-explicitly.md) — Harness Skills live
   in the Harness Runtime Store, while Source Repository Skills are disabled by
   default and selected explicitly per task or allowlist policy.
+- [ADR 0016](0016-install-harness-skills-under-agents.md) — V2 setup installs
+  only missing Harness Skills under the Harness Project Root's `.agents/skills`
+  directory instead of `.codex/skills`.
 
 ## Historical audit sources
 

@@ -6,9 +6,9 @@ Issues and specs for this repository live as GitHub issues in
 ## Scope boundary
 
 This file configures engineering skills while they work on this repository
-itself. It does **not** configure the portable Harness Master defined by
-`codex/config.toml`, and it does not establish a default tracker for projects
-operated by that Master.
+itself. It does **not** configure Main through the Harness Project Root's
+`.codex/config.toml`, and it does not establish a default tracker for projects
+operated by that Harness.
 
 Each target project binds its own issue workflow. Depending on that project's
 environment, the binding may use GitHub, GitLab, a local Git server, local

@@ -778,8 +778,9 @@ def test_installed_runner_rejects_unvetted_role_or_guard_before_runtime_launch(
     else:
         config_file.write_text(
             config_file.read_text(encoding="utf-8").replace(
-                'writable_roots = [".scratch"]',
-                'writable_roots = [".scratch", "../outside"]',
+                'sandbox_mode = "workspace-write"',
+                'sandbox_mode = "read-only"',
+                1,
             ),
             encoding="utf-8",
         )

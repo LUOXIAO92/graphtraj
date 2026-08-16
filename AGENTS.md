@@ -3,9 +3,9 @@
 ### Issue tracker
 
 Issues for this repository are tracked in GitHub Issues and managed with `gh`.
-This repository-level setting does not configure the portable Master in
-`codex/config.toml`; each target project binds its own tracker. See
-`docs/agents/issue-tracker.md`.
+This repository-level setting does not configure the portable Main in the
+Harness Project Root's `.codex/config.toml`; each target project binds its own
+tracker. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
@@ -38,10 +38,37 @@ This repository uses the single-context layout. See `docs/agents/domain.md`.
   `engineer-junior`, `engineer-senior`, `engineer-expert`, and
   `merge-resolver`. Their role definitions are authoritative; do not duplicate
   their developer instructions in dispatch prompts.
-- Use `codex/config.toml` as the concurrency authority. Do not hard-code or
-  reinterpret its capacity outside the Harness workflow.
+- Use the Harness Project Root's `.codex/config.toml` as the concurrency
+  authority. Do not hard-code or reinterpret its capacity outside the Harness
+  workflow.
 - If a required Skill or role is unavailable, stop that operation and repair
   Runtime selection or installation. Do not improvise a substitute workflow.
+
+### Proportional review and validation
+
+- Use the narrowest check that can falsify the current change. A small,
+  localized correction does not authorize a baseline-to-HEAD review or a full
+  test-suite run merely because those workflows are available.
+- After Main has accepted a full Standards/Spec review, review a bounded
+  follow-up against that accepted candidate, not the original branch baseline.
+  Carry the accepted full-review evidence forward; do not review the unchanged
+  branch again.
+- During rework, run the affected tests and the acceptance check that exposed
+  the problem. Run the full suite once for the final candidate only when the
+  change can affect the wider product. If `dev` fast-forwards to that exact
+  already-validated commit, use targeted integration checks instead of running
+  the same full suite a second time.
+- Keep real-Runtime acceptance fixtures narrow. Stub unrelated Skills and
+  workflows so a probe does not launch TDD, code review, or sub-agents. If an
+  unrelated workflow makes a probe slow, narrow the fixture; do not repeatedly
+  increase its timeout.
+- Do not turn a judgement-call smell or a few duplicated test lines into a new
+  helper, abstraction, framework, or ticket when the requested fix is already
+  clear and local. Require a concrete correctness or maintenance benefit.
+- Successful reviewed integration plus proportionate integration validation is
+  delivery. Runner cleanup is post-delivery housekeeping: a cleanup failure
+  must not reopen the ticket or trigger config migration, setup, or product
+  changes unless the user explicitly requests that work.
 
 ### Expert-failure exception
 

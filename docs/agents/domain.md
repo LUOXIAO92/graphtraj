@@ -22,12 +22,11 @@ This repository uses a single-context layout:
 ```text
 /
 ├── CONTEXT.md
-├── docs/
-│   ├── pure_agent_harness.md
-│   └── adr/
-│       ├── 0001-example-decision.md
-│       └── 0002-another-decision.md
-└── codex/
+└── docs/
+    ├── pure_agent_harness.md
+    └── adr/
+        ├── 0001-example-decision.md
+        └── 0002-another-decision.md
 ```
 
 ## Use the glossary's vocabulary

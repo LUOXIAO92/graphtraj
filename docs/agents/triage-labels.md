@@ -12,9 +12,9 @@ GitHub Issues.
 | `wontfix`         | `wontfix`          | Will not be actioned                       |
 
 This mapping configures this repository only. It does not configure projects
-operated by the Harness Master in `codex/config.toml`. Each target project owns
-its own triage mapping and may use different labels or equivalent workflow
-states.
+operated through the Harness Project Root's `.codex/config.toml`. Each target
+project owns its own triage mapping and may use different labels or equivalent
+workflow states.
 
 If this repository later renames its GitHub labels, edit the right-hand column
 without changing the canonical roles.

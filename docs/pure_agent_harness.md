@@ -128,7 +128,7 @@ Master **不负责**：
 → 使用 GitHub Issues 管理这个仓库自己的工作
 → 由 AGENTS.md 和 docs/agents/issue-tracker.md 配置
 
-codex/config.toml 中定义的 Harness Master
+Harness Project Root 的 `.codex/config.toml` 中定义的 Main
 → 是可移植的 control plane
 → 不继承本仓库的 GitHub tracker
 → 针对每个目标项目单独绑定 tracker

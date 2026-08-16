@@ -292,7 +292,7 @@ def test_packaged_config_defines_the_project_local_codex_workspace() -> None:
     assert 'model = "gpt-5.6-sol"' in config
     assert 'model_reasoning_effort = "xhigh"' in config
     assert 'sandbox_mode = "workspace-write"' in config
-    assert 'writable_roots = [".scratch"]' in config
+    assert "sandbox_workspace_write" not in tomllib.loads(config)
     assert 'max_concurrent_threads_per_session = 12' in config
 
 
@@ -871,9 +871,9 @@ def test_installed_package_exposes_complete_codex_resources(
 
     for resource in expected_files:
         assert resource.read_text(encoding="utf-8")
-    assert tomllib.loads((installed_resources / "config.toml").read_text(encoding="utf-8"))[
-        "sandbox_workspace_write"
-    ]["writable_roots"] == [".scratch"]
+    assert "sandbox_workspace_write" not in tomllib.loads(
+        (installed_resources / "config.toml").read_text(encoding="utf-8")
+    )
 
     hook = installed_resources / "hooks" / "worktree_guard.py"
     result = run_hook(

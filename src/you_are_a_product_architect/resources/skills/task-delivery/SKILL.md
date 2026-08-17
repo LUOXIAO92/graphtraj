@@ -85,6 +85,18 @@ authority to the Delivery State Agent.
    Main reports the integration result, synchronize the Run and continue with
    the next Main-selected frontier.
 
+## Select one Agent Runtime per batch
+
+- Let explicit user direction choose the Runtime before Harness Project policy,
+  and let Harness Project policy choose before Main's current Runtime.
+- When those sources do not permit a confident choice, ask the user and record
+  the answer.
+- Record one selected Runtime once at batch level as `runtime`; each task keeps
+  only its logical role and task access. Do not repeat Runtime, model,
+  configuration, Hook, command, or path details in task objects.
+- Let the Runner validate the selected configured built-in Adapter before it
+  reserves a task, provisions a Worktree, retains a batch, or starts a Runtime.
+
 ## Escalate review failure
 
 - Increment a tier counter only for a Main-adjudicated `FAIL`. Do not count TDD

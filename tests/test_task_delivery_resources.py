@@ -122,6 +122,22 @@ def test_installed_task_delivery_keeps_semantic_orchestration_with_main(
     assert "automatically re-split" in skill
 
 
+def test_installed_task_delivery_selects_one_runtime_for_each_batch(
+    installed_task_delivery_resources: Dict[str, str],
+) -> None:
+    guidance = normalized(installed_task_delivery_resources["skill"])
+
+    for required_guidance in (
+        "explicit user direction",
+        "harness project policy",
+        "main's current runtime",
+        "ask the user and record the answer",
+        "one selected runtime once at batch level",
+        "do not repeat runtime",
+    ):
+        assert required_guidance in guidance
+
+
 def test_installed_task_delivery_preserves_review_escalation_policy(
     installed_task_delivery_resources: Dict[str, str],
 ) -> None:

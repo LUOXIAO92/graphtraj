@@ -13,6 +13,7 @@ from .runner_models import Project, RunnerError, Task
 
 
 RUNNER_CONFIG_VERSION = 1
+ALLOWLISTED_RUNTIMES = frozenset({"codex"})
 
 
 def configured_worktree_root(runner_directory: Path) -> Path:
@@ -336,6 +337,7 @@ _ROOT_RUNNER_KEYS = frozenset(
 
 def discover_project(
     cwd: Path,
+    selected_runtime: str | None = None,
     *,
     require_clean_integration: bool = True,
     require_runtime_executable: bool = True,
@@ -372,7 +374,11 @@ def discover_project(
     ):
         raise RunnerError("RUNNER_CONFIG_INVALID", invalid)
     _validate_source_repository(repository, common, invalid)
-    runtime_name = os.environ.get("AGENT_RUNTIME", config.get("default_runtime"))
+    runtime_name = (
+        config.get("default_runtime")
+        if selected_runtime is None
+        else selected_runtime
+    )
     runtimes = config.get("runtimes")
     if not isinstance(runtime_name, str) or not isinstance(runtimes, dict):
         raise RunnerError(
@@ -385,7 +391,7 @@ def discover_project(
             "RUNTIME_NOT_CONFIGURED",
             "The selected Agent Runtime is not configured for this project.",
         )
-    if runtime_name != "codex":
+    if runtime_name not in ALLOWLISTED_RUNTIMES:
         raise RunnerError(
             "RUNTIME_UNSUPPORTED",
             "The selected Agent Runtime is not supported by this Runner.",
@@ -396,6 +402,7 @@ def discover_project(
     allowlist = config.get("repository_skill_allowlist")
     if (
         branch != "dev"
+        or set(runtime) != {"executable", "roles"}
         or not isinstance(executable_value, str)
         or not Path(executable_value).is_absolute()
         or not isinstance(roles, dict)

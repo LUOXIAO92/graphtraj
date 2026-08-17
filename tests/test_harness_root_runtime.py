@@ -629,6 +629,7 @@ def test_real_codex_uses_harness_hook_and_explicit_skill_configuration(
     batch_file = harness_root / "real-codex-batch.yml"
     batch_file.write_text(
         "run_id: 20260816-real-codex\n"
+        "runtime: codex\n"
         "tasks:\n"
         "  - ticket_id: '16'\n"
         "    ticket_name: real-codex-runtime\n"

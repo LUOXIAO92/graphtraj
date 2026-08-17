@@ -12,14 +12,13 @@ from typing import Any, Dict, Optional, Tuple
 
 import yaml
 
-from .codex_adapter import (
-    CodexAdapterError,
-    CodexRole,
-    EffectiveSkill,
-    resolve_codex_role,
-    resolve_effective_skills,
+from .codex_adapter import preflight_engineer_runtime_context
+from .runner_batch import (
+    evidence_path,
+    prepare_evidence,
+    read_batch,
+    retain_batch,
 )
-from .runner_batch import prepare_evidence, read_batch, retain_batch
 from .runner_io import (
     ActiveTurnBusyError,
     ActiveTurnReservation,
@@ -41,6 +40,11 @@ from .runner_project import (
     preflight_worktree,
     provision_worktree,
 )
+from .runtime_adapter import (
+    EngineerRuntimeContext,
+    EngineerRuntimeContextPreflight,
+    RuntimeAdapterError,
+)
 
 
 LAUNCH_TIMEOUT_SECONDS = OPERATION_TIMEOUT_SECONDS
@@ -52,6 +56,7 @@ class _TaskLaunchPlan:
     binding: str
     branch: str
     worktree: Path
+    context_preflight: Optional[EngineerRuntimeContextPreflight] = None
     active_turn: Optional[ActiveTurnReservation] = None
 
 
@@ -73,15 +78,17 @@ def launch_batch(batch_file: Path, cwd: Path) -> LaunchResponse:
         )
     _preflight_plan_collisions(project, launch_plans)
     for plan in launch_plans:
-        _resolve_role(project.runtime_store, plan.binding)
         exists = preflight_worktree(
             project,
             plan.task,
             plan.branch,
             plan.worktree,
         )
-        _resolve_skills(
+        plan.context_preflight = _preflight_runtime_context(
             project,
+            plan.binding,
+            plan.worktree,
+            evidence_path(project.state_directory, batch.run_id, plan.task),
             plan.worktree if exists else project.integration_worktree,
             plan.task,
         )
@@ -129,6 +136,9 @@ def _launch_task(
     active_turn = plan.active_turn
     if active_turn is None:
         raise AssertionError("launch task was not reserved")
+    context_preflight = plan.context_preflight
+    if context_preflight is None:
+        raise AssertionError("launch task was not preflighted")
     task = plan.task
     result = {
         "ticket_id": task.ticket_id,
@@ -144,19 +154,17 @@ def _launch_task(
         alias_history = _read_alias_history(evidence, run_id, task)
         provision_worktree(project, task, plan.branch, plan.worktree)
         _ensure_scoped_scratch(plan.worktree, evidence)
-        role = _resolve_role(project.runtime_store, plan.binding)
-        effective_skills = _resolve_skills(project, plan.worktree, task)
+        runtime_context = _finalize_runtime_context(context_preflight)
         alias, mapping = _start_turn(
             project=project,
             run_id=run_id,
             task=task,
-            role=role,
             branch=plan.branch,
             worktree=plan.worktree,
             evidence=evidence,
             active_turn=active_turn,
             alias_history=alias_history,
-            effective_skills=effective_skills,
+            runtime_context=runtime_context,
         )
         _write_metadata(
             evidence=evidence,
@@ -168,7 +176,7 @@ def _launch_task(
             branch=plan.branch,
             worktree=plan.worktree,
             requested_skills=task.requested_skills,
-            effective_skills=effective_skills,
+            runtime_context=runtime_context,
         )
     except RunnerError as error:
         release_reservation = error.release_reservation
@@ -307,13 +315,12 @@ def _start_turn(
     project: Project,
     run_id: str,
     task: Task,
-    role: CodexRole,
     branch: str,
     worktree: Path,
     evidence: Path,
     active_turn: ActiveTurnReservation,
     alias_history: Tuple[str, ...],
-    effective_skills: Tuple[EffectiveSkill, ...],
+    runtime_context: EngineerRuntimeContext,
 ) -> Tuple[str, Dict[str, Any]]:
     session_root = project.runner_directory / "sessions"
     try:
@@ -324,9 +331,10 @@ def _start_turn(
             ROLE_ALIAS_MARKERS[task.role],
             alias_history,
         )
+        launch_document = runtime_context.launch_document()
         mapping = {
             "alias": alias,
-            "runtime": "codex",
+            "runtime": runtime_context.runtime,
             "run_id": run_id,
             "ticket_id": task.ticket_id,
             "ticket_name": task.ticket_name,
@@ -340,15 +348,7 @@ def _start_turn(
         write_yaml_durably(
             launch_file,
             {
-                "runtime": "codex",
-                "adapter_request": role.launch_request(
-                    executable=project.runtime_executable,
-                    worktree=worktree,
-                    evidence=evidence,
-                    git_common_directory=project.common_directory,
-                    runtime_store=project.runtime_store,
-                    effective_skills=effective_skills,
-                ),
+                **launch_document,
                 "active_turn_key": active_turn.key,
                 "active_turn_device": active_turn.device,
                 "active_turn_inode": active_turn.inode,
@@ -568,7 +568,7 @@ def _write_metadata(
     worktree: Path,
     aliases: Tuple[str, ...],
     requested_skills: Tuple[str, ...],
-    effective_skills: Tuple[EffectiveSkill, ...],
+    runtime_context: EngineerRuntimeContext,
 ) -> None:
     try:
         write_yaml_durably(
@@ -580,15 +580,12 @@ def _write_metadata(
                 "alias": alias,
                 "aliases": list(aliases),
                 "role": task.role,
-                "runtime": "codex",
+                **runtime_context.evidence_document(),
                 "session": session,
                 "branch": branch,
                 "worktree_path": str(worktree),
                 "ticket_file": str(task.ticket_file),
                 "requested_skills": list(requested_skills),
-                "effective_skills": [
-                    skill.evidence_entry() for skill in effective_skills
-                ],
             },
         )
     except (OSError, yaml.YAMLError) as error:
@@ -598,24 +595,33 @@ def _write_metadata(
         ) from error
 
 
-def _resolve_role(runtime_store: Path, binding: str) -> CodexRole:
+def _preflight_runtime_context(
+    project: Project,
+    binding: str,
+    worktree: Path,
+    evidence: Path,
+    repository_skill_source: Path,
+    task: Task,
+) -> EngineerRuntimeContextPreflight:
     try:
-        return resolve_codex_role(runtime_store, binding)
-    except CodexAdapterError as error:
+        return preflight_engineer_runtime_context(
+            runtime_store=project.runtime_store,
+            executable=project.runtime_executable,
+            git_common_directory=project.common_directory,
+            role=binding,
+            worktree=worktree,
+            evidence=evidence,
+            repository_skill_source=repository_skill_source,
+            requested_skills=task.requested_skills,
+        )
+    except RuntimeAdapterError as error:
         raise RunnerError(error.code, error.message) from error
 
 
-def _resolve_skills(
-    project: Project,
-    worktree: Path,
-    task: Task,
-) -> Tuple[EffectiveSkill, ...]:
+def _finalize_runtime_context(
+    preflight: EngineerRuntimeContextPreflight,
+) -> EngineerRuntimeContext:
     try:
-        return resolve_effective_skills(
-            project.runtime_store,
-            worktree,
-            task.role,
-            task.requested_skills,
-        )
-    except CodexAdapterError as error:
+        return preflight.finalize()
+    except RuntimeAdapterError as error:
         raise RunnerError(error.code, error.message) from error

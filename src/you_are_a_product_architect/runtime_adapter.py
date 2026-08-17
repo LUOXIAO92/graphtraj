@@ -38,6 +38,27 @@ class RuntimeTurn(Protocol):
         """Keep ownership until the Runtime process group is terminal."""
 
 
+class EngineerRuntimeContext(Protocol):
+    """One immutable Adapter-owned launch, evidence, and recovery Context."""
+
+    @property
+    def runtime(self) -> str:
+        """Return the selected Runtime's stable name."""
+
+    def launch_document(self) -> Dict[str, Any]:
+        """Return a fresh durable document for launch and resume."""
+
+    def evidence_document(self) -> Dict[str, Any]:
+        """Return a fresh document of the effective Context facts."""
+
+
+class EngineerRuntimeContextPreflight(Protocol):
+    """A side-effect-free preparation awaiting Ticket Worktree facts."""
+
+    def finalize(self) -> EngineerRuntimeContext:
+        """Resolve Worktree-local facts and freeze the effective Context."""
+
+
 RuntimeAdapter = Callable[
     [Mapping[str, Any], str, Path, SessionStarted], RuntimeTurn
 ]

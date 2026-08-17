@@ -16,7 +16,12 @@ from importlib import resources
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
-from .runtime_adapter import RuntimeAdapterError, SessionStarted
+from .runtime_adapter import (
+    EngineerRuntimeContext,
+    EngineerRuntimeContextPreflight,
+    RuntimeAdapterError,
+    SessionStarted,
+)
 from .runner_transport import runtime_turn_outcome
 from .skill_check import declared_skill_name, harness_skill_root
 
@@ -54,7 +59,7 @@ class CodexAdapterError(RuntimeAdapterError):
 
 
 @dataclass(frozen=True)
-class EffectiveSkill:
+class _EffectiveSkill:
     """One explicit Codex Skill selection persisted with a launch request."""
 
     name: str
@@ -75,7 +80,7 @@ class EffectiveSkill:
 
 
 @dataclass(frozen=True)
-class CodexRole:
+class _CodexRole:
     """Validated effective settings for one Harness-owned custom Agent."""
 
     name: str
@@ -86,7 +91,7 @@ class CodexRole:
     hooks: Mapping[str, Any]
     agents: Mapping[str, Any]
 
-    def launch_request(
+    def _launch_request(
         self,
         *,
         executable: Path,
@@ -94,7 +99,7 @@ class CodexRole:
         evidence: Path,
         git_common_directory: Path,
         runtime_store: Path,
-        effective_skills: Tuple[EffectiveSkill, ...],
+        effective_skills: Tuple[_EffectiveSkill, ...],
     ) -> Dict[str, Any]:
         """Render the private request consumed by this Adapter's worker."""
 
@@ -142,6 +147,108 @@ class CodexRole:
             arguments.extend(("-c", "{0}={1}".format(key, _toml_value(value))))
         arguments.extend(("--json", "-"))
         return {"arguments": arguments, "worktree_path": str(worktree)}
+
+
+@dataclass(frozen=True)
+class _CodexEngineerRuntimePreflight:
+    _runtime_store: Path
+    _executable: Path
+    _git_common_directory: Path
+    _role: _CodexRole
+    _worktree: Path
+    _evidence: Path
+    _harness_skills: Tuple[_EffectiveSkill, ...]
+    _requested_skills: Tuple[str, ...]
+
+    def finalize(self) -> EngineerRuntimeContext:
+        """Resolve Ticket Worktree facts and freeze one launch Context."""
+
+        effective_skills = self._harness_skills + _resolve_repository_skills(
+            self._worktree, self._requested_skills
+        )
+        request = self._role._launch_request(
+            executable=self._executable,
+            worktree=self._worktree,
+            evidence=self._evidence,
+            git_common_directory=self._git_common_directory,
+            runtime_store=self._runtime_store,
+            effective_skills=effective_skills,
+        )
+        return _CodexEngineerRuntimeContext(
+            _role=self._role.name,
+            _arguments=tuple(request["arguments"]),
+            _worktree=self._worktree,
+            _effective_skills=effective_skills,
+        )
+
+
+@dataclass(frozen=True)
+class _CodexEngineerRuntimeContext:
+    _role: str
+    _arguments: Tuple[str, ...]
+    _worktree: Path
+    _effective_skills: Tuple[_EffectiveSkill, ...]
+    runtime: str = "codex"
+
+    def launch_document(self) -> Dict[str, Any]:
+        """Return the durable Adapter input for launch and resume."""
+
+        return {
+            "runtime": self.runtime,
+            "adapter_request": {
+                "arguments": list(self._arguments),
+                "worktree_path": str(self._worktree),
+            },
+        }
+
+    def evidence_document(self) -> Dict[str, Any]:
+        """Return the effective Context facts for mechanical evidence."""
+
+        return {
+            "runtime": self.runtime,
+            "effective_role": self._role,
+            "effective_skills": [
+                skill.evidence_entry() for skill in self._effective_skills
+            ],
+        }
+
+
+def preflight_engineer_runtime_context(
+    *,
+    runtime_store: Path,
+    executable: Path,
+    git_common_directory: Path,
+    role: str,
+    worktree: Path,
+    evidence: Path,
+    repository_skill_source: Path,
+    requested_skills: Tuple[str, ...],
+) -> EngineerRuntimeContextPreflight:
+    """Validate every Engineer Context fact available before provisioning."""
+
+    resolved_role = _resolve_codex_role(runtime_store, role)
+    harness_skills = _resolve_harness_skills(runtime_store, role)
+    repository_skills = _resolve_repository_skills(
+        repository_skill_source, requested_skills
+    )
+    resolved_role._launch_request(
+        executable=executable,
+        worktree=worktree,
+        evidence=evidence,
+        git_common_directory=git_common_directory,
+        runtime_store=runtime_store,
+        effective_skills=harness_skills + repository_skills,
+    )
+    return _CodexEngineerRuntimePreflight(
+        _runtime_store=runtime_store,
+        _executable=executable,
+        _git_common_directory=git_common_directory,
+        _role=resolved_role,
+        _worktree=worktree,
+        _evidence=evidence,
+        _harness_skills=harness_skills,
+        _requested_skills=requested_skills,
+    )
 
 
 class CodexTurn:
@@ -417,7 +524,7 @@ def _process_group_is_alive(process_group: int) -> bool:
     return True
 
 
-def resolve_codex_role(runtime_store: Path, binding: str) -> CodexRole:
+def _resolve_codex_role(runtime_store: Path, binding: str) -> _CodexRole:
     """Resolve and vet one canonical role from the Harness Runtime Store."""
 
     agent_directory = runtime_store / "agents"
@@ -465,7 +572,7 @@ def resolve_codex_role(runtime_store: Path, binding: str) -> CodexRole:
         )
     _verify_packaged_guard(runtime_store)
 
-    return CodexRole(
+    return _CodexRole(
         name=binding,
         model=document["model"],
         reasoning_effort=document["model_reasoning_effort"],
@@ -574,13 +681,12 @@ ENGINEER_ROLES = frozenset(
 ENGINEER_REQUIRED_SKILLS = ("implement", "ponytail", "tdd", "code-review")
 
 
-def resolve_effective_skills(
+def _resolve_harness_skills(
     runtime_store: Path,
-    worktree: Path,
     role: str,
-    requested_names: Tuple[str, ...],
-) -> Tuple[EffectiveSkill, ...]:
-    """Build the one explicit per-Skill configuration for an Engineer turn."""
+) -> Tuple[_EffectiveSkill, ...]:
+    """Resolve the Engineer role's required external Harness Skills."""
+
     if role not in ENGINEER_ROLES:
         raise CodexAdapterError(
             "ROLE_NOT_SUPPORTED",
@@ -589,7 +695,7 @@ def resolve_effective_skills(
     required_names = ENGINEER_REQUIRED_SKILLS
     runtime_skills = _discover_skill_files(harness_skill_root(runtime_store))
     user_skills = _discover_skill_files(Path.home() / ".agents" / "skills")
-    effective: List[EffectiveSkill] = []
+    effective: List[_EffectiveSkill] = []
     for name in required_names:
         matches = runtime_skills.get(name, ())
         source = "harness"
@@ -604,13 +710,22 @@ def resolve_effective_skills(
                 ),
             )
         effective.append(
-            EffectiveSkill(
+            _EffectiveSkill(
                 name=name,
                 path=matches[0],
                 enabled=True,
                 source=source,
             )
         )
+    return tuple(effective)
+
+
+def _resolve_repository_skills(
+    worktree: Path,
+    requested_names: Tuple[str, ...],
+) -> Tuple[_EffectiveSkill, ...]:
+    """Resolve the explicit Skill configuration beneath one Worktree."""
+
     repository_skills = _discover_skill_files(
         worktree / ".agents" / "skills"
     )
@@ -638,9 +753,10 @@ def resolve_effective_skills(
         for name, paths in repository_skills.items()
         for path in paths
     ]
+    effective: List[_EffectiveSkill] = []
     for name, path in sorted(repository_entries, key=lambda entry: str(entry[1])):
         effective.append(
-            EffectiveSkill(
+            _EffectiveSkill(
                 name=name,
                 path=path,
                 enabled=path in selected_paths,

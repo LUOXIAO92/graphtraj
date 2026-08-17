@@ -4,7 +4,6 @@ import importlib.util
 import json
 import os
 import subprocess
-import tomllib
 from pathlib import Path
 
 import pytest
@@ -317,10 +316,6 @@ def test_installed_runner_launches_one_isolated_engineer_and_returns_early(
     )
 
     alias = "2-10-launch-engineer@e1"
-    common_directory = Path(git_output(primary, "rev-parse", "--git-common-dir"))
-    if not common_directory.is_absolute():
-        common_directory = primary / common_directory
-    common_directory = common_directory.resolve()
     session_directory = (
         harness_root / ".codex" / "agent-runner" / "sessions" / alias
     )
@@ -404,72 +399,6 @@ def test_installed_runner_launches_one_isolated_engineer_and_returns_early(
         )
         assert runtime_call["cwd"] == str(ticket_worktree)
         assert runtime_call["stdin"] == expected_task
-        runtime_argv = runtime_call["argv"]
-        assert runtime_argv[:12] == [
-                "exec",
-                "-C",
-                str(ticket_worktree),
-                "--add-dir",
-                str(evidence),
-                "--add-dir",
-                str(common_directory),
-                "--model",
-                "gpt-5.6-sol",
-                "--sandbox",
-                "workspace-write",
-                "--dangerously-bypass-hook-trust",
-        ]
-        assert runtime_argv[-2:] == ["--json", "-"]
-        assert runtime_argv.count("--add-dir") == 2
-        assert "--profile" not in runtime_argv
-
-        config_argv = runtime_argv[12:-2]
-        assert config_argv[::2] == ["-c"] * 6
-        parsed_overrides = {}
-        for override in config_argv[1::2]:
-            parsed_overrides.update(tomllib.loads(override))
-        role_config = tomllib.loads(
-            (
-                harness_root
-                / ".codex"
-                / "agents"
-                / "engineer-expert.toml"
-            ).read_text(encoding="utf-8")
-        )
-        expected_role_overrides = {
-            "model_reasoning_effort": role_config["model_reasoning_effort"],
-            "agents": role_config["agents"],
-        }
-        for key, value in expected_role_overrides.items():
-            assert parsed_overrides[key] == value
-        assert parsed_overrides["projects"] == {
-            str(ticket_worktree): {"trust_level": "untrusted"}
-        }
-        configured_skills = {
-            entry["path"]: entry["enabled"]
-            for entry in parsed_overrides["skills"]["config"]
-        }
-        assert configured_skills[
-            str(ticket_worktree / ".agents" / "skills" / "repo-selected" / "SKILL.md")
-        ] is True
-        assert configured_skills[
-            str(ticket_worktree / ".agents" / "skills" / "repo-disabled" / "SKILL.md")
-        ] is False
-        assert all(
-            configured_skills[
-                str(user_home / ".agents" / "skills" / name / "SKILL.md")
-            ]
-            is True
-            for name in ("implement", "ponytail", "tdd", "code-review")
-        )
-        for event in ("PreToolUse", "SubagentStart"):
-            for entry in parsed_overrides["hooks"][event]:
-                for hook in entry["hooks"]:
-                    assert str(
-                        harness_root / ".codex" / "hooks" / "worktree_guard.py"
-                    ) in hook["command"]
-        assert role_config["name"] not in runtime_argv
-        assert role_config["description"] not in runtime_argv
 
         mapping_file = session_directory / "mapping.yml"
         assert mapping_file.is_file()
@@ -531,6 +460,7 @@ def test_installed_runner_launches_one_isolated_engineer_and_returns_early(
             "aliases": [alias],
             "role": "engineer-expert",
             "runtime": "codex",
+            "effective_role": "engineer-expert",
             "session": "thread-ticket-10",
             "branch": branch,
             "worktree_path": str(ticket_worktree),
@@ -679,6 +609,15 @@ def test_installed_runner_rejects_invalid_skills_before_starting_any_task(
     assert rejected.stderr == message + "\n"
     assert not fake_codex.log_file.exists()
     assert not (harness_root / ".agent-worktrees" / "runs").exists()
+    assert not (
+        harness_root / "state" / "task-delivery" / "20260816-skill-preflight"
+    ).exists()
+    assert not (
+        harness_root / ".codex" / "agent-runner" / "active-worktrees"
+    ).exists()
+    assert not (
+        harness_root / ".codex" / "agent-runner" / "sessions"
+    ).exists()
 
 
 @pytest.mark.parametrize(

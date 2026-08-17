@@ -270,16 +270,22 @@ def retain_batch(state: Path, batch: Batch) -> Path:
     )
 
 
-def prepare_evidence(state: Path, run_id: str, task: Task) -> Path:
-    """Create the one persistent evidence directory for a validated ticket."""
+def evidence_path(state: Path, run_id: str, task: Task) -> Path:
+    """Return one ticket's deterministic persistent evidence path."""
 
-    evidence = (
+    return (
         state
         / "task-delivery"
         / run_id
         / "tickets"
         / task.stem
-    )
+    ).resolve()
+
+
+def prepare_evidence(state: Path, run_id: str, task: Task) -> Path:
+    """Create the one persistent evidence directory for a validated ticket."""
+
+    evidence = evidence_path(state, run_id, task)
     _safe_directory(evidence, state)
     return evidence.resolve()
 

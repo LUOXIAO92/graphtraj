@@ -121,7 +121,9 @@ def test_setup_uses_runtime_user_core_skills_without_root_skill_config(
     monkeypatch.syspath_prepend(
         str(Path(__file__).resolve().parents[1] / "src")
     )
-    from you_are_a_product_architect.codex_adapter import resolve_codex_role
+    from you_are_a_product_architect.codex_adapter import (
+        preflight_engineer_runtime_context,
+    )
     from you_are_a_product_architect.project_initialization import plan_project_setup
 
     harness_root = temporary_git_repository.parent
@@ -146,14 +148,24 @@ def test_setup_uses_runtime_user_core_skills_without_root_skill_config(
         runtime_config.read_text(encoding="utf-8")
     )
     assert not (harness_root / ".agents" / "skills").exists()
-    assert resolve_codex_role(runtime_store, "engineer-expert").name == (
-        "engineer-expert"
+    preflight_engineer_runtime_context(
+        runtime_store=runtime_store,
+        executable=_runtime_executable(tmp_path),
+        git_common_directory=temporary_git_repository / ".git",
+        role="engineer-expert",
+        worktree=tmp_path / "ticket-worktree",
+        evidence=tmp_path / "evidence",
+        repository_skill_source=(
+            harness_root / ".agent-worktrees" / "integration"
+        ),
+        requested_skills=(),
     )
 
 
-def test_adapter_keeps_main_root_config_out_of_engineer_preflight(
+def test_engineer_runtime_context_preflight_validates_without_launch_artifacts(
     monkeypatch,
     temporary_git_repository: Path,
+    fake_codex: FakeCodex,
     tmp_path: Path,
 ) -> None:
     monkeypatch.syspath_prepend(
@@ -161,8 +173,7 @@ def test_adapter_keeps_main_root_config_out_of_engineer_preflight(
     )
     from you_are_a_product_architect.codex_adapter import (
         CodexAdapterError,
-        resolve_codex_role,
-        resolve_effective_skills,
+        preflight_engineer_runtime_context,
     )
     from you_are_a_product_architect.project_initialization import plan_project_setup
 
@@ -179,24 +190,111 @@ def test_adapter_keeps_main_root_config_out_of_engineer_preflight(
 
     runtime_store = harness_root / ".codex"
     (runtime_store / "config.toml").unlink()
-    assert (
-        resolve_codex_role(runtime_store, "engineer-expert").name
-        == "engineer-expert"
+    target_worktree = tmp_path / "ticket-worktree"
+    evidence = tmp_path / "evidence"
+    preflight_engineer_runtime_context(
+        runtime_store=runtime_store,
+        executable=fake_codex.executable,
+        git_common_directory=temporary_git_repository / ".git",
+        role="engineer-expert",
+        worktree=target_worktree,
+        evidence=evidence,
+        repository_skill_source=(
+            harness_root / ".agent-worktrees" / "integration"
+        ),
+        requested_skills=(),
     )
+    assert not target_worktree.exists()
+    assert not evidence.exists()
+    assert not fake_codex.log_file.exists()
 
     (harness_root / ".agents" / "skills" / "implement" / "SKILL.md").unlink()
 
     with pytest.raises(CodexAdapterError) as unavailable:
-        resolve_effective_skills(
-            runtime_store,
-            tmp_path / "ticket-worktree",
-            "engineer-expert",
-            (),
+        preflight_engineer_runtime_context(
+            runtime_store=runtime_store,
+            executable=fake_codex.executable,
+            git_common_directory=temporary_git_repository / ".git",
+            role="engineer-expert",
+            worktree=target_worktree,
+            evidence=evidence,
+            repository_skill_source=(
+                harness_root / ".agent-worktrees" / "integration"
+            ),
+            requested_skills=(),
         )
     assert unavailable.value.code == "HARNESS_SKILL_NOT_FOUND"
 
 
-def test_adapter_uses_root_role_hook_and_explicit_skill_paths(
+@pytest.mark.parametrize(
+    ("skill_directories", "requested_skill", "expected_code"),
+    (
+        ((), "missing", "REPOSITORY_SKILL_NOT_FOUND"),
+        (
+            (("duplicate-one", "duplicate"), ("duplicate-two", "duplicate")),
+            "duplicate",
+            "REPOSITORY_SKILL_AMBIGUOUS",
+        ),
+    ),
+)
+def test_engineer_runtime_context_preflight_rejects_unresolved_repository_skills(
+    monkeypatch,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+    skill_directories: tuple[tuple[str, str], ...],
+    requested_skill: str,
+    expected_code: str,
+) -> None:
+    monkeypatch.syspath_prepend(
+        str(Path(__file__).resolve().parents[1] / "src")
+    )
+    from you_are_a_product_architect.codex_adapter import (
+        CodexAdapterError,
+        preflight_engineer_runtime_context,
+    )
+    from you_are_a_product_architect.project_initialization import plan_project_setup
+
+    harness_root = temporary_git_repository.parent
+    user_home = tmp_path / "runtime-user"
+    user_home.mkdir()
+    monkeypatch.setenv("HOME", str(user_home))
+    plan = plan_project_setup(
+        harness_root,
+        temporary_git_repository,
+        fake_codex.executable,
+    )
+    plan.apply(install_missing_skills=True)
+    source = harness_root / ".agent-worktrees" / "integration"
+    for directory, name in skill_directories:
+        skill = source / ".agents" / "skills" / directory / "SKILL.md"
+        skill.parent.mkdir(parents=True)
+        skill.write_text(
+            "---\nname: {0}\ndescription: test\n---\n".format(name),
+            encoding="utf-8",
+        )
+    worktree = tmp_path / "ticket-worktree"
+    evidence = tmp_path / "evidence"
+
+    with pytest.raises(CodexAdapterError) as raised:
+        preflight_engineer_runtime_context(
+            runtime_store=harness_root / ".codex",
+            executable=fake_codex.executable,
+            git_common_directory=temporary_git_repository / ".git",
+            role="engineer-expert",
+            worktree=worktree,
+            evidence=evidence,
+            repository_skill_source=source,
+            requested_skills=(requested_skill,),
+        )
+
+    assert raised.value.code == expected_code
+    assert not worktree.exists()
+    assert not evidence.exists()
+    assert not fake_codex.log_file.exists()
+
+
+def test_engineer_runtime_context_finalizes_worktree_facts_once(
     monkeypatch,
     temporary_git_repository: Path,
     tmp_path: Path,
@@ -205,9 +303,7 @@ def test_adapter_uses_root_role_hook_and_explicit_skill_paths(
         str(Path(__file__).resolve().parents[1] / "src")
     )
     from you_are_a_product_architect.codex_adapter import (
-        CodexAdapterError,
-        resolve_codex_role,
-        resolve_effective_skills,
+        preflight_engineer_runtime_context,
     )
     from you_are_a_product_architect.project_initialization import plan_project_setup
 
@@ -222,111 +318,90 @@ def test_adapter_uses_root_role_hook_and_explicit_skill_paths(
     )
     plan.apply(install_missing_skills=True)
     runtime_store = harness_root / ".codex"
+    source = tmp_path / "integration"
     ticket = tmp_path / "ticket-worktree"
-    selected = ticket / ".agents" / "skills" / "repo-selected" / "SKILL.md"
-    disabled = ticket / ".agents" / "skills" / "repo-disabled" / "SKILL.md"
-    source_config = ticket / ".codex" / "config.toml"
-    selected.parent.mkdir(parents=True)
-    disabled.parent.mkdir(parents=True)
-    source_config.parent.mkdir(parents=True)
-    selected.write_text(
-        "---\nname: repo-selected\ndescription: selected\n---\n",
-        encoding="utf-8",
-    )
-    disabled.write_text(
-        "---\nname: repo-disabled\ndescription: disabled\n---\n",
-        encoding="utf-8",
-    )
-    source_config.write_text("model = \"source-poison\"\n", encoding="utf-8")
     evidence = tmp_path / "evidence"
     git_common = tmp_path / "git-common"
+    for root in (source, ticket):
+        selected = root / ".agents" / "skills" / "repo-selected" / "SKILL.md"
+        disabled = root / ".agents" / "skills" / "repo-disabled" / "SKILL.md"
+        selected.parent.mkdir(parents=True)
+        disabled.parent.mkdir(parents=True)
+        selected.write_text(
+            "---\nname: repo-selected\ndescription: selected\n---\n",
+            encoding="utf-8",
+        )
+        disabled.write_text(
+            "---\nname: repo-disabled\ndescription: disabled\n---\n",
+            encoding="utf-8",
+        )
     evidence.mkdir()
     git_common.mkdir()
-
-    role = resolve_codex_role(runtime_store, "engineer-expert")
-    effective = resolve_effective_skills(
-        runtime_store,
-        ticket,
-        "engineer-expert",
-        ("repo-selected",),
-    )
-    request = role.launch_request(
+    preflight = preflight_engineer_runtime_context(
+        runtime_store=runtime_store,
         executable=_runtime_executable(tmp_path),
         worktree=ticket,
         evidence=evidence,
         git_common_directory=git_common,
-        runtime_store=runtime_store,
-        effective_skills=effective,
+        role="engineer-expert",
+        repository_skill_source=source,
+        requested_skills=("repo-selected",),
     )
-    arguments = request["arguments"]
-    overrides = {}
-    for index, argument in enumerate(arguments):
-        if argument == "-c":
-            overrides.update(tomllib.loads(arguments[index + 1]))
 
-    assert overrides["developer_instructions"].startswith(
-        "Implement the assigned ticket using [$implement]({0}).\n"
-        "Use [$ponytail]({1}) to choose the smallest implementation that "
-        "fully satisfies the ticket.\n"
-        "Use [$tdd]({2}) for behavior changes and [$code-review]({3}) "
-        "before handing off the candidate.\n".format(
-            harness_root / ".agents" / "skills" / "implement" / "SKILL.md",
-            harness_root / ".agents" / "skills" / "ponytail" / "SKILL.md",
-            harness_root / ".agents" / "skills" / "tdd" / "SKILL.md",
-            harness_root / ".agents" / "skills" / "code-review" / "SKILL.md",
-        )
-    )
-    assert overrides["projects"][str(ticket)]["trust_level"] == "untrusted"
-    hooks = overrides["hooks"]
-    for event in ("PreToolUse", "SubagentStart"):
-        for entry in hooks[event]:
-            for hook in entry["hooks"]:
-                assert str(runtime_store / "hooks" / "worktree_guard.py") in hook[
-                    "command"
-                ]
-                assert str(ticket / ".codex") not in hook["command"]
-    by_path = {
-        entry["path"]: entry["enabled"]
-        for entry in overrides["skills"]["config"]
+    context = preflight.finalize()
+    expected_evidence = {
+        "runtime": "codex",
+        "effective_role": "engineer-expert",
+        "effective_skills": [
+            {
+                "name": name,
+                "path": str(
+                    harness_root / ".agents" / "skills" / name / "SKILL.md"
+                ),
+                "enabled": True,
+                "source": "harness",
+            }
+            for name in ("implement", "ponytail", "tdd", "code-review")
+        ]
+        + [
+            {
+                "name": "repo-disabled",
+                "path": str(
+                    ticket
+                    / ".agents"
+                    / "skills"
+                    / "repo-disabled"
+                    / "SKILL.md"
+                ),
+                "enabled": False,
+                "source": "repository",
+            },
+            {
+                "name": "repo-selected",
+                "path": str(
+                    ticket
+                    / ".agents"
+                    / "skills"
+                    / "repo-selected"
+                    / "SKILL.md"
+                ),
+                "enabled": True,
+                "source": "repository",
+            },
+        ],
     }
-    assert by_path[str(selected.resolve())] is True
-    assert by_path[str(disabled.resolve())] is False
-    assert all(
-        by_path[
-            str(harness_root / ".agents" / "skills" / name / "SKILL.md")
-        ] is True
-        for name in ("implement", "ponytail", "tdd", "code-review")
-    )
-    assert [skill.name for skill in effective if skill.source == "repository"] == [
-        "repo-disabled",
-        "repo-selected",
-    ]
-    with pytest.raises(CodexAdapterError, match="not found") as missing:
-        resolve_effective_skills(
-            runtime_store,
-            ticket,
-            "engineer-expert",
-            ("missing",),
-        )
-    assert missing.value.code == "REPOSITORY_SKILL_NOT_FOUND"
-    for directory in ("duplicate-one", "duplicate-two"):
-        duplicate = ticket / ".agents" / "skills" / directory / "SKILL.md"
-        duplicate.parent.mkdir(parents=True)
-        duplicate.write_text(
-            "---\nname: duplicate\ndescription: ambiguous\n---\n",
-            encoding="utf-8",
-        )
-    with pytest.raises(CodexAdapterError, match="ambiguous") as ambiguous:
-        resolve_effective_skills(
-            runtime_store,
-            ticket,
-            "engineer-expert",
-            ("duplicate",),
-        )
-    assert ambiguous.value.code == "REPOSITORY_SKILL_AMBIGUOUS"
+    launch = context.launch_document()
+    evidence_document = context.evidence_document()
+
+    assert launch["runtime"] == "codex"
+    assert evidence_document == expected_evidence
+    launch["adapter_request"].clear()
+    evidence_document["effective_skills"].clear()
+    assert context.launch_document()["adapter_request"]
+    assert context.evidence_document() == expected_evidence
 
 
-def test_resume_reuses_the_persisted_request_after_runtime_changes(
+def test_engineer_runtime_context_finalization_rechecks_ticket_worktree_skills(
     monkeypatch,
     temporary_git_repository: Path,
     fake_codex: FakeCodex,
@@ -336,9 +411,8 @@ def test_resume_reuses_the_persisted_request_after_runtime_changes(
         str(Path(__file__).resolve().parents[1] / "src")
     )
     from you_are_a_product_architect.codex_adapter import (
-        create_codex_resume_turn,
-        resolve_codex_role,
-        resolve_effective_skills,
+        CodexAdapterError,
+        preflight_engineer_runtime_context,
     )
     from you_are_a_product_architect.project_initialization import plan_project_setup
 
@@ -349,62 +423,35 @@ def test_resume_reuses_the_persisted_request_after_runtime_changes(
     plan = plan_project_setup(
         harness_root,
         temporary_git_repository,
-        _runtime_executable(tmp_path),
+        fake_codex.executable,
     )
     plan.apply(install_missing_skills=True)
-    runtime_store = harness_root / ".codex"
-    ticket = tmp_path / "ticket-worktree"
+    source = harness_root / ".agent-worktrees" / "integration"
+    selected = source / ".agents" / "skills" / "selected" / "SKILL.md"
+    selected.parent.mkdir(parents=True)
+    selected.write_text(
+        "---\nname: selected\ndescription: test\n---\n", encoding="utf-8"
+    )
+    worktree = tmp_path / "ticket-worktree"
     evidence = tmp_path / "evidence"
-    git_common = tmp_path / "git-common"
-    ticket.mkdir()
-    evidence.mkdir()
-    git_common.mkdir()
-    role = resolve_codex_role(runtime_store, "engineer-expert")
-    request = role.launch_request(
+    preflight = preflight_engineer_runtime_context(
+        runtime_store=harness_root / ".codex",
         executable=fake_codex.executable,
-        worktree=ticket,
+        git_common_directory=temporary_git_repository / ".git",
+        role="engineer-expert",
+        worktree=worktree,
         evidence=evidence,
-        git_common_directory=git_common,
-        runtime_store=runtime_store,
-        effective_skills=resolve_effective_skills(
-            runtime_store,
-            ticket,
-            "engineer-expert",
-            (),
-        ),
+        repository_skill_source=source,
+        requested_skills=("selected",),
     )
-    session_directory = tmp_path / "session"
-    session_directory.mkdir()
-    session = "persisted-session"
-    (ticket / ".codex").mkdir()
-    (ticket / ".codex" / "config.toml").write_text(
-        "model = \"source-changed\"\n", encoding="utf-8"
-    )
-    (runtime_store / "agents" / "engineer-expert.toml").write_text(
-        "name = \"changed-after-launch\"\n", encoding="utf-8"
-    )
-    monkeypatch.setenv("FAKE_CODEX_LOG", str(fake_codex.log_file))
-    monkeypatch.setenv(
-        "FAKE_CODEX_EVENTS",
-        json.dumps([{"type": "thread.started", "thread_id": session}]),
-    )
-    resumed = []
-    turn = create_codex_resume_turn(
-        request,
-        "Resume the persisted request.",
-        session,
-        session_directory,
-        lambda identity, process_id: resumed.append(identity),
-    )
-    turn.run()
-    runtime_record = json.loads(fake_codex.log_file.read_text(encoding="utf-8"))
-    assert resumed == [session]
-    assert runtime_record["argv"] == [
-        *request["arguments"][1:-1],
-        "resume",
-        session,
-        "-",
-    ]
+    worktree.mkdir()
+
+    with pytest.raises(CodexAdapterError) as raised:
+        preflight.finalize()
+
+    assert raised.value.code == "REPOSITORY_SKILL_NOT_FOUND"
+    assert not evidence.exists()
+    assert not fake_codex.log_file.exists()
 
 
 @pytest.mark.skipif(
@@ -606,36 +653,7 @@ def test_real_codex_uses_harness_hook_and_explicit_skill_configuration(
         (session / "turn.yml").read_text(encoding="utf-8")
     )["outcome"] == "completed"
 
-    request = yaml.safe_load(
-        (session / "launch.yml").read_text(encoding="utf-8")
-    )["adapter_request"]
-    overrides = {}
-    for index, argument in enumerate(request["arguments"]):
-        if argument == "-c":
-            overrides.update(tomllib.loads(request["arguments"][index + 1]))
     ticket_worktree = Path(task["worktree_path"])
-    assert overrides["projects"][str(ticket_worktree)]["trust_level"] == "untrusted"
-    selected = (
-        ticket_worktree
-        / ".agents"
-        / "skills"
-        / "repository-selected"
-        / "SKILL.md"
-    )
-    disabled = (
-        ticket_worktree
-        / ".agents"
-        / "skills"
-        / "repository-disabled"
-        / "SKILL.md"
-    )
-    configured_skills = {
-        Path(entry["path"]): entry["enabled"]
-        for entry in overrides["skills"]["config"]
-    }
-    assert configured_skills[harness_skill] is True
-    assert configured_skills[selected] is True
-    assert configured_skills[disabled] is False
     assert (ticket_worktree / ".harness-skill-proof").read_text(
         encoding="utf-8"
     ).strip() == "implement"

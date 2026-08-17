@@ -95,6 +95,14 @@ def test_installed_send_resumes_an_idle_runtime_session_under_the_same_alias(
         fake_codex.log_file.read_text(encoding="utf-8")
     )
     wait_for_process_exit(original_mapping["worker_pid"])
+    (harness_root / ".codex" / "agents" / "engineer-expert.toml").write_text(
+        'name = "changed-after-launch"\n', encoding="utf-8"
+    )
+    source_config = (
+        Path(original_mapping["worktree_path"]) / ".codex" / "config.toml"
+    )
+    source_config.parent.mkdir()
+    source_config.write_text('model = "source-changed"\n', encoding="utf-8")
     resume_release = tmp_path / "allow-resumed-turn-to-finish"
     instruction = "--dangerously-bypass-approvals-and-sandbox"
 

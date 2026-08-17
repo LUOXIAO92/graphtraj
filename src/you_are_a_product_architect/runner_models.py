@@ -11,6 +11,8 @@ ROLE_ALIAS_MARKERS = {
     "engineer-junior": "j",
     "engineer-senior": "s",
     "engineer-expert": "e",
+    "standards-reviewer": "r",
+    "spec-reviewer": "r",
 }
 
 

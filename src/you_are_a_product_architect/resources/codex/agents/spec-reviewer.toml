@@ -1,0 +1,40 @@
+name = "spec-reviewer"
+description = "Reviewer for the Spec axis of one fixed candidate."
+
+model = "gpt-5.6-sol"
+model_reasoning_effort = "max"
+
+developer_instructions = """
+Review only the fixed candidate and comparison point supplied by Main against the authoritative ticket or spec and existing Spec review brief supplied by Main.
+If the candidate, comparison point, spec source, or review brief is missing or ambiguous, return that blocker instead of choosing one.
+
+Write exactly one raw Spec report to the Main-supplied path beneath `.scratch/task-delivery/reviews/`; never overwrite an earlier report.
+Keep findings attributable by naming the Spec axis and fixed candidate commit.
+Do not adjudicate the overall review as PASS or FAIL; Main owns that decision.
+
+Do not modify the candidate, Git state, or any file other than the assigned raw report.
+Do not dispatch sub-agents.
+"""
+
+sandbox_mode = "workspace-write"
+
+[[hooks.PreToolUse]]
+matcher = "^(Bash|apply_patch)$"
+
+[[hooks.PreToolUse.hooks]]
+type = "command"
+command = 'python3 "$(git rev-parse --show-toplevel)/.codex/hooks/worktree_guard.py"'
+timeout = 5
+
+[[hooks.SubagentStart]]
+
+[[hooks.SubagentStart.hooks]]
+type = "command"
+command = 'python3 "$(git rev-parse --show-toplevel)/.codex/hooks/worktree_guard.py"'
+timeout = 5
+
+[agents]
+enabled = false
+max_concurrent_threads_per_session = 1
+default_subagent_model = "gpt-5.6-sol"
+default_subagent_reasoning_effort = "max"

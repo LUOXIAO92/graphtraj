@@ -65,7 +65,7 @@ the Primary Worktree or Source Repository Runtime files.
 
 The Runtime Store is Harness-owned rather than committed into `dev`; Ticket
 Worktrees do not inherit Harness roles, Hooks, or Harness Skills. Runner still
-requires a clean `dev` Integration Worktree before dispatching an Engineer.
+requires a clean `dev` Integration Worktree before dispatching a role.
 
 Treat tracker binding, repository instructions, and domain documentation as
 target-project concerns; setup does not impose this repository's choices on a
@@ -73,8 +73,9 @@ target project.
 
 ## Deliver a selected ticket
 
-Main selects the ticket, tier, Runtime, and integration order. The Runner is
-mechanical transport only: it neither reads a tracker nor discovers a queue.
+Main selects the ticket, Engineer tier, optional Reviewers, Runtime, and
+integration order. The Runner is mechanical transport only: it neither reads a
+tracker nor discovers a queue.
 
 Create a YAML batch containing one `run_id`, one selected `runtime`, and one
 to four selected tasks
@@ -103,12 +104,22 @@ both requested and effective selections in durable ticket evidence. The
 root-owned Runner configuration exposes a persistent Repository Skill allowlist
 for Main, but allowlisting never enables a Skill by itself.
 
+Engineer tasks use `engineer-junior`, `engineer-senior`, or `engineer-expert`.
+After an Engineer returns a fixed candidate and validation evidence, Main may
+omit review or launch `standards-reviewer` and `spec-reviewer` as separate,
+serialized tasks against that same Ticket Worktree. Main supplies the exact
+candidate and comparison point in each instruction. Reviewer roles are
+limited to an exact raw-report path and must leave the fixed candidate and Git
+state unchanged; merge and integration actions do not use them.
+
 Use `status` only for aliases Main explicitly supplies. With the Codex V1
 Runtime, `send` can resume an idle session but cannot inject live input into a
 running turn; Main may explicitly interrupt and then send when that is the
 intended recovery. Review and commit the candidate in its Ticket Worktree.
-After review evidence is adjudicated by Main, Main merges the candidate into `dev`
-in the Integration Worktree and runs the target project's validation there.
+Main adjudicates any dispatched Standards and Spec reports; when it omits
+review, it records that decision without inventing a review verdict. Main then
+merges the accepted candidate into `dev` in the Integration Worktree and runs
+the target project's validation there.
 
 After that validation succeeds, run `agent-runner cleanup` for the stable run
 and ticket IDs. It verifies that the branch is merged into `dev` and that the
@@ -120,9 +131,12 @@ idempotent already-cleaned result.
 
 Persistent evidence stays outside Git Worktrees under
 `state/task-delivery/<run-id>/`: exact retained batches, ticket metadata,
-Engineer result and validation summaries, and raw reviewer reports remain after
-cleanup. The Delivery State Agent owns the run ledger and task map; the Runner
-owns only mechanical metadata. There is no deletion command: an operator may
+Engineer result and validation summaries, and Main-retained raw Reviewer
+reports remain after cleanup. Review Diversity is recorded only when the
+selected Reviewer Runtime or model actually differs from the Engineer's; using
+the same Runtime and model is valid. The Delivery State Agent owns the run
+ledger and task map; the Runner owns only mechanical metadata. There is no
+deletion command: an operator may
 manually delete a completed run's `state/task-delivery/<run-id>/` directory
 through the filesystem or file manager when its retention period ends.
 

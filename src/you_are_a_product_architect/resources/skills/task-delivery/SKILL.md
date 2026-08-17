@@ -1,6 +1,6 @@
 ---
 name: task-delivery
-description: Orchestrate delivery of an accepted Ticket DAG while Main retains semantic authority and a Delivery State Agent maintains durable run records. Use when accepted tickets and their explicit dependencies are ready for Engineer dispatch, review escalation, and integration handoff.
+description: Orchestrate delivery of an accepted Ticket DAG while Main retains semantic authority and a Delivery State Agent maintains durable run records. Use when accepted tickets and their explicit dependencies are ready for Engineer dispatch, optional review, escalation, and integration handoff.
 ---
 
 # Task Delivery
@@ -19,8 +19,8 @@ description: Orchestrate delivery of an accepted Ticket DAG while Main retains s
 
 - Let Main own readiness, complexity and Engineer tier, dispatch, review
   adjudication, retry, escalation, integration ordering, and exceptions.
-- Use the Runner only as mechanical transport for Main-selected Engineer
-  tasks: launch, isolation, session transport, and cleanup. Do not ask it to
+- Use the Runner only as mechanical transport for Main-selected Engineer and
+  Reviewer tasks: launch, isolation, session transport, and cleanup. Do not ask it to
   inspect the DAG, select a frontier, choose a tier, interpret user intent, or
   make semantic decisions.
 - Let the Runner provision or reuse the persistent ticket evidence directory,
@@ -73,17 +73,38 @@ authority to the Delivery State Agent.
    the Runner to launch exactly those logical tasks. Keep any optional
    instruction concise; do not use it as a second ticket specification.
 3. Ask the Delivery State Agent to register launch facts and synchronize after
-   every Engineer return, review adjudication, retry, escalation, integration
-   result, blocker, or user redirection.
-4. Require the Engineer to return either candidate commit and validation plus
-   raw Standards and Spec Reviewer evidence, or evidence of a blocker. Do not
-   treat an Engineer's own claim as review acceptance.
-5. Let Main read both Reviewer reports and adjudicate the review round as
-   `PASS` or `FAIL`, with a concise rationale. On `PASS`, mark the ticket
-   `awaiting-integration`. On `FAIL`, apply the escalation policy below.
-6. Hand reviewed work to the repository's accepted integration sequence. After
-   Main reports the integration result, synchronize the Run and continue with
-   the next Main-selected frontier.
+   every Engineer or Reviewer return, review adjudication, retry, escalation,
+   integration result, blocker, or user redirection.
+4. Require the Engineer to return either a candidate commit and validation
+   evidence, or evidence of a blocker. The Engineer does not dispatch
+   Reviewers, create the authoritative Reviewer set, or claim review acceptance.
+5. Let Main fix the candidate commit and comparison point, then decide whether
+   the fixed candidate needs review. Review applicability is Main's semantic
+   judgment: Main may omit Reviewer dispatch for any candidate it judges not to
+   require review, and merge or integration actions never require Reviewer
+   dispatch. Do not encode mechanical applicability rules or change the
+   existing Standards or Spec review meaning in this workflow.
+6. When review is useful, dispatch one `standards-reviewer` and one
+   `spec-reviewer` through the selected Runtime Adapter in separate serialized
+   Runner tasks against the same fixed Ticket Worktree. Supply the exact
+   candidate, comparison point, existing axis brief, and standards or spec
+   sources in Main's instruction, along with that axis's exact report path under
+   `.scratch/task-delivery/reviews/`. Require both Reviewers to write only their
+   assigned report and leave the candidate and its Git state unchanged.
+7. Retain their separate raw axis-specific reports under
+   `reviews/<candidate-alias>-rN-standards.md` and
+   `reviews/<candidate-alias>-rN-spec.md`; never overwrite an earlier round.
+   Verify the fixed candidate and clean Git state before adjudication. Record
+   each Reviewer's role, Runner alias, selected Runtime, and configured model
+   with its report so the evidence remains attributable.
+8. Main adjudicates both reports as one review round and records `PASS` or
+   `FAIL` with a concise rationale. On `PASS`, mark the ticket
+   `awaiting-integration`. On `FAIL`, apply the escalation policy below. When
+   Main omits review, record that decision and move the validated candidate to
+   `awaiting-integration` without inventing a review verdict.
+9. Hand accepted work to the repository's integration sequence. After Main
+   reports the integration result, synchronize the Run and continue with the
+   next Main-selected frontier.
 
 ## Select one Agent Runtime per batch
 
@@ -94,6 +115,10 @@ authority to the Delivery State Agent.
 - Record one selected Runtime once at batch level as `runtime`; each task keeps
   only its logical role and task access. Do not repeat Runtime, model,
   configuration, Hook, command, or path details in task objects.
+- Main may select a different Runtime or configured model for either Reviewer.
+  The same Runtime and model remain valid. Claim Review Diversity only when the
+  selected Reviewer's Runtime or model actually differs from the implementing
+  Engineer's; otherwise record the selections without a diversity claim.
 - Let the Runner validate the selected configured built-in Adapter before it
   reserves a task, provisions a Worktree, retains a batch, or starts a Runtime.
 
@@ -119,11 +144,11 @@ authority to the Delivery State Agent.
 Follow this repository's accepted review and integration sequence without
 turning it into Runner behavior:
 
-1. Let Main serialize reviewed commits in the `dev` Integration Worktree.
+1. Let Main serialize accepted candidate commits in the `dev` Integration Worktree.
 2. Let Main invoke the Merge Resolver for textual or semantic integration
    conflicts and adjudicate the result.
 3. Let Main run integration validation. Record `integrated` only when the
-   reviewed commit is present in `dev` and that validation passes.
+   accepted commit is present in `dev` and that validation passes.
 4. Let Main request mechanical Runner cleanup after successful integration.
    Preserve the run ledger, Mermaid DAG, retained batch, and ticket evidence.
 5. Resume this Delivery Run; unlock dependents only from validated `dev`.

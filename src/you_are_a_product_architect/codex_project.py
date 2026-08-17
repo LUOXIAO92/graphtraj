@@ -16,6 +16,8 @@ ROLE_BINDINGS = {
     "engineer-junior": "engineer-junior",
     "engineer-senior": "engineer-senior",
     "engineer-expert": "engineer-expert",
+    "standards-reviewer": "standards-reviewer",
+    "spec-reviewer": "spec-reviewer",
 }
 RESOURCE_PATHS = (
     "config.toml",
@@ -24,6 +26,8 @@ RESOURCE_PATHS = (
     "agents/engineer-junior.toml",
     "agents/engineer-senior.toml",
     "agents/merge-resolver.toml",
+    "agents/spec-reviewer.toml",
+    "agents/standards-reviewer.toml",
     "hooks/worktree_guard.py",
 )
 

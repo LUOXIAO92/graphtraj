@@ -361,7 +361,7 @@ def test_engineer_runtime_context_finalizes_worktree_facts_once(
                 "enabled": True,
                 "source": "harness",
             }
-            for name in ("implement", "ponytail", "tdd", "code-review")
+            for name in ("implement", "ponytail", "tdd")
         ]
         + [
             {

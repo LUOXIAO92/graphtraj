@@ -4,6 +4,11 @@ status: accepted
 
 # Main dispatches Reviewers
 
+This supersedes earlier Engineer-owned Reviewer creation and report-handoff
+wording in ADRs 0004, 0005, 0008, 0009, and 0011; their evidence retention,
+escalation, transport, integration, and Skill-discovery decisions otherwise
+remain accepted.
+
 When candidate work requires review, Main dispatches the Standards and Spec
 Reviewers rather than delegating Reviewer creation to the Engineer, and Main
 continues to adjudicate their evidence. Review applicability remains a soft

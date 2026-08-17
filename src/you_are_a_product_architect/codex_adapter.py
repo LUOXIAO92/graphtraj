@@ -636,7 +636,7 @@ def _nonempty_string(value: Any) -> bool:
 
 
 def _packaged_role(binding: str) -> Dict[str, Any]:
-    if not re.fullmatch(r"engineer-(?:junior|senior|expert)", binding):
+    if binding not in SUPPORTED_ROLES:
         raise CodexAdapterError(
             "ROLE_NOT_SUPPORTED",
             "The configured Codex role is not supported by this Runner.",
@@ -678,7 +678,9 @@ def _verify_packaged_guard(runtime_store: Path) -> None:
 ENGINEER_ROLES = frozenset(
     {"engineer-junior", "engineer-senior", "engineer-expert"}
 )
-ENGINEER_REQUIRED_SKILLS = ("implement", "ponytail", "tdd", "code-review")
+REVIEWER_ROLES = frozenset({"standards-reviewer", "spec-reviewer"})
+SUPPORTED_ROLES = ENGINEER_ROLES | REVIEWER_ROLES
+ENGINEER_REQUIRED_SKILLS = ("implement", "ponytail", "tdd")
 
 
 def _resolve_harness_skills(
@@ -687,12 +689,12 @@ def _resolve_harness_skills(
 ) -> Tuple[_EffectiveSkill, ...]:
     """Resolve the Engineer role's required external Harness Skills."""
 
-    if role not in ENGINEER_ROLES:
+    if role not in SUPPORTED_ROLES:
         raise CodexAdapterError(
             "ROLE_NOT_SUPPORTED",
             "The configured Codex role is not supported by this Runner.",
         )
-    required_names = ENGINEER_REQUIRED_SKILLS
+    required_names = ENGINEER_REQUIRED_SKILLS if role in ENGINEER_ROLES else ()
     runtime_skills = _discover_skill_files(harness_skill_root(runtime_store))
     user_skills = _discover_skill_files(Path.home() / ".agents" / "skills")
     effective: List[_EffectiveSkill] = []

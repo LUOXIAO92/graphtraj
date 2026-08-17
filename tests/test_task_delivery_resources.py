@@ -138,6 +138,26 @@ def test_installed_task_delivery_selects_one_runtime_for_each_batch(
         assert required_guidance in guidance
 
 
+def test_installed_task_delivery_lets_main_dispatch_optional_reviewers(
+    installed_task_delivery_resources: Dict[str, str],
+) -> None:
+    skill = installed_task_delivery_resources["skill"]
+    guidance = normalized(skill)
+
+    for required_guidance in (
+        "decide whether the fixed candidate needs review",
+        "one `standards-reviewer` and one `spec-reviewer`",
+        "may omit reviewer dispatch",
+        "separate raw axis-specific reports",
+        "main adjudicates both reports",
+        "same runtime and model remain valid",
+        "claim review diversity only when",
+    ):
+        assert required_guidance in guidance
+
+    assert "Require the Engineer to return either candidate commit and validation plus" not in skill
+
+
 def test_installed_task_delivery_preserves_review_escalation_policy(
     installed_task_delivery_resources: Dict[str, str],
 ) -> None:

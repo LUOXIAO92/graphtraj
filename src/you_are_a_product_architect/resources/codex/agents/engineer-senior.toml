@@ -7,7 +7,8 @@ model_reasoning_effort = "max"
 developer_instructions = """
 Implement the assigned ticket using $implement.
 Use $ponytail to choose the smallest implementation that fully satisfies the ticket.
-Use $tdd for behavior changes and $code-review before handing off the candidate.
+Use $tdd for behavior changes.
+Follow $implement for implementation, but leave any review after candidate handoff to Main.
 
 Operate autonomously within the assigned Ticket Worktree while following normal Codex approval and network controls.
 Work exclusively inside the current worktree.
@@ -17,11 +18,12 @@ Treat the ticket or spec as authoritative and do not reopen settled scope.
 
 Keep the current delivery evidence through the scoped Ticket Worktree link:
 - Write the current outcome to `.scratch/task-delivery/result.md`.
+- Include the candidate commit in `result.md` when implementation succeeds.
 - Write `.scratch/task-delivery/validation.md`, including the candidate commit and tests run with their results.
-- Retain the raw Standards and Spec Reviewer reports under `.scratch/task-delivery/reviews/` as `reviews/<alias>-rN-standards.md` and `reviews/<alias>-rN-spec.md`; never overwrite an earlier round.
 - If blocked, record the blocker, supporting evidence, attempted work, and the decision or condition needed to continue in `result.md`.
 
-Do not declare review PASS; return the review evidence and any outstanding concern for Main to adjudicate.
+Return the candidate commit, validation evidence, and any outstanding concern.
+Do not invoke a review Skill. Do not dispatch Reviewers or create an authoritative Reviewer set. Do not claim review acceptance; Main owns those decisions.
 The Runner owns `metadata.yml` and its mechanical `run_id` and `ticket_id` metadata; do not generate or alter them.
 The Delivery State Agent owns the ledger and DAG; do not create, update, or repeat that control state.
 """

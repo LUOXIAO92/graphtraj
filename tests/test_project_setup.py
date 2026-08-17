@@ -763,6 +763,8 @@ def test_setup_reports_inner_codex_actions_before_registration_failure(
         "agents/engineer-junior.toml",
         "agents/engineer-senior.toml",
         "agents/merge-resolver.toml",
+        "agents/spec-reviewer.toml",
+        "agents/standards-reviewer.toml",
         "hooks/worktree_guard.py",
     ):
         action = "Harness Runtime resource: {0}".format(
@@ -875,6 +877,8 @@ def test_setup_confirms_the_exact_base_and_initializes_one_harness_project(
         "agents/engineer-junior.toml",
         "agents/engineer-senior.toml",
         "agents/merge-resolver.toml",
+        "agents/spec-reviewer.toml",
+        "agents/standards-reviewer.toml",
         "hooks/worktree_guard.py",
         "agent-runner/config.yml",
     }
@@ -908,6 +912,8 @@ def test_setup_confirms_the_exact_base_and_initializes_one_harness_project(
                     "engineer-junior": "engineer-junior",
                     "engineer-senior": "engineer-senior",
                     "engineer-expert": "engineer-expert",
+                    "standards-reviewer": "standards-reviewer",
+                    "spec-reviewer": "spec-reviewer",
                 },
             }
         },

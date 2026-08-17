@@ -483,7 +483,7 @@ def test_installed_runner_launches_one_isolated_engineer_and_returns_early(
                     "enabled": True,
                     "source": "runtime-user",
                 }
-                for name in ("implement", "ponytail", "tdd", "code-review")
+                for name in ("implement", "ponytail", "tdd")
             ]
             + [
                 {
@@ -526,6 +526,120 @@ def test_installed_runner_launches_one_isolated_engineer_and_returns_early(
             wait_for_file(turn_file)
     active_root = harness_root / ".codex" / "agent-runner" / "active-worktrees"
     assert list(active_root.iterdir()) == []
+
+
+def test_installed_runner_launches_a_standards_reviewer_for_a_fixed_candidate(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    harness_root = temporary_git_repository.parent
+    integration = harness_root / ".agent-worktrees" / "integration"
+    user_home = tmp_path / "operator-home"
+    install_user_skills(user_home)
+    setup = run_setup(
+        installed_commands,
+        harness_root=harness_root,
+        user_home=user_home,
+        fake_codex=fake_codex,
+        answers="{0}\ny\n".format(temporary_git_repository.name),
+    )
+    assert setup.returncode == 0, setup.stderr
+
+    candidate_file = integration / "candidate.txt"
+    candidate_file.write_text("fixed candidate\n", encoding="utf-8")
+    run_process(["git", "add", candidate_file.name], cwd=integration).check_returncode()
+    run_process(
+        ["git", "commit", "-m", "Create fixed review candidate"], cwd=integration
+    ).check_returncode()
+    candidate = git_output(integration, "rev-parse", "HEAD")
+    comparison = git_output(integration, "rev-parse", "HEAD^")
+
+    ticket_file = harness_root / "review-ticket.md"
+    ticket_content = "# Review the fixed candidate\n"
+    ticket_file.write_text(ticket_content, encoding="utf-8")
+    instruction = (
+        "Review candidate {0} against {1}. Write the raw report to "
+        ".scratch/task-delivery/reviews/candidate-r1-standards.md."
+    ).format(
+        candidate,
+        comparison,
+    )
+    batch_file = harness_root / "review-batch.yml"
+    batch_file.write_text(
+        yaml.safe_dump(
+            {
+                "run_id": "20260818-review-candidate",
+                "runtime": "codex",
+                "tasks": [
+                    {
+                        "ticket_id": "50",
+                        "ticket_name": "review-candidate",
+                        "role": "standards-reviewer",
+                        "ticket_file": str(ticket_file),
+                        "instruction": instruction,
+                    }
+                ],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    environment = os.environ.copy()
+    environment.update(
+        {
+            "HOME": str(user_home),
+            "FAKE_CODEX_LOG": str(fake_codex.log_file),
+            "FAKE_CODEX_CAPTURE_STDIN": "1",
+        }
+    )
+
+    result = run_process(
+        [str(installed_commands.runner), "--batch-input", str(batch_file)],
+        cwd=harness_root,
+        env=environment,
+        timeout=5,
+    )
+
+    assert result.returncode == 0, result.stderr
+    task = yaml.safe_load(result.stdout)["tasks"][0]
+    assert task["role"] == "standards-reviewer"
+    assert task["alias"] == "2-50-review-candidate@r1"
+    worktree = Path(task["worktree_path"])
+    session = (
+        harness_root
+        / ".codex"
+        / "agent-runner"
+        / "sessions"
+        / task["alias"]
+    )
+    wait_for_file(session / "turn.yml")
+
+    runtime_call = json.loads(fake_codex.log_file.read_text(encoding="utf-8"))
+    assert runtime_call["cwd"] == str(worktree)
+    assert runtime_call["stdin"] == (
+        ticket_content
+        + "\n## Additional instruction from Main\n\n"
+        + instruction
+        + "\n"
+    )
+    assert git_output(worktree, "rev-parse", "HEAD") == candidate
+    assert git_output(worktree, "status", "--short") == ""
+
+    metadata = yaml.safe_load(
+        (
+            harness_root
+            / "state"
+            / "task-delivery"
+            / "20260818-review-candidate"
+            / "tickets"
+            / "2-50-review-candidate"
+            / "metadata.yml"
+        ).read_text(encoding="utf-8")
+    )
+    assert metadata["role"] == "standards-reviewer"
+    assert metadata["effective_role"] == "standards-reviewer"
 
 
 def test_installed_runner_rejects_invalid_skills_before_starting_any_task(

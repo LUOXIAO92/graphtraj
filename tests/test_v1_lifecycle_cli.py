@@ -170,6 +170,8 @@ print("target validation passed")
         harness_root / ".codex" / "agents" / "engineer-junior.toml",
         harness_root / ".codex" / "agents" / "engineer-senior.toml",
         harness_root / ".codex" / "agents" / "engineer-expert.toml",
+        harness_root / ".codex" / "agents" / "standards-reviewer.toml",
+        harness_root / ".codex" / "agents" / "spec-reviewer.toml",
         harness_root / ".codex" / "agents" / "merge-resolver.toml",
         harness_root / ".codex" / "agents" / "delivery-state.toml",
     ):

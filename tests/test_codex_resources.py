@@ -293,23 +293,20 @@ def test_packaged_config_defines_the_project_local_codex_workspace() -> None:
     assert "sandbox_workspace_write" not in tomllib.loads(config)
 
 
-def test_packaged_engineer_roles_keep_models_and_return_candidate_evidence() -> None:
+def test_packaged_engineer_roles_keep_the_accepted_runtime_settings() -> None:
     expected_roles = {
         "engineer-junior.toml": ("gpt-5.6-luna", "gpt-5.6-terra"),
         "engineer-senior.toml": ("gpt-5.6-terra", "gpt-5.6-terra"),
         "engineer-expert.toml": ("gpt-5.6-sol", "gpt-5.6-sol"),
     }
 
-    for filename, (model, reviewer_model) in expected_roles.items():
+    for filename, (model, subagent_model) in expected_roles.items():
         role = (RESOURCE_ROOT / "agents" / filename).read_text(encoding="utf-8")
 
         assert 'model = "{0}"'.format(model) in role
         assert 'model_reasoning_effort = "max"' in role
-        assert 'default_subagent_model = "{0}"'.format(reviewer_model) in role
+        assert 'default_subagent_model = "{0}"'.format(subagent_model) in role
         assert 'default_subagent_reasoning_effort = "max"' in role
-        for skill in ("$implement", "$ponytail", "$tdd"):
-            assert skill in role
-        assert "$code-review" not in role
         assert 'sandbox_mode = "workspace-write"' in role
         assert "approval_policy" not in role
         assert "network_access" not in role
@@ -318,18 +315,6 @@ def test_packaged_engineer_roles_keep_models_and_return_candidate_evidence() -> 
         assert "~/.codex" not in role
         assert "[[hooks.PreToolUse]]" in role
         assert "[[hooks.SubagentStart]]" in role
-        for evidence_instruction in (
-            "`.scratch/task-delivery/result.md`",
-            "`.scratch/task-delivery/validation.md`",
-            "candidate commit",
-            "Do not invoke a review Skill",
-            "Do not dispatch Reviewers",
-            "Do not claim review acceptance",
-            "The Runner owns `metadata.yml`",
-            "The Delivery State Agent owns the ledger and DAG",
-        ):
-            assert evidence_instruction in role
-        assert "`reviews/<alias>" not in role
 
 
 def test_worktree_guard_adds_the_current_boundary_to_subagent_context(

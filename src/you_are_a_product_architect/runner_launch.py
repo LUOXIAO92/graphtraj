@@ -12,7 +12,7 @@ from typing import Any, Dict, Optional, Tuple
 
 import yaml
 
-from .codex_adapter import preflight_engineer_runtime_context
+from .codex_adapter import preflight_runtime_context
 from .runner_batch import (
     evidence_path,
     prepare_evidence,
@@ -42,15 +42,15 @@ from .runner_project import (
     provision_worktree,
 )
 from .runtime_adapter import (
-    EngineerRuntimeContext,
-    EngineerRuntimeContextPreflight,
+    RuntimeContext,
+    RuntimeContextPreflight,
     RuntimeAdapterError,
 )
 
 
 LAUNCH_TIMEOUT_SECONDS = OPERATION_TIMEOUT_SECONDS
-ENGINEER_RUNTIME_CONTEXT_PREFLIGHTS = {
-    "codex": preflight_engineer_runtime_context,
+RUNTIME_CONTEXT_PREFLIGHTS = {
+    "codex": preflight_runtime_context,
 }
 
 
@@ -60,7 +60,7 @@ class _TaskLaunchPlan:
     binding: str
     branch: str
     worktree: Path
-    context_preflight: Optional[EngineerRuntimeContextPreflight] = None
+    context_preflight: Optional[RuntimeContextPreflight] = None
     active_turn: Optional[ActiveTurnReservation] = None
 
 
@@ -327,7 +327,7 @@ def _start_turn(
     evidence: Path,
     active_turn: ActiveTurnReservation,
     alias_history: Tuple[str, ...],
-    runtime_context: EngineerRuntimeContext,
+    runtime_context: RuntimeContext,
 ) -> Tuple[str, Dict[str, Any]]:
     session_root = project.runner_directory / "sessions"
     try:
@@ -575,7 +575,7 @@ def _write_metadata(
     worktree: Path,
     aliases: Tuple[str, ...],
     requested_skills: Tuple[str, ...],
-    runtime_context: EngineerRuntimeContext,
+    runtime_context: RuntimeContext,
 ) -> None:
     try:
         write_yaml_durably(
@@ -610,9 +610,9 @@ def _preflight_runtime_context(
     evidence: Path,
     repository_skill_source: Path,
     task: Task,
-) -> EngineerRuntimeContextPreflight:
+) -> RuntimeContextPreflight:
     try:
-        return ENGINEER_RUNTIME_CONTEXT_PREFLIGHTS[runtime](
+        return RUNTIME_CONTEXT_PREFLIGHTS[runtime](
             runtime_store=project.runtime_store,
             executable=project.runtime_executable,
             git_common_directory=project.common_directory,
@@ -632,8 +632,8 @@ def _preflight_runtime_context(
 
 
 def _finalize_runtime_context(
-    preflight: EngineerRuntimeContextPreflight,
-) -> EngineerRuntimeContext:
+    preflight: RuntimeContextPreflight,
+) -> RuntimeContext:
     try:
         return preflight.finalize()
     except RuntimeAdapterError as error:

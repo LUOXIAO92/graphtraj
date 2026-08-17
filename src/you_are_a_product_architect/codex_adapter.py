@@ -14,12 +14,13 @@ import tomllib
 from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Tuple, cast
 
 from .runtime_adapter import (
-    EngineerRuntimeContext,
     EngineerRuntimeContextPreflight,
     RuntimeAdapterError,
+    RuntimeContext,
+    RuntimeContextPreflight,
     SessionStarted,
 )
 from .runner_transport import runtime_turn_outcome
@@ -150,7 +151,7 @@ class _CodexRole:
 
 
 @dataclass(frozen=True)
-class _CodexEngineerRuntimePreflight:
+class _CodexRuntimePreflight:
     _runtime_store: Path
     _executable: Path
     _git_common_directory: Path
@@ -160,8 +161,8 @@ class _CodexEngineerRuntimePreflight:
     _harness_skills: Tuple[_EffectiveSkill, ...]
     _requested_skills: Tuple[str, ...]
 
-    def finalize(self) -> EngineerRuntimeContext:
-        """Resolve Ticket Worktree facts and freeze one launch Context."""
+    def finalize(self) -> RuntimeContext:
+        """Resolve Ticket Worktree facts shared by supported role boundaries."""
 
         effective_skills = self._harness_skills + _resolve_repository_skills(
             self._worktree, self._requested_skills
@@ -174,7 +175,7 @@ class _CodexEngineerRuntimePreflight:
             runtime_store=self._runtime_store,
             effective_skills=effective_skills,
         )
-        return _CodexEngineerRuntimeContext(
+        return _CodexRuntimeContext(
             _role=self._role.name,
             _arguments=tuple(request["arguments"]),
             _worktree=self._worktree,
@@ -183,7 +184,7 @@ class _CodexEngineerRuntimePreflight:
 
 
 @dataclass(frozen=True)
-class _CodexEngineerRuntimeContext:
+class _CodexRuntimeContext:
     _role: str
     _arguments: Tuple[str, ...]
     _worktree: Path
@@ -226,20 +227,61 @@ def preflight_engineer_runtime_context(
 ) -> EngineerRuntimeContextPreflight:
     """Validate every Engineer Context fact available before provisioning."""
 
+    if role not in ENGINEER_ROLES:
+        raise CodexAdapterError(
+            "ROLE_NOT_SUPPORTED",
+            "The configured Codex role is not supported by this Runner.",
+        )
+    return cast(
+        EngineerRuntimeContextPreflight,
+        preflight_runtime_context(
+            runtime_store=runtime_store,
+            executable=executable,
+            git_common_directory=git_common_directory,
+            role=role,
+            worktree=worktree,
+            evidence=evidence,
+            repository_skill_source=repository_skill_source,
+            requested_skills=requested_skills,
+        ),
+    )
+
+
+def preflight_runtime_context(
+    *,
+    runtime_store: Path,
+    executable: Path,
+    git_common_directory: Path,
+    role: str,
+    worktree: Path,
+    evidence: Path,
+    repository_skill_source: Path,
+    requested_skills: Tuple[str, ...],
+) -> RuntimeContextPreflight:
+    """Prepare one Codex role without crossing role-specific boundaries."""
+
     resolved_role = _resolve_codex_role(runtime_store, role)
-    harness_skills = _resolve_harness_skills(runtime_store, role)
+    if role in ENGINEER_ROLES:
+        harness_skills = _resolve_engineer_harness_skills(runtime_store, role)
+    elif role in REVIEWER_ROLES:
+        harness_skills = ()
+    else:
+        raise CodexAdapterError(
+            "ROLE_NOT_SUPPORTED",
+            "The configured Codex role is not supported by this Runner.",
+        )
     repository_skills = _resolve_repository_skills(
         repository_skill_source, requested_skills
     )
     resolved_role._launch_request(
+        runtime_store=runtime_store,
         executable=executable,
+        git_common_directory=git_common_directory,
         worktree=worktree,
         evidence=evidence,
-        git_common_directory=git_common_directory,
-        runtime_store=runtime_store,
         effective_skills=harness_skills + repository_skills,
     )
-    return _CodexEngineerRuntimePreflight(
+    return _CodexRuntimePreflight(
         _runtime_store=runtime_store,
         _executable=executable,
         _git_common_directory=git_common_directory,
@@ -683,22 +725,21 @@ SUPPORTED_ROLES = ENGINEER_ROLES | REVIEWER_ROLES
 ENGINEER_REQUIRED_SKILLS = ("implement", "ponytail", "tdd")
 
 
-def _resolve_harness_skills(
+def _resolve_engineer_harness_skills(
     runtime_store: Path,
     role: str,
 ) -> Tuple[_EffectiveSkill, ...]:
     """Resolve the Engineer role's required external Harness Skills."""
 
-    if role not in SUPPORTED_ROLES:
+    if role not in ENGINEER_ROLES:
         raise CodexAdapterError(
             "ROLE_NOT_SUPPORTED",
             "The configured Codex role is not supported by this Runner.",
         )
-    required_names = ENGINEER_REQUIRED_SKILLS if role in ENGINEER_ROLES else ()
     runtime_skills = _discover_skill_files(harness_skill_root(runtime_store))
     user_skills = _discover_skill_files(Path.home() / ".agents" / "skills")
     effective: List[_EffectiveSkill] = []
-    for name in required_names:
+    for name in ENGINEER_REQUIRED_SKILLS:
         matches = runtime_skills.get(name, ())
         source = "harness"
         if not matches:

@@ -1,4 +1,4 @@
-"""Runtime-neutral contracts for one background Engineer turn."""
+"""Runtime-neutral contracts for one background Agent turn."""
 
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ class RuntimeTurn(Protocol):
         """Keep ownership until the Runtime process group is terminal."""
 
 
-class EngineerRuntimeContext(Protocol):
+class RuntimeContext(Protocol):
     """One immutable Adapter-owned launch, evidence, and recovery Context."""
 
     @property
@@ -52,8 +52,19 @@ class EngineerRuntimeContext(Protocol):
         """Return a fresh document of the effective Context facts."""
 
 
-class EngineerRuntimeContextPreflight(Protocol):
+class EngineerRuntimeContext(RuntimeContext, Protocol):
+    """One immutable Context for an Engineer session."""
+
+
+class RuntimeContextPreflight(Protocol):
     """A side-effect-free preparation awaiting Ticket Worktree facts."""
+
+    def finalize(self) -> RuntimeContext:
+        """Resolve Worktree-local facts and freeze the effective Context."""
+
+
+class EngineerRuntimeContextPreflight(RuntimeContextPreflight, Protocol):
+    """A side-effect-free Engineer preparation."""
 
     def finalize(self) -> EngineerRuntimeContext:
         """Resolve Worktree-local facts and freeze the effective Context."""

@@ -18,6 +18,7 @@ from .runner_batch import (
     prepare_evidence,
     read_batch,
     retain_batch,
+    validate_batch_roles,
 )
 from .runner_io import (
     ActiveTurnBusyError,
@@ -48,6 +49,9 @@ from .runtime_adapter import (
 
 
 LAUNCH_TIMEOUT_SECONDS = OPERATION_TIMEOUT_SECONDS
+ENGINEER_RUNTIME_CONTEXT_PREFLIGHTS = {
+    "codex": preflight_engineer_runtime_context,
+}
 
 
 @dataclass
@@ -63,8 +67,9 @@ class _TaskLaunchPlan:
 def launch_batch(batch_file: Path, cwd: Path) -> LaunchResponse:
     """Preflight and independently launch the exact supplied batch."""
 
-    project = discover_project(cwd)
-    batch = read_batch(batch_file, cwd, project.role_bindings)
+    batch = read_batch(batch_file, cwd)
+    project = discover_project(cwd, batch.runtime)
+    validate_batch_roles(batch, project.role_bindings)
     launch_plans = []
     for task in batch.tasks:
         branch, worktree = _task_coordinates(project, batch.run_id, task)
@@ -86,6 +91,7 @@ def launch_batch(batch_file: Path, cwd: Path) -> LaunchResponse:
         )
         plan.context_preflight = _preflight_runtime_context(
             project,
+            batch.runtime,
             plan.binding,
             plan.worktree,
             evidence_path(project.state_directory, batch.run_id, plan.task),
@@ -119,6 +125,7 @@ def launch_batch(batch_file: Path, cwd: Path) -> LaunchResponse:
     return LaunchResponse(
         document={
             "run_id": batch.run_id,
+            "runtime": batch.runtime,
             "retained_batch_file": str(retained_batch),
             "tasks": results,
         },
@@ -597,6 +604,7 @@ def _write_metadata(
 
 def _preflight_runtime_context(
     project: Project,
+    runtime: str,
     binding: str,
     worktree: Path,
     evidence: Path,
@@ -604,7 +612,7 @@ def _preflight_runtime_context(
     task: Task,
 ) -> EngineerRuntimeContextPreflight:
     try:
-        return preflight_engineer_runtime_context(
+        return ENGINEER_RUNTIME_CONTEXT_PREFLIGHTS[runtime](
             runtime_store=project.runtime_store,
             executable=project.runtime_executable,
             git_common_directory=project.common_directory,
@@ -614,6 +622,11 @@ def _preflight_runtime_context(
             repository_skill_source=repository_skill_source,
             requested_skills=task.requested_skills,
         )
+    except KeyError as error:
+        raise RunnerError(
+            "RUNTIME_UNSUPPORTED",
+            "The selected Agent Runtime is not supported by this Runner.",
+        ) from error
     except RuntimeAdapterError as error:
         raise RunnerError(error.code, error.message) from error
 

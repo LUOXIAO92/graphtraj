@@ -73,13 +73,15 @@ target project.
 
 ## Deliver a selected ticket
 
-Main selects the ticket, tier, and integration order. The Runner is mechanical
-transport only: it neither reads a tracker nor discovers a queue.
+Main selects the ticket, tier, Runtime, and integration order. The Runner is
+mechanical transport only: it neither reads a tracker nor discovers a queue.
 
-Create a YAML batch containing one `run_id` and one to four selected tasks
+Create a YAML batch containing one `run_id`, one selected `runtime`, and one
+to four selected tasks
 (`ticket_id`, `ticket_name`, `role`, `ticket_file`, optional semantic `skills`,
-and optionally a concise `instruction`), then launch it from the Harness
-Project Root:
+and optionally a concise `instruction`). Runtime, model, configuration, Hook,
+command, and path details never belong in task objects. Then launch it from the
+Harness Project Root:
 
 ```text
 agent-runner --batch-input <batch.yml>

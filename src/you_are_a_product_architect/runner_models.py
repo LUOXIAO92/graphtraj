@@ -71,6 +71,7 @@ DETAIL_ERROR_CATEGORIES = {
     "RUNNER_CONFIG_INVALID": "invalid-config",
     "RUNNER_CONFIG_VERSION_UNSUPPORTED": "invalid-config",
     "RUNTIME_EXECUTABLE_INVALID": "invalid-config",
+    "RUNTIME_INVALID": "invalid-input",
     "ROLE_NOT_FOUND": "invalid-config",
     "ROLE_DUPLICATE": "invalid-config",
     "ROLE_CONFIG_INVALID": "invalid-config",
@@ -157,6 +158,7 @@ class Task:
 @dataclass(frozen=True)
 class Batch:
     run_id: str
+    runtime: str
     tasks: Tuple[Task, ...]
     source_bytes: bytes
 

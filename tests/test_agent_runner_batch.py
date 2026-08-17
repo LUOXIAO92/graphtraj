@@ -80,7 +80,7 @@ def test_installed_runner_launches_four_exact_main_selected_tasks_in_order(
 
     batch_file = harness_root / "four-task-batch.yml"
     batch_bytes = yaml.safe_dump(
-        {"run_id": run_id, "tasks": task_documents},
+        {"run_id": run_id, "runtime": "codex", "tasks": task_documents},
         sort_keys=False,
     ).encode("utf-8")
     batch_file.write_bytes(batch_bytes)
@@ -101,6 +101,7 @@ def test_installed_runner_launches_four_exact_main_selected_tasks_in_order(
         harness_root / "state" / "task-delivery" / run_id / "batch.yml"
     ).resolve()
     assert document["run_id"] == run_id
+    assert document["runtime"] == "codex"
     assert document["retained_batch_file"] == str(retained)
     assert retained.read_bytes() == batch_bytes
     assert [task["ticket_id"] for task in document["tasks"]] == [
@@ -166,6 +167,7 @@ def test_installed_runner_rejects_duplicate_ticket_ids_before_any_start(
         yaml.safe_dump(
             {
                 "run_id": run_id,
+                "runtime": "codex",
                 "tasks": [
                     {
                         "ticket_id": "11",
@@ -233,6 +235,7 @@ def test_installed_runner_rejects_intra_batch_worktree_collision_before_any_star
         yaml.safe_dump(
             {
                 "run_id": run_id,
+                "runtime": "codex",
                 "tasks": [
                     {
                         "ticket_id": "A",
@@ -306,6 +309,7 @@ def test_installed_runner_preflights_later_worktree_conflict_before_any_start(
         yaml.safe_dump(
             {
                 "run_id": run_id,
+                "runtime": "codex",
                 "tasks": [
                     {
                         "ticket_id": "11",
@@ -366,6 +370,7 @@ def test_installed_runner_preflights_later_worktree_conflict_before_any_start(
         yaml.safe_dump(
             {
                 "run_id": misplaced_run,
+                "runtime": "codex",
                 "tasks": [
                     {
                         "ticket_id": "13",
@@ -455,6 +460,7 @@ def test_installed_runner_rejects_later_live_ticket_without_expected_branch(
         yaml.safe_dump(
             {
                 "run_id": run_id,
+                "runtime": "codex",
                 "tasks": [
                     {
                         "ticket_id": "20",
@@ -538,7 +544,8 @@ def test_installed_runner_reports_mixed_post_preflight_launch_outcomes(
     (broken_evidence / "metadata.yml").mkdir(parents=True)
     batch_file = harness_root / "mixed-batch.yml"
     batch_bytes = yaml.safe_dump(
-        {"run_id": run_id, "tasks": task_documents}, sort_keys=False
+        {"run_id": run_id, "runtime": "codex", "tasks": task_documents},
+        sort_keys=False,
     ).encode("utf-8")
     batch_file.write_bytes(batch_bytes)
 
@@ -559,6 +566,7 @@ def test_installed_runner_reports_mixed_post_preflight_launch_outcomes(
         harness_root / "state" / "task-delivery" / run_id / "batch.yml"
     ).resolve()
     assert document["run_id"] == run_id
+    assert document["runtime"] == "codex"
     assert document["retained_batch_file"] == str(retained)
     assert retained.read_bytes() == batch_bytes
     assert [task["ticket_id"] for task in document["tasks"]] == [
@@ -615,6 +623,7 @@ def test_installed_runner_rejects_later_busy_or_already_live_ticket_globally(
         yaml.safe_dump(
             {
                 "run_id": "20260813-live-ticket",
+                "runtime": "codex",
                 "tasks": [
                     {
                         "ticket_id": "11",
@@ -644,6 +653,7 @@ def test_installed_runner_rejects_later_busy_or_already_live_ticket_globally(
         yaml.safe_dump(
             {
                 "run_id": "20260813-live-ticket",
+                "runtime": "codex",
                 "tasks": [
                     {
                         "ticket_id": "20",
@@ -696,6 +706,7 @@ def test_installed_runner_rejects_later_busy_or_already_live_ticket_globally(
         yaml.safe_dump(
             {
                 "run_id": run_id,
+                "runtime": "codex",
                 "tasks": [
                     {
                         "ticket_id": "20",
@@ -777,6 +788,7 @@ def test_installed_runner_rejects_global_file_runtime_and_integration_failures(
         yaml.safe_dump(
             {
                 "run_id": missing_run,
+                "runtime": "codex",
                 "tasks": [
                     base_task,
                     {
@@ -807,16 +819,19 @@ def test_installed_runner_rejects_global_file_runtime_and_integration_failures(
     runtime_batch = harness_root / "unknown-runtime-batch.yml"
     runtime_batch.write_text(
         yaml.safe_dump(
-            {"run_id": runtime_run, "tasks": [base_task]}, sort_keys=False
+            {
+                "run_id": runtime_run,
+                "runtime": "unknown-runtime",
+                "tasks": [base_task],
+            },
+            sort_keys=False,
         ),
         encoding="utf-8",
     )
-    runtime_environment = dict(environment)
-    runtime_environment["AGENT_RUNTIME"] = "unknown-runtime"
     runtime_result = run_process(
         [str(installed_commands.runner), "--batch-input", str(runtime_batch)],
         cwd=harness_root,
-        env=runtime_environment,
+        env=environment,
     )
     runtime_message = "The selected Agent Runtime is not configured for this project."
     assert yaml.safe_load(runtime_result.stdout) == {
@@ -829,7 +844,8 @@ def test_installed_runner_rejects_global_file_runtime_and_integration_failures(
     dirty_batch = harness_root / "dirty-integration-batch.yml"
     dirty_batch.write_text(
         yaml.safe_dump(
-            {"run_id": dirty_run, "tasks": [base_task]}, sort_keys=False
+            {"run_id": dirty_run, "runtime": "codex", "tasks": [base_task]},
+            sort_keys=False,
         ),
         encoding="utf-8",
     )
@@ -882,3 +898,96 @@ def test_installed_runner_rejects_global_file_runtime_and_integration_failures(
         assert not (
             harness_root / "state" / "task-delivery" / run_id
         ).exists()
+
+
+def test_installed_runner_uses_only_allowlisted_built_in_runtime_adapters(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    harness_root, worktree_root, integration, environment = configure_harness(
+        installed_commands,
+        temporary_git_repository,
+        fake_codex,
+        tmp_path,
+    )
+    ticket_file = harness_root / "ticket.md"
+    ticket_file.write_text("# Canonical ticket\n", encoding="utf-8")
+    config_file = harness_root / ".codex" / "agent-runner" / "config.yml"
+    config = yaml.safe_load(config_file.read_text(encoding="utf-8"))
+
+    config["runtimes"]["unapproved"] = dict(config["runtimes"]["codex"])
+    config_file.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+    unapproved_run = "20260813-unapproved-runtime"
+    unapproved_batch = harness_root / "unapproved-runtime-batch.yml"
+    unapproved_batch.write_text(
+        yaml.safe_dump(
+            {
+                "run_id": unapproved_run,
+                "runtime": "unapproved",
+                "tasks": [
+                    {
+                        "ticket_id": "11",
+                        "ticket_name": "unapproved-runtime",
+                        "role": "engineer-expert",
+                        "ticket_file": str(ticket_file),
+                    }
+                ],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    unapproved = run_process(
+        [str(installed_commands.runner), "--batch-input", str(unapproved_batch)],
+        cwd=harness_root,
+        env=environment,
+    )
+    assert unapproved.returncode == 1
+    assert yaml.safe_load(unapproved.stdout) == {
+        "error": {
+            "code": "unsupported-runtime",
+            "message": "The selected Agent Runtime is not supported by this Runner.",
+        }
+    }
+
+    config["runtimes"].pop("unapproved")
+    config["runtimes"]["codex"]["adapter"] = "arbitrary.module:adapter"
+    config_file.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+    unsafe_run = "20260813-unsafe-adapter"
+    unsafe_batch = harness_root / "unsafe-adapter-batch.yml"
+    unsafe_batch.write_text(
+        yaml.safe_dump(
+            {
+                "run_id": unsafe_run,
+                "runtime": "codex",
+                "tasks": [
+                    {
+                        "ticket_id": "12",
+                        "ticket_name": "unsafe-adapter",
+                        "role": "engineer-expert",
+                        "ticket_file": str(ticket_file),
+                    }
+                ],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    unsafe = run_process(
+        [str(installed_commands.runner), "--batch-input", str(unsafe_batch)],
+        cwd=harness_root,
+        env=environment,
+    )
+    assert unsafe.returncode == 1
+    assert yaml.safe_load(unsafe.stdout) == {
+        "error": {
+            "code": "invalid-config",
+            "message": "Project Runner Config contains invalid project or Codex settings.",
+        }
+    }
+    assert not fake_codex.log_file.exists()
+    for run_id in (unapproved_run, unsafe_run):
+        assert not (worktree_root / "runs" / run_id).exists()
+        assert not (harness_root / "state" / "task-delivery" / run_id).exists()

@@ -162,7 +162,7 @@ print("target validation passed")
     assert git_output(integration, "branch", "--show-current") == "dev"
     assert (integration / ".scratch").resolve() == state.resolve()
     assert {
-        path.name for path in (harness_root / ".codex" / "skills").iterdir()
+        path.name for path in (harness_root / ".agents" / "skills").iterdir()
     } == set(CORE_SKILL_NAMES)
     for resource in (
         harness_root / ".codex" / "config.toml",
@@ -198,6 +198,7 @@ print("target validation passed")
     batch_content = yaml.safe_dump(
         {
             "run_id": run_id,
+            "runtime": "codex",
             "tasks": [
                 {
                     "ticket_id": "15",

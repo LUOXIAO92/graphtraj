@@ -227,6 +227,7 @@ def launch_turn(
         yaml.safe_dump(
             {
                 "run_id": run_id,
+                "runtime": "codex",
                 "tasks": [
                     {
                         "ticket_id": ticket_id,

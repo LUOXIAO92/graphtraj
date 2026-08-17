@@ -17,6 +17,7 @@ RUN_ID = re.compile(
 )
 TICKET_ID = re.compile(r"^[A-Za-z0-9._-]{1,32}$")
 TICKET_NAME = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+RUNTIME_NAME = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 LOGICAL_ROLES = frozenset(ROLE_ALIAS_MARKERS)
 
 
@@ -79,10 +80,19 @@ def valid_ticket_name(value: object) -> bool:
     )
 
 
+def valid_runtime_name(value: object) -> bool:
+    """Return whether a value is one semantic Agent Runtime name."""
+
+    return (
+        isinstance(value, str)
+        and len(value) <= 64
+        and RUNTIME_NAME.fullmatch(value) is not None
+    )
+
+
 def read_batch(
     batch_file: Path,
     cwd: Path,
-    role_bindings: Mapping[str, str],
 ) -> Batch:
     """Read and strictly validate one complete YAML batch input."""
 
@@ -104,10 +114,14 @@ def read_batch(
         raise RunnerError(
             "BATCH_YAML_INVALID", "Batch input is not valid YAML."
         ) from error
-    if not isinstance(document, dict) or set(document) != {"run_id", "tasks"}:
+    if not isinstance(document, dict) or set(document) != {
+        "run_id",
+        "runtime",
+        "tasks",
+    }:
         raise RunnerError(
             "BATCH_SCHEMA_INVALID",
-            "Batch input must contain only run_id and tasks.",
+            "Batch input must contain only run_id, runtime, and tasks.",
         )
     run_id = document["run_id"]
     if not valid_run_id(run_id):
@@ -119,6 +133,12 @@ def read_batch(
                 "characters overall."
             ),
         )
+    runtime = document["runtime"]
+    if not valid_runtime_name(runtime):
+        raise RunnerError(
+            "RUNTIME_INVALID",
+            "runtime must be a 1-64 character lowercase kebab-case Agent Runtime name.",
+        )
     tasks = document["tasks"]
     if not isinstance(tasks, list) or not 1 <= len(tasks) <= 4:
         raise RunnerError(
@@ -126,7 +146,7 @@ def read_batch(
             "A batch must contain between one and four tasks.",
         )
     validated_tasks = tuple(
-        _read_task(task_document, cwd, role_bindings)
+        _read_task(task_document, cwd)
         for task_document in tasks
     )
     ticket_ids = [task.ticket_id for task in validated_tasks]
@@ -137,15 +157,28 @@ def read_batch(
         )
     return Batch(
         run_id=run_id,
+        runtime=runtime,
         tasks=validated_tasks,
         source_bytes=source_bytes,
     )
 
 
+def validate_batch_roles(
+    batch: Batch,
+    role_bindings: Mapping[str, str],
+) -> None:
+    """Require every logical task role to have a selected-Runtime binding."""
+
+    if any(task.role not in role_bindings for task in batch.tasks):
+        raise RunnerError(
+            "ROLE_NOT_CONFIGURED",
+            "The selected logical Engineer role is not configured.",
+        )
+
+
 def _read_task(
     task_document: object,
     cwd: Path,
-    role_bindings: Mapping[str, str],
 ) -> Task:
     """Validate and resolve one task without changing the supplied choices."""
 
@@ -176,7 +209,6 @@ def _read_task(
     if (
         not isinstance(role, str)
         or role not in LOGICAL_ROLES
-        or role not in role_bindings
     ):
         raise RunnerError(
             "ROLE_NOT_CONFIGURED",

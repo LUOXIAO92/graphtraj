@@ -181,11 +181,13 @@ def test_active_reservation_is_project_wide_for_ticket_across_delivery_runs(
     )
     first_batch = Batch(
         run_id="20260813-first-run",
+        runtime="codex",
         tasks=(task,),
         source_bytes=b"first",
     )
     second_batch = Batch(
         run_id="20260813-second-run",
+        runtime="codex",
         tasks=(task,),
         source_bytes=b"second",
     )
@@ -276,6 +278,7 @@ def test_installed_runner_launches_one_isolated_engineer_and_returns_early(
     batch_content = yaml.safe_dump(
         {
             "run_id": run_id,
+            "runtime": "codex",
             "tasks": [
                 {
                     "ticket_id": "10",
@@ -312,6 +315,7 @@ def test_installed_runner_launches_one_isolated_engineer_and_returns_early(
             "FAKE_CODEX_EVENTS": json.dumps(events),
             "FAKE_CODEX_CAPTURE_STDIN": "1",
             "FAKE_CODEX_RELEASE_FILE": str(release_file),
+            "AGENT_RUNTIME": "not-selected-by-runner",
         }
     )
 
@@ -355,6 +359,7 @@ def test_installed_runner_launches_one_isolated_engineer_and_returns_early(
         assert documents == [
             {
                 "run_id": run_id,
+                "runtime": "codex",
                 "retained_batch_file": str(retained_batch.resolve()),
                 "tasks": [
                     {
@@ -372,6 +377,9 @@ def test_installed_runner_launches_one_isolated_engineer_and_returns_early(
         ]
 
         assert retained_batch.read_bytes() == batch_content.encode("utf-8")
+        assert yaml.safe_load(retained_batch.read_text(encoding="utf-8"))["runtime"] == (
+            "codex"
+        )
         assert ticket_file.read_bytes() == ticket_before
         assert [path.name for path in evidence.parent.iterdir()] == [
             "2-10-launch-engineer"
@@ -563,6 +571,7 @@ def test_installed_runner_rejects_invalid_skills_before_starting_any_task(
         yaml.safe_dump(
             {
                 "run_id": "20260816-skill-preflight",
+                "runtime": "codex",
                 "tasks": [
                     {
                         "ticket_id": "16.1",
@@ -691,6 +700,7 @@ def test_installed_runner_rejects_unvetted_role_or_guard_before_runtime_launch(
         yaml.safe_dump(
             {
                 "run_id": "20260813-security-check",
+                "runtime": "codex",
                 "tasks": [
                     {
                         "ticket_id": "10",
@@ -765,8 +775,14 @@ def test_installed_runner_rejects_invalid_logical_input_without_launch_artifacts
     }
     cases = (
         (
+            {"run_id": "20260813-missing-runtime", "tasks": [base_task]},
+            "invalid-input",
+            "Batch input must contain only run_id, runtime, and tasks.",
+        ),
+        (
             {
                 "run_id": "20260813-" + "a" * 49,
+                "runtime": "codex",
                 "tasks": [base_task],
             },
             "invalid-input",
@@ -777,7 +793,11 @@ def test_installed_runner_rejects_invalid_logical_input_without_launch_artifacts
             ),
         ),
         (
-            {"run_id": "not-a-dated-run", "tasks": [base_task]},
+            {
+                "run_id": "not-a-dated-run",
+                "runtime": "codex",
+                "tasks": [base_task],
+            },
             "invalid-input",
             (
                 "run_id must use YYYYMMDD-short-name form with a semantic "
@@ -788,6 +808,7 @@ def test_installed_runner_rejects_invalid_logical_input_without_launch_artifacts
         (
             {
                 "run_id": "20260813-invalid-ticket-id",
+                "runtime": "codex",
                 "tasks": [{**base_task, "ticket_id": "invalid/ticket"}],
             },
             "invalid-input",
@@ -796,6 +817,7 @@ def test_installed_runner_rejects_invalid_logical_input_without_launch_artifacts
         (
             {
                 "run_id": "20260813-invalid-ticket-name",
+                "runtime": "codex",
                 "tasks": [{**base_task, "ticket_name": "Launch-Engineer"}],
             },
             "invalid-input",
@@ -804,6 +826,7 @@ def test_installed_runner_rejects_invalid_logical_input_without_launch_artifacts
         (
             {
                 "run_id": "20260813-invalid-role",
+                "runtime": "codex",
                 "tasks": [{**base_task, "role": "engineer-principal"}],
             },
             "invalid-input",
@@ -812,6 +835,7 @@ def test_installed_runner_rejects_invalid_logical_input_without_launch_artifacts
         (
             {
                 "run_id": "20260813-physical-input",
+                "runtime": "codex",
                 "tasks": [{**base_task, "worktree_path": "/tmp/main-selected"}],
             },
             "invalid-input",
@@ -820,6 +844,7 @@ def test_installed_runner_rejects_invalid_logical_input_without_launch_artifacts
         (
             {
                 "run_id": "20260813-multiple-tasks",
+                "runtime": "codex",
                 "tasks": [
                     base_task,
                     {**base_task, "ticket_id": "11"},
@@ -898,6 +923,7 @@ def test_installed_runner_rejects_preexisting_ticket_branch_off_validated_dev(
         yaml.safe_dump(
             {
                 "run_id": run_id,
+                "runtime": "codex",
                 "tasks": [
                     {
                         "ticket_id": "10",
@@ -981,6 +1007,7 @@ def test_installed_runner_separates_ambiguous_ticket_identity_pairs(
             yaml.safe_dump(
                 {
                     "run_id": run_id,
+                    "runtime": "codex",
                     "tasks": [
                         {
                             "ticket_id": ticket_id,
@@ -1047,6 +1074,7 @@ def test_concurrent_runner_processes_atomically_reserve_one_ticket_worktree(
         yaml.safe_dump(
             {
                 "run_id": run_id,
+                "runtime": "codex",
                 "tasks": [
                     {
                         "ticket_id": "10",
@@ -1155,6 +1183,7 @@ def test_failed_launch_retains_reservation_until_worker_and_runtime_terminate(
         yaml.safe_dump(
             {
                 "run_id": run_id,
+                "runtime": "codex",
                 "tasks": [
                     {
                         "ticket_id": "10",

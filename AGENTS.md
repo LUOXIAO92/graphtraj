@@ -41,6 +41,8 @@ This repository uses the single-context layout. See `docs/agents/domain.md`.
 - Use the Harness Project Root's `.codex/config.toml` as the concurrency
   authority. Do not hard-code or reinterpret its capacity outside the Harness
   workflow.
+- When monitoring Runner aliases, wait 90 seconds between unchanged status
+  polls. A meaningful event may trigger an immediate status check.
 - If a required Skill or role is unavailable, stop that operation and repair
   Runtime selection or installation. Do not improvise a substitute workflow.
 

@@ -41,10 +41,30 @@ _Avoid_: Scratch directory, Integration Worktree state
 
 **Harness Runtime Store**:
 The Harness Project-owned control-plane source for Main configuration, Harness
-roles, Harness Skills, and Runtime policy, independent of Source Repository
-history and Worktree lifecycles.
+roles, Hooks, and Runtime policy, independent of Source Repository history and
+Worktree lifecycles.
 _Avoid_: Source Repository Runtime configuration, Integration Worktree
 configuration
+
+**Agent Runtime**:
+The execution environment that hosts an Agent, such as Codex, independently of
+the logical role the Agent performs or the model it uses.
+_Avoid_: Agent Runner, Runtime Adapter, Model
+
+**Agent Runner**:
+The Harness execution boundary that dispatches Main-selected logical roles
+through allowlisted Runtime Adapters.
+_Avoid_: Agent Runtime, Main
+
+**Runtime Adapter**:
+The Harness binding that translates a logical role and task access into one
+Agent Runtime's native launch and session mechanics.
+_Avoid_: Agent Runtime, Agent Runner
+
+**Runtime Selection**:
+Main's semantic choice of Agent Runtime for a logical role, based on explicit
+user direction, Harness Project policy, or Main's own Runtime.
+_Avoid_: Runtime discovery, Adapter configuration
 
 **Harness Skill**:
 A Skill installed and owned by a Harness Project for Main or selected Harness
@@ -60,3 +80,24 @@ _Avoid_: Harness Skill, Automatically trusted Skill
 The immutable Adapter-resolved role, Runtime settings, selected Skills, and
 task access used to launch or resume one Engineer session.
 _Avoid_: Runtime profile, Source Repository configuration
+
+**Reviewer**:
+An Agent that Main dispatches to evaluate candidate work when Main decides a
+review is required.
+_Avoid_: Engineer-owned sub-Agent, Mandatory delivery step
+
+**Review Diversity**:
+The deliberate choice to use a different Agent Runtime or model for a Reviewer
+to counterbalance the implementing Engineer's biases.
+_Avoid_: Review requirement, Review independence
+
+**Compaction Handoff**:
+A handoff written by an Agent in its current session immediately before that
+same session compacts, preserving the task across the context replacement.
+_Avoid_: Compaction summary, Handoff Agent
+
+**Handoff Scope**:
+The persistent state boundary that owns an Agent's current Compaction Handoff
+and its archived predecessors: project-level for Main and Ticket-level for an
+Engineer.
+_Avoid_: Runtime-specific Hook, Shared HANDOFF.md

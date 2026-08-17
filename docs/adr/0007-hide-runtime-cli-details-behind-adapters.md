@@ -7,9 +7,10 @@ status: accepted
 > **Partial supersession:** [ADR 0013](0013-own-runtime-resources-at-the-harness-root.md)
 > replaces current-Git-project discovery as Main's control-plane entrypoint,
 > and [ADR 0014](0014-inject-engineer-runtime-through-the-adapter.md)
-> replaces the Source Repository `.codex` loading model. The Runner/Adapter
-> abstraction, semantic role selection, and private Runtime transport remain
-> accepted.
+> replaces the Source Repository `.codex` loading model. [ADR 0018](0018-main-selects-runtimes-outside-task-objects.md)
+> replaces V1's Runtime-selection authority and defaulting policy. The
+> Runner/Adapter abstraction, semantic role selection, and private Runtime
+> transport remain accepted.
 
 Main addresses logical Engineer roles without constructing or supplying
 Runtime commands, profile paths, or machine-local worktree and state paths.
@@ -28,9 +29,10 @@ root is `<harness-project-root>/.agent-worktrees/` as defined by
 discovers the config from the current Git project; Main does not locate or pass
 it.
 
-An explicit `AGENT_RUNTIME` environment value may override the configured
-default. Normal `task-delivery` calls omit this override, and Runtime selection
-never appears in batch task objects. Unknown or unconfigured Runtimes fail
+V1 allowed an explicit `AGENT_RUNTIME` environment value to override the
+configured default, while normal `task-delivery` calls omitted the override.
+ADR 0018 replaces that selection policy for V2. Runtime selection remains
+outside batch task objects, and unknown or unconfigured Runtimes still fail
 preflight before launch.
 
 The selected Runtime name resolves only through the Runner's built-in Adapter

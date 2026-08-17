@@ -9,8 +9,8 @@ the Harness do not require editing a single system-wide record.
   Harness Project isolates one Source Repository, its Worktrees, and persistent
   state beneath a dedicated project root.
 - [ADR 0013](0013-own-runtime-resources-at-the-harness-root.md) — Main runs at
-  the Harness Project Root, whose Runtime Store owns Harness roles, Skills, and
-  Hooks independently of Source Repository history and Worktree lifecycles.
+  the Harness Project Root, whose Runtime Store owns Harness roles and Hooks
+  independently of Source Repository history and Worktree lifecycles.
 
 ## Soft orchestration and delivery state
 
@@ -22,6 +22,8 @@ the Harness do not require editing a single system-wide record.
   delivery evidence lives outside Git worktrees.
 - [ADR 0005](0005-review-failures-escalate-within-task-delivery.md) — review
   failures escalate within Task Delivery.
+- [ADR 0019](0019-main-dispatches-reviewers.md) — Main conditionally dispatches
+  Standards and Spec Reviewers, with optional Review Diversity.
 
 ## Agent Runner and isolation
 
@@ -36,6 +38,16 @@ the Harness do not require editing a single system-wide record.
 - [ADR 0014](0014-inject-engineer-runtime-through-the-adapter.md) — the Adapter
   constructs an Engineer's effective role and isolation context without
   loading the Source Repository's project-scoped Codex configuration.
+- [ADR 0017](0017-prepare-engineer-runtime-context-in-two-stages.md) — Engineer
+  Runtime Context is prepared through one side-effect-free, two-stage boundary.
+- [ADR 0018](0018-main-selects-runtimes-outside-task-objects.md) — Main selects
+  a Runtime outside logical task objects while Runtime-specific mechanics stay
+  private to the selected Adapter.
+- [ADR 0020](0020-write-a-handoff-before-compaction.md) — the current Agent
+  writes a handoff in the same session before manual or automatic compaction.
+- [ADR 0021](0021-store-handoffs-in-scope-owned-state.md) — Main and Engineers
+  share one handoff archive contract while keeping current and historical
+  handoffs in separate Harness State scopes.
 
 ## Distribution and target-project setup
 
@@ -46,8 +58,8 @@ the Harness do not require editing a single system-wide record.
   one interactive, preflighted operation.
 - [ADR 0011](0011-resolve-core-skills-by-name.md) — core Skill dependencies are
   checked and resolved by declared name.
-- [ADR 0015](0015-select-repository-skills-explicitly.md) — Harness Skills live
-  in the Harness Runtime Store, while Source Repository Skills are disabled by
+- [ADR 0015](0015-select-repository-skills-explicitly.md) — Harness Skills are
+  owned by the Harness Project, while Source Repository Skills are disabled by
   default and selected explicitly per task or allowlist policy.
 - [ADR 0016](0016-install-harness-skills-under-agents.md) — V2 setup installs
   only missing Harness Skills under the Harness Project Root's `.agents/skills`

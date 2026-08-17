@@ -4,6 +4,12 @@ status: accepted
 
 # Own Runtime resources at the Harness Project Root
 
+> **Partial supersession:** [ADR 0016](0016-install-harness-skills-under-agents.md)
+> replaces the `.codex/skills/` installation and discovery statements below
+> with `<harness-project-root>/.agents/skills/` for V2. The Harness-root
+> control-plane, role, Hook, and Runner-configuration decisions remain
+> accepted.
+
 The operator runs both setup and the normal Main session from the Harness
 Project Root. Main must not enter the Integration Worktree or use a special
 `-C` invocation merely to discover Harness configuration. The Harness Project

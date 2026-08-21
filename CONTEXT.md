@@ -46,6 +46,18 @@ Worktree lifecycles.
 _Avoid_: Source Repository Runtime configuration, Integration Worktree
 configuration
 
+**Project Document**:
+A Source Repository artifact that explains requirements, decisions, design,
+operation, or Agent instructions. Main owns Project Document changes; every
+subagent has read-only access.
+_Avoid_: Harness State evidence, Any Markdown file
+
+**Soft Plan**:
+Main's default read-only authorization state before the user explicitly asks
+it to execute a state-changing action. It is a developer-instruction policy,
+not an Agent Runtime's formal Plan mode.
+_Avoid_: Plan mode, Pending execution approval
+
 **Agent Runtime**:
 The execution environment that hosts an Agent, such as Codex, independently of
 the logical role the Agent performs or the model it uses.

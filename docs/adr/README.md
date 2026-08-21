@@ -20,10 +20,13 @@ the Harness do not require editing a single system-wide record.
   State Agent owns the ledger and Mermaid working view.
 - [ADR 0004](0004-preserve-delivery-evidence-outside-git-worktrees.md) — durable
   delivery evidence lives outside Git worktrees.
-- [ADR 0005](0005-review-failures-escalate-within-task-delivery.md) — review
-  failures escalate within Task Delivery.
 - [ADR 0019](0019-main-dispatches-reviewers.md) — Main conditionally dispatches
   Standards and Spec Reviewers, with optional Review Diversity.
+- [ADR 0022](0022-diagnose-review-failures-before-choosing-an-action.md) — Main
+  diagnoses each review failure before choosing retry, escalation, or
+  replanning.
+- [ADR 0024](0024-keep-main-read-only-until-explicitly-authorized.md) — Main
+  remains in Soft Plan until the user explicitly authorizes execution.
 
 ## Agent Runner and isolation
 
@@ -48,6 +51,8 @@ the Harness do not require editing a single system-wide record.
 - [ADR 0021](0021-store-handoffs-in-scope-owned-state.md) — Main and Engineers
   share one handoff archive contract while keeping current and historical
   handoffs in separate Harness State scopes.
+- [ADR 0023](0023-keep-project-documents-read-only-for-subagents.md) — every
+  subagent receives read-only access to Source Repository Project Documents.
 
 ## Distribution and target-project setup
 
@@ -66,6 +71,9 @@ the Harness do not require editing a single system-wide record.
   directory instead of `.codex/skills`.
 
 ## Historical audit sources
+
+[ADR 0005](0005-review-failures-escalate-within-task-delivery.md) is retained
+as the superseded mechanical review-escalation decision.
 
 The pre-split files
 [`docs/task-delivery-adr-before-functional-split.md`](../task-delivery-adr-before-functional-split.md)

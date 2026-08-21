@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: superseded by ADR 0022
 ---
 
 # Review failures escalate within Task Delivery

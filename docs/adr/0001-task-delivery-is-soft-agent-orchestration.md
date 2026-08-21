@@ -51,9 +51,9 @@ Two supporting components remain deliberately narrower than Main:
   transport, and cleanup, beginning with the interface in
   [ADR 0006](0006-runner-dispatches-main-selected-ticket-batches.md).
 
-Review escalation is policy inside `task-delivery`, not a separate Skill; its
-thresholds and evidence rules are recorded in
-[ADR 0005](0005-review-failures-escalate-within-task-delivery.md).
+Review-failure diagnosis and the next-action decision remain policy inside
+`task-delivery`, not a separate Skill; the current decision is recorded in
+[ADR 0022](0022-diagnose-review-failures-before-choosing-an-action.md).
 
 ## Considered options
 

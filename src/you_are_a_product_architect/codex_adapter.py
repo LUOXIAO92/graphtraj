@@ -133,7 +133,18 @@ class _CodexRole:
         overrides = (
             ("model_reasoning_effort", self.reasoning_effort),
             ("developer_instructions", developer_instructions),
-            ("hooks", _root_owned_hooks(self.hooks, runtime_store)),
+            (
+                "hooks",
+                _root_owned_hooks(
+                    self.hooks,
+                    runtime_store,
+                    handoff_path=(
+                        Path(".scratch/task-delivery/handoffs/HANDOFF.md")
+                        if self.name in ENGINEER_ROLES
+                        else None
+                    ),
+                ),
+            ),
             ("agents", self.agents),
             (
                 "projects",
@@ -607,7 +618,13 @@ def _resolve_codex_role(runtime_store: Path, binding: str) -> _CodexRole:
     _, document = matching[0]
     _validate_role_schema(document)
     expected = _packaged_role(binding)
-    if document["hooks"] != expected.get("hooks"):
+    configured_hooks = dict(document["hooks"])
+    if (
+        binding in ENGINEER_ROLES
+        and configured_hooks.get("PreCompact") == _packaged_main_precompact()
+    ):
+        del configured_hooks["PreCompact"]
+    if configured_hooks != expected.get("hooks"):
         raise CodexAdapterError(
             "ROLE_HOOK_MISMATCH",
             "The configured Codex role does not contain the packaged Worktree Guard hooks.",
@@ -692,6 +709,29 @@ def _packaged_role(binding: str) -> Dict[str, Any]:
         raise CodexAdapterError(
             "PACKAGED_ROLE_INVALID",
             "The installed Codex role resource is invalid.",
+        ) from error
+
+
+def _packaged_main_precompact() -> Any:
+    """Return Main's canonical opt-in Compaction Handoff Hook."""
+
+    resource = resources.files("you_are_a_product_architect.resources").joinpath(
+        "codex", "config.toml"
+    )
+    try:
+        return tomllib.loads(resource.read_text(encoding="utf-8"))["hooks"][
+            "PreCompact"
+        ]
+    except (
+        KeyError,
+        OSError,
+        TypeError,
+        UnicodeError,
+        tomllib.TOMLDecodeError,
+    ) as error:
+        raise CodexAdapterError(
+            "PACKAGED_CONFIG_INVALID",
+            "The installed Codex configuration is invalid.",
         ) from error
 
 
@@ -837,6 +877,7 @@ def _discover_skill_files(root: Path) -> Dict[str, Tuple[Path, ...]]:
 def _root_owned_hooks(
     packaged_hooks: Mapping[str, Any],
     runtime_store: Path,
+    handoff_path: Optional[Path] = None,
 ) -> Mapping[str, Any]:
     """Translate canonical Hooks to the root-owned Worktree Guard."""
     _verify_packaged_guard(runtime_store)
@@ -862,6 +903,10 @@ def _root_owned_hooks(
             "ROLE_HOOK_MISMATCH",
             "The configured Codex role does not contain the packaged Worktree Guard hooks.",
         ) from error
+    if handoff_path is not None and "PreCompact" in hooks:
+        hooks["PreCompact"][0]["hooks"][0]["prompt"] += (
+            " Write the handoff to `{0}`.".format(handoff_path)
+        )
     return hooks
 
 

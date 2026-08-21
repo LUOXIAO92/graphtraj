@@ -642,6 +642,109 @@ def test_installed_runner_launches_a_standards_reviewer_for_a_fixed_candidate(
     assert metadata["effective_role"] == "standards-reviewer"
 
 
+def test_installed_runner_launches_engineer_with_opted_in_compaction_handoff(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    harness_root = temporary_git_repository.parent
+    user_home = tmp_path / "operator-home"
+    install_user_skills(user_home)
+    setup_result = run_setup(
+        installed_commands,
+        harness_root=harness_root,
+        user_home=user_home,
+        fake_codex=fake_codex,
+        answers="{0}\ny\n".format(temporary_git_repository.name),
+    )
+    assert setup_result.returncode == 0, setup_result.stderr
+
+    prompt = (
+        "Use the $handoff Skill now in this same session to write the durable "
+        "handoff. Finish the handoff before compaction continues."
+    )
+    role_file = harness_root / ".codex" / "agents" / "engineer-expert.toml"
+    role = role_file.read_text(encoding="utf-8")
+    hook = (
+        "\n[[hooks.PreCompact]]\n"
+        'matcher = "{0}"\n\n'
+        "[[hooks.PreCompact.hooks]]\n"
+        'type = "prompt"\n'
+        'prompt = "{1}"\n'
+    )
+    ticket_file = harness_root / "ticket.md"
+    ticket_file.write_text("# Canonical ticket\n", encoding="utf-8")
+    batch_file = harness_root / "batch.yml"
+    batch_file.write_text(
+        yaml.safe_dump(
+            {
+                "run_id": "20260822-engineer-handoff",
+                "runtime": "codex",
+                "tasks": [
+                    {
+                        "ticket_id": "51",
+                        "ticket_name": "engineer-handoff",
+                        "role": "engineer-expert",
+                        "ticket_file": str(ticket_file),
+                    }
+                ],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    environment = os.environ.copy()
+    environment.update(
+        {"HOME": str(user_home), "FAKE_CODEX_LOG": str(fake_codex.log_file)}
+    )
+
+    message = (
+        "The configured Codex role does not contain the packaged Worktree Guard "
+        "hooks."
+    )
+    role_file.write_text(
+        role + hook.format("manual", prompt),
+        encoding="utf-8",
+    )
+    rejected = run_process(
+        [str(installed_commands.runner), "--batch-input", str(batch_file)],
+        cwd=harness_root,
+        env=environment,
+        timeout=5,
+    )
+
+    assert rejected.returncode == 1
+    assert yaml.safe_load(rejected.stdout) == {
+        "error": {"code": "invalid-config", "message": message}
+    }
+    assert rejected.stderr == message + "\n"
+    assert not fake_codex.log_file.exists()
+
+    role_file.write_text(
+        role + hook.format("manual|auto", prompt),
+        encoding="utf-8",
+    )
+    result = run_process(
+        [str(installed_commands.runner), "--batch-input", str(batch_file)],
+        cwd=harness_root,
+        env=environment,
+        timeout=5,
+    )
+
+    assert result.returncode == 0, result.stderr
+    wait_for_file(fake_codex.log_file)
+    runtime_call = json.loads(fake_codex.log_file.read_text(encoding="utf-8"))
+    hooks = next(
+        argument
+        for argument in runtime_call["argv"]
+        if argument.startswith("hooks=")
+    )
+    assert prompt in hooks
+    assert ".scratch/task-delivery/handoffs/HANDOFF.md" in hooks
+    assert str(harness_root / ".codex" / "hooks" / "worktree_guard.py") in hooks
+
+
 def test_installed_runner_rejects_invalid_skills_before_starting_any_task(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,

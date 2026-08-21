@@ -27,7 +27,7 @@ from .runner_transport import runtime_turn_outcome
 from .skill_check import declared_skill_name, harness_skill_root
 
 
-SUPPORTED_ROLE_KEYS = frozenset(
+ADAPTER_ROLE_KEYS = frozenset(
     {
         "name",
         "description",
@@ -39,7 +39,7 @@ SUPPORTED_ROLE_KEYS = frozenset(
         "agents",
     }
 )
-REQUIRED_ROLE_KEYS = SUPPORTED_ROLE_KEYS - {"description"}
+REQUIRED_ROLE_KEYS = ADAPTER_ROLE_KEYS - {"description"}
 SUPPORTED_AGENT_KEYS = frozenset(
     {
         "enabled",
@@ -91,6 +91,7 @@ class _CodexRole:
     sandbox_mode: str
     hooks: Mapping[str, Any]
     agents: Mapping[str, Any]
+    native_settings: Mapping[str, Any]
 
     def _launch_request(
         self,
@@ -131,6 +132,7 @@ class _CodexRole:
                     "[${0}]({1})".format(skill.name, skill.path),
                 )
         overrides = (
+            *self.native_settings.items(),
             ("model_reasoning_effort", self.reasoning_effort),
             ("developer_instructions", developer_instructions),
             (
@@ -639,14 +641,17 @@ def _resolve_codex_role(runtime_store: Path, binding: str) -> _CodexRole:
         sandbox_mode=document["sandbox_mode"],
         hooks=document["hooks"],
         agents=document["agents"],
+        native_settings={
+            key: value
+            for key, value in document.items()
+            if key not in ADAPTER_ROLE_KEYS
+        },
     )
 
 
 def _validate_role_schema(document: Mapping[str, Any]) -> None:
     keys = frozenset(document)
-    if not REQUIRED_ROLE_KEYS.issubset(keys) or not keys.issubset(
-        SUPPORTED_ROLE_KEYS
-    ):
+    if not REQUIRED_ROLE_KEYS.issubset(keys):
         raise CodexAdapterError(
             "ROLE_CONFIG_UNSUPPORTED",
             "The configured Codex role uses an unsupported top-level schema.",

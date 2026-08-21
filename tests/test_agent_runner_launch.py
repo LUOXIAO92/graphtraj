@@ -242,6 +242,17 @@ def test_installed_runner_launches_one_isolated_engineer_and_returns_early(
         answers="{0}\ny\n".format(primary.name),
     )
     assert setup_result.returncode == 0, setup_result.stderr
+    role_file = harness_root / ".codex" / "agents" / "engineer-expert.toml"
+    role_file.write_text(
+        role_file.read_text(encoding="utf-8").replace(
+            "\nmodel_reasoning_effort = ",
+            "\nmodel_context_window = 400000\n"
+            "model_auto_compact_token_limit = 340000\n\n"
+            "model_reasoning_effort = ",
+            1,
+        ),
+        encoding="utf-8",
+    )
     repository_skills = integration / ".agents" / "skills"
     for name in ("repo-selected", "repo-disabled"):
         document = repository_skills / name / "SKILL.md"
@@ -399,6 +410,8 @@ def test_installed_runner_launches_one_isolated_engineer_and_returns_early(
         assert git_output(primary, "rev-parse", "HEAD") != dev_head
 
         runtime_call = json.loads(fake_codex.log_file.read_text(encoding="utf-8"))
+        assert "model_context_window=400000" in runtime_call["argv"]
+        assert "model_auto_compact_token_limit=340000" in runtime_call["argv"]
         expected_task = (
             ticket_content
             + "\n## Additional instruction from Main\n\n"
@@ -850,11 +863,6 @@ def test_installed_runner_rejects_invalid_skills_before_starting_any_task(
     ("mutation", "expected_code", "expected_message"),
     (
         (
-            "unsupported-role-key",
-            "invalid-config",
-            "The configured Codex role uses an unsupported top-level schema.",
-        ),
-        (
             "changed-hook-command",
             "invalid-config",
             "The configured Codex role does not contain the packaged Worktree Guard hooks.",
@@ -889,14 +897,7 @@ def test_installed_runner_rejects_unvetted_role_or_guard_before_runtime_launch(
 
     role_file = harness_root / ".codex" / "agents" / "engineer-expert.toml"
     guard_file = harness_root / ".codex" / "hooks" / "worktree_guard.py"
-    if mutation == "unsupported-role-key":
-        role_file.write_text(
-            role_file.read_text(encoding="utf-8").replace(
-                "\nmodel = ", "\nunsupported_setting = true\n\nmodel = ", 1
-            ),
-            encoding="utf-8",
-        )
-    elif mutation == "changed-hook-command":
+    if mutation == "changed-hook-command":
         role_file.write_text(
             role_file.read_text(encoding="utf-8").replace(
                 'command = \'python3 "$(git rev-parse --show-toplevel)/.codex/hooks/worktree_guard.py"\'',

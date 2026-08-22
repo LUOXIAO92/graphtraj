@@ -642,7 +642,8 @@ def test_real_codex_uses_harness_hook_and_explicit_skill_configuration(
 
     runtime_user = tmp_path / "runtime-user"
     runtime_user.mkdir()
-    environment = os.environ.copy()
+    runtime_environment = os.environ.copy()
+    environment = runtime_environment.copy()
     environment["HOME"] = str(runtime_user)
     codex_executable = shutil.which("codex")
     assert codex_executable is not None
@@ -663,7 +664,7 @@ def test_real_codex_uses_harness_hook_and_explicit_skill_configuration(
             "--json",
             "-",
         ],
-        env=environment,
+        env=runtime_environment,
         input=(
             "Use Bash to run `pwd` once, then reply with "
             "`SOURCE_HOOK_CONTROL`.\n"
@@ -773,7 +774,7 @@ def test_real_codex_uses_harness_hook_and_explicit_skill_configuration(
     launched = run_process(
         [str(installed_commands.runner), "--batch-input", str(batch_file)],
         cwd=harness_root,
-        env=environment,
+        env=runtime_environment,
         timeout=60,
     )
     assert launched.returncode == 0, launched.stderr

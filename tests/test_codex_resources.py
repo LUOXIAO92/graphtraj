@@ -288,9 +288,11 @@ def semantic_and_expansion_bypasses() -> tuple[str, ...]:
 
 def test_packaged_config_defines_the_project_local_codex_workspace() -> None:
     config = (RESOURCE_ROOT / "config.toml").read_text(encoding="utf-8")
+    document = tomllib.loads(config)
 
     assert 'sandbox_mode = "workspace-write"' in config
-    assert "sandbox_workspace_write" not in tomllib.loads(config)
+    assert "sandbox_workspace_write" not in document
+    assert document["developer_instructions"].strip()
 
 
 def test_packaged_engineer_roles_keep_the_accepted_runtime_settings() -> None:

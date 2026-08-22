@@ -56,6 +56,7 @@ extends = ":workspace"
 
 [permissions.project-documents-read-only.filesystem.":workspace_roots"]
 "." = "write"
+".agents" = "read"
 "AGENTS.md" = "read"
 "CONTEXT.md" = "read"
 "README.md" = "read"

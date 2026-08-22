@@ -403,6 +403,7 @@ def test_engineer_runtime_context_finalizes_worktree_facts_once(
         argument for argument in arguments if argument.startswith("permissions=")
     )
     assert '"AGENTS.md" = "read"' in permissions
+    assert '".agents" = "read"' in permissions
     assert '"CONTEXT.md" = "read"' in permissions
     assert '"README.md" = "read"' in permissions
     assert 'docs = "read"' in permissions
@@ -423,6 +424,9 @@ def test_installed_setup_to_runner_launch_uses_project_document_permissions(
     harness_root = temporary_git_repository.parent
     runtime_user = tmp_path / "runtime-user"
     runtime_user.mkdir()
+    user_config = runtime_user / ".codex" / "config.toml"
+    user_config.parent.mkdir()
+    user_config.write_text('sandbox_mode = "workspace-write"\n', encoding="utf-8")
     environment = os.environ.copy()
     environment["HOME"] = str(runtime_user)
     environment["PATH"] = "{0}{1}{2}".format(
@@ -431,6 +435,7 @@ def test_installed_setup_to_runner_launch_uses_project_document_permissions(
         environment.get("PATH", ""),
     )
     environment["FAKE_CODEX_LOG"] = str(fake_codex.log_file)
+    environment["FAKE_CODEX_LIFECYCLE_ACTION"] = "deliver-representative-ticket"
     setup = subprocess.run(
         [str(installed_commands.product), "setup"],
         cwd=harness_root,
@@ -465,6 +470,35 @@ def test_installed_setup_to_runner_launch_uses_project_document_permissions(
         timeout=60,
     )
 
+    assert launched.returncode == 1
+    failed_task = yaml.safe_load(launched.stdout)["tasks"][0]
+    assert failed_task["error"] == {
+        "code": "invalid-config",
+        "message": (
+            "The loaded Codex user configuration contains sandbox_mode, "
+            "which disables the selected permission profile."
+        ),
+    }
+    assert not fake_codex.log_file.exists()
+
+    user_config.unlink()
+    batch_file.write_text(
+        "run_id: 20260823-permissions-retry\n"
+        "runtime: codex\n"
+        "tasks:\n"
+        "  - ticket_id: '53-retry'\n"
+        "    ticket_name: project-document-permissions\n"
+        "    role: engineer-junior\n"
+        "    ticket_file: {0}\n".format(ticket_file),
+        encoding="utf-8",
+    )
+    launched = run_process(
+        [str(installed_commands.runner), "--batch-input", str(batch_file)],
+        cwd=harness_root,
+        env=environment,
+        timeout=60,
+    )
+
     assert launched.returncode == 0, launched.stderr
     task = yaml.safe_load(launched.stdout)["tasks"][0]
     wait_for_file(fake_codex.log_file)
@@ -477,9 +511,13 @@ def test_installed_setup_to_runner_launch_uses_project_document_permissions(
         argument for argument in arguments if argument.startswith("permissions=")
     )
     assert '"AGENTS.md" = "read"' in permission_override
+    assert '".agents" = "read"' in permission_override
     assert 'docs = "read"' in permission_override
     evidence = (Path(task["worktree_path"]) / ".scratch" / "task-delivery").resolve()
     assert str(evidence) in arguments
+    wait_for_file(Path(task["worktree_path"]) / "V1_DELIVERED.txt")
+    wait_for_file(evidence / "result.md")
+    assert (evidence / "validation.md").is_file()
 
 
 def test_engineer_runtime_context_finalization_rechecks_ticket_worktree_skills(
@@ -594,6 +632,13 @@ def test_real_codex_uses_harness_hook_and_explicit_skill_configuration(
         ["git", "commit", "-m", "Add isolated Runtime fixtures"],
         cwd=primary,
     ).check_returncode()
+    project_skill_before = (
+        primary
+        / ".agents"
+        / "skills"
+        / "repository-selected"
+        / "SKILL.md"
+    ).read_bytes()
 
     runtime_user = tmp_path / "runtime-user"
     runtime_user.mkdir()
@@ -655,7 +700,12 @@ def test_real_codex_uses_harness_hook_and_explicit_skill_configuration(
         "---\n\n"
         "When asked to perform the Harness Skill acceptance probe, use "
         "apply_patch to create `.harness-skill-proof` containing "
-        "`implement`.\n",
+        "`implement`. Then use Bash to attempt these commands separately, "
+        "continuing after the first two are denied: "
+        "`echo forbidden > README.md`; "
+        "`echo forbidden > .agents/skills/repository-selected/SKILL.md`; "
+        "`touch .native-code-write-proof`; "
+        "`touch .scratch/task-delivery/native-evidence-write-proof`.\n",
         encoding="utf-8",
     )
     for name in ("tdd", "code-review"):
@@ -743,5 +793,22 @@ def test_real_codex_uses_harness_hook_and_explicit_skill_configuration(
         encoding="utf-8"
     ).strip() == "repository-selected"
     assert not (ticket_worktree / ".repository-disabled-skill-proof").exists()
+    assert (ticket_worktree / "README.md").read_text(encoding="utf-8") == (
+        "# Target project\n"
+    )
+    assert (
+        ticket_worktree
+        / ".agents"
+        / "skills"
+        / "repository-selected"
+        / "SKILL.md"
+    ).read_bytes() == project_skill_before
+    assert (ticket_worktree / ".native-code-write-proof").is_file()
+    assert (
+        ticket_worktree
+        / ".scratch"
+        / "task-delivery"
+        / "native-evidence-write-proof"
+    ).is_file()
     assert harness_hook_marker.is_file()
     assert not source_hook_marker.exists()

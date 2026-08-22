@@ -321,6 +321,7 @@ class CodexTurn:
         """Own the process and translate its private JSONL protocol."""
 
         arguments, worktree = _validate_launch_request(self._request)
+        _reject_legacy_user_sandbox_config()
         if self._expected_session is not None:
             arguments = _resume_arguments(arguments, self._expected_session)
         events_file = self._session_directory / "events.jsonl"
@@ -493,6 +494,33 @@ def _validate_launch_request(
             "The durable Codex launch request is invalid.",
         )
     return arguments, worktree
+
+
+def _reject_legacy_user_sandbox_config() -> None:
+    codex_home = Path(os.environ.get("CODEX_HOME", Path.home() / ".codex"))
+    config = codex_home / "config.toml"
+    try:
+        document = tomllib.loads(config.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return
+    except (OSError, UnicodeError, tomllib.TOMLDecodeError):
+        return
+
+    profile = document.get("profile")
+    profiles = document.get("profiles")
+    selected_profile = (
+        profiles.get(profile)
+        if isinstance(profile, str) and isinstance(profiles, dict)
+        else None
+    )
+    if "sandbox_mode" in document or (
+        isinstance(selected_profile, dict) and "sandbox_mode" in selected_profile
+    ):
+        raise CodexAdapterError(
+            "LEGACY_SANDBOX_CONFIG_CONFLICT",
+            "The loaded Codex user configuration contains sandbox_mode, "
+            "which disables the selected permission profile.",
+        )
 
 
 def _resume_arguments(launch_arguments: List[str], session: str) -> List[str]:

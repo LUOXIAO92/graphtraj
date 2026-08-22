@@ -345,6 +345,7 @@ def test_every_packaged_subagent_role_keeps_project_documents_read_only() -> Non
         assert profile_name == "project-documents-read-only"
         assert filesystem == {
             ".": "write",
+            ".agents": "read",
             "AGENTS.md": "read",
             "CONTEXT.md": "read",
             "README.md": "read",

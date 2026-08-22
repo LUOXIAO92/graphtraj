@@ -192,6 +192,29 @@ def test_engineer_runtime_context_preflight_validates_without_launch_artifacts(
     (runtime_store / "config.toml").unlink()
     target_worktree = tmp_path / "ticket-worktree"
     evidence = tmp_path / "evidence"
+    user_config = user_home / ".codex" / "config.toml"
+    user_config.parent.mkdir()
+    user_config.write_text('sandbox_mode = "workspace-write"\n', encoding="utf-8")
+
+    with pytest.raises(CodexAdapterError) as legacy_sandbox:
+        preflight_engineer_runtime_context(
+            runtime_store=runtime_store,
+            executable=fake_codex.executable,
+            git_common_directory=temporary_git_repository / ".git",
+            role="engineer-expert",
+            worktree=target_worktree,
+            evidence=evidence,
+            repository_skill_source=(
+                harness_root / ".agent-worktrees" / "integration"
+            ),
+            requested_skills=(),
+        )
+    assert legacy_sandbox.value.code == "LEGACY_SANDBOX_CONFIG_CONFLICT"
+    assert not target_worktree.exists()
+    assert not evidence.exists()
+    assert not fake_codex.log_file.exists()
+
+    user_config.unlink()
     preflight_engineer_runtime_context(
         runtime_store=runtime_store,
         executable=fake_codex.executable,
@@ -471,15 +494,22 @@ def test_installed_setup_to_runner_launch_uses_project_document_permissions(
     )
 
     assert launched.returncode == 1
-    failed_task = yaml.safe_load(launched.stdout)["tasks"][0]
-    assert failed_task["error"] == {
-        "code": "invalid-config",
-        "message": (
-            "The loaded Codex user configuration contains sandbox_mode, "
-            "which disables the selected permission profile."
-        ),
+    assert yaml.safe_load(launched.stdout) == {
+        "error": {
+            "code": "invalid-config",
+            "message": (
+                "The loaded Codex user configuration contains sandbox_mode, "
+                "which disables the selected permission profile."
+            ),
+        }
     }
     assert not fake_codex.log_file.exists()
+    assert not (
+        harness_root / ".agent-worktrees" / "runs" / "20260823-permissions"
+    ).exists()
+    assert not (
+        harness_root / "state" / "task-delivery" / "20260823-permissions"
+    ).exists()
 
     user_config.unlink()
     batch_file.write_text(

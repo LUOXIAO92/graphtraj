@@ -266,6 +266,7 @@ def preflight_runtime_context(
 ) -> RuntimeContextPreflight:
     """Prepare one Codex role without crossing role-specific boundaries."""
 
+    _reject_legacy_user_sandbox_config()
     resolved_role = _resolve_codex_role(runtime_store, role)
     if role in ENGINEER_ROLES:
         harness_skills = _resolve_engineer_harness_skills(runtime_store, role)

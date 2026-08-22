@@ -14,8 +14,8 @@ The `.scratch` path is an access path, not the canonical store. Main's handoff
 does not belong to a Delivery Run because a Main session can precede or span
 runs, and no handoff enters Source Repository history.
 
-Before writing a new current handoff, the common Hook framework moves any
-existing `HANDOFF.md` to
+Before the lifecycle controller requests compaction, the common Handoff store
+moves any existing `HANDOFF.md` to
 `archive/<timestamp>-<session-id>-<compact-count>.md`, then atomically replaces
 the fixed-name current file. Main and Engineer use the same archive operation,
 while their separate Handoff Scopes keep their state isolated. Each scope root

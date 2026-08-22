@@ -179,6 +179,8 @@ class _CodexRuntimePreflight:
         )
         return _CodexRuntimeContext(
             _role=self._role.name,
+            _model=self._role.model,
+            _reasoning_effort=self._role.reasoning_effort,
             _arguments=tuple(request["arguments"]),
             _worktree=self._worktree,
             _effective_skills=effective_skills,
@@ -188,6 +190,8 @@ class _CodexRuntimePreflight:
 @dataclass(frozen=True)
 class _CodexRuntimeContext:
     _role: str
+    _model: str
+    _reasoning_effort: str
     _arguments: Tuple[str, ...]
     _worktree: Path
     _effective_skills: Tuple[_EffectiveSkill, ...]
@@ -210,6 +214,8 @@ class _CodexRuntimeContext:
         return {
             "runtime": self.runtime,
             "effective_role": self._role,
+            "model": self._model,
+            "model_reasoning_effort": self._reasoning_effort,
             "effective_skills": [
                 skill.evidence_entry() for skill in self._effective_skills
             ],

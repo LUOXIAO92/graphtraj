@@ -289,11 +289,10 @@ print("target validation passed")
         ],
         cwd=harness_root,
         env={
-            **environment,
-            "FAKE_CODEX_CAPTURE_STDIN": "1",
-            "FAKE_CODEX_LIFECYCLE_ACTION": "deliver-representative-ticket",
-            "FAKE_CODEX_LIFECYCLE_ALIAS": alias,
-            "FAKE_CODEX_EVENTS": json.dumps(
+                **environment,
+                "FAKE_CODEX_CAPTURE_STDIN": "1",
+                "FAKE_CODEX_LIFECYCLE_ACTION": "deliver-representative-ticket",
+                "FAKE_CODEX_EVENTS": json.dumps(
                 [
                     {"type": "thread.started", "thread_id": session},
                     {"type": "turn.started"},
@@ -339,8 +338,105 @@ print("target validation passed")
         "Command: git diff --check HEAD^ HEAD\n"
         "Result: passed.\n"
     ).format(candidate)
-    assert (reviews / "{0}-r1-standards.md".format(alias)).is_file()
-    assert (reviews / "{0}-r1-spec.md".format(alias)).is_file()
+    reviewer_evidence = []
+    for axis, role in (
+        ("standards", "standards-reviewer"),
+        ("spec", "spec-reviewer"),
+    ):
+        report = reviews / "{0}-r1-{1}.md".format(alias, axis)
+        review_batch = harness_root / "{0}-review.yml".format(axis)
+        review_batch.write_text(
+            yaml.safe_dump(
+                {
+                    "run_id": run_id,
+                    "runtime": "codex",
+                    "tasks": [
+                        {
+                            "ticket_id": "15",
+                            "ticket_name": "v1-lifecycle",
+                            "role": role,
+                            "ticket_file": str(ticket_file),
+                            "instruction": (
+                                "Review candidate {0} against {1}; write only {2}."
+                            ).format(candidate, main_before, report),
+                        }
+                    ],
+                },
+                sort_keys=False,
+            ),
+            encoding="utf-8",
+        )
+        review_session = "fake-v1-{0}-review-session".format(axis)
+        review_launch = run_process(
+            [
+                str(installed_commands.runner),
+                "--batch-input",
+                str(review_batch),
+            ],
+            cwd=harness_root,
+            env={
+                **environment,
+                "FAKE_CODEX_EVENTS": json.dumps(
+                    [
+                        {
+                            "type": "thread.started",
+                            "thread_id": review_session,
+                        },
+                        {"type": "turn.started"},
+                        {
+                            "type": "turn.completed",
+                            "usage": {
+                                "cached_input_tokens": 0,
+                                "input_tokens": 1,
+                                "output_tokens": 1,
+                            },
+                        },
+                    ]
+                ),
+                "FAKE_CODEX_LIFECYCLE_ACTION": "review-representative-candidate",
+                "FAKE_CODEX_REVIEW_AXIS": axis,
+                "FAKE_CODEX_REVIEW_CANDIDATE": candidate,
+                "FAKE_CODEX_REVIEW_REPORT": str(report),
+            },
+            timeout=10,
+        )
+        assert review_launch.returncode == 0, review_launch.stderr
+        review_task = yaml.safe_load(review_launch.stdout)["tasks"][0]
+        reviewer_alias = review_task["alias"]
+        wait_for_idle_outcome(
+            installed_commands,
+            harness_root=harness_root,
+            environment=environment,
+            alias=reviewer_alias,
+            outcome="completed",
+        )
+        assert review_task["role"] == role
+        assert review_task["worktree_path"] == str(ticket_worktree)
+        assert git_output(ticket_worktree, "rev-parse", "HEAD") == candidate
+        assert git_output(ticket_worktree, "status", "--porcelain") == ""
+        assert report.read_text(encoding="utf-8") == (
+            "Raw {0} review for candidate {1}.\n"
+            "Main must adjudicate this evidence.\n"
+        ).format(axis.title(), candidate)
+        reviewer_evidence.append(
+            {
+                "alias": reviewer_alias,
+                "role": role,
+                "runtime": "codex",
+                "model": "gpt-5.6-sol",
+            }
+        )
+
+    metadata = yaml.safe_load(
+        (evidence / "metadata.yml").read_text(encoding="utf-8")
+    )
+    assert [
+        {
+            key: launch[key]
+            for key in ("alias", "role", "runtime", "model")
+        }
+        for launch in metadata["launches"][-2:]
+    ] == reviewer_evidence
     evidence_before_cleanup = tree_contents(evidence)
     retained_batch_before_cleanup = retained_batch.read_bytes()
 
@@ -378,7 +474,12 @@ print("target validation passed")
         timeout=10,
     )
     assert cleanup.returncode == 0, cleanup.stderr
-    assert yaml.safe_load(cleanup.stdout)["cleanup_status"] == "cleaned"
+    cleanup_document = yaml.safe_load(cleanup.stdout)
+    assert cleanup_document["cleanup_status"] == "cleaned"
+    assert cleanup_document["aliases_removed"] == [
+        alias,
+        *[reviewer["alias"] for reviewer in reviewer_evidence],
+    ]
     assert not ticket_worktree.exists()
     branch_gone = run_process(
         [

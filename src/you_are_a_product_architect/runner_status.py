@@ -15,7 +15,7 @@ from .runner_process import process_is_alive
 from .runner_project import discover_runner_directory
 
 
-ALIAS = re.compile(r"^[A-Za-z0-9._%-]+@[jse][1-9][0-9]*$")
+ALIAS = re.compile(r"^[A-Za-z0-9._%-]+@[jser][1-9][0-9]*$")
 TERMINAL_OUTCOMES = frozenset({"completed", "interrupted", "runtime-error"})
 MAPPING_FIELDS = frozenset(
     {

@@ -352,6 +352,8 @@ def test_engineer_runtime_context_finalizes_worktree_facts_once(
     expected_evidence = {
         "runtime": "codex",
         "effective_role": "engineer-expert",
+        "model": "gpt-5.6-sol",
+        "model_reasoning_effort": "max",
         "effective_skills": [
             {
                 "name": name,

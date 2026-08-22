@@ -158,7 +158,9 @@ def _launch_task(
     mapping: Optional[Dict[str, Any]] = None
     try:
         evidence = prepare_evidence(project.state_directory, run_id, task)
-        alias_history = _read_alias_history(evidence, run_id, task)
+        alias_history, launch_history = _read_launch_history(
+            evidence, run_id, task
+        )
         provision_worktree(project, task, plan.branch, plan.worktree)
         _ensure_scoped_scratch(plan.worktree, evidence)
         runtime_context = _finalize_runtime_context(context_preflight)
@@ -180,6 +182,7 @@ def _launch_task(
             alias=alias,
             session=mapping["session"],
             aliases=alias_history + (alias,),
+            launches=launch_history,
             branch=plan.branch,
             worktree=plan.worktree,
             requested_skills=task.requested_skills,
@@ -462,17 +465,17 @@ def _start_turn(
     )
 
 
-def _read_alias_history(
+def _read_launch_history(
     evidence: Path, run_id: str, task: Task
-) -> Tuple[str, ...]:
+) -> Tuple[Tuple[str, ...], Tuple[Dict[str, Any], ...]]:
     metadata_file = evidence / "metadata.yml"
     if not os.path.lexists(str(metadata_file)):
-        return ()
+        return (), ()
     try:
         if metadata_file.is_dir() and not metadata_file.is_symlink():
             # Preserve the per-task post-preflight failure seam: the later
             # durable metadata write reports the exact write failure.
-            return ()
+            return (), ()
         if metadata_file.is_symlink() or not metadata_file.is_file():
             raise OSError("metadata is not a regular file")
         metadata = yaml.safe_load(metadata_file.read_text(encoding="utf-8"))
@@ -511,7 +514,15 @@ def _read_alias_history(
             "METADATA_INVALID",
             "The retained mechanical ticket metadata is invalid.",
         )
-    return aliases
+    launches = metadata.get("launches", [])
+    if not isinstance(launches, list) or any(
+        not isinstance(launch, dict) for launch in launches
+    ):
+        raise RunnerError(
+            "METADATA_INVALID",
+            "The retained mechanical ticket metadata is invalid.",
+        )
+    return aliases, tuple(launches)
 
 
 def _historical_alias_is_valid(task: Task, alias: str) -> bool:
@@ -574,9 +585,22 @@ def _write_metadata(
     branch: str,
     worktree: Path,
     aliases: Tuple[str, ...],
+    launches: Tuple[Dict[str, Any], ...],
     requested_skills: Tuple[str, ...],
     runtime_context: RuntimeContext,
 ) -> None:
+    context_evidence = runtime_context.evidence_document()
+    launch_evidence = {
+        "alias": alias,
+        "role": task.role,
+        "runtime": context_evidence["runtime"],
+        "effective_role": context_evidence["effective_role"],
+        "model": context_evidence["model"],
+        "model_reasoning_effort": context_evidence[
+            "model_reasoning_effort"
+        ],
+        "session": session,
+    }
     try:
         write_yaml_durably(
             evidence / "metadata.yml",
@@ -586,8 +610,9 @@ def _write_metadata(
                 "ticket_name": task.ticket_name,
                 "alias": alias,
                 "aliases": list(aliases),
+                "launches": [*launches, launch_evidence],
                 "role": task.role,
-                **runtime_context.evidence_document(),
+                **context_evidence,
                 "session": session,
                 "branch": branch,
                 "worktree_path": str(worktree),

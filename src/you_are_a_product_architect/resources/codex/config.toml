@@ -9,13 +9,6 @@ service_tier = "default"
 
 sandbox_mode = "workspace-write"
 
-[[hooks.PreCompact]]
-matcher = "manual|auto"
-
-[[hooks.PreCompact.hooks]]
-type = "prompt"
-prompt = "Use the $handoff Skill now in this same session to write the durable handoff. Finish the handoff before compaction continues."
-
 [agents]
 enabled = true
 # Main-owned auxiliary agents use this session; Runner roles have separate sessions.

@@ -46,11 +46,6 @@ the Harness do not require editing a single system-wide record.
 - [ADR 0018](0018-main-selects-runtimes-outside-task-objects.md) — Main selects
   a Runtime outside logical task objects while Runtime-specific mechanics stay
   private to the selected Adapter.
-- [ADR 0020](0020-write-a-handoff-before-compaction.md) — the current Agent
-  writes a handoff in the same session before manual or automatic compaction.
-- [ADR 0021](0021-store-handoffs-in-scope-owned-state.md) — Main and Engineers
-  share one handoff archive contract while keeping current and historical
-  handoffs in separate Harness State scopes.
 - [ADR 0023](0023-keep-project-documents-read-only-for-subagents.md) — every
   subagent receives read-only access to Source Repository Project Documents.
 

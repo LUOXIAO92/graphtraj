@@ -680,30 +680,10 @@ integration success
 
 ---
 
-# 15. Long-context / Handoff
+# 15. Explicit Handoff
 
-V1 暂时**不自动化 context lifecycle**。
-
-目前流程：
-
-```text
-Master 正常工作
-       ↓
-人工观察 context
-       ↓
-约 ~70–75%
-       ↓
-$handoff
-       ↓
-保存 durable control-plane checkpoint
-       ↓
-二选一
-   /compact
-      或
-   new session
-       ↓
-继续
-```
+`$handoff` 只用于用户或 Agent 明确选择的 session 转移。它不由 token
+阈值自动触发，也不作为自动压缩的前置 gate。
 
 Handoff 重点记录：
 
@@ -735,45 +715,11 @@ current dev state
 
 ---
 
-# 16. 为什么 V1 暂时人工管理 Context
+# 16. Context 由 Agent Runtime 管理
 
-当前 Hook API 没有直接暴露：
-
-```text
-context_used
-context_remaining
-context_window
-```
-
-虽然 Codex `app-server` 已经有：
-
-```text
-thread/tokenUsage/updated
-```
-
-能拿到 context telemetry。
-
-所以未来 V2 可以：
-
-```text
-app-server telemetry
-        ↓
-Context Lifecycle Controller
-        ↓
-75%
-        ↓
-handoff
-compact
-rehydrate
-```
-
-但 V1 不急着手搓。
-
-当前原则：
-
-> **Codex measurement + future harness policy。**
-
-现在先由人承担 context lifecycle。
+每个 Agent 只使用自己的 Runtime 原生自动压缩。Harness 不读取 token
+阈值、不通过 Hook 插入 Handoff，也不维护 app-server context lifecycle
+controller。Runtime 的原生压缩配置或默认值就是这一层的 authority。
 
 ---
 

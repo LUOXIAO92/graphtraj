@@ -102,14 +102,3 @@ _Avoid_: Engineer-owned sub-Agent, Mandatory delivery step
 The deliberate choice to use a different Agent Runtime or model for a Reviewer
 to counterbalance the implementing Engineer's biases.
 _Avoid_: Review requirement, Review independence
-
-**Compaction Handoff**:
-A handoff written by an Agent in its current session immediately before that
-same session compacts, preserving the task across the context replacement.
-_Avoid_: Compaction summary, Handoff Agent
-
-**Handoff Scope**:
-The persistent state boundary that owns an Agent's current Compaction Handoff
-and its archived predecessors: project-level for Main and Ticket-level for an
-Engineer.
-_Avoid_: Runtime-specific Hook, Shared HANDOFF.md

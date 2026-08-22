@@ -479,9 +479,22 @@ def test_installed_runner_launches_one_isolated_engineer_and_returns_early(
             "ticket_name": "launch-engineer",
             "alias": alias,
             "aliases": [alias],
+            "launches": [
+                {
+                    "alias": alias,
+                    "role": "engineer-expert",
+                    "runtime": "codex",
+                    "effective_role": "engineer-expert",
+                    "model": "gpt-5.6-sol",
+                    "model_reasoning_effort": "max",
+                    "session": "thread-ticket-10",
+                }
+            ],
             "role": "engineer-expert",
             "runtime": "codex",
             "effective_role": "engineer-expert",
+            "model": "gpt-5.6-sol",
+            "model_reasoning_effort": "max",
             "session": "thread-ticket-10",
             "branch": branch,
             "worktree_path": str(ticket_worktree),

@@ -290,7 +290,8 @@ def test_packaged_config_defines_the_project_local_codex_workspace() -> None:
     config = (RESOURCE_ROOT / "config.toml").read_text(encoding="utf-8")
     document = tomllib.loads(config)
 
-    assert 'sandbox_mode = "workspace-write"' in config
+    assert document["default_permissions"] == ":workspace"
+    assert "sandbox_mode" not in document
     assert "sandbox_workspace_write" not in document
     assert document["developer_instructions"].strip()
 
@@ -304,12 +305,14 @@ def test_packaged_engineer_roles_keep_the_accepted_runtime_settings() -> None:
 
     for filename, (model, subagent_model) in expected_roles.items():
         role = (RESOURCE_ROOT / "agents" / filename).read_text(encoding="utf-8")
+        document = tomllib.loads(role)
 
         assert 'model = "{0}"'.format(model) in role
         assert 'model_reasoning_effort = "max"' in role
         assert 'default_subagent_model = "{0}"'.format(subagent_model) in role
         assert 'default_subagent_reasoning_effort = "max"' in role
-        assert 'sandbox_mode = "workspace-write"' in role
+        assert document["default_permissions"] == "project-documents-read-only"
+        assert "sandbox_mode" not in document
         assert "approval_policy" not in role
         assert "network_access" not in role
         assert '$(git rev-parse --show-toplevel)/.codex/hooks/worktree_guard.py' in role
@@ -317,6 +320,37 @@ def test_packaged_engineer_roles_keep_the_accepted_runtime_settings() -> None:
         assert "~/.codex" not in role
         assert "[[hooks.PreToolUse]]" in role
         assert "[[hooks.SubagentStart]]" in role
+
+
+def test_every_packaged_subagent_role_keeps_project_documents_read_only() -> None:
+    role_files = tuple(sorted((RESOURCE_ROOT / "agents").glob("*.toml")))
+
+    assert {path.stem for path in role_files} == {
+        "delivery-state",
+        "engineer-expert",
+        "engineer-junior",
+        "engineer-senior",
+        "merge-resolver",
+        "spec-reviewer",
+        "standards-reviewer",
+    }
+    for path in role_files:
+        role = tomllib.loads(path.read_text(encoding="utf-8"))
+        profile_name = role["default_permissions"]
+        filesystem = role["permissions"][profile_name]["filesystem"][
+            ":workspace_roots"
+        ]
+
+        assert role["name"] != "main"
+        assert profile_name == "project-documents-read-only"
+        assert filesystem == {
+            ".": "write",
+            ".agents": "read",
+            "AGENTS.md": "read",
+            "CONTEXT.md": "read",
+            "README.md": "read",
+            "docs": "read",
+        }
 
 
 def test_worktree_guard_adds_the_current_boundary_to_subagent_context(
@@ -827,7 +861,8 @@ def test_packaged_merge_resolver_is_confined_to_integration_reconciliation() -> 
         "redesign the ticket or spec",
     ):
         assert prohibition in resolver
-    assert 'sandbox_mode = "workspace-write"' in resolver
+    assert 'default_permissions = "project-documents-read-only"' in resolver
+    assert "sandbox_mode" not in resolver
     assert "approval_policy" not in resolver
     assert "network_access" not in resolver
     assert '$(git rev-parse --show-toplevel)/.codex/hooks/worktree_guard.py' in resolver

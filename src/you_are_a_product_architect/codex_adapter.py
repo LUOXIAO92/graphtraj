@@ -34,7 +34,7 @@ ADAPTER_ROLE_KEYS = frozenset(
         "model",
         "model_reasoning_effort",
         "developer_instructions",
-        "sandbox_mode",
+        "default_permissions",
         "hooks",
         "agents",
     }
@@ -51,7 +51,6 @@ SUPPORTED_AGENT_KEYS = frozenset(
 REASONING_EFFORTS = frozenset(
     {"none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"}
 )
-SANDBOX_MODES = frozenset({"read-only", "workspace-write", "danger-full-access"})
 BARE_TOML_KEY = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
@@ -88,7 +87,7 @@ class _CodexRole:
     model: str
     reasoning_effort: str
     developer_instructions: str
-    sandbox_mode: str
+    default_permissions: str
     hooks: Mapping[str, Any]
     agents: Mapping[str, Any]
     native_settings: Mapping[str, Any]
@@ -116,8 +115,6 @@ class _CodexRole:
             str(git_common_directory),
             "--model",
             self.model,
-            "--sandbox",
-            self.sandbox_mode,
             "--dangerously-bypass-hook-trust",
         ]
         developer_instructions = self.developer_instructions
@@ -133,6 +130,7 @@ class _CodexRole:
                 )
         overrides = (
             *self.native_settings.items(),
+            ("default_permissions", self.default_permissions),
             ("model_reasoning_effort", self.reasoning_effort),
             ("developer_instructions", developer_instructions),
             ("hooks", _root_owned_hooks(self.hooks, runtime_store)),
@@ -268,6 +266,7 @@ def preflight_runtime_context(
 ) -> RuntimeContextPreflight:
     """Prepare one Codex role without crossing role-specific boundaries."""
 
+    _reject_legacy_user_sandbox_config()
     resolved_role = _resolve_codex_role(runtime_store, role)
     if role in ENGINEER_ROLES:
         harness_skills = _resolve_engineer_harness_skills(runtime_store, role)
@@ -323,6 +322,7 @@ class CodexTurn:
         """Own the process and translate its private JSONL protocol."""
 
         arguments, worktree = _validate_launch_request(self._request)
+        _reject_legacy_user_sandbox_config()
         if self._expected_session is not None:
             arguments = _resume_arguments(arguments, self._expected_session)
         events_file = self._session_directory / "events.jsonl"
@@ -497,6 +497,33 @@ def _validate_launch_request(
     return arguments, worktree
 
 
+def _reject_legacy_user_sandbox_config() -> None:
+    codex_home = Path(os.environ.get("CODEX_HOME", Path.home() / ".codex"))
+    config = codex_home / "config.toml"
+    try:
+        document = tomllib.loads(config.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return
+    except (OSError, UnicodeError, tomllib.TOMLDecodeError):
+        return
+
+    profile = document.get("profile")
+    profiles = document.get("profiles")
+    selected_profile = (
+        profiles.get(profile)
+        if isinstance(profile, str) and isinstance(profiles, dict)
+        else None
+    )
+    if "sandbox_mode" in document or (
+        isinstance(selected_profile, dict) and "sandbox_mode" in selected_profile
+    ):
+        raise CodexAdapterError(
+            "LEGACY_SANDBOX_CONFIG_CONFLICT",
+            "The loaded Codex user configuration contains sandbox_mode, "
+            "which disables the selected permission profile.",
+        )
+
+
 def _resume_arguments(launch_arguments: List[str], session: str) -> List[str]:
     if (
         len(launch_arguments) < 4
@@ -627,7 +654,7 @@ def _resolve_codex_role(runtime_store: Path, binding: str) -> _CodexRole:
         model=document["model"],
         reasoning_effort=document["model_reasoning_effort"],
         developer_instructions=document["developer_instructions"],
-        sandbox_mode=document["sandbox_mode"],
+        default_permissions=document["default_permissions"],
         hooks=document["hooks"],
         agents=document["agents"],
         native_settings={
@@ -655,8 +682,8 @@ def _validate_role_schema(document: Mapping[str, Any]) -> None:
         raise _invalid_role_value("model_reasoning_effort")
     if not _nonempty_string(document["developer_instructions"]):
         raise _invalid_role_value("developer_instructions")
-    if document["sandbox_mode"] not in SANDBOX_MODES:
-        raise _invalid_role_value("sandbox_mode")
+    if not _nonempty_string(document["default_permissions"]):
+        raise _invalid_role_value("default_permissions")
     if not isinstance(document["hooks"], dict):
         raise _invalid_role_value("hooks")
 

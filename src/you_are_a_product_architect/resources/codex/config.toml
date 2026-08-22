@@ -7,7 +7,7 @@ model_reasoning_effort = "xhigh"
 personality = "pragmatic"
 service_tier = "default"
 
-sandbox_mode = "workspace-write"
+default_permissions = ":workspace"
 
 developer_instructions = """
 You are Main. Start in Soft Plan, an authorization boundary rather than the

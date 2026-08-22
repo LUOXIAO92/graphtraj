@@ -78,6 +78,7 @@ DETAIL_ERROR_CATEGORIES = {
     "ROLE_DUPLICATE": "invalid-config",
     "ROLE_CONFIG_INVALID": "invalid-config",
     "ROLE_CONFIG_UNSUPPORTED": "invalid-config",
+    "LEGACY_SANDBOX_CONFIG_CONFLICT": "invalid-config",
     "ROLE_HOOK_MISMATCH": "invalid-config",
     "ROLE_GUARD_MISMATCH": "invalid-config",
     "PROJECT_CONFIG_MISMATCH": "invalid-config",

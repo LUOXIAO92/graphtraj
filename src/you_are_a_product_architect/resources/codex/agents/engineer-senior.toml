@@ -28,7 +28,17 @@ The Runner owns `metadata.yml` and its mechanical `run_id` and `ticket_id` metad
 The Delivery State Agent owns the ledger and DAG; do not create, update, or repeat that control state.
 """
 
-sandbox_mode = "workspace-write"
+default_permissions = "project-documents-read-only"
+
+[permissions.project-documents-read-only]
+extends = ":workspace"
+
+[permissions.project-documents-read-only.filesystem.":workspace_roots"]
+"." = "write"
+"AGENTS.md" = "read"
+"CONTEXT.md" = "read"
+"README.md" = "read"
+docs = "read"
 
 [[hooks.PreToolUse]]
 matcher = "^(Bash|apply_patch)$"

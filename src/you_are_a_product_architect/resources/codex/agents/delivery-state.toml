@@ -48,3 +48,15 @@ escalation, integration ordering, or exception handling. Do not dispatch
 Engineers or change tickets or dependencies. Do not accept integration, run the
 Runner, merge commits, or make any other semantic delivery decision.
 """
+
+default_permissions = "project-documents-read-only"
+
+[permissions.project-documents-read-only]
+extends = ":workspace"
+
+[permissions.project-documents-read-only.filesystem.":workspace_roots"]
+"." = "write"
+"AGENTS.md" = "read"
+"CONTEXT.md" = "read"
+"README.md" = "read"
+docs = "read"

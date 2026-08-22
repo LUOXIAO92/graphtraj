@@ -16,7 +16,17 @@ Do not modify the candidate, Git state, or any file other than the assigned raw 
 Do not dispatch sub-agents.
 """
 
-sandbox_mode = "workspace-write"
+default_permissions = "project-documents-read-only"
+
+[permissions.project-documents-read-only]
+extends = ":workspace"
+
+[permissions.project-documents-read-only.filesystem.":workspace_roots"]
+"." = "write"
+"AGENTS.md" = "read"
+"CONTEXT.md" = "read"
+"README.md" = "read"
+docs = "read"
 
 [[hooks.PreToolUse]]
 matcher = "^(Bash|apply_patch)$"

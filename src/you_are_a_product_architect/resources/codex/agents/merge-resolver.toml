@@ -18,7 +18,17 @@ Do not change merge order, integrate additional commits, reopen settled scope, o
 If accepted requirements themselves are incompatible, stop and report the conflict to the parent agent.
 """
 
-sandbox_mode = "workspace-write"
+default_permissions = "project-documents-read-only"
+
+[permissions.project-documents-read-only]
+extends = ":workspace"
+
+[permissions.project-documents-read-only.filesystem.":workspace_roots"]
+"." = "write"
+"AGENTS.md" = "read"
+"CONTEXT.md" = "read"
+"README.md" = "read"
+docs = "read"
 
 [agents]
 enabled = false

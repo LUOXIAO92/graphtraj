@@ -396,11 +396,90 @@ def test_engineer_runtime_context_finalizes_worktree_facts_once(
     evidence_document = context.evidence_document()
 
     assert launch["runtime"] == "codex"
+    arguments = launch["adapter_request"]["arguments"]
+    assert "--sandbox" not in arguments
+    assert 'default_permissions="project-documents-read-only"' in arguments
+    permissions = next(
+        argument for argument in arguments if argument.startswith("permissions=")
+    )
+    assert '"AGENTS.md" = "read"' in permissions
+    assert '"CONTEXT.md" = "read"' in permissions
+    assert '"README.md" = "read"' in permissions
+    assert 'docs = "read"' in permissions
+    assert '"." = "write"' in permissions
     assert evidence_document == expected_evidence
     launch["adapter_request"].clear()
     evidence_document["effective_skills"].clear()
     assert context.launch_document()["adapter_request"]
     assert context.evidence_document() == expected_evidence
+
+
+def test_installed_setup_to_runner_launch_uses_project_document_permissions(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    harness_root = temporary_git_repository.parent
+    runtime_user = tmp_path / "runtime-user"
+    runtime_user.mkdir()
+    environment = os.environ.copy()
+    environment["HOME"] = str(runtime_user)
+    environment["PATH"] = "{0}{1}{2}".format(
+        fake_codex.executable.parent,
+        os.pathsep,
+        environment.get("PATH", ""),
+    )
+    environment["FAKE_CODEX_LOG"] = str(fake_codex.log_file)
+    setup = subprocess.run(
+        [str(installed_commands.product), "setup"],
+        cwd=harness_root,
+        env=environment,
+        input="{0}\ny\ny\n".format(temporary_git_repository.name),
+        check=False,
+        text=True,
+        capture_output=True,
+        timeout=60,
+    )
+    assert setup.returncode == 0, setup.stderr
+
+    ticket_file = harness_root / "tickets" / "permissions.md"
+    ticket_file.parent.mkdir()
+    ticket_file.write_text("# Verify native permissions\n", encoding="utf-8")
+    batch_file = harness_root / "permissions-batch.yml"
+    batch_file.write_text(
+        "run_id: 20260823-permissions\n"
+        "runtime: codex\n"
+        "tasks:\n"
+        "  - ticket_id: '53'\n"
+        "    ticket_name: project-document-permissions\n"
+        "    role: engineer-junior\n"
+        "    ticket_file: {0}\n".format(ticket_file),
+        encoding="utf-8",
+    )
+
+    launched = run_process(
+        [str(installed_commands.runner), "--batch-input", str(batch_file)],
+        cwd=harness_root,
+        env=environment,
+        timeout=60,
+    )
+
+    assert launched.returncode == 0, launched.stderr
+    task = yaml.safe_load(launched.stdout)["tasks"][0]
+    wait_for_file(fake_codex.log_file)
+    runtime_call = json.loads(fake_codex.log_file.read_text(encoding="utf-8"))
+    arguments = runtime_call["argv"]
+    assert runtime_call["cwd"] == task["worktree_path"]
+    assert "--sandbox" not in arguments
+    assert 'default_permissions="project-documents-read-only"' in arguments
+    permission_override = next(
+        argument for argument in arguments if argument.startswith("permissions=")
+    )
+    assert '"AGENTS.md" = "read"' in permission_override
+    assert 'docs = "read"' in permission_override
+    evidence = (Path(task["worktree_path"]) / ".scratch" / "task-delivery").resolve()
+    assert str(evidence) in arguments
 
 
 def test_engineer_runtime_context_finalization_rechecks_ticket_worktree_skills(

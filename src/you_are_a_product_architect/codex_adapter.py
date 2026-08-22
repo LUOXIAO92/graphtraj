@@ -34,7 +34,7 @@ ADAPTER_ROLE_KEYS = frozenset(
         "model",
         "model_reasoning_effort",
         "developer_instructions",
-        "sandbox_mode",
+        "default_permissions",
         "hooks",
         "agents",
     }
@@ -51,7 +51,6 @@ SUPPORTED_AGENT_KEYS = frozenset(
 REASONING_EFFORTS = frozenset(
     {"none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"}
 )
-SANDBOX_MODES = frozenset({"read-only", "workspace-write", "danger-full-access"})
 BARE_TOML_KEY = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
@@ -88,7 +87,7 @@ class _CodexRole:
     model: str
     reasoning_effort: str
     developer_instructions: str
-    sandbox_mode: str
+    default_permissions: str
     hooks: Mapping[str, Any]
     agents: Mapping[str, Any]
     native_settings: Mapping[str, Any]
@@ -116,8 +115,6 @@ class _CodexRole:
             str(git_common_directory),
             "--model",
             self.model,
-            "--sandbox",
-            self.sandbox_mode,
             "--dangerously-bypass-hook-trust",
         ]
         developer_instructions = self.developer_instructions
@@ -133,6 +130,7 @@ class _CodexRole:
                 )
         overrides = (
             *self.native_settings.items(),
+            ("default_permissions", self.default_permissions),
             ("model_reasoning_effort", self.reasoning_effort),
             ("developer_instructions", developer_instructions),
             ("hooks", _root_owned_hooks(self.hooks, runtime_store)),
@@ -627,7 +625,7 @@ def _resolve_codex_role(runtime_store: Path, binding: str) -> _CodexRole:
         model=document["model"],
         reasoning_effort=document["model_reasoning_effort"],
         developer_instructions=document["developer_instructions"],
-        sandbox_mode=document["sandbox_mode"],
+        default_permissions=document["default_permissions"],
         hooks=document["hooks"],
         agents=document["agents"],
         native_settings={
@@ -655,8 +653,8 @@ def _validate_role_schema(document: Mapping[str, Any]) -> None:
         raise _invalid_role_value("model_reasoning_effort")
     if not _nonempty_string(document["developer_instructions"]):
         raise _invalid_role_value("developer_instructions")
-    if document["sandbox_mode"] not in SANDBOX_MODES:
-        raise _invalid_role_value("sandbox_mode")
+    if not _nonempty_string(document["default_permissions"]):
+        raise _invalid_role_value("default_permissions")
     if not isinstance(document["hooks"], dict):
         raise _invalid_role_value("hooks")
 

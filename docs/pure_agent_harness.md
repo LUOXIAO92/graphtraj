@@ -258,18 +258,21 @@ Engineer 自己不拥有：
 
 ---
 
-# 6. Escalation
+# 6. Review Failure Diagnosis
 
-当前规则已经很明确：
+`review FAIL` 是 Master 必须先诊断的证据，不是 Engineer 层级不足的证明：
 
 ```text
 review FAIL
-→ Engineer 修复
-→ 再 review
-
-连续 3 次 review FAIL
-→ Master escalation
+→ Master 记录原因与下一步理由
+→ 小修：原 Engineer / 原层级
+→ 上下文污染：同层级 fresh context
+→ Ticket 清楚且确有能力错配：更高层级
+→ Main 编排或过度设计：回到最小 Ticket 规划
+→ 产品或 Spec 变化：交由用户决定
 ```
+
+同一层级出现 3 次失败时必须显式重新评估，但绝不自动升级。
 
 注意统计的是：
 
@@ -285,24 +288,7 @@ review FAIL
 ❌ 普通测试修复循环
 ```
 
-升级：
-
-```text
-Junior ×3
-→ Senior fresh context
-
-Senior ×3
-→ Expert fresh context
-
-Expert ×3
-→ Master / 用户层异常处理
-```
-
-关键原则：
-
-> **升级不继承旧 Agent conversation。**
-
-但保留 canonical work state：
+替换 Agent 时不继承旧 conversation，但保留 canonical work state：
 
 ```text
 ticket
@@ -755,13 +741,10 @@ Master classification
                   │       │
                  PASS    FAIL
                   │       │
-                  │    retry
+                  │  Master diagnosis
                   │       │
-                  │    ×3?
-                  │       │
-                  │      yes
-                  │       ↓
-                  │   Master escalation
+                  │  repair / replan /
+                  │  justified escalation
                   │
                   ▼
              reviewed commit

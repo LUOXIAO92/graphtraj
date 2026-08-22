@@ -99,7 +99,7 @@ authority to the Delivery State Agent.
    with its report so the evidence remains attributable.
 8. Main adjudicates both reports as one review round and records `PASS` or
    `FAIL` with a concise rationale. On `PASS`, mark the ticket
-   `awaiting-integration`. On `FAIL`, apply the escalation policy below. When
+   `awaiting-integration`. On `FAIL`, apply the diagnosis policy below. When
    Main omits review, record that decision and move the validated candidate to
    `awaiting-integration` without inventing a review verdict.
 9. Hand accepted work to the repository's integration sequence. After Main
@@ -122,22 +122,30 @@ authority to the Delivery State Agent.
 - Let the Runner validate the selected configured built-in Adapter before it
   reserves a task, provisions a Worktree, retains a batch, or starts a Runtime.
 
-## Escalate review failure
+## Diagnose review failure
 
-- Increment a tier counter only for a Main-adjudicated `FAIL`. Do not count TDD
-  red states, implementation test or typecheck failures, transport failures,
-  integration failures, or external blockers.
-- Below three failures at a tier, resume the same Engineer session in the same
-  Ticket Worktree with the retained evidence.
-- At three Junior failures, replace the Engineer with a Senior in fresh
-  context. At three Senior failures, replace it with an Expert in fresh
-  context. Start the new tier's counter at zero while retaining the same Ticket
-  Worktree, canonical work, and same evidence; do not transfer the former
-  conversation.
-- At three Expert failures, stop autonomous delivery for that ticket. Use the
-  target user's selected exception path: delegated Main authority or
-  human-in-the-loop decision. Do not hard-code which path owns target-project
-  semantic exceptions.
+- Treat each Main-adjudicated `FAIL` as evidence to diagnose. Before retrying,
+  replacing an Agent, choosing a higher tier, or returning work to planning,
+  Main records the cause and its rationale for the next action.
+- Keep a small implementation correction with the same Engineer and tier. Use
+  a fresh-context Engineer at the same tier only when the Ticket remains
+  suitable but the current session context is polluted. Choose a higher tier
+  only when the accepted Ticket is clear and the evidence shows genuine
+  difficulty or a capability mismatch; this may happen before three failures.
+  Three failures at one tier require explicit reassessment, never automatic
+  escalation.
+- When Main's tier choice, decomposition, dependencies, acceptance mapping, or
+  dispatch instruction caused the failure, Main corrects its orchestration
+  within the accepted Spec instead of counting an Engineer failure. For
+  Main-created overengineering, remove unsupported mechanisms, assumptions,
+  validations, edge cases, and tests; do not keep refining the polluted Ticket
+  or candidate, and classify the corrected minimal work again.
+- Reviewer error, transport failure, implementation-test failure, integration
+  failure, and external blockers do not justify tier escalation. Product or
+  Spec changes remain user-owned.
+- Keep failure counts only as historical evidence. The Delivery State Agent
+  records Main's decision; neither it nor the Runner infers the cause or
+  chooses the next action.
 
 ## Hand off integration
 

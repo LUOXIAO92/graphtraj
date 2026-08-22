@@ -72,25 +72,24 @@ This repository uses the single-context layout. See `docs/agents/domain.md`.
   must not reopen the ticket or trigger config migration, setup, or product
   changes unless the user explicitly requests that work.
 
-### Expert-failure exception
+### Review-failure authority
 
-This target project selects `$task-delivery`'s delegated Main authority path,
-not human-in-the-loop adjudication, after three Main-adjudicated Expert review
-failures on one ticket.
+This target project delegates review-failure diagnosis and corrective
+orchestration within the accepted Ticket and Spec to Main. A failure count does
+not select the next action.
 
-- Stop autonomous delivery of the failed ticket. Do not dispatch another
-  Engineer against it or keep revising the same accepted ticket.
-- Treat the repeated highest-tier failures as a defect in Main's ticket
-  definition or decomposition, not in the accepted Spec or user requirements.
-  Main must inspect the retained implementation and review evidence, explain
-  which ticket boundaries, dependencies, acceptance mapping, or complexity
-  assumptions failed, and return the work to ticket planning.
-- Keep the accepted Spec and user requirements unchanged. Main must not invoke
-  `$to-spec`, revise the Spec, reinterpret requirements, or otherwise change
-  product scope while handling this exception. Use `$to-tickets` against the
-  same accepted Spec to replace and re-split the failed ticket into a newly
-  accepted Ticket DAG before delivery restarts. Preserve the failed ticket and
-  its evidence as history; do not silently rewrite or retry it.
-- If the evidence appears to require a product or Spec change, stop and ask the
-  user for an explicit decision. Delegated Main authority does not authorize
-  changing requirements.
+- Before retrying, replacing an Agent, choosing a higher tier, or returning to
+  planning, inspect the retained implementation and review evidence and record
+  the diagnosed cause and next-action rationale.
+- Keep small implementation corrections with the same Engineer and tier. Use a
+  fresh Agent at the same tier only for polluted session context, and choose a
+  higher tier only for demonstrated difficulty or capability mismatch on a
+  clear Ticket. Three failures at one tier require reassessment, never
+  automatic escalation.
+- Correct Main-caused tier selection, decomposition, dependency, acceptance,
+  or dispatch errors within the accepted Spec instead of counting an Engineer
+  failure. If Main introduced overengineering, remove the unsupported work and
+  return the corrected minimal work to ticket planning rather than refining
+  the polluted Ticket or candidate.
+- Keep product and Spec changes user-owned. If the diagnosis would require one,
+  stop and ask the user for an explicit decision.

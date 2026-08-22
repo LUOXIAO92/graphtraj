@@ -138,27 +138,6 @@ def test_installed_task_delivery_selects_one_runtime_for_each_batch(
         assert required_guidance in guidance
 
 
-def test_installed_task_delivery_preserves_review_escalation_policy(
-    installed_task_delivery_resources: Dict[str, str],
-) -> None:
-    skill = installed_task_delivery_resources["skill"]
-    guidance = normalized(skill)
-
-    assert "Main-adjudicated `FAIL`" in skill
-    for required_guidance in (
-        "three",
-        "Junior",
-        "Senior",
-        "Expert",
-        "fresh context",
-        "same Ticket Worktree",
-        "same evidence",
-        "delegated Main",
-        "human-in-the-loop",
-    ):
-        assert required_guidance.lower() in guidance
-
-
 def test_installed_task_delivery_assigns_only_mechanical_evidence_work_to_runner(
     installed_task_delivery_resources: Dict[str, str],
 ) -> None:

@@ -215,11 +215,10 @@ print("target validation passed")
     batch_file.write_text(batch_content, encoding="utf-8")
     release_file = tmp_path / "allow-initial-turn-to-finish"
     session = "fake-v1-lifecycle-session"
+    initial_events = [{"type": "thread.started", "thread_id": session}]
     launch_environment = {
         **environment,
-        "FAKE_CODEX_EVENTS": json.dumps(
-            [{"type": "thread.started", "thread_id": session}]
-        ),
+        "FAKE_CODEX_EVENTS": json.dumps(initial_events),
         "FAKE_CODEX_RELEASE_FILE": str(release_file),
     }
 
@@ -279,6 +278,18 @@ print("target validation passed")
     )
 
     instruction = "Resume this representative ticket and finish it."
+    resumed_events = [
+        {"type": "thread.started", "thread_id": session},
+        {"type": "turn.started"},
+        {
+            "type": "turn.completed",
+            "usage": {
+                "cached_input_tokens": 0,
+                "input_tokens": 1,
+                "output_tokens": 1,
+            },
+        },
+    ]
     resumed = run_process(
         [
             str(installed_commands.runner),
@@ -292,20 +303,7 @@ print("target validation passed")
                 **environment,
                 "FAKE_CODEX_CAPTURE_STDIN": "1",
                 "FAKE_CODEX_LIFECYCLE_ACTION": "deliver-representative-ticket",
-                "FAKE_CODEX_EVENTS": json.dumps(
-                [
-                    {"type": "thread.started", "thread_id": session},
-                    {"type": "turn.started"},
-                    {
-                        "type": "turn.completed",
-                        "usage": {
-                            "cached_input_tokens": 0,
-                            "input_tokens": 1,
-                            "output_tokens": 1,
-                        },
-                    },
-                ]
-            ),
+                "FAKE_CODEX_EVENTS": json.dumps(resumed_events),
         },
         timeout=10,
     )
@@ -323,6 +321,16 @@ print("target validation passed")
     assert "resume" in runtime_record["argv"]
     assert session in runtime_record["argv"]
     assert runtime_record["cwd"] == str(ticket_worktree)
+
+    trace_root = evidence / "traces" / alias
+    initial_trace = trace_root / "turn-1" / "events.jsonl"
+    resumed_trace = trace_root / "turn-2" / "events.jsonl"
+    assert [json.loads(line) for line in initial_trace.read_text().splitlines()] == (
+        initial_events
+    )
+    assert [json.loads(line) for line in resumed_trace.read_text().splitlines()] == (
+        resumed_events
+    )
 
     delivered = ticket_worktree / "V1_DELIVERED.txt"
     assert delivered.read_text(encoding="utf-8") == "representative delivery\n"
@@ -511,6 +519,8 @@ print("target validation passed")
         ]
     }
     assert alias_gone.stderr == alias_not_found + "\n"
+    assert initial_trace.is_file() and initial_trace.stat().st_size > 0
+    assert resumed_trace.is_file() and resumed_trace.stat().st_size > 0
     assert tree_contents(evidence) == evidence_before_cleanup
     assert retained_batch.read_bytes() == retained_batch_before_cleanup
 

@@ -70,6 +70,7 @@ def run(launch_file: Path) -> int:
             if not isinstance(base_mapping, dict):
                 raise ValueError("mapping is not a mapping")
             prompt = sys.stdin.read()
+            _prepare_trace(session_directory, base_mapping)
 
             def record_session(session: str, runtime_pid: int) -> None:
                 nonlocal mapping_recorded
@@ -163,6 +164,31 @@ def run(launch_file: Path) -> int:
         if active_turn is not None and (terminal_persisted or runtime_terminal):
             release_active_turn(runner_directory, active_turn)
     return 0 if terminal_persisted else 1
+
+
+def _prepare_trace(
+    session_directory: Path, mapping: dict[str, object]
+) -> None:
+    evidence = mapping.get("evidence_path")
+    alias = mapping.get("alias")
+    turn = mapping.get("turn")
+    if (
+        not isinstance(evidence, str)
+        or not isinstance(alias, str)
+        or not isinstance(turn, int)
+        or isinstance(turn, bool)
+        or turn < 1
+    ):
+        raise ValueError("trace address is invalid")
+    trace_directory = (
+        Path(evidence) / "traces" / alias / "turn-{0}".format(turn)
+    )
+    trace_directory.mkdir(parents=True)
+    trace_file = trace_directory / "events.jsonl"
+    trace_file.touch(exist_ok=False)
+    live_events = session_directory / "events.jsonl"
+    live_events.unlink(missing_ok=True)
+    os.link(trace_file, live_events)
 
 
 def _terminal_turn(turn: object, interrupted: bool) -> dict[str, object]:

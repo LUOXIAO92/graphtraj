@@ -24,6 +24,7 @@ from .runtime_adapter import (
     SessionStarted,
 )
 from .runner_transport import runtime_turn_outcome
+from .runner_models import LOGICAL_ROLES, managed_runtime_policy_matches
 from .skill_check import declared_skill_name, harness_skill_root
 
 
@@ -612,6 +613,7 @@ def _resolve_codex_role(runtime_store: Path, binding: str) -> _CodexRole:
         )
 
     matching: List[Tuple[Path, Dict[str, Any]]] = []
+    canonical_document: Optional[Dict[str, Any]] = None
     for path in sorted(agent_directory.glob("*.toml")):
         if path.is_symlink() or not path.is_file():
             raise CodexAdapterError(
@@ -625,10 +627,18 @@ def _resolve_codex_role(runtime_store: Path, binding: str) -> _CodexRole:
                 "ROLE_CONFIG_INVALID",
                 "A Harness Codex Agent file is not valid readable TOML.",
             ) from error
+        if path.name == "{0}.toml".format(binding):
+            canonical_document = document
         if document.get("name") == binding:
             matching.append((path, document))
 
     if not matching:
+        if canonical_document is not None:
+            _validate_role_schema(canonical_document)
+            raise CodexAdapterError(
+                "ROLE_CONFIG_MISMATCH",
+                "The configured Codex role contains managed policy drift.",
+            )
         raise CodexAdapterError(
             "ROLE_NOT_FOUND",
             "The configured Codex role was not found in Harness Agent files.",
@@ -641,11 +651,16 @@ def _resolve_codex_role(runtime_store: Path, binding: str) -> _CodexRole:
 
     _, document = matching[0]
     _validate_role_schema(document)
-    expected = _packaged_role(binding)
+    expected = _packaged_role(binding, runtime_store)
     if document["hooks"] != expected.get("hooks"):
         raise CodexAdapterError(
             "ROLE_HOOK_MISMATCH",
             "The configured Codex role does not contain the packaged Worktree Guard hooks.",
+        )
+    if not managed_runtime_policy_matches(document, expected):
+        raise CodexAdapterError(
+            "ROLE_CONFIG_MISMATCH",
+            "The configured Codex role contains managed policy drift.",
         )
     _verify_packaged_guard(runtime_store)
 
@@ -715,17 +730,19 @@ def _nonempty_string(value: Any) -> bool:
     return isinstance(value, str) and bool(value.strip())
 
 
-def _packaged_role(binding: str) -> Dict[str, Any]:
+def _packaged_role(binding: str, runtime_store: Path) -> Dict[str, Any]:
     if binding not in SUPPORTED_ROLES:
         raise CodexAdapterError(
             "ROLE_NOT_SUPPORTED",
             "The configured Codex role is not supported by this Runner.",
         )
-    resource = resources.files("you_are_a_product_architect.resources").joinpath(
-        "codex", "agents", "{0}.toml".format(binding)
-    )
     try:
-        return tomllib.loads(resource.read_text(encoding="utf-8"))
+        from .codex_project import CodexProjectFiles
+
+        content = CodexProjectFiles.load().runtime_resources(runtime_store)[
+            "agents/{0}.toml".format(binding)
+        ]
+        return tomllib.loads(content.decode())
     except (OSError, UnicodeError, tomllib.TOMLDecodeError) as error:
         raise CodexAdapterError(
             "PACKAGED_ROLE_INVALID",
@@ -756,9 +773,9 @@ def _verify_packaged_guard(runtime_store: Path) -> None:
 
 
 ENGINEER_ROLES = frozenset(
-    {"engineer-junior", "engineer-senior", "engineer-expert"}
+    role for role in LOGICAL_ROLES if role.startswith("engineer-")
 )
-REVIEWER_ROLES = frozenset({"standards-reviewer", "spec-reviewer"})
+REVIEWER_ROLES = frozenset(LOGICAL_ROLES) - ENGINEER_ROLES
 SUPPORTED_ROLES = ENGINEER_ROLES | REVIEWER_ROLES
 ENGINEER_REQUIRED_SKILLS = ("implement", "ponytail", "tdd")
 

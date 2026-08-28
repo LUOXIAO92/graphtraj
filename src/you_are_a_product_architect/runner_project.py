@@ -9,10 +9,15 @@ from typing import Dict, List
 
 import yaml
 
-from .runner_models import Project, RunnerError, Task
+from .runner_models import (
+    LOGICAL_ROLES,
+    RUNNER_CONFIG_VERSION,
+    Project,
+    RunnerError,
+    Task,
+)
 
 
-RUNNER_CONFIG_VERSION = 1
 ALLOWLISTED_RUNTIMES = frozenset({"codex"})
 
 
@@ -406,6 +411,7 @@ def discover_project(
         or not isinstance(executable_value, str)
         or not Path(executable_value).is_absolute()
         or not isinstance(roles, dict)
+        or roles != {role: role for role in LOGICAL_ROLES}
         or any(
             not isinstance(key, str) or not isinstance(value, str)
             for key, value in roles.items()

@@ -6,9 +6,13 @@ import os
 import stat
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple
 
-from .codex_project import CodexProjectError, CodexProjectFiles
+from .codex_project import (
+    CodexProjectError,
+    CodexProjectFiles,
+    runtime_resource_matches,
+)
 from .git_repository import GitRepositoryError, GitTreeEntry, SourceRepository
 from .path_safety import relative_parent_paths
 from .skill_check import (
@@ -141,6 +145,8 @@ def _preflight_file(
     description: str,
     actions: List[PlannedSetupAction],
     conflicts: List[str],
+    *,
+    content_matches: Optional[Callable[[bytes, bytes], bool]] = None,
 ) -> None:
     for parent in relative_parent_paths(relative_path):
         entry = view.entry(parent)
@@ -162,7 +168,10 @@ def _preflight_file(
             )
         )
         return
-    if entry.kind == "file" and entry.content == expected:
+    matches = content_matches or (
+        lambda configured, packaged: configured == packaged
+    )
+    if entry.kind == "file" and matches(entry.content, expected):
         actions.append(
             PlannedSetupAction(
                 "ALREADY CONFIGURED",
@@ -505,7 +514,9 @@ class ProjectSetupPlan:
                         conflicts,
                     )
 
-        for relative_path, content in self.codex_files.runtime_resources().items():
+        for relative_path, content in self.codex_files.runtime_resources(
+            self.runtime_store
+        ).items():
             _preflight_file(
                 runtime_view,
                 relative_path,
@@ -513,6 +524,9 @@ class ProjectSetupPlan:
                 "Harness Runtime resource",
                 actions,
                 conflicts,
+                content_matches=lambda configured, packaged, path=relative_path: (
+                    runtime_resource_matches(path, configured, packaged)
+                ),
             )
 
         scratch_path = ".scratch"

@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import json
 import os
+import shlex
+import tomllib
 from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path
@@ -10,15 +13,14 @@ from typing import Callable, Dict, Optional
 
 import yaml
 
+from .runner_models import (
+    LOGICAL_ROLES,
+    RUNNER_CONFIG_VERSION,
+    managed_runtime_policy_matches,
+)
 
-RUNNER_CONFIG_VERSION = 1
-ROLE_BINDINGS = {
-    "engineer-junior": "engineer-junior",
-    "engineer-senior": "engineer-senior",
-    "engineer-expert": "engineer-expert",
-    "standards-reviewer": "standards-reviewer",
-    "spec-reviewer": "spec-reviewer",
-}
+
+ROLE_BINDINGS = {role: role for role in LOGICAL_ROLES}
 RESOURCE_PATHS = (
     "config.toml",
     "agents/delivery-state.toml",
@@ -34,6 +36,20 @@ RESOURCE_PATHS = (
 
 class CodexProjectError(Exception):
     """Accepted Codex or machine-local Runner files could not be installed."""
+
+
+def runtime_resource_matches(
+    relative_path: str, configured: bytes, packaged: bytes
+) -> bool:
+    """Compare managed TOML policy and exact non-TOML Runtime resources."""
+    if not relative_path.endswith(".toml"):
+        return configured == packaged
+    try:
+        configured_document = tomllib.loads(configured.decode())
+        packaged_document = tomllib.loads(packaged.decode())
+    except (UnicodeError, tomllib.TOMLDecodeError):
+        return False
+    return managed_runtime_policy_matches(configured_document, packaged_document)
 
 
 @dataclass(frozen=True)
@@ -162,20 +178,34 @@ class CodexProjectFiles:
         }
         return yaml.safe_dump(config, sort_keys=False)
 
-    def runtime_resources(self) -> Dict[str, bytes]:
-        """Return the exact root-owned resources to install for this Runtime."""
-
-        return dict(self.resources_by_path)
+    def runtime_resources(self, runtime_store: Path) -> Dict[str, bytes]:
+        """Return the root-owned resources rendered for this Runtime Store."""
+        rendered = dict(self.resources_by_path)
+        relative_path = "agents/merge-resolver.toml"
+        packaged_command = (
+            b'command = \'python3 "$(git rev-parse --show-toplevel)/.codex/'
+            b'hooks/worktree_guard.py"\''
+        )
+        guard_command = "python3 {0}".format(
+            shlex.quote(str(runtime_store / "hooks" / "worktree_guard.py"))
+        )
+        rendered[relative_path] = rendered[relative_path].replace(
+            packaged_command,
+            "command = {0}".format(json.dumps(guard_command)).encode(),
+        )
+        return rendered
 
     def _write_resources(
         self,
         runtime_store: Path,
         on_action_complete: Optional[Callable[[str], None]],
     ) -> None:
-        for relative_path, content in self.runtime_resources().items():
+        for relative_path, content in self.runtime_resources(runtime_store).items():
             target = runtime_store / relative_path
             if target.exists():
-                if target.is_file() and target.read_bytes() == content:
+                if target.is_file() and runtime_resource_matches(
+                    relative_path, target.read_bytes(), content
+                ):
                     continue
                 raise CodexProjectError(
                     "Runtime resource already exists with different content: "

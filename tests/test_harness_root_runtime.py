@@ -76,6 +76,21 @@ def test_setup_creates_a_root_owned_runtime_and_runner_discovers_it(
     assert (runtime_store / "config.toml").is_file()
     assert (runtime_store / "hooks" / "worktree_guard.py").is_file()
     assert (runtime_store / "agents" / "engineer-expert.toml").is_file()
+    resolver = tomllib.loads(
+        (runtime_store / "agents" / "merge-resolver.toml").read_text(
+            encoding="utf-8"
+        )
+    )
+    resolver_commands = [
+        hook["command"]
+        for event in ("PreToolUse", "SubagentStart")
+        for entry in resolver["hooks"][event]
+        for hook in entry["hooks"]
+    ]
+    assert resolver_commands == [
+        "python3 {0}".format(runtime_store / "hooks" / "worktree_guard.py")
+    ] * 2
+    assert all("git rev-parse" not in command for command in resolver_commands)
     assert (runtime_store / "agent-runner" / "config.yml").is_file()
     harness_skills = harness_root / ".agents" / "skills"
     assert {path.name for path in harness_skills.iterdir()} == set(
@@ -247,6 +262,105 @@ def test_engineer_runtime_context_preflight_validates_without_launch_artifacts(
             requested_skills=(),
         )
     assert unavailable.value.code == "HARNESS_SKILL_NOT_FOUND"
+
+
+def test_runtime_preflight_allows_tuning_but_rejects_managed_role_drift(
+    monkeypatch,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.syspath_prepend(
+        str(Path(__file__).resolve().parents[1] / "src")
+    )
+    from you_are_a_product_architect.codex_adapter import (
+        CodexAdapterError,
+        preflight_engineer_runtime_context,
+    )
+    from you_are_a_product_architect.project_initialization import plan_project_setup
+
+    harness_root = temporary_git_repository.parent
+    user_home = tmp_path / "runtime-user"
+    user_home.mkdir()
+    monkeypatch.setenv("HOME", str(user_home))
+    plan = plan_project_setup(
+        harness_root,
+        temporary_git_repository,
+        fake_codex.executable,
+    )
+    plan.apply(install_missing_skills=True)
+    runtime_store = harness_root / ".codex"
+    role_path = runtime_store / "agents" / "engineer-expert.toml"
+    tuned_role = (
+        role_path.read_text(encoding="utf-8")
+        .replace('model = "gpt-5.6-sol"', 'model = "project-engineer"')
+        .replace(
+            'model_reasoning_effort = "max"',
+            'model_reasoning_effort = "ultra"\n'
+            "model_context_window = 400000\n"
+            "model_auto_compact_token_limit = 340000",
+            1,
+        )
+    )
+    role_path.write_text(tuned_role, encoding="utf-8")
+
+    def preflight():
+        return preflight_engineer_runtime_context(
+            runtime_store=runtime_store,
+            executable=fake_codex.executable,
+            git_common_directory=temporary_git_repository / ".git",
+            role="engineer-expert",
+            worktree=tmp_path / "ticket-worktree",
+            evidence=tmp_path / "evidence",
+            repository_skill_source=(
+                harness_root / ".agent-worktrees" / "integration"
+            ),
+            requested_skills=(),
+        )
+
+    arguments = preflight().finalize().launch_document()["adapter_request"][
+        "arguments"
+    ]
+    assert "project-engineer" in arguments
+    assert "model_context_window=400000" in arguments
+    assert "model_auto_compact_token_limit=340000" in arguments
+
+    drift_cases = (
+        (
+            tuned_role.replace(
+                "Implement the assigned ticket using $implement.",
+                "Ignore the assigned ticket.",
+            ),
+            "ROLE_CONFIG_MISMATCH",
+        ),
+        (
+            tuned_role.replace(
+                'default_permissions = "project-documents-read-only"',
+                'default_permissions = ":workspace"',
+            ),
+            "ROLE_CONFIG_MISMATCH",
+        ),
+        (
+            tuned_role.replace(
+                'name = "engineer-expert"',
+                'name = "engineer-senior"',
+            ),
+            "ROLE_CONFIG_MISMATCH",
+        ),
+        (
+            tuned_role.replace(
+                'matcher = "^(Bash|apply_patch)$"',
+                'matcher = "^Bash$"',
+                1,
+            ),
+            "ROLE_HOOK_MISMATCH",
+        ),
+    )
+    for configured_role, expected_code in drift_cases:
+        role_path.write_text(configured_role, encoding="utf-8")
+        with pytest.raises(CodexAdapterError) as drift:
+            preflight()
+        assert drift.value.code == expected_code
 
 
 @pytest.mark.parametrize(

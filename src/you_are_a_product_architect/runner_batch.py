@@ -9,7 +9,7 @@ from typing import Mapping
 
 import yaml
 
-from .runner_models import ROLE_ALIAS_MARKERS, Batch, RunnerError, Task
+from .runner_models import LOGICAL_ROLES, Batch, RunnerError, Task
 
 
 RUN_ID = re.compile(
@@ -18,9 +18,6 @@ RUN_ID = re.compile(
 TICKET_ID = re.compile(r"^[A-Za-z0-9._-]{1,32}$")
 TICKET_NAME = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 RUNTIME_NAME = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
-LOGICAL_ROLES = frozenset(ROLE_ALIAS_MARKERS)
-
-
 class _UniqueKeyLoader(yaml.SafeLoader):
     """Safe YAML loader that treats repeated mapping keys as malformed."""
 

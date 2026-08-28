@@ -471,6 +471,34 @@ def test_setup_rerun_reports_an_already_configured_plan_without_rewriting(
     assert first.returncode == 0, first.stderr
 
     runtime_store = harness_root / ".codex"
+    runtime_config = runtime_store / "config.toml"
+    runtime_config.write_text(
+        runtime_config.read_text(encoding="utf-8")
+        .replace('model = "gpt-5.6-sol"', 'model = "project-main"')
+        .replace(
+            'model_reasoning_effort = "xhigh"',
+            'model_reasoning_effort = "high"\n'
+            "model_context_window = 400000",
+        )
+        .replace(
+            "model_auto_compact_token_limit = 204000",
+            "model_auto_compact_token_limit = 340000",
+        ),
+        encoding="utf-8",
+    )
+    engineer_role = runtime_store / "agents" / "engineer-expert.toml"
+    engineer_role.write_text(
+        engineer_role.read_text(encoding="utf-8")
+        .replace('model = "gpt-5.6-sol"', 'model = "project-engineer"')
+        .replace(
+            'model_reasoning_effort = "max"',
+            'model_reasoning_effort = "ultra"\n'
+            "model_context_window = 400000\n"
+            "model_auto_compact_token_limit = 340000",
+            1,
+        ),
+        encoding="utf-8",
+    )
     runner_config = runtime_store / "agent-runner" / "config.yml"
     exclude_file = common_git_directory(primary) / "info" / "exclude"
     watched_files = tuple(

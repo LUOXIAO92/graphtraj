@@ -14,6 +14,7 @@ from conftest import FakeCodex, InstalledCommands, run_process, wait_for_file
 from test_project_setup import (
     CORE_SKILL_NAMES,
     install_skills,
+    supported_skill_contents,
     tree_contents,
     worktree_contents,
 )
@@ -162,7 +163,11 @@ def test_setup_uses_runtime_user_core_skills_without_root_skill_config(
     assert "skills" not in tomllib.loads(
         runtime_config.read_text(encoding="utf-8")
     )
-    assert not (harness_root / ".agents" / "skills").exists()
+    harness_skills = harness_root / ".agents" / "skills"
+    assert {path.name for path in harness_skills.iterdir()} == {"task-delivery"}
+    assert tree_contents(harness_skills / "task-delivery") == supported_skill_contents(
+        "task-delivery"
+    )
     preflight_engineer_runtime_context(
         runtime_store=runtime_store,
         executable=_runtime_executable(tmp_path),

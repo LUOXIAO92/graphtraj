@@ -123,7 +123,7 @@ class SupportedSkills:
         missing_names: Iterable[str],
         on_action_complete: Optional[Callable[[str], None]] = None,
     ) -> None:
-        """Copy only preflighted missing names to the Runtime Store."""
+        """Install preflighted release-supported Skill resources."""
 
         names = tuple(missing_names)
         unknown_names = tuple(
@@ -150,7 +150,9 @@ class SupportedSkills:
             if target.is_dir():
                 for existing in target.rglob("*"):
                     relative_path = existing.relative_to(target).as_posix()
-                    if existing.is_symlink() or relative_path not in allowed_paths:
+                    if existing.is_symlink() or (
+                        name != "task-delivery" and relative_path not in allowed_paths
+                    ):
                         raise SupportedSkillsError(
                             "Harness Skill contains unsupported or redirected "
                             "content: {0}".format(existing)
@@ -161,7 +163,10 @@ class SupportedSkills:
                         continue
                     if (
                         _existing_kind(existing) != "file"
-                        or existing.read_bytes() != content
+                        or (
+                            name != "task-delivery"
+                            and existing.read_bytes() != content
+                        )
                     ):
                         raise SupportedSkillsError(
                             "Harness Skill resource differs: {0}".format(

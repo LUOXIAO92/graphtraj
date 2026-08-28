@@ -406,7 +406,7 @@ def test_setup_rejects_runtime_and_skill_symlink_redirection_before_mutation(
     assert not fake_codex.log_file.exists()
 
 
-def test_setup_recovers_a_byte_identical_partial_supported_skill_copy(
+def test_setup_recovers_a_byte_identical_partial_task_delivery_projection(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
     fake_codex: FakeCodex,
@@ -420,17 +420,17 @@ def test_setup_recovers_a_byte_identical_partial_supported_skill_copy(
         ["git", "worktree", "add", str(integration), "dev"], cwd=primary
     ).check_returncode()
 
-    partial_skill = harness_root / ".agents" / "skills" / "domain-modeling"
+    partial_skill = harness_root / ".agents" / "skills" / "task-delivery"
     partial_skill.mkdir(parents=True)
-    supported = supported_skill_contents("domain-modeling")
-    partial_file = partial_skill / "ADR-FORMAT.md"
-    partial_file.write_bytes(supported["ADR-FORMAT.md"])
+    supported = supported_skill_contents("task-delivery")
+    partial_file = partial_skill / "SKILL.md"
+    partial_file.write_bytes(supported["SKILL.md"])
     partial_mtime = partial_file.stat().st_mtime_ns
 
     user_home = tmp_path / "operator-home"
     install_skills(
         user_home / ".agents" / "skills",
-        tuple(name for name in CORE_SKILL_NAMES if name != "domain-modeling"),
+        tuple(name for name in CORE_SKILL_NAMES if name != "task-delivery"),
     )
 
     result = run_setup(
@@ -442,11 +442,71 @@ def test_setup_recovers_a_byte_identical_partial_supported_skill_copy(
     )
 
     assert result.returncode == 0, result.stderr
-    assert "ALREADY CONFIGURED: Harness Skill domain-modeling" in result.stdout
-    assert "CREATE: Harness Skill domain-modeling" in result.stdout
+    assert "ALREADY CONFIGURED: Harness Skill task-delivery" in result.stdout
+    assert "CREATE: Harness Skill task-delivery" in result.stdout
     assert tree_contents(partial_skill) == supported
     assert partial_file.stat().st_mtime_ns == partial_mtime
     assert not fake_codex.log_file.exists()
+
+
+def test_setup_repairs_a_complete_stale_task_delivery_projection(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    harness_root = temporary_git_repository.parent
+    primary = temporary_git_repository
+    task_delivery = harness_root / ".agents" / "skills" / "task-delivery"
+    supported = supported_skill_contents("task-delivery")
+    for relative_path in supported:
+        target = task_delivery / relative_path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("stale\n", encoding="utf-8")
+    (task_delivery / "SKILL.md").write_text(
+        "---\nname: task-delivery\ndescription: Stale Skill.\n---\n",
+        encoding="utf-8",
+    )
+    operator_note = task_delivery / "operator-note.md"
+    operator_note.write_text("leave me alone\n", encoding="utf-8")
+    unrelated_skill = harness_root / ".agents" / "skills" / "operator-skill"
+    unrelated_skill.mkdir()
+    unrelated_file = unrelated_skill / "SKILL.md"
+    unrelated_file.write_text("operator-owned\n", encoding="utf-8")
+
+    user_home = tmp_path / "operator-home"
+    install_user_skills(user_home)
+
+    first = run_setup(
+        installed_commands,
+        harness_root=harness_root,
+        user_home=user_home,
+        fake_codex=fake_codex,
+        answers="{0}\ny\n".format(primary.name),
+    )
+
+    assert first.returncode == 0, first.stderr
+    assert "REPLACE: Harness Skill task-delivery:" in first.stdout
+    for relative_path, content in supported.items():
+        assert (task_delivery / relative_path).read_bytes() == content
+    assert operator_note.read_text(encoding="utf-8") == "leave me alone\n"
+    assert unrelated_file.read_text(encoding="utf-8") == "operator-owned\n"
+
+    managed_files = tuple(task_delivery / relative_path for relative_path in supported)
+    mtimes = {path: path.stat().st_mtime_ns for path in managed_files}
+    second = run_setup(
+        installed_commands,
+        harness_root=harness_root,
+        user_home=user_home,
+        fake_codex=fake_codex,
+        answers="{0}\n".format(primary.name),
+    )
+
+    assert second.returncode == 0, second.stderr
+    assert "REPLACE: Harness Skill task-delivery:" not in second.stdout
+    assert {path: path.stat().st_mtime_ns for path in managed_files} == mtimes
+    assert operator_note.read_text(encoding="utf-8") == "leave me alone\n"
+    assert unrelated_file.read_text(encoding="utf-8") == "operator-owned\n"
 
 
 def test_setup_rerun_reports_an_already_configured_plan_without_rewriting(
@@ -912,6 +972,9 @@ def test_setup_confirms_the_exact_base_and_initializes_one_harness_project(
     }
     assert not (integration / ".codex").exists()
     assert not (integration / ".agents").exists()
+    assert tree_contents(
+        harness_root / ".agents" / "skills" / "task-delivery"
+    ) == supported_skill_contents("task-delivery")
 
     scratch = integration / ".scratch"
     assert scratch.is_symlink()

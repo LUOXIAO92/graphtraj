@@ -518,7 +518,14 @@ def test_installed_worker_owns_an_unconfirmed_runtime_until_it_is_terminal(
                     "branch": "agent/2-10-recovery",
                     "worktree_path": str(integration),
                     "ticket_file": str(tmp_path / "ticket.md"),
-                    "evidence_path": str(tmp_path / "evidence"),
+                    "evidence_path": str(
+                        tmp_path
+                        / "state"
+                        / "task-delivery"
+                        / "20260813-recovery"
+                        / "tickets"
+                        / "2-10-recovery"
+                    ),
                     "turn": 1,
                 },
             },

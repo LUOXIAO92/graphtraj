@@ -927,7 +927,8 @@ def test_installed_cleanup_removes_only_integrated_disposable_state(
     retained_files = {
         launched.ticket_file: launched.ticket_file.read_bytes(),
         run_state / "batch.yml": (run_state / "batch.yml").read_bytes(),
-        run_state / "ledger.md": b"# Delivery Run ledger\n",
+        run_state / "worldline.jsonl": b'{"worldline_seq":1}\n',
+        run_state / "ledger.yml": b"run_id: cleanup-test\ntrajectory: []\n",
         run_state / "task-map.mmd": b"graph TD\n  T14[Ticket 14]\n",
         evidence / "result.md": b"# Engineer result\nCandidate ready.\n",
         evidence / "validation.md": b"# Validation\nReal Git tests passed.\n",
@@ -2244,7 +2245,15 @@ def test_terminal_turn_is_durable_before_the_worker_releases_ownership(
                 "adapter_request": {},
                 "mapping": {
                     "alias": "ticket@e1",
-                    "evidence_path": str(tmp_path / "evidence"),
+                    "run_id": "20260829-terminal-order",
+                    "ticket_id": "61",
+                    "role": "engineer-senior",
+                    "evidence_path": str(
+                        tmp_path
+                        / "20260829-terminal-order"
+                        / "tickets"
+                        / "2-61-terminal-order"
+                    ),
                     "turn": 1,
                 },
             }
@@ -2268,11 +2277,17 @@ def test_terminal_turn_is_durable_before_the_worker_releases_ownership(
         session_directory: Path,
         record_session: object,
     ) -> CompletedTurn:
+        record_session("thread-terminal-order", 1234)  # type: ignore[operator]
         return CompletedTurn()
 
     release_observations: list[bool] = []
     monkeypatch.setitem(runner_worker.ADAPTERS, "codex", create_turn)
     monkeypatch.setattr(sys, "stdin", io.StringIO("ticket prompt"))
+    monkeypatch.setattr(
+        runner_worker,
+        "write_active_turn_owner",
+        lambda runner_directory, reservation, owner: None,
+    )
     monkeypatch.setattr(
         runner_worker,
         "release_active_turn",
@@ -2724,7 +2739,8 @@ def test_installed_cleanup_refuses_a_state_root_redirected_into_the_worktree(
     reviews.mkdir()
     retained_files = {
         run_root / "batch.yml": (run_root / "batch.yml").read_bytes(),
-        run_root / "ledger.md": b"# Delivery Run ledger\n",
+        run_root / "worldline.jsonl": b'{"worldline_seq":1}\n',
+        run_root / "ledger.yml": b"run_id: cleanup-test\ntrajectory: []\n",
         run_root / "task-map.mmd": b"graph TD\n  T14[Ticket 14]\n",
         evidence / "metadata.yml": (evidence / "metadata.yml").read_bytes(),
         evidence / "result.md": b"# Engineer result\nCandidate ready.\n",

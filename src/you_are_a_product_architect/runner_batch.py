@@ -180,7 +180,7 @@ def _read_task(
     """Validate and resolve one task without changing the supplied choices."""
 
     required = {"ticket_id", "ticket_name", "role", "ticket_file"}
-    allowed = required | {"instruction", "skills"}
+    allowed = required | {"instruction", "skills", "review_round"}
     if (
         not isinstance(task_document, dict)
         or not required.issubset(task_document)
@@ -251,6 +251,17 @@ def _read_task(
             "SKILL_SELECTION_INVALID",
             "skills must be a list of unique non-empty semantic Skill names.",
         )
+    review_round = task_document.get("review_round")
+    reviewer = role in {"standards-reviewer", "spec-reviewer"}
+    if reviewer != (
+        isinstance(review_round, int)
+        and not isinstance(review_round, bool)
+        and review_round > 0
+    ):
+        raise RunnerError(
+            "TASK_SCHEMA_INVALID",
+            "Reviewer tasks require one positive review_round; Engineer tasks do not accept one.",
+        )
     return Task(
         ticket_id=ticket_id,
         ticket_name=ticket_name,
@@ -259,6 +270,7 @@ def _read_task(
         ticket_content=ticket_content,
         instruction=instruction,
         requested_skills=tuple(requested_skills),
+        review_round=review_round,
     )
 
 

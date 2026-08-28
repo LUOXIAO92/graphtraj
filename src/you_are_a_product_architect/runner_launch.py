@@ -355,6 +355,8 @@ def _start_turn(
             "evidence_path": str(evidence),
             "turn": 1,
         }
+        if task.review_round is not None:
+            mapping["review_round"] = task.review_round
         launch_file = session_directory / "launch.yml"
         write_yaml_durably(
             launch_file,

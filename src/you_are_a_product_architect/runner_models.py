@@ -176,6 +176,7 @@ class Task:
     ticket_content: str
     instruction: Optional[str]
     requested_skills: Tuple[str, ...] = ()
+    review_round: Optional[int] = None
 
     @property
     def stem(self) -> str:

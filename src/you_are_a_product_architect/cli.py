@@ -2,6 +2,7 @@
 
 import click
 
+from .delivery_worldline import worldline
 from .project_setup import setup
 from .skill_check import doctor
 
@@ -13,3 +14,4 @@ def main():
 
 main.add_command(setup)
 main.add_command(doctor)
+main.add_command(worldline)

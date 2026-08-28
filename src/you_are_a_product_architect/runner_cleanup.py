@@ -932,6 +932,57 @@ def _inspect_aliases(
                     or turn < 1
                 ):
                     errors.append("alias-turn-invalid")
+                resume_entry = next(
+                    (
+                        entry
+                        for entry in entries
+                        if entry.name == "resume.yml"
+                    ),
+                    None,
+                )
+                if resume_entry is not None:
+                    resume = _read_yaml_at(
+                        alias_descriptor,
+                        "resume.yml",
+                        expected=resume_entry,
+                    )
+                    resumed_mapping = (
+                        resume.get("mapping")
+                        if isinstance(resume, dict)
+                        else None
+                    )
+                    resumed_turn = (
+                        resumed_mapping.get("turn")
+                        if isinstance(resumed_mapping, dict)
+                        else None
+                    )
+                    identity_fields = (
+                        "alias",
+                        "runtime",
+                        "run_id",
+                        "ticket_id",
+                        "ticket_name",
+                        "role",
+                        "branch",
+                        "worktree_path",
+                        "ticket_file",
+                        "evidence_path",
+                        "session",
+                    )
+                    if (
+                        not isinstance(turn, int)
+                        or isinstance(turn, bool)
+                        or not isinstance(resumed_turn, int)
+                        or isinstance(resumed_turn, bool)
+                        or resumed_turn < turn
+                        or any(
+                            resumed_mapping.get(field) != mapping.get(field)
+                            for field in identity_fields
+                        )
+                    ):
+                        errors.append("alias-turn-invalid")
+                    else:
+                        turn = resumed_turn
                 if (
                     not isinstance(role, str)
                     or role not in ROLE_ALIAS_MARKERS

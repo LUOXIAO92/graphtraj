@@ -463,6 +463,49 @@ def test_installed_cleanup_refuses_an_invalid_required_turn_trace(
     assert launched.session_directory.is_dir()
 
 
+def test_installed_cleanup_refuses_an_empty_trace_from_a_resume_without_a_session_event(
+    installed_cleanup_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    launched = launch_ticket(
+        installed_cleanup_commands,
+        temporary_git_repository,
+        fake_codex,
+        tmp_path,
+    )
+    launched.environment["FAKE_CODEX_EVENTS"] = "[]"
+
+    resumed = send_instruction(
+        installed_cleanup_commands,
+        launched,
+        "Resume without reporting a Runtime Session event.",
+    )
+
+    assert resumed.returncode == 1
+    cleanup = cleanup_ticket(installed_cleanup_commands, launched)
+    assert cleanup.returncode == 1
+    assert yaml.safe_load(cleanup.stdout)["evidence"] == {
+        "ownership_mismatches": ["persistent-evidence-invalid"]
+    }
+    trace = (
+        launched.harness_root
+        / "state"
+        / "task-delivery"
+        / launched.run_id
+        / "tickets"
+        / launched.worktree.name
+        / "traces"
+        / launched.alias
+        / "turn-2"
+        / "events.jsonl"
+    )
+    assert trace.is_file() and trace.stat().st_size == 0
+    assert launched.worktree.is_dir()
+    assert launched.session_directory.is_dir()
+
+
 def test_installed_cleanup_refuses_an_active_engineer_turn(
     installed_cleanup_commands: InstalledCommands,
     temporary_git_repository: Path,

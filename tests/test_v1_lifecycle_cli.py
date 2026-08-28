@@ -347,6 +347,9 @@ print("target validation passed")
         ("spec", "spec-reviewer"),
     ):
         report = reviews / "{0}-r1-{1}.md".format(alias, axis)
+        report_file = str(
+            Path(".scratch/task-delivery/reviews") / report.name
+        )
         review_batch = harness_root / "{0}-review.yml".format(axis)
         review_batch.write_text(
             yaml.safe_dump(
@@ -361,11 +364,8 @@ print("target validation passed")
                             "ticket_file": str(ticket_file),
                             "instruction": (
                                 "Review candidate {0} against {1}; write only {2}."
-                            ).format(candidate, main_before, report),
-                            "report_file": str(
-                                Path(".scratch/task-delivery/reviews")
-                                / report.name
-                            ),
+                            ).format(candidate, main_before, report_file),
+                            "report_file": report_file,
                         }
                     ],
                 },
@@ -373,6 +373,11 @@ print("target validation passed")
             ),
             encoding="utf-8",
         )
+        review_task_input = yaml.safe_load(
+            review_batch.read_text(encoding="utf-8")
+        )["tasks"][0]
+        assert review_task_input["report_file"] == report_file
+        assert report_file in review_task_input["instruction"]
         review_session = "fake-v1-{0}-review-session".format(axis)
         review_processes.append(
             (

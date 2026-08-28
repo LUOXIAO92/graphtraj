@@ -90,7 +90,9 @@ authority to the Delivery State Agent.
    gating the other. Supply the exact
    candidate, comparison point, existing axis brief, and standards or spec
    sources in Main's instruction, along with that axis's exact report path under
-   `.scratch/task-delivery/reviews/`. Require both Reviewers to write only their
+   `.scratch/task-delivery/reviews/`. For each Reviewer task, set `report_file`
+   to that axis's exact non-overwriting report path and also supply the same
+   path in the Reviewer instruction. Require both Reviewers to write only their
    assigned report and leave the candidate and its Git state unchanged.
 7. Retain their separate raw axis-specific reports under
    `reviews/<candidate-alias>-rN-standards.md` and

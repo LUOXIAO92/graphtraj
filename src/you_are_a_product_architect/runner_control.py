@@ -105,6 +105,9 @@ def send_instruction(alias: str, instruction: str, cwd: Path) -> Dict[str, str]:
     worker_started = False
     try:
         resume_file = session_directory / "resume.yml"
+        turn = mapping.get("turn")
+        if not isinstance(turn, int) or isinstance(turn, bool) or turn < 1:
+            raise _invalid_mapping()
         write_yaml_durably(
             resume_file,
             {
@@ -115,7 +118,7 @@ def send_instruction(alias: str, instruction: str, cwd: Path) -> Dict[str, str]:
                 "active_turn_device": reservation.device,
                 "active_turn_inode": reservation.inode,
                 "expected_session": mapping["session"],
-                "mapping": mapping,
+                "mapping": {**mapping, "turn": turn + 1},
             },
         )
         error_file = session_directory / "resume-error.yml"

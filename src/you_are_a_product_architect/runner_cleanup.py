@@ -73,6 +73,7 @@ class BoundAlias:
     device: int
     inode: int
     entries: Tuple["BoundAliasEntry", ...]
+    turn: int
 
 
 @dataclass(frozen=True)
@@ -272,7 +273,9 @@ def _cleanup_reserved(target: CleanupTarget) -> CleanupResponse:
     ):
         ownership_errors.append("registered-alias-missing")
     ownership_errors.extend(alias_errors)
-    ownership_errors.extend(_persistent_evidence_errors(target))
+    ownership_errors.extend(
+        _persistent_evidence_errors(target, bound_aliases)
+    )
     if ownership_errors:
         return _refused(
             target=target,
@@ -922,6 +925,64 @@ def _inspect_aliases(
                 ):
                     errors.append("alias-terminal-outcome-missing")
                 role = mapping.get("role")
+                turn = mapping.get("turn")
+                if (
+                    not isinstance(turn, int)
+                    or isinstance(turn, bool)
+                    or turn < 1
+                ):
+                    errors.append("alias-turn-invalid")
+                resume_entry = next(
+                    (
+                        entry
+                        for entry in entries
+                        if entry.name == "resume.yml"
+                    ),
+                    None,
+                )
+                if resume_entry is not None:
+                    resume = _read_yaml_at(
+                        alias_descriptor,
+                        "resume.yml",
+                        expected=resume_entry,
+                    )
+                    resumed_mapping = (
+                        resume.get("mapping")
+                        if isinstance(resume, dict)
+                        else None
+                    )
+                    resumed_turn = (
+                        resumed_mapping.get("turn")
+                        if isinstance(resumed_mapping, dict)
+                        else None
+                    )
+                    identity_fields = (
+                        "alias",
+                        "runtime",
+                        "run_id",
+                        "ticket_id",
+                        "ticket_name",
+                        "role",
+                        "branch",
+                        "worktree_path",
+                        "ticket_file",
+                        "evidence_path",
+                        "session",
+                    )
+                    if (
+                        not isinstance(turn, int)
+                        or isinstance(turn, bool)
+                        or not isinstance(resumed_turn, int)
+                        or isinstance(resumed_turn, bool)
+                        or resumed_turn < turn
+                        or any(
+                            resumed_mapping.get(field) != mapping.get(field)
+                            for field in identity_fields
+                        )
+                    ):
+                        errors.append("alias-turn-invalid")
+                    else:
+                        turn = resumed_turn
                 if (
                     not isinstance(role, str)
                     or role not in ROLE_ALIAS_MARKERS
@@ -941,6 +1002,7 @@ def _inspect_aliases(
                             device=identity.st_dev,
                             inode=identity.st_ino,
                             entries=entries,
+                            turn=turn,
                         )
                     )
             except (OSError, UnicodeError, yaml.YAMLError):
@@ -1372,7 +1434,9 @@ def _stat_identity_matches(
     )
 
 
-def _persistent_evidence_errors(target: CleanupTarget) -> List[str]:
+def _persistent_evidence_errors(
+    target: CleanupTarget, bound_aliases: List[BoundAlias]
+) -> List[str]:
     run_root = target.project.state_directory / "task-delivery" / target.run_id
     ticket_root = run_root / "tickets" / target.worktree.name
     worktree_roots = [target.worktree]
@@ -1420,6 +1484,27 @@ def _persistent_evidence_errors(target: CleanupTarget) -> List[str]:
                 return ["persistent-evidence-invalid"]
         except OSError:
             return ["persistent-evidence-invalid"]
+    trace_root = ticket_root / "traces"
+    if trace_root.is_symlink() or not trace_root.is_dir():
+        return ["persistent-evidence-invalid"]
+    for alias in bound_aliases:
+        alias_root = trace_root / alias.path.name
+        if alias_root.is_symlink() or not alias_root.is_dir():
+            return ["persistent-evidence-invalid"]
+        for turn in range(1, alias.turn + 1):
+            turn_root = alias_root / "turn-{0}".format(turn)
+            trace = turn_root / "events.jsonl"
+            try:
+                if (
+                    turn_root.is_symlink()
+                    or not turn_root.is_dir()
+                    or trace.is_symlink()
+                    or not trace.is_file()
+                    or trace.stat().st_size == 0
+                ):
+                    return ["persistent-evidence-invalid"]
+            except OSError:
+                return ["persistent-evidence-invalid"]
     return []
 
 

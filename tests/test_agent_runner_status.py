@@ -519,6 +519,7 @@ def test_installed_worker_owns_an_unconfirmed_runtime_until_it_is_terminal(
                     "worktree_path": str(integration),
                     "ticket_file": str(tmp_path / "ticket.md"),
                     "evidence_path": str(tmp_path / "evidence"),
+                    "turn": 1,
                 },
             },
             sort_keys=False,

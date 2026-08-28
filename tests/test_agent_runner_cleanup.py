@@ -240,6 +240,7 @@ def test_alias_removal_preserves_a_final_diagnostic_path_replacement(
         device=identity.st_dev,
         inode=identity.st_ino,
         entries=entries,
+        turn=1,
     )
     snapshot = runner_cleanup.SessionSnapshot(
         path=sessions,
@@ -415,6 +416,93 @@ def test_installed_cleanup_refuses_a_dirty_ticket_worktree(
     }
     assert result.stderr == message + "\n"
     assert dirty_file.read_text(encoding="utf-8") == "uncommitted Engineer work\n"
+    assert launched.session_directory.is_dir()
+
+
+@pytest.mark.parametrize("invalid_trace", ("missing", "redirected", "empty"))
+def test_installed_cleanup_refuses_an_invalid_required_turn_trace(
+    invalid_trace: str,
+    installed_cleanup_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    launched = launch_ticket(
+        installed_cleanup_commands,
+        temporary_git_repository,
+        fake_codex,
+        tmp_path,
+    )
+    trace = (
+        launched.harness_root
+        / "state"
+        / "task-delivery"
+        / launched.run_id
+        / "tickets"
+        / launched.worktree.name
+        / "traces"
+        / launched.alias
+        / "turn-1"
+        / "events.jsonl"
+    )
+    if invalid_trace == "missing":
+        trace.unlink()
+    elif invalid_trace == "redirected":
+        trace.unlink()
+        trace.symlink_to(launched.session_directory / "events.jsonl")
+    else:
+        trace.write_bytes(b"")
+
+    result = cleanup_ticket(installed_cleanup_commands, launched)
+
+    assert result.returncode == 1
+    assert yaml.safe_load(result.stdout)["evidence"] == {
+        "ownership_mismatches": ["persistent-evidence-invalid"]
+    }
+    assert launched.worktree.is_dir()
+    assert launched.session_directory.is_dir()
+
+
+def test_installed_cleanup_refuses_an_empty_trace_from_a_resume_without_a_session_event(
+    installed_cleanup_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    launched = launch_ticket(
+        installed_cleanup_commands,
+        temporary_git_repository,
+        fake_codex,
+        tmp_path,
+    )
+    launched.environment["FAKE_CODEX_EVENTS"] = "[]"
+
+    resumed = send_instruction(
+        installed_cleanup_commands,
+        launched,
+        "Resume without reporting a Runtime Session event.",
+    )
+
+    assert resumed.returncode == 1
+    cleanup = cleanup_ticket(installed_cleanup_commands, launched)
+    assert cleanup.returncode == 1
+    assert yaml.safe_load(cleanup.stdout)["evidence"] == {
+        "ownership_mismatches": ["persistent-evidence-invalid"]
+    }
+    trace = (
+        launched.harness_root
+        / "state"
+        / "task-delivery"
+        / launched.run_id
+        / "tickets"
+        / launched.worktree.name
+        / "traces"
+        / launched.alias
+        / "turn-2"
+        / "events.jsonl"
+    )
+    assert trace.is_file() and trace.stat().st_size == 0
+    assert launched.worktree.is_dir()
     assert launched.session_directory.is_dir()
 
 
@@ -2154,7 +2242,11 @@ def test_terminal_turn_is_durable_before_the_worker_releases_ownership(
                 "active_turn_inode": session.stat().st_ino,
                 "runtime": "codex",
                 "adapter_request": {},
-                "mapping": {},
+                "mapping": {
+                    "alias": "ticket@e1",
+                    "evidence_path": str(tmp_path / "evidence"),
+                    "turn": 1,
+                },
             }
         ),
         encoding="utf-8",

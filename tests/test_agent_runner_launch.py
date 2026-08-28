@@ -395,7 +395,10 @@ def test_installed_runner_launches_one_isolated_engineer_and_returns_early(
         assert [path.name for path in evidence.parent.iterdir()] == [
             "2-10-launch-engineer"
         ]
-        assert sorted(path.name for path in evidence.iterdir()) == ["metadata.yml"]
+        assert sorted(path.name for path in evidence.iterdir()) == [
+            "metadata.yml",
+            "traces",
+        ]
 
         scoped_scratch = ticket_worktree / ".scratch" / "task-delivery"
         assert scoped_scratch.is_symlink()

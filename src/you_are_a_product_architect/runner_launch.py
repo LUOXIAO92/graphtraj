@@ -353,6 +353,7 @@ def _start_turn(
             "worktree_path": str(worktree),
             "ticket_file": str(task.ticket_file),
             "evidence_path": str(evidence),
+            "turn": 1,
         }
         launch_file = session_directory / "launch.yml"
         write_yaml_durably(

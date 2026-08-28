@@ -22,6 +22,7 @@ def send(
     environment: dict[str, str],
     alias: str,
     instruction: str,
+    caused_by_worldline_seq: int = 1,
 ):
     return run_process(
         [
@@ -30,6 +31,8 @@ def send(
             alias,
             "--instruction",
             instruction,
+            "--caused-by-worldline-seq",
+            str(caused_by_worldline_seq),
         ],
         cwd=integration.parents[1],
         env=environment,
@@ -105,6 +108,39 @@ def test_installed_send_resumes_an_idle_runtime_session_under_the_same_alias(
     source_config.write_text('model = "source-changed"\n', encoding="utf-8")
     resume_release = tmp_path / "allow-resumed-turn-to-finish"
     instruction = "--dangerously-bypass-approvals-and-sandbox"
+    run_root = harness_root / "state" / "task-delivery" / "20260814-resume-engineer"
+    decision_file = harness_root / "resume-decision.yml"
+    decision_file.write_text(
+        yaml.safe_dump(
+            {
+                "kind": "main-decision",
+                "ticket_id": "10",
+                "accepted_findings": [],
+                "rejected_findings": [],
+                "verdict": "FAIL",
+                "caused_by_worldline_seqs": [2],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    decision = run_process(
+        [
+            str(installed_worktree_commands.product),
+            "worldline",
+            "append",
+            "--run-root",
+            str(run_root),
+            "--run-id",
+            "20260814-resume-engineer",
+            "--event-file",
+            str(decision_file),
+        ],
+        cwd=harness_root,
+        env=environment,
+    )
+    assert decision.returncode == 0, decision.stderr
+    decision_seq = yaml.safe_load(decision.stdout)["worldline_seq"]
 
     resumed = send(
         installed_worktree_commands,
@@ -119,6 +155,7 @@ def test_installed_send_resumes_an_idle_runtime_session_under_the_same_alias(
         },
         alias,
         instruction,
+        decision_seq,
     )
 
     assert resumed.returncode == 0, resumed.stderr
@@ -159,6 +196,16 @@ def test_installed_send_resumes_an_idle_runtime_session_under_the_same_alias(
     resume_release.touch()
     wait_for_file(turn_file)
     wait_for_process_exit(resumed_mapping["worker_pid"])
+    worldline = [
+        json.loads(line)
+        for line in (run_root / "worldline.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    turn_two_start = next(
+        event
+        for event in worldline
+        if event["kind"] == "agent-turn-start" and event["turn"] == 2
+    )
+    assert turn_two_start["caused_by_worldline_seqs"] == [decision_seq]
 
 
 def test_installed_send_rejects_running_codex_without_deferring_instruction(

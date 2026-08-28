@@ -131,10 +131,30 @@ def test_atomic_worldline_projects_interleaved_explicit_events_deterministically
 
     ledger = run_root / "ledger.yml"
     original_projection = ledger.read_bytes()
-    assert yaml.safe_load(original_projection) == {
-        "run_id": run_id,
-        "trajectory": journal,
-    }
+    projection = yaml.safe_load(original_projection)
+    assert projection["run_id"] == run_id
+    assert [group["kind"] for group in projection["trajectory"]] == [
+        "agent-turn",
+        "user-input",
+        "review-round",
+        "main-decision",
+    ]
+    assert projection["trajectory"][0]["events"] == [journal[0]]
+    assert projection["trajectory"][1]["event"] == journal[1]
+    review_round = projection["trajectory"][2]
+    assert review_round["review_round"] == 1
+    assert [turn["alias"] for turn in review_round["agent_turns"]] == [
+        "r2",
+        "r1",
+    ]
+    assert [turn["events"] for turn in review_round["agent_turns"]] == [
+        [journal[2]],
+        [journal[3]],
+    ]
+    decision = projection["trajectory"][3]
+    assert decision["event"] == journal[4]
+    assert decision["task_state_changes"] == [journal[5]]
+    assert decision["dag_changes"] == [journal[6]]
     ledger.write_text("stale: true\n", encoding="utf-8")
     project_worldline(run_root)
     assert ledger.read_bytes() == original_projection

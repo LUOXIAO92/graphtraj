@@ -297,6 +297,8 @@ print("target validation passed")
             alias,
             "--instruction",
             instruction,
+            "--caused-by-worldline-seq",
+            "1",
         ],
         cwd=harness_root,
         env={

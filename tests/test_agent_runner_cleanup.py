@@ -196,6 +196,8 @@ def send_instruction(
             launched.alias,
             "--instruction",
             instruction,
+            "--caused-by-worldline-seq",
+            "1",
         ],
         cwd=launched.harness_root,
         env=launched.environment,

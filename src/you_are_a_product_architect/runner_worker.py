@@ -232,6 +232,10 @@ def _worldline_turn_event(
     review_round = mapping.get("review_round")
     if review_round is not None:
         event["review_round"] = review_round
+    if kind == "agent-turn-start" and "caused_by_worldline_seqs" in mapping:
+        event["caused_by_worldline_seqs"] = mapping[
+            "caused_by_worldline_seqs"
+        ]
     return event
 
 

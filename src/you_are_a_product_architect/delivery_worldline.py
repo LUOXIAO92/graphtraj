@@ -148,8 +148,109 @@ def _write_projection(
     events: list[dict[str, Any]],
 ) -> Path:
     ledger = run_root / "ledger.yml"
-    write_yaml_durably(ledger, {"run_id": run_id, "trajectory": events})
+    write_yaml_durably(
+        ledger,
+        {"run_id": run_id, "trajectory": _group_trajectory(events)},
+    )
     return ledger
+
+
+def _group_trajectory(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    groups: list[dict[str, Any]] = []
+    agent_turns: dict[tuple[str, int], dict[str, Any]] = {}
+    review_rounds: dict[tuple[str, int], dict[str, Any]] = {}
+    review_turns: dict[tuple[str, int, str, int], dict[str, Any]] = {}
+    decisions: dict[int, dict[str, Any]] = {}
+
+    for event in events:
+        kind = event["kind"]
+        if kind in {"task-state-change", "dag-change"}:
+            decision = next(
+                (
+                    decisions[sequence]
+                    for sequence in event["caused_by_worldline_seqs"]
+                    if sequence in decisions
+                ),
+                None,
+            )
+            if decision is not None:
+                key = (
+                    "task_state_changes"
+                    if kind == "task-state-change"
+                    else "dag_changes"
+                )
+                decision[key].append(event)
+                continue
+        if kind.startswith("agent-turn-"):
+            if "review_round" in event:
+                round_key = (event["ticket_id"], event["review_round"])
+                review_round = review_rounds.get(round_key)
+                if review_round is None:
+                    review_round = {
+                        "kind": "review-round",
+                        "ticket_id": event["ticket_id"],
+                        "review_round": event["review_round"],
+                        "agent_turns": [],
+                    }
+                    review_rounds[round_key] = review_round
+                    groups.append(review_round)
+                turn_key = (*round_key, event["alias"], event["turn"])
+                turn = review_turns.get(turn_key)
+                if turn is None:
+                    turn = _new_turn(event)
+                    review_turns[turn_key] = turn
+                    review_round["agent_turns"].append(turn)
+                turn["events"].append(event)
+            else:
+                turn_key = (event["alias"], event["turn"])
+                turn = agent_turns.get(turn_key)
+                if turn is None:
+                    turn = _new_turn(event)
+                    agent_turns[turn_key] = turn
+                    groups.append(turn)
+                turn["events"].append(event)
+            continue
+        if kind == "user-input":
+            groups.append({"kind": kind, "event": event})
+            continue
+        if kind == "main-decision":
+            decision = {
+                "kind": kind,
+                "event": event,
+                "task_state_changes": [],
+                "dag_changes": [],
+            }
+            decisions[event["worldline_seq"]] = decision
+            groups.append(decision)
+            continue
+        groups.append({"kind": kind, "event": event})
+
+    for review_round in review_rounds.values():
+        review_round["agent_turns"].sort(key=_turn_completion_sequence)
+    return groups
+
+
+def _new_turn(event: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "kind": "agent-turn",
+        "ticket_id": event["ticket_id"],
+        "role": event["role"],
+        "alias": event["alias"],
+        "turn": event["turn"],
+        "events": [],
+    }
+
+
+def _turn_completion_sequence(turn: Mapping[str, Any]) -> int:
+    terminal = next(
+        (
+            event["worldline_seq"]
+            for event in turn["events"]
+            if event["kind"] == "agent-turn-terminal"
+        ),
+        None,
+    )
+    return terminal if terminal is not None else turn["events"][0]["worldline_seq"]
 
 
 def _validate_supplied_event(event: Mapping[str, Any]) -> None:

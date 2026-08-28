@@ -106,11 +106,13 @@ for Main, but allowlisting never enables a Skill by itself.
 
 Engineer tasks use `engineer-junior`, `engineer-senior`, or `engineer-expert`.
 After an Engineer returns a fixed candidate and validation evidence, Main may
-omit review or launch `standards-reviewer` and `spec-reviewer` as separate,
-serialized tasks against that same Ticket Worktree. Main supplies the exact
-candidate and comparison point in each instruction. Reviewer roles are
-limited to an exact raw-report path and must leave the fixed candidate and Git
-state unchanged; merge and integration actions do not use them.
+omit review or launch `standards-reviewer` and `spec-reviewer` concurrently
+as separate tasks against that same Ticket Worktree. Neither axis gates the
+other. Main supplies the same exact candidate and comparison point in each
+instruction. Reviewer roles receive a read-only candidate and are limited to
+their exact raw-report paths; Main waits for both reports and verifies the
+candidate and Git state before one round decision. Merge and integration
+actions do not use Reviewers.
 
 Use `status` only for aliases Main explicitly supplies. With the Codex V1
 Runtime, `send` can resume an idle session but cannot inject live input into a

@@ -2,25 +2,27 @@
 status: accepted
 ---
 
-# Preserve a time-normalized Delivery Run worldline
+# Preserve an append-only, time-normalized Delivery Run worldline
 
 A Delivery Run must retain enough causal history to reconstruct what each
 Agent did, what the user changed, how Main interpreted the available evidence,
 and why task state or the accepted DAG changed. A phase-oriented Markdown
-ledger cannot represent parallel turns and causal links reliably enough, so
-`state/task-delivery/<run-id>/ledger.yml` is the single canonical, readable,
-structured **Delivery Worldline**. It replaces `ledger.md` as the authoritative
-ledger. `task-map.yml` remains the current semantic-state projection and
-`dag.md` remains the current accepted-topology projection.
+ledger and a mutable YAML document cannot represent parallel turns and causal
+links reliably enough, so
+`state/task-delivery/<run-id>/worldline.jsonl` is the single canonical,
+append-only **Delivery Worldline**. `ledger.yml` is its deterministic readable
+projection; `ledger.md` is retired. Current task-map and DAG ownership remains
+with [ADR 0003](0003-delivery-state-agent-maintains-run-state.md).
 
-One Delivery Run has one worldline. Its entries are coarse-grained lifecycle
-and semantic events in Harness-observed chronological order, including Agent
-turn start and terminal events, relevant user input, Main decisions, Runner
-actions, and task or DAG changes. Every entry has an ISO 8601 `captured_at`
-value from the Harness boundary and a stable, monotonically increasing
-`worldline_seq` unique within the Run. Runtime-native timestamps remain source
-evidence but cannot establish cross-session order by themselves. Equal capture
-times retain deterministic Harness capture order.
+One Delivery Run has one worldline. Each JSON line is one complete normalized
+coarse event in Harness-observed chronological order, including Agent Turn
+start and terminal events, relevant user input, Main decisions, Runner actions,
+and task or DAG changes. Every entry has the Run's `run_id`, an ISO 8601
+`captured_at` value from the Harness boundary, an explicit `kind`, and a
+stable, monotonically increasing `worldline_seq` unique within the Run.
+Runtime-native timestamps remain source evidence but cannot establish
+cross-session order by themselves. Equal capture times retain deterministic
+Harness capture order.
 
 The ledger never uses a bare `id`. Each identifier or ordinal names its domain:
 
@@ -29,7 +31,7 @@ The ledger never uses a bare `id`. Each identifier or ordinal names its domain:
 - `worldline_seq` orders one Run's canonical worldline;
 - `review_round` groups the two review axes for one fixed candidate;
 - `alias` addresses one logical Runtime session while it is live; and
-- `turn` numbers resumed turns within `(run_id, alias)`.
+- `turn` numbers resumed turns within `(run_id, ticket_id, alias)`.
 
 A cross-Run worldline reference is therefore `(run_id, worldline_seq)`, not an
 overloaded identifier that can be mistaken for a ticket number. Causal fields
@@ -40,8 +42,9 @@ name the same key explicitly, for example `caused_by_worldline_seqs`.
 The worldline is an index over evidence, not a replacement for it. Every
 Engineer and Reviewer turn maps to one complete, immutable raw Agent event
 stream containing that turn's captured actions and final output. The trace is
-addressed by `(run_id, alias, turn)` and linked with a Run-relative
-`trace_ref`; the ledger does not embed or summarize away the JSONL stream.
+addressed by `(run_id, ticket_id, alias, turn)` and linked with a Run-relative
+`trace_ref`; the worldline does not embed or summarize away the raw JSONL
+stream.
 When an Agent Runtime appends resumed turns to one live `events.jsonl`, the
 Runner must still preserve each turn as a separately addressable durable trace
 without rewriting the captured events.
@@ -60,92 +63,33 @@ reports, any relevant user input, accepted and rejected findings, the `PASS` or
 turn of the selected Engineer session when Main resumes it; it does not
 overwrite the earlier turn or review round.
 
-A representative readable shape is:
+A representative canonical journal begins:
 
-```yaml
-run_id: 20260823-example
-worldline:
-  - worldline_seq: 1
-    captured_at: 2026-08-23T10:00:00+09:00
-    ticket_id: "53"
-    kind: agent-turn-start
-    role: engineer
-    alias: "@e1"
-    turn: 1
-
-  - worldline_seq: 2
-    captured_at: 2026-08-23T10:08:41+09:00
-    ticket_id: "53"
-    kind: agent-turn-terminal
-    role: engineer
-    alias: "@e1"
-    turn: 1
-    trace_ref: traces/e1/turn-1/events.jsonl
-
-  - worldline_seq: 3
-    captured_at: 2026-08-23T10:09:02+09:00
-    ticket_id: "53"
-    kind: agent-turn-start
-    role: standards-reviewer
-    review_round: 1
-    alias: "@r1"
-    turn: 1
-
-  - worldline_seq: 4
-    captured_at: 2026-08-23T10:09:03+09:00
-    ticket_id: "53"
-    kind: agent-turn-start
-    role: spec-reviewer
-    review_round: 1
-    alias: "@r2"
-    turn: 1
-
-  - worldline_seq: 5
-    captured_at: 2026-08-23T10:12:17+09:00
-    ticket_id: "53"
-    kind: agent-turn-terminal
-    role: spec-reviewer
-    review_round: 1
-    alias: "@r2"
-    turn: 1
-    trace_ref: traces/r2/turn-1/events.jsonl
-
-  - worldline_seq: 6
-    captured_at: 2026-08-23T10:14:31+09:00
-    ticket_id: "53"
-    kind: agent-turn-terminal
-    role: standards-reviewer
-    review_round: 1
-    alias: "@r1"
-    turn: 1
-    trace_ref: traces/r1/turn-1/events.jsonl
-
-  - worldline_seq: 7
-    captured_at: 2026-08-23T10:15:04+09:00
-    ticket_id: "53"
-    kind: user-input
-
-  - worldline_seq: 8
-    captured_at: 2026-08-23T10:16:20+09:00
-    ticket_id: "53"
-    kind: main-decision
-    caused_by_worldline_seqs: [5, 6, 7]
-    verdict: fail
+```jsonl
+{"run_id":"20260823-example","worldline_seq":1,"captured_at":"2026-08-23T10:00:00+09:00","ticket_id":"53","kind":"agent-turn-start","role":"engineer","alias":"@e1","turn":1}
+{"run_id":"20260823-example","worldline_seq":2,"captured_at":"2026-08-23T10:08:41+09:00","ticket_id":"53","kind":"agent-turn-terminal","role":"engineer","alias":"@e1","turn":1,"trace_ref":"tickets/2-53-example/traces/e1/turn-1/events.jsonl"}
 ```
 
-The example is illustrative rather than a complete persistence schema. The
-required invariants are the domain-specific keys, chronological ordering,
-causal links, and lossless per-turn trace mapping.
+The example is illustrative rather than a generalized schema. The required
+invariants are append-only complete lines, domain-specific keys, chronological
+ordering, causal links, and lossless per-Turn trace mapping. `ledger.yml`
+groups those events by Turn, review round, user input, and Main decision using
+their explicit fields and causal references; it never parses Agent prose.
 
 ## Ownership and lifecycle
 
-The Runner captures mechanical Runtime and turn facts and preserves each raw
-Agent trace in the Harness State Directory before live session or Worktree
-cleanup. The Delivery State Agent remains the sole writer of `ledger.yml`,
-`task-map.yml`, and `dag.md`; Main supplies user-facing meaning, review
-adjudication, and DAG decisions rather than asking the Runner to infer them.
-The State Agent updates these projections after every meaningful confirmed
-change.
+One Run-local append boundary assigns `captured_at` and `worldline_seq` and
+atomically appends one complete event. The existing Runner capture path records
+only mechanical Agent Turn observations and raw-trace references through that
+boundary; it never converts transport outcomes into verdicts. No resident
+recorder, watcher, database, or event bus is introduced.
+
+The Delivery State Agent is the sole semantic writer. When Main supplies a
+confirmed user input, review decision, accepted or rejected finding, task-state
+change, or DAG change, the State Agent appends that explicit semantic event and
+regenerates `ledger.yml`. Current `task-map.yml` and `dag.md` synchronization
+remains owned by ADR 0003. Retained batch-input lifecycle remains owned by
+[ADR 0004](0004-preserve-delivery-evidence-outside-git-worktrees.md).
 
 Successful cleanup still removes retired live aliases, Runtime mappings,
 Worktrees, branches, and disposable transport diagnostics. It must not remove
@@ -154,10 +98,10 @@ promotes the captured Agent event stream to durable delivery evidence; stderr
 remains a disposable transport diagnostic unless a later decision explicitly
 promotes it.
 
-No independently hand-maintained `ledger.md` copy is kept. A Markdown view may
-be generated from `ledger.yml` later if it proves useful, but it is a derived
-view and cannot become a second authority. Existing historical Runs need not
-be rewritten merely to adopt this decision.
+No independently hand-maintained `ledger.md` copy is kept. `ledger.yml` may
+be regenerated at any time from `worldline.jsonl` and cannot become a second
+authority. Existing historical Runs need not be rewritten merely to adopt this
+decision.
 
 This partially supersedes ADR 0003's `ledger.md` representation, ADR 0004's
 classification of raw Runtime events as disposable, and ADR 0008's deletion of
@@ -169,11 +113,13 @@ session addressing, and cleanup decisions otherwise remain accepted.
 - Keeping `ledger.md` with Markdown links was rejected because regex-based
   parsing becomes brittle once parallel turns, causal references, and DAG
   evolution must be reconstructed.
-- Maintaining both YAML and Markdown ledgers by hand was rejected because they
-  can disagree; one canonical YAML document remains readable without creating
-  duplicate authority.
+- Keeping mutable `ledger.yml` canonical was rejected because updates can
+  overwrite causal history; deterministic YAML remains a readable projection
+  of the append-only journal.
 - Merging every Agent's fine-grained events into one rewritten JSONL stream was
   rejected because it would alter raw evidence and conflate global delivery
   order with Runtime-local action order.
+- Adding a database, event bus, resident recorder, or generalized schema
+  registry was rejected because one atomic Run-local append is sufficient.
 - Reusing a generic `id` was rejected because ticket identity, worldline order,
   review rounds, sessions, and turns have different scopes and lifecycles.

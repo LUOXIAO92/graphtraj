@@ -5,9 +5,9 @@ status: accepted
 # Preserve Delivery Run evidence outside Git worktrees
 
 > **Partial supersession:** [ADR 0025](0025-preserve-a-time-normalized-delivery-worldline.md)
-> replaces `ledger.md` with `ledger.yml` and makes each complete per-turn Agent
-> event stream durable delivery evidence. Stderr remains a disposable
-> transport diagnostic.
+> replaces `ledger.md` with canonical `worldline.jsonl` and derived
+> `ledger.yml`, and makes each complete per-Turn Agent event stream durable
+> delivery evidence. Stderr remains a disposable transport diagnostic.
 
 Delivery Run state must survive Ticket Worktree cleanup without entering
 product history. It lives in a project-level persistent **Harness State
@@ -18,9 +18,10 @@ Delivery State Agent retain the Matt Skills scratch convention. The containing
 project boundary is defined in
 [ADR 0012](0012-isolate-each-harness-project-at-its-own-root.md).
 
-One run occupies `state/task-delivery/<run-id>/`. Its ledger is visible from
-the Integration Worktree at
-`.scratch/task-delivery/<run-id>/ledger.md`. Each ticket has exactly one
+One run occupies `state/task-delivery/<run-id>/`. Its canonical Worldline and
+readable projection are visible from the Integration Worktree at
+`.scratch/task-delivery/<run-id>/worldline.jsonl` and
+`.scratch/task-delivery/<run-id>/ledger.yml`. Each ticket has exactly one
 persistent evidence directory:
 
 ```text
@@ -57,16 +58,17 @@ worktree, or escalation counters already maintained by the Delivery State
 Agent.
 
 The Delivery State Agent reads evidence through the Integration Worktree's
-persistent `.scratch` view and links it from the ledger instead of embedding
-reports. Main reads it to adjudicate but does not repeat or rewrite it for the
-state Agent.
+persistent `.scratch` view and links it from the Worldline instead of
+embedding reports. Main reads it to adjudicate but does not repeat or rewrite
+it for the State Agent.
 
 Main may create Runner batch YAML in a temporary file. After validating it and
 before launching an Engineer, the Runner preserves the exact input, including
 any inline instruction, in the run's Harness State Directory and returns the
 retained path. The temporary source may then be removed. The retained input,
-ledger, Mermaid graph, Engineer results, validation evidence, and Reviewer
-reports are never automatically deleted by ticket cleanup or run completion.
+`worldline.jsonl`, `ledger.yml`, `task-map.yml`, `dag.md`, Engineer results,
+validation evidence, and Reviewer reports are never automatically deleted by
+ticket cleanup or run completion.
 Only the operator removes persistent run state directly through the filesystem
 or file manager; V1 exposes no Runner or product CLI command for it.
 

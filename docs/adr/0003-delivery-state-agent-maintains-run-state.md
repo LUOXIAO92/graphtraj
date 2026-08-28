@@ -5,16 +5,18 @@ status: accepted
 # A Delivery State Agent maintains Delivery Run state
 
 > **Partial supersession:** [ADR 0025](0025-preserve-a-time-normalized-delivery-worldline.md)
-> replaces `ledger.md` with the canonical `ledger.yml` Delivery Worldline.
-> State Agent ownership and the current-state and DAG projections remain
-> accepted.
+> replaces `ledger.md` with canonical `worldline.jsonl` and a derived
+> `ledger.yml` projection. State Agent ownership and the current-state and DAG
+> projections remain accepted.
 
 Main is the semantic authority for a Delivery Run, but it does not spend its
-context and output budget rewriting the ledger or Mermaid graph. Each active
-Delivery Run has one Delivery State Agent acting on Main's behalf as the sole
-writer of that Run's ledger and Mermaid graph. Concurrent Runs may use
-different State Agents because their artifacts are run-scoped; no State Agent
-owns another Run's files.
+context and output budget rewriting current task state, DAG state, or semantic
+history. Each active Delivery Run has one Delivery State Agent acting on
+Main's behalf as the sole writer of that Run's `task-map.yml`, `dag.md`,
+semantic Worldline entries, and readable Worldline projection. ADR 0025 owns
+the Worldline representation. Concurrent Runs may use different State Agents
+because their artifacts are run-scoped; no State Agent owns another Run's
+files.
 
 The Delivery State Agent is a custom Agent role launched and coordinated by
 Main through the Runtime's native agent tools. It shares Main's Integration
@@ -23,8 +25,9 @@ is likewise a Main-coordinated native role rather than a Runner-managed
 Engineer.
 
 At initialization, the Delivery State Agent reads the accepted tickets and
-their explicit dependencies, then creates the working task map, ledger, and
-Mermaid DAG. It also creates a short stable `run_id` in the ASCII form
+their explicit dependencies, then creates `task-map.yml`, `dag.md`, and the
+Worldline artifacts defined by ADR 0025. It also creates a short stable
+`run_id` in the ASCII form
 `YYYYMMDD-short-name`, adding a numeric suffix such as `-2` on collision. The
 Agent chooses the semantic short name and resolves collisions; the Runner only
 validates that the ID is path-safe, within its allowed length, and consistent
@@ -41,16 +44,17 @@ When Main dispatches a ticket, the Delivery State Agent registers its
 worktree, branch, tier, and Engineer session. After an Engineer turn or another
 meaningful event, Main asks the same Agent to synchronize the task. The Agent
 reads the registered worktree, Git state, result, review reports, and
-validation evidence itself; updates the ledger and Mermaid graph; and returns
-a short summary, ready-ticket suggestions, and any inconsistency or semantic
-question that requires Main.
+validation evidence itself; updates `task-map.yml` and `dag.md`; appends any
+Main-confirmed semantic event through ADR 0025's Worldline boundary;
+regenerates its readable projection; and returns a short summary, ready-ticket
+suggestions, and any inconsistency or semantic question that requires Main.
 
 Main must still trigger synchronization. V1 has no autonomous watcher,
 hook-triggered drawing Agent, or event-loop controller. If the original state
 session is unavailable, a fresh Delivery State Agent can recover by reading
 the persistent artifacts and replace it as that Run's sole writer.
 
-The ledger uses this shared soft status vocabulary:
+`task-map.yml` uses this shared soft status vocabulary:
 
 - `pending` — explicit dependencies have not all been integrated.
 - `ready` — the ticket is a candidate for Main to dispatch.
@@ -84,8 +88,9 @@ ownership are defined separately in
 
 ## Considered options
 
-- Requiring Main to construct the normalized graph, ledger, or Mermaid was
-  rejected because it creates high-volume mechanical work in Main's context.
+- Requiring Main to construct the current task map, DAG, or Worldline
+  projection was rejected because it creates high-volume mechanical work in
+  Main's context.
 - Requiring Main to relay Engineer and Reviewer output was rejected because the
   Delivery State Agent can read registered artifacts directly.
 - Automatically invoking the Agent after every transition was rejected because

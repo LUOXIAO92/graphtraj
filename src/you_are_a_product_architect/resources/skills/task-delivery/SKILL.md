@@ -85,8 +85,9 @@ authority to the Delivery State Agent.
    dispatch. Do not encode mechanical applicability rules or change the
    existing Standards or Spec review meaning in this workflow.
 6. When review is useful, dispatch one `standards-reviewer` and one
-   `spec-reviewer` through the selected Runtime Adapter in separate serialized
-   Runner tasks against the same fixed Ticket Worktree. Supply the exact
+   `spec-reviewer` concurrently through the selected Runtime Adapter in separate
+   Runner tasks against the same fixed Ticket Worktree, with neither axis
+   gating the other. Supply the exact
    candidate, comparison point, existing axis brief, and standards or spec
    sources in Main's instruction, along with that axis's exact report path under
    `.scratch/task-delivery/reviews/`. Require both Reviewers to write only their
@@ -97,9 +98,11 @@ authority to the Delivery State Agent.
    Verify the fixed candidate and clean Git state before adjudication. Record
    each Reviewer's role, Runner alias, selected Runtime, and configured model
    with its report so the evidence remains attributable.
-8. Main adjudicates both reports as one review round and records `PASS` or
-   `FAIL` with a concise rationale. On `PASS`, mark the ticket
-   `awaiting-integration`. On `FAIL`, apply the diagnosis policy below. When
+8. Main waits for both reports, rejects findings that lack a cited requirement,
+   a supported reachable state after upstream validation, or a concrete
+   observable failure. Main adjudicates both reports as one review round
+   and records `PASS` or `FAIL` with a concise rationale. On `PASS`, mark the
+   ticket `awaiting-integration`. On `FAIL`, apply the diagnosis policy below. When
    Main omits review, record that decision and move the validated candidate to
    `awaiting-integration` without inventing a review verdict.
 9. Hand accepted work to the repository's integration sequence. After Main

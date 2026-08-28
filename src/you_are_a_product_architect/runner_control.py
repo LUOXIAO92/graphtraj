@@ -89,6 +89,7 @@ def send_instruction(alias: str, instruction: str, cwd: Path) -> Dict[str, str]:
                 "ticket_id": mapping["ticket_id"],
                 "worktree_path": str(worktree),
                 "alias": alias,
+                "role": mapping["role"],
                 "launcher_pid": os.getpid(),
             },
         )
@@ -114,6 +115,7 @@ def send_instruction(alias: str, instruction: str, cwd: Path) -> Dict[str, str]:
                 "active_turn_key": key,
                 "active_turn_device": reservation.device,
                 "active_turn_inode": reservation.inode,
+                "active_turn_role": reservation.role,
                 "expected_session": mapping["session"],
                 "mapping": mapping,
             },

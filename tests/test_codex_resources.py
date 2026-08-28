@@ -343,7 +343,7 @@ def test_every_packaged_subagent_role_keeps_project_documents_read_only() -> Non
 
         assert role["name"] != "main"
         assert profile_name == "project-documents-read-only"
-        assert filesystem == {
+        expected_filesystem = {
             ".": "write",
             ".agents": "read",
             "AGENTS.md": "read",
@@ -351,6 +351,14 @@ def test_every_packaged_subagent_role_keeps_project_documents_read_only() -> Non
             "README.md": "read",
             "docs": "read",
         }
+        if role["name"] in {"standards-reviewer", "spec-reviewer"}:
+            expected_filesystem.update(
+                {
+                    ".": "read",
+                    ".scratch/task-delivery/reviews": "write",
+                }
+            )
+        assert filesystem == expected_filesystem
 
 
 def test_worktree_guard_adds_the_current_boundary_to_subagent_context(

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import fcntl
 import os
 import subprocess
 import sys
@@ -158,7 +159,7 @@ def _launch_task(
     mapping: Optional[Dict[str, Any]] = None
     try:
         evidence = prepare_evidence(project.state_directory, run_id, task)
-        alias_history, launch_history = _read_launch_history(
+        alias_history, _ = _read_launch_history(
             evidence, run_id, task
         )
         provision_worktree(project, task, plan.branch, plan.worktree)
@@ -181,8 +182,6 @@ def _launch_task(
             task=task,
             alias=alias,
             session=mapping["session"],
-            aliases=alias_history + (alias,),
-            launches=launch_history,
             branch=plan.branch,
             worktree=plan.worktree,
             requested_skills=task.requested_skills,
@@ -281,6 +280,7 @@ def _reserve_active_turn(
                 "run_id": run_id,
                 "ticket_id": task.ticket_id,
                 "worktree_path": str(worktree),
+                "role": task.role,
                 "launcher_pid": os.getpid(),
             },
         )
@@ -362,6 +362,7 @@ def _start_turn(
                 "active_turn_key": active_turn.key,
                 "active_turn_device": active_turn.device,
                 "active_turn_inode": active_turn.inode,
+                "active_turn_role": active_turn.role,
                 "mapping": mapping,
             },
         )
@@ -584,8 +585,6 @@ def _write_metadata(
     session: str,
     branch: str,
     worktree: Path,
-    aliases: Tuple[str, ...],
-    launches: Tuple[Dict[str, Any], ...],
     requested_skills: Tuple[str, ...],
     runtime_context: RuntimeContext,
 ) -> None:
@@ -602,24 +601,30 @@ def _write_metadata(
         "session": session,
     }
     try:
-        write_yaml_durably(
-            evidence / "metadata.yml",
-            {
-                "run_id": run_id,
-                "ticket_id": task.ticket_id,
-                "ticket_name": task.ticket_name,
-                "alias": alias,
-                "aliases": list(aliases),
-                "launches": [*launches, launch_evidence],
-                "role": task.role,
-                **context_evidence,
-                "session": session,
-                "branch": branch,
-                "worktree_path": str(worktree),
-                "ticket_file": str(task.ticket_file),
-                "requested_skills": list(requested_skills),
-            },
-        )
+        evidence_descriptor = os.open(str(evidence), os.O_RDONLY)
+        try:
+            fcntl.flock(evidence_descriptor, fcntl.LOCK_EX)
+            aliases, launches = _read_launch_history(evidence, run_id, task)
+            write_yaml_durably(
+                evidence / "metadata.yml",
+                {
+                    "run_id": run_id,
+                    "ticket_id": task.ticket_id,
+                    "ticket_name": task.ticket_name,
+                    "alias": alias,
+                    "aliases": [*aliases, alias],
+                    "launches": [*launches, launch_evidence],
+                    "role": task.role,
+                    **context_evidence,
+                    "session": session,
+                    "branch": branch,
+                    "worktree_path": str(worktree),
+                    "ticket_file": str(task.ticket_file),
+                    "requested_skills": list(requested_skills),
+                },
+            )
+        finally:
+            os.close(evidence_descriptor)
     except (OSError, yaml.YAMLError) as error:
         raise RunnerError(
             "METADATA_WRITE_FAILED",

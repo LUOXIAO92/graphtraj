@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -339,6 +340,8 @@ print("target validation passed")
         "Result: passed.\n"
     ).format(candidate)
     reviewer_evidence = []
+    review_processes = []
+    review_release = tmp_path / "allow-reviews-to-finish"
     for axis, role in (
         ("standards", "standards-reviewer"),
         ("spec", "spec-reviewer"),
@@ -367,41 +370,82 @@ print("target validation passed")
             encoding="utf-8",
         )
         review_session = "fake-v1-{0}-review-session".format(axis)
-        review_launch = run_process(
-            [
-                str(installed_commands.runner),
-                "--batch-input",
-                str(review_batch),
-            ],
-            cwd=harness_root,
-            env={
-                **environment,
-                "FAKE_CODEX_EVENTS": json.dumps(
+        review_processes.append(
+            (
+                axis,
+                role,
+                report,
+                subprocess.Popen(
                     [
-                        {
-                            "type": "thread.started",
-                            "thread_id": review_session,
-                        },
-                        {"type": "turn.started"},
-                        {
-                            "type": "turn.completed",
-                            "usage": {
-                                "cached_input_tokens": 0,
-                                "input_tokens": 1,
-                                "output_tokens": 1,
-                            },
-                        },
-                    ]
+                        str(installed_commands.runner),
+                        "--batch-input",
+                        str(review_batch),
+                    ],
+                    cwd=harness_root,
+                    env={
+                        **environment,
+                        "FAKE_CODEX_EVENTS": json.dumps(
+                            [
+                                {
+                                    "type": "thread.started",
+                                    "thread_id": review_session,
+                                },
+                                {"type": "turn.started"},
+                                {
+                                    "type": "turn.completed",
+                                    "usage": {
+                                        "cached_input_tokens": 0,
+                                        "input_tokens": 1,
+                                        "output_tokens": 1,
+                                    },
+                                },
+                            ]
+                        ),
+                        "FAKE_CODEX_LIFECYCLE_ACTION": (
+                            "review-representative-candidate"
+                        ),
+                        "FAKE_CODEX_REVIEW_AXIS": axis,
+                        "FAKE_CODEX_REVIEW_CANDIDATE": candidate,
+                        "FAKE_CODEX_REVIEW_REPORT": str(report),
+                        "FAKE_CODEX_RELEASE_FILE": str(review_release),
+                    },
+                    text=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
                 ),
-                "FAKE_CODEX_LIFECYCLE_ACTION": "review-representative-candidate",
-                "FAKE_CODEX_REVIEW_AXIS": axis,
-                "FAKE_CODEX_REVIEW_CANDIDATE": candidate,
-                "FAKE_CODEX_REVIEW_REPORT": str(report),
-            },
-            timeout=10,
+            )
         )
-        assert review_launch.returncode == 0, review_launch.stderr
-        review_task = yaml.safe_load(review_launch.stdout)["tasks"][0]
+
+    review_tasks = []
+    for axis, role, report, process in review_processes:
+        review_stdout, review_stderr = process.communicate(timeout=10)
+        assert process.returncode == 0, review_stderr
+        review_task = yaml.safe_load(review_stdout)["tasks"][0]
+        reviewer_alias = review_task["alias"]
+        running_review = run_process(
+            [str(installed_commands.runner), "status", reviewer_alias],
+            cwd=harness_root,
+            env=environment,
+        )
+        assert running_review.returncode == 0, running_review.stderr
+        assert yaml.safe_load(running_review.stdout) == {
+            "aliases": [{"alias": reviewer_alias, "activity": "running"}]
+        }
+        review_tasks.append((axis, role, report, review_task))
+
+    engineer_while_reviewing = run_process(
+        [str(installed_commands.runner), "--batch-input", str(batch_file)],
+        cwd=harness_root,
+        env=environment,
+        timeout=10,
+    )
+    assert engineer_while_reviewing.returncode == 1
+    assert yaml.safe_load(engineer_while_reviewing.stdout)["error"]["code"] == (
+        "worktree-busy"
+    )
+
+    review_release.touch()
+    for axis, role, report, review_task in review_tasks:
         reviewer_alias = review_task["alias"]
         wait_for_idle_outcome(
             installed_commands,
@@ -430,13 +474,16 @@ print("target validation passed")
     metadata = yaml.safe_load(
         (evidence / "metadata.yml").read_text(encoding="utf-8")
     )
-    assert [
+    recorded_reviews = [
         {
             key: launch[key]
             for key in ("alias", "role", "runtime", "model")
         }
         for launch in metadata["launches"][-2:]
-    ] == reviewer_evidence
+    ]
+    assert sorted(recorded_reviews, key=lambda review: review["role"]) == sorted(
+        reviewer_evidence, key=lambda review: review["role"]
+    )
     evidence_before_cleanup = tree_contents(evidence)
     retained_batch_before_cleanup = retained_batch.read_bytes()
 
@@ -476,10 +523,10 @@ print("target validation passed")
     assert cleanup.returncode == 0, cleanup.stderr
     cleanup_document = yaml.safe_load(cleanup.stdout)
     assert cleanup_document["cleanup_status"] == "cleaned"
-    assert cleanup_document["aliases_removed"] == [
-        alias,
-        *[reviewer["alias"] for reviewer in reviewer_evidence],
-    ]
+    assert cleanup_document["aliases_removed"][0] == alias
+    assert set(cleanup_document["aliases_removed"][1:]) == {
+        reviewer["alias"] for reviewer in reviewer_evidence
+    }
     assert not ticket_worktree.exists()
     branch_gone = run_process(
         [

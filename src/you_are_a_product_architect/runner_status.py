@@ -143,6 +143,16 @@ def require_active_turn(
         activity = read_active_turn_owner(runner_directory, key)
     except OSError as error:
         raise _invalid_activity() from error
+    reviewers = activity.get("reviewers") if isinstance(activity, dict) else None
+    if isinstance(reviewers, list):
+        activity = next(
+            (
+                owner
+                for owner in reviewers
+                if isinstance(owner, dict) and owner.get("alias") == alias
+            ),
+            {},
+        )
     if (
         not isinstance(activity, dict)
         or activity.get("activity") != "running"

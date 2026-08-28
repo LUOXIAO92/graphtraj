@@ -362,6 +362,10 @@ print("target validation passed")
                             "instruction": (
                                 "Review candidate {0} against {1}; write only {2}."
                             ).format(candidate, main_before, report),
+                            "report_file": str(
+                                Path(".scratch/task-delivery/reviews")
+                                / report.name
+                            ),
                         }
                     ],
                 },

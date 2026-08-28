@@ -180,7 +180,7 @@ def _read_task(
     """Validate and resolve one task without changing the supplied choices."""
 
     required = {"ticket_id", "ticket_name", "role", "ticket_file"}
-    allowed = required | {"instruction", "skills"}
+    allowed = required | {"instruction", "skills", "report_file"}
     if (
         not isinstance(task_document, dict)
         or not required.issubset(task_document)
@@ -188,7 +188,7 @@ def _read_task(
     ):
         raise RunnerError(
             "TASK_SCHEMA_INVALID",
-            "A task must contain ticket identity, role, ticket_file, and optional instruction and Skills only.",
+            "A task must contain ticket identity, role, ticket_file, and only supported task access.",
         )
     ticket_id = task_document["ticket_id"]
     if not valid_ticket_id(ticket_id):
@@ -251,6 +251,7 @@ def _read_task(
             "SKILL_SELECTION_INVALID",
             "skills must be a list of unique non-empty semantic Skill names.",
         )
+    report_file = _read_report_file(task_document.get("report_file"), role)
     return Task(
         ticket_id=ticket_id,
         ticket_name=ticket_name,
@@ -259,7 +260,36 @@ def _read_task(
         ticket_content=ticket_content,
         instruction=instruction,
         requested_skills=tuple(requested_skills),
+        report_file=report_file,
     )
+
+
+def _read_report_file(value: object, role: str) -> Path | None:
+    reviewer = role in {"standards-reviewer", "spec-reviewer"}
+    if value is None:
+        if reviewer:
+            raise RunnerError(
+                "REPORT_FILE_INVALID",
+                "A Reviewer task must supply one report_file beneath "
+                ".scratch/task-delivery/reviews/.",
+            )
+        return None
+    path = Path(value) if isinstance(value, str) else Path()
+    if (
+        not reviewer
+        or not isinstance(value, str)
+        or path.is_absolute()
+        or len(path.parts) != 4
+        or path.parts[:3] != (".scratch", "task-delivery", "reviews")
+        or path.name in {".", ".."}
+        or path.suffix != ".md"
+    ):
+        raise RunnerError(
+            "REPORT_FILE_INVALID",
+            "report_file must name one Markdown file beneath "
+            ".scratch/task-delivery/reviews/ for a Reviewer task.",
+        )
+    return path
 
 
 def retain_batch(state: Path, batch: Batch) -> Path:

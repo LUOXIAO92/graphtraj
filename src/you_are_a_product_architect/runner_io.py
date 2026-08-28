@@ -404,6 +404,23 @@ def read_active_turn_owner(runner_directory: Path, key: str) -> dict[str, Any]:
     return document
 
 
+def active_turn_alias_released(
+    runner_directory: Path, key: str, alias: str
+) -> bool:
+    """Return whether one alias no longer owns its active-turn lease."""
+
+    if not os.path.lexists(str(active_turn_directory(runner_directory, key))):
+        return True
+    try:
+        document = read_active_turn_owner(runner_directory, key)
+    except OSError:
+        return False
+    reviewers = _reviewer_owners(document)
+    return reviewers is not None and all(
+        owner.get("alias") != alias for owner in reviewers
+    )
+
+
 def _sync_file(path: Path) -> None:
     flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
     descriptor = os.open(str(path), flags)

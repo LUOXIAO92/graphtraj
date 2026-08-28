@@ -164,6 +164,7 @@ def _launch_task(
         )
         provision_worktree(project, task, plan.branch, plan.worktree)
         _ensure_scoped_scratch(plan.worktree, evidence)
+        _prepare_report_destination(evidence, task)
         runtime_context = _finalize_runtime_context(context_preflight)
         alias, mapping = _start_turn(
             project=project,
@@ -317,6 +318,27 @@ def _ensure_scoped_scratch(worktree: Path, evidence: Path) -> None:
         raise RunnerError(
             "SCRATCH_LINK_FAILED",
             "The Ticket Worktree scoped scratch link could not be established.",
+        ) from error
+
+
+def _prepare_report_destination(evidence: Path, task: Task) -> None:
+    if task.report_file is None:
+        return
+    reviews = evidence / "reviews"
+    report = reviews / task.report_file.name
+    try:
+        reviews.mkdir(exist_ok=True)
+        if (
+            reviews.is_symlink()
+            or not reviews.is_dir()
+            or os.path.lexists(str(report))
+        ):
+            raise OSError("review report destination is not new")
+    except OSError as error:
+        raise RunnerError(
+            "REPORT_FILE_INVALID",
+            "The Reviewer report_file must be a new file in the retained "
+            "reviews directory.",
         ) from error
 
 
@@ -651,6 +673,7 @@ def _preflight_runtime_context(
             evidence=evidence,
             repository_skill_source=repository_skill_source,
             requested_skills=task.requested_skills,
+            report_file=task.report_file,
         )
     except KeyError as error:
         raise RunnerError(

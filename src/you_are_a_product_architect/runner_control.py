@@ -16,7 +16,7 @@ from .codex_adapter import read_codex_session_identity
 from .runner_io import (
     ActiveTurnBusyError,
     ActiveTurnReservation,
-    active_turn_directory,
+    active_turn_alias_released,
     active_turn_key,
     confirm_alias_mapping_durable,
     create_active_turn_reservation,
@@ -190,14 +190,13 @@ def interrupt_session(alias: str, cwd: Path) -> Dict[str, str]:
             "The active Engineer turn could not be interrupted.",
         ) from error
 
-    reservation = active_turn_directory(runner_directory, key)
     deadline = time.monotonic() + OPERATION_TIMEOUT_SECONDS
     while time.monotonic() < deadline:
         if turn_file.is_file():
             outcome = read_terminal_outcome(turn_file)
             if (
                 outcome == "interrupted"
-                and not os.path.lexists(str(reservation))
+                and active_turn_alias_released(runner_directory, key, alias)
                 and not process_is_alive(mapping["worker_pid"])
             ):
                 return {

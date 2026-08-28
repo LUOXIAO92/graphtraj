@@ -23,7 +23,6 @@ extends = ":workspace"
 
 [permissions.project-documents-read-only.filesystem.":workspace_roots"]
 "." = "read"
-".scratch/task-delivery/reviews" = "write"
 ".agents" = "read"
 "AGENTS.md" = "read"
 "CONTEXT.md" = "read"

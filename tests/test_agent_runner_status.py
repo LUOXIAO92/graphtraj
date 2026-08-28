@@ -223,19 +223,23 @@ def launch_turn(
     ticket_file = harness_root / "ticket-{0}.md".format(ticket_id)
     ticket_file.write_text("# Canonical ticket {0}\n".format(ticket_id))
     batch_file = harness_root / "batch-{0}.yml".format(ticket_id)
+    task = {
+        "ticket_id": ticket_id,
+        "ticket_name": ticket_name,
+        "role": role,
+        "ticket_file": str(ticket_file),
+    }
+    if role in {"standards-reviewer", "spec-reviewer"}:
+        axis = role.removesuffix("-reviewer")
+        task["report_file"] = (
+            ".scratch/task-delivery/reviews/candidate-r1-{0}.md".format(axis)
+        )
     batch_file.write_text(
         yaml.safe_dump(
             {
                 "run_id": run_id,
                 "runtime": "codex",
-                "tasks": [
-                    {
-                        "ticket_id": ticket_id,
-                        "ticket_name": ticket_name,
-                        "role": role,
-                        "ticket_file": str(ticket_file),
-                    }
-                ],
+                "tasks": [task],
             },
             sort_keys=False,
         ),

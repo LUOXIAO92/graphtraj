@@ -352,12 +352,7 @@ def test_every_packaged_subagent_role_keeps_project_documents_read_only() -> Non
             "docs": "read",
         }
         if role["name"] in {"standards-reviewer", "spec-reviewer"}:
-            expected_filesystem.update(
-                {
-                    ".": "read",
-                    ".scratch/task-delivery/reviews": "write",
-                }
-            )
+            expected_filesystem["."] = "read"
         assert filesystem == expected_filesystem
 
 

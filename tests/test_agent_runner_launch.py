@@ -608,6 +608,10 @@ def test_installed_runner_launches_a_standards_reviewer_for_a_fixed_candidate(
                         "role": "standards-reviewer",
                         "ticket_file": str(ticket_file),
                         "instruction": instruction,
+                        "report_file": (
+                            ".scratch/task-delivery/reviews/"
+                            "candidate-r1-standards.md"
+                        ),
                     }
                 ],
             },
@@ -653,22 +657,54 @@ def test_installed_runner_launches_a_standards_reviewer_for_a_fixed_candidate(
         + instruction
         + "\n"
     )
+    permissions = next(
+        argument
+        for argument in runtime_call["argv"]
+        if argument.startswith("permissions=")
+    )
+    assert (
+        '".scratch/task-delivery/reviews/candidate-r1-standards.md" = "write"'
+        in permissions
+    )
+    assert '".scratch/task-delivery/reviews" = "write"' not in permissions
+    assert (
+        '".scratch/task-delivery/reviews/candidate-r0-standards.md"'
+        not in permissions
+    )
     assert git_output(worktree, "rev-parse", "HEAD") == candidate
     assert git_output(worktree, "status", "--short") == ""
 
+    evidence = (
+        harness_root
+        / "state"
+        / "task-delivery"
+        / "20260818-review-candidate"
+        / "tickets"
+        / "2-50-review-candidate"
+    )
     metadata = yaml.safe_load(
-        (
-            harness_root
-            / "state"
-            / "task-delivery"
-            / "20260818-review-candidate"
-            / "tickets"
-            / "2-50-review-candidate"
-            / "metadata.yml"
-        ).read_text(encoding="utf-8")
+        (evidence / "metadata.yml").read_text(encoding="utf-8")
     )
     assert metadata["role"] == "standards-reviewer"
     assert metadata["effective_role"] == "standards-reviewer"
+
+    report = evidence / "reviews" / "candidate-r1-standards.md"
+    report.write_text("earlier report\n", encoding="utf-8")
+    repeated = run_process(
+        [str(installed_commands.runner), "--batch-input", str(batch_file)],
+        cwd=harness_root,
+        env=environment,
+        timeout=5,
+    )
+    assert repeated.returncode == 1
+    assert yaml.safe_load(repeated.stdout)["tasks"][0]["error"] == {
+        "code": "invalid-input",
+        "message": (
+            "The Reviewer report_file must be a new file in the retained "
+            "reviews directory."
+        ),
+    }
+    assert report.read_text(encoding="utf-8") == "earlier report\n"
 
 
 def test_installed_runner_rejects_invalid_skills_before_starting_any_task(
@@ -970,7 +1006,7 @@ def test_installed_runner_rejects_invalid_logical_input_without_launch_artifacts
                 "tasks": [{**base_task, "worktree_path": "/tmp/main-selected"}],
             },
             "invalid-input",
-            "A task must contain ticket identity, role, ticket_file, and optional instruction and Skills only.",
+            "A task must contain ticket identity, role, ticket_file, and only supported task access.",
         ),
         (
             {

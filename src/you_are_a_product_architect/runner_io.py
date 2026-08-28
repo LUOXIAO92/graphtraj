@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import fcntl
 import hashlib
 import os
 import re
@@ -15,6 +16,7 @@ import yaml
 
 
 ACTIVE_TURN_KEY = re.compile(r"^[0-9a-f]{64}$")
+REVIEWER_ROLES = frozenset({"standards-reviewer", "spec-reviewer"})
 
 
 class ActiveTurnReservation(NamedTuple):
@@ -23,6 +25,7 @@ class ActiveTurnReservation(NamedTuple):
     key: str
     device: int
     inode: int
+    role: str | None = None
 
 
 class ActiveTurnBusyError(FileExistsError):
@@ -115,18 +118,35 @@ def create_active_turn_reservation(
                     0o600,
                     dir_fd=active_descriptor,
                 )
-            except FileExistsError as error:
-                raise ActiveTurnBusyError(
-                    _read_reserved_alias(active_turn_directory(runner_directory, key))
-                ) from error
+                created = True
+            except FileExistsError:
+                reservation_descriptor = os.open(
+                    key,
+                    os.O_RDWR | getattr(os, "O_NOFOLLOW", 0),
+                    dir_fd=active_descriptor,
+                )
+                created = False
             try:
+                fcntl.flock(reservation_descriptor, fcntl.LOCK_EX)
                 identity = os.fstat(reservation_descriptor)
                 if not stat.S_ISREG(identity.st_mode):
                     raise OSError("active-turn reservation is not a regular file")
+                role = owner.get("role") if isinstance(owner, dict) else None
+                if not created:
+                    current = _read_yaml_from_descriptor(reservation_descriptor)
+                    reviewers = _reviewer_owners(current)
+                    if (
+                        role not in REVIEWER_ROLES
+                        or reviewers is None
+                        or any(item.get("role") == role for item in reviewers)
+                    ):
+                        raise ActiveTurnBusyError(_reserved_alias(current))
+                    owner = {"reviewers": [*reviewers, owner]}
                 reservation = ActiveTurnReservation(
                     key=key,
                     device=identity.st_dev,
                     inode=identity.st_ino,
+                    role=role if role in REVIEWER_ROLES else None,
                 )
                 _write_yaml_to_descriptor(reservation_descriptor, owner)
                 os.fsync(active_descriptor)
@@ -150,7 +170,24 @@ def write_active_turn_owner(
         _open_active_turn(runner_directory, reservation)
     )
     try:
-        _write_yaml_to_descriptor(reservation_descriptor, owner)
+        fcntl.flock(reservation_descriptor, fcntl.LOCK_EX)
+        if reservation.role in REVIEWER_ROLES:
+            current = _read_yaml_from_descriptor(reservation_descriptor)
+            reviewers = _reviewer_owners(current)
+            if reviewers is None:
+                raise OSError("active reviewer reservation is malformed")
+            updated = [
+                owner if item.get("role") == reservation.role else item
+                for item in reviewers
+            ]
+            if all(item.get("role") != reservation.role for item in reviewers):
+                raise OSError("active reviewer reservation is missing")
+            _write_yaml_to_descriptor(
+                reservation_descriptor,
+                _reviewer_document(updated),
+            )
+        else:
+            _write_yaml_to_descriptor(reservation_descriptor, owner)
     finally:
         os.close(reservation_descriptor)
         os.close(active_descriptor)
@@ -172,7 +209,7 @@ def release_active_turn(
     runner_directory: Path,
     reservation: ActiveTurnReservation,
 ) -> bool:
-    """Release only an empty, known-shape active-turn reservation."""
+    """Release only the caller's identity-bound active-turn lease."""
 
     try:
         runner_descriptor, active_descriptor, reservation_descriptor = (
@@ -181,6 +218,7 @@ def release_active_turn(
     except (OSError, ValueError):
         return False
     try:
+        fcntl.flock(reservation_descriptor, fcntl.LOCK_EX)
         current = os.stat(
             reservation.key,
             dir_fd=active_descriptor,
@@ -192,6 +230,24 @@ def release_active_turn(
             or current.st_ino != reservation.inode
         ):
             return False
+        if reservation.role in REVIEWER_ROLES:
+            document = _read_yaml_from_descriptor(reservation_descriptor)
+            reviewers = _reviewer_owners(document)
+            if reviewers is None or all(
+                item.get("role") != reservation.role for item in reviewers
+            ):
+                return False
+            remaining = [
+                item
+                for item in reviewers
+                if item.get("role") != reservation.role
+            ]
+            if remaining:
+                _write_yaml_to_descriptor(
+                    reservation_descriptor,
+                    _reviewer_document(remaining),
+                )
+                return True
         quarantine = _quarantine_name()
         os.rename(
             reservation.key,
@@ -274,6 +330,49 @@ def _write_yaml_to_descriptor(descriptor: int, document: Any) -> None:
     os.fsync(descriptor)
 
 
+def _read_yaml_from_descriptor(descriptor: int) -> Any:
+    os.lseek(descriptor, 0, os.SEEK_SET)
+    with os.fdopen(os.dup(descriptor), "r", encoding="utf-8") as stream:
+        return yaml.safe_load(stream)
+
+
+def _reviewer_owners(document: Any) -> list[dict[str, Any]] | None:
+    if not isinstance(document, dict):
+        return None
+    reviewers = document.get("reviewers")
+    if reviewers is None:
+        reviewers = [document]
+    if (
+        not isinstance(reviewers, list)
+        or not reviewers
+        or any(
+            not isinstance(owner, dict)
+            or owner.get("role") not in REVIEWER_ROLES
+            for owner in reviewers
+        )
+    ):
+        return None
+    return reviewers
+
+
+def _reviewer_document(reviewers: list[dict[str, Any]]) -> dict[str, Any]:
+    return reviewers[0] if len(reviewers) == 1 else {"reviewers": reviewers}
+
+
+def _reserved_alias(document: Any) -> str | None:
+    reviewers = _reviewer_owners(document)
+    if reviewers is not None:
+        aliases = [owner.get("alias") for owner in reviewers]
+        return next(
+            (alias for alias in aliases if isinstance(alias, str) and alias),
+            None,
+        )
+    if not isinstance(document, dict):
+        return None
+    alias = document.get("alias")
+    return alias if isinstance(alias, str) and alias else None
+
+
 def _quarantine_name() -> str:
     """Return an unpublished pathname for identity-bound retirement."""
 
@@ -305,20 +404,21 @@ def read_active_turn_owner(runner_directory: Path, key: str) -> dict[str, Any]:
     return document
 
 
-def _read_reserved_alias(reservation: Path) -> str | None:
+def active_turn_alias_released(
+    runner_directory: Path, key: str, alias: str
+) -> bool:
+    """Return whether one alias no longer owns its active-turn lease."""
+
+    if not os.path.lexists(str(active_turn_directory(runner_directory, key))):
+        return True
     try:
-        if reservation.is_symlink() or not reservation.is_file():
-            return None
-        document = yaml.safe_load(reservation.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, yaml.YAMLError):
-        return None
-    if not isinstance(document, dict) or document.get("activity") not in {
-        "starting",
-        "running",
-    }:
-        return None
-    alias = document.get("alias")
-    return alias if isinstance(alias, str) and alias else None
+        document = read_active_turn_owner(runner_directory, key)
+    except OSError:
+        return False
+    reviewers = _reviewer_owners(document)
+    return reviewers is not None and all(
+        owner.get("alias") != alias for owner in reviewers
+    )
 
 
 def _sync_file(path: Path) -> None:

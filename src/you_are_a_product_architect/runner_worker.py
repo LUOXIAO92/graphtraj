@@ -59,6 +59,7 @@ def run(launch_file: Path) -> int:
                 key=launch["active_turn_key"],
                 device=launch["active_turn_device"],
                 inode=launch["active_turn_inode"],
+                role=launch.get("active_turn_role"),
             )
             runtime = launch["runtime"]
             operation = launch.get("operation", "launch")

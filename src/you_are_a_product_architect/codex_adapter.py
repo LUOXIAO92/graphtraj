@@ -102,6 +102,7 @@ class _CodexRole:
         git_common_directory: Path,
         runtime_store: Path,
         effective_skills: Tuple[_EffectiveSkill, ...],
+        report_file: Path | None,
     ) -> Dict[str, Any]:
         """Render the private request consumed by this Adapter's worker."""
 
@@ -129,8 +130,13 @@ class _CodexRole:
                     "${0}".format(skill.name),
                     "[${0}]({1})".format(skill.name, skill.path),
                 )
+        native_settings = copy.deepcopy(dict(self.native_settings))
+        if report_file is not None:
+            native_settings["permissions"][self.default_permissions]["filesystem"][
+                ":workspace_roots"
+            ][str(report_file)] = "write"
         overrides = (
-            *self.native_settings.items(),
+            *native_settings.items(),
             ("default_permissions", self.default_permissions),
             ("model_reasoning_effort", self.reasoning_effort),
             ("developer_instructions", developer_instructions),
@@ -161,6 +167,7 @@ class _CodexRuntimePreflight:
     _evidence: Path
     _harness_skills: Tuple[_EffectiveSkill, ...]
     _requested_skills: Tuple[str, ...]
+    _report_file: Path | None
 
     def finalize(self) -> RuntimeContext:
         """Resolve Ticket Worktree facts shared by supported role boundaries."""
@@ -175,6 +182,7 @@ class _CodexRuntimePreflight:
             git_common_directory=self._git_common_directory,
             runtime_store=self._runtime_store,
             effective_skills=effective_skills,
+            report_file=self._report_file,
         )
         return _CodexRuntimeContext(
             _role=self._role.name,
@@ -250,6 +258,7 @@ def preflight_engineer_runtime_context(
             evidence=evidence,
             repository_skill_source=repository_skill_source,
             requested_skills=requested_skills,
+            report_file=None,
         ),
     )
 
@@ -264,6 +273,7 @@ def preflight_runtime_context(
     evidence: Path,
     repository_skill_source: Path,
     requested_skills: Tuple[str, ...],
+    report_file: Path | None = None,
 ) -> RuntimeContextPreflight:
     """Prepare one Codex role without crossing role-specific boundaries."""
 
@@ -288,6 +298,7 @@ def preflight_runtime_context(
         worktree=worktree,
         evidence=evidence,
         effective_skills=harness_skills + repository_skills,
+        report_file=report_file,
     )
     return _CodexRuntimePreflight(
         _runtime_store=runtime_store,
@@ -298,6 +309,7 @@ def preflight_runtime_context(
         _evidence=evidence,
         _harness_skills=harness_skills,
         _requested_skills=requested_skills,
+        _report_file=report_file,
     )
 
 

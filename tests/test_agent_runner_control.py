@@ -405,6 +405,95 @@ def test_installed_interrupt_stops_only_the_addressed_runtime_process_group(
         wait_for_process_exit(second_mapping["worker_pid"])
 
 
+def test_installed_interrupt_is_alias_local_for_shared_reviewer_reservation(
+    installed_worktree_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    (
+        harness_root,
+        integration,
+        runner_directory,
+        _,
+        environment,
+    ) = configured_runner(
+        installed_worktree_commands,
+        temporary_git_repository,
+        fake_codex,
+        tmp_path,
+    )
+    standards_release = tmp_path / "allow-standards-to-finish"
+    spec_release = tmp_path / "allow-spec-to-finish"
+    common = {
+        "ticket_id": "60",
+        "ticket_name": "parallel-review",
+        "run_id": "20260829-parallel-review",
+    }
+    standards_alias, _ = launch_turn(
+        installed_worktree_commands,
+        harness_root,
+        integration,
+        {
+            **environment,
+            "FAKE_CODEX_EVENTS": json.dumps(
+                [{"type": "thread.started", "thread_id": "standards-thread"}]
+            ),
+            "FAKE_CODEX_RELEASE_FILE": str(standards_release),
+        },
+        role="standards-reviewer",
+        **common,
+    )
+    spec_alias, _ = launch_turn(
+        installed_worktree_commands,
+        harness_root,
+        integration,
+        {
+            **environment,
+            "FAKE_CODEX_EVENTS": json.dumps(
+                [{"type": "thread.started", "thread_id": "spec-thread"}]
+            ),
+            "FAKE_CODEX_RELEASE_FILE": str(spec_release),
+        },
+        role="spec-reviewer",
+        **common,
+    )
+    spec_mapping = yaml.safe_load(
+        (
+            runner_directory / "sessions" / spec_alias / "mapping.yml"
+        ).read_text(encoding="utf-8")
+    )
+
+    try:
+        stopped = interrupt(
+            installed_worktree_commands,
+            integration,
+            environment,
+            standards_alias,
+        )
+
+        assert stopped.returncode == 0, stopped.stderr
+        assert yaml.safe_load(stopped.stdout) == {
+            "alias": standards_alias,
+            "interrupt_status": "interrupted",
+        }
+        sibling = status(
+            installed_worktree_commands,
+            integration,
+            environment,
+            spec_alias,
+        )
+        assert sibling.returncode == 0, sibling.stderr
+        assert yaml.safe_load(sibling.stdout) == {
+            "aliases": [{"alias": spec_alias, "activity": "running"}]
+        }
+    finally:
+        standards_release.touch()
+        spec_release.touch()
+        wait_for_file(runner_directory / "sessions" / spec_alias / "turn.yml")
+        wait_for_process_exit(spec_mapping["worker_pid"])
+
+
 def test_launch_and_idle_send_share_ticket_worktree_exclusivity(
     installed_worktree_commands: InstalledCommands,
     temporary_git_repository: Path,

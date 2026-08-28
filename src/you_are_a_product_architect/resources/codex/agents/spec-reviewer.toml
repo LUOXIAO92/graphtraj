@@ -22,7 +22,7 @@ default_permissions = "project-documents-read-only"
 extends = ":workspace"
 
 [permissions.project-documents-read-only.filesystem.":workspace_roots"]
-"." = "write"
+"." = "read"
 ".agents" = "read"
 "AGENTS.md" = "read"
 "CONTEXT.md" = "read"

@@ -145,6 +145,27 @@ def test_installed_task_delivery_selects_one_runtime_for_each_batch(
         assert required_guidance in guidance
 
 
+def test_installed_task_delivery_runs_one_parallel_fixed_candidate_review_round(
+    installed_task_delivery_resources: Dict[str, str],
+) -> None:
+    guidance = normalized(installed_task_delivery_resources["skill"])
+
+    for required_guidance in (
+        "concurrently",
+        "separate runner tasks",
+        "same fixed ticket worktree",
+        "neither axis gating the other",
+        "report_file",
+        "exact non-overwriting report path",
+        "reviewer instruction",
+        "main waits for both reports",
+        "supported reachable state after upstream validation",
+        "concrete observable failure",
+    ):
+        assert required_guidance in guidance
+    assert "serialized" not in guidance
+
+
 def test_installed_task_delivery_assigns_only_mechanical_evidence_work_to_runner(
     installed_task_delivery_resources: Dict[str, str],
 ) -> None:

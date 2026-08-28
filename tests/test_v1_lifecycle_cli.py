@@ -12,7 +12,7 @@ from conftest import FakeCodex, InstalledCommands, run_process
 from test_project_setup import (
     CORE_SKILL_NAMES,
     git_output,
-    run_setup,
+    run_ready_setup as run_setup,
     setup_environment,
     tree_contents,
     worktree_contents,

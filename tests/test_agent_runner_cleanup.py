@@ -23,7 +23,7 @@ from test_project_setup import (
     common_git_directory,
     git_output,
     install_user_skills,
-    run_setup,
+    run_ready_setup as run_setup,
 )
 
 

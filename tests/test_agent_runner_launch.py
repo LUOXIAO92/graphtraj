@@ -16,7 +16,12 @@ from conftest import (
     run_process,
     wait_for_file,
 )
-from test_project_setup import git_output, install_user_skills, run_setup
+from test_project_setup import (
+    canonical_reviewer_guidance,
+    git_output,
+    install_user_skills,
+    run_ready_setup as run_setup,
+)
 
 
 def test_alias_mapping_durability_syncs_file_and_every_directory_entry(
@@ -595,7 +600,9 @@ def test_installed_runner_launches_a_standards_reviewer_for_a_fixed_candidate(
 
     candidate_file = integration / "candidate.txt"
     candidate_file.write_text("fixed candidate\n", encoding="utf-8")
-    run_process(["git", "add", candidate_file.name], cwd=integration).check_returncode()
+    run_process(
+        ["git", "add", "AGENTS.md", candidate_file.name], cwd=integration
+    ).check_returncode()
     run_process(
         ["git", "commit", "-m", "Create fixed review candidate"], cwd=integration
     ).check_returncode()
@@ -691,6 +698,9 @@ def test_installed_runner_launches_a_standards_reviewer_for_a_fixed_candidate(
     )
     assert git_output(worktree, "rev-parse", "HEAD") == candidate
     assert git_output(worktree, "status", "--short") == ""
+    assert canonical_reviewer_guidance() in (
+        worktree / "AGENTS.md"
+    ).read_text(encoding="utf-8")
 
     evidence = (
         harness_root

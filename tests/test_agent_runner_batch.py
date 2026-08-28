@@ -7,7 +7,7 @@ import pytest
 import yaml
 
 from conftest import FakeCodex, InstalledCommands, run_process, wait_for_file
-from test_project_setup import install_user_skills, run_setup
+from test_project_setup import install_user_skills, run_ready_setup as run_setup
 
 
 def configure_harness(

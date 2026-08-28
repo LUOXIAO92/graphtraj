@@ -8,7 +8,11 @@ from pathlib import Path
 import yaml
 
 from conftest import FakeCodex, InstalledCommands, run_process
-from test_project_setup import install_user_skills, run_setup, setup_environment
+from test_project_setup import (
+    install_user_skills,
+    run_ready_setup as run_setup,
+    setup_environment,
+)
 
 
 def run_guard(hook: Path, event: dict[str, object], cwd: Path) -> subprocess.CompletedProcess[str]:

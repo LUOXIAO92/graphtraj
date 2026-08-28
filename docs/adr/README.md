@@ -17,7 +17,7 @@ the Harness do not require editing a single system-wide record.
 - [ADR 0001](0001-task-delivery-is-soft-agent-orchestration.md) — Task Delivery
   remains soft Agent orchestration controlled by Main.
 - [ADR 0003](0003-delivery-state-agent-maintains-run-state.md) — the Delivery
-  State Agent owns the ledger and Mermaid working view.
+  State Agent owns current `task-map.yml` and `dag.md` synchronization.
 - [ADR 0004](0004-preserve-delivery-evidence-outside-git-worktrees.md) — durable
   delivery evidence lives outside Git worktrees.
 - [ADR 0025](0025-preserve-a-time-normalized-delivery-worldline.md) — each
@@ -59,6 +59,9 @@ the Harness do not require editing a single system-wide record.
 - [ADR 0010](0010-configure-target-projects-locally.md) — setup writes
   Harness-local Runtime configuration and machine-local Runner state through
   one interactive, preflighted operation.
+- [ADR 0026](0026-manage-inherited-reviewer-guidance.md) — setup manages one
+  inherited Reviewer-guidance section in the Source Repository root
+  `AGENTS.md` without owning surrounding user content.
 - [ADR 0011](0011-resolve-core-skills-by-name.md) — core Skill dependencies are
   checked and resolved by declared name.
 - [ADR 0015](0015-select-repository-skills-explicitly.md) — Harness Skills are

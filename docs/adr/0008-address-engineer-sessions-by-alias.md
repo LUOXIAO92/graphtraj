@@ -2,16 +2,16 @@
 status: accepted
 ---
 
-# Address Engineer Runtime sessions by semantic alias
+# Address Agent Runtime sessions by semantic alias
 
 > **Partial supersession:** [ADR 0025](0025-preserve-a-time-normalized-delivery-worldline.md)
 > requires the complete Agent event stream for each turn to be preserved in
 > Run state before cleanup removes the live alias and its transport storage.
 
-Main controls launched Engineer sessions through Runner aliases rather than
-shell job IDs, opaque Runtime session IDs, or Runtime-specific resume commands.
-The Runner exposes three transport operations: `status`, `send`, and
-`interrupt`.
+Main controls launched Engineer and Reviewer sessions through Runner aliases
+rather than shell job IDs, opaque Runtime session IDs, or Runtime-specific
+resume commands. The Runner exposes three transport operations: `status`,
+`send`, and `interrupt`.
 
 Although a successful launch result includes the raw Runtime session as opaque
 evidence, these operations accept the alias only. Main does not interpret or
@@ -31,7 +31,8 @@ Their V1 command forms are:
 
 ```text
 agent-runner status <alias> [<alias>...]
-agent-runner send <alias> --instruction <text>
+agent-runner send <alias> --instruction <text> \
+  --caused-by-worldline-seq <seq> [--caused-by-worldline-seq <seq> ...]
 agent-runner interrupt <alias>
 ```
 
@@ -53,7 +54,7 @@ Unknown aliases, corrupt mappings, unreachable Runtimes, and non-resumable
 sessions are structured operation errors rather than a public `unavailable`
 activity.
 
-Each active Engineer turn is owned by a short-lived internal Runner worker.
+Each active Agent turn is owned by a short-lived internal Runner worker.
 The worker starts and owns the Adapter process group, captures Runtime events
 and stderr, persists the terminal outcome, and exits when that turn ends. A
 batch launch returns after the Adapter has obtained the Runtime session and the
@@ -72,13 +73,15 @@ native live input may implement running-turn `send` directly.
 
 An alias identifies one immutable logical Runtime session. It combines the
 unambiguous `ticket-stem` from
-[ADR 0009](0009-integrate-ticket-worktrees-through-dev.md) with Engineer tier
-and that tier's session ordinal, for example `2-42-payment-retry@j1`,
-`2-42-payment-retry@s1`, and `2-42-payment-retry@e1`. The ordinal counts fresh
-sessions at that tier, not review failures. Rework that resumes a session
-retains the alias; replacement or tier escalation creates a new alias. Because
-one ticket may have only one live Ticket Worktree across the Harness Project,
-the alias does not repeat the project or Delivery Run identity.
+[ADR 0009](0009-integrate-ticket-worktrees-through-dev.md) with a role marker
+and that marker's session ordinal: `@jN`, `@sN`, and `@eN` identify Junior,
+Senior, and Expert Engineer sessions, while `@rN` identifies either Reviewer
+role. Examples are `2-42-payment-retry@j1`, `2-42-payment-retry@e1`, and
+`2-42-payment-retry@r1`. The ordinal counts fresh sessions for that marker, not
+review failures or review rounds. Rework that resumes a session retains the
+alias; replacement or tier escalation creates a new alias. Because one ticket
+may have only one live Ticket Worktree across the Harness Project, the alias
+does not repeat the project or Delivery Run identity.
 
 Alias uniqueness and immutability apply to live Runner mappings. Successful
 cleanup retires the mapping, so a later Delivery Run may reuse the same alias
@@ -86,23 +89,27 @@ text for a new logical Runtime session. Persistent history identifies a
 session by `(run_id, alias)`; a historical alias without a live mapping is not
 a transport address.
 
-The Runner persists the narrow alias-to-Runtime-session, process, role,
-worktree, and ticket-file mapping under the Git common directory. The Delivery
-State Agent may record current and historical aliases, but this does not make
-the Runner the semantic ticket ledger. Successful ticket cleanup deletes all
-live aliases and transport diagnostics bound to the removed worktree; aliases
-retained in evidence become history rather than transport addresses.
+The Runner persists each narrow alias-to-Runtime-session, process, role,
+worktree, and ticket-file mapping at
+`<harness-project-root>/.codex/agent-runner/sessions/<alias>/` in the Harness
+Runtime Store. The Delivery State Agent may record current and historical
+aliases, but this does not make the Runner the semantic ticket ledger.
+Successful ticket cleanup deletes all live aliases and transport diagnostics
+bound to the removed worktree; aliases retained in evidence become history
+rather than transport addresses.
 
-At most one Engineer turn may actively write one Ticket Worktree. `idle`
-describes only the addressed alias and does not reserve its Worktree. A batch
-launch or `send` must therefore pass the same Worktree exclusivity preflight;
-an operation that would start a second turn there is rejected with the alias
-already running. This is mechanical resource safety, not a decision about
-readiness, retries, or escalation.
+`idle` describes only the addressed alias and does not reserve its Worktree.
+A batch launch or `send` must pass the applicable Worktree reservation
+preflight. Engineer exclusivity and ADR 0019's narrow concurrent-Reviewer
+exception remain launch policy owned by
+[ADR 0019](0019-main-dispatches-reviewers.md); this ADR owns only their live
+alias and transport identity. This is mechanical resource safety, not a
+decision about readiness, retries, or escalation.
 
 The launch path makes that preflight atomic across separate Runner processes:
 before provisioning or starting a turn it creates one project-private
-reservation for the derived Ticket Worktree under the Git common Runner state.
+reservation for the derived Ticket Worktree under
+`<harness-project-root>/.codex/agent-runner/active-worktrees/`.
 The reservation records `starting`, becomes `running` with the durable session
 mapping, and is released by the owning worker only after the Runtime turn is
 terminal. An existing or unexpected reservation fails closed; it is never

@@ -80,9 +80,10 @@ tracker nor discovers a queue.
 Create a YAML batch containing one `run_id`, one selected `runtime`, and one
 to four selected tasks
 (`ticket_id`, `ticket_name`, `role`, `ticket_file`, optional semantic `skills`,
-and optionally a concise `instruction`). Runtime, model, configuration, Hook,
-command, and path details never belong in task objects. Then launch it from the
-Harness Project Root:
+and optionally a concise `instruction`). Reviewer tasks additionally carry a
+positive `review_round` and one exact relative `report_file`; Engineer tasks
+carry neither. Runtime, model, configuration, Hook, and command details never
+belong in task objects. Then launch it from the Harness Project Root:
 
 ```text
 agent-runner --batch-input <batch.yml>
@@ -93,7 +94,8 @@ YAML result document on stdout:
 
 ```text
 agent-runner status <alias> [<alias>...]
-agent-runner send <alias> --instruction <text>
+agent-runner send <alias> --instruction <text> \
+  --caused-by-worldline-seq <seq> [--caused-by-worldline-seq <seq> ...]
 agent-runner interrupt <alias>
 agent-runner cleanup --run-id <run-id> --ticket-id <ticket-id>
 ```
@@ -114,10 +116,17 @@ their exact raw-report paths; Main waits for both reports and verifies the
 candidate and Git state before one round decision. Merge and integration
 actions do not use Reviewers.
 
+The minimum finding policy is inherited from the managed `## Reviewer
+guidance` section in the Source Repository root `AGENTS.md`; setup ownership is
+defined by [ADR 0026](docs/adr/0026-manage-inherited-reviewer-guidance.md).
+Runtime role prompts and Skills reference that policy instead of copying its
+body.
+
 Use `status` only for aliases Main explicitly supplies. With the Codex V1
 Runtime, `send` can resume an idle session but cannot inject live input into a
-running turn; Main may explicitly interrupt and then send when that is the
-intended recovery. Review and commit the candidate in its Ticket Worktree.
+running turn. A resume names the prior Worldline sequence or sequences that
+caused it; Main may explicitly interrupt and then send when that is the intended
+recovery. Review and commit the candidate in its Ticket Worktree.
 Main adjudicates any dispatched Standards and Spec reports; when it omits
 review, it records that decision without inventing a review verdict. Main then
 merges the accepted candidate into `dev` in the Integration Worktree and runs
@@ -136,9 +145,10 @@ Persistent evidence stays outside Git Worktrees under
 Engineer result and validation summaries, and Main-retained raw Reviewer
 reports remain after cleanup. Review Diversity is recorded only when the
 selected Reviewer Runtime or model actually differs from the Engineer's; using
-the same Runtime and model is valid. The Delivery State Agent owns the run
-ledger and task map; the Runner owns only mechanical metadata. There is no
-deletion command: an operator may
+the same Runtime and model is valid. ADR 0025 owns the append-only Worldline and
+derived `ledger.yml`; ADR 0003 owns current `task-map.yml` and `dag.md`; ADR
+0004 owns retained batch input. The Runner owns only mechanical metadata. There
+is no deletion command: an operator may
 manually delete a completed run's `state/task-delivery/<run-id>/` directory
 through the filesystem or file manager when its retention period ends.
 

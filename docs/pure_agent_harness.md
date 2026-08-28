@@ -1,3 +1,9 @@
+> [!IMPORTANT]
+> This is the historical whole-system design book. It is retained for context
+> and is non-normative. Use the repository glossary in [`CONTEXT.md`](../CONTEXT.md)
+> and the active decision index in [`docs/adr/README.md`](adr/README.md) for
+> current terminology and architecture.
+
 可以。现在这套 **V1 纯 Agent Harness** 已经比较完整了，它的核心不是做一个硬编码 orchestrator，而是先用 **Master + Custom Agents + Skills + Hooks + Git Worktrees** 把职责、权限和状态流跑通。
 
 ## 1. 总体架构

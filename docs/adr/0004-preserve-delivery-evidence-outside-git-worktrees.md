@@ -72,11 +72,13 @@ ticket cleanup or run completion.
 Only the operator removes persistent run state directly through the filesystem
 or file manager; V1 exposes no Runner or product CLI command for it.
 
-Raw Runtime event output and stderr are transport diagnostics, not delivery
-evidence. They live with machine-local session mappings under
-`<git-common-dir>/agent-runner/sessions/<alias>/` and are deleted with the
-aliases and Ticket Worktree after successful cleanup. Canonical tickets or
-tracker snapshots remain owned and retained by the tracker binding.
+Complete per-Turn Runtime event streams are durable delivery evidence under
+[ADR 0025](0025-preserve-a-time-normalized-delivery-worldline.md). The live
+event link, stderr, and other session transport diagnostics remain disposable
+and are removed with the alias and Ticket Worktree after successful cleanup.
+[ADR 0008](0008-address-engineer-sessions-by-alias.md) solely defines their
+live Session location and alias identity. Canonical tickets or tracker
+snapshots remain owned and retained by the tracker binding.
 
 ## Considered options
 

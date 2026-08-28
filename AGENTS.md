@@ -94,7 +94,9 @@ not select the next action.
 - Keep product and Spec changes user-owned. If the diagnosis would require one,
   stop and ask the user for an explicit decision.
 
-### Minimal review baseline
+<!-- you-are-a-product-architect:reviewer-guidance:start -->
+
+## Reviewer guidance
 
 Review against the smallest implementation that satisfies the accepted Ticket,
 its acceptance criteria, and the repository's documented constraints.
@@ -120,3 +122,5 @@ its acceptance criteria, and the repository's documented constraints.
   additional defensive machinery is scope creep.
 - Main must reject a report item that fails this baseline as Reviewer error. It
   does not count as an Engineer review failure and cannot authorize rework.
+
+<!-- you-are-a-product-architect:reviewer-guidance:end -->

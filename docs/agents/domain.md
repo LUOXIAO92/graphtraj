@@ -5,11 +5,15 @@ when exploring or changing the harness.
 
 ## Before exploring, read these
 
-- `docs/pure_agent_harness.md` — the current V1 architecture, role boundaries,
-  safety invariants, and end-to-end state flow.
 - `CONTEXT.md` at the repository root — the shared domain language, when it
   exists.
-- `docs/adr/` — ADRs relevant to the area being changed, when they exist.
+- `docs/adr/README.md` — the active decision index; follow only the ADRs
+  relevant to the area being changed.
+
+`docs/pure_agent_harness.md` is the historical whole-system design book. It is
+retained for context but is non-normative and cannot override the glossary or
+active ADR index. Pre-split ADR sources, audit reports, and generated previews
+are likewise evidence only when present.
 
 If `CONTEXT.md` or `docs/adr/` does not exist, proceed silently. Do not suggest
 creating them upfront. The domain-modeling workflow creates them lazily when
@@ -25,6 +29,7 @@ This repository uses a single-context layout:
 └── docs/
     ├── pure_agent_harness.md
     └── adr/
+        ├── README.md
         ├── 0001-example-decision.md
         └── 0002-another-decision.md
 ```
@@ -43,10 +48,10 @@ necessary or note the gap for the domain-modeling workflow.
 
 ## Preserve harness invariants
 
-Treat the settled boundaries in `docs/pure_agent_harness.md` as constraints
-unless the task explicitly revisits them. In particular, surface any proposal
-that changes role ownership, worktree isolation, review authority, escalation,
-or serialized integration.
+Treat the accepted ADRs routed from `docs/adr/README.md` as constraints unless
+the task explicitly revisits them. In particular, surface any proposal that
+changes role ownership, worktree isolation, review authority, escalation, or
+integration.
 
 ## Flag ADR conflicts
 

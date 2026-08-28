@@ -29,6 +29,11 @@ Git state are unchanged, and adjudicates one review-round `PASS` or `FAIL`.
 This concurrency does not make review mandatory, create a mechanical
 applicability rule, or require Review Diversity.
 
+Finding admissibility is inherited from the one managed Reviewer-guidance
+section defined by [ADR 0026](0026-manage-inherited-reviewer-guidance.md). That
+policy does not become a second owner of dispatch, concurrency, or Main's
+adjudication defined here.
+
 Reviewer dispatch follows ADR 0018's Runtime-selection policy. Choosing a
 different Runtime or model provides Review Diversity and helps counter one
 Agent family's systematic biases, but diversity is not a hard precondition for

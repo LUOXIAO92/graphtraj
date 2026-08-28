@@ -7,9 +7,10 @@ status: accepted
 > **Partial supersession:** [ADR 0013](0013-own-runtime-resources-at-the-harness-root.md)
 > replaces Integration-owned Runtime placement, while
 > [ADR 0015](0015-select-repository-skills-explicitly.md) replaces the missing-
-> Skill prompt and installation destination. The single interactive setup,
-> complete preflight, conflict refusal, idempotence, and failure-reporting
-> decisions remain accepted.
+> Skill prompt and installation destination. [ADR 0026](0026-manage-inherited-reviewer-guidance.md)
+> narrowly replaces the prohibition on setup-managed `AGENTS.md` content. The
+> single interactive setup, complete preflight, conflict refusal, idempotence,
+> and failure-reporting decisions remain accepted.
 
 After host installation, the operator runs
 `you-are-a-product-architect setup` from the Harness Project Root defined in
@@ -76,11 +77,13 @@ outside committed Runtime configuration. The Runner is a shared host tool, not
 something installed into an Agent profile.
 
 Repository engineering metadata remains owned by
-`setup-matt-pocock-skills`. Product setup neither creates nor updates
-`AGENTS.md` or `docs/agents/`, and it never invokes that Skill or starts an LLM.
-After setup, it tells the operator to invoke the Skill separately if tracker
-binding, triage labels, domain documentation, or repository instructions are
-still needed.
+`setup-matt-pocock-skills`. The only product-managed repository instruction is
+the marked Reviewer-guidance section in the Source Repository root
+`AGENTS.md`, as defined by
+[ADR 0026](0026-manage-inherited-reviewer-guidance.md). Product setup does not
+manage other `AGENTS.md` content or `docs/agents/`, invoke that Skill, or start
+an LLM. After setup, it tells the operator to invoke the Skill separately if
+tracker binding, triage labels, or domain documentation are still needed.
 
 V1 installs resources only for the Codex Adapter. A future Runtime Adapter must
 use its own project-local configuration rather than reuse or pollute Codex

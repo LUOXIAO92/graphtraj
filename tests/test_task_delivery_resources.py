@@ -120,6 +120,13 @@ def test_installed_task_delivery_keeps_semantic_orchestration_with_main(
     assert "Do not merge into `dev`" in skill
     assert "Do not normalize" in skill
     assert "automatically re-split" in skill
+    for required_guidance in (
+        "require the engineer to return either a candidate commit and validation evidence",
+        "the engineer does not dispatch reviewers",
+        "let main fix the candidate commit",
+        "main adjudicates both reports",
+    ):
+        assert required_guidance in guidance
 
 
 def test_installed_task_delivery_selects_one_runtime_for_each_batch(

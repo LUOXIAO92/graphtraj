@@ -141,6 +141,8 @@ def _preflight_file(
     description: str,
     actions: List[PlannedSetupAction],
     conflicts: List[str],
+    *,
+    replace_existing_file: bool = False,
 ) -> None:
     for parent in relative_parent_paths(relative_path):
         entry = view.entry(parent)
@@ -166,6 +168,14 @@ def _preflight_file(
         actions.append(
             PlannedSetupAction(
                 "ALREADY CONFIGURED",
+                "{0}: {1}".format(description, target),
+            )
+        )
+        return
+    if entry.kind == "file" and replace_existing_file:
+        actions.append(
+            PlannedSetupAction(
+                "REPLACE",
                 "{0}: {1}".format(description, target),
             )
         )
@@ -252,6 +262,22 @@ def _recoverable_supported_skills(
         manifest = supported_skills.manifest(name)
         root = "skills/{0}".format(name)
         root_entry = view.entry(root)
+        if name == "task-delivery":
+            if root_entry is None:
+                recoverable.append(name)
+                continue
+            if root_entry.kind != "directory":
+                recoverable.append(name)
+                continue
+            if any(
+                (entry := view.entry("{0}/{1}".format(root, relative_path)))
+                is None
+                or entry.kind != "file"
+                or entry.content != content
+                for relative_path, content in manifest.items()
+            ):
+                recoverable.append(name)
+            continue
         if root_entry is None or root_entry.kind != "directory":
             continue
         existing_paths = set(view.paths_under(root))
@@ -482,6 +508,13 @@ class ProjectSetupPlan:
                     path
                     for path in skill_view.paths_under(skill_relative_root)
                     if path not in allowed_paths
+                    and (
+                        name != "task-delivery"
+                        or skill_view.entry(
+                            "{0}/{1}".format(skill_relative_root, path)
+                        ).kind
+                        == "symlink"
+                    )
                 )
                 for unexpected_path in unexpected_paths:
                     _append_conflict(
@@ -503,6 +536,7 @@ class ProjectSetupPlan:
                         "Harness Skill {0}".format(name),
                         actions,
                         conflicts,
+                        replace_existing_file=name == "task-delivery",
                     )
 
         for relative_path, content in self.codex_files.runtime_resources().items():

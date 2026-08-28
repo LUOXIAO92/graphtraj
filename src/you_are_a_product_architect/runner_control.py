@@ -61,12 +61,21 @@ IMMUTABLE_MAPPING_FIELDS = (
 SESSION_IDENTITY_READERS = {"codex": read_codex_session_identity}
 
 
-def send_instruction(alias: str, instruction: str, cwd: Path) -> Dict[str, str]:
+def send_instruction(
+    alias: str,
+    instruction: str,
+    cwd: Path,
+    caused_by_worldline_seqs: tuple[int, ...],
+) -> Dict[str, str]:
     """Resume one idle mapped Runtime session without changing its alias."""
 
     if not instruction.strip():
         raise RunnerError(
             "invalid-input", "instruction must be non-empty plain text."
+        )
+    if len(caused_by_worldline_seqs) != len(set(caused_by_worldline_seqs)):
+        raise RunnerError(
+            "invalid-input", "causal Worldline sequences must be unique."
         )
     runner_directory = discover_runner_directory(cwd)
     mapping, session_directory = read_alias_mapping(runner_directory, alias)
@@ -120,7 +129,11 @@ def send_instruction(alias: str, instruction: str, cwd: Path) -> Dict[str, str]:
                 "active_turn_inode": reservation.inode,
                 "active_turn_role": reservation.role,
                 "expected_session": mapping["session"],
-                "mapping": {**mapping, "turn": turn + 1},
+                "mapping": {
+                    **mapping,
+                    "turn": turn + 1,
+                    "caused_by_worldline_seqs": list(caused_by_worldline_seqs),
+                },
             },
         )
         error_file = session_directory / "resume-error.yml"

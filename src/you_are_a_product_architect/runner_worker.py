@@ -11,6 +11,7 @@ from typing import Mapping
 import yaml
 
 from .codex_adapter import create_codex_resume_turn, create_codex_turn
+from .delivery_worldline import append_worldline_event
 from .runner_io import (
     ActiveTurnReservation,
     release_active_turn,
@@ -44,6 +45,9 @@ def run(launch_file: Path) -> int:
     interruption_confirmed = False
     operation = "launch"
     previous_sigterm = None
+    turn_start_seq: int | None = None
+    run_root: Path | None = None
+    trace_ref: str | None = None
 
     def request_termination(signum: int, frame: object) -> None:
         nonlocal interruption_confirmed
@@ -71,10 +75,10 @@ def run(launch_file: Path) -> int:
             if not isinstance(base_mapping, dict):
                 raise ValueError("mapping is not a mapping")
             prompt = sys.stdin.read()
-            _prepare_trace(session_directory, base_mapping)
+            run_root, trace_ref = _prepare_trace(session_directory, base_mapping)
 
             def record_session(session: str, runtime_pid: int) -> None:
-                nonlocal mapping_recorded
+                nonlocal mapping_recorded, turn_start_seq
                 mapping = dict(base_mapping)
                 mapping.update(
                     {
@@ -83,6 +87,13 @@ def run(launch_file: Path) -> int:
                         "runtime_pid": runtime_pid,
                     }
                 )
+                assert run_root is not None
+                started = append_worldline_event(
+                    run_root,
+                    str(base_mapping["run_id"]),
+                    _worldline_turn_event("agent-turn-start", base_mapping),
+                )
+                turn_start_seq = started["worldline_seq"]
                 if operation == "resume":
                     (session_directory / "turn.yml").unlink()
                 assert active_turn is not None
@@ -149,6 +160,21 @@ def run(launch_file: Path) -> int:
         if terminal_turn is not None:
             try:
                 write_yaml_durably(session_directory / "turn.yml", terminal_turn)
+                assert run_root is not None
+                assert trace_ref is not None
+                assert turn_start_seq is not None
+                append_worldline_event(
+                    run_root,
+                    str(base_mapping["run_id"]),
+                    {
+                        **_worldline_turn_event(
+                            "agent-turn-terminal", base_mapping
+                        ),
+                        **terminal_turn,
+                        "trace_ref": trace_ref,
+                        "caused_by_worldline_seqs": [turn_start_seq],
+                    },
+                )
                 terminal_persisted = True
             except (OSError, yaml.YAMLError) as error:
                 _write_worker_error(
@@ -169,7 +195,7 @@ def run(launch_file: Path) -> int:
 
 def _prepare_trace(
     session_directory: Path, mapping: dict[str, object]
-) -> None:
+) -> tuple[Path, str]:
     evidence = mapping.get("evidence_path")
     alias = mapping.get("alias")
     turn = mapping.get("turn")
@@ -190,6 +216,28 @@ def _prepare_trace(
     live_events = session_directory / "events.jsonl"
     live_events.unlink(missing_ok=True)
     os.link(trace_file, live_events)
+    run_root = Path(evidence).parent.parent
+    return run_root, trace_file.relative_to(run_root).as_posix()
+
+
+def _worldline_turn_event(
+    kind: str, mapping: Mapping[str, object]
+) -> dict[str, object]:
+    event = {
+        "kind": kind,
+        "ticket_id": mapping["ticket_id"],
+        "role": mapping["role"],
+        "alias": mapping["alias"],
+        "turn": mapping["turn"],
+    }
+    review_round = mapping.get("review_round")
+    if review_round is not None:
+        event["review_round"] = review_round
+    if kind == "agent-turn-start" and "caused_by_worldline_seqs" in mapping:
+        event["caused_by_worldline_seqs"] = mapping[
+            "caused_by_worldline_seqs"
+        ]
+    return event
 
 
 def _terminal_turn(turn: object, interrupted: bool) -> dict[str, object]:

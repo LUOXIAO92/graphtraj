@@ -553,6 +553,23 @@ def test_installed_runner_launches_one_isolated_engineer_and_returns_early(
         turn_file = session_directory / "turn.yml"
         if session_directory.exists():
             wait_for_file(turn_file)
+
+    run_root = harness_root / "state" / "task-delivery" / run_id
+    worldline = [
+        json.loads(line)
+        for line in (run_root / "worldline.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
+    ]
+    assert [event["kind"] for event in worldline] == [
+        "agent-turn-start",
+        "agent-turn-terminal",
+    ]
+    assert worldline[1]["trace_ref"] == (
+        "tickets/2-10-launch-engineer/traces/"
+        "2-10-launch-engineer@e1/turn-1/events.jsonl"
+    )
+    assert worldline[1]["outcome"] == "completed"
     active_root = harness_root / ".codex" / "agent-runner" / "active-worktrees"
     assert list(active_root.iterdir()) == []
 
@@ -606,6 +623,7 @@ def test_installed_runner_launches_a_standards_reviewer_for_a_fixed_candidate(
                         "ticket_id": "50",
                         "ticket_name": "review-candidate",
                         "role": "standards-reviewer",
+                        "review_round": 1,
                         "ticket_file": str(ticket_file),
                         "instruction": instruction,
                         "report_file": (

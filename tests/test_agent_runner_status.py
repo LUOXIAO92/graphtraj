@@ -231,6 +231,7 @@ def launch_turn(
     }
     if role in {"standards-reviewer", "spec-reviewer"}:
         axis = role.removesuffix("-reviewer")
+        task["review_round"] = 1
         task["report_file"] = (
             ".scratch/task-delivery/reviews/candidate-r1-{0}.md".format(axis)
         )
@@ -522,7 +523,14 @@ def test_installed_worker_owns_an_unconfirmed_runtime_until_it_is_terminal(
                     "branch": "agent/2-10-recovery",
                     "worktree_path": str(integration),
                     "ticket_file": str(tmp_path / "ticket.md"),
-                    "evidence_path": str(tmp_path / "evidence"),
+                    "evidence_path": str(
+                        tmp_path
+                        / "state"
+                        / "task-delivery"
+                        / "20260813-recovery"
+                        / "tickets"
+                        / "2-10-recovery"
+                    ),
                     "turn": 1,
                 },
             },

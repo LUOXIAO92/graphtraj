@@ -178,6 +178,7 @@ class Task:
     instruction: Optional[str]
     requested_skills: Tuple[str, ...] = ()
     report_file: Optional[Path] = None
+    review_round: Optional[int] = None
 
     @property
     def stem(self) -> str:

@@ -69,10 +69,21 @@ def status(aliases):
 @main.command()
 @click.argument("alias")
 @click.option("--instruction", required=True)
-def send(alias, instruction):
+@click.option(
+    "--caused-by-worldline-seq",
+    type=click.IntRange(min=1),
+    multiple=True,
+    required=True,
+)
+def send(alias, instruction, caused_by_worldline_seq):
     """Send a follow-up to one recoverable Engineer session."""
     try:
-        response = send_instruction(alias, instruction, Path.cwd().resolve())
+        response = send_instruction(
+            alias,
+            instruction,
+            Path.cwd().resolve(),
+            caused_by_worldline_seq,
+        )
     except RunnerError as error:
         _emit_result({"alias": alias, "error": error.as_document()})
         click.echo(error.message, err=True)

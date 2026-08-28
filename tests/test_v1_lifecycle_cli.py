@@ -298,6 +298,8 @@ print("target validation passed")
             alias,
             "--instruction",
             instruction,
+            "--caused-by-worldline-seq",
+            "1",
         ],
         cwd=harness_root,
         env={
@@ -369,6 +371,7 @@ print("target validation passed")
                             "ticket_id": "15",
                             "ticket_name": "v1-lifecycle",
                             "role": role,
+                            "review_round": 1,
                             "ticket_file": str(ticket_file),
                             "instruction": (
                                 "Review candidate {0} against {1}; write only {2}."

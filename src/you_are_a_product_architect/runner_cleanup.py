@@ -1450,7 +1450,8 @@ def _persistent_evidence_errors(
     ):
         return ["persistent-evidence-invalid"]
     retained_files = (
-        run_root / "ledger.md",
+        run_root / "worldline.jsonl",
+        run_root / "ledger.yml",
         run_root / "task-map.mmd",
         ticket_root / "metadata.yml",
         ticket_root / "result.md",

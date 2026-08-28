@@ -4,6 +4,10 @@ status: accepted
 
 # Address Engineer Runtime sessions by semantic alias
 
+> **Partial supersession:** [ADR 0025](0025-preserve-a-time-normalized-delivery-worldline.md)
+> requires the complete Agent event stream for each turn to be preserved in
+> Run state before cleanup removes the live alias and its transport storage.
+
 Main controls launched Engineer sessions through Runner aliases rather than
 shell job IDs, opaque Runtime session IDs, or Runtime-specific resume commands.
 The Runner exposes three transport operations: `status`, `send`, and

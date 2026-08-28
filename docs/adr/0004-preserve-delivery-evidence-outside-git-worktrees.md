@@ -4,6 +4,11 @@ status: accepted
 
 # Preserve Delivery Run evidence outside Git worktrees
 
+> **Partial supersession:** [ADR 0025](0025-preserve-a-time-normalized-delivery-worldline.md)
+> replaces `ledger.md` with `ledger.yml` and makes each complete per-turn Agent
+> event stream durable delivery evidence. Stderr remains a disposable
+> transport diagnostic.
+
 Delivery Run state must survive Ticket Worktree cleanup without entering
 product history. It lives in a project-level persistent **Harness State
 Directory** at `<harness-project-root>/state/`, outside the Primary Worktree

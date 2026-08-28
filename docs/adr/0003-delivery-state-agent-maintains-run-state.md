@@ -4,6 +4,11 @@ status: accepted
 
 # A Delivery State Agent maintains Delivery Run state
 
+> **Partial supersession:** [ADR 0025](0025-preserve-a-time-normalized-delivery-worldline.md)
+> replaces `ledger.md` with the canonical `ledger.yml` Delivery Worldline.
+> State Agent ownership and the current-state and DAG projections remain
+> accepted.
+
 Main is the semantic authority for a Delivery Run, but it does not spend its
 context and output budget rewriting the ledger or Mermaid graph. Each active
 Delivery Run has one Delivery State Agent acting on Main's behalf as the sole

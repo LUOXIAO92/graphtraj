@@ -20,6 +20,9 @@ the Harness do not require editing a single system-wide record.
   State Agent owns the ledger and Mermaid working view.
 - [ADR 0004](0004-preserve-delivery-evidence-outside-git-worktrees.md) — durable
   delivery evidence lives outside Git worktrees.
+- [ADR 0025](0025-preserve-a-time-normalized-delivery-worldline.md) — each
+  Delivery Run retains one YAML worldline linked to complete per-turn Agent
+  traces.
 - [ADR 0019](0019-main-dispatches-reviewers.md) — Main conditionally dispatches
   Standards and Spec Reviewers, with optional Review Diversity.
 - [ADR 0022](0022-diagnose-review-failures-before-choosing-an-action.md) — Main

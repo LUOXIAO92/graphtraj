@@ -93,3 +93,30 @@ not select the next action.
   the polluted Ticket or candidate.
 - Keep product and Spec changes user-owned. If the diagnosis would require one,
   stop and ask the user for an explicit decision.
+
+### Minimal review baseline
+
+Review against the smallest implementation that satisfies the accepted Ticket,
+its acceptance criteria, and the repository's documented constraints.
+
+- A blocking finding must cite the exact Ticket, Spec, ADR, or repository rule,
+  identify a currently supported input or state, trace how it passes existing
+  callers and upstream validation to the changed code, and show the concrete
+  observable failure. If any part is missing, omit the finding; do not replace
+  it with non-blocking speculation.
+- Treat established upstream validation and interface invariants as
+  authoritative. Do not require duplicate downstream validation, fallback,
+  error mapping, or tests unless the downstream code is itself an explicitly
+  documented trust, security, data-loss, or destructive-operation boundary.
+- Review only behavior changed by the fixed candidate. Unrelated existing
+  inconsistency and repository-wide normalization are out of scope.
+  Consistency is blocking only when a cited rule explicitly requires it or the
+  difference causes the concrete failure above.
+- Do not use unsupported corruption, unsupported environments, future
+  extension, bare theoretical races, defense in depth, code smells, or generic
+  best practice as grounds for `FAIL` or rework.
+- Prefer deletion and the fewest files, branches, validations, and tests. Once
+  the minimum code satisfies current acceptance and applicable constraints,
+  additional defensive machinery is scope creep.
+- Main must reject a report item that fails this baseline as Reviewer error. It
+  does not count as an Engineer review failure and cannot authorize rework.

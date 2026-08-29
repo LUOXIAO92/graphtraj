@@ -1033,6 +1033,39 @@ def test_installed_cleanup_succeeds_idempotently_after_disposable_state_is_gone(
     assert (evidence / "metadata.yml").read_bytes() == metadata_before
 
 
+def test_installed_cleanup_ignores_an_alias_owned_by_another_run(
+    installed_cleanup_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    launched = launch_ticket(
+        installed_cleanup_commands,
+        temporary_git_repository,
+        fake_codex,
+        tmp_path,
+    )
+    foreign_alias = "2-14-cleanup-integrated-worktrees@e9"
+    foreign_session = launched.session_directory.parent / foreign_alias
+    shutil.copytree(launched.session_directory, foreign_session)
+    foreign_run = "20260812-earlier-run"
+    mapping_file = foreign_session / "mapping.yml"
+    mapping = yaml.safe_load(mapping_file.read_text(encoding="utf-8"))
+    mapping.update({"alias": foreign_alias, "run_id": foreign_run})
+    for key in ("branch", "worktree_path", "evidence_path"):
+        mapping[key] = mapping[key].replace(launched.run_id, foreign_run)
+    mapping_file.write_text(
+        yaml.safe_dump(mapping, sort_keys=False), encoding="utf-8"
+    )
+
+    result = cleanup_ticket(installed_cleanup_commands, launched)
+
+    assert result.returncode == 0, result.stderr
+    assert not launched.worktree.exists()
+    assert not launched.session_directory.exists()
+    assert foreign_session.is_dir()
+
+
 def test_retired_alias_text_is_reusable_without_losing_run_scoped_history(
     installed_cleanup_commands: InstalledCommands,
     temporary_git_repository: Path,
@@ -2081,7 +2114,7 @@ def test_installed_cleanup_refuses_a_bound_mapping_in_a_renamed_alias_directory(
         "message": message,
     }
     assert yaml.safe_load(result.stdout)["evidence"] == {
-        "ownership_mismatches": ["alias-name-mismatch"]
+        "ownership_mismatches": ["registered-alias-missing"]
     }
     assert launched.worktree.is_dir()
     assert renamed_session.is_dir()
@@ -2199,7 +2232,7 @@ def test_installed_cleanup_removes_failed_alias_diagnostics_with_a_valid_launch_
         tmp_path,
     )
     failed_environment = dict(launched.environment)
-    failed_environment["FAKE_CODEX_EVENTS"] = '[{"type": "turn.started"}]'
+    failed_environment["FAKE_CODEX_EVENTS"] = "[]"
     failed_launch = run_process(
         [
             str(installed_cleanup_commands.runner),
@@ -2215,6 +2248,19 @@ def test_installed_cleanup_removes_failed_alias_diagnostics_with_a_valid_launch_
     assert (failed_session / "launch.yml").is_file()
     assert (failed_session / "launch-error.yml").is_file()
     assert not (failed_session / "mapping.yml").exists()
+    failed_trace = (
+        launched.harness_root
+        / "state"
+        / "task-delivery"
+        / launched.run_id
+        / "tickets"
+        / launched.worktree.name
+        / "traces"
+        / failed_alias
+        / "turn-1"
+        / "events.jsonl"
+    )
+    assert failed_trace.is_file() and failed_trace.stat().st_size == 0
 
     result = cleanup_ticket(installed_cleanup_commands, launched)
 
@@ -2446,7 +2492,7 @@ def test_installed_cleanup_refuses_a_corrupt_renamed_alias_mapping(
     document = yaml.safe_load(result.stdout)
     assert document["error"]["code"] == "cleanup-ownership-mismatch"
     assert document["evidence"] == {
-        "ownership_mismatches": ["alias-mapping-invalid"]
+        "ownership_mismatches": ["registered-alias-missing"]
     }
     assert launched.worktree.is_dir()
     assert renamed_session.is_dir()

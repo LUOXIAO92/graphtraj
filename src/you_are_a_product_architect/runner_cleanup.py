@@ -851,8 +851,9 @@ def _inspect_aliases(
     errors = []
     try:
         for name in names:
+            if not name.startswith("{0}@".format(stem)):
+                continue
             directory = session_root / name
-            name_matches = name.startswith("{0}@".format(stem))
             try:
                 alias_descriptor = os.open(
                     name, flags, dir_fd=session_descriptor
@@ -877,18 +878,7 @@ def _inspect_aliases(
                         mapping.get("evidence_path") == str(evidence),
                     )
                 )
-                if (
-                    not name_matches
-                    and not references_ticket
-                    and not references_resources
-                ):
-                    continue
-                if mapping.get("run_id") != run_id and allow_foreign:
-                    if _foreign_alias_is_self_owned(
-                        project, mapping, directory, ticket_id
-                    ):
-                        continue
-                    errors.append("foreign-alias-ownership-mismatch")
+                if not references_ticket and not references_resources:
                     continue
                 checks = (
                     ("alias", name, "alias-name-mismatch"),
@@ -1147,54 +1137,6 @@ def _read_yaml_at(
         return yaml.safe_load(content.decode("utf-8"))
     finally:
         os.close(descriptor)
-
-
-def _foreign_alias_is_self_owned(
-    project: Project,
-    mapping: Dict[str, Any],
-    directory: Path,
-    ticket_id: str,
-) -> bool:
-    run_id = mapping.get("run_id")
-    mapped_ticket = mapping.get("ticket_id")
-    ticket_name = mapping.get("ticket_name")
-    if (
-        not isinstance(run_id, str)
-        or not valid_run_id(run_id)
-        or mapped_ticket != ticket_id
-        or not valid_ticket_name(ticket_name)
-    ):
-        return False
-    stem = ticket_stem(ticket_id, ticket_name)
-    branch = "agent/{0}/{1}".format(run_id, stem)
-    worktree = project.worktree_root / "runs" / run_id / stem
-    evidence = (
-        project.state_directory
-        / "task-delivery"
-        / run_id
-        / "tickets"
-        / stem
-    )
-    expected = {
-        "alias": directory.name,
-        "runtime": "codex",
-        "run_id": run_id,
-        "ticket_id": ticket_id,
-        "ticket_name": ticket_name,
-        "branch": branch,
-        "worktree_path": str(worktree),
-        "evidence_path": str(evidence),
-    }
-    if any(mapping.get(key) != value for key, value in expected.items()):
-        return False
-    if not _role_alias_is_valid(mapping.get("role"), stem, directory.name):
-        return False
-    expected_branch = "refs/heads/{0}".format(branch)
-    return any(
-        _registered_worktree_path(record) == worktree
-        and record.get("branch") == expected_branch
-        for record in registered_worktrees(project.repository)
-    )
 
 
 def _role_alias_is_valid(role: Any, stem: str, alias: str) -> bool:
@@ -1492,6 +1434,9 @@ def _persistent_evidence_errors(
         alias_root = trace_root / alias.path.name
         if alias_root.is_symlink() or not alias_root.is_dir():
             return ["persistent-evidence-invalid"]
+        requires_nonempty_trace = any(
+            entry.name == "turn.yml" for entry in alias.entries
+        )
         for turn in range(1, alias.turn + 1):
             turn_root = alias_root / "turn-{0}".format(turn)
             trace = turn_root / "events.jsonl"
@@ -1501,7 +1446,10 @@ def _persistent_evidence_errors(
                     or not turn_root.is_dir()
                     or trace.is_symlink()
                     or not trace.is_file()
-                    or trace.stat().st_size == 0
+                    or (
+                        requires_nonempty_trace
+                        and trace.stat().st_size == 0
+                    )
                 ):
                     return ["persistent-evidence-invalid"]
             except OSError:

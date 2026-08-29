@@ -72,7 +72,7 @@ class CodexProjectFiles:
         name: str,
         target: Path,
     ) -> str:
-        """Describe one Integration directory symlink mutation."""
+        """Describe one Integration Worktree symlink mutation."""
 
         return "Integration {0} link: {1} -> {2}".format(
             name.removeprefix("."),
@@ -84,7 +84,7 @@ class CodexProjectFiles:
     def exclude_action(common_git_directory: Path) -> str:
         """Describe the machine-local Git exclude registration."""
 
-        return "Ignore Integration .state and .scratch in {0}".format(
+        return "Ignore Worktree views in {0}".format(
             common_git_directory / "info" / "exclude"
         )
 
@@ -135,6 +135,18 @@ class CodexProjectFiles:
             integration_worktree,
             ".scratch",
             scratch_directory,
+            on_action_complete,
+        )
+        self._ensure_link(
+            integration_worktree,
+            "CONTEXT.md",
+            harness_root / "CONTEXT.md",
+            on_action_complete,
+        )
+        self._ensure_link(
+            integration_worktree,
+            "docs",
+            harness_root / "docs",
             on_action_complete,
         )
         self._ensure_links_are_ignored(
@@ -249,7 +261,7 @@ class CodexProjectFiles:
                 integration_worktree,
                 target,
             ),
-            target_is_directory=True,
+            target_is_directory=target.is_dir(),
         )
         if on_action_complete is not None:
             on_action_complete(
@@ -280,7 +292,7 @@ class CodexProjectFiles:
         )
         missing = [
             path
-            for path in ("/.state", "/.scratch")
+            for path in ("/.state", "/.scratch", "/CONTEXT.md", "/docs")
             if path not in existing.splitlines()
         ]
         if not missing:

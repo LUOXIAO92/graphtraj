@@ -410,6 +410,54 @@ def ticket_evidence_scope(root: Path) -> Optional[Tuple[Path, Path]]:
     return None
 
 
+def readable_harness_document_view(
+    lexical: Path,
+    target: Path,
+    *,
+    root: Path,
+) -> bool:
+    """Return whether a Worktree view resolves to its root-owned document."""
+    for worktree_directory in root.parents:
+        if worktree_directory.name != ".agent-worktrees":
+            continue
+        try:
+            relative = root.relative_to(worktree_directory)
+        except ValueError:
+            return False
+        if relative != Path("integration") and not (
+            len(relative.parts) == 3 and relative.parts[0] == "runs"
+        ):
+            return False
+        harness_root = worktree_directory.parent
+        for name, directory in (("CONTEXT.md", False), ("docs", True)):
+            view = root / name
+            expected = harness_root / name
+            if not directory and lexical != view:
+                continue
+            if directory and not is_inside(lexical, view):
+                continue
+            try:
+                if (
+                    not view.is_symlink()
+                    or expected.is_symlink()
+                    or view.resolve(strict=False) != expected
+                ):
+                    return False
+                if not directory:
+                    return target == expected
+                relative_path = lexical.relative_to(view)
+                cursor = view
+                for part in relative_path.parts:
+                    cursor = cursor / part
+                    if cursor.is_symlink():
+                        return False
+                return target == expected / relative_path
+            except (OSError, RuntimeError, ValueError):
+                return False
+        return False
+    return False
+
+
 def scoped_evidence_reason(
     lexical: Path,
     target: Path,
@@ -456,7 +504,14 @@ def lexically_targets_scoped_evidence(raw: str, *, cwd: Path, root: Path) -> boo
     return scope is not None and lexical is not None and is_inside(lexical, scope[0])
 
 
-def target_reason(raw: str, *, cwd: Path, root: Path, required: bool = True) -> Optional[str]:
+def target_reason(
+    raw: str,
+    *,
+    cwd: Path,
+    root: Path,
+    required: bool = True,
+    allow_harness_document_read: bool = False,
+) -> Optional[str]:
     target = path_from(raw, cwd=cwd, required=required)
     lexical = lexical_path_from(raw, cwd=cwd)
     if target is None or lexical is None:
@@ -468,6 +523,12 @@ def target_reason(raw: str, *, cwd: Path, root: Path, required: bool = True) -> 
     if scoped:
         return reason
     if not is_inside(target, root):
+        if allow_harness_document_read and readable_harness_document_view(
+            lexical,
+            target,
+            root=root,
+        ):
+            return None
         return "Blocked target outside current worktree: {0}".format(raw)
     return None
 
@@ -615,6 +676,7 @@ def validate_policy(
     policy: Policy,
     cwd: Path,
     root: Path,
+    allow_harness_document_read: bool = False,
 ) -> Optional[str]:
     operands: list[str] = []
     index = 0
@@ -652,12 +714,22 @@ def validate_policy(
         for index, operand in enumerate(operands):
             if index < policy.skip_operands:
                 continue
-            reason = target_reason(operand, cwd=cwd, root=root)
+            reason = target_reason(
+                operand,
+                cwd=cwd,
+                root=root,
+                allow_harness_document_read=allow_harness_document_read,
+            )
             if reason:
                 return reason
     elif policy.operands == PATTERN_PATHS:
         for operand in operands[1:]:
-            reason = target_reason(operand, cwd=cwd, root=root)
+            reason = target_reason(
+                operand,
+                cwd=cwd,
+                root=root,
+                allow_harness_document_read=allow_harness_document_read,
+            )
             if reason:
                 return reason
     elif policy.operands == OPTIONAL_PATHS:
@@ -833,11 +905,39 @@ def validate_segment(
     if command in {"mypy", "pyright"}:
         return validate_policy(arguments, policy=TYPECHECK_POLICY, cwd=cwd, root=root)
     if command == "rg" and "--files" in arguments:
-        return validate_policy(arguments, policy=RG_FILES_POLICY, cwd=cwd, root=root)
-    policy = FILE_POLICIES.get(command) or SEARCH_POLICIES.get(command) or SIMPLE_POLICIES.get(command)
+        return validate_policy(
+            arguments,
+            policy=RG_FILES_POLICY,
+            cwd=cwd,
+            root=root,
+            allow_harness_document_read=True,
+        )
+    policy = (
+        FILE_POLICIES.get(command)
+        or SEARCH_POLICIES.get(command)
+        or SIMPLE_POLICIES.get(command)
+    )
     if policy is None:
         return "Cannot verify executable: {0}".format(command)
-    reason = validate_policy(arguments, policy=policy, cwd=cwd, root=root)
+    reason = validate_policy(
+        arguments,
+        policy=policy,
+        cwd=cwd,
+        root=root,
+        allow_harness_document_read=command
+        in {
+            "cat",
+            "diff",
+            "grep",
+            "head",
+            "ls",
+            "readlink",
+            "rg",
+            "stat",
+            "tail",
+            "wc",
+        },
+    )
     if reason:
         return reason
     if command in {"cp", "mv"}:

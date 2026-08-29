@@ -7,7 +7,7 @@ from pathlib import Path
 
 import yaml
 
-from conftest import FakeCodex, InstalledCommands, run_process
+from conftest import FakeCodex, InstalledCommands, run_process, wait_for_file
 from test_project_setup import (
     install_user_skills,
     run_ready_setup as run_setup,
@@ -34,6 +34,13 @@ def test_installed_worktree_guard_is_an_independent_ticket_process(
 ) -> None:
     harness_root = temporary_git_repository.parent
     integration = harness_root / ".agent-worktrees" / "integration"
+    context = harness_root / "CONTEXT.md"
+    documents = harness_root / "docs"
+    context.write_text("# Harness context\n", encoding="utf-8")
+    documents.mkdir()
+    (documents / "guidance.md").write_text(
+        "# Harness guidance\n", encoding="utf-8"
+    )
     user_home = tmp_path / "operator-home"
     install_user_skills(user_home)
     environment = setup_environment(user_home, fake_codex)
@@ -78,6 +85,14 @@ def test_installed_worktree_guard_is_an_independent_ticket_process(
     ticket_worktree = Path(task["worktree_path"])
     hook = harness_root / ".codex" / "hooks" / "worktree_guard.py"
     assert not (ticket_worktree / ".codex").exists()
+    assert (ticket_worktree / "CONTEXT.md").resolve() == context.resolve()
+    assert (ticket_worktree / "CONTEXT.md").read_text(encoding="utf-8") == (
+        "# Harness context\n"
+    )
+    assert (ticket_worktree / "docs").resolve() == documents.resolve()
+    assert (ticket_worktree / "docs" / "guidance.md").read_text(
+        encoding="utf-8"
+    ) == "# Harness guidance\n"
     start = run_guard(
         hook,
         {"hook_event_name": "SubagentStart", "cwd": str(ticket_worktree)},
@@ -103,6 +118,37 @@ def test_installed_worktree_guard_is_an_independent_ticket_process(
     assert allowed.returncode == 0, allowed.stderr
     assert allowed.stdout == ""
 
+    for command in ("cat CONTEXT.md", "cat docs/guidance.md"):
+        readable = run_guard(
+            hook,
+            {
+                "hook_event_name": "PreToolUse",
+                "cwd": str(ticket_worktree),
+                "tool_name": "Bash",
+                "tool_input": {"command": command},
+            },
+            ticket_worktree,
+        )
+        assert readable.returncode == 0, readable.stderr
+        assert readable.stdout == ""
+
+    for command in ("touch CONTEXT.md", "touch docs/forbidden.md"):
+        write = run_guard(
+            hook,
+            {
+                "hook_event_name": "PreToolUse",
+                "cwd": str(ticket_worktree),
+                "tool_name": "Bash",
+                "tool_input": {"command": command},
+            },
+            ticket_worktree,
+        )
+        assert write.returncode == 0, write.stderr
+        assert (
+            json.loads(write.stdout)["hookSpecificOutput"]["permissionDecision"]
+            == "deny"
+        )
+
     denied = run_guard(
         hook,
         {
@@ -119,3 +165,27 @@ def test_installed_worktree_guard_is_an_independent_ticket_process(
     )
     assert denied.returncode == 0, denied.stderr
     assert json.loads(denied.stdout)["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+    session = (
+        harness_root / ".codex" / "agent-runner" / "sessions" / task["alias"]
+    )
+    wait_for_file(session / "turn.yml")
+    cleanup = run_process(
+        [
+            str(installed_commands.runner),
+            "cleanup",
+            "--run-id",
+            "20260814-hook-process",
+            "--ticket-id",
+            "15",
+        ],
+        cwd=harness_root,
+        env=environment,
+    )
+    assert cleanup.returncode == 0, cleanup.stderr
+    assert yaml.safe_load(cleanup.stdout)["cleanup_status"] == "cleaned"
+    assert not ticket_worktree.exists()
+    assert context.read_text(encoding="utf-8") == "# Harness context\n"
+    assert (documents / "guidance.md").read_text(encoding="utf-8") == (
+        "# Harness guidance\n"
+    )

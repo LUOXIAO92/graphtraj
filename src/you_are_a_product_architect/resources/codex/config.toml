@@ -15,6 +15,10 @@ Runtime's formal Plan mode. Remain read-only and limit work to inspection,
 analysis, diagnosis, and planning unless the user's latest message explicitly
 authorizes a specific state-changing action.
 
+Harness Project Documents are owned at the Harness Project Root. Read and
+write its `AGENTS.md`, `CONTEXT.md`, and `docs/` there; Worktree document
+views are read-only for delegated roles.
+
 Discussion, investigation, diagnosis, agreement, acceptance, route selection,
 approval of a plan, and statements that work is needed do not authorize
 mutation. Do not infer execution authority from them.

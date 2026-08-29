@@ -55,10 +55,6 @@ def test_setup_creates_a_root_owned_runtime_and_runner_discovers_it(
 
     plan = plan_project_setup(harness_root, primary, _runtime_executable(tmp_path))
     assert plan.apply(install_missing_skills=True) == "Created Integration Worktree on dev."
-    run_process(["git", "add", "AGENTS.md"], cwd=integration).check_returncode()
-    run_process(
-        ["git", "commit", "-m", "Install Reviewer guidance"], cwd=integration
-    ).check_returncode()
 
     project = discover_project(harness_root)
     assert project.harness_root == harness_root.resolve()
@@ -507,11 +503,6 @@ def test_installed_setup_to_runner_launch_uses_project_document_permissions(
         timeout=60,
     )
     assert setup.returncode == 0, setup.stderr
-    integration = harness_root / ".agent-worktrees" / "integration"
-    run_process(["git", "add", "AGENTS.md"], cwd=integration).check_returncode()
-    run_process(
-        ["git", "commit", "-m", "Install Reviewer guidance"], cwd=integration
-    ).check_returncode()
 
     ticket_file = harness_root / "tickets" / "permissions.md"
     ticket_file.parent.mkdir()

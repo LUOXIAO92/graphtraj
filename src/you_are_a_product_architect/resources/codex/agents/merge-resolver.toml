@@ -16,6 +16,9 @@ Operate autonomously within the assigned Integration Worktree while following no
 Do not inspect or modify other worktrees.
 Do not change merge order, integrate additional commits, reopen settled scope, or redesign the ticket or spec.
 If accepted requirements themselves are incompatible, stop and report the conflict to the parent agent.
+
+Read Harness Project Documents only through this Worktree's `CONTEXT.md` and
+`docs/` views. They are Main-owned and read-only.
 """
 
 default_permissions = "project-documents-read-only"

@@ -163,7 +163,7 @@ def _launch_task(
             evidence, run_id, task
         )
         provision_worktree(project, task, plan.branch, plan.worktree)
-        _ensure_worktree_paths(plan.worktree, evidence)
+        _ensure_worktree_paths(project, plan.worktree, evidence)
         _prepare_report_destination(evidence, task)
         runtime_context = _finalize_runtime_context(context_preflight)
         alias, mapping = _start_turn(
@@ -297,7 +297,11 @@ def _reserve_active_turn(
         ) from error
 
 
-def _ensure_worktree_paths(worktree: Path, evidence: Path) -> None:
+def _ensure_worktree_paths(
+    project: Project,
+    worktree: Path,
+    evidence: Path,
+) -> None:
     scratch = worktree / ".scratch"
     state = worktree / ".state"
     try:
@@ -305,15 +309,28 @@ def _ensure_worktree_paths(worktree: Path, evidence: Path) -> None:
             raise OSError(".scratch must not be a symlink")
         scratch.mkdir(exist_ok=True)
         if os.path.lexists(str(state)):
-            if state.is_symlink() and state.resolve() == evidence:
-                return
-            raise OSError("scoped state already points elsewhere")
-        state.symlink_to(
-            os.path.relpath(evidence, worktree),
-            target_is_directory=True,
-        )
-        if state.resolve() != evidence:
-            raise OSError("scoped state does not resolve to evidence")
+            if not state.is_symlink() or state.resolve() != evidence:
+                raise OSError("scoped state already points elsewhere")
+        else:
+            state.symlink_to(
+                os.path.relpath(evidence, worktree),
+                target_is_directory=True,
+            )
+            if state.resolve() != evidence:
+                raise OSError("scoped state does not resolve to evidence")
+        for name in ("CONTEXT.md", "docs"):
+            link = worktree / name
+            target = project.harness_root / name
+            if os.path.lexists(str(link)):
+                if link.is_symlink() and link.resolve() == target.resolve():
+                    continue
+                raise OSError("Harness Project Document view points elsewhere")
+            link.symlink_to(
+                os.path.relpath(target, worktree),
+                target_is_directory=target.is_dir(),
+            )
+            if link.resolve() != target.resolve():
+                raise OSError("Harness Project Document view does not resolve")
     except OSError as error:
         raise RunnerError(
             "STATE_LINK_FAILED",

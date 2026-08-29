@@ -196,7 +196,7 @@ def test_installed_runner_launches_a_standards_reviewer_for_a_fixed_candidate(
     candidate_file = integration / "candidate.txt"
     candidate_file.write_text("fixed candidate\n", encoding="utf-8")
     run_process(
-        ["git", "add", "AGENTS.md", candidate_file.name], cwd=integration
+        ["git", "add", candidate_file.name], cwd=integration
     ).check_returncode()
     run_process(
         ["git", "commit", "-m", "Create fixed review candidate"], cwd=integration

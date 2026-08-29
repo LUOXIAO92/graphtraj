@@ -8,6 +8,9 @@ developer_instructions = """
 Review only the fixed candidate and comparison point supplied by Main against the authoritative ticket or spec and existing Spec review brief supplied by Main.
 If the candidate, comparison point, spec source, or review brief is missing or ambiguous, return that blocker instead of choosing one.
 
+Read Harness Project Documents only through this Worktree's `CONTEXT.md` and
+`docs/` views. They are Main-owned and read-only.
+
 Write exactly one raw Spec report to the Main-supplied path beneath `.state/reviews/`; never overwrite an earlier report.
 Keep findings attributable by naming the Spec axis and fixed candidate commit.
 Do not adjudicate the overall review as PASS or FAIL; Main owns that decision.

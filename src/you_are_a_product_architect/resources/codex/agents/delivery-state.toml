@@ -47,6 +47,9 @@ Do not adjudicate reviews. Do not choose readiness, an Engineer tier, retry,
 escalation, integration ordering, or exception handling. Do not dispatch
 Engineers or change tickets or dependencies. Do not accept integration, run the
 Runner, merge commits, or make any other semantic delivery decision.
+
+Read Harness Project Documents only through this Worktree's `CONTEXT.md` and
+`docs/` views. They are Main-owned and read-only.
 """
 
 default_permissions = "project-documents-read-only"

@@ -133,8 +133,8 @@ class _CodexRole:
         native_settings = copy.deepcopy(dict(self.native_settings))
         if report_file is not None:
             native_settings["permissions"][self.default_permissions]["filesystem"][
-                ":workspace_roots"
-            ][str(evidence / "reviews" / report_file.name)] = "write"
+                str(evidence / "reviews" / report_file.name)
+            ] = "write"
         overrides = (
             *native_settings.items(),
             ("default_permissions", self.default_permissions),

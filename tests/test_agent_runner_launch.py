@@ -4,6 +4,7 @@ import importlib.util
 import json
 import os
 import subprocess
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -688,21 +689,22 @@ def test_installed_runner_launches_a_standards_reviewer_for_a_fixed_candidate(
         for argument in runtime_call["argv"]
         if argument.startswith("permissions=")
     )
-    assert (
-        '"{0}" = "write"'.format(
-            evidence / "reviews" / "candidate-r1-standards.md"
-        )
-        in permissions
+    permission_document = tomllib.loads(
+        permissions.replace("permissions=", "permissions = ", 1)
     )
-    assert (
-        '".scratch/task-delivery/reviews/candidate-r1-standards.md"'
-        not in permissions
-    )
-    assert '".scratch/task-delivery/reviews" = "write"' not in permissions
-    assert (
-        '".scratch/task-delivery/reviews/candidate-r0-standards.md"'
-        not in permissions
-    )
+    filesystem = permission_document["permissions"][
+        "project-documents-read-only"
+    ]["filesystem"]
+    report = str(evidence / "reviews" / "candidate-r1-standards.md")
+    assert filesystem[report] == "write"
+    assert filesystem[":workspace_roots"] == {
+        ".": "read",
+        ".agents": "read",
+        "AGENTS.md": "read",
+        "CONTEXT.md": "read",
+        "README.md": "read",
+        "docs": "read",
+    }
     assert git_output(worktree, "rev-parse", "HEAD") == candidate
     assert git_output(worktree, "status", "--short") == ""
 

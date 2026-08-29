@@ -159,11 +159,24 @@ def test_installed_task_delivery_runs_one_parallel_fixed_candidate_review_round(
         "exact non-overwriting report path",
         "reviewer instruction",
         "main waits for both reports",
-        "supported reachable state after upstream validation",
-        "concrete observable failure",
+        "source repository root `agents.md`",
+        "adr 0026",
     ):
         assert required_guidance in guidance
     assert "serialized" not in guidance
+    assert "supported reachable state after upstream validation" not in guidance
+    assert "concrete observable failure" not in guidance
+
+
+def test_installed_task_delivery_routes_state_projection_authority_to_adr_0003(
+    installed_task_delivery_resources: Dict[str, str],
+) -> None:
+    guidance = normalized(installed_task_delivery_resources["skill"])
+
+    assert "adr 0003" in guidance
+    assert "0003-delivery-state-agent-maintains-run-state.md" in guidance
+    assert "sole writer of that run's ledger and mermaid dag" not in guidance
+    assert "synchronize after every engineer or reviewer return" not in guidance
 
 
 def test_installed_task_delivery_assigns_only_mechanical_evidence_work_to_runner(

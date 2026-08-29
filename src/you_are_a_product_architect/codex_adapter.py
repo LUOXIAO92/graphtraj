@@ -134,7 +134,7 @@ class _CodexRole:
         if report_file is not None:
             native_settings["permissions"][self.default_permissions]["filesystem"][
                 ":workspace_roots"
-            ][str(report_file)] = "write"
+            ][str(evidence / "reviews" / report_file.name)] = "write"
         overrides = (
             *native_settings.items(),
             ("default_permissions", self.default_permissions),

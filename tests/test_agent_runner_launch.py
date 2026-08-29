@@ -658,6 +658,14 @@ def test_installed_runner_launches_a_standards_reviewer_for_a_fixed_candidate(
     assert task["role"] == "standards-reviewer"
     assert task["alias"] == "2-50-review-candidate@r1"
     worktree = Path(task["worktree_path"])
+    evidence = (
+        harness_root
+        / "state"
+        / "task-delivery"
+        / "20260818-review-candidate"
+        / "tickets"
+        / "2-50-review-candidate"
+    )
     session = (
         harness_root
         / ".codex"
@@ -681,8 +689,14 @@ def test_installed_runner_launches_a_standards_reviewer_for_a_fixed_candidate(
         if argument.startswith("permissions=")
     )
     assert (
-        '".scratch/task-delivery/reviews/candidate-r1-standards.md" = "write"'
+        '"{0}" = "write"'.format(
+            evidence / "reviews" / "candidate-r1-standards.md"
+        )
         in permissions
+    )
+    assert (
+        '".scratch/task-delivery/reviews/candidate-r1-standards.md"'
+        not in permissions
     )
     assert '".scratch/task-delivery/reviews" = "write"' not in permissions
     assert (
@@ -692,14 +706,6 @@ def test_installed_runner_launches_a_standards_reviewer_for_a_fixed_candidate(
     assert git_output(worktree, "rev-parse", "HEAD") == candidate
     assert git_output(worktree, "status", "--short") == ""
 
-    evidence = (
-        harness_root
-        / "state"
-        / "task-delivery"
-        / "20260818-review-candidate"
-        / "tickets"
-        / "2-50-review-candidate"
-    )
     metadata = yaml.safe_load(
         (evidence / "metadata.yml").read_text(encoding="utf-8")
     )

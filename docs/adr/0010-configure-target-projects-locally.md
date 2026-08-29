@@ -71,9 +71,10 @@ but it does not claim transactional rollback across filesystem and Git
 operations. Operations are idempotent. An execution-time failure reports which
 actions completed and which did not, allowing correction and rerun.
 
-Machine-local paths, executable bindings, and Runner session mappings stay
-under the selected Source Repository's `<git-common-dir>/agent-runner/`,
-outside committed Runtime configuration. The Runner is a shared host tool, not
+Machine-local paths and executable bindings stay outside committed Runtime
+configuration. Live Runner Session location and transport identity are owned
+solely by [ADR 0008](0008-address-engineer-sessions-by-alias.md); this ADR does
+not define a second Session path. The Runner is a shared host tool, not
 something installed into an Agent profile.
 
 Repository engineering metadata remains owned by

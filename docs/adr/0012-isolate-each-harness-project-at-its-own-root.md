@@ -14,12 +14,14 @@ Worktree, is the isolation boundary for one Harness Project. V1 contains one
 Source Repository whose existing Primary Worktree is at
 `<harness-project-root>/<repository-directory>/`, one project-private Worktree
 Directory at `<harness-project-root>/.agent-worktrees/`, and one persistent
-Harness State Directory at `<harness-project-root>/state/`. The operator clones
-the repository and chooses the Primary Worktree's directory name before setup,
-then identifies that directory to the interactive setup command. Setup does
-not clone a repository. It runs from the Harness Project Root and must not
-discover, group, authorize, or share state with neighboring projects merely
-because they have the same filesystem parent.
+Harness State Directory at `<harness-project-root>/state/`. Non-authoritative
+working material belongs separately at
+`<harness-project-root>/.scratch/`. The operator clones the repository and
+chooses the Primary Worktree's directory name before setup, then identifies
+that directory to the interactive setup command. Setup does not clone a
+repository. It runs from the Harness Project Root and must not discover,
+group, authorize, or share state with neighboring projects merely because
+they have the same filesystem parent.
 
 The Primary Worktree remains a normal operator-cloned Git checkout and
 identifies the Source Repository through its `.git/` metadata. Reviewable
@@ -40,7 +42,8 @@ The project-private Worktree Directory has no additional project-name layer:
 │   └── runs/<run-id>/<ticket-stem>/
 ├── <repository-directory>/                  # Primary Worktree on main
 │   └── .git/
-└── state/
+├── state/<run-id>/                           # authoritative delivery state
+└── .scratch/                                 # disposable working material
 ```
 
 V1 does not infer a multi-repository project from repositories being adjacent

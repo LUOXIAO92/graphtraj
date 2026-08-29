@@ -13,19 +13,20 @@ Delivery Run state must survive Ticket Worktree cleanup without entering
 product history. It lives in a project-level persistent **Harness State
 Directory** at `<harness-project-root>/state/`, outside the Primary Worktree
 and every linked Git Worktree of the Source Repository. The Integration
-Worktree exposes it through an ignored `.scratch` symlink so Main and the
-Delivery State Agent retain the Matt Skills scratch convention. The containing
-project boundary is defined in
+Worktree exposes it through an ignored `.state` symlink. The distinct Harness
+Scratch Directory contains only non-authoritative working material and never
+delivery state or evidence. The containing project boundary is defined in
 [ADR 0012](0012-isolate-each-harness-project-at-its-own-root.md).
 
-One run occupies `state/task-delivery/<run-id>/`. Its canonical Worldline and
-readable projection are visible from the Integration Worktree at
-`.scratch/task-delivery/<run-id>/worldline.jsonl` and
-`.scratch/task-delivery/<run-id>/ledger.yml`. Each ticket has exactly one
+One run occupies `state/<run-id>/`; no additional `task-delivery` namespace is
+kept while Delivery Runs are the State Directory's only state kind. Its
+canonical Worldline and readable projection are visible from the Integration
+Worktree at `.state/<run-id>/worldline.jsonl` and
+`.state/<run-id>/ledger.yml`. Each ticket has exactly one
 persistent evidence directory:
 
 ```text
-state/task-delivery/<run-id>/tickets/<ticket-stem>/
+state/<run-id>/tickets/<ticket-stem>/
 ```
 
 `ticket-stem` is the unambiguous mechanical encoding defined by
@@ -33,9 +34,8 @@ state/task-delivery/<run-id>/tickets/<ticket-stem>/
 
 Retries and tier escalation reuse this directory rather than creating a
 directory per Engineer session. When provisioning a Ticket Worktree, the
-Runner creates a scoped `.scratch/task-delivery` symlink to that ticket
-directory. Other Matt Skills scratch material remains local to the Ticket
-Worktree.
+Runner creates a scoped `.state` symlink to that ticket directory. Scratch
+material remains local and non-authoritative.
 
 Evidence ownership is divided by meaning:
 
@@ -58,7 +58,7 @@ worktree, or escalation counters already maintained by the Delivery State
 Agent.
 
 The Delivery State Agent reads evidence through the Integration Worktree's
-persistent `.scratch` view and links it from the Worldline instead of
+persistent `.state` view and links it from the Worldline instead of
 embedding reports. Main reads it to adjudicate but does not repeat or rewrite
 it for the State Agent.
 

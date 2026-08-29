@@ -43,9 +43,11 @@ requires project trust, the operator grants it through that Runtime's normal
 user-controlled trust flow.
 
 Codex project config uses `workspace-write` and names the stable Worktree-local
-`.scratch` path in `sandbox_workspace_write.writable_roots`. Setup creates the
-Integration Worktree's ignored `.scratch` symlink to the external Harness State
-Directory and verifies that it resolves to the registered writable location.
+`.state` and `.scratch` paths in `sandbox_workspace_write.writable_roots`.
+Setup creates the Integration Worktree's ignored `.state` symlink to the
+external Harness State Directory and its ignored `.scratch` symlink to the
+distinct Harness Scratch Directory, then verifies both registered writable
+locations.
 It also creates and validates the machine-local Project Runner Config and
 `worktree_root` described in [ADR 0007](0007-hide-runtime-cli-details-behind-adapters.md),
 and establishes `dev` and its Integration Worktree according to

@@ -90,7 +90,9 @@ Worktree is clean, and the mapping and canonical path belong to the supplied
 IDs. Failure refuses cleanup with evidence; an already-cleaned ticket succeeds.
 Success removes the Ticket Worktree, merged ticket branch, all aliases, and
 temporary transport diagnostics. It never deletes canonical tickets or
-persistent Delivery Run evidence.
+persistent Delivery Run evidence. Cleanup also removes the now-empty Run
+Worktree directory and the `runs/` parent when no Ticket Worktrees remain;
+empty lifecycle directories are not retained as state.
 
 Setup creates or registers the Integration Worktree. If `dev` exists, setup
 validates it and detects any conflicting checkout instead of silently moving or

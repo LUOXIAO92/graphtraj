@@ -6,8 +6,8 @@ the Harness do not require editing a single system-wide record.
 ## Project boundary and layout
 
 - [ADR 0012](0012-isolate-each-harness-project-at-its-own-root.md) — each
-  Harness Project isolates one Source Repository, its Worktrees, and persistent
-  state beneath a dedicated project root.
+  Harness Project isolates one Source Repository, its Worktrees, authoritative
+  state, and disposable scratch material beneath a dedicated project root.
 - [ADR 0013](0013-own-runtime-resources-at-the-harness-root.md) — Main runs at
   the Harness Project Root, whose Runtime Store owns Harness roles and Hooks
   independently of Source Repository history and Worktree lifecycles.

@@ -35,9 +35,14 @@ Projects.
 _Avoid_: Shared worktree root, Workspace worktrees
 
 **Harness State Directory**:
-The durable project-level home for Delivery Run ledgers, task maps, batch
-inputs, and evidence, independent of any Worktree's lifecycle.
-_Avoid_: Scratch directory, Integration Worktree state
+The authoritative, durable project-level home for Delivery Run state and the
+evidence needed to reconstruct it, independent of any Worktree's lifecycle.
+_Avoid_: Harness Scratch Directory, Integration Worktree state
+
+**Harness Scratch Directory**:
+The non-authoritative project-level home for disposable user/Main discussion,
+design drafts, and investigations whose loss cannot change delivery truth.
+_Avoid_: Harness State Directory, Delivery evidence
 
 **Harness Runtime Store**:
 The Harness Project-owned control-plane source for Main configuration, Harness

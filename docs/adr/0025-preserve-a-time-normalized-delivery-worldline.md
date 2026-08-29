@@ -9,7 +9,7 @@ Agent did, what the user changed, how Main interpreted the available evidence,
 and why task state or the accepted DAG changed. A phase-oriented Markdown
 ledger and a mutable YAML document cannot represent parallel turns and causal
 links reliably enough, so
-`state/task-delivery/<run-id>/worldline.jsonl` is the single canonical,
+`state/<run-id>/worldline.jsonl` is the single canonical,
 append-only **Delivery Worldline**. `ledger.yml` is its deterministic readable
 projection; `ledger.md` is retired. Current task-map and DAG ownership remains
 with [ADR 0003](0003-delivery-state-agent-maintains-run-state.md).

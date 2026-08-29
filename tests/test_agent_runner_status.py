@@ -20,7 +20,11 @@ from conftest import (
     InstalledCommands,
     run_process,
 )
-from test_project_setup import git_output, install_user_skills, run_setup
+from test_project_setup import (
+    git_output,
+    install_user_skills,
+    run_ready_setup as run_setup,
+)
 
 
 def wait_for_file(path: Path, timeout: float = 5.0) -> None:

@@ -67,9 +67,11 @@ The Runtime Store is Harness-owned rather than committed into `dev`; Ticket
 Worktrees do not inherit Harness roles, Hooks, or Harness Skills. Runner still
 requires a clean `dev` Integration Worktree before dispatching a role.
 
-Treat tracker binding, repository instructions, and domain documentation as
-target-project concerns; setup does not impose this repository's choices on a
-target project.
+Treat tracker binding, surrounding repository instructions, and domain
+documentation as target-project concerns. Setup manages only the marked
+Reviewer-guidance section in the Source Repository root `AGENTS.md`, as defined
+by [ADR 0026](docs/adr/0026-manage-inherited-reviewer-guidance.md); it does not
+impose this repository's other choices on a target project.
 
 ## Deliver a selected ticket
 

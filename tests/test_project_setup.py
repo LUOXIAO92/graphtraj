@@ -27,6 +27,21 @@ CORE_SKILL_NAMES = (
     "resolving-merge-conflicts",
 )
 
+REVIEWER_GUIDANCE_START = (
+    "<!-- you-are-a-product-architect:reviewer-guidance:start -->"
+)
+REVIEWER_GUIDANCE_END = (
+    "<!-- you-are-a-product-architect:reviewer-guidance:end -->"
+)
+
+
+def canonical_reviewer_guidance() -> str:
+    project_document = Path(__file__).resolve().parents[1] / "AGENTS.md"
+    content = project_document.read_text(encoding="utf-8")
+    start = content.index(REVIEWER_GUIDANCE_START)
+    end = content.index(REVIEWER_GUIDANCE_END, start) + len(REVIEWER_GUIDANCE_END)
+    return content[start:end]
+
 
 def install_skills(skill_root: Path, names: Iterable[str]) -> None:
     for name in names:
@@ -93,8 +108,9 @@ def run_setup(
     user_home: Path,
     fake_codex: FakeCodex,
     answers: str,
+    commit_project_document: bool = False,
 ) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
+    result = subprocess.run(
         [str(installed_commands.product), "setup"],
         cwd=harness_root,
         env=setup_environment(user_home, fake_codex),
@@ -102,6 +118,36 @@ def run_setup(
         check=False,
         text=True,
         capture_output=True,
+    )
+    integration = harness_root / ".agent-worktrees" / "integration"
+    if (
+        commit_project_document
+        and result.returncode == 0
+        and git_output(integration, "status", "--porcelain", "--", "AGENTS.md")
+    ):
+        run_process(["git", "add", "AGENTS.md"], cwd=integration).check_returncode()
+        run_process(
+            ["git", "commit", "-m", "Install Reviewer guidance"],
+            cwd=integration,
+        ).check_returncode()
+    return result
+
+
+def run_ready_setup(
+    installed_commands: InstalledCommands,
+    *,
+    harness_root: Path,
+    user_home: Path,
+    fake_codex: FakeCodex,
+    answers: str,
+) -> subprocess.CompletedProcess[str]:
+    return run_setup(
+        installed_commands,
+        harness_root=harness_root,
+        user_home=user_home,
+        fake_codex=fake_codex,
+        answers=answers,
+        commit_project_document=True,
     )
 
 
@@ -139,6 +185,140 @@ def commit_dev_files_without_leaving_dev_checked_out(
     run_process(
         ["git", "worktree", "remove", str(seed_worktree)], cwd=primary
     ).check_returncode()
+
+
+def test_setup_creates_missing_project_document_with_reviewer_guidance(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    harness_root = temporary_git_repository.parent
+    integration = harness_root / ".agent-worktrees" / "integration"
+    user_home = tmp_path / "operator-home"
+    install_user_skills(user_home)
+
+    result = run_setup(
+        installed_commands,
+        harness_root=harness_root,
+        user_home=user_home,
+        fake_codex=fake_codex,
+        answers="{0}\ny\n".format(temporary_git_repository.name),
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert (integration / "AGENTS.md").read_text(encoding="utf-8") == (
+        "# AGENTS.md\n\n{0}\n".format(canonical_reviewer_guidance())
+    )
+    assert "CREATE: Reviewer guidance Project Document" in result.stdout
+
+
+def test_setup_preserves_existing_project_document_content(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    harness_root = temporary_git_repository.parent
+    integration = harness_root / ".agent-worktrees" / "integration"
+    user_home = tmp_path / "operator-home"
+    install_user_skills(user_home)
+    user_content = "# Team instructions\n\nKeep this exactly.\n"
+    commit_dev_files_without_leaving_dev_checked_out(
+        temporary_git_repository,
+        tmp_path / "seed-dev",
+        {"AGENTS.md": user_content},
+    )
+
+    result = run_setup(
+        installed_commands,
+        harness_root=harness_root,
+        user_home=user_home,
+        fake_codex=fake_codex,
+        answers="{0}\n".format(temporary_git_repository.name),
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert (integration / "AGENTS.md").read_text(encoding="utf-8") == (
+        user_content + "\n" + canonical_reviewer_guidance() + "\n"
+    )
+    assert "REPLACE: Reviewer guidance Project Document" in result.stdout
+
+
+def test_setup_updates_one_managed_reviewer_section_at_the_end(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    harness_root = temporary_git_repository.parent
+    integration = harness_root / ".agent-worktrees" / "integration"
+    user_home = tmp_path / "operator-home"
+    install_user_skills(user_home)
+    stale = (
+        REVIEWER_GUIDANCE_START
+        + "\n\n## Reviewer guidance\n\nStale copy.\n\n"
+        + REVIEWER_GUIDANCE_END
+    )
+    existing = "# User heading\n" + stale + "\nUser tail\n" + stale + "\n"
+    commit_dev_files_without_leaving_dev_checked_out(
+        temporary_git_repository,
+        tmp_path / "seed-dev",
+        {"AGENTS.md": existing},
+    )
+
+    result = run_setup(
+        installed_commands,
+        harness_root=harness_root,
+        user_home=user_home,
+        fake_codex=fake_codex,
+        answers="{0}\n".format(temporary_git_repository.name),
+    )
+
+    assert result.returncode == 0, result.stderr
+    installed = (integration / "AGENTS.md").read_text(encoding="utf-8")
+    assert installed.count(REVIEWER_GUIDANCE_START) == 1
+    assert installed.count(REVIEWER_GUIDANCE_END) == 1
+    assert installed.endswith(canonical_reviewer_guidance() + "\n")
+    assert "# User heading\n" in installed
+    assert "\nUser tail\n" in installed
+    assert "Stale copy." not in installed
+
+
+def test_setup_rerun_does_not_rewrite_managed_reviewer_guidance(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    harness_root = temporary_git_repository.parent
+    integration = harness_root / ".agent-worktrees" / "integration"
+    user_home = tmp_path / "operator-home"
+    install_user_skills(user_home)
+    first = run_setup(
+        installed_commands,
+        harness_root=harness_root,
+        user_home=user_home,
+        fake_codex=fake_codex,
+        answers="{0}\ny\n".format(temporary_git_repository.name),
+    )
+    assert first.returncode == 0, first.stderr
+    agents = integration / "AGENTS.md"
+    before = agents.read_bytes()
+    before_mtime = agents.stat().st_mtime_ns
+
+    second = run_setup(
+        installed_commands,
+        harness_root=harness_root,
+        user_home=user_home,
+        fake_codex=fake_codex,
+        answers="{0}\n".format(temporary_git_repository.name),
+    )
+
+    assert second.returncode == 0, second.stderr
+    assert "ALREADY CONFIGURED: Reviewer guidance Project Document" in second.stdout
+    assert agents.read_bytes() == before
+    assert agents.stat().st_mtime_ns == before_mtime
 
 
 def test_setup_reports_all_preflight_conflicts_without_mutation(
@@ -950,7 +1130,7 @@ def test_setup_confirms_the_exact_base_and_initializes_one_harness_project(
     assert git_output(integration, "log", "-1", "--format=%s") == (
         "Initial target project"
     )
-    assert git_output(integration, "status", "--porcelain") == ""
+    assert git_output(integration, "status", "--porcelain") == "?? AGENTS.md"
 
     runtime_store = harness_root / ".codex"
     installed_resource_files = {
@@ -1065,7 +1245,7 @@ def test_setup_registers_an_existing_valid_dev_as_the_integration_worktree(
     assert registered_worktrees != worktree_listing
     assert "worktree {0}".format(integration) in registered_worktrees
     assert "branch refs/heads/dev" in registered_worktrees
-    assert git_output(integration, "status", "--porcelain") == ""
+    assert git_output(integration, "status", "--porcelain") == "?? AGENTS.md"
     assert not (integration / ".codex").exists()
     assert not (integration / ".agents").exists()
     assert tree_contents(user_home) == user_before

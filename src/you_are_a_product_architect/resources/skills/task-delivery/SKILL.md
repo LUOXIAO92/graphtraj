@@ -26,8 +26,8 @@ description: Orchestrate delivery of an accepted Ticket DAG while Main retains s
 - Let the Runner provision or reuse the persistent ticket evidence directory,
   create the Ticket Worktree's scoped `.scratch/task-delivery` symlink, and
   write or update `metadata.yml` with mechanically known launch facts. Keep
-  these as narrow provisioning and metadata duties; the Runner neither writes
-  semantic evidence nor owns the Run ledger or Mermaid DAG.
+  these as narrow provisioning and metadata duties; the Runner does not write
+  semantic evidence or cross the Delivery State authority defined by ADR 0003.
 - Drive the complete accepted DAG by default until every ticket is integrated,
   externally blocked, or escalated. Treat `awaiting-integration` as a checkpoint,
   not the end of the Delivery Run.
@@ -37,6 +37,12 @@ description: Orchestrate delivery of an accepted Ticket DAG while Main retains s
 
 ## Delegate Delivery Run records
 
+Resolve the active Source Repository root, then read
+`docs/adr/0003-delivery-state-agent-maintains-run-state.md` there for Delivery
+State Agent ownership and current task-map and DAG synchronization. ADR 0003 is
+the sole authority for that behavior; this Skill only invokes it as part of
+Main's delivery orchestration.
+
 1. Launch one Delivery State Agent per active Delivery Run through the
    Runtime's native agent tools from Main's Integration Worktree. Do not send
    this role through the Runner.
@@ -44,21 +50,12 @@ description: Orchestrate delivery of an accepted Ticket DAG while Main retains s
    it create the stable `run_id` in the ASCII `YYYYMMDD-short-name` form. Require
    a semantic lowercase kebab-case short name and allow an optional positive
    numeric collision suffix such as `-2`. Let the Agent resolve collisions;
-   the Runner only validates the ID and never creates or changes it. Then let
-   the Agent create the working task map, ledger, and Mermaid DAG.
-3. Treat it as the sole writer of that Run's ledger and Mermaid DAG. Register
-   worktree, branch, tier, and Engineer session facts only after Main supplies
-   them from Runner results. Never connect the State Agent directly to the
-   Runner or send it across the Runner seam.
-4. Ask the same Agent to synchronize only after a meaningful event. Let it
-   read the registered Git state, result, validation, and raw review evidence
-   directly; do not relay or rewrite those artifacts.
-5. Supply compact semantic decisions only after Main has made them. Require a
+   the Runner only validates the ID and never creates or changes it.
+3. Supply compact semantic decisions only after Main has made them. Require a
    short state summary, ready-ticket suggestions, and inconsistencies or
    questions for Main.
-6. Recover with a fresh Delivery State Agent when its session is unavailable.
-   Reconstruct from persistent run artifacts and preserve one sole writer for
-   the Run.
+4. Recover with a fresh Delivery State Agent when its session is unavailable,
+   using the persistent Run records.
 
 Never delegate review adjudication, readiness, tier choice, dispatch,
 dependency changes, retry or escalation, integration acceptance, or exception
@@ -72,9 +69,7 @@ authority to the Delivery State Agent.
 2. Let Main classify each selected ticket as Junior, Senior, or Expert and ask
    the Runner to launch exactly those logical tasks. Keep any optional
    instruction concise; do not use it as a second ticket specification.
-3. Ask the Delivery State Agent to register launch facts and synchronize after
-   every Engineer or Reviewer return, review adjudication, retry, escalation,
-   integration result, blocker, or user redirection.
+3. Coordinate Delivery State records as ADR 0003 directs.
 4. Require the Engineer to return either a candidate commit and validation
    evidence, or evidence of a blocker. The Engineer does not dispatch
    Reviewers, create the authoritative Reviewer set, or claim review acceptance.
@@ -100,10 +95,12 @@ authority to the Delivery State Agent.
    Verify the fixed candidate and clean Git state before adjudication. Record
    each Reviewer's role, Runner alias, selected Runtime, and configured model
    with its report so the evidence remains attributable.
-8. Main waits for both reports, rejects findings that lack a cited requirement,
-   a supported reachable state after upstream validation, or a concrete
-   observable failure. Main adjudicates both reports as one review round
-   and records `PASS` or `FAIL` with a concise rationale. On `PASS`, mark the
+8. Main waits for both reports, resolves the active Source Repository root, and
+   applies the managed Reviewer-guidance policy in its root `AGENTS.md`. Read
+   ADR 0026 at `docs/adr/0026-manage-inherited-reviewer-guidance.md` from that
+   same root for the routing decision. Main adjudicates both reports as one
+   review round and records `PASS` or `FAIL` with a concise rationale. On
+   `PASS`, mark the
    ticket `awaiting-integration`. On `FAIL`, apply the diagnosis policy below. When
    Main omits review, record that decision and move the validated candidate to
    `awaiting-integration` without inventing a review verdict.
@@ -163,7 +160,7 @@ turning it into Runner behavior:
 3. Let Main run integration validation. Record `integrated` only when the
    accepted commit is present in `dev` and that validation passes.
 4. Let Main request mechanical Runner cleanup after successful integration.
-   Preserve the run ledger, Mermaid DAG, retained batch, and ticket evidence.
+   Preserve retained Delivery Run records and ticket evidence.
 5. Resume this Delivery Run; unlock dependents only from validated `dev`.
 
 Do not merge into `dev` inside this Skill. Do not schedule or normalize work,

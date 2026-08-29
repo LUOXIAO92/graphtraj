@@ -1030,6 +1030,42 @@ def test_installed_cleanup_succeeds_idempotently_after_disposable_state_is_gone(
     assert (evidence / "metadata.yml").read_bytes() == metadata_before
 
 
+def test_installed_cleanup_retries_ancestor_pruning_after_a_failure(
+    installed_cleanup_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    launched = launch_ticket(
+        installed_cleanup_commands,
+        temporary_git_repository,
+        fake_codex,
+        tmp_path,
+    )
+    runs_root = launched.worktree.parent.parent
+    original_mode = runs_root.stat().st_mode & 0o777
+    runs_root.chmod(0o500)
+    try:
+        first = cleanup_ticket(installed_cleanup_commands, launched)
+    finally:
+        runs_root.chmod(original_mode)
+
+    assert first.returncode == 1
+    assert yaml.safe_load(first.stdout)["evidence"]["completed_actions"] == [
+        "worktree-removed",
+        "aliases-removed",
+        "branch-removed",
+    ]
+    assert launched.worktree.parent.is_dir()
+
+    repeated = cleanup_ticket(installed_cleanup_commands, launched)
+
+    assert repeated.returncode == 0, repeated.stderr
+    assert yaml.safe_load(repeated.stdout)["cleanup_status"] == "already-cleaned"
+    assert not launched.worktree.parent.exists()
+    assert not runs_root.exists()
+
+
 def test_installed_cleanup_ignores_an_alias_owned_by_another_run(
     installed_cleanup_commands: InstalledCommands,
     temporary_git_repository: Path,

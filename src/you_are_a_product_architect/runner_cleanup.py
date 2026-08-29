@@ -1520,6 +1520,15 @@ def _refused(
 
 
 def _already_cleaned(target: CleanupTarget) -> CleanupResponse:
+    try:
+        _prune_worktree_ancestors(target)
+    except OSError:
+        return _refused(
+            target=target,
+            code="cleanup-failed",
+            message="The integrated Ticket Worktree could not be cleaned up.",
+            evidence={"ancestor_pruning": "failed"},
+        )
     return CleanupResponse(
         document={
             "run_id": target.run_id,

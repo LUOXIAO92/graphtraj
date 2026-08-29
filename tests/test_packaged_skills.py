@@ -90,3 +90,26 @@ print(json.dumps(results, sort_keys=True))
         assert resources[skill_name]["directory"] is True
         assert resources[skill_name]["declared_name"] == skill_name
         assert resources[skill_name]["missing_files"] == []
+
+
+def test_local_markdown_tracker_uses_durable_project_documents() -> None:
+    skills_root = (
+        Path(__file__).resolve().parents[1]
+        / "src"
+        / "you_are_a_product_architect"
+        / "resources"
+        / "codex"
+        / "skills"
+    )
+    resources = (
+        skills_root / "setup-matt-pocock-skills" / "SKILL.md",
+        skills_root / "setup-matt-pocock-skills" / "issue-tracker-local.md",
+        skills_root / "to-tickets" / "SKILL.md",
+        skills_root / "code-review" / "SKILL.md",
+    )
+
+    contents = [path.read_text(encoding="utf-8") for path in resources]
+
+    assert all("docs/agents/issues/" in content for content in contents)
+    assert all(".scratch" not in content for content in contents)
+    assert all("state/" not in content for content in contents)

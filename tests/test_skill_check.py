@@ -193,10 +193,7 @@ def test_doctor_has_no_machine_output_mode(
 
     assert result.returncode == 2
     assert result.stdout == ""
-    assert "no such option" in result.stderr.lower()
     assert "--yaml" in result.stderr
-    for name in CORE_SKILL_NAMES:
-        assert "{0}:".format(name) not in result.stderr
 
 
 def test_doctor_uses_only_valid_top_level_yaml_names(

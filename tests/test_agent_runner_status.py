@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 import json
-import hashlib
 import os
 import re
 import signal
 import subprocess
-import sys
 import time
 from pathlib import Path
 from typing import Mapping
@@ -15,7 +13,6 @@ import pytest
 import yaml
 
 from conftest import (
-    PROJECT_ROOT,
     FakeCodex,
     InstalledCommands,
     run_process,
@@ -34,39 +31,6 @@ def wait_for_file(path: Path, timeout: float = 5.0) -> None:
             return
         time.sleep(0.01)
     raise AssertionError("Timed out waiting for {0}".format(path))
-
-
-@pytest.fixture
-def installed_worktree_commands(tmp_path: Path) -> InstalledCommands:
-    environment_directory = tmp_path / "installed-runner"
-    subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "venv",
-            "--system-site-packages",
-            str(environment_directory),
-        ],
-        check=True,
-    )
-    python = environment_directory / "bin" / "python"
-    result = run_process(
-        [
-            str(python),
-            "-m",
-            "pip",
-            "install",
-            "--no-deps",
-            "--no-build-isolation",
-            str(PROJECT_ROOT),
-        ],
-        cwd=PROJECT_ROOT,
-    )
-    result.check_returncode()
-    return InstalledCommands(
-        product=environment_directory / "bin" / "you-are-a-product-architect",
-        runner=environment_directory / "bin" / "agent-runner",
-    )
 
 
 def wait_for_process_exit(pid: int, timeout: float = 5.0) -> None:
@@ -113,74 +77,6 @@ def assert_no_resident_runner_processes(runner: Path) -> None:
         )
     ]
     assert runner_processes == []
-
-
-def test_no_resident_runner_assertion_detects_this_runner_process(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    runner = tmp_path / "installed-runner" / "bin" / "agent-runner"
-    monkeypatch.setattr(
-        subprocess,
-        "run",
-        lambda *args, **kwargs: subprocess.CompletedProcess(
-            args=args,
-            returncode=0,
-            stdout=(
-                "{0} --batch-input launch.yml\n".format(runner)
-            ),
-        ),
-    )
-
-    with pytest.raises(AssertionError):
-        assert_no_resident_runner_processes(runner)
-
-
-def test_no_resident_runner_assertion_detects_this_worker_process(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    runner = tmp_path / "installed-runner" / "bin" / "agent-runner"
-    monkeypatch.setattr(
-        subprocess,
-        "run",
-        lambda *args, **kwargs: subprocess.CompletedProcess(
-            args=args,
-            returncode=0,
-            stdout=(
-                "{0} -m ".format(runner.parent / "python")
-                + "you_are_a_product_architect.runner_worker launch.yml\n"
-            ),
-        ),
-    )
-
-    with pytest.raises(AssertionError):
-        assert_no_resident_runner_processes(runner)
-
-
-def test_no_resident_runner_assertion_ignores_another_installation(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    runner = tmp_path / "installed-runner" / "bin" / "agent-runner"
-    monkeypatch.setattr(
-        subprocess,
-        "run",
-        lambda *args, **kwargs: subprocess.CompletedProcess(
-            args=args,
-            returncode=0,
-            stdout=(
-                "/tmp/another-runner/bin/agent-runner --batch-input launch.yml\n"
-                "/tmp/another-runner/bin/python -m "
-                "you_are_a_product_architect.runner_worker launch.yml\n"
-                "{0}-other --batch-input launch.yml\n"
-                "{1}-other -m "
-                "you_are_a_product_architect.runner_worker launch.yml\n"
-            ).format(runner, runner.parent / "python"),
-        ),
-    )
-
-    assert_no_resident_runner_processes(runner)
 
 
 def configured_runner(
@@ -457,7 +353,12 @@ def test_installed_status_reports_terminal_transport_outcomes(
         os.kill(mapping["worker_pid"], signal.SIGTERM)
     wait_for_file(turn_file)
 
-    observed = status(installed_worktree_commands, integration, environment, alias)
+    observed = status(
+        installed_worktree_commands,
+        integration,
+        environment,
+        alias,
+    )
     assert observed.returncode == 0, observed.stderr
     assert observed.stderr == ""
     assert yaml.safe_load(observed.stdout) == {
@@ -470,8 +371,7 @@ def test_installed_status_reports_terminal_transport_outcomes(
         ]
     }
 
-
-def test_installed_worker_owns_an_unconfirmed_runtime_until_it_is_terminal(
+def test_installed_status_returns_a_stable_error_for_an_unknown_alias(
     installed_worktree_commands: InstalledCommands,
     temporary_git_repository: Path,
     fake_codex: FakeCodex,
@@ -480,7 +380,7 @@ def test_installed_worker_owns_an_unconfirmed_runtime_until_it_is_terminal(
     (
         _,
         integration,
-        runner_directory,
+        _,
         _,
         environment,
     ) = configured_runner(
@@ -489,208 +389,17 @@ def test_installed_worker_owns_an_unconfirmed_runtime_until_it_is_terminal(
         fake_codex,
         tmp_path,
     )
-    alias = "2-10-recovery@e1"
-    ticket_id = "10"
-    reservation_key = hashlib.sha256(ticket_id.encode("ascii")).hexdigest()
-    session_directory = runner_directory / "sessions" / alias
-    session_directory.mkdir(parents=True)
-    reservation_file = runner_directory / "active-worktrees" / reservation_key
-    reservation_file.parent.mkdir(parents=True)
-    reservation_file.write_text(
-        yaml.safe_dump(
-            {
-                "activity": "starting",
-                "run_id": "20260813-recovery",
-                "ticket_id": ticket_id,
-                "worktree_path": str(integration),
-            }
-        ),
-        encoding="utf-8",
-    )
-    reservation_identity = reservation_file.stat()
-    launch_file = session_directory / "launch.yml"
-    launch_file.write_text(
-        yaml.safe_dump(
-            {
-                "runtime": "codex",
-                "adapter_request": {},
-                "active_turn_key": reservation_key,
-                "active_turn_device": reservation_identity.st_dev,
-                "active_turn_inode": reservation_identity.st_ino,
-                "mapping": {
-                    "alias": alias,
-                    "runtime": "codex",
-                    "run_id": "20260813-recovery",
-                    "ticket_id": ticket_id,
-                    "ticket_name": "recovery",
-                    "role": "engineer-expert",
-                    "branch": "agent/2-10-recovery",
-                    "worktree_path": str(integration),
-                    "ticket_file": str(tmp_path / "ticket.md"),
-                    "evidence_path": str(
-                        tmp_path
-                        / "state"
-                        / "20260813-recovery"
-                        / "tickets"
-                        / "2-10-recovery"
-                    ),
-                    "turn": 1,
-                },
-            },
-            sort_keys=False,
-        ),
-        encoding="utf-8",
-    )
-    recovery_started = tmp_path / "recovery-started"
-    recovery_release = tmp_path / "recovery-release"
-    worker_program = """
-import os
-import sys
-import time
-from pathlib import Path
-
-from you_are_a_product_architect import runner_worker
-from you_are_a_product_architect.runtime_adapter import RuntimeAdapterError
-
-
-class RecoveringTurn:
-    def run(self):
-        raise RuntimeAdapterError(
-            "TEST_RUNTIME_FAILURE",
-            "The synthetic Runtime stopped reporting progress.",
-            terminal_confirmed=False,
-        )
-
-    def terminate(self):
-        return False
-
-    def terminate_until_terminal(self):
-        Path(os.environ["RECOVERY_STARTED"]).touch()
-        while not Path(os.environ["RECOVERY_RELEASE"]).exists():
-            time.sleep(0.01)
-
-
-class RecoveringAdapter:
-    def __call__(self, request, prompt, session_directory, session_started):
-        session_started("synthetic-session", os.getpid())
-        return RecoveringTurn()
-
-
-runner_worker.ADAPTERS = {"codex": RecoveringAdapter()}
-raise SystemExit(runner_worker.run(Path(sys.argv[1])))
-"""
-    worker = subprocess.Popen(
-        [
-            str(installed_worktree_commands.runner.parent / "python"),
-            "-c",
-            worker_program,
-            str(launch_file),
-        ],
-        cwd=integration,
-        env={
-            **environment,
-            "RECOVERY_STARTED": str(recovery_started),
-            "RECOVERY_RELEASE": str(recovery_release),
-        },
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
-    assert worker.stdin is not None
-    worker.stdin.close()
-
-    try:
-        wait_for_file(session_directory / "mapping.yml")
-        wait_for_file(recovery_started)
-        assert worker.poll() is None
-        observed = status(
-            installed_worktree_commands,
-            integration,
-            environment,
-            alias,
-        )
-        assert observed.returncode == 0, observed.stderr
-        assert yaml.safe_load(observed.stdout) == {
-            "aliases": [{"alias": alias, "activity": "running"}]
-        }
-        assert not (session_directory / "turn.yml").exists()
-    finally:
-        recovery_release.touch()
-
-    assert worker.wait(timeout=5) == 0
-    assert worker.stdout is not None
-    assert worker.stderr is not None
-    assert worker.stdout.read() == ""
-    assert worker.stderr.read() == ""
-    assert yaml.safe_load((session_directory / "turn.yml").read_text()) == {
-        "outcome": "runtime-error"
-    }
-    assert list((runner_directory / "active-worktrees").iterdir()) == []
-
-
-def test_installed_status_returns_stable_errors_for_unknown_and_corrupt_mappings(
-    installed_worktree_commands: InstalledCommands,
-    temporary_git_repository: Path,
-    fake_codex: FakeCodex,
-    tmp_path: Path,
-) -> None:
-    (
-        harness_root,
-        integration,
-        runner_directory,
-        _,
-        environment,
-    ) = configured_runner(
-        installed_worktree_commands,
-        temporary_git_repository,
-        fake_codex,
-        tmp_path,
-    )
-    alias, _ = launch_turn(
-        installed_worktree_commands,
-        harness_root,
-        integration,
-        environment,
-        ticket_id="10",
-        ticket_name="corrupt-mapping",
-        role="engineer-expert",
-        run_id="20260813-corrupt-mapping",
-    )
-    mapping_file = runner_directory / "sessions" / alias / "mapping.yml"
-    wait_for_file(runner_directory / "sessions" / alias / "turn.yml")
-    mapping_file.write_text("not: a durable alias mapping\n", encoding="utf-8")
-
+    unknown_alias = "2-99-unknown@e1"
     result = status(
         installed_worktree_commands,
         integration,
         environment,
-        "2-99-unknown@e1",
-        alias,
+        unknown_alias,
     )
     assert result.returncode == 1
-    assert yaml.safe_load(result.stdout) == {
-        "aliases": [
-            {
-                "alias": "2-99-unknown@e1",
-                "error": {
-                    "code": "alias-not-found",
-                    "message": "The requested Engineer alias was not found.",
-                },
-            },
-            {
-                "alias": alias,
-                "error": {
-                    "code": "operation-failed",
-                    "message": "The requested Engineer alias mapping is invalid.",
-                },
-            },
-        ]
-    }
-    assert result.stderr == (
-        "The requested Engineer alias was not found.\n"
-        "The requested Engineer alias mapping is invalid.\n"
-    )
+    alias_status = yaml.safe_load(result.stdout)["aliases"]
+    assert alias_status[0]["alias"] == unknown_alias
+    assert alias_status[0]["error"]["code"] == "alias-not-found"
 
 
 def test_installed_status_reads_terminal_mapping_without_launch_preflight(

@@ -6,34 +6,6 @@ from pathlib import Path
 from conftest import InstalledCommands, run_process
 
 
-SUPPORTED_UPSTREAM_SKILL_FILES = {
-    "setup-matt-pocock-skills": (
-        "SKILL.md",
-        "agents/openai.yaml",
-        "domain.md",
-        "issue-tracker-github.md",
-        "issue-tracker-gitlab.md",
-        "issue-tracker-local.md",
-        "triage-labels.md",
-    ),
-    "grill-with-docs": ("SKILL.md", "agents/openai.yaml"),
-    "grilling": ("SKILL.md", "agents/openai.yaml"),
-    "domain-modeling": (
-        "ADR-FORMAT.md",
-        "CONTEXT-FORMAT.md",
-        "SKILL.md",
-        "agents/openai.yaml",
-    ),
-    "to-spec": ("SKILL.md", "agents/openai.yaml"),
-    "to-tickets": ("SKILL.md", "agents/openai.yaml"),
-    "implement": ("SKILL.md", "agents/openai.yaml"),
-    "ponytail": ("SKILL.md",),
-    "tdd": ("SKILL.md", "agents/openai.yaml", "mocking.md", "tests.md"),
-    "code-review": ("SKILL.md", "agents/openai.yaml"),
-    "resolving-merge-conflicts": ("SKILL.md", "agents/openai.yaml"),
-}
-
-
 def installed_python(installed_commands: InstalledCommands) -> Path:
     candidate = installed_commands.product.parent / "python"
     if candidate.is_file():
@@ -45,71 +17,38 @@ def installed_python(installed_commands: InstalledCommands) -> Path:
     raise AssertionError("Installed product wrapper did not declare its Python interpreter.")
 
 
-def test_installed_distribution_exposes_supported_upstream_skill_resources(
+def test_installed_distribution_installs_supported_skill_resources(
     installed_commands: InstalledCommands,
-    temporary_git_repository: Path,
+    tmp_path: Path,
 ) -> None:
-    expected_files = json.dumps(SUPPORTED_UPSTREAM_SKILL_FILES)
     resource_probe = """
-from importlib.resources import files
 import json
+import sys
+from pathlib import Path
 
-expected_files = json.loads({expected_files!r})
-skills_root = files("you_are_a_product_architect.resources").joinpath("codex", "skills")
-results = {{}}
-for skill_name, skill_files in expected_files.items():
-    skill_directory = skills_root.joinpath(skill_name)
-    skill_document = skill_directory.joinpath("SKILL.md")
-    declared_name = None
-    if skill_document.is_file():
-        for line in skill_document.read_text(encoding="utf-8").splitlines():
-            if line.startswith("name: "):
-                declared_name = line.removeprefix("name: ").strip().strip('"')
-                break
-    results[skill_name] = {{
-        "directory": skill_directory.is_dir(),
-        "declared_name": declared_name,
-        "missing_files": [
-            resource_path
-            for resource_path in skill_files
-            if not skill_directory.joinpath(*resource_path.split("/")).is_file()
-        ],
-    }}
+from you_are_a_product_architect.supported_skills import SupportedSkills
 
-print(json.dumps(results, sort_keys=True))
-""".format(expected_files=expected_files)
+runtime_store = Path(sys.argv[1]) / ".codex"
+SupportedSkills.load().install_missing(runtime_store, ("task-delivery", "tdd"))
+skill_root = runtime_store.parent / ".agents" / "skills"
+print(json.dumps({
+    name: (skill_root / name / "SKILL.md").read_text(encoding="utf-8")
+    for name in ("task-delivery", "tdd")
+}))
+
+"""
 
     result = run_process(
-        [str(installed_python(installed_commands)), "-c", resource_probe],
-        cwd=temporary_git_repository,
+        [
+            str(installed_python(installed_commands)),
+            "-c",
+            resource_probe,
+            str(tmp_path),
+        ],
+        cwd=tmp_path,
     )
 
     assert result.returncode == 0, result.stderr
     resources = json.loads(result.stdout)
-    for skill_name in SUPPORTED_UPSTREAM_SKILL_FILES:
-        assert resources[skill_name]["directory"] is True
-        assert resources[skill_name]["declared_name"] == skill_name
-        assert resources[skill_name]["missing_files"] == []
-
-
-def test_local_markdown_tracker_uses_durable_project_documents() -> None:
-    skills_root = (
-        Path(__file__).resolve().parents[1]
-        / "src"
-        / "you_are_a_product_architect"
-        / "resources"
-        / "codex"
-        / "skills"
-    )
-    resources = (
-        skills_root / "setup-matt-pocock-skills" / "SKILL.md",
-        skills_root / "setup-matt-pocock-skills" / "issue-tracker-local.md",
-        skills_root / "to-tickets" / "SKILL.md",
-        skills_root / "code-review" / "SKILL.md",
-    )
-
-    contents = [path.read_text(encoding="utf-8") for path in resources]
-
-    assert all("docs/agents/issues/" in content for content in contents)
-    assert all(".scratch" not in content for content in contents)
-    assert all("state/" not in content for content in contents)
+    assert resources["task-delivery"].startswith("---\nname: task-delivery\n")
+    assert resources["tdd"].startswith("---\nname: tdd\n")

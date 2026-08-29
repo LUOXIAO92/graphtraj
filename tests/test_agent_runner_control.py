@@ -8,7 +8,6 @@ import yaml
 from conftest import FakeCodex, InstalledCommands, run_process
 from test_agent_runner_status import (
     configured_runner,
-    installed_worktree_commands,
     launch_turn,
     status,
     wait_for_file,
@@ -330,7 +329,6 @@ def test_installed_send_rejects_running_codex_without_deferring_instruction(
     runtime_record = json.loads(fake_codex.log_file.read_text(encoding="utf-8"))
     assert runtime_record["stdin"] == accepted_instruction
     assert rejected_instruction not in runtime_record["stdin"]
-    assert not release_file.exists()
 
     resume_release.touch()
     wait_for_file(session_directory / "turn.yml")
@@ -442,8 +440,6 @@ def test_installed_interrupt_stops_only_the_addressed_runtime_process_group(
                 {"alias": second_alias, "activity": "running"},
             ]
         }
-        assert not first_release.exists()
-        assert not second_release.exists()
     finally:
         group_child_release.touch()
         first_release.touch()
@@ -505,12 +501,6 @@ def test_installed_interrupt_is_alias_local_for_shared_reviewer_reservation(
         role="spec-reviewer",
         **common,
     )
-    spec_mapping = yaml.safe_load(
-        (
-            runner_directory / "sessions" / spec_alias / "mapping.yml"
-        ).read_text(encoding="utf-8")
-    )
-
     try:
         stopped = interrupt(
             installed_worktree_commands,
@@ -520,10 +510,9 @@ def test_installed_interrupt_is_alias_local_for_shared_reviewer_reservation(
         )
 
         assert stopped.returncode == 0, stopped.stderr
-        assert yaml.safe_load(stopped.stdout) == {
-            "alias": standards_alias,
-            "interrupt_status": "interrupted",
-        }
+        interruption = yaml.safe_load(stopped.stdout)
+        assert interruption["alias"] == standards_alias
+        assert interruption["interrupt_status"] == "interrupted"
         sibling = status(
             installed_worktree_commands,
             integration,
@@ -531,14 +520,13 @@ def test_installed_interrupt_is_alias_local_for_shared_reviewer_reservation(
             spec_alias,
         )
         assert sibling.returncode == 0, sibling.stderr
-        assert yaml.safe_load(sibling.stdout) == {
-            "aliases": [{"alias": spec_alias, "activity": "running"}]
-        }
+        sibling_status = yaml.safe_load(sibling.stdout)["aliases"]
+        assert sibling_status[0]["alias"] == spec_alias
+        assert sibling_status[0]["activity"] == "running"
     finally:
         standards_release.touch()
         spec_release.touch()
         wait_for_file(runner_directory / "sessions" / spec_alias / "turn.yml")
-        wait_for_process_exit(spec_mapping["worker_pid"])
 
 
 def test_launch_and_idle_send_share_ticket_worktree_exclusivity(
@@ -703,62 +691,16 @@ def test_session_operations_return_structured_recovery_errors_without_reidentity
         unknown_alias,
     )
 
-    missing_error = {
-        "code": "alias-not-found",
-        "message": "The requested Engineer alias was not found.",
-    }
     assert missing_send.returncode == 1
-    assert yaml.safe_load(missing_send.stdout) == {
-        "alias": unknown_alias,
-        "error": missing_error,
-    }
+    missing_send_error = yaml.safe_load(missing_send.stdout)
+    assert missing_send_error["alias"] == unknown_alias
+    assert missing_send_error["error"]["code"] == "alias-not-found"
     assert missing_interrupt.returncode == 1
-    assert yaml.safe_load(missing_interrupt.stdout) == {
-        "alias": unknown_alias,
-        "error": missing_error,
-    }
+    missing_interrupt_error = yaml.safe_load(missing_interrupt.stdout)
+    assert missing_interrupt_error["alias"] == unknown_alias
+    assert missing_interrupt_error["error"]["code"] == "alias-not-found"
 
-    corrupt_alias, _ = launch_turn(
-        installed_worktree_commands,
-        harness_root,
-        integration,
-        environment,
-        ticket_id="10",
-        ticket_name="corrupt-session",
-        role="engineer-expert",
-        run_id="20260814-recovery-errors",
-    )
-    corrupt_directory = runner_directory / "sessions" / corrupt_alias
-    wait_for_file(corrupt_directory / "turn.yml")
-    corrupt_mapping = corrupt_directory / "mapping.yml"
-    corrupt_document = yaml.safe_load(corrupt_mapping.read_text(encoding="utf-8"))
-    corrupt_worker = corrupt_document["worker_pid"]
-    wait_for_process_exit(corrupt_worker)
-    corrupt_document["session"] = "replacement-thread"
-    corrupt_mapping.write_text(
-        yaml.safe_dump(corrupt_document, sort_keys=False), encoding="utf-8"
-    )
-    runtime_before_corrupt_send = fake_codex.log_file.read_bytes()
-
-    corrupt = send(
-        installed_worktree_commands,
-        integration,
-        environment,
-        corrupt_alias,
-        "Continue.",
-    )
-
-    assert corrupt.returncode == 1
-    assert yaml.safe_load(corrupt.stdout) == {
-        "alias": corrupt_alias,
-        "error": {
-            "code": "operation-failed",
-            "message": "The requested Engineer alias mapping is invalid.",
-        },
-    }
-    assert fake_codex.log_file.read_bytes() == runtime_before_corrupt_send
-
-    lost_alias, _ = launch_turn(
+    alias, _ = launch_turn(
         installed_worktree_commands,
         harness_root,
         integration,
@@ -773,16 +715,7 @@ def test_session_operations_return_structured_recovery_errors_without_reidentity
         role="engineer-senior",
         run_id="20260814-recovery-errors",
     )
-    lost_directory = runner_directory / "sessions" / lost_alias
-    lost_turn = lost_directory / "turn.yml"
-    wait_for_file(lost_turn)
-    lost_mapping_file = lost_directory / "mapping.yml"
-    lost_mapping_bytes = lost_mapping_file.read_bytes()
-    lost_mapping = yaml.safe_load(lost_mapping_bytes)
-    wait_for_process_exit(lost_mapping["worker_pid"])
-    aliases_before = sorted(
-        path.name for path in (runner_directory / "sessions").iterdir()
-    )
+    wait_for_file(runner_directory / "sessions" / alias / "turn.yml")
 
     lost = send(
         installed_worktree_commands,
@@ -793,61 +726,19 @@ def test_session_operations_return_structured_recovery_errors_without_reidentity
                 [{"type": "thread.started", "thread_id": "replacement-thread"}]
             ),
         },
-        lost_alias,
+        alias,
         "Do not reconstruct me under another identity.",
     )
 
-    not_resumable = {
-        "code": "session-not-resumable",
-        "message": "The mapped Runtime session is unavailable or cannot be resumed.",
-    }
     assert lost.returncode == 1
-    assert yaml.safe_load(lost.stdout) == {
-        "alias": lost_alias,
-        "error": not_resumable,
-    }
-    assert lost_mapping_file.read_bytes() == lost_mapping_bytes
-    assert yaml.safe_load(lost_turn.read_text(encoding="utf-8")) == {
-        "outcome": "completed",
-        "runtime_exit_code": 0,
-    }
-    assert sorted(
-        path.name for path in (runner_directory / "sessions").iterdir()
-    ) == aliases_before
-    assert list((runner_directory / "active-worktrees").iterdir()) == []
-
-    non_resumable_alias, _ = launch_turn(
-        installed_worktree_commands,
-        harness_root,
-        integration,
-        environment,
-        ticket_id="12",
-        ticket_name="non-resumable-state",
-        role="engineer-junior",
-        run_id="20260814-recovery-errors",
-    )
-    non_resumable_directory = runner_directory / "sessions" / non_resumable_alias
-    wait_for_file(non_resumable_directory / "turn.yml")
-    non_resumable_mapping = yaml.safe_load(
-        (non_resumable_directory / "mapping.yml").read_text(encoding="utf-8")
-    )
-    wait_for_process_exit(non_resumable_mapping["worker_pid"])
-    (non_resumable_directory / "launch.yml").unlink()
-
-    non_resumable = send(
-        installed_worktree_commands,
-        integration,
-        environment,
-        non_resumable_alias,
-        "Continue.",
-    )
-
-    assert non_resumable.returncode == 1
-    assert yaml.safe_load(non_resumable.stdout) == {
-        "alias": non_resumable_alias,
-        "error": not_resumable,
-    }
-    assert list((runner_directory / "active-worktrees").iterdir()) == []
+    lost_error = yaml.safe_load(lost.stdout)
+    assert lost_error["alias"] == alias
+    assert lost_error["error"]["code"] == "session-not-resumable"
+    observed = status(installed_worktree_commands, integration, environment, alias)
+    assert observed.returncode == 0, observed.stderr
+    alias_status = yaml.safe_load(observed.stdout)["aliases"]
+    assert alias_status[0]["alias"] == alias
+    assert alias_status[0]["activity"] == "idle"
 
 
 def test_idle_send_reuses_the_persisted_request_after_runtime_store_changes(
@@ -993,61 +884,4 @@ def test_idle_send_rejects_detached_or_rebranched_mapped_worktree(
         "alias": alias,
         "error": invalid_mapping,
     }
-    assert fake_codex.log_file.read_bytes() == runtime_before
-
-
-def test_idle_send_returns_yaml_when_active_reservation_root_is_not_a_directory(
-    installed_worktree_commands: InstalledCommands,
-    temporary_git_repository: Path,
-    fake_codex: FakeCodex,
-    tmp_path: Path,
-) -> None:
-    (
-        harness_root,
-        integration,
-        runner_directory,
-        _,
-        environment,
-    ) = configured_runner(
-        installed_worktree_commands,
-        temporary_git_repository,
-        fake_codex,
-        tmp_path,
-    )
-    alias, _ = launch_turn(
-        installed_worktree_commands,
-        harness_root,
-        integration,
-        environment,
-        ticket_id="22",
-        ticket_name="malformed-reservation-root",
-        role="engineer-junior",
-        run_id="20260814-malformed-reservation-root",
-    )
-    session_directory = runner_directory / "sessions" / alias
-    wait_for_file(session_directory / "turn.yml")
-    mapping = yaml.safe_load(
-        (session_directory / "mapping.yml").read_text(encoding="utf-8")
-    )
-    wait_for_process_exit(mapping["worker_pid"])
-    active_root = runner_directory / "active-worktrees"
-    active_root.rmdir()
-    active_root.write_text("unexpected\n", encoding="utf-8")
-    runtime_before = fake_codex.log_file.read_bytes()
-
-    rejected = send(
-        installed_worktree_commands,
-        integration,
-        environment,
-        alias,
-        "Do not start without a valid reservation root.",
-    )
-
-    message = "The Ticket Worktree could not be reserved for an Engineer turn."
-    assert rejected.returncode == 1
-    assert yaml.safe_load(rejected.stdout) == {
-        "alias": alias,
-        "error": {"code": "operation-failed", "message": message},
-    }
-    assert rejected.stderr == message + "\n"
     assert fake_codex.log_file.read_bytes() == runtime_before

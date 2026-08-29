@@ -233,11 +233,9 @@ def fake_codex(tmp_path: Path) -> FakeCodex:
     return FakeCodex(executable=executable, log_file=log_file)
 
 
-@pytest.fixture
-def installed_commands(tmp_path: Path) -> InstalledCommands:
+def _install_commands(environment: Path) -> InstalledCommands:
     """Install the local candidate before exercising its public CLIs."""
 
-    environment = tmp_path / "installed-environment"
     subprocess.run(
         [
             sys.executable,
@@ -277,3 +275,30 @@ def installed_commands(tmp_path: Path) -> InstalledCommands:
         product=bin_directory / "you-are-a-product-architect",
         runner=bin_directory / "agent-runner",
     )
+
+
+@pytest.fixture(scope="session")
+def installed_commands(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> InstalledCommands:
+    environment = tmp_path_factory.mktemp("installed-environment") / "venv"
+    return _install_commands(environment)
+
+
+@pytest.fixture(scope="session")
+def installed_cleanup_commands(
+    installed_commands: InstalledCommands,
+) -> InstalledCommands:
+    return installed_commands
+
+
+@pytest.fixture(scope="session")
+def installed_worktree_commands(
+    installed_commands: InstalledCommands,
+) -> InstalledCommands:
+    return installed_commands
+
+
+@pytest.fixture
+def mutable_installed_commands(tmp_path: Path) -> InstalledCommands:
+    return _install_commands(tmp_path / "installed-mutable-environment")

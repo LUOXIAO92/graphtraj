@@ -23,6 +23,9 @@ Repository and its disposable and durable Harness material:
 
 ```text
 <harness-project-root>/
+├── AGENTS.md                            Harness Guidance for Main
+├── CONTEXT.md                           shared Harness vocabulary
+├── docs/                                active Harness decisions/configuration
 ├── .codex/                               Harness Runtime Store
 │   ├── agents/                            canonical Harness roles
 │   └── hooks/                             Harness Worktree Guard
@@ -59,9 +62,10 @@ Harness Project's `.agents/skills/`; declining stops before setup writes
 anything. Setup
 creates or registers `dev`, installs configuration, roles, and Hooks under the
 root `.codex/` Runtime Store, installs supported Skills under the root
-`.agents/skills/`, makes the Integration Worktree's ignored `.state` point at
-the Harness State Directory, and makes its ignored `.scratch` point at the
-distinct Harness Scratch Directory. It does
+`.agents/skills/`, manages Harness Guidance in the root `AGENTS.md`, makes the
+Integration Worktree's ignored `.state` and `.scratch` point at the Harness
+State and Scratch directories, and creates ignored `CONTEXT.md` and `docs`
+views of the authoritative root documents. It does
 not clone a source repository, write `~/.codex`, alter credentials, or change
 the Primary Worktree or Source Repository Runtime files.
 
@@ -69,11 +73,11 @@ The Runtime Store is Harness-owned rather than committed into `dev`; Ticket
 Worktrees do not inherit Harness roles, Hooks, or Harness Skills. Runner still
 requires a clean `dev` Integration Worktree before dispatching a role.
 
-Treat tracker binding, surrounding repository instructions, and domain
-documentation as target-project concerns. Setup manages only the marked
-Reviewer-guidance section in the Source Repository root `AGENTS.md`, as defined
-by [ADR 0026](docs/adr/0026-manage-inherited-reviewer-guidance.md); it does not
-impose this repository's other choices on a target project.
+Harness Project Documents and Harness Guidance remain outside Source Repository
+history. The Source Repository `AGENTS.md` stays concise Repository Guidance;
+setup neither creates nor rewrites it. Repository-owned `CONTEXT.md` or `docs`
+paths conflict with the reserved Worktree views and make setup stop before any
+mutation. The Primary Worktree receives no Harness-created document links.
 
 ## Deliver a selected ticket
 
@@ -120,11 +124,10 @@ their exact raw-report paths; Main waits for both reports and verifies the
 candidate and Git state before one round decision. Merge and integration
 actions do not use Reviewers.
 
-The minimum finding policy is inherited from the managed `## Reviewer
-guidance` section in the Source Repository root `AGENTS.md`; setup ownership is
-defined by [ADR 0026](docs/adr/0026-manage-inherited-reviewer-guidance.md).
-Runtime role prompts and Skills reference that policy instead of copying its
-body.
+Main applies the minimum-finding policy from Harness Guidance at the Harness
+Project Root. Runtime role prompts and Skills route delegated Agents to the
+read-only Worktree document views instead of copying that policy into Source
+Repository Guidance.
 
 Use `status` only for aliases Main explicitly supplies. With the Codex V1
 Runtime, `send` can resume an idle session but cannot inject live input into a
@@ -157,9 +160,9 @@ manually delete a completed run's `state/<run-id>/` directory
 through the filesystem or file manager when its retention period ends.
 
 This repository itself uses GitHub Issues, but a target project chooses its own
-tracker binding. GitHub, GitLab, local Markdown, and other project-local
-workflows are all valid; Main must read or establish that target-specific
-binding instead of inheriting this repository's tracker choice.
+tracker binding. GitHub, GitLab, local Markdown, and other Harness-root Project
+Document workflows are all valid; Main must read or establish that
+target-specific binding instead of inheriting this repository's tracker choice.
 
 ## V1 limitations
 

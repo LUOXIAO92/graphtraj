@@ -51,11 +51,21 @@ Worktree lifecycles.
 _Avoid_: Source Repository Runtime configuration, Integration Worktree
 configuration
 
-**Project Document**:
-A Source Repository artifact that explains requirements, decisions, design,
-operation, or Agent instructions. Main owns Project Document changes; every
-subagent has read-only access.
-_Avoid_: Harness State evidence, Any Markdown file
+**Harness Project Document**:
+A Main-owned, durable control-plane document beneath the Harness Project Root
+that records shared language, requirements, decisions, design, or operation.
+_Avoid_: Source Repository document, Harness State evidence, Harness Scratch
+material
+
+**Harness Guidance**:
+Harness-specific Main guidance rooted at the Harness Project Root and kept
+separate from Source Repository instructions.
+_Avoid_: Repository Guidance, Runtime configuration, Skill procedure
+
+**Repository Guidance**:
+Concise, stable, project-general instructions in the Source Repository root
+`AGENTS.md` that apply across ordinary repository tasks.
+_Avoid_: Harness Guidance, Task instruction, Review finding ledger
 
 **Soft Plan**:
 Main's default read-only authorization state before the user explicitly asks

@@ -11,6 +11,9 @@ the Harness do not require editing a single system-wide record.
 - [ADR 0013](0013-own-runtime-resources-at-the-harness-root.md) — Main runs at
   the Harness Project Root, whose Runtime Store owns Harness roles and Hooks
   independently of Source Repository history and Worktree lifecycles.
+- [ADR 0027](0027-own-harness-project-documents-at-the-harness-root.md) — the
+  Harness Project Root owns Main guidance, shared language, ADRs, and other
+  Harness Project Documents; linked Worktrees receive read-only access views.
 
 ## Soft orchestration and delivery state
 
@@ -49,8 +52,6 @@ the Harness do not require editing a single system-wide record.
 - [ADR 0018](0018-main-selects-runtimes-outside-task-objects.md) — Main selects
   a Runtime outside logical task objects while Runtime-specific mechanics stay
   private to the selected Adapter.
-- [ADR 0023](0023-keep-project-documents-read-only-for-subagents.md) — every
-  subagent receives read-only access to Source Repository Project Documents.
 
 ## Distribution and target-project setup
 
@@ -59,9 +60,6 @@ the Harness do not require editing a single system-wide record.
 - [ADR 0010](0010-configure-target-projects-locally.md) — setup writes
   Harness-local Runtime configuration and machine-local Runner state through
   one interactive, preflighted operation.
-- [ADR 0026](0026-manage-inherited-reviewer-guidance.md) — setup manages one
-  inherited Reviewer-guidance section in the Source Repository root
-  `AGENTS.md` without owning surrounding user content.
 - [ADR 0011](0011-resolve-core-skills-by-name.md) — core Skill dependencies are
   checked and resolved by declared name.
 - [ADR 0015](0015-select-repository-skills-explicitly.md) — Harness Skills are
@@ -75,6 +73,9 @@ the Harness do not require editing a single system-wide record.
 
 [ADR 0005](0005-review-failures-escalate-within-task-delivery.md) is retained
 as the superseded mechanical review-escalation decision.
+[ADR 0023](0023-keep-project-documents-read-only-for-subagents.md) and
+[ADR 0026](0026-manage-inherited-reviewer-guidance.md) are retained as the
+superseded Source-Repository document-placement decisions.
 
 The pre-split files
 [`docs/task-delivery-adr-before-functional-split.md`](../task-delivery-adr-before-functional-split.md)

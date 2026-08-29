@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: superseded by ADR-0027
 ---
 
 # Keep Project Documents read-only for subagents

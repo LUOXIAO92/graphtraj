@@ -31,7 +31,8 @@ Repository and its disposable and durable Harness material:
 ├── .agent-worktrees/
 │   ├── integration/                         Integration Worktree on dev
 │   └── runs/<run-id>/<ticket-stem>/         Ticket Worktrees
-└── state/                                   Harness State Directory
+├── state/<run-id>/                          authoritative Delivery Run state
+└── .scratch/                                disposable working material
 ```
 
 The Primary Worktree is the operator's existing clone and remains untouched by
@@ -58,8 +59,9 @@ Harness Project's `.agents/skills/`; declining stops before setup writes
 anything. Setup
 creates or registers `dev`, installs configuration, roles, and Hooks under the
 root `.codex/` Runtime Store, installs supported Skills under the root
-`.agents/skills/`, and makes the Integration
-Worktree's ignored `.scratch` point at the Harness State Directory. It does
+`.agents/skills/`, makes the Integration Worktree's ignored `.state` point at
+the Harness State Directory, and makes its ignored `.scratch` point at the
+distinct Harness Scratch Directory. It does
 not clone a source repository, write `~/.codex`, alter credentials, or change
 the Primary Worktree or Source Repository Runtime files.
 
@@ -143,7 +145,7 @@ idempotent already-cleaned result.
 ## Evidence and tracker portability
 
 Persistent evidence stays outside Git Worktrees under
-`state/task-delivery/<run-id>/`: exact retained batches, ticket metadata,
+`state/<run-id>/`: exact retained batches, ticket metadata,
 Engineer result and validation summaries, and Main-retained raw Reviewer
 reports remain after cleanup. Review Diversity is recorded only when the
 selected Reviewer Runtime or model actually differs from the Engineer's; using
@@ -151,7 +153,7 @@ the same Runtime and model is valid. ADR 0025 owns the append-only Worldline and
 derived `ledger.yml`; ADR 0003 owns current `task-map.yml` and `dag.md`; ADR
 0004 owns retained batch input. The Runner owns only mechanical metadata. There
 is no deletion command: an operator may
-manually delete a completed run's `state/task-delivery/<run-id>/` directory
+manually delete a completed run's `state/<run-id>/` directory
 through the filesystem or file manager when its retention period ends.
 
 This repository itself uses GitHub Issues, but a target project chooses its own

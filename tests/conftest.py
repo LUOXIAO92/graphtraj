@@ -188,7 +188,7 @@ def fake_codex(tmp_path: Path) -> FakeCodex:
         "    run_git('commit', '-m', 'Deliver representative V1 ticket')\n"
         "    candidate = run_git('rev-parse', 'HEAD').stdout.strip()\n"
         "    run_git('diff', '--check', 'HEAD^', 'HEAD')\n"
-        "    evidence = (worktree / '.scratch' / 'task-delivery').resolve()\n"
+        "    evidence = (worktree / '.state').resolve()\n"
         "    (evidence / 'result.md').write_text(\n"
         "        (\n"
         "            'Candidate commit: {0}\\n'\n"

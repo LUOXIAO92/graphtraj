@@ -67,22 +67,24 @@ class CodexProjectFiles:
         )
 
     @staticmethod
-    def scratch_action(
+    def link_action(
         integration_worktree: Path,
-        state_directory: Path,
+        name: str,
+        target: Path,
     ) -> str:
-        """Describe the Integration scratch symlink mutation."""
+        """Describe one Integration directory symlink mutation."""
 
-        return "Integration scratch link: {0} -> {1}".format(
-            integration_worktree / ".scratch",
-            state_directory,
+        return "Integration {0} link: {1} -> {2}".format(
+            name.removeprefix("."),
+            integration_worktree / name,
+            target,
         )
 
     @staticmethod
     def exclude_action(common_git_directory: Path) -> str:
         """Describe the machine-local Git exclude registration."""
 
-        return "Ignore Integration .scratch in {0}".format(
+        return "Ignore Integration .state and .scratch in {0}".format(
             common_git_directory / "info" / "exclude"
         )
 
@@ -115,6 +117,7 @@ class CodexProjectFiles:
         source_repository: Path,
         integration_worktree: Path,
         state_directory: Path,
+        scratch_directory: Path,
         common_git_directory: Path,
         worktree_root: Path,
         runtime_executable: Path,
@@ -122,12 +125,19 @@ class CodexProjectFiles:
     ) -> None:
         runtime_store = harness_root / ".codex"
         self._write_resources(runtime_store, on_action_complete)
-        self._ensure_scratch_link(
+        self._ensure_link(
             integration_worktree,
+            ".state",
             state_directory,
             on_action_complete,
         )
-        self._ensure_scratch_is_ignored(
+        self._ensure_link(
+            integration_worktree,
+            ".scratch",
+            scratch_directory,
+            on_action_complete,
+        )
+        self._ensure_links_are_ignored(
             common_git_directory,
             on_action_complete,
         )
@@ -142,13 +152,13 @@ class CodexProjectFiles:
         )
 
     @staticmethod
-    def scratch_link_text(
+    def link_text(
         integration_worktree: Path,
-        state_directory: Path,
+        target: Path,
     ) -> str:
         """Return the stable repository-local link text setup will install."""
 
-        return os.path.relpath(state_directory, integration_worktree)
+        return os.path.relpath(target, integration_worktree)
 
     @staticmethod
     def runner_config_content(
@@ -219,41 +229,45 @@ class CodexProjectFiles:
                 )
 
     @staticmethod
-    def _ensure_scratch_link(
+    def _ensure_link(
         integration_worktree: Path,
-        state_directory: Path,
+        name: str,
+        target: Path,
         on_action_complete: Optional[Callable[[str], None]],
     ) -> None:
-        scratch = integration_worktree / ".scratch"
-        if os.path.lexists(str(scratch)):
-            if scratch.is_symlink() and scratch.resolve() == state_directory.resolve():
+        link = integration_worktree / name
+        if os.path.lexists(str(link)):
+            if link.is_symlink() and link.resolve() == target.resolve():
                 return
             raise CodexProjectError(
-                "Integration .scratch does not resolve to the Harness State "
-                "Directory."
+                "Integration {0} does not resolve to its Harness Directory.".format(
+                    name
+                )
             )
-        scratch.symlink_to(
-            CodexProjectFiles.scratch_link_text(
+        link.symlink_to(
+            CodexProjectFiles.link_text(
                 integration_worktree,
-                state_directory,
+                target,
             ),
             target_is_directory=True,
         )
         if on_action_complete is not None:
             on_action_complete(
-                CodexProjectFiles.scratch_action(
+                CodexProjectFiles.link_action(
                     integration_worktree,
-                    state_directory,
+                    name,
+                    target,
                 )
             )
-        if scratch.resolve() != state_directory.resolve():
+        if link.resolve() != target.resolve():
             raise CodexProjectError(
-                "Integration .scratch does not resolve to the Harness State "
-                "Directory."
+                "Integration {0} does not resolve to its Harness Directory.".format(
+                    name
+                )
             )
 
     @staticmethod
-    def _ensure_scratch_is_ignored(
+    def _ensure_links_are_ignored(
         common_git_directory: Path,
         on_action_complete: Optional[Callable[[str], None]],
     ) -> None:
@@ -264,11 +278,16 @@ class CodexProjectFiles:
             if exclude_file.exists()
             else ""
         )
-        if "/.scratch" in existing.splitlines():
+        missing = [
+            path
+            for path in ("/.state", "/.scratch")
+            if path not in existing.splitlines()
+        ]
+        if not missing:
             return
         separator = "" if not existing or existing.endswith("\n") else "\n"
         with exclude_file.open("a", encoding="utf-8") as stream:
-            stream.write("{0}/.scratch\n".format(separator))
+            stream.write("{0}{1}\n".format(separator, "\n".join(missing)))
         if on_action_complete is not None:
             on_action_complete(
                 CodexProjectFiles.exclude_action(common_git_directory)

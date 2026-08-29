@@ -17,9 +17,9 @@ Do not change the working directory outside the current worktree.
 Treat the ticket or spec as authoritative and do not reopen settled scope.
 
 Keep the current delivery evidence through the scoped Ticket Worktree link:
-- Write the current outcome to `.scratch/task-delivery/result.md`.
+- Write the current outcome to `.state/result.md`.
 - Include the candidate commit in `result.md` when implementation succeeds.
-- Write `.scratch/task-delivery/validation.md`, including the candidate commit and tests run with their results.
+- Write `.state/validation.md`, including the candidate commit and tests run with their results.
 - If blocked, record the blocker, supporting evidence, attempted work, and the decision or condition needed to continue in `result.md`.
 
 Return the candidate commit, validation evidence, and any outstanding concern.

@@ -438,7 +438,6 @@ def test_installed_cleanup_refuses_an_invalid_required_turn_trace(
     trace = (
         launched.harness_root
         / "state"
-        / "task-delivery"
         / launched.run_id
         / "tickets"
         / launched.worktree.name
@@ -494,7 +493,6 @@ def test_installed_cleanup_refuses_an_empty_trace_from_a_resume_without_a_sessio
     trace = (
         launched.harness_root
         / "state"
-        / "task-delivery"
         / launched.run_id
         / "tickets"
         / launched.worktree.name
@@ -565,6 +563,8 @@ def test_installed_cleanup_allows_an_active_different_ticket_in_the_same_run(
         tmp_path,
     )
     other_ticket_id = "99"
+    other_worktree = launched.worktree.parent / "2-99-other-ticket"
+    other_worktree.mkdir()
     other_reservation = (
         launched.harness_root
         / ".codex"
@@ -578,9 +578,7 @@ def test_installed_cleanup_allows_an_active_different_ticket_in_the_same_run(
                 "activity": "running",
                 "run_id": launched.run_id,
                 "ticket_id": other_ticket_id,
-                "worktree_path": str(
-                    launched.worktree.parent / "2-99-other-ticket"
-                ),
+                "worktree_path": str(other_worktree),
                 "alias": "2-99-other-ticket@e1",
             },
             sort_keys=False,
@@ -593,6 +591,9 @@ def test_installed_cleanup_allows_an_active_different_ticket_in_the_same_run(
     assert result.returncode == 0, result.stderr
     assert yaml.safe_load(result.stdout)["cleanup_status"] == "cleaned"
     assert other_reservation.is_file()
+    assert other_worktree.is_dir()
+    assert launched.worktree.parent.is_dir()
+    assert launched.worktree.parent.parent.is_dir()
     assert not launched.worktree.exists()
     assert not launched.session_directory.exists()
 
@@ -917,12 +918,7 @@ def test_installed_cleanup_removes_only_integrated_disposable_state(
     ).check_returncode()
     integration_commit = git_output(launched.integration, "rev-parse", "HEAD")
 
-    run_state = (
-        launched.harness_root
-        / "state"
-        / "task-delivery"
-        / launched.run_id
-    )
+    run_state = launched.harness_root / "state" / launched.run_id
     evidence = run_state / "tickets" / "2-14-cleanup-integrated-worktrees"
     reviews = evidence / "reviews"
     reviews.mkdir()
@@ -971,6 +967,8 @@ def test_installed_cleanup_removes_only_integrated_disposable_state(
         },
     }
     assert not launched.worktree.exists()
+    assert not launched.worktree.parent.exists()
+    assert not launched.worktree.parent.parent.exists()
     assert run_process(
         [
             "git",
@@ -1006,7 +1004,6 @@ def test_installed_cleanup_succeeds_idempotently_after_disposable_state_is_gone(
     evidence = (
         launched.harness_root
         / "state"
-        / "task-delivery"
         / launched.run_id
         / "tickets"
         / "2-14-cleanup-integrated-worktrees"
@@ -1081,7 +1078,6 @@ def test_retired_alias_text_is_reusable_without_losing_run_scoped_history(
     old_evidence = (
         launched.harness_root
         / "state"
-        / "task-delivery"
         / launched.run_id
         / "tickets"
         / "2-14-cleanup-integrated-worktrees"
@@ -1191,7 +1187,6 @@ def test_same_run_relaunch_after_cleanup_allocates_a_new_historical_alias(
         (
             launched.harness_root
             / "state"
-            / "task-delivery"
             / launched.run_id
             / "tickets"
             / "2-14-cleanup-integrated-worktrees"
@@ -1269,7 +1264,6 @@ def test_installed_cleanup_refuses_a_consistently_forged_overlong_ticket_name(
     ticket_root = (
         launched.harness_root
         / "state"
-        / "task-delivery"
         / launched.run_id
         / "tickets"
     )
@@ -2042,7 +2036,6 @@ def test_installed_cleanup_rejects_a_lexical_state_root_symlink(
     state_root.symlink_to(retained_state, target_is_directory=True)
     evidence = (
         retained_state
-        / "task-delivery"
         / launched.run_id
         / "tickets"
         / launched.worktree.name
@@ -2251,7 +2244,6 @@ def test_installed_cleanup_removes_failed_alias_diagnostics_with_a_valid_launch_
     failed_trace = (
         launched.harness_root
         / "state"
-        / "task-delivery"
         / launched.run_id
         / "tickets"
         / launched.worktree.name
@@ -2617,7 +2609,6 @@ def test_installed_cleanup_never_deletes_a_registered_canonical_ticket(
     evidence = (
         launched.harness_root
         / "state"
-        / "task-delivery"
         / launched.run_id
         / "tickets"
         / "2-14-cleanup-integrated-worktrees"
@@ -2681,7 +2672,6 @@ def test_installed_cleanup_refuses_persistent_evidence_redirected_into_the_workt
     evidence = (
         launched.harness_root
         / "state"
-        / "task-delivery"
         / launched.run_id
         / "tickets"
         / "2-14-cleanup-integrated-worktrees"
@@ -2737,7 +2727,6 @@ def test_installed_cleanup_refuses_a_later_retained_batch_redirected_into_the_wo
     run_root = (
         launched.harness_root
         / "state"
-        / "task-delivery"
         / launched.run_id
     )
     retained_batch = run_root / "batch-2.yml"
@@ -2781,7 +2770,7 @@ def test_installed_cleanup_refuses_a_state_root_redirected_into_the_worktree(
         tmp_path,
     )
     state_root = launched.harness_root / "state"
-    run_root = state_root / "task-delivery" / launched.run_id
+    run_root = state_root / launched.run_id
     evidence = run_root / "tickets" / "2-14-cleanup-integrated-worktrees"
     reviews = evidence / "reviews"
     reviews.mkdir()
@@ -2815,7 +2804,6 @@ def test_installed_cleanup_refuses_a_state_root_redirected_into_the_worktree(
     state_root.symlink_to(hidden_state, target_is_directory=True)
     hidden_evidence = (
         hidden_state
-        / "task-delivery"
         / launched.run_id
         / "tickets"
         / "2-14-cleanup-integrated-worktrees"
@@ -3178,7 +3166,6 @@ def test_installed_cleanup_accepts_bound_aliases_with_distinct_safe_ticket_snaps
     evidence = (
         launched.harness_root
         / "state"
-        / "task-delivery"
         / launched.run_id
         / "tickets"
         / "2-14-cleanup-integrated-worktrees"

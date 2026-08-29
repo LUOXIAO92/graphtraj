@@ -24,7 +24,7 @@ description: Orchestrate delivery of an accepted Ticket DAG while Main retains s
   inspect the DAG, select a frontier, choose a tier, interpret user intent, or
   make semantic decisions.
 - Let the Runner provision or reuse the persistent ticket evidence directory,
-  create the Ticket Worktree's scoped `.scratch/task-delivery` symlink, and
+  create the Ticket Worktree's scoped `.state` symlink and `.scratch` directory, and
   write or update `metadata.yml` with mechanically known launch facts. Keep
   these as narrow provisioning and metadata duties; the Runner does not write
   semantic evidence or cross the Delivery State authority defined by ADR 0003.
@@ -85,7 +85,7 @@ authority to the Delivery State Agent.
    gating the other. Supply the exact
    candidate, comparison point, existing axis brief, and standards or spec
    sources in Main's instruction, along with that axis's exact report path under
-   `.scratch/task-delivery/reviews/`. For each Reviewer task, set `report_file`
+   `.state/reviews/`. For each Reviewer task, set `report_file`
    to that axis's exact non-overwriting report path and also supply the same
    path in the Reviewer instruction. Require both Reviewers to write only their
    assigned report and leave the candidate and its Git state unchanged.

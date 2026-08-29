@@ -746,7 +746,10 @@ def test_setup_rerun_reports_an_already_configured_plan_without_rewriting(
     ) + (runner_config, exclude_file)
     before_bytes = {path: path.read_bytes() for path in watched_files}
     before_mtimes = {path: path.stat().st_mtime_ns for path in watched_files}
-    scratch_before = (integration / ".scratch").lstat().st_mtime_ns
+    link_mtimes = {
+        name: (integration / name).lstat().st_mtime_ns
+        for name in (".state", ".scratch")
+    }
     worktrees_before = git_output(primary, "worktree", "list", "--porcelain")
     integration_status = git_output(integration, "status", "--porcelain")
 
@@ -762,16 +765,21 @@ def test_setup_rerun_reports_an_already_configured_plan_without_rewriting(
     for planned_target in (
         "Worktree Directory",
         "Harness State Directory",
+        "Harness Scratch Directory",
         "Integration Worktree on dev",
         "Harness Runtime resource",
+        "Integration state link",
         "Integration scratch link",
         "Harness Runner Config",
-        "Ignore Integration .scratch",
+        "Ignore Integration .state and .scratch",
     ):
         assert "ALREADY CONFIGURED: {0}".format(planned_target) in second.stdout
     assert {path: path.read_bytes() for path in watched_files} == before_bytes
     assert {path: path.stat().st_mtime_ns for path in watched_files} == before_mtimes
-    assert (integration / ".scratch").lstat().st_mtime_ns == scratch_before
+    assert {
+        name: (integration / name).lstat().st_mtime_ns
+        for name in (".state", ".scratch")
+    } == link_mtimes
     assert git_output(primary, "worktree", "list", "--porcelain") == worktrees_before
     assert git_output(integration, "status", "--porcelain") == integration_status
     assert git_output(primary, "branch", "--show-current") == "main"
@@ -852,7 +860,7 @@ def test_setup_reports_partial_execution_and_rerun_recovers(
     ) in incomplete
     assert "Harness Runtime resource:" in incomplete
     assert "Integration scratch link:" in incomplete
-    assert "Ignore Integration .scratch" in incomplete
+    assert "Ignore Integration .state and .scratch" in incomplete
     assert "Harness Runner Config:" in incomplete
     assert "Correct the cause and rerun setup" in failed.stderr
     assert (harness_root / ".agent-worktrees").is_dir()
@@ -954,7 +962,7 @@ def test_setup_reports_each_completed_and_incomplete_skill_file(
         assert "- {0}".format(action) not in completed
     assert "Harness Runtime resource:" in incomplete
     assert "Integration scratch link:" in incomplete
-    assert "Ignore Integration .scratch" in incomplete
+    assert "Ignore Integration .state and .scratch" in incomplete
     assert "Harness Runner Config:" in incomplete
     assert git_output(primary, "branch", "--show-current") == "main"
     assert git_output(primary, "status", "--porcelain") == ""
@@ -989,6 +997,7 @@ def test_setup_reports_inner_codex_actions_before_registration_failure(
     primary = temporary_git_repository
     integration = harness_root / ".agent-worktrees" / "integration"
     state = harness_root / "state"
+    scratch_root = harness_root / ".scratch"
     user_home = tmp_path / "operator-home"
     install_user_skills(user_home)
     user_before = tree_contents(user_home)
@@ -1040,11 +1049,15 @@ def test_setup_reports_inner_codex_actions_before_registration_failure(
         )
         assert "- {0}".format(action) in completed
         assert "- {0}".format(action) not in incomplete
-    assert "Integration scratch link: {0} -> {1}".format(
-        integration / ".scratch",
-        state,
+    assert "Integration state link: {0} -> {1}".format(
+        integration / ".state", state
     ) in completed
-    assert "Ignore Integration .scratch in {0}".format(exclude_file) in incomplete
+    assert "Integration scratch link: {0} -> {1}".format(
+        integration / ".scratch", scratch_root
+    ) in completed
+    assert "Ignore Integration .state and .scratch in {0}".format(
+        exclude_file
+    ) in incomplete
     assert "Harness Runner Config:" in incomplete
     assert exclude_file.read_bytes() == exclude_before
     assert not (harness_root / ".codex" / "agent-runner" / "config.yml").exists()
@@ -1065,7 +1078,8 @@ def test_setup_reports_inner_codex_actions_before_registration_failure(
 
     assert rerun.returncode == 0, rerun.stderr
     assert git_output(integration, "branch", "--show-current") == "dev"
-    assert (integration / ".scratch").resolve() == state.resolve()
+    assert (integration / ".state").resolve() == state.resolve()
+    assert (integration / ".scratch").resolve() == scratch_root.resolve()
     assert (harness_root / ".codex" / "agent-runner" / "config.yml").is_file()
     assert git_output(primary, "branch", "--show-current") == "main"
     assert git_output(primary, "status", "--porcelain") == ""
@@ -1085,6 +1099,7 @@ def test_setup_confirms_the_exact_base_and_initializes_one_harness_project(
     worktree_root = harness_root / ".agent-worktrees"
     integration = worktree_root / "integration"
     state = harness_root / "state"
+    scratch_root = harness_root / ".scratch"
     user_home = tmp_path / "operator-home"
     install_user_skills(user_home)
     (user_home / ".codex").mkdir()
@@ -1122,6 +1137,7 @@ def test_setup_confirms_the_exact_base_and_initializes_one_harness_project(
     assert "Create dev from {0}?".format(primary_head) in result.stdout
     assert integration.is_dir()
     assert state.is_dir()
+    assert scratch_root.is_dir()
     assert not (worktree_root / primary.name).exists()
     assert not (state / primary.name).exists()
 
@@ -1156,13 +1172,17 @@ def test_setup_confirms_the_exact_base_and_initializes_one_harness_project(
         harness_root / ".agents" / "skills" / "task-delivery"
     ) == supported_skill_contents("task-delivery")
 
-    scratch = integration / ".scratch"
-    assert scratch.is_symlink()
-    assert scratch.resolve() == state.resolve()
-    ignored = run_process(
-        ["git", "check-ignore", "--quiet", ".scratch"], cwd=integration
-    )
-    assert ignored.returncode == 0
+    state_link = integration / ".state"
+    scratch_link = integration / ".scratch"
+    assert state_link.is_symlink()
+    assert state_link.resolve() == state.resolve()
+    assert scratch_link.is_symlink()
+    assert scratch_link.resolve() == scratch_root.resolve()
+    for ignored_path in (".state", ".scratch"):
+        ignored = run_process(
+            ["git", "check-ignore", "--quiet", ignored_path], cwd=integration
+        )
+        assert ignored.returncode == 0
 
     common_directory = Path(git_output(primary, "rev-parse", "--git-common-dir"))
     if not common_directory.is_absolute():
@@ -1214,6 +1234,7 @@ def test_setup_registers_an_existing_valid_dev_as_the_integration_worktree(
     worktree_root = harness_root / ".agent-worktrees"
     integration = worktree_root / "integration"
     state = harness_root / "state"
+    scratch_root = harness_root / ".scratch"
     run_process(["git", "branch", "dev"], cwd=primary).check_returncode()
 
     user_home = tmp_path / "operator-home"
@@ -1251,7 +1272,8 @@ def test_setup_registers_an_existing_valid_dev_as_the_integration_worktree(
     assert tree_contents(user_home) == user_before
     assert worktree_contents(primary) == primary_files
     assert git_output(primary, "status", "--porcelain") == primary_status == ""
-    assert (integration / ".scratch").resolve() == state.resolve()
+    assert (integration / ".state").resolve() == state.resolve()
+    assert (integration / ".scratch").resolve() == scratch_root.resolve()
     assert not (worktree_root / primary.name).exists()
     assert not (state / primary.name).exists()
     assert not fake_codex.log_file.exists()

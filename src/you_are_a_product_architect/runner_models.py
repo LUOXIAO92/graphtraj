@@ -127,7 +127,7 @@ DETAIL_ERROR_CATEGORIES = {
     "WORKTREE_TURN_ACTIVE": "worktree-busy",
     "ACTIVE_TURN_RESERVATION_FAILED": "launch-failed",
     "WORKTREE_PROVISION_FAILED": "launch-failed",
-    "SCRATCH_LINK_FAILED": "launch-failed",
+    "STATE_LINK_FAILED": "launch-failed",
     "RUNTIME_WORKER_START_FAILED": "launch-failed",
     "RUNTIME_MAPPING_INVALID": "launch-failed",
     "RUNTIME_LAUNCH_FAILED": "launch-failed",

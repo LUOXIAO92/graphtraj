@@ -94,8 +94,8 @@ def test_installed_worktree_guard_is_an_independent_ticket_process(
             "cwd": str(ticket_worktree),
             "tool_name": "Bash",
             "tool_input": {
-                "command": "mkdir -p .scratch/task-delivery/reviews && touch "
-                ".scratch/task-delivery/result.md"
+                "command": "mkdir -p .state/reviews && touch "
+                ".state/result.md"
             },
         },
         ticket_worktree,

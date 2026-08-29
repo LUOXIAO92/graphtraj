@@ -415,6 +415,7 @@ class ProjectSetupPlan:
     worktree_root: Path
     integration_worktree: Path
     state_directory: Path
+    scratch_directory: Path
     runtime_executable: Path
     codex_files: CodexProjectFiles
     supported_skills: SupportedSkills
@@ -474,6 +475,12 @@ class ProjectSetupPlan:
         _preflight_directory(
             self.state_directory,
             "Harness State Directory",
+            actions,
+            conflicts,
+        )
+        _preflight_directory(
+            self.scratch_directory,
+            "Harness Scratch Directory",
             actions,
             conflicts,
         )
@@ -661,39 +668,45 @@ class ProjectSetupPlan:
                 ),
             )
 
-        scratch_path = ".scratch"
-        scratch_entry = integration_view.entry(scratch_path)
-        if scratch_entry is None:
-            actions.append(
-                PlannedSetupAction(
-                    "CREATE",
-                    self.codex_files.scratch_action(
-                        self.integration_worktree,
-                        self.state_directory,
-                    ),
-                )
-            )
-        elif scratch_entry.kind == "symlink" and _symlink_resolves_to(
-            self.integration_worktree / scratch_path,
-            scratch_entry.content,
-            self.state_directory,
+        for name, target in (
+            (".state", self.state_directory),
+            (".scratch", self.scratch_directory),
         ):
-            actions.append(
-                PlannedSetupAction(
-                    "ALREADY CONFIGURED",
-                    self.codex_files.scratch_action(
-                        self.integration_worktree,
-                        self.state_directory,
+            entry = integration_view.entry(name)
+            if entry is None:
+                actions.append(
+                    PlannedSetupAction(
+                        "CREATE",
+                        self.codex_files.link_action(
+                            self.integration_worktree,
+                            name,
+                            target,
+                        ),
+                    )
+                )
+            elif entry.kind == "symlink" and _symlink_resolves_to(
+                self.integration_worktree / name,
+                entry.content,
+                target,
+            ):
+                actions.append(
+                    PlannedSetupAction(
+                        "ALREADY CONFIGURED",
+                        self.codex_files.link_action(
+                            self.integration_worktree,
+                            name,
+                            target,
+                        ),
+                    )
+                )
+            else:
+                _append_conflict(
+                    conflicts,
+                    "Integration {0} link conflicts at {1}.".format(
+                        name.removeprefix("."),
+                        self.integration_worktree / name,
                     ),
                 )
-            )
-        else:
-            _append_conflict(
-                conflicts,
-                "Integration scratch link conflicts at {0}.".format(
-                    self.integration_worktree / scratch_path
-                ),
-            )
 
         common_view = _TargetView(self.repository.common_directory)
         exclude_parent = common_view.entry("info")
@@ -726,7 +739,10 @@ class ProjectSetupPlan:
             else:
                 disposition = (
                     "ALREADY CONFIGURED"
-                    if "/.scratch" in exclude_lines
+                    if all(
+                        path in exclude_lines
+                        for path in ("/.state", "/.scratch")
+                    )
                     else "REGISTER"
                 )
                 actions.append(
@@ -787,6 +803,12 @@ class ProjectSetupPlan:
             mark_completed(
                 _directory_action("Harness State Directory", self.state_directory)
             )
+            self.scratch_directory.mkdir(parents=True, exist_ok=True)
+            mark_completed(
+                _directory_action(
+                    "Harness Scratch Directory", self.scratch_directory
+                )
+            )
             self.runtime_store.mkdir(parents=True, exist_ok=True)
             mark_completed(
                 _directory_action("Harness Runtime Store", self.runtime_store)
@@ -844,6 +866,7 @@ class ProjectSetupPlan:
                 source_repository=self.repository.primary_worktree,
                 integration_worktree=self.integration_worktree,
                 state_directory=self.state_directory,
+                scratch_directory=self.scratch_directory,
                 common_git_directory=self.repository.common_directory,
                 worktree_root=self.worktree_root,
                 runtime_executable=self.runtime_executable,
@@ -886,6 +909,7 @@ def plan_project_setup(
     worktree_root = harness_root / ".agent-worktrees"
     integration_worktree = worktree_root / "integration"
     state_directory = harness_root / "state"
+    scratch_directory = harness_root / ".scratch"
     runtime_store = harness_root / ".codex"
     runtime_user_skill_root = Path.home() / ".agents" / "skills"
     try:
@@ -935,6 +959,7 @@ def plan_project_setup(
         worktree_root=worktree_root,
         integration_worktree=integration_worktree,
         state_directory=state_directory,
+        scratch_directory=scratch_directory,
         runtime_executable=runtime_executable,
         codex_files=codex_files,
         supported_skills=supported_skills,

@@ -97,9 +97,7 @@ def test_installed_runner_launches_four_exact_main_selected_tasks_in_order(
     documents = list(yaml.safe_load_all(result.stdout))
     assert len(documents) == 1
     document = documents[0]
-    retained = (
-        harness_root / "state" / "task-delivery" / run_id / "batch.yml"
-    ).resolve()
+    retained = (harness_root / "state" / run_id / "batch.yml").resolve()
     assert document["run_id"] == run_id
     assert document["runtime"] == "codex"
     assert document["retained_batch_file"] == str(retained)
@@ -203,7 +201,7 @@ def test_installed_runner_rejects_duplicate_ticket_ids_before_any_start(
     assert not fake_codex.log_file.exists()
     assert not (worktree_root / "runs" / run_id).exists()
     assert not (
-        harness_root / "state" / "task-delivery" / run_id
+        harness_root / "state" / run_id
     ).exists()
 
 
@@ -271,7 +269,7 @@ def test_installed_runner_rejects_intra_batch_worktree_collision_before_any_star
     assert not fake_codex.log_file.exists()
     assert not (worktree_root / "runs" / run_id).exists()
     assert not (
-        harness_root / "state" / "task-delivery" / run_id
+        harness_root / "state" / run_id
     ).exists()
 
 
@@ -345,7 +343,7 @@ def test_installed_runner_preflights_later_worktree_conflict_before_any_start(
     assert not fake_codex.log_file.exists()
     assert not (worktree_root / "runs" / run_id).exists()
     assert not (
-        harness_root / "state" / "task-delivery" / run_id
+        harness_root / "state" / run_id
     ).exists()
 
     misplaced_run = "20260813-misplaced-worktree"
@@ -404,7 +402,7 @@ def test_installed_runner_preflights_later_worktree_conflict_before_any_start(
     }
     assert misplaced_result.stderr == misplaced_message + "\n"
     assert not (
-        harness_root / "state" / "task-delivery" / misplaced_run
+        harness_root / "state" / misplaced_run
     ).exists()
     assert not fake_codex.log_file.exists()
 
@@ -498,7 +496,7 @@ def test_installed_runner_rejects_later_live_ticket_without_expected_branch(
         worktree_root / "runs" / run_id / "2-20-must-not-start"
     ).exists()
     assert not (
-        harness_root / "state" / "task-delivery" / run_id
+        harness_root / "state" / run_id
     ).exists()
 
 
@@ -536,7 +534,6 @@ def test_installed_runner_reports_mixed_post_preflight_launch_outcomes(
     broken_evidence = (
         harness_root
         / "state"
-        / "task-delivery"
         / run_id
         / "tickets"
         / "2-12-broken-ticket"
@@ -563,7 +560,7 @@ def test_installed_runner_reports_mixed_post_preflight_launch_outcomes(
     assert len(documents) == 1
     document = documents[0]
     retained = (
-        harness_root / "state" / "task-delivery" / run_id / "batch.yml"
+        harness_root / "state" / run_id / "batch.yml"
     ).resolve()
     assert document["run_id"] == run_id
     assert document["runtime"] == "codex"
@@ -690,7 +687,7 @@ def test_installed_runner_rejects_later_busy_or_already_live_ticket_globally(
     assert busy_result.stderr == busy_message + "\n"
     assert fake_codex.log_file.read_bytes() == runtime_log_before
     live_run_directory = (
-        harness_root / "state" / "task-delivery" / "20260813-live-ticket"
+        harness_root / "state" / "20260813-live-ticket"
     )
     assert not (live_run_directory / "batch-2.yml").exists()
     assert not (
@@ -748,7 +745,7 @@ def test_installed_runner_rejects_later_busy_or_already_live_ticket_globally(
         assert fake_codex.log_file.read_bytes() == runtime_log_before
         assert not (worktree_root / "runs" / run_id).exists()
         assert not (
-            harness_root / "state" / "task-delivery" / run_id
+            harness_root / "state" / run_id
         ).exists()
     finally:
         release_file.touch()
@@ -896,7 +893,7 @@ def test_installed_runner_rejects_global_file_runtime_and_integration_failures(
     for run_id in (missing_run, runtime_run, dirty_run, malformed_run):
         assert not (worktree_root / "runs" / run_id).exists()
         assert not (
-            harness_root / "state" / "task-delivery" / run_id
+            harness_root / "state" / run_id
         ).exists()
 
 
@@ -990,4 +987,4 @@ def test_installed_runner_uses_only_allowlisted_built_in_runtime_adapters(
     assert not fake_codex.log_file.exists()
     for run_id in (unapproved_run, unsafe_run):
         assert not (worktree_root / "runs" / run_id).exists()
-        assert not (harness_root / "state" / "task-delivery" / run_id).exists()
+        assert not (harness_root / "state" / run_id).exists()

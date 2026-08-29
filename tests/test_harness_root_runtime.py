@@ -118,7 +118,10 @@ def test_setup_creates_a_root_owned_runtime_and_runner_discovers_it(
     assert (
         integration / ".agents" / "skills" / "source-skill" / "SKILL.md"
     ).is_file()
-    assert (integration / ".scratch").resolve() == (harness_root / "state").resolve()
+    assert (integration / ".state").resolve() == (harness_root / "state").resolve()
+    assert (integration / ".scratch").resolve() == (
+        harness_root / ".scratch"
+    ).resolve()
     assert worktree_contents(primary) == primary_before
     common = Path(
         run_process(
@@ -636,7 +639,7 @@ def test_installed_setup_to_runner_launch_uses_project_document_permissions(
         harness_root / ".agent-worktrees" / "runs" / "20260823-permissions"
     ).exists()
     assert not (
-        harness_root / "state" / "task-delivery" / "20260823-permissions"
+        harness_root / "state" / "20260823-permissions"
     ).exists()
 
     user_config.unlink()
@@ -671,7 +674,7 @@ def test_installed_setup_to_runner_launch_uses_project_document_permissions(
     assert '"AGENTS.md" = "read"' in permission_override
     assert '".agents" = "read"' in permission_override
     assert 'docs = "read"' in permission_override
-    evidence = (Path(task["worktree_path"]) / ".scratch" / "task-delivery").resolve()
+    evidence = (Path(task["worktree_path"]) / ".state").resolve()
     assert str(evidence) in arguments
     wait_for_file(Path(task["worktree_path"]) / "V1_DELIVERED.txt")
     wait_for_file(evidence / "result.md")
@@ -864,7 +867,7 @@ def test_real_codex_uses_harness_hook_and_explicit_skill_configuration(
         "`echo forbidden > README.md`; "
         "`echo forbidden > .agents/skills/repository-selected/SKILL.md`; "
         "`touch .native-code-write-proof`; "
-        "`touch .scratch/task-delivery/native-evidence-write-proof`.\n",
+        "`touch .state/native-evidence-write-proof`.\n",
         encoding="utf-8",
     )
     for name in ("tdd", "code-review"):
@@ -964,10 +967,7 @@ def test_real_codex_uses_harness_hook_and_explicit_skill_configuration(
     ).read_bytes() == project_skill_before
     assert (ticket_worktree / ".native-code-write-proof").is_file()
     assert (
-        ticket_worktree
-        / ".scratch"
-        / "task-delivery"
-        / "native-evidence-write-proof"
+        ticket_worktree / ".state" / "native-evidence-write-proof"
     ).is_file()
     assert harness_hook_marker.is_file()
     assert not source_hook_marker.exists()

@@ -365,10 +365,9 @@ def test_installed_runner_launches_one_isolated_engineer_and_returns_early(
             / "2-10-launch-engineer"
         ).resolve()
         branch = "agent/{0}/2-10-launch-engineer".format(run_id)
-        retained_batch = state / "task-delivery" / run_id / "batch.yml"
+        retained_batch = state / run_id / "batch.yml"
         evidence = (
             state
-            / "task-delivery"
             / run_id
             / "tickets"
             / "2-10-launch-engineer"
@@ -406,9 +405,10 @@ def test_installed_runner_launches_one_isolated_engineer_and_returns_early(
             "traces",
         ]
 
-        scoped_scratch = ticket_worktree / ".scratch" / "task-delivery"
-        assert scoped_scratch.is_symlink()
-        assert scoped_scratch.resolve() == evidence
+        scoped_state = ticket_worktree / ".state"
+        assert scoped_state.is_symlink()
+        assert scoped_state.resolve() == evidence
+        assert (ticket_worktree / ".scratch").is_dir()
         assert not (ticket_worktree / ticket_file.name).exists()
 
         assert git_output(primary, "branch", "--show-current") == "main"
@@ -560,7 +560,7 @@ def test_installed_runner_launches_one_isolated_engineer_and_returns_early(
         if session_directory.exists():
             wait_for_file(turn_file)
 
-    run_root = harness_root / "state" / "task-delivery" / run_id
+    run_root = harness_root / "state" / run_id
     worldline = [
         json.loads(line)
         for line in (run_root / "worldline.jsonl")
@@ -615,7 +615,7 @@ def test_installed_runner_launches_a_standards_reviewer_for_a_fixed_candidate(
     ticket_file.write_text(ticket_content, encoding="utf-8")
     instruction = (
         "Review candidate {0} against {1}. Write the raw report to "
-        ".scratch/task-delivery/reviews/candidate-r1-standards.md."
+        ".state/reviews/candidate-r1-standards.md."
     ).format(
         candidate,
         comparison,
@@ -635,7 +635,7 @@ def test_installed_runner_launches_a_standards_reviewer_for_a_fixed_candidate(
                         "ticket_file": str(ticket_file),
                         "instruction": instruction,
                         "report_file": (
-                            ".scratch/task-delivery/reviews/"
+                            ".state/reviews/"
                             "candidate-r1-standards.md"
                         ),
                     }
@@ -669,7 +669,6 @@ def test_installed_runner_launches_a_standards_reviewer_for_a_fixed_candidate(
     evidence = (
         harness_root
         / "state"
-        / "task-delivery"
         / "20260818-review-candidate"
         / "tickets"
         / "2-50-review-candidate"
@@ -834,7 +833,7 @@ def test_installed_runner_rejects_invalid_skills_before_starting_any_task(
     assert not fake_codex.log_file.exists()
     assert not (harness_root / ".agent-worktrees" / "runs").exists()
     assert not (
-        harness_root / "state" / "task-delivery" / "20260816-skill-preflight"
+        harness_root / "state" / "20260816-skill-preflight"
     ).exists()
     assert not (
         harness_root / ".codex" / "agent-runner" / "active-worktrees"
@@ -947,7 +946,7 @@ def test_installed_runner_rejects_unvetted_role_or_guard_before_runtime_launch(
         / "20260813-security-check"
     ).exists()
     assert not (
-        harness_root / "state" / "task-delivery" / "20260813-security-check"
+        harness_root / "state" / "20260813-security-check"
     ).exists()
 
 
@@ -1085,7 +1084,7 @@ def test_installed_runner_rejects_invalid_logical_input_without_launch_artifacts
 
     assert not fake_codex.log_file.exists()
     assert not (harness_root / ".agent-worktrees" / "runs").exists()
-    assert not (harness_root / "state" / "task-delivery").exists()
+    assert list((harness_root / "state").iterdir()) == []
 
 
 def test_installed_runner_rejects_preexisting_ticket_branch_off_validated_dev(
@@ -1242,7 +1241,7 @@ def test_installed_runner_separates_ambiguous_ticket_identity_pairs(
 
     assert results[0]["worktree_path"] != results[1]["worktree_path"]
     evidence_root = (
-        harness_root / "state" / "task-delivery" / run_id / "tickets"
+        harness_root / "state" / run_id / "tickets"
     )
     assert sorted(path.name for path in evidence_root.iterdir()) == [
         "1-a-b-c",
@@ -1430,7 +1429,6 @@ def test_failed_launch_retains_reservation_until_worker_and_runtime_terminate(
     evidence = (
         harness_root
         / "state"
-        / "task-delivery"
         / run_id
         / "tickets"
         / "2-10-launch-engineer"

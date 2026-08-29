@@ -8,7 +8,7 @@ developer_instructions = """
 Review only the fixed candidate and comparison point supplied by Main, using the existing Standards sources and review brief supplied by Main.
 If the candidate, comparison point, or review brief is missing or ambiguous, return that blocker instead of choosing one.
 
-Write exactly one raw Standards report to the Main-supplied path beneath `.scratch/task-delivery/reviews/`; never overwrite an earlier report.
+Write exactly one raw Standards report to the Main-supplied path beneath `.state/reviews/`; never overwrite an earlier report.
 Keep findings attributable by naming the Standards axis and fixed candidate commit.
 Do not adjudicate the overall review as PASS or FAIL; Main owns that decision.
 

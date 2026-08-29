@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import hashlib
 import os
 import re
@@ -374,6 +375,8 @@ def _cleanup_reserved(target: CleanupTarget) -> CleanupResponse:
             ):
                 raise OSError("Ticket branch still exists")
             completed_actions.append("branch-removed")
+
+        _prune_worktree_ancestors(target)
     except (OSError, RunnerError):
         return _refused(
             target=target,
@@ -407,12 +410,10 @@ def _resolve_registration(
     run_id: str,
     ticket_id: str,
 ) -> Dict[str, Any]:
-    ticket_root = (
-        project.state_directory / "task-delivery" / run_id / "tickets"
-    )
+    ticket_root = project.state_directory / run_id / "tickets"
     prefix = ticket_id_stem_prefix(ticket_id)
     current = project.state_directory
-    for component in ("task-delivery", run_id, "tickets"):
+    for component in (run_id, "tickets"):
         current = current / component
         if os.path.lexists(str(current)) and current.is_symlink():
             raise _RegistrationError(
@@ -820,13 +821,7 @@ def _inspect_aliases(
             return [], [], None
         return [], ["session-root-missing"], None
     stem = worktree.name
-    evidence = (
-        project.state_directory
-        / "task-delivery"
-        / run_id
-        / "tickets"
-        / stem
-    )
+    evidence = project.state_directory / run_id / "tickets" / stem
     flags = directory_open_flags()
     try:
         runner_descriptor = os.open(str(runner_directory), flags)
@@ -1379,7 +1374,7 @@ def _stat_identity_matches(
 def _persistent_evidence_errors(
     target: CleanupTarget, bound_aliases: List[BoundAlias]
 ) -> List[str]:
-    run_root = target.project.state_directory / "task-delivery" / target.run_id
+    run_root = target.project.state_directory / target.run_id
     ticket_root = run_root / "tickets" / target.worktree.name
     worktree_roots = [target.worktree]
     worktree_roots.extend(
@@ -1471,6 +1466,20 @@ def _delete_ticket_branch_if_dev_unchanged(
         "commit\n"
     ).format(project.integration_branch, project.dev_commit, branch, ticket_commit)
     run_git(project.repository, "update-ref", "--stdin", input_text=transaction)
+
+
+def _prune_worktree_ancestors(target: CleanupTarget) -> None:
+    for directory in (
+        target.worktree.parent,
+        target.project.worktree_root / "runs",
+    ):
+        try:
+            directory.rmdir()
+        except FileNotFoundError:
+            continue
+        except OSError as error:
+            if error.errno not in {errno.EEXIST, errno.ENOTEMPTY}:
+                raise
 
 
 def _registered_worktree_path(record: Dict[str, str]) -> Path:

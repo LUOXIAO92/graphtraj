@@ -378,7 +378,7 @@ def lexical_path_from(raw: str, *, cwd: Path) -> Optional[Path]:
 
 
 def ticket_evidence_scope(root: Path) -> Optional[Tuple[Path, Path]]:
-    """Return the one scratch link and evidence directory implied by a ticket root."""
+    """Return the one state link and evidence directory implied by a ticket root."""
     for worktree_directory in root.parents:
         if worktree_directory.name != ".agent-worktrees":
             continue
@@ -398,16 +398,15 @@ def ticket_evidence_scope(root: Path) -> Optional[Tuple[Path, Path]]:
         run_id = relative.parts[1]
         ticket_directory = relative.parts[2]
         harness_root = worktree_directory.parent
-        scoped_scratch = root / ".scratch" / "task-delivery"
+        scoped_state = root / ".state"
         expected_evidence = (
             harness_root
             / "state"
-            / "task-delivery"
             / run_id
             / "tickets"
             / ticket_directory
         )
-        return scoped_scratch, expected_evidence
+        return scoped_state, expected_evidence
     return None
 
 
@@ -421,21 +420,21 @@ def scoped_evidence_reason(
     scope = ticket_evidence_scope(root)
     if scope is None:
         return False, None
-    scoped_scratch, expected_evidence = scope
-    if not is_inside(lexical, scoped_scratch):
+    scoped_state, expected_evidence = scope
+    if not is_inside(lexical, scoped_state):
         return False, None
 
-    relative = lexical.relative_to(scoped_scratch)
+    relative = lexical.relative_to(scoped_state)
     if not relative.parts:
         return True, "Blocked direct operation on the scoped evidence link."
     try:
-        if scoped_scratch.parent.resolve(strict=False) != scoped_scratch.parent:
+        if scoped_state.parent.resolve(strict=False) != scoped_state.parent:
             return True, "Cannot verify the scoped evidence link parent."
-        if not scoped_scratch.is_symlink():
+        if not scoped_state.is_symlink():
             return True, "Cannot verify the scoped evidence link."
         if expected_evidence.resolve(strict=False) != expected_evidence:
             return True, "Cannot verify the expected ticket evidence directory."
-        if scoped_scratch.resolve(strict=False) != expected_evidence:
+        if scoped_state.resolve(strict=False) != expected_evidence:
             return True, "Blocked mispointed scoped evidence link."
     except (OSError, RuntimeError, ValueError):
         return True, "Cannot resolve the scoped evidence link."
@@ -443,7 +442,7 @@ def scoped_evidence_reason(
     if not is_inside(target, expected_evidence):
         return True, "Blocked target outside the current ticket evidence directory."
 
-    cursor = scoped_scratch
+    cursor = scoped_state
     for part in relative.parts:
         cursor = cursor / part
         if cursor.is_symlink():

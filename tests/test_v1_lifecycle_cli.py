@@ -77,7 +77,7 @@ def test_operator_guide_covers_the_complete_v1_lifecycle() -> None:
         "agent-runner send",
         "agent-runner interrupt",
         "agent-runner cleanup",
-        "state/task-delivery",
+        "state",
         "manually delete",
         "GitHub, GitLab, local Markdown",
         "Codex-only",
@@ -161,7 +161,10 @@ print("target validation passed")
     assert tree_contents(user_home) == user_before
     assert integration.is_dir()
     assert git_output(integration, "branch", "--show-current") == "dev"
-    assert (integration / ".scratch").resolve() == state.resolve()
+    assert (integration / ".state").resolve() == state.resolve()
+    assert (integration / ".scratch").resolve() == (
+        harness_root / ".scratch"
+    ).resolve()
     assert {
         path.name for path in (harness_root / ".agents" / "skills").iterdir()
     } == set(CORE_SKILL_NAMES)
@@ -242,10 +245,11 @@ print("target validation passed")
     assert alias == "2-15-v1-lifecycle@e1"
     ticket_branch = "agent/{0}/2-15-v1-lifecycle".format(run_id)
     assert git_output(ticket_worktree, "branch", "--show-current") == ticket_branch
-    evidence = state / "task-delivery" / run_id / "tickets" / ticket_worktree.name
+    evidence = state / run_id / "tickets" / ticket_worktree.name
     retained_batch = Path(launch_document["retained_batch_file"])
     assert retained_batch.read_bytes() == batch_content.encode("utf-8")
-    assert (ticket_worktree / ".scratch" / "task-delivery").resolve() == evidence.resolve()
+    assert (ticket_worktree / ".state").resolve() == evidence.resolve()
+    assert (ticket_worktree / ".scratch").is_dir()
     assert not (ticket_worktree / ".codex").exists()
     assert not (ticket_worktree / ".agents").exists()
 
@@ -358,7 +362,7 @@ print("target validation passed")
     ):
         report = reviews / "{0}-r1-{1}.md".format(alias, axis)
         report_file = str(
-            Path(".scratch/task-delivery/reviews") / report.name
+            Path(".state/reviews") / report.name
         )
         review_batch = harness_root / "{0}-review.yml".format(axis)
         review_batch.write_text(

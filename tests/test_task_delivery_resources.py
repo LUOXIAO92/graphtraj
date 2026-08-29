@@ -208,7 +208,7 @@ def test_installed_task_delivery_assigns_only_mechanical_evidence_work_to_runner
 
     for required_guidance in (
         "provision or reuse the persistent ticket evidence directory",
-        "scoped `.scratch/task-delivery` symlink",
+        "scoped `.state` symlink and `.scratch` directory",
         "write or update `metadata.yml`",
         "mechanically known launch facts",
     ):

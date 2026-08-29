@@ -237,7 +237,7 @@ def launch_turn(
         axis = role.removesuffix("-reviewer")
         task["review_round"] = 1
         task["report_file"] = (
-            ".scratch/task-delivery/reviews/candidate-r1-{0}.md".format(axis)
+            ".state/reviews/candidate-r1-{0}.md".format(axis)
         )
     batch_file.write_text(
         yaml.safe_dump(
@@ -530,7 +530,6 @@ def test_installed_worker_owns_an_unconfirmed_runtime_until_it_is_terminal(
                     "evidence_path": str(
                         tmp_path
                         / "state"
-                        / "task-delivery"
                         / "20260813-recovery"
                         / "tickets"
                         / "2-10-recovery"

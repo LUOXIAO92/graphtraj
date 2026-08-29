@@ -108,7 +108,7 @@ def test_installed_send_resumes_an_idle_runtime_session_under_the_same_alias(
     source_config.write_text('model = "source-changed"\n', encoding="utf-8")
     resume_release = tmp_path / "allow-resumed-turn-to-finish"
     instruction = "--dangerously-bypass-approvals-and-sandbox"
-    run_root = harness_root / "state" / "task-delivery" / "20260814-resume-engineer"
+    run_root = harness_root / "state" / "20260814-resume-engineer"
     decision_file = harness_root / "resume-decision.yml"
     decision_file.write_text(
         yaml.safe_dump(

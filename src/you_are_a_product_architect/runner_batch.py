@@ -288,7 +288,7 @@ def _read_report_file(value: object, role: str) -> Path | None:
             raise RunnerError(
                 "REPORT_FILE_INVALID",
                 "A Reviewer task must supply one report_file beneath "
-                ".scratch/task-delivery/reviews/.",
+                ".state/reviews/.",
             )
         return None
     path = Path(value) if isinstance(value, str) else Path()
@@ -296,15 +296,15 @@ def _read_report_file(value: object, role: str) -> Path | None:
         not reviewer
         or not isinstance(value, str)
         or path.is_absolute()
-        or len(path.parts) != 4
-        or path.parts[:3] != (".scratch", "task-delivery", "reviews")
+        or len(path.parts) != 3
+        or path.parts[:2] != (".state", "reviews")
         or path.name in {".", ".."}
         or path.suffix != ".md"
     ):
         raise RunnerError(
             "REPORT_FILE_INVALID",
             "report_file must name one Markdown file beneath "
-            ".scratch/task-delivery/reviews/ for a Reviewer task.",
+            ".state/reviews/ for a Reviewer task.",
         )
     return path
 
@@ -312,7 +312,7 @@ def _read_report_file(value: object, role: str) -> Path | None:
 def retain_batch(state: Path, batch: Batch) -> Path:
     """Retain the exact validated input without overwriting prior batches."""
 
-    run_directory = state / "task-delivery" / batch.run_id
+    run_directory = state / batch.run_id
     _safe_directory(run_directory, state)
     for ordinal in range(1, 10000):
         name = "batch.yml" if ordinal == 1 else "batch-{0}.yml".format(ordinal)
@@ -349,13 +349,7 @@ def retain_batch(state: Path, batch: Batch) -> Path:
 def evidence_path(state: Path, run_id: str, task: Task) -> Path:
     """Return one ticket's deterministic persistent evidence path."""
 
-    return (
-        state
-        / "task-delivery"
-        / run_id
-        / "tickets"
-        / task.stem
-    ).resolve()
+    return (state / run_id / "tickets" / task.stem).resolve()
 
 
 def prepare_evidence(state: Path, run_id: str, task: Task) -> Path:

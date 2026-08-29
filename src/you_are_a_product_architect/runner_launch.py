@@ -163,7 +163,7 @@ def _launch_task(
             evidence, run_id, task
         )
         provision_worktree(project, task, plan.branch, plan.worktree)
-        _ensure_scoped_scratch(plan.worktree, evidence)
+        _ensure_worktree_paths(plan.worktree, evidence)
         _prepare_report_destination(evidence, task)
         runtime_context = _finalize_runtime_context(context_preflight)
         alias, mapping = _start_turn(
@@ -297,27 +297,27 @@ def _reserve_active_turn(
         ) from error
 
 
-def _ensure_scoped_scratch(worktree: Path, evidence: Path) -> None:
+def _ensure_worktree_paths(worktree: Path, evidence: Path) -> None:
     scratch = worktree / ".scratch"
-    scoped = scratch / "task-delivery"
+    state = worktree / ".state"
     try:
         if scratch.is_symlink():
             raise OSError(".scratch must not be a symlink")
         scratch.mkdir(exist_ok=True)
-        if os.path.lexists(str(scoped)):
-            if scoped.is_symlink() and scoped.resolve() == evidence:
+        if os.path.lexists(str(state)):
+            if state.is_symlink() and state.resolve() == evidence:
                 return
-            raise OSError("scoped scratch already points elsewhere")
-        scoped.symlink_to(
-            os.path.relpath(evidence, scratch),
+            raise OSError("scoped state already points elsewhere")
+        state.symlink_to(
+            os.path.relpath(evidence, worktree),
             target_is_directory=True,
         )
-        if scoped.resolve() != evidence:
-            raise OSError("scoped scratch does not resolve to evidence")
+        if state.resolve() != evidence:
+            raise OSError("scoped state does not resolve to evidence")
     except OSError as error:
         raise RunnerError(
-            "SCRATCH_LINK_FAILED",
-            "The Ticket Worktree scoped scratch link could not be established.",
+            "STATE_LINK_FAILED",
+            "The Ticket Worktree scoped state link could not be established.",
         ) from error
 
 

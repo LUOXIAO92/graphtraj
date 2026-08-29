@@ -114,7 +114,6 @@ def exercise_ticket_evidence_scope(
     evidence = (
         harness_root
         / "state"
-        / "task-delivery"
         / run_id
         / "tickets"
         / ticket_name
@@ -123,7 +122,6 @@ def exercise_ticket_evidence_scope(
     mispointed_evidence = (
         harness_root
         / "state"
-        / "task-delivery"
         / "other-run"
         / "tickets"
         / ticket_name
@@ -137,19 +135,16 @@ def exercise_ticket_evidence_scope(
     ).check_returncode()
     scratch = ticket_worktree / ".scratch"
     scratch.mkdir()
-    scoped_scratch = scratch / "task-delivery"
-    scoped_scratch.symlink_to(evidence, target_is_directory=True)
-    alias_report = (
-        ".scratch/task-delivery/reviews/"
-        "42-payment-retry@e1-r1-spec.md"
-    )
+    scoped_state = ticket_worktree / ".state"
+    scoped_state.symlink_to(evidence, target_is_directory=True)
+    alias_report = ".state/reviews/42-payment-retry@e1-r1-spec.md"
 
     for command in (
-        "touch .scratch/task-delivery/result.md",
-        "touch .scratch/task-delivery/validation.md",
-        "mkdir -p .scratch/task-delivery/reviews",
-        "touch .scratch/task-delivery/reviews/{0}-r1-standards.md".format(suffix),
-        "touch .scratch/task-delivery/reviews/{0}-r1-spec.md".format(suffix),
+        "touch .state/result.md",
+        "touch .state/validation.md",
+        "mkdir -p .state/reviews",
+        "touch .state/reviews/{0}-r1-standards.md".format(suffix),
+        "touch .state/reviews/{0}-r1-spec.md".format(suffix),
     ):
         allowed = run_hook(
             hook,
@@ -169,7 +164,7 @@ def exercise_ticket_evidence_scope(
         (
             "apply_patch",
             """*** Begin Patch
-*** Add File: .scratch/task-delivery/reviews/42-payment-retry@e1-r1-spec.md
+*** Add File: .state/reviews/42-payment-retry@e1-r1-spec.md
 +Raw Spec Reviewer report
 *** End Patch
 """,
@@ -224,13 +219,13 @@ def exercise_ticket_evidence_scope(
     assert relocatable_link.resolve() == local_target
 
     for command in (
-        "touch .scratch/task-delivery/sibling-link/result.md",
-        "touch .scratch/task-delivery/current-link/result.md",
+        "touch .state/sibling-link/result.md",
+        "touch .state/current-link/result.md",
         (
             "cp -a nested/deep/relocatable-link "
-            ".scratch/task-delivery/copied-link"
+            ".state/copied-link"
         ),
-        "ln -s {0} .scratch/task-delivery/linked-sibling".format(sibling_evidence),
+        "ln -s {0} .state/linked-sibling".format(sibling_evidence),
     ):
         assert_hook_denies(
             hook,
@@ -244,15 +239,15 @@ def exercise_ticket_evidence_scope(
         )
 
     for wrong_evidence in (sibling_evidence, mispointed_evidence):
-        scoped_scratch.unlink()
-        scoped_scratch.symlink_to(wrong_evidence, target_is_directory=True)
+        scoped_state.unlink()
+        scoped_state.symlink_to(wrong_evidence, target_is_directory=True)
         assert_hook_denies(
             hook,
             {
                 "hook_event_name": "PreToolUse",
                 "cwd": str(ticket_worktree),
                 "tool_name": "Bash",
-                "tool_input": {"command": "touch .scratch/task-delivery/result.md"},
+                "tool_input": {"command": "touch .state/result.md"},
             },
             cwd=ticket_worktree,
         )

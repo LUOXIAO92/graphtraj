@@ -37,10 +37,11 @@ description: Orchestrate delivery of an accepted Ticket DAG while Main retains s
 
 ## Delegate Delivery Run records
 
-Follow [ADR 0003](../../../../../docs/adr/0003-delivery-state-agent-maintains-run-state.md)
-for Delivery State Agent ownership and current task-map and DAG synchronization.
-It is the sole authority for that behavior; this Skill only invokes it as part
-of Main's delivery orchestration.
+Resolve the active Source Repository root, then read
+`docs/adr/0003-delivery-state-agent-maintains-run-state.md` there for Delivery
+State Agent ownership and current task-map and DAG synchronization. ADR 0003 is
+the sole authority for that behavior; this Skill only invokes it as part of
+Main's delivery orchestration.
 
 1. Launch one Delivery State Agent per active Delivery Run through the
    Runtime's native agent tools from Main's Integration Worktree. Do not send
@@ -94,11 +95,12 @@ authority to the Delivery State Agent.
    Verify the fixed candidate and clean Git state before adjudication. Record
    each Reviewer's role, Runner alias, selected Runtime, and configured model
    with its report so the evidence remains attributable.
-8. Main waits for both reports and applies the managed Reviewer-guidance policy
-   in the Source Repository root `AGENTS.md`, installed under
-   [ADR 0026](../../../../../docs/adr/0026-manage-inherited-reviewer-guidance.md).
-   Main adjudicates both reports as one review round and records `PASS` or
-   `FAIL` with a concise rationale. On `PASS`, mark the
+8. Main waits for both reports, resolves the active Source Repository root, and
+   applies the managed Reviewer-guidance policy in its root `AGENTS.md`. Read
+   ADR 0026 at `docs/adr/0026-manage-inherited-reviewer-guidance.md` from that
+   same root for the routing decision. Main adjudicates both reports as one
+   review round and records `PASS` or `FAIL` with a concise rationale. On
+   `PASS`, mark the
    ticket `awaiting-integration`. On `FAIL`, apply the diagnosis policy below. When
    Main omits review, record that decision and move the validated candidate to
    `awaiting-integration` without inventing a review verdict.

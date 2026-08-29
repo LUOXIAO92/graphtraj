@@ -56,14 +56,23 @@ def installed_task_delivery_resources(
 import importlib.resources
 import json
 import sys
+from pathlib import Path
 
 sys.path.insert(0, sys.argv[1])
+from you_are_a_product_architect.supported_skills import SupportedSkills
+
 package = importlib.resources.files("you_are_a_product_architect")
 paths = json.loads(sys.argv[2])
-print(json.dumps({
+result = {
     name: package.joinpath(*path.split("/")).read_text(encoding="utf-8")
     for name, path in paths.items()
-}))
+}
+runtime_store = Path(sys.argv[3]) / ".codex"
+SupportedSkills.load().install_missing(runtime_store, ("task-delivery",))
+result["installed_skill"] = (
+    runtime_store.parent / ".agents" / "skills" / "task-delivery" / "SKILL.md"
+).read_text(encoding="utf-8")
+print(json.dumps(result))
 """
     result = run_process(
         [
@@ -73,6 +82,7 @@ print(json.dumps({
             probe,
             str(install_directory),
             json.dumps(RESOURCE_PATHS),
+            str(temporary_directory / "harness"),
         ],
         cwd=temporary_directory,
     )
@@ -159,7 +169,8 @@ def test_installed_task_delivery_runs_one_parallel_fixed_candidate_review_round(
         "exact non-overwriting report path",
         "reviewer instruction",
         "main waits for both reports",
-        "source repository root `agents.md`",
+        "active source repository root",
+        "managed reviewer-guidance policy in its root `agents.md`",
         "adr 0026",
     ):
         assert required_guidance in guidance
@@ -177,6 +188,17 @@ def test_installed_task_delivery_routes_state_projection_authority_to_adr_0003(
     assert "0003-delivery-state-agent-maintains-run-state.md" in guidance
     assert "sole writer of that run's ledger and mermaid dag" not in guidance
     assert "synchronize after every engineer or reviewer return" not in guidance
+
+
+def test_harness_installed_skill_routes_to_active_source_repository_adrs(
+    installed_task_delivery_resources: Dict[str, str],
+) -> None:
+    guidance = normalized(installed_task_delivery_resources["installed_skill"])
+
+    assert "active source repository root" in guidance
+    assert "docs/adr/0003-delivery-state-agent-maintains-run-state.md" in guidance
+    assert "docs/adr/0026-manage-inherited-reviewer-guidance.md" in guidance
+    assert "../../../../../docs" not in guidance
 
 
 def test_installed_task_delivery_assigns_only_mechanical_evidence_work_to_runner(

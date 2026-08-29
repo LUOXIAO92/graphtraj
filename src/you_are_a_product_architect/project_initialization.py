@@ -28,6 +28,43 @@ from .supported_skills import (
 
 
 INTEGRATION_BRANCH = "dev"
+HARNESS_GUIDANCE_DESCRIPTION = "Harness Guidance Project Document"
+HARNESS_GUIDANCE_START = (
+    b"<!-- you-are-a-product-architect:harness-guidance:start -->"
+)
+HARNESS_GUIDANCE_END = (
+    b"<!-- you-are-a-product-architect:harness-guidance:end -->"
+)
+HARNESS_GUIDANCE_BLOCK = b"""<!-- you-are-a-product-architect:harness-guidance:start -->
+
+## Harness Guidance
+
+Review against the smallest implementation that satisfies the accepted Ticket,
+its acceptance criteria, and the repository's documented constraints.
+
+- A blocking finding must cite the exact Ticket, Spec, ADR, or repository rule,
+  identify a currently supported input or state, trace how it passes existing
+  callers and upstream validation to the changed code, and show the concrete
+  observable failure. If any part is missing, omit the finding; do not replace
+  it with non-blocking speculation.
+- Treat established upstream validation and interface invariants as
+  authoritative. Do not require duplicate downstream validation, fallback,
+  error mapping, or tests unless the downstream code is itself an explicitly
+  documented trust, security, data-loss, or destructive-operation boundary.
+- Review only behavior changed by the fixed candidate. Unrelated existing
+  inconsistency and repository-wide normalization are out of scope.
+  Consistency is blocking only when a cited rule explicitly requires it or the
+  difference causes the concrete failure above.
+- Do not use unsupported corruption, unsupported environments, future
+  extension, bare theoretical races, defense in depth, code smells, or generic
+  best practice as grounds for `FAIL` or rework.
+- Prefer deletion and the fewest files, branches, validations, and tests. Once
+  the minimum code satisfies current acceptance and applicable constraints,
+  additional defensive machinery is scope creep.
+- Main must reject a report item that fails this baseline as Reviewer error. It
+  does not count as an Engineer review failure and cannot authorize rework.
+
+<!-- you-are-a-product-architect:harness-guidance:end -->"""
 
 
 class ProjectSetupError(Exception):
@@ -120,6 +157,53 @@ class _TargetView:
 def _append_conflict(conflicts: List[str], message: str) -> None:
     if message not in conflicts:
         conflicts.append(message)
+
+
+def _managed_harness_guidance(existing: Optional[bytes]) -> bytes:
+    if existing is None:
+        return b"# AGENTS.md\n\n" + HARNESS_GUIDANCE_BLOCK + b"\n"
+
+    blocks = []
+    cursor = 0
+    while True:
+        start = existing.find(HARNESS_GUIDANCE_START, cursor)
+        stray_end = existing.find(HARNESS_GUIDANCE_END, cursor)
+        if start < 0:
+            if stray_end >= 0:
+                raise ProjectSetupError(
+                    "AGENTS.md contains an unmatched Harness Guidance marker."
+                )
+            break
+        if 0 <= stray_end < start:
+            raise ProjectSetupError(
+                "AGENTS.md contains an unmatched Harness Guidance marker."
+            )
+        end = existing.find(
+            HARNESS_GUIDANCE_END,
+            start + len(HARNESS_GUIDANCE_START),
+        )
+        if end < 0:
+            raise ProjectSetupError(
+                "AGENTS.md contains an unmatched Harness Guidance marker."
+            )
+        end += len(HARNESS_GUIDANCE_END)
+        blocks.append((start, end))
+        cursor = end
+
+    if len(blocks) == 1:
+        start, end = blocks[0]
+        return existing[:start] + HARNESS_GUIDANCE_BLOCK + existing[end:]
+
+    unmanaged = bytearray()
+    cursor = 0
+    for start, end in blocks:
+        unmanaged.extend(existing[cursor:start])
+        cursor = end
+    unmanaged.extend(existing[cursor:])
+    separator = b""
+    if unmanaged and not unmanaged.endswith(b"\n\n"):
+        separator = b"\n" if unmanaged.endswith(b"\n") else b"\n\n"
+    return bytes(unmanaged) + separator + HARNESS_GUIDANCE_BLOCK + b"\n"
 
 
 def _symlink_resolves_to(
@@ -405,6 +489,22 @@ class ProjectSetupPlan:
             "Harness Runtime Store",
             actions,
             conflicts,
+        )
+        harness_view = _TargetView(self.harness_root)
+        agents_entry = harness_view.entry("AGENTS.md")
+        agents_content = _managed_harness_guidance(
+            agents_entry.content
+            if agents_entry is not None and agents_entry.kind == "file"
+            else None
+        )
+        _preflight_file(
+            harness_view,
+            "AGENTS.md",
+            agents_content,
+            HARNESS_GUIDANCE_DESCRIPTION,
+            actions,
+            conflicts,
+            replace_existing_file=True,
         )
 
         dev_exists = self.repository.branch_exists(INTEGRATION_BRANCH)
@@ -727,6 +827,21 @@ class ProjectSetupPlan:
             mark_completed(
                 _directory_action("Harness Runtime Store", self.runtime_store)
             )
+            agents_path = self.harness_root / "AGENTS.md"
+            agents_entry = _filesystem_entry(agents_path)
+            agents_content = _managed_harness_guidance(
+                agents_entry.content
+                if agents_entry is not None and agents_entry.kind == "file"
+                else None
+            )
+            if agents_entry is None or agents_entry.content != agents_content:
+                agents_path.write_bytes(agents_content)
+                mark_completed(
+                    "{0}: {1}".format(
+                        HARNESS_GUIDANCE_DESCRIPTION,
+                        agents_path,
+                    )
+                )
             if self.proposed_base is not None:
                 self.repository.create_branch(
                     INTEGRATION_BRANCH,

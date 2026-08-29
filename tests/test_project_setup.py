@@ -25,6 +25,10 @@ CORE_SKILL_NAMES = (
     "resolving-merge-conflicts",
 )
 
+HARNESS_GUIDANCE_START = (
+    "<!-- you-are-a-product-architect:harness-guidance:start -->"
+)
+
 
 def install_skills(skill_root: Path, names: Iterable[str]) -> None:
     for name in names:
@@ -190,6 +194,7 @@ def test_setup_refuses_repository_owned_document_paths_without_mutation(
     assert not (harness_root / ".agent-worktrees").exists()
     assert not (harness_root / "state").exists()
     assert not (harness_root / ".codex").exists()
+    assert not (harness_root / "AGENTS.md").exists()
     assert git_output(primary, "worktree", "list", "--porcelain") == worktrees_before
     assert worktree_contents(primary) == primary_files
     assert tree_contents(user_home) == user_before
@@ -604,6 +609,21 @@ def test_setup_confirms_the_exact_base_and_initializes_one_harness_project(
     scratch_root = harness_root / ".scratch"
     context = harness_root / "CONTEXT.md"
     documents = harness_root / "docs"
+    harness_agents = harness_root / "AGENTS.md"
+    repository_agents = primary / "AGENTS.md"
+    repository_agents.write_text(
+        "# Repository guidance\n\nKeep this unchanged.\n",
+        encoding="utf-8",
+    )
+    run_process(["git", "add", "AGENTS.md"], cwd=primary).check_returncode()
+    run_process(
+        ["git", "commit", "-m", "Add repository guidance"], cwd=primary
+    ).check_returncode()
+    repository_agents_before = repository_agents.read_bytes()
+    harness_agents.write_text(
+        "# Operator guidance\n\nKeep this around the managed block.\n",
+        encoding="utf-8",
+    )
     context.write_text("# Harness context\n", encoding="utf-8")
     documents.mkdir()
     (documents / "decision.md").write_text(
@@ -635,6 +655,13 @@ def test_setup_confirms_the_exact_base_and_initializes_one_harness_project(
     assert (runtime_store / "agent-runner" / "config.yml").is_file()
     task_delivery = harness_root / ".agents" / "skills" / "task-delivery"
     assert tree_contents(task_delivery) == supported_skill_contents("task-delivery")
+    harness_guidance = harness_agents.read_text(encoding="utf-8")
+    assert "# Operator guidance\n\nKeep this around the managed block.\n" in (
+        harness_guidance
+    )
+    assert harness_guidance.count(HARNESS_GUIDANCE_START) == 1
+    assert repository_agents.read_bytes() == repository_agents_before
+    assert (integration / "AGENTS.md").read_bytes() == repository_agents_before
 
     state_link = integration / ".state"
     scratch_link = integration / ".scratch"

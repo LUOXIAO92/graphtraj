@@ -2,6 +2,14 @@
 
 How the engineering skills should consume this repo's domain documentation when exploring the codebase.
 
+## Harness Project override
+
+For a Harness Project, the Harness Project Root is the Project Document root.
+Read `AGENTS.md`, `CONTEXT.md`, `CONTEXT-MAP.md`, and `docs/` there. Source
+Repository Guidance is read-only: never create, edit, or migrate its
+`AGENTS.md`, `CLAUDE.md`, `CONTEXT.md`, or `docs/`. Outside a Harness Project,
+use the repository-root layout below.
+
 ## Before exploring, read these
 
 - **`CONTEXT.md`** at the repo root, or

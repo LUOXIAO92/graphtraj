@@ -14,6 +14,15 @@ Scaffold the per-repo configuration that the engineering skills assume:
 
 This is a prompt-driven skill, not a deterministic script. Explore, present what you found, confirm with the user, then write.
 
+## Harness Project override
+
+For a Harness Project, the Harness Project Root is the Project Document root.
+Resolve every `AGENTS.md`, `CONTEXT.md`, `CONTEXT-MAP.md`, and `docs/` path in
+this skill and its bundled templates there. Update the Harness Root
+`AGENTS.md`; never create, edit, or migrate Source Repository Guidance,
+including its `AGENTS.md`, `CLAUDE.md`, `CONTEXT.md`, or `docs/`. Outside a
+Harness Project, use the repository-root behavior below.
+
 ## Process
 
 ### 1. Explore

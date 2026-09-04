@@ -1,4 +1,4 @@
-# you-are-a-product-architect
+# GraphTraj
 
 V1 is a soft delivery Harness: Main makes delivery decisions, while the
 installed commands provide safe setup, isolated Engineer transport, and cleanup.
@@ -12,7 +12,7 @@ is required.
 uv tool install "git+https://<repository-url>@<tag-or-commit>"
 ```
 
-This installs the `you-are-a-product-architect` and `agent-runner` commands in
+This installs the `graphtraj` and `agent-runner` commands in
 an isolated tool environment. It does not install project configuration into a
 user-global Codex Runtime directory.
 
@@ -47,13 +47,13 @@ checkout; Ticket Worktrees are isolated, disposable Engineer checkouts.
 From the Harness Project Root, first inspect the core Skill names:
 
 ```text
-you-are-a-product-architect doctor
+graphtraj doctor
 ```
 
 Then run the interactive setup:
 
 ```text
-you-are-a-product-architect setup
+graphtraj setup
 ```
 
 Select the existing Primary Worktree when prompted. If required Skills are

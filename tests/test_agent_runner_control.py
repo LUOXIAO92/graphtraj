@@ -33,7 +33,7 @@ def send(
             "--caused-by-worldline-seq",
             str(caused_by_worldline_seq),
         ],
-        cwd=integration.parents[1],
+        cwd=integration.parent.parent.parent,
         env=environment,
         timeout=5,
     )
@@ -47,7 +47,7 @@ def interrupt(
 ):
     return run_process(
         [str(installed_commands.runner), "interrupt", alias],
-        cwd=integration.parents[1],
+        cwd=integration.parent.parent.parent,
         env=environment,
         timeout=10,
     )
@@ -107,7 +107,9 @@ def test_installed_send_resumes_an_idle_runtime_session_under_the_same_alias(
     source_config.write_text('model = "source-changed"\n', encoding="utf-8")
     resume_release = tmp_path / "allow-resumed-turn-to-finish"
     instruction = "--dangerously-bypass-approvals-and-sandbox"
-    run_root = harness_root / "state" / "20260814-resume-engineer"
+    run_root = (
+        harness_root / ".graphtraj" / "state" / "20260814-resume-engineer"
+    )
     decision_file = harness_root / "resume-decision.yml"
     decision_file.write_text(
         yaml.safe_dump(

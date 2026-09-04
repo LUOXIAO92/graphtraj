@@ -1,4 +1,4 @@
-"""Install the accepted root-owned Codex and Runner configuration."""
+"""Install the accepted root-owned Codex Runtime resources."""
 
 from __future__ import annotations
 
@@ -11,16 +11,9 @@ from importlib import resources
 from pathlib import Path
 from typing import Callable, Dict, Optional
 
-import yaml
-
-from .runner_models import (
-    LOGICAL_ROLES,
-    RUNNER_CONFIG_VERSION,
-    managed_runtime_policy_matches,
-)
+from .runner_models import managed_runtime_policy_matches
 
 
-ROLE_BINDINGS = {role: role for role in LOGICAL_ROLES}
 RESOURCE_PATHS = (
     "config.toml",
     "agents/delivery-state.toml",
@@ -35,7 +28,7 @@ RESOURCE_PATHS = (
 
 
 class CodexProjectError(Exception):
-    """Accepted Codex or machine-local Runner files could not be installed."""
+    """Accepted Codex Runtime files could not be installed."""
 
 
 def runtime_resource_matches(
@@ -88,14 +81,6 @@ class CodexProjectFiles:
             common_git_directory / "info" / "exclude"
         )
 
-    @staticmethod
-    def runner_config_action(runtime_store: Path) -> str:
-        """Describe the machine-local Runner configuration write."""
-
-        return "Harness Runner Config: {0}".format(
-            runtime_store / "agent-runner" / "config.yml"
-        )
-
     @classmethod
     def load(cls) -> "CodexProjectFiles":
         root = resources.files("you_are_a_product_architect.resources").joinpath(
@@ -110,19 +95,19 @@ class CodexProjectFiles:
             }
         )
 
-    def install(
+    def install_setup_resources(
         self,
         *,
         harness_root: Path,
-        source_repository: Path,
         integration_worktree: Path,
         state_directory: Path,
-        scratch_directory: Path,
+        documents_directory: Path,
         common_git_directory: Path,
-        worktree_root: Path,
-        runtime_executable: Path,
+        include_document_views: bool,
         on_action_complete: Optional[Callable[[str], None]] = None,
     ) -> None:
+        """Install Runtime resources without creating a Runner configuration."""
+
         runtime_store = harness_root / ".codex"
         self._write_resources(runtime_store, on_action_complete)
         self._ensure_link(
@@ -131,37 +116,20 @@ class CodexProjectFiles:
             state_directory,
             on_action_complete,
         )
-        self._ensure_link(
-            integration_worktree,
-            ".scratch",
-            scratch_directory,
-            on_action_complete,
-        )
-        self._ensure_link(
-            integration_worktree,
-            "CONTEXT.md",
-            harness_root / "CONTEXT.md",
-            on_action_complete,
-        )
-        self._ensure_link(
-            integration_worktree,
-            "docs",
-            harness_root / "docs",
-            on_action_complete,
-        )
-        self._ensure_links_are_ignored(
-            common_git_directory,
-            on_action_complete,
-        )
-        self._write_runner_config(
-            runtime_store,
-            harness_root,
-            source_repository,
-            common_git_directory,
-            worktree_root,
-            runtime_executable,
-            on_action_complete,
-        )
+        if include_document_views:
+            self._ensure_link(
+                integration_worktree,
+                "CONTEXT.md",
+                harness_root / "CONTEXT.md",
+                on_action_complete,
+            )
+            self._ensure_link(
+                integration_worktree,
+                "docs",
+                documents_directory,
+                on_action_complete,
+            )
+        self._ensure_links_are_ignored(common_git_directory, on_action_complete)
 
     @staticmethod
     def link_text(
@@ -171,34 +139,6 @@ class CodexProjectFiles:
         """Return the stable repository-local link text setup will install."""
 
         return os.path.relpath(target, integration_worktree)
-
-    @staticmethod
-    def runner_config_content(
-        harness_root: Path,
-        source_repository: Path,
-        common_git_directory: Path,
-        worktree_root: Path,
-        runtime_executable: Path,
-    ) -> str:
-        """Render the exact machine-local Runner registration."""
-
-        config = {
-            "version": RUNNER_CONFIG_VERSION,
-            "harness_root": str(harness_root.resolve()),
-            "repository": str(source_repository.resolve()),
-            "common_directory": str(common_git_directory.resolve()),
-            "default_runtime": "codex",
-            "worktree_root": str(worktree_root.resolve()),
-            "integration_branch": "dev",
-            "runtimes": {
-                "codex": {
-                    "executable": str(runtime_executable.resolve()),
-                    "roles": ROLE_BINDINGS,
-                }
-            },
-            "repository_skill_allowlist": [],
-        }
-        return yaml.safe_dump(config, sort_keys=False)
 
     def runtime_resources(self, runtime_store: Path) -> Dict[str, bytes]:
         """Return the root-owned resources rendered for this Runtime Store."""
@@ -303,39 +243,4 @@ class CodexProjectFiles:
         if on_action_complete is not None:
             on_action_complete(
                 CodexProjectFiles.exclude_action(common_git_directory)
-            )
-
-    @staticmethod
-    def _write_runner_config(
-        runtime_store: Path,
-        harness_root: Path,
-        source_repository: Path,
-        common_git_directory: Path,
-        worktree_root: Path,
-        runtime_executable: Path,
-        on_action_complete: Optional[Callable[[str], None]],
-    ) -> None:
-        content = CodexProjectFiles.runner_config_content(
-            harness_root,
-            source_repository,
-            common_git_directory,
-            worktree_root,
-            runtime_executable,
-        )
-        config_file = runtime_store / "agent-runner" / "config.yml"
-        if config_file.exists():
-            if (
-                config_file.is_file()
-                and config_file.read_text(encoding="utf-8") == content
-            ):
-                return
-            raise CodexProjectError(
-                "Harness Runner Config already exists with different content: "
-                "{0}".format(config_file)
-            )
-        config_file.parent.mkdir(parents=True, exist_ok=True)
-        config_file.write_text(content, encoding="utf-8")
-        if on_action_complete is not None:
-            on_action_complete(
-                CodexProjectFiles.runner_config_action(runtime_store)
             )

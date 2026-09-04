@@ -150,20 +150,22 @@ def test_doctor_rejects_a_source_worktree_beneath_a_harness_root(
     source_worktree = harness_root / "source-repository"
     source_skills = source_worktree / ".agents" / "skills"
     user_home = tmp_path / "operator-home"
-    (
-        harness_root / ".codex" / "agent-runner" / "config.yml"
-    ).parent.mkdir(parents=True)
-    (harness_root / ".codex" / "agent-runner" / "config.yml").write_text(
-        "runtime: codex\n",
+    config = harness_root / ".graphtraj" / "config.yml"
+    config.parent.mkdir(parents=True)
+    config.write_text(
+        """version: 1
+paths:
+  project_root: source-repository
+  docs: docs
+  agent_worktrees: .graphtraj/.agent-worktrees
+  state: .graphtraj/state
+agent_runner:
+  dispatch_depth: 2
+  max_concurrency: 18
+""",
         encoding="utf-8",
     )
     source_worktree.mkdir()
-    (
-        source_worktree / ".codex" / "agent-runner" / "config.yml"
-    ).parent.mkdir(parents=True)
-    (
-        source_worktree / ".codex" / "agent-runner" / "config.yml"
-    ).write_text("runtime: source-owned\n", encoding="utf-8")
     for name in CORE_SKILL_NAMES:
         install_skill(source_skills, name)
 

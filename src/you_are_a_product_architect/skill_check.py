@@ -9,6 +9,8 @@ from typing import Dict, Optional, Tuple
 import click
 import yaml
 
+from .project_configuration import configuration_exists
+
 
 CORE_SKILL_NAMES = (
     "setup-matt-pocock-skills",
@@ -121,8 +123,10 @@ def check_core_skills(
 def _doctor_runtime_store(cwd: Path) -> Path:
     """Return the root store, rejecting a known Harness child worktree."""
 
+    if configuration_exists(cwd):
+        return cwd / ".codex"
     for ancestor in cwd.parents:
-        if (ancestor / ".codex" / "agent-runner" / "config.yml").is_file():
+        if configuration_exists(ancestor):
             raise click.UsageError("Run doctor from the Harness Project Root.")
     return cwd / ".codex"
 

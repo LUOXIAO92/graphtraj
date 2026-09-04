@@ -19,6 +19,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Optional, Sequence, Tuple
 
+import yaml
+
 
 FLAG = "flag"
 OPAQUE = "opaque"
@@ -377,37 +379,97 @@ def lexical_path_from(raw: str, *, cwd: Path) -> Optional[Path]:
         return None
 
 
+def configured_harness_paths(root: Path) -> Optional[Tuple[Path, Path, Path, Path]]:
+    """Find the one GraphTraj configuration that owns this Worktree."""
+    installed_root = Path(__file__).resolve().parents[2]
+    candidates = (installed_root, root, *root.parents)
+    seen: set[Path] = set()
+    for harness_root in candidates:
+        if harness_root in seen:
+            continue
+        seen.add(harness_root)
+        config_file = harness_root / ".graphtraj" / "config.yml"
+        try:
+            if config_file.is_symlink() or not config_file.is_file():
+                continue
+            document = yaml.safe_load(config_file.read_text(encoding="utf-8"))
+            if (
+                not isinstance(document, dict)
+                or document.get("version") != 1
+                or set(document) != {"version", "paths", "agent_runner"}
+            ):
+                continue
+            paths = document["paths"]
+            if not isinstance(paths, dict) or set(paths) != {
+                "project_root",
+                "docs",
+                "agent_worktrees",
+                "state",
+            }:
+                continue
+            limits = document["agent_runner"]
+            if not isinstance(limits, dict) or set(limits) != {
+                "dispatch_depth",
+                "max_concurrency",
+            }:
+                continue
+            worktree_value = paths["agent_worktrees"]
+            state_value = paths["state"]
+            docs_value = paths["docs"]
+            if not all(
+                isinstance(value, str) and value
+                for value in (
+                    paths["project_root"],
+                    worktree_value,
+                    state_value,
+                    docs_value,
+                )
+            ) or any(
+                isinstance(value, bool) or not isinstance(value, int) or value < 1
+                for value in (limits["dispatch_depth"], limits["max_concurrency"])
+            ):
+                continue
+            worktree_root = Path(worktree_value)
+            state_root = Path(state_value)
+            documents_root = Path(docs_value)
+            if not worktree_root.is_absolute():
+                worktree_root = harness_root / worktree_root
+            if not state_root.is_absolute():
+                state_root = harness_root / state_root
+            if not documents_root.is_absolute():
+                documents_root = harness_root / documents_root
+            worktree_root = worktree_root.resolve(strict=False)
+            state_root = state_root.resolve(strict=False)
+            documents_root = documents_root.resolve(strict=False)
+            if is_inside(root, worktree_root):
+                return harness_root, worktree_root, state_root, documents_root
+        except (KeyError, OSError, TypeError, UnicodeError, ValueError, yaml.YAMLError):
+            continue
+    return None
+
+
 def ticket_evidence_scope(root: Path) -> Optional[Tuple[Path, Path]]:
     """Return the one state link and evidence directory implied by a ticket root."""
-    for worktree_directory in root.parents:
-        if worktree_directory.name != ".agent-worktrees":
-            continue
-        try:
-            relative = root.relative_to(worktree_directory)
-        except ValueError:
-            return None
-        if (
-            len(relative.parts) != 3
-            or relative.parts[0] != "runs"
-            or not relative.parts[1]
-            or "-" not in relative.parts[2]
-            or relative.parts[2].startswith("-")
-            or relative.parts[2].endswith("-")
-        ):
-            return None
-        run_id = relative.parts[1]
-        ticket_directory = relative.parts[2]
-        harness_root = worktree_directory.parent
-        scoped_state = root / ".state"
-        expected_evidence = (
-            harness_root
-            / "state"
-            / run_id
-            / "tickets"
-            / ticket_directory
-        )
-        return scoped_state, expected_evidence
-    return None
+    configured = configured_harness_paths(root)
+    if configured is None:
+        return None
+    _harness_root, worktree_directory, state_root, _documents_root = configured
+    try:
+        relative = root.relative_to(worktree_directory)
+    except ValueError:
+        return None
+    if (
+        len(relative.parts) != 3
+        or relative.parts[0] != "runs"
+        or not relative.parts[1]
+        or "-" not in relative.parts[2]
+        or relative.parts[2].startswith("-")
+        or relative.parts[2].endswith("-")
+    ):
+        return None
+    run_id = relative.parts[1]
+    ticket_directory = relative.parts[2]
+    return root / ".state", state_root / run_id / "tickets" / ticket_directory
 
 
 def readable_harness_document_view(
@@ -417,44 +479,45 @@ def readable_harness_document_view(
     root: Path,
 ) -> bool:
     """Return whether a Worktree view resolves to its root-owned document."""
-    for worktree_directory in root.parents:
-        if worktree_directory.name != ".agent-worktrees":
+    configured = configured_harness_paths(root)
+    if configured is None:
+        return False
+    harness_root, worktree_directory, _state_root, documents_root = configured
+    try:
+        relative = root.relative_to(worktree_directory)
+    except ValueError:
+        return False
+    if relative != Path("dev") and not (
+        len(relative.parts) == 3 and relative.parts[0] == "runs"
+    ):
+        return False
+    for name, directory, expected in (
+        ("CONTEXT.md", False, harness_root / "CONTEXT.md"),
+        ("docs", True, documents_root),
+    ):
+        view = root / name
+        if not directory and lexical != view:
+            continue
+        if directory and not is_inside(lexical, view):
             continue
         try:
-            relative = root.relative_to(worktree_directory)
-        except ValueError:
-            return False
-        if relative != Path("integration") and not (
-            len(relative.parts) == 3 and relative.parts[0] == "runs"
-        ):
-            return False
-        harness_root = worktree_directory.parent
-        for name, directory in (("CONTEXT.md", False), ("docs", True)):
-            view = root / name
-            expected = harness_root / name
-            if not directory and lexical != view:
-                continue
-            if directory and not is_inside(lexical, view):
-                continue
-            try:
-                if (
-                    not view.is_symlink()
-                    or expected.is_symlink()
-                    or view.resolve(strict=False) != expected
-                ):
-                    return False
-                if not directory:
-                    return target == expected
-                relative_path = lexical.relative_to(view)
-                cursor = view
-                for part in relative_path.parts:
-                    cursor = cursor / part
-                    if cursor.is_symlink():
-                        return False
-                return target == expected / relative_path
-            except (OSError, RuntimeError, ValueError):
+            if (
+                not view.is_symlink()
+                or expected.is_symlink()
+                or view.resolve(strict=False) != expected
+            ):
                 return False
-        return False
+            if not directory:
+                return target == expected
+            relative_path = lexical.relative_to(view)
+            cursor = view
+            for part in relative_path.parts:
+                cursor = cursor / part
+                if cursor.is_symlink():
+                    return False
+            return target == expected / relative_path
+        except (OSError, RuntimeError, ValueError):
+            return False
     return False
 
 

@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Any, Dict, Mapping, Optional, Tuple
 
 
-RUNNER_CONFIG_VERSION = 1
 ROLE_ALIAS_MARKERS = {
     "engineer-junior": "j",
     "engineer-senior": "s",
@@ -101,9 +100,6 @@ DETAIL_ERROR_CATEGORIES = {
     "REPOSITORY_SKILL_AMBIGUOUS": "invalid-input",
     "HARNESS_SKILL_NOT_FOUND": "invalid-config",
     "PROJECT_NOT_FOUND": "invalid-config",
-    "RUNNER_CONFIG_NOT_FOUND": "invalid-config",
-    "RUNNER_CONFIG_INVALID": "invalid-config",
-    "RUNNER_CONFIG_VERSION_UNSUPPORTED": "invalid-config",
     "RUNTIME_EXECUTABLE_INVALID": "invalid-config",
     "RUNTIME_INVALID": "invalid-input",
     "ROLE_NOT_FOUND": "invalid-config",
@@ -209,6 +205,7 @@ class Project:
     runner_directory: Path
     worktree_root: Path
     state_directory: Path
+    documents_directory: Path
     integration_branch: str
     integration_worktree: Path
     dev_commit: str

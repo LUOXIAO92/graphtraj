@@ -33,7 +33,7 @@ def test_installed_worktree_guard_is_an_independent_ticket_process(
     tmp_path: Path,
 ) -> None:
     harness_root = temporary_git_repository.parent
-    integration = harness_root / ".agent-worktrees" / "integration"
+    integration = harness_root / ".graphtraj" / ".agent-worktrees" / "dev"
     context = harness_root / "CONTEXT.md"
     documents = harness_root / "docs"
     context.write_text("# Harness context\n", encoding="utf-8")
@@ -49,7 +49,7 @@ def test_installed_worktree_guard_is_an_independent_ticket_process(
         harness_root=harness_root,
         user_home=user_home,
         fake_codex=fake_codex,
-        answers="{0}\ny\n".format(temporary_git_repository.name),
+        answers="y\n",
     )
     assert setup.returncode == 0, setup.stderr
 

@@ -86,7 +86,7 @@ def configured_runner(
     tmp_path: Path,
 ) -> tuple[Path, Path, Path, Path, dict[str, str]]:
     harness_root = temporary_git_repository.parent
-    integration = harness_root / ".agent-worktrees" / "integration"
+    integration = harness_root / ".graphtraj" / ".agent-worktrees" / "dev"
     user_home = tmp_path / "operator-home"
     install_user_skills(user_home)
     setup_result = run_setup(
@@ -94,7 +94,7 @@ def configured_runner(
         harness_root=harness_root,
         user_home=user_home,
         fake_codex=fake_codex,
-        answers="{0}\ny\n".format(temporary_git_repository.name),
+        answers="y\n",
     )
     assert setup_result.returncode == 0, setup_result.stderr
 
@@ -103,6 +103,9 @@ def configured_runner(
     environment.update(
         {
             "HOME": str(user_home),
+            "PATH": os.pathsep.join(
+                (str(fake_codex.executable.parent), os.environ.get("PATH", ""))
+            ),
             "FAKE_CODEX_LOG": str(fake_codex.log_file),
         }
     )
@@ -165,7 +168,7 @@ def status(
 ):
     return run_process(
         [str(installed_commands.runner), "status", *aliases],
-        cwd=integration.parents[1],
+        cwd=integration.parent.parent.parent,
         env=environment,
         timeout=5,
     )

@@ -1,19 +1,26 @@
-"""Plan and apply setup for a GraphTraj project in one Git repository."""
+"""Plan and apply setup for a GraphTraj project and its Source Repository."""
 
 from __future__ import annotations
 
+import os
 import stat
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-from .git_repository import GitRepositoryError, SourceRepository
+from .codex_project import (
+    CodexProjectError,
+    CodexProjectFiles,
+    runtime_resource_matches,
+)
+from .git_repository import GitRepositoryError, GitTreeEntry, SourceRepository
+from .path_safety import relative_parent_paths
 from .project_configuration import (
-    DEFAULT_CONFIG_CONTENT,
     ProjectConfiguration,
     ProjectConfigurationError,
     configuration_exists,
     configuration_file,
+    default_configuration_content,
     default_project_configuration,
     load_project_configuration,
 )
@@ -49,18 +56,23 @@ class ProjectSetupPreview:
         return "\n".join(lines)
 
 
-def _entry_kind(path: Path) -> Optional[str]:
+def _filesystem_entry(path: Path) -> Optional[GitTreeEntry]:
     try:
         metadata = path.lstat()
     except FileNotFoundError:
         return None
     if stat.S_ISLNK(metadata.st_mode):
-        return "symlink"
+        return GitTreeEntry(kind="symlink", content=os.readlink(path).encode())
     if stat.S_ISDIR(metadata.st_mode):
-        return "directory"
+        return GitTreeEntry(kind="directory")
     if stat.S_ISREG(metadata.st_mode):
-        return "file"
-    return "other"
+        return GitTreeEntry(kind="file", content=path.read_bytes())
+    return GitTreeEntry(kind="other")
+
+
+def _entry_kind(path: Path) -> Optional[str]:
+    entry = _filesystem_entry(path)
+    return entry.kind if entry is not None else None
 
 
 def _append_conflict(conflicts: List[str], message: str) -> None:
@@ -119,6 +131,43 @@ def _integration_worktree_action(path: Path) -> str:
     return "Integration Worktree on dev: {0}".format(path)
 
 
+def _symlink_resolves_to(
+    link: Path,
+    encoded_target: Optional[bytes],
+    expected: Path,
+) -> bool:
+    if encoded_target is None:
+        return False
+    try:
+        target = Path(encoded_target.decode())
+    except UnicodeError:
+        return False
+    if not target.is_absolute():
+        target = link.parent / target
+    return target.resolve() == expected.resolve()
+
+
+def _preflight_link(
+    entry: Optional[GitTreeEntry],
+    link: Path,
+    target: Path,
+    description: str,
+    actions: List[PlannedSetupAction],
+    conflicts: List[str],
+) -> None:
+    if entry is None:
+        actions.append(PlannedSetupAction("CREATE", description))
+    elif entry.kind == "symlink" and _symlink_resolves_to(
+        link, entry.content, target
+    ):
+        actions.append(PlannedSetupAction("ALREADY CONFIGURED", description))
+    else:
+        _append_conflict(
+            conflicts,
+            "{0} conflicts at {1}.".format(description, link),
+        )
+
+
 @dataclass(frozen=True)
 class ProjectSetupPlan:
     """One preflighted setup action with a single explicit mutation step."""
@@ -126,6 +175,7 @@ class ProjectSetupPlan:
     harness_root: Path
     repository: SourceRepository
     configuration: ProjectConfiguration
+    codex_files: CodexProjectFiles
     write_default_configuration: bool
     proposed_base: Optional[str]
     integration_revision: str
@@ -133,6 +183,14 @@ class ProjectSetupPlan:
     @property
     def configuration_path(self) -> Path:
         return configuration_file(self.harness_root)
+
+    @property
+    def runtime_store(self) -> Path:
+        return self.harness_root / ".codex"
+
+    @property
+    def runner_store(self) -> Path:
+        return self.runtime_store / "agent-runner"
 
     def preflight(self) -> ProjectSetupPreview:
         """Check every setup target before setup mutates the project."""
@@ -175,6 +233,19 @@ class ProjectSetupPlan:
             actions,
             conflicts,
         )
+        _preflight_directory(
+            self.runtime_store,
+            "Harness Runtime Store",
+            actions,
+            conflicts,
+        )
+        _preflight_directory(
+            self.runner_store,
+            "Harness Runner Directory",
+            actions,
+            conflicts,
+        )
+        self._preflight_runtime_resources(actions, conflicts)
 
         dev_exists = self.repository.branch_exists(INTEGRATION_BRANCH)
         registered = self.repository.worktree_for_branch(INTEGRATION_BRANCH)
@@ -245,8 +316,138 @@ class ProjectSetupPlan:
                 PlannedSetupAction("CREATE", _integration_worktree_action(integration))
             )
 
+        materialized = (
+            registered == canonical_integration
+            and _entry_kind(integration) == "directory"
+        )
+        self._preflight_integration_links(
+            actions,
+            conflicts,
+            materialized=materialized,
+        )
+        self._preflight_exclude_registration(actions, conflicts)
+
         _raise_conflicts(conflicts)
         return ProjectSetupPreview(tuple(actions))
+
+    def _preflight_runtime_resources(
+        self,
+        actions: List[PlannedSetupAction],
+        conflicts: List[str],
+    ) -> None:
+        if _entry_kind(self.runtime_store) not in {None, "directory"}:
+            return
+        for relative_path, content in self.codex_files.runtime_resources(
+            self.runtime_store
+        ).items():
+            target = self.runtime_store / relative_path
+            for relative_parent in relative_parent_paths(relative_path):
+                parent = self.runtime_store / relative_parent
+                entry = _filesystem_entry(parent)
+                if entry is not None and entry.kind != "directory":
+                    _append_conflict(
+                        conflicts,
+                        "Harness Runtime resource is blocked by a non-directory "
+                        "path: {0}".format(parent),
+                    )
+                    break
+            else:
+                entry = _filesystem_entry(target)
+                description = CodexProjectFiles.resource_action(
+                    self.runtime_store, relative_path
+                )
+                if entry is None:
+                    actions.append(PlannedSetupAction("CREATE", description))
+                elif entry.kind == "file" and runtime_resource_matches(
+                    relative_path, entry.content or b"", content
+                ):
+                    actions.append(
+                        PlannedSetupAction("ALREADY CONFIGURED", description)
+                    )
+                else:
+                    _append_conflict(
+                        conflicts,
+                        "Harness Runtime resource conflicts at {0}.".format(target),
+                    )
+
+    def _preflight_integration_links(
+        self,
+        actions: List[PlannedSetupAction],
+        conflicts: List[str],
+        *,
+        materialized: bool,
+    ) -> None:
+        if materialized:
+            entry_for = lambda name: _filesystem_entry(
+                self.configuration.integration_worktree / name
+            )
+        else:
+            entry_for = lambda name: self.repository.tree_entry(
+                self.integration_revision, name
+            )
+        links = [(".state", self.configuration.state)]
+        if self.configuration.project_root != self.harness_root:
+            links.extend(
+                (
+                    ("CONTEXT.md", self.harness_root / "CONTEXT.md"),
+                    ("docs", self.configuration.docs),
+                )
+            )
+        for name, target in links:
+            _preflight_link(
+                entry_for(name),
+                self.configuration.integration_worktree / name,
+                target,
+                self.codex_files.link_action(
+                    self.configuration.integration_worktree,
+                    name,
+                    target,
+                ),
+                actions,
+                conflicts,
+            )
+
+    def _preflight_exclude_registration(
+        self,
+        actions: List[PlannedSetupAction],
+        conflicts: List[str],
+    ) -> None:
+        common = self.repository.common_directory
+        info = _filesystem_entry(common / "info")
+        exclude = _filesystem_entry(common / "info" / "exclude")
+        description = self.codex_files.exclude_action(common)
+        if info is not None and info.kind != "directory":
+            _append_conflict(
+                conflicts,
+                "Git exclude registration is blocked at {0}.".format(common / "info"),
+            )
+        elif exclude is None:
+            actions.append(PlannedSetupAction("REGISTER", description))
+        elif exclude.kind != "file":
+            _append_conflict(
+                conflicts,
+                "Git exclude registration is blocked at {0}.".format(
+                    common / "info" / "exclude"
+                ),
+            )
+        else:
+            try:
+                lines = (exclude.content or b"").decode().splitlines()
+            except UnicodeError:
+                _append_conflict(
+                    conflicts,
+                    "Git exclude registration is not valid text: {0}.".format(
+                        common / "info" / "exclude"
+                    ),
+                )
+            else:
+                required = ("/.state", "/.scratch", "/CONTEXT.md", "/docs")
+                disposition = (
+                    "ALREADY CONFIGURED"
+                    if all(path in lines for path in required)
+                    else "REGISTER"
+                )
+                actions.append(PlannedSetupAction(disposition, description))
 
     def apply(self) -> str:
         """Create the preflighted configuration, directories, branch, and Worktree."""
@@ -267,7 +468,10 @@ class ProjectSetupPlan:
             if self.write_default_configuration:
                 self.configuration_path.parent.mkdir(parents=True, exist_ok=True)
                 self.configuration_path.write_text(
-                    DEFAULT_CONFIG_CONTENT, encoding="utf-8"
+                    default_configuration_content(
+                        self.harness_root, self.configuration.project_root
+                    ),
+                    encoding="utf-8",
                 )
                 mark_completed("GraphTraj Config: {0}".format(self.configuration_path))
             self.configuration.agent_worktrees.mkdir(parents=True, exist_ok=True)
@@ -280,6 +484,12 @@ class ProjectSetupPlan:
             mark_completed(
                 _directory_action("Harness State Directory", self.configuration.state)
             )
+            self.runtime_store.mkdir(parents=True, exist_ok=True)
+            mark_completed(_directory_action("Harness Runtime Store", self.runtime_store))
+            self.runner_store.mkdir(parents=True, exist_ok=True)
+            mark_completed(
+                _directory_action("Harness Runner Directory", self.runner_store)
+            )
             if self.proposed_base is not None:
                 self.repository.create_branch(INTEGRATION_BRANCH, self.proposed_base)
                 mark_completed(_new_dev_branch_action(self.proposed_base))
@@ -289,17 +499,29 @@ class ProjectSetupPlan:
                 mark_completed(
                     _integration_worktree_action(self.configuration.integration_worktree)
                 )
-                return "Created Integration Worktree on dev."
-            if self.repository.worktree_for_branch(INTEGRATION_BRANCH) is None:
+                result = "Created Integration Worktree on dev."
+            elif self.repository.worktree_for_branch(INTEGRATION_BRANCH) is None:
                 self.repository.add_existing_branch_worktree(
                     INTEGRATION_BRANCH, self.configuration.integration_worktree
                 )
                 mark_completed(
                     _integration_worktree_action(self.configuration.integration_worktree)
                 )
-                return "Registered Integration Worktree on existing dev."
-            return "Using registered Integration Worktree on dev."
-        except (GitRepositoryError, OSError) as error:
+                result = "Registered Integration Worktree on existing dev."
+            else:
+                result = "Using registered Integration Worktree on dev."
+            self.codex_files.install_setup_resources(
+                harness_root=self.harness_root,
+                integration_worktree=self.configuration.integration_worktree,
+                state_directory=self.configuration.state,
+                documents_directory=self.configuration.docs,
+                common_git_directory=self.repository.common_directory,
+                include_document_views=(
+                    self.configuration.project_root != self.harness_root
+                ),
+                on_action_complete=mark_completed,
+            )
+        except (CodexProjectError, GitRepositoryError, OSError) as error:
             incomplete = tuple(
                 description for description in pending if description not in completed
             )
@@ -314,10 +536,14 @@ class ProjectSetupPlan:
                     "\n".join("- {0}".format(action) for action in incomplete or ("none",)),
                 )
             ) from error
+        return result
 
 
-def plan_project_setup(harness_root: Path) -> ProjectSetupPlan:
-    """Plan default same-directory setup without mutating the repository."""
+def plan_project_setup(
+    harness_root: Path,
+    source_repository: Path | None = None,
+) -> ProjectSetupPlan:
+    """Plan setup for one selected Source Repository without mutation."""
 
     root = harness_root.resolve()
     try:
@@ -333,14 +559,13 @@ def plan_project_setup(harness_root: Path) -> ProjectSetupPlan:
                         config_path.parent
                     )
                 )
-            configuration = default_project_configuration(root)
+            if source_repository is None:
+                raise ProjectSetupError(
+                    "Setup could not select a Source Repository."
+                )
+            configuration = default_project_configuration(root, source_repository)
             write_default_configuration = True
-        if configuration.project_root != root:
-            raise ProjectSetupError(
-                "This setup supports only the current Git repository as the "
-                "Harness Project Root."
-            )
-        repository = SourceRepository.from_root(root)
+        repository = SourceRepository.from_root(configuration.project_root)
         dev_exists = repository.branch_exists(INTEGRATION_BRANCH)
         proposed_base = None if dev_exists else repository.head
         integration_revision = (
@@ -348,12 +573,19 @@ def plan_project_setup(harness_root: Path) -> ProjectSetupPlan:
             if dev_exists
             else proposed_base
         )
-    except (GitRepositoryError, OSError, ProjectConfigurationError) as error:
+        codex_files = CodexProjectFiles.load()
+    except (
+        CodexProjectError,
+        GitRepositoryError,
+        OSError,
+        ProjectConfigurationError,
+    ) as error:
         raise ProjectSetupError(str(error)) from error
     return ProjectSetupPlan(
         harness_root=root,
         repository=repository,
         configuration=configuration,
+        codex_files=codex_files,
         write_default_configuration=write_default_configuration,
         proposed_base=proposed_base,
         integration_revision=integration_revision,

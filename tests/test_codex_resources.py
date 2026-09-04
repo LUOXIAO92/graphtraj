@@ -422,16 +422,32 @@ def test_worktree_guard_allows_only_ticket_scoped_persistent_evidence(
 ) -> None:
     run_id = "20260813-source"
     ticket_name = "7-source"
+    harness_root = tmp_path / "harness"
     ticket_worktree = (
-        tmp_path
-        / "harness"
+        harness_root
+        / ".graphtraj"
         / ".agent-worktrees"
         / "runs"
         / run_id
         / ticket_name
     )
     evidence = (
-        tmp_path / "harness" / "state" / run_id / "tickets" / ticket_name
+        harness_root / ".graphtraj" / "state" / run_id / "tickets" / ticket_name
+    )
+    config = harness_root / ".graphtraj" / "config.yml"
+    config.parent.mkdir(parents=True)
+    config.write_text(
+        """version: 1
+paths:
+  project_root: .
+  docs: docs
+  agent_worktrees: .graphtraj/.agent-worktrees
+  state: .graphtraj/state
+agent_runner:
+  dispatch_depth: 2
+  max_concurrency: 18
+""",
+        encoding="utf-8",
     )
     sibling_evidence = evidence.parent / "8-sibling"
     evidence.mkdir(parents=True)

@@ -316,8 +316,6 @@ def discover_project(
 
     configuration = _load_graphtraj_configuration(cwd)
     invalid = "GraphTraj Config contains invalid project paths."
-    if configuration.project_root != configuration.harness_root:
-        raise RunnerError("PROJECT_CONFIG_MISMATCH", invalid)
     repository = configuration.project_root
     common = _validate_source_repository(repository, invalid)
     runtime_name = "codex" if selected_runtime is None else selected_runtime
@@ -381,6 +379,7 @@ def discover_project(
             message=invalid,
             allow_missing=True,
         ),
+        documents_directory=configuration.docs,
         integration_branch=branch,
         integration_worktree=integration,
         dev_commit=dev_commit,

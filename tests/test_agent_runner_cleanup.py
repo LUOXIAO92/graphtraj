@@ -37,6 +37,10 @@ class LaunchedTicket:
     session_directory: Path
     environment: dict[str, str]
 
+    @property
+    def state_root(self) -> Path:
+        return self.harness_root / ".graphtraj" / "state"
+
 
 def launch_ticket(
     installed_commands: InstalledCommands,
@@ -50,7 +54,7 @@ def launch_ticket(
 ) -> LaunchedTicket:
     harness_root = temporary_git_repository.parent
     primary = temporary_git_repository
-    integration = harness_root / ".agent-worktrees" / "integration"
+    integration = harness_root / ".graphtraj" / ".agent-worktrees" / "dev"
     user_home = tmp_path / "operator-home"
     install_user_skills(user_home)
     setup_result = run_setup(
@@ -58,7 +62,7 @@ def launch_ticket(
         harness_root=harness_root,
         user_home=user_home,
         fake_codex=fake_codex,
-        answers="{0}\ny\n".format(primary.name),
+        answers="y\n",
     )
     assert setup_result.returncode == 0, setup_result.stderr
 
@@ -88,6 +92,9 @@ def launch_ticket(
     environment.update(
         {
             "HOME": str(user_home),
+            "PATH": os.pathsep.join(
+                (str(fake_codex.executable.parent), os.environ.get("PATH", ""))
+            ),
             "FAKE_CODEX_LOG": str(fake_codex.log_file),
         }
     )
@@ -264,8 +271,7 @@ def test_installed_cleanup_refuses_an_invalid_required_turn_trace(
         tmp_path,
     )
     trace = (
-        launched.harness_root
-        / "state"
+        launched.state_root
         / launched.run_id
         / "tickets"
         / launched.worktree.name
@@ -319,8 +325,7 @@ def test_installed_cleanup_refuses_an_empty_trace_from_a_resume_without_a_sessio
         "ownership_mismatches": ["persistent-evidence-invalid"]
     }
     trace = (
-        launched.harness_root
-        / "state"
+        launched.state_root
         / launched.run_id
         / "tickets"
         / launched.worktree.name
@@ -654,7 +659,7 @@ def test_installed_cleanup_removes_only_integrated_disposable_state(
     ).check_returncode()
     integration_commit = git_output(launched.integration, "rev-parse", "HEAD")
 
-    run_state = launched.harness_root / "state" / launched.run_id
+    run_state = launched.state_root / launched.run_id
     evidence = run_state / "tickets" / "2-14-cleanup-integrated-worktrees"
     reviews = evidence / "reviews"
     reviews.mkdir()
@@ -738,8 +743,7 @@ def test_installed_cleanup_succeeds_idempotently_after_disposable_state_is_gone(
         tmp_path,
     )
     evidence = (
-        launched.harness_root
-        / "state"
+        launched.state_root
         / launched.run_id
         / "tickets"
         / "2-14-cleanup-integrated-worktrees"
@@ -815,8 +819,7 @@ def test_retired_alias_text_is_reusable_without_losing_run_scoped_history(
         tmp_path,
     )
     old_evidence = (
-        launched.harness_root
-        / "state"
+        launched.state_root
         / launched.run_id
         / "tickets"
         / "2-14-cleanup-integrated-worktrees"
@@ -924,8 +927,7 @@ def test_same_run_relaunch_after_cleanup_allocates_a_new_historical_alias(
     wait_for_file(session / "turn.yml")
     metadata = yaml.safe_load(
         (
-            launched.harness_root
-            / "state"
+            launched.state_root
             / launched.run_id
             / "tickets"
             / "2-14-cleanup-integrated-worktrees"
@@ -1302,8 +1304,7 @@ def test_installed_cleanup_removes_failed_alias_diagnostics_with_a_valid_launch_
     assert (failed_session / "launch-error.yml").is_file()
     assert not (failed_session / "mapping.yml").exists()
     failed_trace = (
-        launched.harness_root
-        / "state"
+        launched.state_root
         / launched.run_id
         / "tickets"
         / launched.worktree.name
@@ -1349,8 +1350,7 @@ def test_installed_cleanup_refuses_persistent_evidence_redirected_into_the_workt
     )
     hidden_result.write_text("# Engineer result\n", encoding="utf-8")
     evidence = (
-        launched.harness_root
-        / "state"
+        launched.state_root
         / launched.run_id
         / "tickets"
         / "2-14-cleanup-integrated-worktrees"
@@ -1383,7 +1383,7 @@ def test_installed_cleanup_refuses_a_state_root_redirected_into_the_worktree(
         fake_codex,
         tmp_path,
     )
-    state_root = launched.harness_root / "state"
+    state_root = launched.state_root
     run_root = state_root / launched.run_id
     evidence = run_root / "tickets" / "2-14-cleanup-integrated-worktrees"
     reviews = evidence / "reviews"

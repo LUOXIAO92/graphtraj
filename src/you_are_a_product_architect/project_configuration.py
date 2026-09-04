@@ -56,12 +56,41 @@ def configuration_file(harness_root: Path) -> Path:
     return harness_root / CONFIG_PATH
 
 
-def default_project_configuration(harness_root: Path) -> ProjectConfiguration:
-    """Return the accepted same-directory setup defaults."""
+def default_configuration_content(harness_root: Path, project_root: Path) -> str:
+    """Render the accepted defaults for one selected Source Repository."""
+
+    root = harness_root.resolve()
+    source = project_root.resolve()
+    try:
+        configured_project_root = source.relative_to(root).as_posix() or "."
+    except ValueError:
+        configured_project_root = str(source)
+    if configured_project_root == ".":
+        return DEFAULT_CONFIG_CONTENT
+    return yaml.safe_dump(
+        {
+            "version": 1,
+            "paths": {
+                "project_root": configured_project_root,
+                "docs": "docs",
+                "agent_worktrees": ".graphtraj/.agent-worktrees",
+                "state": ".graphtraj/state",
+            },
+            "agent_runner": {"dispatch_depth": 2, "max_concurrency": 18},
+        },
+        sort_keys=False,
+    )
+
+
+def default_project_configuration(
+    harness_root: Path,
+    project_root: Path,
+) -> ProjectConfiguration:
+    """Return the accepted setup defaults for one selected Source Repository."""
 
     return _configuration_from_document(
         harness_root,
-        yaml.safe_load(DEFAULT_CONFIG_CONTENT),
+        yaml.safe_load(default_configuration_content(harness_root, project_root)),
     )
 
 
@@ -135,6 +164,8 @@ def _configuration_from_document(
         or max_concurrency < 1
     ):
         raise ProjectConfigurationError(invalid)
+    if _paths_overlap(agent_worktrees, state):
+        raise ProjectConfigurationError(invalid)
     return ProjectConfiguration(
         harness_root=harness_root,
         project_root=project_root,
@@ -152,3 +183,16 @@ def _resolve_configured_path(harness_root: Path, value: object) -> Path:
     root = harness_root.resolve()
     path = Path(value)
     return (path if path.is_absolute() else root / path).resolve()
+
+
+def _paths_overlap(first: Path, second: Path) -> bool:
+    try:
+        first.relative_to(second)
+        return True
+    except ValueError:
+        pass
+    try:
+        second.relative_to(first)
+        return True
+    except ValueError:
+        return False

@@ -29,9 +29,9 @@ def test_installed_runner_launches_one_isolated_engineer_and_returns_early(
     tmp_path: Path,
 ) -> None:
     harness_root = temporary_git_repository.parent
-    worktree_root = harness_root / ".agent-worktrees"
-    integration = worktree_root / "integration"
-    state = harness_root / "state"
+    worktree_root = harness_root / ".graphtraj" / ".agent-worktrees"
+    integration = worktree_root / "dev"
+    state = harness_root / ".graphtraj" / "state"
     user_home = tmp_path / "operator-home"
     install_user_skills(user_home)
 
@@ -40,7 +40,7 @@ def test_installed_runner_launches_one_isolated_engineer_and_returns_early(
         harness_root=harness_root,
         user_home=user_home,
         fake_codex=fake_codex,
-        answers="{0}\ny\n".format(temporary_git_repository.name),
+        answers="y\n",
     )
     assert setup_result.returncode == 0, setup_result.stderr
     dev_head = git_output(integration, "rev-parse", "HEAD")
@@ -95,6 +95,9 @@ def test_installed_runner_launches_one_isolated_engineer_and_returns_early(
     environment.update(
         {
             "HOME": str(user_home),
+            "PATH": os.pathsep.join(
+                (str(fake_codex.executable.parent), os.environ.get("PATH", ""))
+            ),
             "FAKE_CODEX_LOG": str(fake_codex.log_file),
             "FAKE_CODEX_EVENTS": json.dumps(events),
             "FAKE_CODEX_CAPTURE_STDIN": "1",
@@ -181,7 +184,7 @@ def test_installed_runner_launches_a_standards_reviewer_for_a_fixed_candidate(
     tmp_path: Path,
 ) -> None:
     harness_root = temporary_git_repository.parent
-    integration = harness_root / ".agent-worktrees" / "integration"
+    integration = harness_root / ".graphtraj" / ".agent-worktrees" / "dev"
     user_home = tmp_path / "operator-home"
     install_user_skills(user_home)
     setup = run_setup(
@@ -189,7 +192,7 @@ def test_installed_runner_launches_a_standards_reviewer_for_a_fixed_candidate(
         harness_root=harness_root,
         user_home=user_home,
         fake_codex=fake_codex,
-        answers="{0}\ny\n".format(temporary_git_repository.name),
+        answers="y\n",
     )
     assert setup.returncode == 0, setup.stderr
 
@@ -243,6 +246,9 @@ def test_installed_runner_launches_a_standards_reviewer_for_a_fixed_candidate(
     environment.update(
         {
             "HOME": str(user_home),
+            "PATH": os.pathsep.join(
+                (str(fake_codex.executable.parent), os.environ.get("PATH", ""))
+            ),
             "FAKE_CODEX_LOG": str(fake_codex.log_file),
             "FAKE_CODEX_CAPTURE_STDIN": "1",
         }
@@ -262,6 +268,7 @@ def test_installed_runner_launches_a_standards_reviewer_for_a_fixed_candidate(
     worktree = Path(task["worktree_path"])
     evidence = (
         harness_root
+        / ".graphtraj"
         / "state"
         / "20260818-review-candidate"
         / "tickets"
@@ -303,7 +310,7 @@ def test_installed_runner_rejects_invalid_skills_before_starting_any_task(
     tmp_path: Path,
 ) -> None:
     harness_root = temporary_git_repository.parent
-    integration = harness_root / ".agent-worktrees" / "integration"
+    integration = harness_root / ".graphtraj" / ".agent-worktrees" / "dev"
     user_home = tmp_path / "operator-home"
     install_user_skills(user_home)
     setup = run_setup(
@@ -311,7 +318,7 @@ def test_installed_runner_rejects_invalid_skills_before_starting_any_task(
         harness_root=harness_root,
         user_home=user_home,
         fake_codex=fake_codex,
-        answers="{0}\ny\n".format(temporary_git_repository.name),
+        answers="y\n",
     )
     assert setup.returncode == 0, setup.stderr
 
@@ -364,6 +371,9 @@ def test_installed_runner_rejects_invalid_skills_before_starting_any_task(
     environment.update(
         {
             "HOME": str(user_home),
+            "PATH": os.pathsep.join(
+                (str(fake_codex.executable.parent), os.environ.get("PATH", ""))
+            ),
             "FAKE_CODEX_LOG": str(fake_codex.log_file),
         }
     )
@@ -411,7 +421,7 @@ def test_installed_runner_rejects_unvetted_role_or_guard_before_runtime_launch(
         harness_root=harness_root,
         user_home=user_home,
         fake_codex=fake_codex,
-        answers="{0}\ny\n".format(temporary_git_repository.name),
+        answers="y\n",
     )
     assert setup_result.returncode == 0, setup_result.stderr
 
@@ -454,7 +464,13 @@ def test_installed_runner_rejects_unvetted_role_or_guard_before_runtime_launch(
     )
     environment = os.environ.copy()
     environment.update(
-        {"HOME": str(user_home), "FAKE_CODEX_LOG": str(fake_codex.log_file)}
+        {
+            "HOME": str(user_home),
+            "PATH": os.pathsep.join(
+                (str(fake_codex.executable.parent), os.environ.get("PATH", ""))
+            ),
+            "FAKE_CODEX_LOG": str(fake_codex.log_file),
+        }
     )
 
     result = run_process(
@@ -476,12 +492,13 @@ def test_installed_runner_rejects_unvetted_role_or_guard_before_runtime_launch(
     assert not fake_codex.log_file.exists()
     assert not (
         harness_root
+        / ".graphtraj"
         / ".agent-worktrees"
         / "runs"
         / "20260813-security-check"
     ).exists()
     assert not (
-        harness_root / "state" / "20260813-security-check"
+        harness_root / ".graphtraj" / "state" / "20260813-security-check"
     ).exists()
 
 
@@ -536,14 +553,20 @@ def test_installed_runner_separates_ambiguous_ticket_identity_pairs(
         harness_root=harness_root,
         user_home=user_home,
         fake_codex=fake_codex,
-        answers="{0}\ny\n".format(temporary_git_repository.name),
+        answers="y\n",
     )
     assert setup_result.returncode == 0, setup_result.stderr
 
     run_id = "20260813-identity-boundary"
     environment = os.environ.copy()
     environment.update(
-        {"HOME": str(user_home), "FAKE_CODEX_LOG": str(fake_codex.log_file)}
+        {
+            "HOME": str(user_home),
+            "PATH": os.pathsep.join(
+                (str(fake_codex.executable.parent), os.environ.get("PATH", ""))
+            ),
+            "FAKE_CODEX_LOG": str(fake_codex.log_file),
+        }
     )
     cases = (
         ("a-b", "c"),
@@ -594,7 +617,7 @@ def test_concurrent_runner_processes_atomically_reserve_one_ticket_worktree(
     tmp_path: Path,
 ) -> None:
     harness_root = temporary_git_repository.parent
-    integration = harness_root / ".agent-worktrees" / "integration"
+    integration = harness_root / ".graphtraj" / ".agent-worktrees" / "dev"
     user_home = tmp_path / "operator-home"
     install_user_skills(user_home)
     setup_result = run_setup(
@@ -602,7 +625,7 @@ def test_concurrent_runner_processes_atomically_reserve_one_ticket_worktree(
         harness_root=harness_root,
         user_home=user_home,
         fake_codex=fake_codex,
-        answers="{0}\ny\n".format(temporary_git_repository.name),
+        answers="y\n",
     )
     assert setup_result.returncode == 0, setup_result.stderr
 
@@ -633,6 +656,9 @@ def test_concurrent_runner_processes_atomically_reserve_one_ticket_worktree(
     environment.update(
         {
             "HOME": str(user_home),
+            "PATH": os.pathsep.join(
+                (str(fake_codex.executable.parent), os.environ.get("PATH", ""))
+            ),
             "FAKE_CODEX_LOG": str(fake_codex.log_file),
             "FAKE_CODEX_RELEASE_FILE": str(release_file),
         }
@@ -702,7 +728,7 @@ def test_failed_launch_retains_reservation_until_worker_and_runtime_terminate(
     tmp_path: Path,
 ) -> None:
     harness_root = temporary_git_repository.parent
-    integration = harness_root / ".agent-worktrees" / "integration"
+    integration = harness_root / ".graphtraj" / ".agent-worktrees" / "dev"
     user_home = tmp_path / "operator-home"
     install_user_skills(user_home)
     setup_result = run_setup(
@@ -710,7 +736,7 @@ def test_failed_launch_retains_reservation_until_worker_and_runtime_terminate(
         harness_root=harness_root,
         user_home=user_home,
         fake_codex=fake_codex,
-        answers="{0}\ny\n".format(temporary_git_repository.name),
+        answers="y\n",
     )
     assert setup_result.returncode == 0, setup_result.stderr
 
@@ -745,6 +771,9 @@ def test_failed_launch_retains_reservation_until_worker_and_runtime_terminate(
     environment.update(
         {
             "HOME": str(user_home),
+            "PATH": os.pathsep.join(
+                (str(fake_codex.executable.parent), os.environ.get("PATH", ""))
+            ),
             "FAKE_CODEX_LOG": str(fake_codex.log_file),
             "FAKE_CODEX_TERMINATION_SEEN": str(termination_seen),
             "FAKE_CODEX_TERMINATION_RELEASE": str(termination_release),
@@ -765,6 +794,7 @@ def test_failed_launch_retains_reservation_until_worker_and_runtime_terminate(
     active_root = harness_root / ".codex" / "agent-runner" / "active-worktrees"
     evidence = (
         harness_root
+        / ".graphtraj"
         / "state"
         / run_id
         / "tickets"

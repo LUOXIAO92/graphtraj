@@ -29,6 +29,19 @@ def git_output(repository: Path, *arguments: str) -> str:
     return result.stdout.strip()
 
 
+def create_git_repository(path: Path) -> Path:
+    path.mkdir()
+    run_process(["git", "init", "--initial-branch=main"], cwd=path).check_returncode()
+    run_process(["git", "config", "user.name", "GraphTraj Test"], cwd=path).check_returncode()
+    run_process(
+        ["git", "config", "user.email", "graphtraj@example.invalid"], cwd=path
+    ).check_returncode()
+    (path / "README.md").write_text("# Source\n", encoding="utf-8")
+    run_process(["git", "add", "README.md"], cwd=path).check_returncode()
+    run_process(["git", "commit", "-m", "Initial source"], cwd=path).check_returncode()
+    return path
+
+
 def test_setup_initializes_the_current_git_repository(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
@@ -72,6 +85,84 @@ def test_setup_initializes_the_current_git_repository(
     assert not (repository / ".codex" / "agent-runner" / "config.yml").exists()
 
 
+def test_setup_selects_the_only_git_child_and_preserves_root_documents(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+) -> None:
+    harness_root = temporary_git_repository.parent
+    agents = harness_root / "AGENTS.md"
+    context = harness_root / "CONTEXT.md"
+    docs = harness_root / "docs"
+    agents.write_text("# Harness guidance\n", encoding="utf-8")
+    context.write_text("# Harness context\n", encoding="utf-8")
+    docs.mkdir()
+    decision = docs / "decision.md"
+    decision.write_text("# Harness decision\n", encoding="utf-8")
+    documents_before = {
+        agents: agents.read_bytes(),
+        context: context.read_bytes(),
+        decision: decision.read_bytes(),
+    }
+
+    first = run_setup(installed_commands, harness_root)
+    config_path = harness_root / ".graphtraj" / "config.yml"
+    config_before = config_path.read_bytes()
+    second = run_setup(installed_commands, harness_root, answers="")
+
+    assert first.returncode == 0, first.stderr
+    assert second.returncode == 0, second.stderr
+    config = yaml.safe_load(config_before)
+    assert config["paths"]["project_root"] == temporary_git_repository.name
+    assert config["paths"]["docs"] == "docs"
+    assert config_path.read_bytes() == config_before
+    integration = harness_root / ".graphtraj" / ".agent-worktrees" / "dev"
+    assert git_output(integration, "rev-parse", "--show-toplevel") == str(
+        integration.resolve()
+    )
+    assert {path: path.read_bytes() for path in documents_before} == documents_before
+
+
+def test_setup_prompts_to_select_one_of_multiple_git_children(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+) -> None:
+    harness_root = temporary_git_repository.parent
+    selected = create_git_repository(harness_root / "selected-source")
+
+    result = run_setup(installed_commands, harness_root, answers="selected-source\ny\n")
+
+    assert result.returncode == 0, result.stderr
+    config = yaml.safe_load(
+        (harness_root / ".graphtraj" / "config.yml").read_text(encoding="utf-8")
+    )
+    assert config["paths"]["project_root"] == selected.name
+    integration = harness_root / ".graphtraj" / ".agent-worktrees" / "dev"
+    assert git_output(integration, "rev-parse", "--show-toplevel") == str(
+        integration.resolve()
+    )
+
+
+def test_setup_prompts_for_an_explicit_source_when_no_git_child_exists(
+    installed_commands: InstalledCommands,
+    tmp_path: Path,
+) -> None:
+    harness_root = tmp_path / "harness-project"
+    harness_root.mkdir()
+    source = create_git_repository(tmp_path / "external-source")
+
+    result = run_setup(installed_commands, harness_root, answers="{0}\ny\n".format(source))
+
+    assert result.returncode == 0, result.stderr
+    config = yaml.safe_load(
+        (harness_root / ".graphtraj" / "config.yml").read_text(encoding="utf-8")
+    )
+    assert config["paths"]["project_root"] == str(source)
+    integration = harness_root / ".graphtraj" / ".agent-worktrees" / "dev"
+    assert git_output(integration, "rev-parse", "--show-toplevel") == str(
+        integration.resolve()
+    )
+
+
 def test_setup_preserves_a_valid_operator_configuration(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
@@ -102,6 +193,44 @@ def test_setup_preserves_a_valid_operator_configuration(
     assert integration.is_dir()
     assert git_output(integration, "branch", "--show-current") == "dev"
     assert (repository / ".graphtraj" / "operator-state").is_dir()
+
+
+def test_setup_uses_the_configured_document_directory_for_child_worktrees(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+) -> None:
+    harness_root = temporary_git_repository.parent
+    documents = harness_root / "project-documents"
+    documents.mkdir()
+    (documents / "decision.md").write_text("# Decision\n", encoding="utf-8")
+    (harness_root / "CONTEXT.md").write_text("# Context\n", encoding="utf-8")
+    config_path = harness_root / ".graphtraj" / "config.yml"
+    config_path.parent.mkdir()
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "version": 1,
+                "paths": {
+                    "project_root": temporary_git_repository.name,
+                    "docs": "project-documents",
+                    "agent_worktrees": ".graphtraj/.agent-worktrees",
+                    "state": ".graphtraj/state",
+                },
+                "agent_runner": {"dispatch_depth": 2, "max_concurrency": 18},
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_setup(installed_commands, harness_root, answers="y\n")
+
+    integration = harness_root / ".graphtraj" / ".agent-worktrees" / "dev"
+    assert result.returncode == 0, result.stderr
+    assert (integration / "docs").resolve() == documents.resolve()
+    assert (integration / "docs" / "decision.md").read_text(encoding="utf-8") == (
+        "# Decision\n"
+    )
 
 
 def test_setup_preflight_failure_leaves_the_project_unchanged(

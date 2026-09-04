@@ -9,6 +9,7 @@ import yaml
 from conftest import FakeCodex, InstalledCommands, run_process
 from test_project_setup import (
     git_output,
+    install_user_skills,
     run_ready_setup as run_setup,
     setup_environment,
 )
@@ -60,9 +61,10 @@ def test_pinned_install_exercises_the_complete_v1_delivery_lifecycle(
     tmp_path: Path,
 ) -> None:
     harness_root = temporary_git_repository.parent
-    integration = harness_root / ".agent-worktrees" / "integration"
-    state = harness_root / "state"
+    integration = harness_root / ".graphtraj" / ".agent-worktrees" / "dev"
+    state = harness_root / ".graphtraj" / "state"
     user_home = tmp_path / "operator-home"
+    install_user_skills(user_home)
     environment = setup_environment(user_home, fake_codex)
 
     setup = run_setup(
@@ -70,7 +72,7 @@ def test_pinned_install_exercises_the_complete_v1_delivery_lifecycle(
         harness_root=harness_root,
         user_home=user_home,
         fake_codex=fake_codex,
-        answers="{0}\ny\ny\n".format(temporary_git_repository.name),
+        answers="y\n",
     )
 
     assert setup.returncode == 0, setup.stderr

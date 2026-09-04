@@ -318,9 +318,11 @@ def _ensure_worktree_paths(
             )
             if state.resolve() != evidence:
                 raise OSError("scoped state does not resolve to evidence")
-        for name in ("CONTEXT.md", "docs"):
+        for name, target in (
+            ("CONTEXT.md", project.harness_root / "CONTEXT.md"),
+            ("docs", project.documents_directory),
+        ):
             link = worktree / name
-            target = project.harness_root / name
             if os.path.lexists(str(link)):
                 if link.is_symlink() and link.resolve() == target.resolve():
                     continue

@@ -17,8 +17,8 @@ def configure_harness(
     tmp_path: Path,
 ) -> tuple[Path, Path, Path, dict[str, str]]:
     harness_root = temporary_git_repository.parent
-    worktree_root = harness_root / ".agent-worktrees"
-    integration = worktree_root / "integration"
+    worktree_root = harness_root / ".graphtraj" / ".agent-worktrees"
+    integration = worktree_root / "dev"
     user_home = tmp_path / "operator-home"
     install_user_skills(user_home)
     setup_result = run_setup(
@@ -26,13 +26,16 @@ def configure_harness(
         harness_root=harness_root,
         user_home=user_home,
         fake_codex=fake_codex,
-        answers="{0}\ny\n".format(temporary_git_repository.name),
+        answers="y\n",
     )
     assert setup_result.returncode == 0, setup_result.stderr
     environment = os.environ.copy()
     environment.update(
         {
             "HOME": str(user_home),
+            "PATH": os.pathsep.join(
+                (str(fake_codex.executable.parent), os.environ.get("PATH", ""))
+            ),
             "FAKE_CODEX_LOG": str(fake_codex.log_file),
         }
     )
@@ -97,7 +100,9 @@ def test_installed_runner_launches_four_exact_main_selected_tasks_in_order(
     documents = list(yaml.safe_load_all(result.stdout))
     assert len(documents) == 1
     document = documents[0]
-    retained = (harness_root / "state" / run_id / "batch.yml").resolve()
+    retained = (
+        harness_root / ".graphtraj" / "state" / run_id / "batch.yml"
+    ).resolve()
     assert document["run_id"] == run_id
     assert document["runtime"] == "codex"
     assert document["retained_batch_file"] == str(retained)
@@ -261,7 +266,7 @@ def test_installed_runner_rejects_intra_batch_worktree_collision_before_any_star
     assert not fake_codex.log_file.exists()
     assert not (worktree_root / "runs" / run_id).exists()
     assert not (
-        harness_root / "state" / run_id
+        harness_root / ".graphtraj" / "state" / run_id
     ).exists()
 
 
@@ -420,7 +425,7 @@ def test_installed_runner_rejects_later_live_ticket_without_expected_branch(
         worktree_root / "runs" / run_id / "2-20-must-not-start"
     ).exists()
     assert not (
-        harness_root / "state" / run_id
+        harness_root / ".graphtraj" / "state" / run_id
     ).exists()
 
 
@@ -457,6 +462,7 @@ def test_installed_runner_reports_mixed_post_preflight_launch_outcomes(
         )
     broken_evidence = (
         harness_root
+        / ".graphtraj"
         / "state"
         / run_id
         / "tickets"
@@ -484,7 +490,7 @@ def test_installed_runner_reports_mixed_post_preflight_launch_outcomes(
     assert len(documents) == 1
     document = documents[0]
     retained = (
-        harness_root / "state" / run_id / "batch.yml"
+        harness_root / ".graphtraj" / "state" / run_id / "batch.yml"
     ).resolve()
     assert document["run_id"] == run_id
     assert document["runtime"] == "codex"
@@ -696,11 +702,6 @@ def test_installed_runner_uses_only_allowlisted_built_in_runtime_adapters(
     )
     ticket_file = harness_root / "ticket.md"
     ticket_file.write_text("# Canonical ticket\n", encoding="utf-8")
-    config_file = harness_root / ".codex" / "agent-runner" / "config.yml"
-    config = yaml.safe_load(config_file.read_text(encoding="utf-8"))
-
-    config["runtimes"]["unapproved"] = dict(config["runtimes"]["codex"])
-    config_file.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
     unapproved_run = "20260813-unapproved-runtime"
     unapproved_batch = harness_root / "unapproved-runtime-batch.yml"
     unapproved_batch.write_text(
@@ -733,43 +734,8 @@ def test_installed_runner_uses_only_allowlisted_built_in_runtime_adapters(
             "message": "The selected Agent Runtime is not supported by this Runner.",
         }
     }
-
-    config["runtimes"].pop("unapproved")
-    config["runtimes"]["codex"]["adapter"] = "arbitrary.module:adapter"
-    config_file.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
-    unsafe_run = "20260813-unsafe-adapter"
-    unsafe_batch = harness_root / "unsafe-adapter-batch.yml"
-    unsafe_batch.write_text(
-        yaml.safe_dump(
-            {
-                "run_id": unsafe_run,
-                "runtime": "codex",
-                "tasks": [
-                    {
-                        "ticket_id": "12",
-                        "ticket_name": "unsafe-adapter",
-                        "role": "engineer-expert",
-                        "ticket_file": str(ticket_file),
-                    }
-                ],
-            },
-            sort_keys=False,
-        ),
-        encoding="utf-8",
-    )
-    unsafe = run_process(
-        [str(installed_commands.runner), "--batch-input", str(unsafe_batch)],
-        cwd=harness_root,
-        env=environment,
-    )
-    assert unsafe.returncode == 1
-    assert yaml.safe_load(unsafe.stdout) == {
-        "error": {
-            "code": "invalid-config",
-            "message": "Project Runner Config contains invalid project or Codex settings.",
-        }
-    }
+    assert not (harness_root / ".codex" / "agent-runner" / "config.yml").exists()
     assert not fake_codex.log_file.exists()
-    for run_id in (unapproved_run, unsafe_run):
+    for run_id in (unapproved_run,):
         assert not (worktree_root / "runs" / run_id).exists()
-        assert not (harness_root / "state" / run_id).exists()
+        assert not (harness_root / ".graphtraj" / "state" / run_id).exists()

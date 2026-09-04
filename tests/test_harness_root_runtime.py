@@ -39,7 +39,7 @@ def test_setup_creates_a_root_owned_runtime_and_runner_discovers_it(
 
     harness_root = temporary_git_repository.parent
     primary = temporary_git_repository
-    integration = harness_root / ".agent-worktrees" / "integration"
+    integration = harness_root / ".graphtraj" / ".agent-worktrees" / "dev"
     runtime_store = harness_root / ".codex"
     user_home = tmp_path / "runtime-user"
     user_home.mkdir()
@@ -53,24 +53,29 @@ def test_setup_creates_a_root_owned_runtime_and_runner_discovers_it(
     ).check_returncode()
     source_before = source_config.read_bytes()
 
-    plan = plan_project_setup(harness_root, primary, _runtime_executable(tmp_path))
-    assert plan.apply(install_missing_skills=True) == "Created Integration Worktree on dev."
+    runtime = _runtime_executable(tmp_path)
+    monkeypatch.setenv(
+        "PATH", os.pathsep.join((str(runtime.parent), os.environ.get("PATH", "")))
+    )
+    install_skills(user_home / ".agents" / "skills", ("implement", "ponytail", "tdd"))
+    plan = plan_project_setup(harness_root, primary)
+    assert plan.apply() == "Created Integration Worktree on dev."
 
     project = discover_project(harness_root)
     assert project.harness_root == harness_root.resolve()
     assert project.runner_directory == runtime_store / "agent-runner"
     assert project.integration_worktree == integration.resolve()
     assert (runtime_store / "config.toml").is_file()
-    assert (runtime_store / "agent-runner" / "config.yml").is_file()
-    assert (harness_root / ".agents" / "skills" / "task-delivery" / "SKILL.md").is_file()
+    assert (runtime_store / "agent-runner").is_dir()
+    assert not (runtime_store / "agent-runner" / "config.yml").exists()
+    assert not (harness_root / ".agents").exists()
     assert source_config.read_bytes() == source_before
-    assert (integration / ".state").resolve() == (harness_root / "state").resolve()
-    assert (integration / ".scratch").resolve() == (
-        harness_root / ".scratch"
+    assert (integration / ".state").resolve() == (
+        harness_root / ".graphtraj" / "state"
     ).resolve()
     with pytest.raises(RunnerError) as non_root:
         discover_project(integration)
-    assert non_root.value.code == "RUNNER_CONFIG_NOT_FOUND"
+    assert non_root.value.code == "PROJECT_CONFIG_MISMATCH"
 
 
 def test_setup_uses_runtime_user_core_skills_without_root_skill_config(
@@ -91,12 +96,7 @@ def test_setup_uses_runtime_user_core_skills_without_root_skill_config(
     install_skills(user_home / ".agents" / "skills", CORE_SKILL_NAMES)
     monkeypatch.setenv("HOME", str(user_home))
 
-    plan = plan_project_setup(
-        harness_root,
-        temporary_git_repository,
-        _runtime_executable(tmp_path),
-    )
-    assert plan.missing_skills == ()
+    plan = plan_project_setup(harness_root, temporary_git_repository)
     assert plan.apply() == "Created Integration Worktree on dev."
 
     runtime_store = harness_root / ".codex"
@@ -104,11 +104,7 @@ def test_setup_uses_runtime_user_core_skills_without_root_skill_config(
     assert runtime_config.read_bytes() == plan.codex_files.resources_by_path[
         "config.toml"
     ]
-    harness_skills = harness_root / ".agents" / "skills"
-    assert {path.name for path in harness_skills.iterdir()} == {"task-delivery"}
-    assert tree_contents(harness_skills / "task-delivery") == supported_skill_contents(
-        "task-delivery"
-    )
+    assert not (harness_root / ".agents").exists()
     preflight_engineer_runtime_context(
         runtime_store=runtime_store,
         executable=_runtime_executable(tmp_path),
@@ -117,7 +113,7 @@ def test_setup_uses_runtime_user_core_skills_without_root_skill_config(
         worktree=tmp_path / "ticket-worktree",
         evidence=tmp_path / "evidence",
         repository_skill_source=(
-            harness_root / ".agent-worktrees" / "integration"
+            harness_root / ".graphtraj" / ".agent-worktrees" / "dev"
         ),
         requested_skills=(),
     )
@@ -142,12 +138,9 @@ def test_engineer_runtime_context_preflight_validates_without_launch_artifacts(
     user_home = tmp_path / "runtime-user"
     user_home.mkdir()
     monkeypatch.setenv("HOME", str(user_home))
-    plan = plan_project_setup(
-        harness_root,
-        temporary_git_repository,
-        _runtime_executable(tmp_path),
-    )
-    plan.apply(install_missing_skills=True)
+    install_skills(user_home / ".agents" / "skills", ("implement", "ponytail", "tdd"))
+    plan = plan_project_setup(harness_root, temporary_git_repository)
+    plan.apply()
 
     runtime_store = harness_root / ".codex"
     (runtime_store / "config.toml").unlink()
@@ -166,7 +159,7 @@ def test_engineer_runtime_context_preflight_validates_without_launch_artifacts(
             worktree=target_worktree,
             evidence=evidence,
             repository_skill_source=(
-                harness_root / ".agent-worktrees" / "integration"
+                harness_root / ".graphtraj" / ".agent-worktrees" / "dev"
             ),
             requested_skills=(),
         )
@@ -184,7 +177,7 @@ def test_engineer_runtime_context_preflight_validates_without_launch_artifacts(
         worktree=target_worktree,
         evidence=evidence,
         repository_skill_source=(
-            harness_root / ".agent-worktrees" / "integration"
+            harness_root / ".graphtraj" / ".agent-worktrees" / "dev"
         ),
         requested_skills=(),
     )
@@ -192,7 +185,7 @@ def test_engineer_runtime_context_preflight_validates_without_launch_artifacts(
     assert not evidence.exists()
     assert not fake_codex.log_file.exists()
 
-    (harness_root / ".agents" / "skills" / "implement" / "SKILL.md").unlink()
+    (user_home / ".agents" / "skills" / "implement" / "SKILL.md").unlink()
 
     with pytest.raises(CodexAdapterError) as unavailable:
         preflight_engineer_runtime_context(
@@ -203,7 +196,7 @@ def test_engineer_runtime_context_preflight_validates_without_launch_artifacts(
             worktree=target_worktree,
             evidence=evidence,
             repository_skill_source=(
-                harness_root / ".agent-worktrees" / "integration"
+                harness_root / ".graphtraj" / ".agent-worktrees" / "dev"
             ),
             requested_skills=(),
         )
@@ -232,12 +225,9 @@ def test_runtime_preflight_allows_tuning_but_rejects_managed_role_drift(
     user_home = tmp_path / "runtime-user"
     user_home.mkdir()
     monkeypatch.setenv("HOME", str(user_home))
-    plan = plan_project_setup(
-        harness_root,
-        temporary_git_repository,
-        fake_codex.executable,
-    )
-    plan.apply(install_missing_skills=True)
+    install_skills(user_home / ".agents" / "skills", ("implement", "ponytail", "tdd"))
+    plan = plan_project_setup(harness_root, temporary_git_repository)
+    plan.apply()
     runtime_store = harness_root / ".codex"
     role_path = runtime_store / "agents" / "engineer-expert.toml"
     tuned_role = (
@@ -262,7 +252,7 @@ def test_runtime_preflight_allows_tuning_but_rejects_managed_role_drift(
             worktree=tmp_path / "ticket-worktree",
             evidence=tmp_path / "evidence",
             repository_skill_source=(
-                harness_root / ".agent-worktrees" / "integration"
+                harness_root / ".graphtraj" / ".agent-worktrees" / "dev"
             ),
             requested_skills=(),
         )
@@ -345,13 +335,10 @@ def test_engineer_runtime_context_preflight_rejects_unresolved_repository_skills
     user_home = tmp_path / "runtime-user"
     user_home.mkdir()
     monkeypatch.setenv("HOME", str(user_home))
-    plan = plan_project_setup(
-        harness_root,
-        temporary_git_repository,
-        fake_codex.executable,
-    )
-    plan.apply(install_missing_skills=True)
-    source = harness_root / ".agent-worktrees" / "integration"
+    install_skills(user_home / ".agents" / "skills", ("implement", "ponytail", "tdd"))
+    plan = plan_project_setup(harness_root, temporary_git_repository)
+    plan.apply()
+    source = harness_root / ".graphtraj" / ".agent-worktrees" / "dev"
     for directory, name in skill_directories:
         skill = source / ".agents" / "skills" / directory / "SKILL.md"
         skill.parent.mkdir(parents=True)
@@ -397,12 +384,9 @@ def test_engineer_runtime_context_finalizes_worktree_facts_once(
     user_home = tmp_path / "runtime-user"
     user_home.mkdir()
     monkeypatch.setenv("HOME", str(user_home))
-    plan = plan_project_setup(
-        harness_root,
-        temporary_git_repository,
-        _runtime_executable(tmp_path),
-    )
-    plan.apply(install_missing_skills=True)
+    install_skills(user_home / ".agents" / "skills", ("implement", "ponytail", "tdd"))
+    plan = plan_project_setup(harness_root, temporary_git_repository)
+    plan.apply()
     runtime_store = harness_root / ".codex"
     source = tmp_path / "integration"
     ticket = tmp_path / "ticket-worktree"
@@ -447,7 +431,7 @@ def test_engineer_runtime_context_finalizes_worktree_facts_once(
     assert {
         skill["name"]
         for skill in evidence_document["effective_skills"]
-        if skill["source"] == "harness"
+        if skill["source"] == "runtime-user"
     } == {"implement", "ponytail", "tdd"}
     repository_skills = {
         skill["name"]: skill
@@ -467,7 +451,7 @@ def test_engineer_runtime_context_finalizes_worktree_facts_once(
     assert {
         skill["name"]
         for skill in context.evidence_document()["effective_skills"]
-        if skill["source"] == "harness"
+        if skill["source"] == "runtime-user"
     } == {"implement", "ponytail", "tdd"}
 
 
@@ -480,6 +464,7 @@ def test_installed_setup_to_runner_launch_uses_project_document_permissions(
     harness_root = temporary_git_repository.parent
     runtime_user = tmp_path / "runtime-user"
     runtime_user.mkdir()
+    install_skills(runtime_user / ".agents" / "skills", ("implement", "ponytail", "tdd"))
     user_config = runtime_user / ".codex" / "config.toml"
     user_config.parent.mkdir()
     user_config.write_text('sandbox_mode = "workspace-write"\n', encoding="utf-8")
@@ -496,7 +481,7 @@ def test_installed_setup_to_runner_launch_uses_project_document_permissions(
         [str(installed_commands.product), "setup"],
         cwd=harness_root,
         env=environment,
-        input="{0}\ny\ny\n".format(temporary_git_repository.name),
+        input="y\n",
         check=False,
         text=True,
         capture_output=True,
@@ -538,10 +523,14 @@ def test_installed_setup_to_runner_launch_uses_project_document_permissions(
     }
     assert not fake_codex.log_file.exists()
     assert not (
-        harness_root / ".agent-worktrees" / "runs" / "20260823-permissions"
+        harness_root
+        / ".graphtraj"
+        / ".agent-worktrees"
+        / "runs"
+        / "20260823-permissions"
     ).exists()
     assert not (
-        harness_root / "state" / "20260823-permissions"
+        harness_root / ".graphtraj" / "state" / "20260823-permissions"
     ).exists()
 
     user_config.unlink()

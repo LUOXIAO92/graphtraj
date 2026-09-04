@@ -3,9 +3,9 @@ requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "you-are-a-product-architect"
+name = "graphtraj"
 version = "0.1.0"
-description = "A soft harness for product architecture and delivery."
+description = "GraphTraj, a soft harness for product architecture and delivery."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [project.scripts]
-you-are-a-product-architect = "you_are_a_product_architect.cli:main"
+graphtraj = "you_are_a_product_architect.cli:main"
 agent-runner = "you_are_a_product_architect.agent_runner:main"
 
 [tool.setuptools]

@@ -1,1 +1,1 @@
-"""The you-are-a-product-architect distribution."""
+"""The GraphTraj distribution."""

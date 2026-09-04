@@ -268,11 +268,12 @@ def _install_commands(environment: Path) -> InstalledCommands:
     }.issuperset(
         {
         "agent-runner",
-        "you-are-a-product-architect",
+        "graphtraj",
         }
     )
+    assert not (bin_directory / "you-are-a-product-architect").exists()
     return InstalledCommands(
-        product=bin_directory / "you-are-a-product-architect",
+        product=bin_directory / "graphtraj",
         runner=bin_directory / "agent-runner",
     )
 

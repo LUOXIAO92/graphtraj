@@ -481,7 +481,7 @@ def test_installed_setup_to_runner_launch_uses_project_document_permissions(
         [str(installed_commands.product), "setup"],
         cwd=harness_root,
         env=environment,
-        input="y\n",
+        input="y\ny\n",
         check=False,
         text=True,
         capture_output=True,

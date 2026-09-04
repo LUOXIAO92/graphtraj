@@ -24,6 +24,8 @@ from .project_configuration import (
     default_project_configuration,
     load_project_configuration,
 )
+from .skill_check import CORE_SKILL_NAMES, check_core_skills, harness_skill_root
+from .supported_skills import SupportedSkills, SupportedSkillsError
 
 
 INTEGRATION_BRANCH = "dev"
@@ -176,6 +178,8 @@ class ProjectSetupPlan:
     repository: SourceRepository
     configuration: ProjectConfiguration
     codex_files: CodexProjectFiles
+    supported_skills: SupportedSkills
+    missing_skills: Tuple[str, ...]
     write_default_configuration: bool
     proposed_base: Optional[str]
     integration_revision: str
@@ -192,21 +196,42 @@ class ProjectSetupPlan:
     def runner_store(self) -> Path:
         return self.runtime_store / "agent-runner"
 
-    def preflight(self) -> ProjectSetupPreview:
+    def _skill_names_to_install(
+        self,
+        install_missing_skills: bool,
+    ) -> Tuple[str, ...]:
+        if not install_missing_skills:
+            return ()
+        return self.missing_skills
+
+    def preflight(
+        self,
+        *,
+        install_missing_skills: bool = False,
+    ) -> ProjectSetupPreview:
         """Check every setup target before setup mutates the project."""
 
         try:
-            return self._preflight()
+            return self._preflight(install_missing_skills=install_missing_skills)
         except ProjectSetupError:
             raise
-        except (GitRepositoryError, OSError) as error:
+        except (GitRepositoryError, OSError, SupportedSkillsError) as error:
             raise ProjectSetupError(
                 "Setup preflight could not be completed: {0}".format(error)
             ) from error
 
-    def _preflight(self) -> ProjectSetupPreview:
+    def _preflight(
+        self,
+        *,
+        install_missing_skills: bool = False,
+    ) -> ProjectSetupPreview:
         actions: List[PlannedSetupAction] = []
         conflicts: List[str] = []
+        self._preflight_supported_skills(
+            self._skill_names_to_install(install_missing_skills),
+            actions,
+            conflicts,
+        )
         if self.write_default_configuration:
             actions.append(
                 PlannedSetupAction(
@@ -330,6 +355,38 @@ class ProjectSetupPlan:
         _raise_conflicts(conflicts)
         return ProjectSetupPreview(tuple(actions))
 
+    def _preflight_supported_skills(
+        self,
+        names: Tuple[str, ...],
+        actions: List[PlannedSetupAction],
+        conflicts: List[str],
+    ) -> None:
+        if not names:
+            return
+        try:
+            self.supported_skills.preflight_installation(self.runtime_store, names)
+        except SupportedSkillsError as error:
+            _append_conflict(conflicts, str(error))
+            return
+        skill_root = harness_skill_root(self.runtime_store)
+        for name in names:
+            for relative_path, content in self.supported_skills.manifest(name).items():
+                target = skill_root / name / relative_path
+                entry = _filesystem_entry(target)
+                description = SupportedSkills.resource_action(
+                    self.runtime_store,
+                    name,
+                    relative_path,
+                )
+                if entry is None:
+                    actions.append(PlannedSetupAction("CREATE", description))
+                elif entry.kind == "file" and entry.content == content:
+                    actions.append(
+                        PlannedSetupAction("ALREADY CONFIGURED", description)
+                    )
+                else:
+                    actions.append(PlannedSetupAction("REPLACE", description))
+
     def _preflight_runtime_resources(
         self,
         actions: List[PlannedSetupAction],
@@ -449,10 +506,11 @@ class ProjectSetupPlan:
                 )
                 actions.append(PlannedSetupAction(disposition, description))
 
-    def apply(self) -> str:
+    def apply(self, *, install_missing_skills: bool = False) -> str:
         """Create the preflighted configuration, directories, branch, and Worktree."""
 
-        preview = self.preflight()
+        preview = self.preflight(install_missing_skills=install_missing_skills)
+        skill_names = self._skill_names_to_install(install_missing_skills)
         pending = tuple(
             action.description
             for action in preview.actions
@@ -521,7 +579,18 @@ class ProjectSetupPlan:
                 ),
                 on_action_complete=mark_completed,
             )
-        except (CodexProjectError, GitRepositoryError, OSError) as error:
+            if skill_names:
+                self.supported_skills.install_missing(
+                    self.runtime_store,
+                    skill_names,
+                    on_action_complete=mark_completed,
+                )
+        except (
+            CodexProjectError,
+            GitRepositoryError,
+            OSError,
+            SupportedSkillsError,
+        ) as error:
             incomplete = tuple(
                 description for description in pending if description not in completed
             )
@@ -574,11 +643,23 @@ def plan_project_setup(
             else proposed_base
         )
         codex_files = CodexProjectFiles.load()
+        supported_skills = SupportedSkills.load()
+        skill_statuses = check_core_skills(
+            root / ".codex",
+            Path.home() / ".agents" / "skills",
+        )
+        discovered_skills = {
+            status.name for status in skill_statuses if status.discovered
+        }
+        missing_skills = tuple(
+            name for name in CORE_SKILL_NAMES if name not in discovered_skills
+        )
     except (
         CodexProjectError,
         GitRepositoryError,
         OSError,
         ProjectConfigurationError,
+        SupportedSkillsError,
     ) as error:
         raise ProjectSetupError(str(error)) from error
     return ProjectSetupPlan(
@@ -586,6 +667,8 @@ def plan_project_setup(
         repository=repository,
         configuration=configuration,
         codex_files=codex_files,
+        supported_skills=supported_skills,
+        missing_skills=missing_skills,
         write_default_configuration=write_default_configuration,
         proposed_base=proposed_base,
         integration_revision=integration_revision,

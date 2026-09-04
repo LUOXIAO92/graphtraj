@@ -11,7 +11,7 @@ from conftest import InstalledCommands, run_process
 def run_setup(
     installed_commands: InstalledCommands,
     repository: Path,
-    answers: str = "y\n",
+    answers: str = "y\ny\n",
 ) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [str(installed_commands.product), "setup"],
@@ -129,7 +129,7 @@ def test_setup_prompts_to_select_one_of_multiple_git_children(
     harness_root = temporary_git_repository.parent
     selected = create_git_repository(harness_root / "selected-source")
 
-    result = run_setup(installed_commands, harness_root, answers="selected-source\ny\n")
+    result = run_setup(installed_commands, harness_root, answers="selected-source\ny\ny\n")
 
     assert result.returncode == 0, result.stderr
     config = yaml.safe_load(
@@ -150,7 +150,7 @@ def test_setup_prompts_for_an_explicit_source_when_no_git_child_exists(
     harness_root.mkdir()
     source = create_git_repository(tmp_path / "external-source")
 
-    result = run_setup(installed_commands, harness_root, answers="{0}\ny\n".format(source))
+    result = run_setup(installed_commands, harness_root, answers="{0}\ny\ny\n".format(source))
 
     assert result.returncode == 0, result.stderr
     config = yaml.safe_load(
@@ -223,7 +223,7 @@ def test_setup_uses_the_configured_document_directory_for_child_worktrees(
         encoding="utf-8",
     )
 
-    result = run_setup(installed_commands, harness_root, answers="y\n")
+    result = run_setup(installed_commands, harness_root, answers="y\ny\n")
 
     integration = harness_root / ".graphtraj" / ".agent-worktrees" / "dev"
     assert result.returncode == 0, result.stderr

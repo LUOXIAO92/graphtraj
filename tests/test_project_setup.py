@@ -142,6 +142,134 @@ def commit_dev_files_without_leaving_dev_checked_out(
     ).check_returncode()
 
 
+def test_setup_refuses_missing_core_skills_without_mutating_either_scope(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    harness_root = temporary_git_repository.parent
+    user_home = tmp_path / "operator-home"
+    user_home.mkdir()
+    (user_home / "operator-note.txt").write_text(
+        "leave the Runtime-user scope alone\n",
+        encoding="utf-8",
+    )
+    user_before = tree_contents(user_home)
+    worktrees_before = git_output(
+        temporary_git_repository, "worktree", "list", "--porcelain"
+    )
+
+    result = run_setup(
+        installed_commands,
+        harness_root=harness_root,
+        user_home=user_home,
+        fake_codex=fake_codex,
+        answers="n\n",
+    )
+
+    assert result.returncode == 1
+    assert "Missing required core Skills:" in result.stdout
+    assert "implement" in result.stdout
+    assert "Setup stopped before any setup mutation." in result.stderr
+    assert not (harness_root / ".graphtraj").exists()
+    assert not (harness_root / ".codex").exists()
+    assert not (harness_root / ".agents").exists()
+    assert tree_contents(user_home) == user_before
+    assert git_output(
+        temporary_git_repository, "worktree", "list", "--porcelain"
+    ) == worktrees_before
+
+
+def test_setup_installs_only_missing_core_skills_at_the_harness_root(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    harness_root = temporary_git_repository.parent
+    harness_skills = harness_root / ".agents" / "skills"
+    install_skills(harness_skills, ("grilling",))
+    existing_grilling = harness_skills / "grilling" / "SKILL.md"
+    existing_grilling.write_text(
+        "---\nname: grilling\ndescription: Operator Skill.\n---\n",
+        encoding="utf-8",
+    )
+    grilling_before = existing_grilling.read_bytes()
+    user_home = tmp_path / "operator-home"
+    install_skills(user_home / ".agents" / "skills", ("tdd",))
+    user_before = tree_contents(user_home)
+
+    result = run_setup(
+        installed_commands,
+        harness_root=harness_root,
+        user_home=user_home,
+        fake_codex=fake_codex,
+        answers="y\ny\n",
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert existing_grilling.read_bytes() == grilling_before
+    for name in CORE_SKILL_NAMES:
+        target = harness_skills / name
+        if name == "grilling":
+            assert target.joinpath("SKILL.md").read_bytes() == grilling_before
+        elif name == "tdd":
+            assert not target.exists()
+        else:
+            assert tree_contents(target) == supported_skill_contents(name)
+    assert tree_contents(user_home) == user_before
+    assert not (
+        harness_root / ".codex" / "agent-runner" / "config.yml"
+    ).exists()
+
+
+def test_setup_preflights_missing_skill_targets_before_project_mutation(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    harness_root = temporary_git_repository.parent
+    redirected_target = tmp_path / "outside-harness"
+    redirected_target.mkdir()
+    (redirected_target / "operator-note.txt").write_text(
+        "leave this alone\n", encoding="utf-8"
+    )
+    harness_skills = harness_root / ".agents" / "skills"
+    harness_skills.mkdir(parents=True)
+    (harness_skills / "implement").symlink_to(
+        redirected_target,
+        target_is_directory=True,
+    )
+    user_home = tmp_path / "operator-home"
+    user_home.mkdir()
+    user_before = tree_contents(user_home)
+    outside_before = tree_contents(redirected_target)
+    worktrees_before = git_output(
+        temporary_git_repository, "worktree", "list", "--porcelain"
+    )
+
+    result = run_setup(
+        installed_commands,
+        harness_root=harness_root,
+        user_home=user_home,
+        fake_codex=fake_codex,
+        answers="y\ny\n",
+    )
+
+    assert result.returncode == 1
+    assert "Harness Skill target is not a real directory" in result.stderr
+    assert not (harness_root / ".graphtraj").exists()
+    assert not (harness_root / ".codex").exists()
+    assert (harness_skills / "implement").is_symlink()
+    assert tree_contents(redirected_target) == outside_before
+    assert tree_contents(user_home) == user_before
+    assert git_output(
+        temporary_git_repository, "worktree", "list", "--porcelain"
+    ) == worktrees_before
+
+
 def test_setup_preflights_source_document_views_before_mutating(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
@@ -150,6 +278,8 @@ def test_setup_preflights_source_document_views_before_mutating(
 ) -> None:
     harness_root = temporary_git_repository.parent
     integration = harness_root / ".graphtraj" / ".agent-worktrees" / "dev"
+    user_home = tmp_path / "operator-home"
+    install_user_skills(user_home)
     commit_dev_files_without_leaving_dev_checked_out(
         temporary_git_repository,
         tmp_path / "seed-dev",
@@ -165,7 +295,7 @@ def test_setup_preflights_source_document_views_before_mutating(
     result = run_setup(
         installed_commands,
         harness_root=harness_root,
-        user_home=tmp_path / "operator-home",
+        user_home=user_home,
         fake_codex=fake_codex,
         answers="",
     )
@@ -187,6 +317,8 @@ def test_setup_preflights_a_dev_checkout_owned_elsewhere(
     tmp_path: Path,
 ) -> None:
     harness_root = temporary_git_repository.parent
+    user_home = tmp_path / "operator-home"
+    install_user_skills(user_home)
     foreign_dev = tmp_path / "operator-dev-worktree"
     run_process(["git", "branch", "dev"], cwd=temporary_git_repository).check_returncode()
     run_process(
@@ -198,7 +330,7 @@ def test_setup_preflights_a_dev_checkout_owned_elsewhere(
     result = run_setup(
         installed_commands,
         harness_root=harness_root,
-        user_home=tmp_path / "operator-home",
+        user_home=user_home,
         fake_codex=fake_codex,
         answers="{0}\n".format(temporary_git_repository.name),
     )
@@ -217,6 +349,8 @@ def test_setup_preflights_runtime_conflicts_before_creating_dev(
     tmp_path: Path,
 ) -> None:
     harness_root = temporary_git_repository.parent
+    user_home = tmp_path / "operator-home"
+    install_user_skills(user_home)
     runtime_store = harness_root / ".codex"
     runtime_store.mkdir()
     (runtime_store / "config.toml").write_text("unmanaged = true\n", encoding="utf-8")
@@ -225,7 +359,7 @@ def test_setup_preflights_runtime_conflicts_before_creating_dev(
     result = run_setup(
         installed_commands,
         harness_root=harness_root,
-        user_home=tmp_path / "operator-home",
+        user_home=user_home,
         fake_codex=fake_codex,
         answers="",
     )
@@ -267,6 +401,7 @@ def test_setup_reports_partial_execution_and_rerun_recovers(
     )
     git_wrapper.chmod(0o755)
     user_home = tmp_path / "operator-home"
+    install_user_skills(user_home)
 
     failed = run_setup(
         installed_commands,
@@ -311,12 +446,14 @@ def test_setup_registers_an_existing_dev_at_the_configured_location(
     tmp_path: Path,
 ) -> None:
     harness_root = temporary_git_repository.parent
+    user_home = tmp_path / "operator-home"
+    install_user_skills(user_home)
     run_process(["git", "branch", "dev"], cwd=temporary_git_repository).check_returncode()
 
     result = run_setup(
         installed_commands,
         harness_root=harness_root,
-        user_home=tmp_path / "operator-home",
+        user_home=user_home,
         fake_codex=fake_codex,
         answers="",
     )

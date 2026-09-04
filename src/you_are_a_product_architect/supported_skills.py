@@ -125,6 +125,53 @@ class SupportedSkills:
     ) -> None:
         """Install preflighted release-supported Skill resources."""
 
+        names, manifests = self._installation_manifests(runtime_store, missing_names)
+        if not names:
+            return
+        skill_root = harness_skill_root(runtime_store)
+        skill_root.mkdir(parents=True, exist_ok=True)
+        for name in names:
+            target = skill_root / name
+            target.mkdir(parents=True, exist_ok=True)
+            manifest = manifests[name]
+            file_order = sorted(
+                manifest,
+                key=lambda path: (Path(path).name == "SKILL.md", path),
+            )
+            for relative_path in file_order:
+                destination = target / relative_path
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                if (
+                    destination.exists()
+                    and destination.read_bytes() == manifest[relative_path]
+                ):
+                    continue
+                destination.write_bytes(manifest[relative_path])
+                if on_action_complete is not None:
+                    on_action_complete(
+                        self.resource_action(
+                            runtime_store,
+                            name,
+                            relative_path,
+                        )
+                    )
+
+    def preflight_installation(
+        self,
+        runtime_store: Path,
+        missing_names: Iterable[str],
+    ) -> None:
+        """Check supported Skill targets without writing any files."""
+
+        self._installation_manifests(runtime_store, missing_names)
+
+    def _installation_manifests(
+        self,
+        runtime_store: Path,
+        missing_names: Iterable[str],
+    ) -> tuple[tuple[str, ...], Dict[str, Dict[str, bytes]]]:
+        """Validate target paths and return the exact files ready to install."""
+
         names = tuple(missing_names)
         unknown_names = tuple(
             name for name in names if name not in self.resources_by_name
@@ -138,6 +185,11 @@ class SupportedSkills:
 
         manifests = {name: self.manifest(name) for name in names}
         skill_root = harness_skill_root(runtime_store)
+        for root in (skill_root.parent, skill_root):
+            if os.path.lexists(str(root)) and _existing_kind(root) != "directory":
+                raise SupportedSkillsError(
+                    "Harness Skill root is not a real directory: {0}".format(root)
+                )
         for name, manifest in manifests.items():
             target = skill_root / name
             if os.path.lexists(str(target)) and _existing_kind(target) != "directory":
@@ -173,33 +225,7 @@ class SupportedSkills:
                                 existing
                             )
                         )
-
-        skill_root.mkdir(parents=True, exist_ok=True)
-        for name in names:
-            target = skill_root / name
-            target.mkdir(parents=True, exist_ok=True)
-            manifest = manifests[name]
-            file_order = sorted(
-                manifest,
-                key=lambda path: (Path(path).name == "SKILL.md", path),
-            )
-            for relative_path in file_order:
-                destination = target / relative_path
-                destination.parent.mkdir(parents=True, exist_ok=True)
-                if (
-                    destination.exists()
-                    and destination.read_bytes() == manifest[relative_path]
-                ):
-                    continue
-                destination.write_bytes(manifest[relative_path])
-                if on_action_complete is not None:
-                    on_action_complete(
-                        self.resource_action(
-                            runtime_store,
-                            name,
-                            relative_path,
-                        )
-                    )
+        return names, manifests
 
     def manifest(self, name: str) -> Dict[str, bytes]:
         """Return one supported Skill as exact relative file content."""

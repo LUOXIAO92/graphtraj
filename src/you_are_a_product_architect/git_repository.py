@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -73,6 +74,22 @@ class SourceRepository:
     """The narrow Git interface needed to establish an Integration Worktree."""
 
     primary_worktree: Path
+
+    @classmethod
+    def from_root(cls, root: Path) -> "SourceRepository":
+        """Return the current directory when it is an existing Git root."""
+
+        repository = root.resolve()
+        if not os.path.lexists(str(repository / ".git")):
+            raise GitRepositoryError(
+                "Setup must be run from an existing Git repository root."
+            )
+        top_level = Path(_git(repository, "rev-parse", "--show-toplevel")).resolve()
+        if top_level != repository:
+            raise GitRepositoryError(
+                "Setup must be run from the root of the existing Git repository."
+            )
+        return cls(primary_worktree=repository)
 
     @classmethod
     def from_primary(

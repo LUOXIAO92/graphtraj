@@ -1,74 +1,29 @@
-"""Plan and apply initialization for exactly one Harness Project."""
+"""Plan and apply setup for a GraphTraj project in one Git repository."""
 
 from __future__ import annotations
 
-import os
 import stat
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
-from .codex_project import (
-    CodexProjectError,
-    CodexProjectFiles,
-    runtime_resource_matches,
-)
-from .git_repository import GitRepositoryError, GitTreeEntry, SourceRepository
-from .path_safety import relative_parent_paths
-from .skill_check import (
-    CORE_SKILL_NAMES,
-    check_core_skills,
-    harness_skill_root,
-)
-from .supported_skills import (
-    SupportedSkills,
-    SupportedSkillsError,
-    allowed_manifest_paths,
+from .git_repository import GitRepositoryError, SourceRepository
+from .project_configuration import (
+    DEFAULT_CONFIG_CONTENT,
+    ProjectConfiguration,
+    ProjectConfigurationError,
+    configuration_exists,
+    configuration_file,
+    default_project_configuration,
+    load_project_configuration,
 )
 
 
 INTEGRATION_BRANCH = "dev"
-HARNESS_GUIDANCE_DESCRIPTION = "Harness Guidance Project Document"
-HARNESS_GUIDANCE_START = (
-    b"<!-- you-are-a-product-architect:harness-guidance:start -->"
-)
-HARNESS_GUIDANCE_END = (
-    b"<!-- you-are-a-product-architect:harness-guidance:end -->"
-)
-HARNESS_GUIDANCE_BLOCK = b"""<!-- you-are-a-product-architect:harness-guidance:start -->
-
-## Harness Guidance
-
-Review against the smallest implementation that satisfies the accepted Ticket,
-its acceptance criteria, and the repository's documented constraints.
-
-- A blocking finding must cite the exact Ticket, Spec, ADR, or repository rule,
-  identify a currently supported input or state, trace how it passes existing
-  callers and upstream validation to the changed code, and show the concrete
-  observable failure. If any part is missing, omit the finding; do not replace
-  it with non-blocking speculation.
-- Treat established upstream validation and interface invariants as
-  authoritative. Do not require duplicate downstream validation, fallback,
-  error mapping, or tests unless the downstream code is itself an explicitly
-  documented trust, security, data-loss, or destructive-operation boundary.
-- Review only behavior changed by the fixed candidate. Unrelated existing
-  inconsistency and repository-wide normalization are out of scope.
-  Consistency is blocking only when a cited rule explicitly requires it or the
-  difference causes the concrete failure above.
-- Do not use unsupported corruption, unsupported environments, future
-  extension, bare theoretical races, defense in depth, code smells, or generic
-  best practice as grounds for `FAIL` or rework.
-- Prefer deletion and the fewest files, branches, validations, and tests. Once
-  the minimum code satisfies current acceptance and applicable constraints,
-  additional defensive machinery is scope creep.
-- Main must reject a report item that fails this baseline as Reviewer error. It
-  does not count as an Engineer review failure and cannot authorize rework.
-
-<!-- you-are-a-product-architect:harness-guidance:end -->"""
 
 
 class ProjectSetupError(Exception):
-    """The selected Harness Project cannot be initialized as planned."""
+    """The selected GraphTraj project cannot be initialized as planned."""
 
 
 @dataclass(frozen=True)
@@ -94,64 +49,18 @@ class ProjectSetupPreview:
         return "\n".join(lines)
 
 
-def _is_within(path: Path, directory: Path) -> bool:
-    try:
-        path.relative_to(directory)
-    except ValueError:
-        return False
-    return True
-
-
-def _filesystem_entry(path: Path) -> Optional[GitTreeEntry]:
+def _entry_kind(path: Path) -> Optional[str]:
     try:
         metadata = path.lstat()
     except FileNotFoundError:
         return None
     if stat.S_ISLNK(metadata.st_mode):
-        return GitTreeEntry(kind="symlink", content=os.readlink(path).encode())
+        return "symlink"
     if stat.S_ISDIR(metadata.st_mode):
-        return GitTreeEntry(kind="directory")
+        return "directory"
     if stat.S_ISREG(metadata.st_mode):
-        return GitTreeEntry(kind="file", content=path.read_bytes())
-    return GitTreeEntry(kind="other")
-
-
-@dataclass(frozen=True)
-class _TargetView:
-    root: Path
-    repository: Optional[SourceRepository] = None
-    revision: Optional[str] = None
-
-    def entry(self, relative_path: str) -> Optional[GitTreeEntry]:
-        if self.repository is None:
-            return _filesystem_entry(self.root / relative_path)
-        if self.revision is None:
-            raise ProjectSetupError("A Git tree view requires a fixed revision.")
-        return self.repository.tree_entry(self.revision, relative_path)
-
-    def display_path(self, relative_path: str) -> Path:
-        return self.root / relative_path
-
-    def paths_under(self, relative_root: str) -> Tuple[str, ...]:
-        if self.repository is not None:
-            if self.revision is None:
-                raise ProjectSetupError("A Git tree view requires a fixed revision.")
-            paths = self.repository.tree_paths(self.revision, relative_root)
-            prefix = "{0}/".format(relative_root.rstrip("/"))
-            return tuple(
-                path[len(prefix) :]
-                for path in paths
-                if path.startswith(prefix)
-            )
-
-        root = self.root / relative_root
-        entry = _filesystem_entry(root)
-        if entry is None or entry.kind != "directory":
-            return ()
-        return tuple(
-            path.relative_to(root).as_posix()
-            for path in root.rglob("*")
-        )
+        return "file"
+    return "other"
 
 
 def _append_conflict(conflicts: List[str], message: str) -> None:
@@ -159,133 +68,17 @@ def _append_conflict(conflicts: List[str], message: str) -> None:
         conflicts.append(message)
 
 
-def _managed_harness_guidance(existing: Optional[bytes]) -> bytes:
-    if existing is None:
-        return b"# AGENTS.md\n\n" + HARNESS_GUIDANCE_BLOCK + b"\n"
-
-    blocks = []
-    cursor = 0
-    while True:
-        start = existing.find(HARNESS_GUIDANCE_START, cursor)
-        stray_end = existing.find(HARNESS_GUIDANCE_END, cursor)
-        if start < 0:
-            if stray_end >= 0:
-                raise ProjectSetupError(
-                    "AGENTS.md contains an unmatched Harness Guidance marker."
-                )
-            break
-        if 0 <= stray_end < start:
-            raise ProjectSetupError(
-                "AGENTS.md contains an unmatched Harness Guidance marker."
-            )
-        end = existing.find(
-            HARNESS_GUIDANCE_END,
-            start + len(HARNESS_GUIDANCE_START),
-        )
-        if end < 0:
-            raise ProjectSetupError(
-                "AGENTS.md contains an unmatched Harness Guidance marker."
-            )
-        end += len(HARNESS_GUIDANCE_END)
-        blocks.append((start, end))
-        cursor = end
-
-    if len(blocks) == 1:
-        start, end = blocks[0]
-        return existing[:start] + HARNESS_GUIDANCE_BLOCK + existing[end:]
-
-    unmanaged = bytearray()
-    cursor = 0
-    for start, end in blocks:
-        unmanaged.extend(existing[cursor:start])
-        cursor = end
-    unmanaged.extend(existing[cursor:])
-    separator = b""
-    if unmanaged and not unmanaged.endswith(b"\n\n"):
-        separator = b"\n" if unmanaged.endswith(b"\n") else b"\n\n"
-    return bytes(unmanaged) + separator + HARNESS_GUIDANCE_BLOCK + b"\n"
-
-
-def _symlink_resolves_to(
-    link: Path,
-    encoded_target: Optional[bytes],
-    expected: Path,
-) -> bool:
-    if encoded_target is None:
-        return False
-    try:
-        target = Path(encoded_target.decode())
-    except UnicodeError:
-        return False
-    if not target.is_absolute():
-        target = link.parent / target
-    return target.resolve() == expected.resolve()
-
-
-def _preflight_file(
-    view: _TargetView,
-    relative_path: str,
-    expected: bytes,
-    description: str,
-    actions: List[PlannedSetupAction],
-    conflicts: List[str],
-    *,
-    content_matches: Optional[Callable[[bytes, bytes], bool]] = None,
-    replace_existing_file: bool = False,
-) -> None:
-    for parent in relative_parent_paths(relative_path):
-        entry = view.entry(parent)
-        if entry is not None and entry.kind != "directory":
-            _append_conflict(
-                conflicts,
-                "{0} redirects through or is blocked by a non-directory path: "
-                "{1}".format(description, view.display_path(parent)),
-            )
-            return
-
-    entry = view.entry(relative_path)
-    target = view.display_path(relative_path)
-    if entry is None:
-        actions.append(
-            PlannedSetupAction(
-                "CREATE",
-                "{0}: {1}".format(description, target),
+def _raise_conflicts(conflicts: List[str]) -> None:
+    if conflicts:
+        raise ProjectSetupError(
+            "Setup preflight found conflicts:\n{0}".format(
+                "\n".join("- {0}".format(conflict) for conflict in conflicts)
             )
         )
-        return
-    matches = content_matches or (
-        lambda configured, packaged: configured == packaged
-    )
-    if entry.kind == "file" and matches(entry.content, expected):
-        actions.append(
-            PlannedSetupAction(
-                "ALREADY CONFIGURED",
-                "{0}: {1}".format(description, target),
-            )
-        )
-        return
-    if entry.kind == "file" and replace_existing_file:
-        actions.append(
-            PlannedSetupAction(
-                "REPLACE",
-                "{0}: {1}".format(description, target),
-            )
-        )
-        return
-    if entry.kind == "file":
-        detail = "different content"
-    elif entry.kind == "symlink":
-        detail = "a symlink that could redirect setup"
-    else:
-        detail = "a {0}, not the planned file".format(entry.kind)
-    _append_conflict(
-        conflicts,
-        "{0} conflicts at {1}: existing target is {2}.".format(
-            description,
-            target,
-            detail,
-        ),
-    )
+
+
+def _directory_action(description: str, path: Path) -> str:
+    return "{0}: {1}".format(description, path)
 
 
 def _preflight_directory(
@@ -294,34 +87,24 @@ def _preflight_directory(
     actions: List[PlannedSetupAction],
     conflicts: List[str],
 ) -> None:
-    entry = _filesystem_entry(path)
+    entry = _entry_kind(path)
     if entry is None:
         actions.append(
-            PlannedSetupAction(
-                "CREATE",
-                _directory_action(description, path),
-            )
+            PlannedSetupAction("CREATE", _directory_action(description, path))
         )
-    elif entry.kind == "directory":
+    elif entry == "directory":
         actions.append(
             PlannedSetupAction(
-                "ALREADY CONFIGURED",
-                _directory_action(description, path),
+                "ALREADY CONFIGURED", _directory_action(description, path)
             )
         )
     else:
         _append_conflict(
             conflicts,
             "{0} conflicts at {1}: existing target is {2}.".format(
-                description,
-                path,
-                entry.kind,
+                description, path, entry
             ),
         )
-
-
-def _directory_action(description: str, path: Path) -> str:
-    return "{0}: {1}".format(description, path)
 
 
 def _new_dev_branch_action(base: str) -> str:
@@ -336,180 +119,67 @@ def _integration_worktree_action(path: Path) -> str:
     return "Integration Worktree on dev: {0}".format(path)
 
 
-def _raise_conflicts(conflicts: List[str]) -> None:
-    if conflicts:
-        raise ProjectSetupError(
-            "Setup preflight found conflicts:\n{0}".format(
-                "\n".join("- {0}".format(conflict) for conflict in conflicts)
-            )
-        )
-
-
-def _recoverable_supported_skills(
-    view: _TargetView,
-    supported_skills: SupportedSkills,
-) -> Tuple[str, ...]:
-    recoverable = []
-    for name in CORE_SKILL_NAMES:
-        manifest = supported_skills.manifest(name)
-        root = "skills/{0}".format(name)
-        root_entry = view.entry(root)
-        if name == "task-delivery":
-            if root_entry is None:
-                recoverable.append(name)
-                continue
-            if root_entry.kind != "directory":
-                recoverable.append(name)
-                continue
-            if any(
-                (entry := view.entry("{0}/{1}".format(root, relative_path)))
-                is None
-                or entry.kind != "file"
-                or entry.content != content
-                for relative_path, content in manifest.items()
-            ):
-                recoverable.append(name)
-            continue
-        if root_entry is None or root_entry.kind != "directory":
-            continue
-        existing_paths = set(view.paths_under(root))
-        expected_directories = {
-            parent
-            for relative_path in manifest
-            for parent in relative_parent_paths(relative_path)
-        }
-        if not existing_paths or not existing_paths.issubset(
-            set(manifest).union(expected_directories)
-        ):
-            continue
-
-        matching_files = 0
-        valid_subset = True
-        for relative_path, content in manifest.items():
-            entry = view.entry("{0}/{1}".format(root, relative_path))
-            if entry is None:
-                continue
-            if entry.kind != "file" or entry.content != content:
-                valid_subset = False
-                break
-            matching_files += 1
-        if not valid_subset:
-            continue
-        for relative_path in expected_directories.intersection(existing_paths):
-            entry = view.entry("{0}/{1}".format(root, relative_path))
-            if entry is None or entry.kind != "directory":
-                valid_subset = False
-                break
-        if valid_subset and matching_files and matching_files < len(manifest):
-            recoverable.append(name)
-    return tuple(recoverable)
-
-
 @dataclass(frozen=True)
 class ProjectSetupPlan:
     """One preflighted setup action with a single explicit mutation step."""
 
     harness_root: Path
-    runtime_store: Path
     repository: SourceRepository
-    worktree_root: Path
-    integration_worktree: Path
-    state_directory: Path
-    scratch_directory: Path
-    runtime_executable: Path
-    codex_files: CodexProjectFiles
-    supported_skills: SupportedSkills
-    missing_skills: Tuple[str, ...]
-    recoverable_skills: Tuple[str, ...]
+    configuration: ProjectConfiguration
+    write_default_configuration: bool
     proposed_base: Optional[str]
-    registered_dev_worktree: Optional[Path]
     integration_revision: str
 
-    def _skill_names_to_install(
-        self,
-        install_missing_skills: bool,
-    ) -> Tuple[str, ...]:
-        selected = set(self.recoverable_skills)
-        if install_missing_skills:
-            selected.update(self.missing_skills)
-        return tuple(name for name in CORE_SKILL_NAMES if name in selected)
+    @property
+    def configuration_path(self) -> Path:
+        return configuration_file(self.harness_root)
 
-    def preflight(
-        self,
-        *,
-        install_missing_skills: bool = False,
-    ) -> ProjectSetupPreview:
-        """Translate all read-only planning failures to the setup interface."""
+    def preflight(self) -> ProjectSetupPreview:
+        """Check every setup target before setup mutates the project."""
 
         try:
-            return self._preflight(
-                install_missing_skills=install_missing_skills,
-            )
+            return self._preflight()
         except ProjectSetupError:
             raise
-        except (
-            CodexProjectError,
-            GitRepositoryError,
-            OSError,
-            SupportedSkillsError,
-        ) as error:
+        except (GitRepositoryError, OSError) as error:
             raise ProjectSetupError(
                 "Setup preflight could not be completed: {0}".format(error)
             ) from error
 
-    def _preflight(
-        self,
-        *,
-        install_missing_skills: bool = False,
-    ) -> ProjectSetupPreview:
-        """Check every safely observable target before setup mutates anything."""
-
+    def _preflight(self) -> ProjectSetupPreview:
         actions: List[PlannedSetupAction] = []
         conflicts: List[str] = []
+        if self.write_default_configuration:
+            actions.append(
+                PlannedSetupAction(
+                    "CREATE", "GraphTraj Config: {0}".format(self.configuration_path)
+                )
+            )
+        else:
+            actions.append(
+                PlannedSetupAction(
+                    "ALREADY CONFIGURED",
+                    "GraphTraj Config: {0}".format(self.configuration_path),
+                )
+            )
+
         _preflight_directory(
-            self.worktree_root,
-            "Worktree Directory",
+            self.configuration.agent_worktrees,
+            "Agent Worktree Directory",
             actions,
             conflicts,
         )
         _preflight_directory(
-            self.state_directory,
+            self.configuration.state,
             "Harness State Directory",
             actions,
             conflicts,
         )
-        _preflight_directory(
-            self.scratch_directory,
-            "Harness Scratch Directory",
-            actions,
-            conflicts,
-        )
-        _preflight_directory(
-            self.runtime_store,
-            "Harness Runtime Store",
-            actions,
-            conflicts,
-        )
-        harness_view = _TargetView(self.harness_root)
-        agents_entry = harness_view.entry("AGENTS.md")
-        agents_content = _managed_harness_guidance(
-            agents_entry.content
-            if agents_entry is not None and agents_entry.kind == "file"
-            else None
-        )
-        _preflight_file(
-            harness_view,
-            "AGENTS.md",
-            agents_content,
-            HARNESS_GUIDANCE_DESCRIPTION,
-            actions,
-            conflicts,
-            replace_existing_file=True,
-        )
 
         dev_exists = self.repository.branch_exists(INTEGRATION_BRANCH)
         registered = self.repository.worktree_for_branch(INTEGRATION_BRANCH)
-        canonical_integration = self.integration_worktree.resolve()
+        integration = self.configuration.integration_worktree
+        canonical_integration = integration.resolve()
         if self.proposed_base is not None:
             if dev_exists:
                 _append_conflict(
@@ -522,10 +192,7 @@ class ProjectSetupPlan:
                     "The proposed dev base changed after setup planning.",
                 )
             actions.append(
-                PlannedSetupAction(
-                    "CREATE",
-                    _new_dev_branch_action(self.proposed_base),
-                )
+                PlannedSetupAction("CREATE", _new_dev_branch_action(self.proposed_base))
             )
         else:
             if not dev_exists:
@@ -533,14 +200,10 @@ class ProjectSetupPlan:
                     conflicts,
                     "The preflighted dev branch no longer exists.",
                 )
-            elif (
-                self.repository.revision(INTEGRATION_BRANCH)
-                != self.integration_revision
-            ):
+            elif self.repository.revision(INTEGRATION_BRANCH) != self.integration_revision:
                 _append_conflict(
                     conflicts,
-                    "dev changed after setup planning; rerun setup to review its "
-                    "targets.",
+                    "dev changed after setup planning; rerun setup to review it.",
                 )
             actions.append(
                 PlannedSetupAction(
@@ -556,247 +219,39 @@ class ProjectSetupPlan:
                     registered
                 ),
             )
-        if registered == canonical_integration:
-            integration_entry = _filesystem_entry(self.integration_worktree)
-            if integration_entry is None:
+        elif registered == canonical_integration:
+            if _entry_kind(integration) != "directory":
                 _append_conflict(
                     conflicts,
                     "The dev Integration Worktree is registered at {0}, but that "
-                    "directory is missing; this is a stale or prunable Git Worktree "
-                    "registration. Setup made no changes. Inspect `git worktree list "
-                    "--porcelain`, then manually restore the directory at {0} or "
-                    "remove the exact stale registration for {0} before rerunning "
-                    "setup.".format(self.integration_worktree),
-                )
-            elif integration_entry.kind != "directory":
-                _append_conflict(
-                    conflicts,
-                    "The registered Integration Worktree is not a real directory: "
-                    "{0}".format(self.integration_worktree),
-                )
-            else:
-                actions.append(
-                    PlannedSetupAction(
-                        "ALREADY CONFIGURED",
-                        _integration_worktree_action(self.integration_worktree),
-                    )
-                )
-        else:
-            integration_entry = _filesystem_entry(self.integration_worktree)
-            if integration_entry is not None:
-                _append_conflict(
-                    conflicts,
-                    "The Integration Worktree path exists without the expected dev "
-                    "registration: {0}".format(self.integration_worktree),
-                )
-            elif registered is None:
-                actions.append(
-                    PlannedSetupAction(
-                        "CREATE",
-                        _integration_worktree_action(self.integration_worktree),
-                    )
-                )
-
-        materialized = (
-            registered == canonical_integration
-            and _filesystem_entry(self.integration_worktree) is not None
-            and _filesystem_entry(self.integration_worktree).kind == "directory"
-        )
-        integration_view = (
-            _TargetView(self.integration_worktree)
-            if materialized
-            else _TargetView(
-                self.integration_worktree,
-                self.repository,
-                self.integration_revision,
-            )
-        )
-        runtime_view = _TargetView(self.runtime_store)
-        skill_view = _TargetView(harness_skill_root(self.runtime_store).parent)
-        skill_names = self._skill_names_to_install(install_missing_skills)
-        if skill_names:
-            for name in skill_names:
-                manifest = self.supported_skills.manifest(name)
-                skill_relative_root = "skills/{0}".format(name)
-                allowed_paths = allowed_manifest_paths(manifest)
-                unexpected_paths = tuple(
-                    path
-                    for path in skill_view.paths_under(skill_relative_root)
-                    if path not in allowed_paths
-                    and (
-                        name != "task-delivery"
-                        or skill_view.entry(
-                            "{0}/{1}".format(skill_relative_root, path)
-                        ).kind
-                        == "symlink"
-                    )
-                )
-                for unexpected_path in unexpected_paths:
-                    _append_conflict(
-                        conflicts,
-                        "Harness Skill contains unsupported content: {0}".format(
-                            skill_view.display_path(
-                                "{0}/{1}".format(
-                                    skill_relative_root,
-                                    unexpected_path,
-                                )
-                            )
-                        ),
-                    )
-                for resource_path, content in manifest.items():
-                    _preflight_file(
-                        skill_view,
-                        "{0}/{1}".format(skill_relative_root, resource_path),
-                        content,
-                        "Harness Skill {0}".format(name),
-                        actions,
-                        conflicts,
-                        replace_existing_file=name == "task-delivery",
-                    )
-
-        for relative_path, content in self.codex_files.runtime_resources(
-            self.runtime_store
-        ).items():
-            _preflight_file(
-                runtime_view,
-                relative_path,
-                content,
-                "Harness Runtime resource",
-                actions,
-                conflicts,
-                content_matches=lambda configured, packaged, path=relative_path: (
-                    runtime_resource_matches(path, configured, packaged)
-                ),
-            )
-
-        for name, target in (
-            ("CONTEXT.md", self.harness_root / "CONTEXT.md"),
-            ("docs", self.harness_root / "docs"),
-            (".state", self.state_directory),
-            (".scratch", self.scratch_directory),
-        ):
-            entry = integration_view.entry(name)
-            if entry is None:
-                actions.append(
-                    PlannedSetupAction(
-                        "CREATE",
-                        self.codex_files.link_action(
-                            self.integration_worktree,
-                            name,
-                            target,
-                        ),
-                    )
-                )
-            elif entry.kind == "symlink" and _symlink_resolves_to(
-                self.integration_worktree / name,
-                entry.content,
-                target,
-            ):
-                actions.append(
-                    PlannedSetupAction(
-                        "ALREADY CONFIGURED",
-                        self.codex_files.link_action(
-                            self.integration_worktree,
-                            name,
-                            target,
-                        ),
-                    )
-                )
-            else:
-                description = (
-                    "Harness Project Document view"
-                    if name in {"CONTEXT.md", "docs"}
-                    else "Integration {0} link".format(name.removeprefix("."))
-                )
-                _append_conflict(
-                    conflicts,
-                    "{0} conflicts at {1}; this path is reserved for the "
-                    "Harness Project Root.".format(
-                        description,
-                        self.integration_worktree / name,
+                    "directory is missing or invalid. Setup made no changes.".format(
+                        integration
                     ),
                 )
-
-        common_view = _TargetView(self.repository.common_directory)
-        exclude_parent = common_view.entry("info")
-        exclude_entry = common_view.entry("info/exclude")
-        exclude_path = self.repository.common_directory / "info" / "exclude"
-        if exclude_parent is not None and exclude_parent.kind != "directory":
+            else:
+                actions.append(
+                    PlannedSetupAction(
+                        "ALREADY CONFIGURED", _integration_worktree_action(integration)
+                    )
+                )
+        elif _entry_kind(integration) is not None:
             _append_conflict(
                 conflicts,
-                "Git exclude registration is blocked or redirected at {0}.".format(
-                    self.repository.common_directory / "info"
-                ),
+                "The Integration Worktree path exists without the expected dev "
+                "registration: {0}".format(integration),
             )
-        elif exclude_entry is None:
+        else:
             actions.append(
-                PlannedSetupAction(
-                    "REGISTER",
-                    self.codex_files.exclude_action(
-                        self.repository.common_directory
-                    ),
-                )
+                PlannedSetupAction("CREATE", _integration_worktree_action(integration))
             )
-        elif exclude_entry.kind == "file":
-            try:
-                exclude_lines = exclude_entry.content.decode().splitlines()
-            except UnicodeError:
-                _append_conflict(
-                    conflicts,
-                    "Git exclude file is not valid text: {0}".format(exclude_path),
-                )
-            else:
-                disposition = (
-                    "ALREADY CONFIGURED"
-                    if all(
-                        path in exclude_lines
-                        for path in (
-                            "/.state",
-                            "/.scratch",
-                            "/CONTEXT.md",
-                            "/docs",
-                        )
-                    )
-                    else "REGISTER"
-                )
-                actions.append(
-                    PlannedSetupAction(
-                        disposition,
-                        self.codex_files.exclude_action(
-                            self.repository.common_directory
-                        ),
-                    )
-                )
-        else:
-            _append_conflict(
-                conflicts,
-                "Git exclude file is blocked or redirected at {0}.".format(
-                    exclude_path
-                ),
-            )
-
-        runner_content = self.codex_files.runner_config_content(
-            self.harness_root,
-            self.repository.primary_worktree,
-            self.repository.common_directory,
-            self.worktree_root,
-            self.runtime_executable,
-        ).encode()
-        _preflight_file(
-            runtime_view,
-            "agent-runner/config.yml",
-            runner_content,
-            "Harness Runner Config",
-            actions,
-            conflicts,
-        )
 
         _raise_conflicts(conflicts)
         return ProjectSetupPreview(tuple(actions))
 
-    def apply(self, *, install_missing_skills: bool = False) -> str:
-        preview = self.preflight(install_missing_skills=install_missing_skills)
-        skill_names = self._skill_names_to_install(install_missing_skills)
+    def apply(self) -> str:
+        """Create the preflighted configuration, directories, branch, and Worktree."""
+
+        preview = self.preflight()
         pending = tuple(
             action.description
             for action in preview.actions
@@ -809,95 +264,45 @@ class ProjectSetupPlan:
                 completed.append(description)
 
         try:
-            self.worktree_root.mkdir(parents=True, exist_ok=True)
-            mark_completed(
-                _directory_action("Worktree Directory", self.worktree_root)
-            )
-            self.state_directory.mkdir(parents=True, exist_ok=True)
-            mark_completed(
-                _directory_action("Harness State Directory", self.state_directory)
-            )
-            self.scratch_directory.mkdir(parents=True, exist_ok=True)
+            if self.write_default_configuration:
+                self.configuration_path.parent.mkdir(parents=True, exist_ok=True)
+                self.configuration_path.write_text(
+                    DEFAULT_CONFIG_CONTENT, encoding="utf-8"
+                )
+                mark_completed("GraphTraj Config: {0}".format(self.configuration_path))
+            self.configuration.agent_worktrees.mkdir(parents=True, exist_ok=True)
             mark_completed(
                 _directory_action(
-                    "Harness Scratch Directory", self.scratch_directory
+                    "Agent Worktree Directory", self.configuration.agent_worktrees
                 )
             )
-            self.runtime_store.mkdir(parents=True, exist_ok=True)
+            self.configuration.state.mkdir(parents=True, exist_ok=True)
             mark_completed(
-                _directory_action("Harness Runtime Store", self.runtime_store)
+                _directory_action("Harness State Directory", self.configuration.state)
             )
-            agents_path = self.harness_root / "AGENTS.md"
-            agents_entry = _filesystem_entry(agents_path)
-            agents_content = _managed_harness_guidance(
-                agents_entry.content
-                if agents_entry is not None and agents_entry.kind == "file"
-                else None
-            )
-            if agents_entry is None or agents_entry.content != agents_content:
-                agents_path.write_bytes(agents_content)
-                mark_completed(
-                    "{0}: {1}".format(
-                        HARNESS_GUIDANCE_DESCRIPTION,
-                        agents_path,
-                    )
-                )
             if self.proposed_base is not None:
-                self.repository.create_branch(
-                    INTEGRATION_BRANCH,
-                    self.proposed_base,
-                )
+                self.repository.create_branch(INTEGRATION_BRANCH, self.proposed_base)
                 mark_completed(_new_dev_branch_action(self.proposed_base))
                 self.repository.add_existing_branch_worktree(
-                    INTEGRATION_BRANCH,
-                    self.integration_worktree,
+                    INTEGRATION_BRANCH, self.configuration.integration_worktree
                 )
                 mark_completed(
-                    _integration_worktree_action(self.integration_worktree)
+                    _integration_worktree_action(self.configuration.integration_worktree)
                 )
-                result = "Created Integration Worktree on dev."
-            elif self.registered_dev_worktree is None:
+                return "Created Integration Worktree on dev."
+            if self.repository.worktree_for_branch(INTEGRATION_BRANCH) is None:
                 self.repository.add_existing_branch_worktree(
-                    INTEGRATION_BRANCH,
-                    self.integration_worktree,
+                    INTEGRATION_BRANCH, self.configuration.integration_worktree
                 )
                 mark_completed(
-                    _integration_worktree_action(self.integration_worktree)
+                    _integration_worktree_action(self.configuration.integration_worktree)
                 )
-                result = "Registered Integration Worktree on existing dev."
-            else:
-                result = "Using registered Integration Worktree on dev."
-
-            for name in skill_names:
-                self.supported_skills.install_missing(
-                    self.runtime_store,
-                    (name,),
-                    on_action_complete=mark_completed,
-                )
-            self.codex_files.install(
-                harness_root=self.harness_root,
-                source_repository=self.repository.primary_worktree,
-                integration_worktree=self.integration_worktree,
-                state_directory=self.state_directory,
-                scratch_directory=self.scratch_directory,
-                common_git_directory=self.repository.common_directory,
-                worktree_root=self.worktree_root,
-                runtime_executable=self.runtime_executable,
-                on_action_complete=mark_completed,
-            )
-        except (
-            CodexProjectError,
-            GitRepositoryError,
-            OSError,
-            SupportedSkillsError,
-        ) as error:
+                return "Registered Integration Worktree on existing dev."
+            return "Using registered Integration Worktree on dev."
+        except (GitRepositoryError, OSError) as error:
             incomplete = tuple(
-                description
-                for description in pending
-                if description not in completed
+                description for description in pending if description not in completed
             )
-            completed_lines = completed or ["none"]
-            incomplete_lines = incomplete or ("none",)
             raise ProjectSetupError(
                 "Setup execution stopped: {0}\n"
                 "Completed actions were not rolled back.\n"
@@ -905,80 +310,51 @@ class ProjectSetupPlan:
                 "Incomplete actions:\n{2}\n"
                 "Correct the cause and rerun setup.".format(
                     error,
-                    "\n".join("- {0}".format(action) for action in completed_lines),
-                    "\n".join("- {0}".format(action) for action in incomplete_lines),
+                    "\n".join("- {0}".format(action) for action in completed or ["none"]),
+                    "\n".join("- {0}".format(action) for action in incomplete or ("none",)),
                 )
             ) from error
-        return result
 
 
-def plan_project_setup(
-    harness_root: Path,
-    primary_worktree: Path,
-    runtime_executable: Path,
-) -> ProjectSetupPlan:
-    """Preflight the success-path plan without mutating the Harness Project."""
+def plan_project_setup(harness_root: Path) -> ProjectSetupPlan:
+    """Plan default same-directory setup without mutating the repository."""
 
-    worktree_root = harness_root / ".agent-worktrees"
-    integration_worktree = worktree_root / "integration"
-    state_directory = harness_root / "state"
-    scratch_directory = harness_root / ".scratch"
-    runtime_store = harness_root / ".codex"
-    runtime_user_skill_root = Path.home() / ".agents" / "skills"
+    root = harness_root.resolve()
     try:
-        repository = SourceRepository.from_primary(
-            harness_root,
-            primary_worktree,
-        )
-        resolved_worktree_root = worktree_root.resolve()
-        if _is_within(resolved_worktree_root, repository.primary_worktree):
+        config_path = configuration_file(root)
+        if configuration_exists(root):
+            configuration = load_project_configuration(root)
+            write_default_configuration = False
+        else:
+            parent_kind = _entry_kind(config_path.parent)
+            if parent_kind not in {None, "directory"}:
+                raise ProjectSetupError(
+                    "GraphTraj Config is blocked by a non-directory path: {0}".format(
+                        config_path.parent
+                    )
+                )
+            configuration = default_project_configuration(root)
+            write_default_configuration = True
+        if configuration.project_root != root:
             raise ProjectSetupError(
-                "The Worktree Directory must remain outside the Primary Worktree."
+                "This setup supports only the current Git repository as the "
+                "Harness Project Root."
             )
-
-        codex_files = CodexProjectFiles.load()
-        supported_skills = SupportedSkills.load()
-        skill_statuses = check_core_skills(
-            runtime_store,
-            runtime_user_skill_root,
-        )
-        discovered_skills = {
-            status.name for status in skill_statuses if status.discovered
-        }
+        repository = SourceRepository.from_root(root)
         dev_exists = repository.branch_exists(INTEGRATION_BRANCH)
-        registered_dev_worktree = repository.worktree_for_branch(
-            INTEGRATION_BRANCH
-        )
         proposed_base = None if dev_exists else repository.head
         integration_revision = (
             repository.revision(INTEGRATION_BRANCH)
             if dev_exists
             else proposed_base
         )
-        missing_skills = tuple(
-            name for name in CORE_SKILL_NAMES if name not in discovered_skills
-        )
-        recoverable_skills = _recoverable_supported_skills(
-            _TargetView(harness_skill_root(runtime_store).parent),
-            supported_skills,
-        )
-    except (GitRepositoryError, OSError, SupportedSkillsError) as error:
+    except (GitRepositoryError, OSError, ProjectConfigurationError) as error:
         raise ProjectSetupError(str(error)) from error
-
     return ProjectSetupPlan(
-        harness_root=harness_root,
-        runtime_store=runtime_store,
+        harness_root=root,
         repository=repository,
-        worktree_root=worktree_root,
-        integration_worktree=integration_worktree,
-        state_directory=state_directory,
-        scratch_directory=scratch_directory,
-        runtime_executable=runtime_executable,
-        codex_files=codex_files,
-        supported_skills=supported_skills,
-        missing_skills=missing_skills,
-        recoverable_skills=recoverable_skills,
+        configuration=configuration,
+        write_default_configuration=write_default_configuration,
         proposed_base=proposed_base,
-        registered_dev_worktree=registered_dev_worktree,
         integration_revision=integration_revision,
     )

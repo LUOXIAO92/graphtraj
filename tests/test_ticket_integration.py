@@ -1,0 +1,164 @@
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+import sys
+
+import pytest
+import yaml
+
+from conftest import run_process, wait_for_file
+from test_agent_runner_batch import configure_harness
+from test_ticket_graph import _change_status, _register, _ticket
+
+
+@pytest.fixture
+def accepted_ticket(installed_commands, temporary_git_repository, fake_codex, tmp_path):
+    root, worktrees, _, environment = configure_harness(
+        installed_commands, temporary_git_repository, fake_codex, tmp_path
+    )
+    _register(installed_commands, root, _ticket("83", "integration"))
+    for identifier, dependencies in (("84", ["83"]), ("85", ["83"]), ("86", ["83", "84"])):
+        _register(installed_commands, root, _ticket(identifier, "dependent", dependencies=dependencies))
+    _change_status(installed_commands, root, "83", "ready")
+    batch = root / "batch.yml"
+    batch.write_text(yaml.safe_dump({"tasks": [{"ticket_id": "83", "ticket_name": "integration", "role": "team-leader"}]}))
+    environment.update(
+        FAKE_CODEX_LIFECYCLE_ACTION="complete-team-round",
+        GRAPHTRAJ_AGENT_RUNNER=str(installed_commands.runner),
+    )
+    launched = run_process([str(installed_commands.runner), "--batch-input", str(batch)], cwd=root, env=environment)
+    assert launched.returncode == 0, launched.stderr
+    state = root / ".graphtraj/state"
+    record = yaml.safe_load((state / "tickets/83-integration/ticket.yml").read_text())
+    assert record["status"] == "awaiting-integration"
+    candidate = record["current_candidate"]
+    assert run_process(["git", "merge-base", "--is-ancestor", candidate, "HEAD"], cwd=worktrees / "dev").returncode == 1
+    return root, worktrees, state, candidate
+
+
+def test_main_integrates_an_accepted_candidate_and_unlocks_only_satisfied_dependencies(
+    installed_commands, accepted_ticket
+):
+    root, worktrees, state, candidate = accepted_ticket
+    # Later branch work must not silently replace the Team's fixed candidate.
+    worktree = worktrees / "83-integration"
+    (worktree / "LATER.txt").write_text("not part of the accepted candidate\n")
+    run_process(["git", "add", "LATER.txt"], cwd=worktree).check_returncode()
+    run_process(["git", "commit", "-m", "Later branch work"], cwd=worktree).check_returncode()
+    validator = root / "validate.py"
+    validator.write_text(
+        "import pathlib, subprocess, yaml\n"
+        f"state = yaml.safe_load(pathlib.Path({str(state / 'tickets/83-integration/ticket.yml')!r}).read_text())\n"
+        "assert state['status'] == 'integrating'\n"
+        f"assert state['current_candidate'] == {candidate!r}\n"
+        "assert subprocess.check_output(['git', 'branch', '--show-current'], text=True).strip() == 'dev'\n"
+        "assert pathlib.Path('TEAM_ROUND_DELIVERED.txt').read_text() == 'complete team round\\n'\n"
+        "print('integration checks passed')\n"
+    )
+    result = run_process(
+        [str(installed_commands.product), "ticket", "integrate", "--ticket-id", "83", "--", sys.executable, str(validator)], cwd=root
+    )
+    assert result.returncode == 0, result.stderr
+    output = yaml.safe_load(result.stdout)
+    assert output["candidate"] == candidate
+    assert output["status"] == "integrated"
+    assert run_process(["git", "merge-base", "--is-ancestor", candidate, "HEAD"], cwd=worktrees / "dev").returncode == 0
+    assert not (worktrees / "dev/LATER.txt").exists()
+    graph = yaml.safe_load(run_process([str(installed_commands.product), "ticket", "graph"], cwd=root).stdout)
+    assert [item["ticket_id"] for item in graph["tickets"] if item["ready"]] == ["84", "85"]
+    assert [item["status"] for item in graph["tickets"]] == ["integrated", "ready", "ready", "pending"]
+    events = [json.loads(line) for shard in (state / "worldline").glob("*.jsonl") for line in shard.read_text().splitlines()]
+    accepted = next(event for event in events if event["kind"] == "team-round-accepted")
+    started = next(event for event in events if event["kind"] == "ticket-integration-started")
+    integrated = next(event for event in events if event["kind"] == "ticket-integrated")
+    assert started["caused_by_event_ids"] == [accepted["event_id"]]
+    assert integrated["caused_by_event_ids"] == [started["event_id"]]
+    assert "integration checks passed" in (root / integrated["evidence_refs"][0]).read_text()
+    unlocked = [event for event in events if event["kind"] == "ticket-dependency-unlocked"]
+    assert {event["ticket_id"] for event in unlocked} == {"84", "85"}
+    assert all(event["caused_by_event_ids"] == [integrated["event_id"]] for event in unlocked)
+    assert not any(path.name in {"task-map.yml", "dag.md", "ledger.yml"} for path in state.rglob("*"))
+
+
+def test_failed_validation_retains_evidence_without_unlocking_and_main_can_retry(
+    installed_commands, accepted_ticket
+):
+    root, worktrees, state, candidate = accepted_ticket
+    command = [str(installed_commands.product), "ticket", "integrate", "--ticket-id", "83", "--"]
+    failed = run_process(command + [sys.executable, "-c", "print('validation failed'); raise SystemExit(1)"], cwd=root)
+    assert failed.returncode == 1
+    output = yaml.safe_load(failed.stdout)
+    assert output["status"] == "integrating"
+    evidence = root / output["evidence"]
+    retained = evidence.read_bytes()
+    assert b"validation failed" in retained
+    assert run_process(["git", "merge-base", "--is-ancestor", candidate, "HEAD"], cwd=worktrees / "dev").returncode == 0
+    graph = yaml.safe_load(run_process([str(installed_commands.product), "ticket", "graph"], cwd=root).stdout)
+    assert not any(item["ready"] for item in graph["tickets"])
+    # Generic semantic updates must not turn failed validation into integration.
+    record = yaml.safe_load((state / "tickets/83-integration/ticket.yml").read_text())
+    change = {key: record[key] for key in ("ticket_id", "active_team_ordinal", "worktree", "branch", "current_candidate")}
+    change.update(status="integrated", caused_by_event_ids=[output["event_id"]], evidence_refs=[output["evidence"]])
+    request = root / "bypass.yml"
+    request.write_text(yaml.safe_dump(change))
+    bypass = run_process([str(installed_commands.product), "ticket", "update", "--state-file", str(request)], cwd=root)
+    assert bypass.returncode == 1
+    assert yaml.safe_load((state / "tickets/83-integration/ticket.yml").read_text())["status"] == "integrating"
+    retried = run_process(command + [sys.executable, "-c", "print('validation passed')"], cwd=root)
+    assert retried.returncode == 0, retried.stderr
+    assert yaml.safe_load(retried.stdout)["status"] == "integrated"
+    assert evidence.read_bytes() == retained
+
+
+def test_integration_rejects_a_team_caller_and_an_unaccepted_ticket(installed_commands, accepted_ticket):
+    root, worktrees, state, candidate = accepted_ticket
+    before = run_process(["git", "rev-parse", "HEAD"], cwd=worktrees / "dev").stdout
+    for ticket_id, environment in (("83", {**os.environ, "GRAPHTRAJ_ROLE": "team-leader"}), ("84", os.environ)):
+        result = run_process([str(installed_commands.product), "ticket", "integrate", "--ticket-id", ticket_id, "--", sys.executable, "-c", "pass"], cwd=root, env=environment)
+        assert result.returncode == 1
+        assert "error" in yaml.safe_load(result.stdout)
+    assert run_process(["git", "rev-parse", "HEAD"], cwd=worktrees / "dev").stdout == before
+
+
+def test_failed_merge_retains_conflict_evidence_and_does_not_run_validation(installed_commands, accepted_ticket):
+    root, worktrees, state, candidate = accepted_ticket
+    dev = worktrees / "dev"
+    (dev / "TEAM_ROUND_DELIVERED.txt").write_text("conflicting integration work\n")
+    for arguments in (("add", "TEAM_ROUND_DELIVERED.txt"), ("commit", "-m", "Independent dev change")):
+        run_process(["git", *arguments], cwd=dev).check_returncode()
+    result = run_process([str(installed_commands.product), "ticket", "integrate", "--ticket-id", "83", "--", sys.executable, "-c", "print('VALIDATOR RAN')"], cwd=root)
+    assert result.returncode == 1
+    output = yaml.safe_load(result.stdout)
+    evidence = (root / output["evidence"]).read_text()
+    assert "CONFLICT" in evidence
+    assert "VALIDATOR RAN" not in evidence
+    assert output["status"] == "integrating"
+    graph = yaml.safe_load(run_process([str(installed_commands.product), "ticket", "graph"], cwd=root).stdout)
+    assert not any(item["ready"] for item in graph["tickets"])
+
+
+def test_main_integration_is_serialized_until_validation_finishes(installed_commands, accepted_ticket):
+    root, worktrees, state, candidate = accepted_ticket
+    started = root / "validation-started"
+    release = root / "validation-release"
+    validator = root / "wait-validation.py"
+    validator.write_text(
+        "from pathlib import Path\nimport time\n"
+        f"Path({str(started)!r}).touch()\n"
+        f"while not Path({str(release)!r}).exists():\n    time.sleep(0.01)\n"
+    )
+    command = [str(installed_commands.product), "ticket", "integrate", "--ticket-id", "83", "--", sys.executable, str(validator)]
+    first = subprocess.Popen(command, cwd=root, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    try:
+        wait_for_file(started)
+        second = run_process(command, cwd=root, timeout=5)
+        assert second.returncode == 1
+        assert "in progress" in yaml.safe_load(second.stdout)["error"]
+        assert yaml.safe_load((state / "tickets/83-integration/ticket.yml").read_text())["status"] == "integrating"
+    finally:
+        release.touch()
+        stdout, stderr = first.communicate(timeout=10)
+    assert first.returncode == 0, stderr
+    assert yaml.safe_load(stdout)["status"] == "integrated"

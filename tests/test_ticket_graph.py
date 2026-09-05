@@ -470,7 +470,7 @@ def test_installed_command_records_a_validated_ticket_state_change(
     assert current["current_candidate"] is None
 
 
-def test_readiness_uses_the_current_state_of_every_active_dependency(
+def test_generic_ticket_updates_cannot_unlock_dependents_without_integration(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
 ) -> None:
@@ -493,12 +493,10 @@ def test_readiness_uses_the_current_state_of_every_active_dependency(
         "implementing",
         "reviewing",
         "awaiting-integration",
-        "integrating",
-        "integrated",
     ):
         _change_status(installed_commands, project, "1", status)
 
     after = yaml.safe_load(_run(installed_commands, project, "graph").stdout)
     assert next(item for item in after["tickets"] if item["ticket_id"] == "2")[
         "ready"
-    ] is True
+    ] is False

@@ -542,6 +542,8 @@ def _update_state(
         if not record["active"]:
             raise ValueError("an inactive Ticket cannot change delivery state")
         old_status = record["status"]
+        if change["status"] in {"integrating", "integrated"}:
+            raise ValueError("Integration state requires Main's ticket integrate command")
         if change["status"] not in _TRANSITIONS[old_status]:
             raise ValueError(
                 "Ticket transition from {0} to {1} is invalid".format(

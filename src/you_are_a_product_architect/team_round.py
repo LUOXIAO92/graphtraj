@@ -239,15 +239,85 @@ def _deliver_ticket(project: Any, requested: Task, retained_batch: Path, capacit
         {
             "phase": "candidate", "ticket_id": task.ticket_id,
             "caused_by_event_ids": [predecessor],
-            "evidence_refs": [
-                (round_directory / name).relative_to(project.harness_root).as_posix()
-                for name in ("engineer.md", "validation.md")
-            ],
+            "evidence_refs": [_trace_ref(project, traces, engineer_alias)],
             "candidate": candidate,
         },
         "candidate",
     )
     predecessor = event["event_id"]
+
+    sessions = {engineer_task.role: (engineer_task, engineer_alias, engineer_session, engineer_batch_path)}
+
+    def correct_process() -> None:
+        nonlocal state_alias, state_session, predecessor, leader_alias, leader_session
+        leader_report = round_directory / "leader.md"
+        while leader_report.is_file() and "Decision: CORRECT" in leader_report.read_text().splitlines():
+            judgment = leader_report.read_text(encoding="utf-8")
+            fields = {}
+            for name in ("Responsible", "Rule", "Reason"):
+                values = [line[len(name) + 2:] for line in judgment.splitlines() if line.startswith(name + ": ")]
+                if len(values) != 1 or not values[0].strip():
+                    raise RunnerError("BATCH_SCHEMA_INVALID", "Correction requires one responsible role, accepted rule, and evidence-backed reason.")
+                fields[name] = values[0]
+            role = fields["Responsible"]
+            if role not in sessions or registration.exists():
+                raise RunnerError("BATCH_SCHEMA_INVALID", "Correction must resume an existing member without registering a new Batch.")
+            child, alias, session, child_batch = sessions[role]
+            state_alias, state_session, event = _request_state(
+                project, task, worktree, ticket_directory, traces,
+                state_alias, state_session, leader_alias, retained_batch,
+                {
+                    "phase": "correction", "ticket_id": task.ticket_id,
+                    "caused_by_event_ids": [predecessor],
+                    "evidence_refs": [_trace_ref(project, traces, leader_alias), _trace_ref(project, traces, alias)],
+                    "responsible_role": role, "session_ref": alias,
+                },
+                "correction",
+            )
+            predecessor = event["event_id"]
+            affected = [role]
+            if role.startswith("engineer-"):
+                affected += [r for r in sessions if r.endswith("reviewer")]
+            leader_report.unlink()
+            for affected_role in affected:
+                names = ("engineer.md", "validation.md") if affected_role.startswith("engineer-") else (
+                    "standards.md" if affected_role == "standards-reviewer" else "spec.md",
+                )
+                for name in names:
+                    (round_directory / name).unlink(missing_ok=True)
+            for affected_role in affected:
+                child, alias, session, child_batch = sessions[affected_role]
+                followup = (
+                    "Reflect on the Team Leader's judgment and correct your work against the accepted Ticket and review rules.\n" + judgment
+                    if affected_role == role else
+                    "Repeat your affected Review against the corrected fixed candidate and the accepted review rules.\n"
+                )
+                _run_agent(
+                    project, child, affected_role, worktree, ticket_directory, traces,
+                    alias, session, None, leader_alias, child_batch,
+                    followup + "\nCaused by Project Worldline event: " + predecessor,
+                )
+                if affected_role.startswith("engineer-"):
+                    candidate = _candidate(round_directory, worktree)
+                    state_alias, state_session, event = _request_state(
+                        project, task, worktree, ticket_directory, traces,
+                        state_alias, state_session, leader_alias, child_batch,
+                        {
+                            "phase": "candidate", "ticket_id": task.ticket_id,
+                            "caused_by_event_ids": [predecessor],
+                            "evidence_refs": [_trace_ref(project, traces, alias)],
+                            "candidate": candidate,
+                        }, "candidate",
+                    )
+                    predecessor = event["event_id"]
+                else:
+                    _collect_review_report(ticket_directory, round_directory, child.report_file.name)
+            leader_alias, leader_session = _run_agent(
+                project, task, "team-leader", worktree, ticket_directory, traces,
+                leader_alias, leader_session, registration, None, retained_batch,
+                "Correction and affected Reviews completed in the same Team Round. Assess the current evidence.\n"
+                + "Caused by Project Worldline event: " + predecessor,
+            )
 
     leader_alias, leader_session = _run_agent(
         project, task, "team-leader", worktree, ticket_directory, traces,
@@ -257,6 +327,7 @@ def _deliver_ticket(project: Any, requested: Task, retained_batch: Path, capacit
             sort_keys=False,
         ),
     )
+    correct_process()
     reviewer_batch, reviewer_batch_path = _registered_batch(registration, worktree)
     if {child.role for child in reviewer_batch.tasks} != {"standards-reviewer", "spec-reviewer"}:
         raise RunnerError("BATCH_SCHEMA_INVALID", "The second direct child Batch must contain both Reviewers.")
@@ -272,6 +343,11 @@ def _deliver_ticket(project: Any, requested: Task, retained_batch: Path, capacit
             "standards.md" if child.role == "standards-reviewer" else "spec.md"
         )
         alias, session = result["alias"], result["session"]
+        sessions[child.role] = (
+            replace(child, ticket_file=definition, ticket_content=ticket_content,
+                    report_file=Path(".state") / "reviews" / report_name),
+            alias, session, reviewer_batch_path,
+        )
         _collect_review_report(ticket_directory, round_directory, report_name)
         member = "standards_reviewer" if child.role == "standards-reviewer" else "spec_reviewer"
         state_alias, state_session, event = _request_state(
@@ -293,6 +369,7 @@ def _deliver_ticket(project: Any, requested: Task, retained_batch: Path, capacit
         leader_alias, leader_session, registration, None, retained_batch,
         "Reviewers completed:\n" + yaml.safe_dump(child_results, sort_keys=False),
     )
+    correct_process()
     if registration.exists():
         raise RunnerError("BATCH_SCHEMA_INVALID", "The completed Team Round cannot register another child Batch.")
     candidate = _validate_round(round_directory, worktree)
@@ -581,6 +658,18 @@ def _execute_agent(
                 role, diagnostic.strip()
             ),
         )
+    round_directory = evidence / "teams" / "1" / "rounds" / "1"
+    reports = (
+        [round_directory / "engineer.md", round_directory / "validation.md"]
+        if role.startswith("engineer-") else
+        [report] if role.endswith("reviewer") else
+        [round_directory / "leader.md"] if role == "team-leader" else []
+    )
+    with (session_directory / "events.jsonl").open("a", encoding="utf-8") as trace:
+        for path in reports:
+            if path.is_file():
+                trace.write(json.dumps({"type": "report-observed", "path": path.relative_to(evidence).as_posix(),
+                                        "content": path.read_text(encoding="utf-8")}) + "\n")
     return alias, session_id
 
 

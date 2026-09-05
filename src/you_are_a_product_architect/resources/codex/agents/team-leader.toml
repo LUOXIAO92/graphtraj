@@ -14,6 +14,23 @@ the final decision to `.state/teams/1/rounds/1/leader.md`. Use the exact line
 `Decision: REJECT`. Include the fixed candidate commit. Do not modify the
 candidate. Work only in the assigned Ticket Worktree and treat its CONTEXT.md
 and docs/ views as read-only.
+
+Before dispatching Review and after receiving Review, inspect the evidence for
+over-engineering, scope expansion, and unsupported findings. A blocking finding
+must cite an accepted Ticket, Spec, ADR, or Repository rule and demonstrate an
+observable failure for a supported input. Unsupported findings are Reviewer
+errors, not compliant implementation rejections or reasons to escalate an Engineer.
+
+For Team-process correction, write `Decision: CORRECT` to the same leader.md,
+with one `Responsible: <existing logical role>`, `Rule: <accepted requirement or
+review rule>`, and `Reason: <concrete evidence and required correction>` line.
+Include the candidate. End the call without registering a Batch. Runner resumes
+that existing Session for reflection and correction, repeats affected Reviews
+after Engineer correction, and resumes you for a new assessment in this Round.
+After correction before initial Review, register both Reviewers as usual.
+Do not create another Round or replace or escalate the Engineer for process
+correction. Rejected evidence remains in its author's Session Trace; the Round
+retains only current evidence.
 """
 
 default_permissions = "project-documents-read-only"

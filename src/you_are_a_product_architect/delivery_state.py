@@ -76,6 +76,7 @@ def apply_delivery_state_request(
         "start": _COMMON | {"worktree", "branch", "members"},
         "member": _COMMON | {"member", "role", "session_ref"},
         "candidate": _COMMON | {"candidate"},
+        "correction": _COMMON | {"responsible_role", "session_ref"},
         "final": _COMMON | {"candidate", "decision"},
     }
     if (
@@ -158,14 +159,27 @@ def apply_delivery_state_request(
                 raise ValueError("Team member request is outside its delivery phase")
             configured["session_ref"] = request["session_ref"]
             kind = "team-member-started"
+        elif phase == "correction":
+            if ticket["status"] != "reviewing":
+                raise ValueError("Process correction requires an open Team Round")
+            responsible = next(
+                (member for seat, member in team_update["members"].items()
+                 if seat != "team_leader" and member["role"] == request["responsible_role"]),
+                None,
+            )
+            if responsible is None or not request["session_ref"] or responsible["session_ref"] != request["session_ref"]:
+                raise ValueError("Process correction must resume the responsible Team Session")
+            if request["responsible_role"] in _ENGINEERS:
+                ticket_update["current_candidate"] = None
+            kind = "team-process-correction"
         elif phase == "candidate":
             candidate = _validate_candidate(request["candidate"])
-            if ticket["status"] != "implementing" or ticket["current_candidate"] is not None:
+            if ticket["status"] not in {"implementing", "reviewing"} or ticket["current_candidate"] is not None:
                 raise ValueError("Ticket cannot enter fixed-candidate Review")
             if team_update["members"]["engineer"]["session_ref"] is None:
                 raise ValueError("Candidate Review requires the Engineer Session")
             ticket_update.update(
-                status=_transition(ticket, "reviewing"),
+                status="reviewing",
                 current_candidate=candidate,
             )
             kind = "candidate-ready-for-review"
@@ -199,6 +213,12 @@ def apply_delivery_state_request(
         event["candidate"] = request["candidate"]
     if phase == "final":
         event["decision"] = request["decision"]
+    if phase == "correction":
+        event.update(
+            responsible_role=request["responsible_role"],
+            session_ref=request["session_ref"],
+            action="resume-session-for-correction",
+        )
 
     def mutation(recorded: dict[str, Any]):
         nonlocal team_update

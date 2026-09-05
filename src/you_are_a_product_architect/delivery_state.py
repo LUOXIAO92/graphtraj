@@ -10,7 +10,7 @@ from typing import Any, Mapping
 import click
 import yaml
 
-from .delivery_worldline import append_project_worldline_event
+from .delivery_worldline import append_project_worldline_event, read_worldline
 from .project_configuration import load_project_configuration
 from .runner_io import write_yaml_durably
 from .ticket_graph import _TRANSITIONS, _load_states
@@ -77,6 +77,7 @@ def apply_delivery_state_request(
         "member": _COMMON | {"member", "role", "session_ref"},
         "candidate": _COMMON | {"candidate"},
         "final": _COMMON | {"candidate", "decision"},
+        "rework": _COMMON,
     }
     if (
         not isinstance(phase, str)
@@ -101,6 +102,8 @@ def apply_delivery_state_request(
     ticket_update = dict(ticket)
     team_update: dict[str, Any] | None = None
     close_round = False
+    open_round = False
+    round_ordinal = 1
 
     if phase == "start":
         if (
@@ -135,6 +138,7 @@ def apply_delivery_state_request(
         if not team_file.is_file():
             raise ValueError("Team generation 1 does not exist")
         team_update = _read_team(team_file)
+        round_ordinal = team_update["current_round"]
         if phase == "member":
             member = request["member"]
             if not isinstance(member, str) or member not in _MEMBER_KEYS:
@@ -169,6 +173,24 @@ def apply_delivery_state_request(
                 current_candidate=candidate,
             )
             kind = "candidate-ready-for-review"
+        elif phase == "rework":
+            previous = next(
+                (event for event in reversed(read_worldline(state_directory, harness_root))
+                 if event.get("ticket_id") == ticket_id),
+                {},
+            )
+            if (
+                ticket["status"] != "reworking"
+                or previous.get("kind") != "team-round-implementation-rejected"
+                or previous.get("ticket_id") != ticket_id
+                or previous.get("team_round") != round_ordinal
+                or request["caused_by_event_ids"] != [previous["event_id"]]
+            ):
+                raise ValueError("Rework requires the confirmed implementation rejection")
+            ticket_update.update(status=_transition(ticket, "implementing"), current_candidate=None)
+            team_update["current_round"] += 1
+            open_round = True
+            kind = "team-round-rework-started"
         else:
             candidate = _validate_candidate(request["candidate"])
             if ticket["status"] != "reviewing" or ticket["current_candidate"] != candidate:
@@ -184,6 +206,13 @@ def apply_delivery_state_request(
                 kind = "team-round-accepted"
             elif request["decision"] == "rejected":
                 kind = "team-round-rejected"
+            elif request["decision"] == "implementation-rejected":
+                _validate_implementation_rejection(
+                    team_directory / "rounds" / str(round_ordinal), candidate
+                )
+                ticket_update["status"] = _transition(ticket, "reworking")
+                close_round = True
+                kind = "team-round-implementation-rejected"
             else:
                 raise ValueError("Leader decision must be accepted or rejected")
 
@@ -193,7 +222,7 @@ def apply_delivery_state_request(
         "evidence_refs": list(request["evidence_refs"]),
         "ticket_id": ticket_id,
         "team_ordinal": 1,
-        "team_round": 1,
+        "team_round": round_ordinal + 1 if open_round else round_ordinal,
     }
     if phase == "candidate" or phase == "final":
         event["candidate"] = request["candidate"]
@@ -220,8 +249,10 @@ def apply_delivery_state_request(
                 write_yaml_durably(team_file, team_update)
             write_yaml_durably(ticket_directory / "ticket.yml", ticket_update)
             _load_states(tickets)
+            if open_round:
+                (team_directory / "rounds" / str(round_ordinal + 1)).mkdir()
             if close_round:
-                round_directory = team_directory / "rounds" / "1"
+                round_directory = team_directory / "rounds" / str(round_ordinal)
                 for path in (*round_directory.iterdir(), round_directory):
                     previous_modes[path] = path.stat().st_mode & 0o777
                     path.chmod(0o444 if path != round_directory else 0o555)
@@ -234,6 +265,8 @@ def apply_delivery_state_request(
             raise
 
         def rollback() -> None:
+            if open_round:
+                (team_directory / "rounds" / str(round_ordinal + 1)).rmdir()
             _restore(ticket_directory / "ticket.yml", original_ticket)
             _restore_team(
                 team_directory, team_file, original_team, team_directory_existed
@@ -284,11 +317,58 @@ def _validate_team(team: Any) -> None:
         or set(team) != {"team_ordinal", "status", "members", "current_round", "started_at"}
         or team["team_ordinal"] != 1
         or team["status"] != "active"
-        or team["current_round"] != 1
+        or type(team["current_round"]) is not int
+        or team["current_round"] < 1
         or not isinstance(team["started_at"], str)
     ):
         raise ValueError("Team state is invalid")
     _validate_members(team["members"])
+
+
+def confirmed_rework(path: Path) -> bool:
+    lines = path.read_text(encoding="utf-8").splitlines()
+    return (
+        [line for line in lines if line.startswith("Decision:")] == ["Decision: REJECT"]
+        and [line for line in lines if line.startswith("Diagnosis:")] == ["Diagnosis: implementation"]
+        and [line for line in lines if line.startswith("Reviews:")] == ["Reviews: compliant"]
+        and [line for line in lines if line.startswith("Action:")] == ["Action: rework"]
+        and any(line.startswith("Rationale:") and line.removeprefix("Rationale:").strip() for line in lines)
+    )
+
+
+def _validate_implementation_rejection(directory: Path, candidate: str) -> None:
+    """Check attributable report fields; the Leader owns their semantic diagnosis."""
+    if not confirmed_rework(directory / "leader.md"):
+        raise ValueError("Rework requires the Team Leader's confirmed diagnosis")
+    comparisons = []
+    findings = []
+    for axis in ("Standards", "Spec"):
+        report = (directory / (axis.lower() + ".md")).read_text()
+        lines = report.splitlines()
+        for prefix, expected in (("Candidate commit:", candidate), ("Axis:", axis)):
+            if [line.removeprefix(prefix).strip() for line in lines if line.startswith(prefix)] != [expected]:
+                raise ValueError("Rework requires attributable dual-axis reports")
+        comparison = [line.removeprefix("Comparison:").strip() for line in lines if line.startswith("Comparison:")]
+        if len(comparison) != 1:
+            raise ValueError("Review comparison is missing or ambiguous")
+        comparisons.append(_validate_candidate(comparison[0]))
+        blocks = report.split("Finding:")[1:]
+        if not blocks:
+            raise ValueError("Review must report findings or explicitly report none")
+        for block in blocks:
+            if block.strip() == "none":
+                if len(blocks) != 1:
+                    raise ValueError("Review findings contradict each other")
+                continue
+            if not block.strip() or not block.splitlines()[0].strip():
+                raise ValueError("Review finding is empty")
+            for prefix in ("Rule:", "Input:", "Trace:", "Failure:", "Evidence:"):
+                values = [line.removeprefix(prefix).strip() for line in block.splitlines() if line.startswith(prefix)]
+                if len(values) != 1 or not values[0]:
+                    raise ValueError("Review finding lacks accepted evidence requirements")
+            findings.append(block)
+    if comparisons[0] != comparisons[1] or not findings:
+        raise ValueError("Rework requires a common comparison and an implementation finding")
 
 
 def _validate_worktree(harness_root: Path, value: Any) -> str:

@@ -18,6 +18,13 @@ from test_agent_runner_batch import configure_harness
         ("reject", "reviewing", False, True),
         ("conflict", "reviewing", False, True),
         ("tamper", "reviewing", False, False),
+        ("rework", "awaiting-integration", True, True),
+        ("process", "reviewing", False, True),
+        ("main", "reviewing", False, True),
+        ("product", "reviewing", False, True),
+        ("invalid-evidence", "reviewing", False, False),
+        ("mismatched-report", "reviewing", False, False),
+        ("no-findings", "reviewing", False, False),
     ),
 )
 def test_installed_runner_obeys_the_explicit_leader_decision_for_a_run_free_team_round(
@@ -94,8 +101,12 @@ def test_installed_runner_obeys_the_explicit_leader_decision_for_a_run_free_team
             "FAKE_CODEX_LIFECYCLE_ACTION": "complete-team-round",
             "GRAPHTRAJ_AGENT_RUNNER": str(installed_commands.runner),
             "FAKE_CODEX_LEADER_DECISION": (
-                "reject" if leader_decision == "tamper" else leader_decision
+                "reject" if leader_decision == "tamper" else
+                "rework" if leader_decision in {
+                    "process", "main", "product", "invalid-evidence", "mismatched-report", "no-findings"
+                } else leader_decision
             ),
+            "FAKE_CODEX_REWORK_CASE": leader_decision,
             "FAKE_CODEX_STATE_TAMPER": (
                 "accepted" if leader_decision == "tamper" else ""
             ),
@@ -106,13 +117,13 @@ def test_installed_runner_obeys_the_explicit_leader_decision_for_a_run_free_team
         [str(installed_commands.runner), "--batch-input", str(batch)],
         cwd=harness_root,
         env=environment,
-        timeout=10,
+        timeout=30,
     )
 
     assert (launched.returncode == 0) is runner_succeeds, launched.stderr
     retained_directory = harness_root / ".graphtraj" / "state" / "batches"
     retained_batches = list(retained_directory.glob("*.yml"))
-    assert len(retained_batches) == 3
+    assert len(retained_batches) == (5 if leader_decision == "rework" else 3)
     worktree = worktree_root / "74-complete-team-round"
     if runner_succeeds:
         output = yaml.safe_load(launched.stdout)
@@ -135,7 +146,7 @@ def test_installed_runner_obeys_the_explicit_leader_decision_for_a_run_free_team
     }
     assert team["team_ordinal"] == 1
     assert team["status"] == "active"
-    assert team["current_round"] == 1
+    assert team["current_round"] == (2 if leader_decision == "rework" else 1)
     assert set(team["members"]) == {
         "team_leader",
         "engineer",
@@ -180,7 +191,7 @@ def test_installed_runner_obeys_the_explicit_leader_decision_for_a_run_free_team
         for shard in (harness_root / ".graphtraj" / "state" / "worldline").glob("*.jsonl")
         for line in shard.read_text().splitlines()
     ]
-    if leader_decision == "tamper":
+    if not runner_succeeds:
         assert worldline[-1]["kind"] == "team-member-started"
         assert not any(event["kind"].startswith("team-round-") for event in worldline)
     else:
@@ -191,6 +202,26 @@ def test_installed_runner_obeys_the_explicit_leader_decision_for_a_run_free_team
     assert team["started_at"] == started["captured_at"]
     assert all(event["caused_by_event_ids"] for event in worldline[2:])
     assert all(path.stat().st_mode & 0o222 == 0 for path in retained_batches)
+    if leader_decision == "rework":
+        second = round_directory.parent / "2"
+        assert {path.name for path in second.iterdir()} == {path.name for path in round_directory.iterdir()}
+        assert all(path.stat().st_mode & 0o222 == 0 for path in second.iterdir())
+        rejected = next(event for event in worldline if event["kind"] == "team-round-implementation-rejected")
+        rework = next(event for event in worldline if event["kind"] == "team-round-rework-started")
+        candidates = [event for event in worldline if event["kind"] == "candidate-ready-for-review"]
+        assert rework["caused_by_event_ids"] == [rejected["event_id"]]
+        assert candidates[1]["caused_by_event_ids"] == [rework["event_id"]]
+        assert candidates[0]["candidate"] != candidates[1]["candidate"] == current["current_candidate"]
+        assert all(candidates[0]["candidate"] in path.read_text() for path in round_directory.iterdir())
+        assert all(candidates[1]["candidate"] in path.read_text() for path in second.iterdir())
+        assert worldline[-1]["team_round"] == 2
+        assert team["members"]["engineer"]["role"] == "engineer-junior"
+        assert len(mappings) == 5
+        for seat in team["members"].values():
+            trace = ticket_directory / "teams" / "1" / "traces" / seat["session_ref"] / "events.jsonl"
+            assert trace.read_text().count('"type": "turn.completed"') >= 2
+    else:
+        assert not (round_directory.parent / "2").exists()
 
 
 def test_installed_runner_rejects_non_run_free_main_batch_fields(

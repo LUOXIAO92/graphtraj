@@ -81,10 +81,10 @@ def _change_status(
         {
             "ticket_id": ticket_id,
             "status": status,
-            "active_team": None,
+            "active_team_ordinal": None,
             "worktree": None,
             "branch": None,
-            "candidate": None,
+            "current_candidate": None,
             "caused_by_event_ids": [],
             "evidence_refs": ["delivery-evidence.md"],
         },
@@ -122,10 +122,10 @@ def test_installed_command_registers_an_accepted_issue_as_a_ticket(
         "replaced_by": [],
         "dependencies": [],
         "status": "pending",
-        "active_team": None,
+        "active_team_ordinal": None,
         "worktree": None,
         "branch": None,
-        "candidate": None,
+        "current_candidate": None,
     }
     events = [
         json.loads(line)
@@ -278,6 +278,54 @@ def test_installed_command_merges_two_tickets_into_one_new_ticket_atomically(
     ]
 
 
+def test_revision_keeps_created_ticket_evidence_unique_and_worldline_readable(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+) -> None:
+    project = temporary_git_repository
+    _configure(project)
+    _register(installed_commands, project, _ticket("1", "first-half"))
+    _register(installed_commands, project, _ticket("2", "second-half"))
+    created_evidence = ".graphtraj/state/tickets/3-combined-ticket/ticket.md"
+    revision = _write(
+        project / "merge-with-created-evidence.yml",
+        {
+            "product_preserving": True,
+            "caused_by_event_ids": [],
+            "evidence_refs": [created_evidence],
+            "tickets": [
+                {
+                    **_ticket("1", "first-half"),
+                    "active": False,
+                    "replaced_by": ["3"],
+                },
+                {
+                    **_ticket("2", "second-half"),
+                    "active": False,
+                    "replaced_by": ["3"],
+                },
+                {
+                    **_ticket("3", "combined-ticket"),
+                    "active": True,
+                    "replaced_by": [],
+                },
+            ],
+        },
+    )
+
+    revision_result = _run(
+        installed_commands, project, "revise", "--revision-file", str(revision)
+    )
+    worldline_result = run_process(
+        [str(installed_commands.product), "worldline", "read"], cwd=project
+    )
+
+    assert revision_result.returncode == 0, revision_result.stderr
+    assert worldline_result.returncode == 0, worldline_result.stderr
+    event = json.loads(worldline_result.stdout.splitlines()[-1])
+    assert event["evidence_refs"].count(created_evidence) == 1
+
+
 def test_revision_rejects_an_active_dependency_on_an_inactive_ticket_without_changes(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
@@ -378,10 +426,10 @@ def test_installed_command_records_a_validated_ticket_state_change(
         {
             "ticket_id": "1",
             "status": "ready",
-            "active_team": None,
+            "active_team_ordinal": None,
             "worktree": None,
             "branch": None,
-            "candidate": None,
+            "current_candidate": None,
             "caused_by_event_ids": [],
             "evidence_refs": ["readiness.md"],
         },
@@ -396,12 +444,30 @@ def test_installed_command_records_a_validated_ticket_state_change(
     assert event["kind"] == "ticket-state-changed"
     assert event["from_status"] == "pending"
     assert event["to_status"] == "ready"
+    assert event["active_team_ordinal"] is None
+    assert event["current_candidate"] is None
+    assert set(event) == {
+        "event_id",
+        "captured_at",
+        "kind",
+        "caused_by_event_ids",
+        "evidence_refs",
+        "ticket_id",
+        "from_status",
+        "to_status",
+        "active_team_ordinal",
+        "worktree",
+        "branch",
+        "current_candidate",
+    }
     current = yaml.safe_load(
         (state / "tickets" / "1-foundation" / "ticket.yml").read_text(
             encoding="utf-8"
         )
     )
     assert current["status"] == "ready"
+    assert current["active_team_ordinal"] is None
+    assert current["current_candidate"] is None
 
 
 def test_readiness_uses_the_current_state_of_every_active_dependency(

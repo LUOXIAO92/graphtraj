@@ -39,10 +39,10 @@ _STATE_FIELDS = frozenset(
         "replaced_by",
         "dependencies",
         "status",
-        "active_team",
+        "active_team_ordinal",
         "worktree",
         "branch",
-        "candidate",
+        "current_candidate",
     }
 )
 _STATUSES = frozenset(
@@ -64,10 +64,10 @@ _STATE_CHANGE_FIELDS = frozenset(
     {
         "ticket_id",
         "status",
-        "active_team",
+        "active_team_ordinal",
         "worktree",
         "branch",
-        "candidate",
+        "current_candidate",
         "caused_by_event_ids",
         "evidence_refs",
     }
@@ -280,20 +280,20 @@ def _validate_state_change(change: Any) -> None:
         not isinstance(change["ticket_id"], str)
         or _TICKET_ID.fullmatch(change["ticket_id"]) is None
         or change["status"] not in _STATUSES
-        or (change["active_team"] is not None and (
-            isinstance(change["active_team"], bool)
-            or not isinstance(change["active_team"], int)
-            or change["active_team"] < 1
+        or (change["active_team_ordinal"] is not None and (
+            isinstance(change["active_team_ordinal"], bool)
+            or not isinstance(change["active_team_ordinal"], int)
+            or change["active_team_ordinal"] < 1
         ))
         or any(
             value is not None and (not isinstance(value, str) or not value)
             for value in (change["worktree"], change["branch"])
         )
         or (
-            change["candidate"] is not None
+            change["current_candidate"] is not None
             and (
-                not isinstance(change["candidate"], str)
-                or _COMMIT.fullmatch(change["candidate"]) is None
+                not isinstance(change["current_candidate"], str)
+                or _COMMIT.fullmatch(change["current_candidate"]) is None
             )
         )
     ):
@@ -315,10 +315,10 @@ def _register(state: Path, harness_root: Path, issue: dict[str, Any]) -> Path:
         "replaced_by": [],
         "dependencies": issue["dependencies"],
         "status": "pending",
-        "active_team": None,
+        "active_team_ordinal": None,
         "worktree": None,
         "branch": None,
-        "candidate": None,
+        "current_candidate": None,
     }
     snapshot = _render_definition(
         {**issue, "active": True, "replaced_by": []}
@@ -414,10 +414,10 @@ def _revise(
                     "replaced_by": definition["replaced_by"],
                     "dependencies": definition["dependencies"],
                     "status": "pending",
-                    "active_team": None,
+                    "active_team_ordinal": None,
                     "worktree": None,
                     "branch": None,
-                    "candidate": None,
+                    "current_candidate": None,
                 }
             proposed[ticket_id] = record
         if not meaningful:
@@ -473,10 +473,11 @@ def _revise(
                     ).as_posix()
                     _write_yaml(state_path, proposed[ticket_id])
                 recorded["definition_refs"] = definition_refs
-                recorded["evidence_refs"] = [
-                    *recorded["evidence_refs"],
-                    *definition_refs.values(),
-                ]
+                recorded["evidence_refs"] = list(
+                    dict.fromkeys(
+                        (*recorded["evidence_refs"], *definition_refs.values())
+                    )
+                )
             except Exception:
                 _rollback_revision(changed)
                 raise
@@ -548,7 +549,13 @@ def _update_state(
                 )
             )
         updated = dict(record)
-        for field in ("status", "active_team", "worktree", "branch", "candidate"):
+        for field in (
+            "status",
+            "active_team_ordinal",
+            "worktree",
+            "branch",
+            "current_candidate",
+        ):
             updated[field] = change[field]
         event = {
             "kind": "ticket-state-changed",
@@ -557,10 +564,10 @@ def _update_state(
             "ticket_id": ticket_id,
             "from_status": old_status,
             "to_status": change["status"],
-            "active_team": change["active_team"],
+            "active_team_ordinal": change["active_team_ordinal"],
             "worktree": change["worktree"],
             "branch": change["branch"],
-            "candidate": change["candidate"],
+            "current_candidate": change["current_candidate"],
         }
         state_path = directory / "ticket.yml"
 
@@ -641,20 +648,20 @@ def _load_states(tickets: Path) -> dict[str, tuple[Path, dict[str, Any]]]:
             or any(not isinstance(item, str) for item in record["dependencies"])
             or not isinstance(record["status"], str)
             or record["status"] not in _STATUSES
-            or (record["active_team"] is not None and (
-                isinstance(record["active_team"], bool)
-                or not isinstance(record["active_team"], int)
-                or record["active_team"] < 1
+            or (record["active_team_ordinal"] is not None and (
+                isinstance(record["active_team_ordinal"], bool)
+                or not isinstance(record["active_team_ordinal"], int)
+                or record["active_team_ordinal"] < 1
             ))
             or any(
                 value is not None and (not isinstance(value, str) or not value)
                 for value in (record["worktree"], record["branch"])
             )
             or (
-                record["candidate"] is not None
+                record["current_candidate"] is not None
                 and (
-                    not isinstance(record["candidate"], str)
-                    or _COMMIT.fullmatch(record["candidate"]) is None
+                    not isinstance(record["current_candidate"], str)
+                    or _COMMIT.fullmatch(record["current_candidate"]) is None
                 )
             )
         ):

@@ -198,6 +198,8 @@ def append_project_worldline_event(
         target_existed = target.exists()
         original_size = target.stat().st_size if target_existed else 0
         try:
+            _validate_string_list(recorded, "caused_by_event_ids")
+            _validate_string_list(recorded, "evidence_refs")
             _validate_evidence(harness_root, recorded["evidence_refs"])
             line = (
                 json.dumps(recorded, ensure_ascii=False, separators=(",", ":"))

@@ -37,14 +37,20 @@ def delivery_state() -> None:
     required=True,
     type=click.Path(path_type=Path, exists=True, dir_okay=False),
 )
-def apply_command(request_file: Path) -> None:
+@click.option(
+    "--facts-file",
+    required=True,
+    type=click.Path(path_type=Path, exists=True, dir_okay=False),
+)
+def apply_command(request_file: Path, facts_file: Path) -> None:
     """Validate and atomically apply one semantic state request."""
 
     try:
         request = yaml.safe_load(request_file.read_text(encoding="utf-8"))
+        facts = yaml.safe_load(facts_file.read_text(encoding="utf-8"))
         configuration = load_project_configuration(Path.cwd())
         recorded = apply_delivery_state_request(
-            configuration.state, configuration.harness_root, request
+            configuration.state, configuration.harness_root, request, facts
         )
     except (OSError, UnicodeError, ValueError, yaml.YAMLError) as error:
         raise click.ClickException(str(error)) from error
@@ -55,11 +61,16 @@ def apply_delivery_state_request(
     state_directory: Path,
     harness_root: Path,
     request: Mapping[str, Any],
+    authoritative_facts: Mapping[str, Any],
 ) -> dict[str, Any]:
     """Validate one Agent request and commit state with its causal event."""
 
-    if not isinstance(request, dict):
-        raise ValueError("Delivery State request must be a mapping")
+    if (
+        not isinstance(request, dict)
+        or not isinstance(authoritative_facts, dict)
+        or request != authoritative_facts
+    ):
+        raise ValueError("Delivery State request differs from authoritative facts")
     phase = request.get("phase")
     allowed = {
         "start": _COMMON | {"worktree", "branch", "members"},

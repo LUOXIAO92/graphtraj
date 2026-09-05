@@ -48,6 +48,8 @@ def test_delivery_state_request_rolls_back_state_when_its_event_is_invalid(
         ),
         encoding="utf-8",
     )
+    facts = project / "delivery-state-facts.yml"
+    facts.write_bytes(request.read_bytes())
 
     result = run_process(
         [
@@ -56,6 +58,8 @@ def test_delivery_state_request_rolls_back_state_when_its_event_is_invalid(
             "apply",
             "--request-file",
             str(request),
+            "--facts-file",
+            str(facts),
         ],
         cwd=project,
     )

@@ -12,8 +12,13 @@ from test_agent_runner_batch import configure_harness
 
 
 @pytest.mark.parametrize(
-    ("leader_decision", "expected_status", "round_closed"),
-    (("accept", "awaiting-integration", True), ("reject", "reviewing", False)),
+    ("leader_decision", "expected_status", "round_closed", "runner_succeeds"),
+    (
+        ("accept", "awaiting-integration", True, True),
+        ("reject", "reviewing", False, True),
+        ("conflict", "reviewing", False, True),
+        ("tamper", "reviewing", False, False),
+    ),
 )
 def test_installed_runner_obeys_the_explicit_leader_decision_for_a_run_free_team_round(
     installed_commands: InstalledCommands,
@@ -23,6 +28,7 @@ def test_installed_runner_obeys_the_explicit_leader_decision_for_a_run_free_team
     leader_decision: str,
     expected_status: str,
     round_closed: bool,
+    runner_succeeds: bool,
 ) -> None:
     harness_root, worktree_root, _, environment = configure_harness(
         installed_commands,
@@ -87,7 +93,12 @@ def test_installed_runner_obeys_the_explicit_leader_decision_for_a_run_free_team
         {
             "FAKE_CODEX_LIFECYCLE_ACTION": "complete-team-round",
             "GRAPHTRAJ_AGENT_RUNNER": str(installed_commands.runner),
-            "FAKE_CODEX_LEADER_DECISION": leader_decision,
+            "FAKE_CODEX_LEADER_DECISION": (
+                "reject" if leader_decision == "tamper" else leader_decision
+            ),
+            "FAKE_CODEX_STATE_TAMPER": (
+                "accepted" if leader_decision == "tamper" else ""
+            ),
         }
     )
 
@@ -98,16 +109,18 @@ def test_installed_runner_obeys_the_explicit_leader_decision_for_a_run_free_team
         timeout=10,
     )
 
-    assert launched.returncode == 0, launched.stderr
-    output = yaml.safe_load(launched.stdout)
-    assert "run_id" not in output
-    retained = Path(output["retained_batch_file"])
-    assert retained.parent == harness_root / ".graphtraj" / "state" / "batches"
-    assert retained.read_bytes() == batch_bytes
-    retained_batches = list(retained.parent.glob("*.yml"))
+    assert (launched.returncode == 0) is runner_succeeds, launched.stderr
+    retained_directory = harness_root / ".graphtraj" / "state" / "batches"
+    retained_batches = list(retained_directory.glob("*.yml"))
     assert len(retained_batches) == 3
     worktree = worktree_root / "74-complete-team-round"
-    assert output["tasks"][0]["worktree_path"] == str(worktree.resolve())
+    if runner_succeeds:
+        output = yaml.safe_load(launched.stdout)
+        assert "run_id" not in output
+        retained = Path(output["retained_batch_file"])
+        assert retained.parent == retained_directory
+        assert retained.read_bytes() == batch_bytes
+        assert output["tasks"][0]["worktree_path"] == str(worktree.resolve())
     wait_for_file(ticket_directory / "teams" / "1" / "rounds" / "1" / "leader.md", 15)
 
     current = yaml.safe_load((ticket_directory / "ticket.yml").read_text())
@@ -159,6 +172,7 @@ def test_installed_runner_obeys_the_explicit_leader_decision_for_a_run_free_team
     assert not list(ticket_directory.rglob("turn-*"))
     assert not (ticket_directory / "metadata.yml").exists()
     assert not (ticket_directory / "handoff.md").exists()
+    assert not (ticket_directory / "reviews").exists()
     assert not (harness_root / ".graphtraj" / "state" / "runs").exists()
     assert not any(path.name in {"ledger.yml", "dag.md", "history.jsonl"} for path in ticket_directory.rglob("*"))
     worldline = [
@@ -166,10 +180,51 @@ def test_installed_runner_obeys_the_explicit_leader_decision_for_a_run_free_team
         for shard in (harness_root / ".graphtraj" / "state" / "worldline").glob("*.jsonl")
         for line in shard.read_text().splitlines()
     ]
-    assert worldline[-1]["kind"] == (
-        "team-round-accepted" if round_closed else "team-round-rejected"
-    )
+    if leader_decision == "tamper":
+        assert worldline[-1]["kind"] == "team-member-started"
+        assert not any(event["kind"].startswith("team-round-") for event in worldline)
+    else:
+        assert worldline[-1]["kind"] == (
+            "team-round-accepted" if round_closed else "team-round-rejected"
+        )
     started = next(event for event in worldline if event["kind"] == "team-started")
     assert team["started_at"] == started["captured_at"]
     assert all(event["caused_by_event_ids"] for event in worldline[2:])
     assert all(path.stat().st_mode & 0o222 == 0 for path in retained_batches)
+
+
+def test_installed_runner_rejects_non_run_free_main_batch_fields(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    harness_root, _, _, environment = configure_harness(
+        installed_commands, temporary_git_repository, fake_codex, tmp_path
+    )
+    task = {
+        "ticket_id": "74",
+        "ticket_name": "complete-team-round",
+        "role": "team-leader",
+    }
+    invalid = [
+        {"run_id": None, "tasks": [task]},
+        {"tasks": [{**task, "review_round": 1}]},
+        {"tasks": [{**task, "report_file": ".state/reviews/report.md"}]},
+        {"tasks": [{**task, "skills": ["tdd"]}]},
+        {"tasks": [{**task, "ticket_file": "ticket.md"}]},
+        {"tasks": [{**task, "unexpected": True}]},
+    ]
+
+    for index, document in enumerate(invalid):
+        batch = harness_root / "invalid-{0}.yml".format(index)
+        batch.write_text(yaml.safe_dump(document, sort_keys=False))
+        result = run_process(
+            [str(installed_commands.runner), "--batch-input", str(batch)],
+            cwd=harness_root,
+            env=environment,
+        )
+        assert result.returncode == 1
+        assert yaml.safe_load(result.stdout)["error"]["code"] == "invalid-input"
+
+    assert not (harness_root / ".graphtraj" / "state" / "batches").exists()

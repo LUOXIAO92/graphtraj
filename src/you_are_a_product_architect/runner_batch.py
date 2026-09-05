@@ -106,8 +106,9 @@ def read_batch(
             "BATCH_SCHEMA_INVALID",
             "Batch input must contain tasks and no top-level Runtime settings.",
         )
-    run_id = document.get("run_id")
-    if run_id is not None and not valid_run_id(run_id):
+    run_free = "run_id" not in document
+    run_id = None if run_free else document["run_id"]
+    if not run_free and not valid_run_id(run_id):
         raise RunnerError(
             "RUN_ID_INVALID",
             (
@@ -123,7 +124,7 @@ def read_batch(
             "A batch must contain at least one task.",
         )
     validated_tasks = tuple(
-        _read_task(task_document, cwd, run_free=run_id is None)
+        _read_task(task_document, cwd, run_free=run_free)
         for task_document in tasks
     )
     ticket_ids = [task.ticket_id for task in validated_tasks]
@@ -166,12 +167,9 @@ def _read_task(
     required = {"ticket_id", "ticket_name", "role"}
     if not run_free:
         required.add("ticket_file")
-    allowed = required | {
-        "instruction",
-        "skills",
-        "report_file",
-        "review_round",
-    }
+    allowed = required | {"instruction"}
+    if not run_free:
+        allowed |= {"skills", "report_file", "review_round"}
     if (
         not isinstance(task_document, dict)
         or not required.issubset(task_document)

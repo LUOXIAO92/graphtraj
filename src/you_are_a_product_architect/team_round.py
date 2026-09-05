@@ -219,11 +219,20 @@ def _deliver_ticket(project: Any, requested: Task, retained_batch: Path) -> dict
         raise RunnerError("BATCH_SCHEMA_INVALID", "The second direct child Batch must contain both Reviewers.")
     child_results = []
     for child in reviewer_batch.tasks:
-        child_task = replace(child, ticket_file=definition.resolve(), ticket_content=ticket_content)
+        report_name = (
+            "standards.md" if child.role == "standards-reviewer" else "spec.md"
+        )
+        child_task = replace(
+            child,
+            ticket_file=definition.resolve(),
+            ticket_content=ticket_content,
+            report_file=Path(".state") / "reviews" / report_name,
+        )
         alias, session = _run_agent(
             project, child_task, child.role, worktree, ticket_directory, traces,
             None, None, None, leader_alias, reviewer_batch_path,
         )
+        _collect_review_report(ticket_directory, round_directory, report_name)
         member = "standards_reviewer" if child.role == "standards-reviewer" else "spec_reviewer"
         state_alias, state_session, event = _request_state(
             project, task, worktree, ticket_directory, traces,
@@ -325,7 +334,9 @@ def _request_state(
     shutil.move(runtime_request, request_file)
     request = yaml.safe_load(request_file.read_text(encoding="utf-8"))
     try:
-        event = apply_delivery_state_request(project.state_directory, project.harness_root, request)
+        event = apply_delivery_state_request(
+            project.state_directory, project.harness_root, request, facts
+        )
     except (OSError, ValueError, yaml.YAMLError) as error:
         raise RunnerError("STATE_DIRECTORY_INVALID", "Delivery State produced an invalid state change.") from error
     return alias, session, event
@@ -396,7 +407,7 @@ def _run_agent(
         evidence=evidence,
         repository_skill_source=worktree,
         requested_skills=(),
-        report_file=None,
+        report_file=task.report_file,
     ).finalize()
     session_id: str | None = expected_session
 
@@ -429,10 +440,31 @@ def _run_agent(
             ".state/teams/1/rounds/1/validation.md. Include the candidate commit in both.\n"
         )
     elif role.endswith("reviewer"):
-        report = "standards.md" if role == "standards-reviewer" else "spec.md"
+        if task.report_file is None:
+            raise RunnerError(
+                "REPORT_FILE_INVALID",
+                "A Team Round Reviewer requires its writable report path.",
+            )
+        report = evidence / "reviews" / task.report_file.name
+        report.parent.mkdir(exist_ok=True)
+        if (
+            report.parent.is_symlink()
+            or not report.parent.is_dir()
+            or os.path.lexists(report)
+        ):
+            raise RunnerError("REPORT_FILE_INVALID", "The Reviewer report path is not new.")
+        comparison = project.dev_commit
+        candidate = run_git(worktree, "rev-parse", "HEAD")
+        brief = (
+            "Review only for Repository Guidance and established project standards."
+            if role == "standards-reviewer"
+            else "Review only against the accepted Ticket and its acceptance criteria."
+        )
         task_prompt += (
-            "\nInspect HEAD without modifying it. Write the decision and exact candidate commit to "
-            ".state/teams/1/rounds/1/{0}.\n".format(report)
+            "\nCandidate: {0}\nComparison: {1}\nReview brief: {2}\n"
+            "Inspect without modifying the candidate. Write the report only to {3}.\n".format(
+                candidate, comparison, brief, task.report_file.as_posix()
+            )
         )
     environment = {
         "GRAPHTRAJ_ROLE": role,
@@ -441,6 +473,13 @@ def _run_agent(
         "GRAPHTRAJ_TICKET_NAME": task.ticket_name,
         "GRAPHTRAJ_HARNESS_ROOT": str(project.harness_root),
     }
+    if role.endswith("reviewer"):
+        environment.update(
+            GRAPHTRAJ_REVIEW_CANDIDATE=candidate,
+            GRAPHTRAJ_REVIEW_COMPARISON=comparison,
+            GRAPHTRAJ_REVIEW_BRIEF=brief,
+            GRAPHTRAJ_REVIEW_REPORT=str(report),
+        )
     if registration is not None:
         environment["GRAPHTRAJ_PARENT_REGISTRATION"] = str(registration)
         environment["GRAPHTRAJ_PARENT_ALIAS"] = alias
@@ -519,4 +558,21 @@ def _candidate(round_directory: Path, worktree: Path) -> str:
 
 def _leader_decision(path: Path) -> str:
     lines = path.read_text(encoding="utf-8").splitlines()
-    return "accepted" if "Decision: ACCEPT" in lines else "rejected"
+    decisions = [
+        line for line in lines if line in {"Decision: ACCEPT", "Decision: REJECT"}
+    ]
+    return "accepted" if decisions == ["Decision: ACCEPT"] else "rejected"
+
+
+def _collect_review_report(
+    evidence: Path,
+    round_directory: Path,
+    report_name: str,
+) -> None:
+    source = evidence / "reviews" / report_name
+    target = round_directory / report_name
+    if source.is_symlink() or not source.is_file() or target.exists():
+        raise RunnerError("REPORT_FILE_INVALID", "The Reviewer did not produce its exact report.")
+    source.replace(target)
+    if not any(source.parent.iterdir()):
+        source.parent.rmdir()

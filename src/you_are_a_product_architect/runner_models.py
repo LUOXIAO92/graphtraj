@@ -12,6 +12,7 @@ from .project_roles import RolePreset
 ROLE_ALIAS_MARKERS = {
     "team-leader": "l",
     "delivery-state": "d",
+    "merge-resolver": "m",
     "engineer-junior": "j",
     "engineer-senior": "s",
     "engineer-expert": "e",

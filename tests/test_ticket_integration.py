@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import subprocess
 import sys
+import tomllib
 
 import pytest
 import yaml
@@ -39,9 +41,10 @@ def accepted_ticket(installed_commands, temporary_git_repository, fake_codex, tm
 
 
 def test_main_integrates_an_accepted_candidate_and_unlocks_only_satisfied_dependencies(
-    installed_commands, accepted_ticket
+    installed_commands, accepted_ticket, fake_codex
 ):
     root, worktrees, state, candidate = accepted_ticket
+    previous_runtime = fake_codex.log_file.read_bytes()
     # Later branch work must not silently replace the Team's fixed candidate.
     worktree = worktrees / "83-integration"
     (worktree / "LATER.txt").write_text("not part of the accepted candidate\n")
@@ -64,6 +67,8 @@ def test_main_integrates_an_accepted_candidate_and_unlocks_only_satisfied_depend
     output = yaml.safe_load(result.stdout)
     assert output["candidate"] == candidate
     assert output["status"] == "integrated"
+    assert fake_codex.log_file.read_bytes() == previous_runtime
+    assert not any("@m" in path.name for path in state.rglob("*"))
     assert run_process(["git", "merge-base", "--is-ancestor", candidate, "HEAD"], cwd=worktrees / "dev").returncode == 0
     assert not (worktrees / "dev/LATER.txt").exists()
     graph = yaml.safe_load(run_process([str(installed_commands.product), "ticket", "graph"], cwd=root).stdout)
@@ -137,6 +142,143 @@ def test_failed_merge_retains_conflict_evidence_and_does_not_run_validation(inst
     assert output["status"] == "integrating"
     graph = yaml.safe_load(run_process([str(installed_commands.product), "ticket", "graph"], cwd=root).stdout)
     assert not any(item["ready"] for item in graph["tickets"])
+
+
+def test_main_resolves_observed_textual_conflict_then_validates_dev(
+    installed_commands, accepted_ticket, fake_codex
+):
+    root, worktrees, state, candidate = accepted_ticket
+    roles_file = root / ".graphtraj/roles.yml"
+    roles = yaml.safe_load(roles_file.read_text())
+    roles["roles"]["merge-resolver"]["model"] = "gpt-5.6-luna"
+    roles_file.write_text(yaml.safe_dump(roles))
+    dev = worktrees / "dev"
+    (dev / "TEAM_ROUND_DELIVERED.txt").write_text("conflicting integration work\n")
+    for arguments in (("add", "TEAM_ROUND_DELIVERED.txt"), ("commit", "-m", "Independent dev change")):
+        run_process(["git", *arguments], cwd=dev).check_returncode()
+    before = run_process(["git", "rev-parse", "HEAD"], cwd=dev).stdout.strip()
+    command = [str(installed_commands.product), "ticket", "integrate", "--ticket-id", "83"]
+    validator = [sys.executable, "-c", "from pathlib import Path; assert Path('TEAM_ROUND_DELIVERED.txt').read_text() == 'complete team round\\nconflicting integration work\\n'"]
+    failed = run_process(command + ["--", *validator], cwd=root)
+    assert failed.returncode == 1
+    previous_runtime = fake_codex.log_file.read_bytes()
+    environment = {
+        **os.environ,
+        "HOME": str(root / "operator-home"),
+        "PATH": str(fake_codex.executable.parent) + os.pathsep + os.environ["PATH"],
+        "FAKE_CODEX_LOG": str(fake_codex.log_file),
+        "FAKE_CODEX_CAPTURE_STDIN": "1",
+        "FAKE_CODEX_LIFECYCLE_ACTION": "resolve-integration",
+    }
+    interrupted = run_process(command + ["--resolve-conflict", "Preserve both accepted lines", "--", *validator], cwd=root, env={**environment, "FAKE_CODEX_EXIT_CODE": "1"})
+    assert interrupted.returncode == 1
+    assert yaml.safe_load(interrupted.stdout)["status"] == "integrating"
+    result = run_process(command + ["--resolve-conflict", "Preserve both accepted lines", "--", *validator], cwd=root, env=environment)
+    output = yaml.safe_load(result.stdout)
+    assert result.returncode == 0, result.stdout + result.stderr + (root / output["evidence"]).read_text()
+    assert output["status"] == "integrated"
+    request = json.loads(fake_codex.log_file.read_text())
+    assert fake_codex.log_file.read_bytes() != previous_runtime
+    assert request["cwd"] == str(dev)
+    assert request["argv"][request["argv"].index("--model") + 1] == "gpt-5.6-luna"
+    assert candidate in request["stdin"] and before in request["stdin"]
+    assert "CONFLICT" in request["stdin"]
+    settings = {}
+    for index, argument in enumerate(request["argv"]):
+        if argument == "-c":
+            settings.update(tomllib.loads(request["argv"][index + 1]))
+    assert settings["agents"]["enabled"] is False
+    permissions = settings["permissions"][settings["default_permissions"]]["filesystem"]
+    assert permissions[str(state / "tickets/83-integration")] == "read"
+    assert permissions[":workspace_roots"]["docs"] == "read"
+    hook = shlex.split(settings["hooks"]["PreToolUse"][0]["hooks"][0]["command"])
+    for tool_command in (
+        "cat " + str(worktrees / "83-integration/TEAM_ROUND_DELIVERED.txt"),
+        "touch " + str(worktrees / "83-integration/unrelated.txt"),
+        "agent-runner --help", "codex exec -",
+    ):
+        checked = subprocess.run([sys.executable, *hook[1:]], cwd=dev, input=json.dumps({
+            "hook_event_name": "PreToolUse", "tool_name": "Bash",
+            "tool_input": {"command": tool_command},
+        }), text=True, capture_output=True, check=True)
+        assert json.loads(checked.stdout)["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert run_process(["git", "rev-parse", "HEAD^1"], cwd=dev).stdout.strip() == before
+    assert run_process(["git", "rev-parse", "HEAD^2"], cwd=dev).stdout.strip() == candidate
+    events = [json.loads(line) for shard in (state / "worldline").glob("*.jsonl") for line in shard.read_text().splitlines()]
+    resolved = next(event for event in events if event["kind"] == "ticket-integration-conflict-resolved")
+    assert resolved["session_ref"]
+    trace = next(root / ref for ref in resolved["evidence_refs"] if ref.endswith("events.jsonl"))
+    assert "Decision: RESOLVED" in trace.read_text()
+    assert yaml.safe_load((state / "tickets/83-integration/ticket.yml").read_text())["status"] == "integrated"
+
+
+@pytest.mark.parametrize("outcome", ["resolved", "escalated", "invalid-resolution", "unrelated-history"])
+def test_semantic_conflict_returns_to_main_and_requires_passing_validation(
+    installed_commands, accepted_ticket, fake_codex, outcome
+):
+    root, worktrees, state, candidate = accepted_ticket
+    if outcome == "escalated":
+        _register(installed_commands, root, _ticket("88", "independent"))
+        _change_status(installed_commands, root, "88", "ready")
+        batch = root / "independent.yml"
+        batch.write_text(yaml.safe_dump({"tasks": [{"ticket_id": "88", "ticket_name": "independent", "role": "team-leader"}]}))
+        launched = run_process([str(installed_commands.runner), "--batch-input", str(batch)], cwd=root, env={
+            **os.environ, "HOME": str(root / "operator-home"),
+            "PATH": str(fake_codex.executable.parent) + os.pathsep + os.environ["PATH"],
+            "FAKE_CODEX_LOG": str(fake_codex.log_file),
+            "FAKE_CODEX_LIFECYCLE_ACTION": "complete-team-round",
+            "GRAPHTRAJ_AGENT_RUNNER": str(installed_commands.runner),
+        })
+        assert launched.returncode == 0, launched.stderr
+    command = [str(installed_commands.product), "ticket", "integrate", "--ticket-id", "83"]
+    validator = [sys.executable, "-c", "from pathlib import Path; assert Path('TEAM_ROUND_DELIVERED.txt').read_text() == 'complete team round\\nconflicting integration work\\n', 'semantic incompatibility: missing existing dev behavior'"]
+    failed = run_process(command + ["--", *validator], cwd=root)
+    assert failed.returncode == 1
+    environment = {
+        **os.environ, "HOME": str(root / "operator-home"),
+        "PATH": str(fake_codex.executable.parent) + os.pathsep + os.environ["PATH"],
+        "FAKE_CODEX_LOG": str(fake_codex.log_file),
+        "FAKE_CODEX_CAPTURE_STDIN": "1",
+        "FAKE_CODEX_LIFECYCLE_ACTION": "resolve-integration",
+        "FAKE_CODEX_RESOLUTION": outcome,
+    }
+    previous_runtime = fake_codex.log_file.read_bytes()
+    weaker = run_process(command + ["--resolve-conflict", "Preserve accepted behavior", "--", sys.executable, "-c", "pass"], cwd=root, env=environment)
+    assert weaker.returncode == 1
+    assert fake_codex.log_file.read_bytes() == previous_runtime
+    result = run_process(command + ["--resolve-conflict", "Preserve accepted behavior", "--", *validator], cwd=root, env=environment)
+    output = yaml.safe_load(result.stdout)
+    assert output["status"] == {"resolved": "integrated", "escalated": "escalated", "invalid-resolution": "integrating", "unrelated-history": "escalated"}[outcome], (root / output["evidence"]).read_text()
+    assert result.returncode == (0 if outcome == "resolved" else 1)
+    events = [json.loads(line) for shard in (state / "worldline").glob("*.jsonl") for line in shard.read_text().splitlines()]
+    final = next(event for event in events if event["event_id"] == output["event_id"])
+    assert final["session_ref"]
+    assert "semantic incompatibility" in json.loads(fake_codex.log_file.read_text())["stdin"]
+    graph = yaml.safe_load(run_process([str(installed_commands.product), "ticket", "graph"], cwd=root).stdout)
+    assert any(item["ready"] for item in graph["tickets"]) == (outcome == "resolved")
+    if outcome == "unrelated-history":
+        assert "changed dev history" in (root / output["evidence"]).read_text()
+    if outcome == "escalated":
+        assert run_process(["git", "rev-parse", "HEAD"], cwd=worktrees / "dev").stdout.strip() == candidate
+        trace = next(root / ref for ref in final["evidence_refs"] if ref.endswith("events.jsonl"))
+        assert "incompatible accepted requirements" in trace.read_text()
+        other = run_process([str(installed_commands.product), "ticket", "integrate", "--ticket-id", "88", "--", sys.executable, "-c", "pass"], cwd=root)
+        assert other.returncode == 1
+        assert "unfinished integration" in yaml.safe_load(other.stdout)["error"]
+
+
+def test_resolver_requires_mains_observed_conflict(installed_commands, accepted_ticket, fake_codex):
+    root, worktrees, state, candidate = accepted_ticket
+    previous_runtime = fake_codex.log_file.read_bytes()
+    command = [str(installed_commands.product), "ticket", "integrate", "--ticket-id", "83", "--resolve-conflict", "No observed conflict", "--", sys.executable, "-c", "pass"]
+    rejected = run_process(command, cwd=root)
+    assert rejected.returncode == 1
+    batch = root / "resolver.yml"
+    batch.write_text(yaml.safe_dump({"tasks": [{"ticket_id": "83", "ticket_name": "integration", "role": "merge-resolver"}]}))
+    rejected = run_process([str(installed_commands.runner), "--batch-input", str(batch)], cwd=root)
+    assert rejected.returncode == 1
+    assert "conflict" in yaml.safe_load(rejected.stdout)["error"]["message"]
+    assert fake_codex.log_file.read_bytes() == previous_runtime
 
 
 def test_main_integration_is_serialized_until_validation_finishes(installed_commands, accepted_ticket):

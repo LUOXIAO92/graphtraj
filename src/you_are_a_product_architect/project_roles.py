@@ -25,6 +25,7 @@ ROLE_NAMES = (
 _REQUIRED_FIELDS = frozenset({"runtime", "model"})
 _CONNECTION_FIELDS = frozenset({"base_url", "api_key_env"})
 _ENVIRONMENT_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_ROLE_NAME = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
 _DEFAULT_PRESETS: dict[str, dict[str, object]] = {
     "team-leader": {
@@ -142,6 +143,25 @@ def load_project_roles(harness_root: Path) -> ProjectRoles:
     return _roles_from_document(document)
 
 
+def parse_inline_role(value: object) -> tuple[str, RolePreset]:
+    """Validate one temporary Batch role with the reusable role schema."""
+
+    if not isinstance(value, dict) or len(value) != 1:
+        raise ProjectRolesError(
+            ("An inline Batch role must contain exactly one role entry.",)
+        )
+    name, settings = next(iter(value.items()))
+    if not isinstance(name, str) or not _ROLE_NAME.fullmatch(name):
+        raise ProjectRolesError(
+            ("An inline Batch role must use a lowercase kebab-case name.",)
+        )
+    diagnostics: list[str] = []
+    preset = _role_preset(name, settings, diagnostics)
+    if diagnostics or preset is None:
+        raise ProjectRolesError(tuple(diagnostics))
+    return name, preset
+
+
 def _roles_from_document(document: Any) -> ProjectRoles:
     diagnostics: list[str] = []
     if not isinstance(document, dict):
@@ -154,7 +174,7 @@ def _roles_from_document(document: Any) -> ProjectRoles:
         diagnostics.append("roles.yml.roles must be a mapping.")
         raise ProjectRolesError(tuple(diagnostics))
 
-    known_entries: dict[str, Mapping[str, object]] = {}
+    known_entries: dict[str, object] = {}
     for name, value in entries.items():
         if not isinstance(name, str):
             diagnostics.append("roles.yml.roles contains an unsupported preset name.")
@@ -162,67 +182,77 @@ def _roles_from_document(document: Any) -> ProjectRoles:
         if name not in ROLE_NAMES:
             diagnostics.append("roles.{0} is not a supported preset.".format(name))
             continue
-        if not isinstance(value, dict):
-            diagnostics.append("{0} must be a mapping.".format(name))
-            continue
         known_entries[name] = value
 
+    presets: dict[str, RolePreset] = {}
     for name in ROLE_NAMES:
         entry = known_entries.get(name)
         if entry is None:
             diagnostics.append("{0} preset is required.".format(name))
             continue
-        allowed = _REQUIRED_FIELDS | _CONNECTION_FIELDS
-        if name == "team-leader":
-            allowed = allowed | {"allow_runtime_swarm"}
-        for field in entry:
-            if field not in allowed:
-                diagnostics.append("{0}.{1} is not supported.".format(name, field))
-        for field in _REQUIRED_FIELDS:
-            value = entry.get(field)
-            if not isinstance(value, str) or not value.strip():
-                diagnostics.append(
-                    "{0}.{1} must be a non-empty string.".format(name, field)
-                )
-        for field in _CONNECTION_FIELDS:
-            if field not in entry:
-                continue
-            value = entry[field]
-            if not isinstance(value, str) or not value.strip():
-                diagnostics.append(
-                    "{0}.{1} must be a non-empty string when supplied.".format(
-                        name, field
-                    )
-                )
-            elif field == "api_key_env" and not _ENVIRONMENT_NAME.fullmatch(value):
-                diagnostics.append(
-                    "{0}.api_key_env must name an environment variable.".format(name)
-                )
-        if name == "team-leader" and "allow_runtime_swarm" in entry and not isinstance(
-            entry["allow_runtime_swarm"], bool
-        ):
-            diagnostics.append("team-leader.allow_runtime_swarm must be a boolean.")
+        preset = _role_preset(name, entry, diagnostics)
+        if preset is not None:
+            presets[name] = preset
 
     if diagnostics:
         raise ProjectRolesError(tuple(diagnostics))
 
-    return ProjectRoles(
-        presets={
-            name: RolePreset(
-                runtime=str(entry["runtime"]),
-                model=str(entry["model"]),
-                base_url=(
-                    str(entry["base_url"]) if "base_url" in entry else None
-                ),
-                api_key_env=(
-                    str(entry["api_key_env"]) if "api_key_env" in entry else None
-                ),
-                allow_runtime_swarm=(
-                    bool(entry.get("allow_runtime_swarm", True))
-                    if name == "team-leader"
-                    else False
-                ),
+    return ProjectRoles(presets=presets)
+
+
+def _role_preset(
+    name: str,
+    entry: object,
+    diagnostics: list[str],
+) -> RolePreset | None:
+    """Return one validated Runtime-setting-only role entry."""
+
+    if not isinstance(entry, dict):
+        diagnostics.append("{0} must be a mapping.".format(name))
+        return None
+    initial_count = len(diagnostics)
+    allowed = _REQUIRED_FIELDS | _CONNECTION_FIELDS
+    if name == "team-leader":
+        allowed = allowed | {"allow_runtime_swarm"}
+    for field in entry:
+        if field not in allowed:
+            diagnostics.append("{0}.{1} is not supported.".format(name, field))
+    for field in _REQUIRED_FIELDS:
+        value = entry.get(field)
+        if not isinstance(value, str) or not value.strip():
+            diagnostics.append(
+                "{0}.{1} must be a non-empty string.".format(name, field)
             )
-            for name, entry in known_entries.items()
-        }
+    for field in _CONNECTION_FIELDS:
+        if field not in entry:
+            continue
+        value = entry[field]
+        if not isinstance(value, str) or not value.strip():
+            diagnostics.append(
+                "{0}.{1} must be a non-empty string when supplied.".format(
+                    name, field
+                )
+            )
+        elif field == "api_key_env" and not _ENVIRONMENT_NAME.fullmatch(value):
+            diagnostics.append(
+                "{0}.api_key_env must name an environment variable.".format(name)
+            )
+    if name == "team-leader" and "allow_runtime_swarm" in entry and not isinstance(
+        entry["allow_runtime_swarm"], bool
+    ):
+        diagnostics.append("team-leader.allow_runtime_swarm must be a boolean.")
+    if len(diagnostics) != initial_count:
+        return None
+    return RolePreset(
+        runtime=str(entry["runtime"]),
+        model=str(entry["model"]),
+        base_url=str(entry["base_url"]) if "base_url" in entry else None,
+        api_key_env=(
+            str(entry["api_key_env"]) if "api_key_env" in entry else None
+        ),
+        allow_runtime_swarm=(
+            bool(entry.get("allow_runtime_swarm", True))
+            if name == "team-leader"
+            else False
+        ),
     )

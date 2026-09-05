@@ -19,6 +19,7 @@ from .runner_batch import (
     prepare_evidence,
     read_batch,
     retain_batch,
+    resolved_role_preset,
     validate_batch_roles,
 )
 from .runner_io import (
@@ -35,6 +36,7 @@ from .runner_models import (
     Project,
     RunnerError,
     Task,
+    role_alias_marker,
 )
 from .runner_process import OPERATION_TIMEOUT_SECONDS, stop_worker
 from .runner_project import (
@@ -80,7 +82,7 @@ def launch_batch(batch_file: Path, cwd: Path) -> LaunchResponse:
     launch_plans = []
     for task in batch.tasks:
         branch, worktree = _task_coordinates(project, batch.run_id, task)
-        preset = project.role_bindings[task.role]
+        preset = resolved_role_preset(task, project.role_bindings)
         launch_plans.append(
             _TaskLaunchPlan(
                 task=task,
@@ -384,7 +386,7 @@ def _start_turn(
         alias, session_directory = _reserve_alias(
             session_root,
             task,
-            ROLE_ALIAS_MARKERS[task.role],
+            role_alias_marker(task.role),
             alias_history,
         )
         launch_document = runtime_context.launch_document()
@@ -583,7 +585,10 @@ def _historical_alias_is_valid(task: Task, alias: str) -> bool:
     if not alias.startswith(prefix):
         return False
     suffix = alias[len(prefix) :]
-    if len(suffix) < 2 or suffix[0] not in ROLE_ALIAS_MARKERS.values():
+    if len(suffix) < 2 or suffix[0] not in {
+        *ROLE_ALIAS_MARKERS.values(),
+        "x",
+    }:
         return False
     ordinal = suffix[1:]
     return (
@@ -697,7 +702,7 @@ def _preflight_runtime_context(
             runtime_store=project.runtime_store,
             executable=runtime_executable(preset.runtime),
             git_common_directory=project.common_directory,
-            role=task.role,
+            role=task.policy_role or task.role,
             model=preset.model,
             base_url=preset.base_url,
             api_key_env=preset.api_key_env,

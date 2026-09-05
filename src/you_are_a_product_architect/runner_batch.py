@@ -10,7 +10,13 @@ from typing import Mapping
 
 import yaml
 
-from .runner_models import LOGICAL_ROLES, Batch, RunnerError, Task
+from .project_roles import (
+    ROLE_NAMES,
+    ProjectRolesError,
+    RolePreset,
+    parse_inline_role,
+)
+from .runner_models import Batch, RunnerError, Task
 
 
 RUN_ID = re.compile(
@@ -149,11 +155,24 @@ def validate_batch_roles(
 ) -> None:
     """Require every logical task role to have a selected-Runtime binding."""
 
-    if any(task.role not in role_bindings for task in batch.tasks):
+    if any(
+        task.inline_preset is None and task.role not in role_bindings
+        for task in batch.tasks
+    ):
         raise RunnerError(
             "ROLE_NOT_CONFIGURED",
             "The selected logical Engineer role is not configured.",
         )
+
+
+def resolved_role_preset(
+    task: Task, role_bindings: Mapping[str, RolePreset]
+) -> RolePreset:
+    """Return one task's immutable inline or reusable Runtime settings."""
+
+    if task.inline_preset is not None:
+        return task.inline_preset
+    return role_bindings[task.role]
 
 
 def _read_task(
@@ -191,11 +210,26 @@ def _read_task(
             "TICKET_NAME_INVALID",
             "ticket_name must be 1-64 ASCII lowercase kebab-case characters.",
         )
-    role = task_document["role"]
-    if (
-        not isinstance(role, str)
-        or role not in LOGICAL_ROLES
-    ):
+    role_value = task_document["role"]
+    inline_preset = None
+    if isinstance(role_value, str):
+        role = role_value
+        if role not in ROLE_NAMES:
+            raise RunnerError(
+                "ROLE_NOT_CONFIGURED",
+                "The selected logical Engineer role is not configured.",
+            )
+        policy_role = role
+    elif isinstance(role_value, dict):
+        try:
+            role, inline_preset = parse_inline_role(role_value)
+        except ProjectRolesError as error:
+            raise RunnerError(
+                "ROLE_NOT_CONFIGURED",
+                "The selected inline role is invalid.",
+            ) from error
+        policy_role = role if role in ROLE_NAMES else "temporary-role"
+    else:
         raise RunnerError(
             "ROLE_NOT_CONFIGURED",
             "The selected logical Engineer role is not configured.",
@@ -265,6 +299,8 @@ def _read_task(
         requested_skills=tuple(requested_skills),
         report_file=report_file,
         review_round=review_round,
+        inline_preset=inline_preset,
+        policy_role=policy_role,
     )
 
 

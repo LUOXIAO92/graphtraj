@@ -11,6 +11,105 @@ from conftest import FakeCodex, InstalledCommands, run_process, wait_for_file
 from test_agent_runner_batch import configure_harness
 
 
+def _register_ready_inline_ticket(harness_root: Path, product: Path) -> None:
+    ticket_input = harness_root / "ticket.yml"
+    ticket_input.write_text(
+        yaml.safe_dump(
+            {
+                "ticket_id": "75",
+                "ticket_name": "inline-specialist",
+                "source": "https://github.com/example/project/issues/75",
+                "title": "Run an inline specialist",
+                "body": "Investigate the accepted Ticket.",
+                "dependencies": [],
+            },
+            sort_keys=False,
+        )
+    )
+    registered = run_process(
+        [str(product), "ticket", "register", "--ticket-file", str(ticket_input)],
+        cwd=harness_root,
+    )
+    assert registered.returncode == 0, registered.stderr
+    readiness = harness_root / "readiness.md"
+    readiness.write_text("The registered Ticket has no unmet dependencies.\n")
+    state_change = harness_root / "state-change.yml"
+    state_change.write_text(
+        yaml.safe_dump(
+            {
+                "ticket_id": "75",
+                "status": "ready",
+                "active_team_ordinal": None,
+                "worktree": None,
+                "branch": None,
+                "current_candidate": None,
+                "caused_by_event_ids": [],
+                "evidence_refs": ["readiness.md"],
+            },
+            sort_keys=False,
+        )
+    )
+    ready = run_process(
+        [str(product), "ticket", "update", "--state-file", str(state_change)],
+        cwd=harness_root,
+    )
+    assert ready.returncode == 0, ready.stderr
+
+
+def test_installed_runner_applies_inline_settings_to_an_existing_preset(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    harness_root, _, _, environment = configure_harness(
+        installed_commands,
+        temporary_git_repository,
+        fake_codex,
+        tmp_path,
+    )
+    _register_ready_inline_ticket(harness_root, installed_commands.product)
+
+    roles_file = harness_root / ".graphtraj" / "roles.yml"
+    roles_before = roles_file.read_bytes()
+    batch = harness_root / "team-batch.yml"
+    batch.write_text(
+        "tasks:\n"
+        "  - ticket_id: \"75\"\n"
+        "    ticket_name: inline-specialist\n"
+        "    role:\n"
+        "      team-leader:\n"
+        "        runtime: codex\n"
+        "        model: gpt-5.6-luna\n"
+        "        allow_runtime_swarm: false\n"
+    )
+    environment.update(
+        {
+            "FAKE_CODEX_LIFECYCLE_ACTION": "complete-team-round",
+            "FAKE_CODEX_CAPTURE_ROLE": "1",
+            "FAKE_CODEX_APPEND_LOG": "1",
+            "GRAPHTRAJ_AGENT_RUNNER": str(installed_commands.runner),
+        }
+    )
+
+    launched = run_process(
+        [str(installed_commands.runner), "--batch-input", str(batch)],
+        cwd=harness_root,
+        env=environment,
+        timeout=10,
+    )
+
+    assert launched.returncode == 0, launched.stderr
+    records = [json.loads(line) for line in fake_codex.log_file.read_text().splitlines()]
+    leader_records = [record for record in records if record["role"] == "team-leader"]
+    assert leader_records
+    assert all(
+        record["argv"][record["argv"].index("--model") + 1] == "gpt-5.6-luna"
+        for record in leader_records
+    )
+    assert roles_file.read_bytes() == roles_before
+
+
 @pytest.mark.parametrize(
     ("leader_decision", "expected_status", "round_closed", "runner_succeeds"),
     (
@@ -228,3 +327,251 @@ def test_installed_runner_rejects_non_run_free_main_batch_fields(
         assert yaml.safe_load(result.stdout)["error"]["code"] == "invalid-input"
 
     assert not (harness_root / ".graphtraj" / "state" / "batches").exists()
+
+
+def test_installed_runner_runs_a_main_inline_specialist_without_creating_a_preset(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    harness_root, _, integration, environment = configure_harness(
+        installed_commands,
+        temporary_git_repository,
+        fake_codex,
+        tmp_path,
+    )
+    _register_ready_inline_ticket(harness_root, installed_commands.product)
+
+    roles_file = harness_root / ".graphtraj" / "roles.yml"
+    roles_before = roles_file.read_bytes()
+    batch = harness_root / "inline-specialist.yml"
+    batch_bytes = (
+        "tasks:\n"
+        "  - ticket_id: \"75\"\n"
+        "    ticket_name: inline-specialist\n"
+        "    role:\n"
+        "      investigation-specialist:\n"
+        "        runtime: codex\n"
+        "        model: gpt-5.6-luna\n"
+        "    instruction: Inspect the Ticket without joining its Team.\n"
+    ).encode()
+    batch.write_bytes(batch_bytes)
+    environment.update(
+        {
+            "FAKE_CODEX_CAPTURE_STDIN": "1",
+            "FAKE_CODEX_CAPTURE_CONNECTION": "1",
+        }
+    )
+
+    launched = run_process(
+        [str(installed_commands.runner), "--batch-input", str(batch)],
+        cwd=harness_root,
+        env=environment,
+        timeout=10,
+    )
+
+    assert launched.returncode == 0, launched.stderr
+    output = yaml.safe_load(launched.stdout)
+    task = output["tasks"][0]
+    assert task["role"] == "investigation-specialist"
+    assert task["launch_status"] == "completed"
+    retained = Path(output["retained_batch_file"])
+    assert retained.read_bytes() == batch_bytes
+    assert retained.stat().st_mode & 0o222 == 0
+    assert roles_file.read_bytes() == roles_before
+    runtime = json.loads(fake_codex.log_file.read_text())
+    assert runtime["cwd"] == str(integration)
+    assert "Investigate the accepted Ticket." in runtime["stdin"]
+    assert "Inspect the Ticket without joining its Team." in runtime["stdin"]
+    assert runtime["connection"]["base_url"] is None
+    assert any(
+        argument.startswith("agents=") and "enabled = false" in argument
+        for argument in runtime["argv"]
+    )
+    session = yaml.safe_load(
+        (
+            harness_root
+            / ".codex"
+            / "agent-runner"
+            / "sessions"
+            / task["alias"]
+            / "mapping.yml"
+        ).read_text()
+    )
+    assert session["role"] == "investigation-specialist"
+    assert session["parent"] is None
+    assert (
+        harness_root
+        / ".codex"
+        / "agent-runner"
+        / "sessions"
+        / task["alias"]
+        / "events.jsonl"
+    ).is_file()
+    ticket_directory = (
+        harness_root
+        / ".graphtraj"
+        / "state"
+        / "tickets"
+        / "75-inline-specialist"
+    )
+    current = yaml.safe_load((ticket_directory / "ticket.yml").read_text())
+    assert current["active_team_ordinal"] is None
+    assert not (ticket_directory / "teams").exists()
+
+
+def test_installed_runner_runs_a_team_leader_inline_specialist_outside_the_team(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    harness_root, _, _, environment = configure_harness(
+        installed_commands,
+        temporary_git_repository,
+        fake_codex,
+        tmp_path,
+    )
+    _register_ready_inline_ticket(harness_root, installed_commands.product)
+
+    roles_file = harness_root / ".graphtraj" / "roles.yml"
+    roles_before = roles_file.read_bytes()
+    batch = harness_root / "team-batch.yml"
+    batch.write_text(
+        "tasks:\n"
+        "  - ticket_id: \"75\"\n"
+        "    ticket_name: inline-specialist\n"
+        "    role: team-leader\n"
+    )
+    environment.update(
+        {
+            "FAKE_CODEX_LIFECYCLE_ACTION": "complete-team-round",
+            "FAKE_CODEX_INLINE_SPECIALIST": "1",
+            "GRAPHTRAJ_AGENT_RUNNER": str(installed_commands.runner),
+        }
+    )
+
+    launched = run_process(
+        [str(installed_commands.runner), "--batch-input", str(batch)],
+        cwd=harness_root,
+        env=environment,
+        timeout=10,
+    )
+
+    assert launched.returncode == 0, launched.stderr
+    ticket_directory = (
+        harness_root
+        / ".graphtraj"
+        / "state"
+        / "tickets"
+        / "75-inline-specialist"
+    )
+    team = yaml.safe_load((ticket_directory / "teams" / "1" / "team.yml").read_text())
+    mappings = [
+        yaml.safe_load(path.read_text())
+        for path in (harness_root / ".codex" / "agent-runner" / "sessions").glob(
+            "*/mapping.yml"
+        )
+    ]
+    leader = next(mapping for mapping in mappings if mapping["role"] == "team-leader")
+    specialist = next(
+        mapping
+        for mapping in mappings
+        if mapping["role"] == "investigation-specialist"
+    )
+    assert specialist["parent"] == leader["alias"]
+    assert specialist["alias"] not in {
+        member["session_ref"] for member in team["members"].values()
+    }
+    assert (
+        ticket_directory
+        / "teams"
+        / "1"
+        / "traces"
+        / specialist["alias"]
+        / "events.jsonl"
+    ).is_file()
+    retained = [
+        yaml.safe_load(path.read_text())
+        for path in (harness_root / ".graphtraj" / "state" / "batches").glob("*.yml")
+    ]
+    assert any(
+        task["role"]
+        == {
+            "investigation-specialist": {
+                "runtime": "codex",
+                "model": "gpt-5.6-luna",
+            }
+        }
+        for retained_batch in retained
+        for task in retained_batch["tasks"]
+    )
+    assert roles_file.read_bytes() == roles_before
+
+
+@pytest.mark.parametrize(
+    "role",
+    (
+        {
+            "first-specialist": {
+                "runtime": "codex",
+                "model": "gpt-5.6-luna",
+            },
+            "second-specialist": {
+                "runtime": "codex",
+                "model": "gpt-5.6-luna",
+            },
+        },
+        {
+            "investigation-specialist": {
+                "runtime": "codex",
+                "model": "gpt-5.6-luna",
+                "dispatch_depth": 2,
+                "agents": {"enabled": True},
+            }
+        },
+    ),
+)
+def test_installed_runner_rejects_malformed_inline_roles_before_retaining_a_batch(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+    role: dict[str, object],
+) -> None:
+    harness_root, _, _, environment = configure_harness(
+        installed_commands,
+        temporary_git_repository,
+        fake_codex,
+        tmp_path,
+    )
+    roles_file = harness_root / ".graphtraj" / "roles.yml"
+    roles_before = roles_file.read_bytes()
+    batch = harness_root / "invalid-inline-role.yml"
+    batch.write_text(
+        yaml.safe_dump(
+            {
+                "tasks": [
+                    {
+                        "ticket_id": "75",
+                        "ticket_name": "inline-specialist",
+                        "role": role,
+                    }
+                ]
+            },
+            sort_keys=False,
+        )
+    )
+
+    result = run_process(
+        [str(installed_commands.runner), "--batch-input", str(batch)],
+        cwd=harness_root,
+        env=environment,
+    )
+
+    assert result.returncode == 1
+    assert yaml.safe_load(result.stdout)["error"]["code"] == "invalid-input"
+    assert roles_file.read_bytes() == roles_before
+    assert not (harness_root / ".graphtraj" / "state" / "batches").exists()
+    assert not fake_codex.log_file.exists()

@@ -42,6 +42,62 @@ def wait_for_probe_completion(commands, alias, harness_root, environment):
     raise AssertionError('Probe timed out; Runner interruption: ' + interrupted.stdout + interrupted.stderr)
 
 
+def wait_for_probe_artifacts(commands, alias, harness_root, environment, proofs, timeout=300):
+    deadline = time.monotonic() + timeout
+    while not all(path.is_file() for path in proofs) and time.monotonic() < deadline:
+        time.sleep(1)
+    result = run_process(
+        [str(commands.runner), 'status', alias],
+        cwd=harness_root, env=environment, timeout=15,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    if yaml.safe_load(result.stdout)['aliases'][0]['activity'] != 'idle':
+        interrupted = run_process(
+            [str(commands.runner), 'interrupt', alias],
+            cwd=harness_root, env=environment, timeout=30,
+        )
+        assert interrupted.returncode == 0, interrupted.stdout + interrupted.stderr
+    assert all(path.is_file() for path in proofs), 'Missing probe proofs: ' + ', '.join(
+        str(path) for path in proofs if not path.is_file()
+    )
+
+
+@pytest.mark.parametrize('missing_proof', (False, True))
+def test_probe_artifact_boundary_interrupts_running_runtime(
+    installed_commands, temporary_git_repository, fake_codex, tmp_path, missing_proof,
+):
+    from test_agent_runner_batch import configure_harness
+
+    harness, _, _, environment = configure_harness(
+        installed_commands, temporary_git_repository, fake_codex, tmp_path,
+    )
+    environment['FAKE_CODEX_RELEASE_FILE'] = str(tmp_path / 'hold-runtime')
+    ticket = harness / 'probe.md'
+    ticket.write_text('# Controlled probe\n')
+    batch = harness / 'probe.yml'
+    batch.write_text(yaml.safe_dump({'run_id': '20260906-probe-boundary', 'tasks': [{
+        'ticket_id': '82', 'ticket_name': 'probe-boundary', 'role': 'engineer-junior',
+        'ticket_file': str(ticket),
+    }]}))
+    launched = run_process(
+        [str(installed_commands.runner), '--batch-input', str(batch)],
+        cwd=harness, env=environment,
+    )
+    assert launched.returncode == 0, launched.stderr
+    alias = yaml.safe_load(launched.stdout)['tasks'][0]['alias']
+    proofs = [fake_codex.log_file, tmp_path / 'missing'] if missing_proof else [fake_codex.log_file]
+    if missing_proof:
+        with pytest.raises(AssertionError, match='Missing probe proofs'):
+            wait_for_probe_artifacts(installed_commands, alias, harness, environment, proofs, timeout=0)
+    else:
+        wait_for_probe_artifacts(installed_commands, alias, harness, environment, proofs)
+    status = run_process(
+        [str(installed_commands.runner), 'status', alias], cwd=harness, env=environment,
+    )
+    assert status.returncode == 0, status.stderr
+    assert yaml.safe_load(status.stdout)['aliases'][0]['last_outcome'] == 'interrupted'
+
+
 @pytest.mark.parametrize('same_root', (False, True))
 def test_installed_hook_allows_only_reads_of_enabled_external_skills(
     installed_commands, temporary_git_repository, fake_codex, tmp_path, same_root,
@@ -938,9 +994,17 @@ def test_real_codex_uses_harness_hook_and_explicit_skill_configuration(
     assert launched.returncode == 0, launched.stderr
     task = yaml.safe_load(launched.stdout)["tasks"][0]
     alias = task["alias"]
-    wait_for_probe_completion(mutable_installed_commands, alias, harness_root, runtime_environment)
-
     ticket_worktree = Path(task["worktree_path"])
+    wait_for_probe_artifacts(
+        mutable_installed_commands, alias, harness_root, runtime_environment,
+        [
+            ticket_worktree / '.harness-skill-proof',
+            ticket_worktree / '.repository-selected-skill-proof',
+            ticket_worktree / '.native-code-write-proof',
+            ticket_worktree / '.state' / 'native-evidence-write-proof',
+            harness_hook_marker,
+        ],
+    )
     assert (ticket_worktree / ".harness-skill-proof").read_text(
         encoding="utf-8"
     ).strip() == "implement"

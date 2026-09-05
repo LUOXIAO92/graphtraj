@@ -22,15 +22,9 @@ from .runner_project import discover_project, preflight_worktree, provision_work
 
 
 _COMMIT = re.compile(r"[0-9a-f]{40}")
-_CHILD_ROLES = frozenset(
-    {
-        "engineer-junior",
-        "engineer-senior",
-        "engineer-expert",
-        "standards-reviewer",
-        "spec-reviewer",
-    }
-)
+_ENGINEER_ROLES = frozenset({"engineer-junior", "engineer-senior", "engineer-expert"})
+_REVIEWER_ROLES = frozenset({"standards-reviewer", "spec-reviewer"})
+_CHILD_ROLES = _ENGINEER_ROLES | _REVIEWER_ROLES
 
 
 def register_child_batch(batch_file: Path, cwd: Path, registration: Path) -> LaunchResponse:
@@ -41,17 +35,17 @@ def register_child_batch(batch_file: Path, cwd: Path, registration: Path) -> Lau
     if batch.run_id is not None or any(
         task.ticket_id != parent_ticket
         or (
-            task.role not in _CHILD_ROLES
+            _task_policy(task) not in _CHILD_ROLES
             and not _is_inline_specialist(task)
         )
         for task in batch.tasks
     ):
         raise RunnerError("BATCH_SCHEMA_INVALID", "A direct child Batch must contain formal roles for its parent Ticket.")
-    engineers = [task for task in batch.tasks if task.role.startswith("engineer-")]
-    reviewers = [task for task in batch.tasks if task.role.endswith("reviewer")]
+    engineers = [task for task in batch.tasks if _task_policy(task) in _ENGINEER_ROLES]
+    reviewers = [task for task in batch.tasks if _task_policy(task) in _REVIEWER_ROLES]
     if not (
         (len(batch.tasks) == 1 and len(engineers) == 1)
-        or {task.role for task in reviewers} == {"standards-reviewer", "spec-reviewer"}
+        or {_task_policy(task) for task in reviewers} == _REVIEWER_ROLES
         and len(batch.tasks) == 2
         or len(batch.tasks) == 1 and _is_inline_specialist(batch.tasks[0])
     ):
@@ -80,6 +74,14 @@ def _is_inline_specialist(task: Task) -> bool:
     """Return whether a task uses the fixed non-Team temporary policy."""
 
     return task.inline_preset is not None and task.policy_role == "temporary-role"
+
+
+def _task_policy(task: Task, role: str | None = None) -> str:
+    """Return the fixed policy applied to this invocation."""
+
+    if role is None or task.role == role:
+        return task.policy_role or task.role
+    return role
 
 
 def launch_team_batch(batch: Batch, cwd: Path) -> LaunchResponse:
@@ -202,7 +204,10 @@ def _deliver_ticket(project: Any, requested: Task, retained_batch: Path) -> dict
         registration,
         retained_batch,
     )
-    if len(engineer_batch.tasks) != 1 or not engineer_batch.tasks[0].role.startswith("engineer-"):
+    if (
+        len(engineer_batch.tasks) != 1
+        or _task_policy(engineer_batch.tasks[0]) not in _ENGINEER_ROLES
+    ):
         raise RunnerError("BATCH_SCHEMA_INVALID", "The first direct child Batch must contain one Engineer.")
     engineer_task = replace(
         engineer_batch.tasks[0],
@@ -304,7 +309,7 @@ def _deliver_ticket(project: Any, requested: Task, retained_batch: Path) -> dict
         registration,
         retained_batch,
     )
-    if {child.role for child in reviewer_batch.tasks} != {"standards-reviewer", "spec-reviewer"}:
+    if {_task_policy(child) for child in reviewer_batch.tasks} != _REVIEWER_ROLES:
         raise RunnerError("BATCH_SCHEMA_INVALID", "The second direct child Batch must contain both Reviewers.")
     child_results = []
     for child in reviewer_batch.tasks:
@@ -342,8 +347,20 @@ def _deliver_ticket(project: Any, requested: Task, retained_batch: Path) -> dict
         leader_alias, leader_session, registration, None, retained_batch,
         "Reviewers completed:\n" + yaml.safe_dump(child_results, sort_keys=False),
     )
-    if registration.exists():
-        raise RunnerError("BATCH_SCHEMA_INVALID", "The completed Team Round cannot register another child Batch.")
+    _, _, leader_alias, leader_session = _next_formal_batch(
+        project,
+        task,
+        definition,
+        ticket_content,
+        worktree,
+        ticket_directory,
+        traces,
+        leader_alias,
+        leader_session,
+        registration,
+        retained_batch,
+        allow_no_formal=True,
+    )
     candidate = _validate_round(round_directory, worktree)
     decision = _leader_decision(round_directory / "leader.md")
     evidence = [
@@ -392,12 +409,16 @@ def _next_formal_batch(
     leader_session: str,
     registration: Path,
     retained_batch: Path,
-) -> tuple[Batch, Path, str, str]:
+    *,
+    allow_no_formal: bool = False,
+) -> tuple[Batch | None, Path | None, str, str]:
     """Run temporary child specialists before returning the next formal Batch."""
 
-    while True:
+    while registration.exists():
         batch, batch_path = _registered_batch(registration, worktree)
         if len(batch.tasks) != 1 or not _is_inline_specialist(batch.tasks[0]):
+            if allow_no_formal:
+                raise RunnerError("BATCH_SCHEMA_INVALID", "The completed Team Round cannot register another child Batch.")
             return batch, batch_path, leader_alias, leader_session
         specialist = replace(
             batch.tasks[0],
@@ -435,6 +456,9 @@ def _next_formal_batch(
                 sort_keys=False,
             ),
         )
+    if allow_no_formal:
+        return None, None, leader_alias, leader_session
+    raise RunnerError("BATCH_SCHEMA_INVALID", "The Team Leader did not register its required direct child Batch.")
 
 
 def _request_state(
@@ -547,6 +571,7 @@ def _run_agent(
         session_directory = project.runner_directory / "sessions" / alias
 
     inline_role = task.inline_preset is not None and task.role == role
+    policy_role = _task_policy(task, role)
     preset = (
         resolved_role_preset(task, project.role_bindings)
         if inline_role
@@ -556,7 +581,7 @@ def _run_agent(
         runtime_store=project.runtime_store,
         executable=runtime_executable(preset.runtime),
         git_common_directory=project.common_directory,
-        role=(task.policy_role or role) if inline_role else role,
+        role=policy_role,
         model=preset.model,
         base_url=preset.base_url,
         api_key_env=preset.api_key_env,
@@ -590,13 +615,13 @@ def _run_agent(
     task_prompt = prompt or task.ticket_content
     if task.instruction:
         task_prompt += "\n## Additional instruction\n\n" + task.instruction + "\n"
-    if role.startswith("engineer-"):
+    if policy_role in _ENGINEER_ROLES:
         task_prompt += (
             "\nWrite the fixed candidate and self-review to "
             ".state/teams/1/rounds/1/engineer.md and its test results to "
             ".state/teams/1/rounds/1/validation.md. Include the candidate commit in both.\n"
         )
-    elif role.endswith("reviewer"):
+    elif policy_role in _REVIEWER_ROLES:
         if task.report_file is None:
             raise RunnerError(
                 "REPORT_FILE_INVALID",
@@ -614,7 +639,7 @@ def _run_agent(
         candidate = run_git(worktree, "rev-parse", "HEAD")
         brief = (
             "Review only for Repository Guidance and established project standards."
-            if role == "standards-reviewer"
+            if policy_role == "standards-reviewer"
             else "Review only against the accepted Ticket and its acceptance criteria."
         )
         task_prompt += (
@@ -630,7 +655,7 @@ def _run_agent(
         "GRAPHTRAJ_TICKET_NAME": task.ticket_name,
         "GRAPHTRAJ_HARNESS_ROOT": str(project.harness_root),
     }
-    if role.endswith("reviewer"):
+    if policy_role in _REVIEWER_ROLES:
         environment.update(
             GRAPHTRAJ_REVIEW_CANDIDATE=candidate,
             GRAPHTRAJ_REVIEW_COMPARISON=comparison,

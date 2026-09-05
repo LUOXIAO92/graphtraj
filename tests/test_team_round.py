@@ -421,11 +421,74 @@ def test_installed_runner_runs_a_main_inline_specialist_without_creating_a_prese
     assert not (ticket_directory / "teams").exists()
 
 
+@pytest.mark.parametrize("role_name", ("dependency-reviewer", "engineer-specialist"))
+def test_installed_runner_keeps_new_inline_role_names_outside_formal_team_policy(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+    role_name: str,
+) -> None:
+    harness_root, _, _, environment = configure_harness(
+        installed_commands,
+        temporary_git_repository,
+        fake_codex,
+        tmp_path,
+    )
+    _register_ready_inline_ticket(harness_root, installed_commands.product)
+
+    batch = harness_root / (role_name + ".yml")
+    batch.write_text(
+        "tasks:\n"
+        "  - ticket_id: \"75\"\n"
+        "    ticket_name: inline-specialist\n"
+        "    role:\n"
+        "      {0}:\n"
+        "        runtime: codex\n"
+        "        model: gpt-5.6-luna\n"
+        "    instruction: Inspect the Ticket without formal Team work.\n".format(role_name)
+    )
+    environment.update(
+        {
+            "FAKE_CODEX_CAPTURE_STDIN": "1",
+            "FAKE_CODEX_CAPTURE_ROLE": "1",
+            "FAKE_CODEX_CAPTURE_ENV": (
+                "GRAPHTRAJ_REVIEW_CANDIDATE,GRAPHTRAJ_REVIEW_COMPARISON,"
+                "GRAPHTRAJ_REVIEW_BRIEF,GRAPHTRAJ_REVIEW_REPORT"
+            ),
+        }
+    )
+
+    launched = run_process(
+        [str(installed_commands.runner), "--batch-input", str(batch)],
+        cwd=harness_root,
+        env=environment,
+        timeout=10,
+    )
+
+    assert launched.returncode == 0, launched.stderr
+    runtime = json.loads(fake_codex.log_file.read_text())
+    assert runtime["role"] == role_name
+    assert "Write the fixed candidate" not in runtime["stdin"]
+    assert "Review brief:" not in runtime["stdin"]
+    assert not any(runtime["environment"].values())
+
+
+@pytest.mark.parametrize(
+    ("specialist_environment", "specialist_role"),
+    (
+        ("FAKE_CODEX_INLINE_SPECIALIST", "dependency-reviewer"),
+        ("FAKE_CODEX_INLINE_SPECIALIST", "engineer-specialist"),
+        ("FAKE_CODEX_FINAL_INLINE_SPECIALIST", "investigation-specialist"),
+    ),
+)
 def test_installed_runner_runs_a_team_leader_inline_specialist_outside_the_team(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
     fake_codex: FakeCodex,
     tmp_path: Path,
+    specialist_environment: str,
+    specialist_role: str,
 ) -> None:
     harness_root, _, _, environment = configure_harness(
         installed_commands,
@@ -447,8 +510,11 @@ def test_installed_runner_runs_a_team_leader_inline_specialist_outside_the_team(
     environment.update(
         {
             "FAKE_CODEX_LIFECYCLE_ACTION": "complete-team-round",
-            "FAKE_CODEX_INLINE_SPECIALIST": "1",
+            specialist_environment: "1",
+            "FAKE_CODEX_INLINE_ROLE": specialist_role,
             "GRAPHTRAJ_AGENT_RUNNER": str(installed_commands.runner),
+            "FAKE_CODEX_CAPTURE_ROLE": "1",
+            "FAKE_CODEX_APPEND_LOG": "1",
         }
     )
 
@@ -478,7 +544,7 @@ def test_installed_runner_runs_a_team_leader_inline_specialist_outside_the_team(
     specialist = next(
         mapping
         for mapping in mappings
-        if mapping["role"] == "investigation-specialist"
+        if mapping["role"] == specialist_role
     )
     assert specialist["parent"] == leader["alias"]
     assert specialist["alias"] not in {
@@ -499,7 +565,7 @@ def test_installed_runner_runs_a_team_leader_inline_specialist_outside_the_team(
     assert any(
         task["role"]
         == {
-            "investigation-specialist": {
+            specialist_role: {
                 "runtime": "codex",
                 "model": "gpt-5.6-luna",
             }
@@ -508,6 +574,10 @@ def test_installed_runner_runs_a_team_leader_inline_specialist_outside_the_team(
         for task in retained_batch["tasks"]
     )
     assert roles_file.read_bytes() == roles_before
+    records = [json.loads(line) for line in fake_codex.log_file.read_text().splitlines()]
+    leader_records = [record for record in records if record["role"] == "team-leader"]
+    assert len(leader_records) == 4
+    assert all("resume" in record["argv"] for record in leader_records[1:])
 
 
 @pytest.mark.parametrize(

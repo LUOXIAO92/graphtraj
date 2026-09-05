@@ -7,12 +7,13 @@ import os
 from contextlib import contextmanager
 from typing import Iterator, BinaryIO
 
+from .project_configuration import ProjectConfiguration
 from .runner_models import Project, RunnerError
 
 
 @contextmanager
 def capacity_positions(
-    project: Project, count: int, inherited_fd: int | None = None,
+    project: Project | ProjectConfiguration, count: int, inherited_fd: int | None = None,
 ) -> Iterator[list[BinaryIO]]:
     """Acquire the whole set or release it; inherited positions keep their lock."""
     positions = []

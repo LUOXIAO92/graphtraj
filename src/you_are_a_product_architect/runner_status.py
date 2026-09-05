@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import re
 from pathlib import Path
-from typing import Any, Dict, Sequence, Tuple
+from typing import Any, Dict, Mapping, Sequence, Tuple
 
 import yaml
 
@@ -15,9 +15,9 @@ from .runner_process import process_is_alive
 from .runner_project import discover_runner_directory
 
 
-ALIAS = re.compile(r"^[A-Za-z0-9._%-]+@[jser][1-9][0-9]*$")
+ALIAS = re.compile(r"^[A-Za-z0-9._%-]+@[ldjser][1-9][0-9]*$")
 TERMINAL_OUTCOMES = frozenset({"completed", "interrupted", "runtime-error"})
-MAPPING_FIELDS = frozenset(
+LEGACY_MAPPING_FIELDS = frozenset(
     {
         "alias",
         "runtime",
@@ -30,6 +30,22 @@ MAPPING_FIELDS = frozenset(
         "ticket_file",
         "evidence_path",
         "session",
+        "worker_pid",
+        "runtime_pid",
+    }
+)
+SESSION_MAPPING_FIELDS = frozenset(
+    {
+        "alias",
+        "runtime",
+        "session",
+        "ticket_id",
+        "team_generation",
+        "role",
+        "parent",
+        "retained_batch_file",
+        "worktree_path",
+        "trace_file",
         "worker_pid",
         "runtime_pid",
     }
@@ -57,6 +73,8 @@ def status_aliases(aliases: Sequence[str], cwd: Path) -> StatusResponse:
 
 def _status_alias(runner_directory: Path, alias: str) -> Dict[str, str]:
     mapping, session_directory = read_alias_mapping(runner_directory, alias)
+    if is_session_mapping(mapping):
+        return _status_session(mapping, session_directory, alias)
     turn_file = session_directory / "turn.yml"
     if os.path.lexists(str(turn_file)):
         outcome = read_terminal_outcome(turn_file)
@@ -68,6 +86,24 @@ def _status_alias(runner_directory: Path, alias: str) -> Dict[str, str]:
 
     require_active_turn(runner_directory, alias, mapping)
     return {"alias": alias, "activity": "running"}
+
+
+def _status_session(
+    mapping: Dict[str, Any], session_directory: Path, alias: str
+) -> Dict[str, str]:
+    execution_file = session_directory / "execution.yml"
+    if os.path.lexists(str(execution_file)):
+        return {
+            "alias": alias,
+            "activity": "idle",
+            "last_outcome": read_terminal_outcome(execution_file),
+        }
+    if process_is_alive(mapping["worker_pid"]):
+        status = {"alias": alias, "activity": "running"}
+        if "last_outcome" in mapping:
+            status["last_outcome"] = mapping["last_outcome"]
+        return status
+    raise _invalid_activity()
 
 
 def read_alias_mapping(
@@ -95,12 +131,24 @@ def read_alias_mapping(
     return mapping, session_directory
 
 
+def is_session_mapping(mapping: Mapping[str, Any]) -> bool:
+    return "run_id" not in mapping and SESSION_MAPPING_FIELDS.issubset(mapping)
+
+
 def _valid_mapping(mapping: object, alias: str) -> bool:
-    if not isinstance(mapping, dict) or not MAPPING_FIELDS.issubset(mapping):
+    if not isinstance(mapping, dict):
+        return False
+    if is_session_mapping(mapping):
+        return _valid_session_mapping(mapping, alias)
+    return _valid_legacy_mapping(mapping, alias)
+
+
+def _valid_legacy_mapping(mapping: Dict[str, Any], alias: str) -> bool:
+    if not LEGACY_MAPPING_FIELDS.issubset(mapping):
         return False
     if mapping["alias"] != alias:
         return False
-    string_fields = MAPPING_FIELDS - {"worker_pid", "runtime_pid"}
+    string_fields = LEGACY_MAPPING_FIELDS - {"worker_pid", "runtime_pid"}
     if any(
         not isinstance(mapping[field], str) or not mapping[field]
         for field in string_fields
@@ -111,6 +159,37 @@ def _valid_mapping(mapping: object, alias: str) -> bool:
         and not isinstance(mapping[field], bool)
         and mapping[field] > 0
         for field in ("worker_pid", "runtime_pid")
+    )
+
+
+def _valid_session_mapping(mapping: Dict[str, Any], alias: str) -> bool:
+    if mapping["alias"] != alias:
+        return False
+    string_fields = SESSION_MAPPING_FIELDS - {
+        "team_generation", "parent", "worker_pid", "runtime_pid"
+    }
+    if any(
+        not isinstance(mapping[field], str) or not mapping[field]
+        for field in string_fields
+    ):
+        return False
+    if mapping["parent"] is not None and not isinstance(mapping["parent"], str):
+        return False
+    if "last_outcome" in mapping and (
+        not isinstance(mapping["last_outcome"], str)
+        or mapping["last_outcome"] not in TERMINAL_OUTCOMES
+    ):
+        return False
+    return (
+        isinstance(mapping["team_generation"], int)
+        and not isinstance(mapping["team_generation"], bool)
+        and mapping["team_generation"] > 0
+        and all(
+            isinstance(mapping[field], int)
+            and not isinstance(mapping[field], bool)
+            and mapping[field] > 0
+            for field in ("worker_pid", "runtime_pid")
+        )
     )
 
 

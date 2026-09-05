@@ -857,7 +857,7 @@ def _runtime_source_history_paths(
         source_repository = SourceRepository.from_root(repository_skill_source)
         if harness_repository.common_directory != source_repository.common_directory:
             return frozenset()
-        return source_history_skill_paths(source_repository, source_repository.head)
+        return source_history_skill_paths(harness_repository, harness_repository.head)
     except (GitRepositoryError, OSError):
         return frozenset()
 

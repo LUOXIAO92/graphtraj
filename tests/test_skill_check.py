@@ -233,6 +233,45 @@ agent_runner:
     ]
 
 
+def test_doctor_ignores_a_tracked_same_root_core_skill_before_setup(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    tmp_path: Path,
+) -> None:
+    repository = temporary_git_repository
+    source_skill = repository / ".agents" / "skills" / "implement" / "SKILL.md"
+    source_skill.parent.mkdir(parents=True)
+    source_skill.write_text(
+        "---\nname: implement\ndescription: Repository Skill.\n---\n",
+        encoding="utf-8",
+    )
+    run_process(["git", "add", ".agents"], cwd=repository).check_returncode()
+    run_process(
+        ["git", "commit", "-m", "Add repository implement Skill"], cwd=repository
+    ).check_returncode()
+    user_home = tmp_path / "operator-home"
+    for name in CORE_SKILL_NAMES:
+        if name != "implement":
+            install_skill(user_home / ".agents" / "skills", name)
+
+    result = run_process(
+        [str(installed_commands.product), "doctor"],
+        cwd=repository,
+        env=doctor_environment(user_home),
+    )
+
+    assert result.returncode == 1
+    assert result.stderr == ""
+    assert not (repository / ".graphtraj").exists()
+    assert result.stdout.splitlines() == [
+        "{0}: {1}".format(
+            name,
+            "MISSING" if name == "implement" else "OK",
+        )
+        for name in CORE_SKILL_NAMES
+    ]
+
+
 def test_doctor_has_no_machine_output_mode(
     installed_commands: InstalledCommands,
     tmp_path: Path,

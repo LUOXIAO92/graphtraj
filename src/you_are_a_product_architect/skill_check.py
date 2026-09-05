@@ -169,10 +169,14 @@ def _doctor_source_history_paths(runtime_store: Path) -> frozenset[str]:
     """Return tracked Skill paths only when the Harness and Source roots match."""
 
     try:
-        configuration = load_project_configuration(runtime_store.parent)
-        if configuration.project_root != configuration.harness_root:
-            return frozenset()
-        repository = SourceRepository.from_root(configuration.project_root)
+        harness_root = runtime_store.parent
+        if configuration_exists(harness_root):
+            configuration = load_project_configuration(harness_root)
+            if configuration.project_root != configuration.harness_root:
+                return frozenset()
+            repository = SourceRepository.from_root(configuration.project_root)
+        else:
+            repository = SourceRepository.from_root(harness_root)
         return source_history_skill_paths(repository, repository.head)
     except (GitRepositoryError, OSError, ProjectConfigurationError):
         return frozenset()

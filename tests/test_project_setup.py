@@ -348,6 +348,50 @@ def test_same_root_setup_preflights_source_document_views_before_mutating(
     assert git_output(repository, "worktree", "list", "--porcelain") == worktrees_before
 
 
+def test_same_root_setup_preflights_primary_history_documents_when_dev_is_older(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    repository = temporary_git_repository
+    run_process(["git", "branch", "dev"], cwd=repository).check_returncode()
+    context = repository / "CONTEXT.md"
+    documents = repository / "docs" / "decision.md"
+    context.write_text("Repository-owned context.\n", encoding="utf-8")
+    documents.parent.mkdir()
+    documents.write_text("Repository-owned documentation.\n", encoding="utf-8")
+    run_process(["git", "add", "CONTEXT.md", "docs"], cwd=repository).check_returncode()
+    run_process(
+        ["git", "commit", "-m", "Add repository documents after dev"],
+        cwd=repository,
+    ).check_returncode()
+    assert git_output(repository, "rev-parse", "dev") != git_output(
+        repository, "rev-parse", "HEAD"
+    )
+    documents_before = {context: context.read_bytes(), documents: documents.read_bytes()}
+    user_home = tmp_path / "operator-home"
+    install_user_skills(user_home)
+    worktrees_before = git_output(repository, "worktree", "list", "--porcelain")
+
+    result = run_setup(
+        installed_commands,
+        harness_root=repository,
+        user_home=user_home,
+        fake_codex=fake_codex,
+        answers="",
+    )
+
+    integration = repository / ".graphtraj" / ".agent-worktrees" / "dev"
+    assert result.returncode == 1
+    assert str(integration / "CONTEXT.md") in result.stderr
+    assert str(integration / "docs") in result.stderr
+    assert not (repository / ".graphtraj").exists()
+    assert not (repository / ".codex").exists()
+    assert {path: path.read_bytes() for path in documents_before} == documents_before
+    assert git_output(repository, "worktree", "list", "--porcelain") == worktrees_before
+
+
 def test_same_root_setup_rejects_a_tracked_core_skill_before_mutating(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,

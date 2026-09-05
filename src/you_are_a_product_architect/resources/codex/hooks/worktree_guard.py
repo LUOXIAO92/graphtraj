@@ -446,6 +446,12 @@ def configured_harness_paths(root: Path) -> Optional[Tuple[Path, Path, Path, Pat
                     break
                 configured[name] = path
             else:
+                configured_project_root = configured["project_root"]
+                if (
+                    configured_project_root != resolved_root
+                    and configured_project_root.parent != resolved_root
+                ):
+                    continue
                 worktree_root = configured["agent_worktrees"]
                 state_root = configured["state"]
                 documents_root = configured["docs"]

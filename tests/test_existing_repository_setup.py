@@ -304,6 +304,46 @@ def test_setup_rejects_configured_paths_outside_the_harness_root(
     assert git_output(repository, "worktree", "list", "--porcelain") == worktrees_before
 
 
+def test_setup_and_runner_reject_a_nested_configured_source_repository(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+) -> None:
+    harness_root = temporary_git_repository.parent
+    nested_source = harness_root / "nested" / "source"
+    nested_source.parent.mkdir()
+    create_git_repository(nested_source)
+    config_path = harness_root / ".graphtraj" / "config.yml"
+    config_path.parent.mkdir()
+    configuration = {
+        "version": 1,
+        "paths": {
+            "project_root": "nested/source",
+            "docs": "docs",
+            "agent_worktrees": ".graphtraj/.agent-worktrees",
+            "state": ".graphtraj/state",
+        },
+        "agent_runner": {"dispatch_depth": 2, "max_concurrency": 18},
+    }
+    config_path.write_text(yaml.safe_dump(configuration, sort_keys=False), encoding="utf-8")
+    config_before = config_path.read_bytes()
+    worktrees_before = git_output(nested_source, "worktree", "list", "--porcelain")
+
+    setup = run_setup(installed_commands, harness_root, answers="")
+    status = run_process(
+        [str(installed_commands.runner), "status", "missing@j1"],
+        cwd=harness_root,
+    )
+
+    assert setup.returncode == 1
+    assert "GraphTraj Config is invalid." in setup.stderr
+    assert status.returncode == 1
+    assert "code: invalid-config" in status.stdout
+    assert "GraphTraj Config is invalid." in status.stdout
+    assert config_path.read_bytes() == config_before
+    assert not (harness_root / ".codex").exists()
+    assert git_output(nested_source, "worktree", "list", "--porcelain") == worktrees_before
+
+
 def test_same_root_setup_rejects_a_primary_worktree_not_on_main(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,

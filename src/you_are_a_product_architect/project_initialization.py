@@ -472,19 +472,35 @@ class ProjectSetupPlan:
             ("CONTEXT.md", self.harness_root / "CONTEXT.md"),
             ("docs", self.configuration.docs),
         )
+        primary_entries = {}
+        if self.configuration.project_root == self.harness_root:
+            primary_revision = self.repository.head
+            primary_entries = {
+                name: self.repository.tree_entry(primary_revision, name)
+                for name in ("CONTEXT.md", "docs")
+            }
         for name, target in links:
+            description = self.codex_files.link_action(
+                self.configuration.integration_worktree,
+                name,
+                target,
+            )
             _preflight_link(
                 entry_for(name),
                 self.configuration.integration_worktree / name,
                 target,
-                self.codex_files.link_action(
-                    self.configuration.integration_worktree,
-                    name,
-                    target,
-                ),
+                description,
                 actions,
                 conflicts,
             )
+            if primary_entries.get(name) is not None:
+                _append_conflict(
+                    conflicts,
+                    "{0} conflicts at {1}.".format(
+                        description,
+                        self.configuration.integration_worktree / name,
+                    ),
+                )
 
     def _preflight_exclude_registration(
         self,

@@ -65,6 +65,8 @@ def default_configuration_content(harness_root: Path, project_root: Path) -> str
         configured_project_root = source.relative_to(root).as_posix() or "."
     except ValueError as error:
         raise ProjectConfigurationError("GraphTraj Config is invalid.") from error
+    if not _is_supported_project_root(root, source):
+        raise ProjectConfigurationError("GraphTraj Config is invalid.")
     if configured_project_root == ".":
         return DEFAULT_CONFIG_CONTENT
     return yaml.safe_dump(
@@ -152,6 +154,9 @@ def _configuration_from_document(
         state = _resolve_configured_path(harness_root, paths["state"])
     except (KeyError, TypeError, ValueError, OSError) as error:
         raise ProjectConfigurationError(invalid) from error
+    root = harness_root.resolve()
+    if not _is_supported_project_root(root, project_root):
+        raise ProjectConfigurationError(invalid)
 
     dispatch_depth = limits["dispatch_depth"]
     max_concurrency = limits["max_concurrency"]
@@ -167,7 +172,7 @@ def _configuration_from_document(
     if _paths_overlap(agent_worktrees, state):
         raise ProjectConfigurationError(invalid)
     return ProjectConfiguration(
-        harness_root=harness_root.resolve(),
+        harness_root=root,
         project_root=project_root,
         docs=docs,
         agent_worktrees=agent_worktrees,
@@ -190,6 +195,10 @@ def _resolve_configured_path(harness_root: Path, value: object) -> Path:
     except ValueError as error:
         raise ValueError("Configured path escapes the Harness Project Root.") from error
     return resolved
+
+
+def _is_supported_project_root(harness_root: Path, project_root: Path) -> bool:
+    return project_root == harness_root or project_root.parent == harness_root
 
 
 def _paths_overlap(first: Path, second: Path) -> bool:

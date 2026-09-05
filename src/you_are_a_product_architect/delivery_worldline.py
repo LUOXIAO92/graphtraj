@@ -8,7 +8,7 @@ import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 import click
 import yaml
@@ -166,6 +166,7 @@ def append_project_worldline_event(
     state_directory: Path,
     harness_root: Path,
     event: Mapping[str, Any],
+    mutation: Callable[[dict[str, Any]], Callable[[], None]] | None = None,
 ) -> dict[str, Any]:
     """Validate and atomically append one project Worldline event."""
 
@@ -178,7 +179,7 @@ def append_project_worldline_event(
     try:
         fcntl.flock(lock_descriptor, fcntl.LOCK_EX)
         shards, existing = _read_shards(state_directory, harness_root)
-        _validate_references(harness_root, event, existing)
+        _validate_causes(event, existing)
         captured = _capture_time()
         if existing and captured < _parse_timestamp(existing[-1]["captured_at"]):
             raise ValueError("system time precedes the chronologically last event")
@@ -189,15 +190,31 @@ def append_project_worldline_event(
             "captured_at": captured_at,
             **event,
         }
-        line = json.dumps(recorded, ensure_ascii=False, separators=(",", ":")) + "\n"
         if shards and len(shards[-1][1]) < _SHARD_SIZE:
             target = shards[-1][0]
         else:
             target = worldline_directory / "{0}.jsonl".format(event_id)
-        with target.open("a", encoding="utf-8") as stream:
-            stream.write(line)
-            stream.flush()
-            os.fsync(stream.fileno())
+        rollback = mutation(recorded) if mutation is not None else None
+        target_existed = target.exists()
+        original_size = target.stat().st_size if target_existed else 0
+        try:
+            _validate_evidence(harness_root, recorded["evidence_refs"])
+            line = (
+                json.dumps(recorded, ensure_ascii=False, separators=(",", ":"))
+                + "\n"
+            )
+            with target.open("ab") as stream:
+                stream.write(line.encode("utf-8"))
+                stream.flush()
+                os.fsync(stream.fileno())
+        except Exception:
+            if target_existed:
+                os.truncate(target, original_size)
+            elif target.exists():
+                target.unlink()
+            if rollback is not None:
+                rollback()
+            raise
         return recorded
     finally:
         fcntl.flock(lock_descriptor, fcntl.LOCK_UN)
@@ -294,10 +311,17 @@ def _validate_references(
     event: Mapping[str, Any],
     existing: list[dict[str, Any]],
 ) -> None:
+    _validate_causes(event, existing)
+    _validate_evidence(harness_root, event["evidence_refs"])
+
+
+def _validate_causes(
+    event: Mapping[str, Any],
+    existing: list[dict[str, Any]],
+) -> None:
     known_ids = {item["event_id"] for item in existing}
     if any(item not in known_ids for item in event["caused_by_event_ids"]):
         raise ValueError("causal predecessor does not exist")
-    _validate_evidence(harness_root, event["evidence_refs"])
 
 
 def _validate_evidence(harness_root: Path, references: list[str]) -> None:

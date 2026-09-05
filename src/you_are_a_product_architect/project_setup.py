@@ -30,7 +30,7 @@ def _select_source_repository(harness_root: Path) -> Path:
         ) from error
     if len(candidates) == 1:
         return candidates[0]
-    return click.prompt(
+    selected = click.prompt(
         "Source Repository directory",
         type=click.Path(
             exists=True,
@@ -41,6 +41,12 @@ def _select_source_repository(harness_root: Path) -> Path:
             path_type=Path,
         ),
     ).resolve()
+    if selected.parent != harness_root or not _has_git_entry(selected):
+        raise ProjectSetupError(
+            "The selected Source Repository must be an existing direct Git child "
+            "of the Harness Project Root."
+        )
+    return selected
 
 
 def _confirm_missing_skill_installation(missing_skills: tuple[str, ...]) -> bool:

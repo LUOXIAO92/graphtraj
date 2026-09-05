@@ -9,7 +9,12 @@ from typing import Dict, Optional, Tuple
 import click
 import yaml
 
-from .project_configuration import configuration_exists
+from .git_repository import GitRepositoryError, SourceRepository
+from .project_configuration import (
+    ProjectConfigurationError,
+    configuration_exists,
+    load_project_configuration,
+)
 
 
 CORE_SKILL_NAMES = (
@@ -86,17 +91,27 @@ def _declared_skill_name(skill_file: Path) -> Optional[str]:
 def core_skill_paths(
     runtime_store: Path,
     user_skill_root: Path,
+    *,
+    source_history_paths: frozenset[str] = frozenset(),
 ) -> Dict[str, Path]:
     """Resolve each core Skill to its Harness-root or Runtime-user file path."""
 
     resolved: Dict[str, Path] = {}
-    for skill_root in (harness_skill_root(runtime_store), user_skill_root):
+    for skill_root, ignore_source_history in (
+        (harness_skill_root(runtime_store), True),
+        (user_skill_root, False),
+    ):
         try:
             candidates = tuple(sorted(skill_root.iterdir()))
         except OSError:
             continue
         for candidate in candidates:
             skill_file = candidate / "SKILL.md"
+            if ignore_source_history and (
+                skill_file.relative_to(runtime_store.parent).as_posix()
+                in source_history_paths
+            ):
+                continue
             name = _declared_skill_name(skill_file)
             if name not in CORE_SKILL_NAMES or name in resolved:
                 continue
@@ -110,13 +125,32 @@ def core_skill_paths(
 def check_core_skills(
     runtime_store: Path,
     user_skill_root: Path,
+    *,
+    source_history_paths: frozenset[str] = frozenset(),
 ) -> Tuple[SkillStatus, ...]:
     """Check core names in the Harness-root and Runtime user scopes."""
 
-    discovered = core_skill_paths(runtime_store, user_skill_root)
+    discovered = core_skill_paths(
+        runtime_store,
+        user_skill_root,
+        source_history_paths=source_history_paths,
+    )
     return tuple(
         SkillStatus(name=name, discovered=name in discovered)
         for name in CORE_SKILL_NAMES
+    )
+
+
+def source_history_skill_paths(
+    repository: SourceRepository,
+    revision: str,
+) -> frozenset[str]:
+    """Return Skill file paths present in one selected Source revision."""
+
+    return frozenset(
+        path
+        for path in repository.tree_paths(revision, ".agents/skills")
+        if Path(path).name == "SKILL.md"
     )
 
 
@@ -131,6 +165,19 @@ def _doctor_runtime_store(cwd: Path) -> Path:
     return cwd / ".codex"
 
 
+def _doctor_source_history_paths(runtime_store: Path) -> frozenset[str]:
+    """Return tracked Skill paths only when the Harness and Source roots match."""
+
+    try:
+        configuration = load_project_configuration(runtime_store.parent)
+        if configuration.project_root != configuration.harness_root:
+            return frozenset()
+        repository = SourceRepository.from_root(configuration.project_root)
+        return source_history_skill_paths(repository, repository.head)
+    except (GitRepositoryError, OSError, ProjectConfigurationError):
+        return frozenset()
+
+
 @click.command()
 def doctor() -> None:
     """Report required core Skills from the active Harness Project context."""
@@ -139,6 +186,7 @@ def doctor() -> None:
     statuses = check_core_skills(
         runtime_store,
         Path.home() / ".agents" / "skills",
+        source_history_paths=_doctor_source_history_paths(runtime_store),
     )
     for status in statuses:
         click.echo(

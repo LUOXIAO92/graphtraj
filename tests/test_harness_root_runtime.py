@@ -4,6 +4,7 @@ import json
 import os
 import shutil
 import subprocess
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -569,6 +570,91 @@ def test_installed_setup_to_runner_launch_uses_project_document_permissions(
     wait_for_file(Path(task["worktree_path"]) / "V1_DELIVERED.txt")
     wait_for_file(evidence / "result.md")
     assert (evidence / "validation.md").is_file()
+
+
+def test_installed_runner_uses_runtime_user_core_skill_when_source_tracks_it(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    repository = temporary_git_repository
+    source_skill = repository / ".agents" / "skills" / "implement" / "SKILL.md"
+    source_skill.parent.mkdir(parents=True)
+    source_skill.write_text(
+        "---\nname: implement\ndescription: Repository Skill.\n---\n",
+        encoding="utf-8",
+    )
+    run_process(["git", "add", ".agents"], cwd=repository).check_returncode()
+    run_process(
+        ["git", "commit", "-m", "Add repository implement Skill"], cwd=repository
+    ).check_returncode()
+    runtime_user = tmp_path / "runtime-user"
+    install_skills(runtime_user / ".agents" / "skills", CORE_SKILL_NAMES)
+    environment = os.environ.copy()
+    environment["HOME"] = str(runtime_user)
+    environment["PATH"] = "{0}{1}{2}".format(
+        fake_codex.executable.parent,
+        os.pathsep,
+        environment.get("PATH", ""),
+    )
+    environment["FAKE_CODEX_LOG"] = str(fake_codex.log_file)
+
+    setup = subprocess.run(
+        [str(installed_commands.product), "setup"],
+        cwd=repository,
+        env=environment,
+        input="y\n",
+        check=False,
+        text=True,
+        capture_output=True,
+        timeout=60,
+    )
+    assert setup.returncode == 0, setup.stderr
+
+    ticket_file = repository / "tickets" / "source-skill.md"
+    ticket_file.parent.mkdir()
+    ticket_file.write_text("# Source Skill\n", encoding="utf-8")
+    batch_file = repository / "source-skill-batch.yml"
+    batch_file.write_text(
+        "run_id: 20260905-source-skill\n"
+        "runtime: codex\n"
+        "tasks:\n"
+        "  - ticket_id: '69-source-skill'\n"
+        "    ticket_name: source-skill\n"
+        "    role: engineer-junior\n"
+        "    ticket_file: {0}\n".format(ticket_file),
+        encoding="utf-8",
+    )
+
+    launched = run_process(
+        [str(installed_commands.runner), "--batch-input", str(batch_file)],
+        cwd=repository,
+        env=environment,
+        timeout=60,
+    )
+
+    assert launched.returncode == 0, launched.stderr
+    task = yaml.safe_load(launched.stdout)["tasks"][0]
+    wait_for_file(fake_codex.log_file)
+    arguments = json.loads(fake_codex.log_file.read_text(encoding="utf-8"))["argv"]
+    skills_argument = next(
+        argument for argument in arguments if argument.startswith("skills=")
+    )
+    configured_skills = tomllib.loads(
+        "value = {0}".format(skills_argument.removeprefix("skills="))
+    )["value"]["config"]
+    runtime_user_skill = runtime_user / ".agents" / "skills" / "implement" / "SKILL.md"
+    ticket_source_skill = (
+        Path(task["worktree_path"])
+        / ".agents"
+        / "skills"
+        / "implement"
+        / "SKILL.md"
+    )
+    assert {"path": str(runtime_user_skill.resolve()), "enabled": True} in configured_skills
+    assert {"path": str(ticket_source_skill.resolve()), "enabled": False} in configured_skills
+    assert {"path": str(source_skill.resolve()), "enabled": True} not in configured_skills
 
 
 @pytest.mark.skipif(

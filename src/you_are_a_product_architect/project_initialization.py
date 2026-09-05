@@ -24,7 +24,12 @@ from .project_configuration import (
     default_project_configuration,
     load_project_configuration,
 )
-from .skill_check import CORE_SKILL_NAMES, check_core_skills, harness_skill_root
+from .skill_check import (
+    CORE_SKILL_NAMES,
+    check_core_skills,
+    harness_skill_root,
+    source_history_skill_paths,
+)
 from .supported_skills import SupportedSkills, SupportedSkillsError
 
 
@@ -180,6 +185,7 @@ class ProjectSetupPlan:
     codex_files: CodexProjectFiles
     supported_skills: SupportedSkills
     missing_skills: Tuple[str, ...]
+    source_history_paths: frozenset[str]
     write_default_configuration: bool
     proposed_base: Optional[str]
     integration_revision: str
@@ -363,6 +369,25 @@ class ProjectSetupPlan:
     ) -> None:
         if not names:
             return
+        source_conflicts = False
+        for name in names:
+            source_paths = tuple(
+                sorted(
+                    path
+                    for path in self.source_history_paths
+                    if path.startswith(".agents/skills/{0}/".format(name))
+                )
+            )
+            if source_paths:
+                source_conflicts = True
+                _append_conflict(
+                    conflicts,
+                    "Harness Skill conflicts with Source Repository history: {0}".format(
+                        self.harness_root / source_paths[0]
+                    ),
+                )
+        if source_conflicts:
+            return
         try:
             self.supported_skills.preflight_installation(self.runtime_store, names)
         except SupportedSkillsError as error:
@@ -442,14 +467,11 @@ class ProjectSetupPlan:
             entry_for = lambda name: self.repository.tree_entry(
                 self.integration_revision, name
             )
-        links = [(".state", self.configuration.state)]
-        if self.configuration.project_root != self.harness_root:
-            links.extend(
-                (
-                    ("CONTEXT.md", self.harness_root / "CONTEXT.md"),
-                    ("docs", self.configuration.docs),
-                )
-            )
+        links = (
+            (".state", self.configuration.state),
+            ("CONTEXT.md", self.harness_root / "CONTEXT.md"),
+            ("docs", self.configuration.docs),
+        )
         for name, target in links:
             _preflight_link(
                 entry_for(name),
@@ -574,9 +596,6 @@ class ProjectSetupPlan:
                 state_directory=self.configuration.state,
                 documents_directory=self.configuration.docs,
                 common_git_directory=self.repository.common_directory,
-                include_document_views=(
-                    self.configuration.project_root != self.harness_root
-                ),
                 on_action_complete=mark_completed,
             )
             if skill_names:
@@ -635,6 +654,8 @@ def plan_project_setup(
             configuration = default_project_configuration(root, source_repository)
             write_default_configuration = True
         repository = SourceRepository.from_root(configuration.project_root)
+        if configuration.project_root == root:
+            repository.require_main()
         dev_exists = repository.branch_exists(INTEGRATION_BRANCH)
         proposed_base = None if dev_exists else repository.head
         integration_revision = (
@@ -644,9 +665,15 @@ def plan_project_setup(
         )
         codex_files = CodexProjectFiles.load()
         supported_skills = SupportedSkills.load()
+        source_paths = (
+            source_history_skill_paths(repository, repository.head)
+            if configuration.project_root == root
+            else frozenset()
+        )
         skill_statuses = check_core_skills(
             root / ".codex",
             Path.home() / ".agents" / "skills",
+            source_history_paths=source_paths,
         )
         discovered_skills = {
             status.name for status in skill_statuses if status.discovered
@@ -669,6 +696,7 @@ def plan_project_setup(
         codex_files=codex_files,
         supported_skills=supported_skills,
         missing_skills=missing_skills,
+        source_history_paths=source_paths,
         write_default_configuration=write_default_configuration,
         proposed_base=proposed_base,
         integration_revision=integration_revision,

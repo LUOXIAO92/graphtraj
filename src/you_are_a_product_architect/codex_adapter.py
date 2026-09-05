@@ -25,7 +25,12 @@ from .runtime_adapter import (
 )
 from .runner_transport import runtime_turn_outcome
 from .runner_models import LOGICAL_ROLES, managed_runtime_policy_matches
-from .skill_check import declared_skill_name, harness_skill_root
+from .git_repository import GitRepositoryError, SourceRepository
+from .skill_check import (
+    declared_skill_name,
+    harness_skill_root,
+    source_history_skill_paths,
+)
 
 
 ADAPTER_ROLE_KEYS = frozenset(
@@ -280,7 +285,11 @@ def preflight_runtime_context(
     _reject_legacy_user_sandbox_config()
     resolved_role = _resolve_codex_role(runtime_store, role)
     if role in ENGINEER_ROLES:
-        harness_skills = _resolve_engineer_harness_skills(runtime_store, role)
+        harness_skills = _resolve_engineer_harness_skills(
+            runtime_store,
+            role,
+            repository_skill_source,
+        )
     elif role in REVIEWER_ROLES:
         harness_skills = ()
     else:
@@ -795,6 +804,7 @@ ENGINEER_REQUIRED_SKILLS = ("implement", "ponytail", "tdd")
 def _resolve_engineer_harness_skills(
     runtime_store: Path,
     role: str,
+    repository_skill_source: Path,
 ) -> Tuple[_EffectiveSkill, ...]:
     """Resolve the Engineer role's required external Harness Skills."""
 
@@ -803,7 +813,13 @@ def _resolve_engineer_harness_skills(
             "ROLE_NOT_SUPPORTED",
             "The configured Codex role is not supported by this Runner.",
         )
-    runtime_skills = _discover_skill_files(harness_skill_root(runtime_store))
+    runtime_skills = _discover_skill_files(
+        harness_skill_root(runtime_store),
+        source_history_paths=_runtime_source_history_paths(
+            runtime_store,
+            repository_skill_source,
+        ),
+    )
     user_skills = _discover_skill_files(Path.home() / ".agents" / "skills")
     effective: List[_EffectiveSkill] = []
     for name in ENGINEER_REQUIRED_SKILLS:
@@ -828,6 +844,22 @@ def _resolve_engineer_harness_skills(
             )
         )
     return tuple(effective)
+
+
+def _runtime_source_history_paths(
+    runtime_store: Path,
+    repository_skill_source: Path,
+) -> frozenset[str]:
+    """Return tracked Skill paths when the runtime root shares this Source."""
+
+    try:
+        harness_repository = SourceRepository.from_root(runtime_store.parent)
+        source_repository = SourceRepository.from_root(repository_skill_source)
+        if harness_repository.common_directory != source_repository.common_directory:
+            return frozenset()
+        return source_history_skill_paths(source_repository, source_repository.head)
+    except (GitRepositoryError, OSError):
+        return frozenset()
 
 
 def _resolve_repository_skills(
@@ -876,7 +908,11 @@ def _resolve_repository_skills(
     return tuple(effective)
 
 
-def _discover_skill_files(root: Path) -> Dict[str, Tuple[Path, ...]]:
+def _discover_skill_files(
+    root: Path,
+    *,
+    source_history_paths: frozenset[str] = frozenset(),
+) -> Dict[str, Tuple[Path, ...]]:
     """Return valid declared Skills beneath one explicit Runtime boundary."""
     try:
         if root.is_symlink() or not root.is_dir():
@@ -889,6 +925,11 @@ def _discover_skill_files(root: Path) -> Dict[str, Tuple[Path, ...]]:
     for candidate in candidates:
         try:
             if candidate.is_symlink() or not candidate.is_file():
+                continue
+            if (
+                candidate.relative_to(root.parents[1]).as_posix()
+                in source_history_paths
+            ):
                 continue
             resolved = candidate.resolve(strict=True)
             if resolved_root not in (resolved, *resolved.parents):

@@ -103,7 +103,6 @@ class CodexProjectFiles:
         state_directory: Path,
         documents_directory: Path,
         common_git_directory: Path,
-        include_document_views: bool,
         on_action_complete: Optional[Callable[[str], None]] = None,
     ) -> None:
         """Install Runtime resources without creating a Runner configuration."""
@@ -116,19 +115,18 @@ class CodexProjectFiles:
             state_directory,
             on_action_complete,
         )
-        if include_document_views:
-            self._ensure_link(
-                integration_worktree,
-                "CONTEXT.md",
-                harness_root / "CONTEXT.md",
-                on_action_complete,
-            )
-            self._ensure_link(
-                integration_worktree,
-                "docs",
-                documents_directory,
-                on_action_complete,
-            )
+        self._ensure_link(
+            integration_worktree,
+            "CONTEXT.md",
+            harness_root / "CONTEXT.md",
+            on_action_complete,
+        )
+        self._ensure_link(
+            integration_worktree,
+            "docs",
+            documents_directory,
+            on_action_complete,
+        )
         self._ensure_links_are_ignored(common_git_directory, on_action_complete)
 
     @staticmethod

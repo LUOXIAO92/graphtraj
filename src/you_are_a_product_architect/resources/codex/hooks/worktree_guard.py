@@ -413,13 +413,14 @@ def configured_harness_paths(root: Path) -> Optional[Tuple[Path, Path, Path, Pat
                 "max_concurrency",
             }:
                 continue
+            project_value = paths["project_root"]
             worktree_value = paths["agent_worktrees"]
             state_value = paths["state"]
             docs_value = paths["docs"]
             if not all(
                 isinstance(value, str) and value
                 for value in (
-                    paths["project_root"],
+                    project_value,
                     worktree_value,
                     state_value,
                     docs_value,
@@ -429,20 +430,27 @@ def configured_harness_paths(root: Path) -> Optional[Tuple[Path, Path, Path, Pat
                 for value in (limits["dispatch_depth"], limits["max_concurrency"])
             ):
                 continue
-            worktree_root = Path(worktree_value)
-            state_root = Path(state_value)
-            documents_root = Path(docs_value)
-            if not worktree_root.is_absolute():
-                worktree_root = harness_root / worktree_root
-            if not state_root.is_absolute():
-                state_root = harness_root / state_root
-            if not documents_root.is_absolute():
-                documents_root = harness_root / documents_root
-            worktree_root = worktree_root.resolve(strict=False)
-            state_root = state_root.resolve(strict=False)
-            documents_root = documents_root.resolve(strict=False)
-            if is_inside(root, worktree_root):
-                return harness_root, worktree_root, state_root, documents_root
+            resolved_root = harness_root.resolve(strict=False)
+            configured = {}
+            for name, value in (
+                ("project_root", project_value),
+                ("agent_worktrees", worktree_value),
+                ("state", state_value),
+                ("docs", docs_value),
+            ):
+                path = Path(value)
+                if path.is_absolute():
+                    break
+                path = (resolved_root / path).resolve(strict=False)
+                if not is_inside(path, resolved_root):
+                    break
+                configured[name] = path
+            else:
+                worktree_root = configured["agent_worktrees"]
+                state_root = configured["state"]
+                documents_root = configured["docs"]
+                if is_inside(root, worktree_root):
+                    return harness_root, worktree_root, state_root, documents_root
         except (KeyError, OSError, TypeError, UnicodeError, ValueError, yaml.YAMLError):
             continue
     return None

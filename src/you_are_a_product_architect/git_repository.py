@@ -108,11 +108,17 @@ class SourceRepository:
             raise GitRepositoryError(
                 "The selected directory must be the root of the Primary Worktree."
             )
-        if _git(primary, "branch", "--show-current") != "main":
+        repository = cls(primary_worktree=primary)
+        repository.require_main()
+        return repository
+
+    def require_main(self) -> None:
+        """Require the Primary Worktree to remain on its accepted main branch."""
+
+        if _git(self.primary_worktree, "branch", "--show-current") != "main":
             raise GitRepositoryError(
                 "The selected Primary Worktree must remain checked out on main."
             )
-        return cls(primary_worktree=primary)
 
     @property
     def common_directory(self) -> Path:

@@ -310,6 +310,131 @@ def test_setup_preflights_source_document_views_before_mutating(
     ) == worktrees_before
 
 
+def test_same_root_setup_preflights_source_document_views_before_mutating(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    repository = temporary_git_repository
+    context = repository / "CONTEXT.md"
+    documents = repository / "docs" / "decision.md"
+    context.write_text("Repository-owned context.\n", encoding="utf-8")
+    documents.parent.mkdir()
+    documents.write_text("Repository-owned documentation.\n", encoding="utf-8")
+    run_process(["git", "add", "CONTEXT.md", "docs"], cwd=repository).check_returncode()
+    run_process(
+        ["git", "commit", "-m", "Add repository documents"], cwd=repository
+    ).check_returncode()
+    documents_before = {context: context.read_bytes(), documents: documents.read_bytes()}
+    user_home = tmp_path / "operator-home"
+    install_user_skills(user_home)
+    worktrees_before = git_output(repository, "worktree", "list", "--porcelain")
+
+    result = run_setup(
+        installed_commands,
+        harness_root=repository,
+        user_home=user_home,
+        fake_codex=fake_codex,
+        answers="",
+    )
+
+    assert result.returncode == 1
+    assert str(repository / ".graphtraj" / ".agent-worktrees" / "dev" / "CONTEXT.md") in result.stderr
+    assert str(repository / ".graphtraj" / ".agent-worktrees" / "dev" / "docs") in result.stderr
+    assert not (repository / ".graphtraj").exists()
+    assert not (repository / ".codex").exists()
+    assert {path: path.read_bytes() for path in documents_before} == documents_before
+    assert git_output(repository, "worktree", "list", "--porcelain") == worktrees_before
+
+
+def test_same_root_setup_rejects_a_tracked_core_skill_before_mutating(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    repository = temporary_git_repository
+    source_skill = repository / ".agents" / "skills" / "implement" / "SKILL.md"
+    source_skill.parent.mkdir(parents=True)
+    source_skill.write_text(
+        "---\nname: implement\ndescription: Repository Skill.\n---\n",
+        encoding="utf-8",
+    )
+    run_process(["git", "add", ".agents"], cwd=repository).check_returncode()
+    run_process(
+        ["git", "commit", "-m", "Add repository implement Skill"], cwd=repository
+    ).check_returncode()
+    source_before = source_skill.read_bytes()
+    user_home = tmp_path / "operator-home"
+    install_skills(
+        user_home / ".agents" / "skills",
+        tuple(name for name in CORE_SKILL_NAMES if name != "implement"),
+    )
+    user_before = tree_contents(user_home)
+    worktrees_before = git_output(repository, "worktree", "list", "--porcelain")
+
+    result = run_setup(
+        installed_commands,
+        harness_root=repository,
+        user_home=user_home,
+        fake_codex=fake_codex,
+        answers="y\n",
+    )
+
+    assert result.returncode == 1
+    assert "Missing required core Skills: implement" in result.stdout
+    assert "Source Repository history" in result.stderr
+    assert source_skill.read_bytes() == source_before
+    assert not (repository / ".graphtraj").exists()
+    assert not (repository / ".codex").exists()
+    assert tree_contents(user_home) == user_before
+    assert git_output(repository, "worktree", "list", "--porcelain") == worktrees_before
+
+
+def test_same_root_setup_installs_a_non_overlapping_harness_core_skill(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    repository = temporary_git_repository
+    source_skill = (
+        repository / ".agents" / "skills" / "repository-implement" / "SKILL.md"
+    )
+    source_skill.parent.mkdir(parents=True)
+    source_skill.write_text(
+        "---\nname: implement\ndescription: Repository Skill.\n---\n",
+        encoding="utf-8",
+    )
+    run_process(["git", "add", ".agents"], cwd=repository).check_returncode()
+    run_process(
+        ["git", "commit", "-m", "Add repository implement Skill"], cwd=repository
+    ).check_returncode()
+    source_before = source_skill.read_bytes()
+    user_home = tmp_path / "operator-home"
+    install_skills(
+        user_home / ".agents" / "skills",
+        tuple(name for name in CORE_SKILL_NAMES if name != "implement"),
+    )
+    user_before = tree_contents(user_home)
+
+    result = run_setup(
+        installed_commands,
+        harness_root=repository,
+        user_home=user_home,
+        fake_codex=fake_codex,
+        answers="y\ny\n",
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert source_skill.read_bytes() == source_before
+    assert tree_contents(
+        repository / ".agents" / "skills" / "implement"
+    ) == supported_skill_contents("implement")
+    assert tree_contents(user_home) == user_before
+
+
 def test_setup_preflights_a_dev_checkout_owned_elsewhere(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,

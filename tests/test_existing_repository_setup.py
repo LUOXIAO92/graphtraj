@@ -3,6 +3,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+import pytest
 import yaml
 
 from conftest import InstalledCommands, run_process
@@ -81,6 +82,10 @@ def test_setup_initializes_the_current_git_repository(
     assert git_output(integration, "rev-parse", "HEAD") == git_output(
         repository, "rev-parse", "dev"
     )
+    assert (integration / "CONTEXT.md").is_symlink()
+    assert (integration / "CONTEXT.md").resolve() == context.resolve()
+    assert (integration / "docs").is_symlink()
+    assert (integration / "docs").resolve() == docs.resolve()
     assert {path: path.read_bytes() for path in documents_before} == documents_before
     assert not (repository / ".codex" / "agent-runner" / "config.yml").exists()
 
@@ -149,18 +154,15 @@ def test_setup_prompts_for_an_explicit_source_when_no_git_child_exists(
     harness_root = tmp_path / "harness-project"
     harness_root.mkdir()
     source = create_git_repository(tmp_path / "external-source")
+    worktrees_before = git_output(source, "worktree", "list", "--porcelain")
 
     result = run_setup(installed_commands, harness_root, answers="{0}\ny\ny\n".format(source))
 
-    assert result.returncode == 0, result.stderr
-    config = yaml.safe_load(
-        (harness_root / ".graphtraj" / "config.yml").read_text(encoding="utf-8")
-    )
-    assert config["paths"]["project_root"] == str(source)
-    integration = harness_root / ".graphtraj" / ".agent-worktrees" / "dev"
-    assert git_output(integration, "rev-parse", "--show-toplevel") == str(
-        integration.resolve()
-    )
+    assert result.returncode == 1
+    assert "direct Git child" in result.stderr
+    assert not (harness_root / ".graphtraj").exists()
+    assert not (harness_root / ".codex").exists()
+    assert git_output(source, "worktree", "list", "--porcelain") == worktrees_before
 
 
 def test_setup_preserves_a_valid_operator_configuration(
@@ -254,6 +256,69 @@ def test_setup_preflight_failure_leaves_the_project_unchanged(
     assert {path: path.read_bytes() for path in documents_before} == documents_before
     assert not (repository / ".graphtraj" / ".agent-worktrees").exists()
     assert not (repository / ".graphtraj" / "state").exists()
+    assert git_output(repository, "worktree", "list", "--porcelain") == worktrees_before
+
+
+@pytest.mark.parametrize("path_name", ("project_root", "docs", "agent_worktrees", "state"))
+@pytest.mark.parametrize("escape_kind", ("absolute", "parent"))
+def test_setup_rejects_configured_paths_outside_the_harness_root(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    tmp_path: Path,
+    path_name: str,
+    escape_kind: str,
+) -> None:
+    repository = temporary_git_repository
+    outside = tmp_path / "outside-harness"
+    value = str(outside) if escape_kind == "absolute" else "../outside-harness"
+    config_path = repository / ".graphtraj" / "config.yml"
+    config_path.parent.mkdir()
+    paths = {
+        "project_root": ".",
+        "docs": "docs",
+        "agent_worktrees": ".graphtraj/.agent-worktrees",
+        "state": ".graphtraj/state",
+    }
+    paths[path_name] = value
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "version": 1,
+                "paths": paths,
+                "agent_runner": {"dispatch_depth": 2, "max_concurrency": 18},
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    config_before = config_path.read_bytes()
+    worktrees_before = git_output(repository, "worktree", "list", "--porcelain")
+
+    result = run_setup(installed_commands, repository, answers="")
+
+    assert result.returncode == 1
+    assert "GraphTraj Config is invalid." in result.stderr
+    assert config_path.read_bytes() == config_before
+    assert not outside.exists()
+    assert not (repository / ".codex").exists()
+    assert git_output(repository, "worktree", "list", "--porcelain") == worktrees_before
+
+
+def test_same_root_setup_rejects_a_primary_worktree_not_on_main(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+) -> None:
+    repository = temporary_git_repository
+    run_process(["git", "switch", "-c", "operator-change"], cwd=repository).check_returncode()
+    worktrees_before = git_output(repository, "worktree", "list", "--porcelain")
+
+    result = run_setup(installed_commands, repository, answers="")
+
+    assert result.returncode == 1
+    assert "checked out on main" in result.stderr
+    assert not (repository / ".graphtraj").exists()
+    assert not (repository / ".codex").exists()
+    assert not (repository / ".agents").exists()
     assert git_output(repository, "worktree", "list", "--porcelain") == worktrees_before
 
 

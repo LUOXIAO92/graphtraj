@@ -519,7 +519,7 @@ def test_installed_setup_to_runner_launch_uses_project_document_permissions(
     assert str(evidence) in arguments
     wait_for_file(Path(task["worktree_path"]) / "V1_DELIVERED.txt")
     wait_for_file(evidence / "result.md")
-    assert (evidence / "validation.md").is_file()
+    wait_for_file(evidence / "validation.md")
 
 
 def test_installed_runner_uses_runtime_user_core_skill_when_source_tracks_it(

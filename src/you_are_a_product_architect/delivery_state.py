@@ -77,6 +77,9 @@ def apply_delivery_state_request(
         "member": _COMMON | {"member", "role", "session_ref"},
         "candidate": _COMMON | {"candidate"},
         "final": _COMMON | {"candidate", "decision"},
+        "retiring": _COMMON | {"actor"},
+        "retired": _COMMON | {"session_ref", "trace_ref"},
+        "replace-member": _COMMON | {"member", "role", "session_ref"},
     }
     if (
         not isinstance(phase, str)
@@ -93,7 +96,15 @@ def apply_delivery_state_request(
     if not isinstance(ticket_id, str) or ticket_id not in current:
         raise ValueError("Delivery State request names an unknown Ticket")
     ticket_directory, ticket = current[ticket_id]
-    team_directory = ticket_directory / "teams" / "1"
+    ordinal = ticket["active_team_ordinal"] or 1
+    replacing = False
+    if phase == "start" and ticket["active_team_ordinal"] is not None:
+        previous = _read_team(ticket_directory / "teams" / str(ordinal) / "team.yml")
+        if previous["status"] != "retired":
+            raise ValueError("The previous Team must be retired before replacement")
+        ordinal += 1
+        replacing = True
+    team_directory = ticket_directory / "teams" / str(ordinal)
     team_file = team_directory / "team.yml"
     original_ticket = (ticket_directory / "ticket.yml").read_bytes()
     original_team = team_file.read_bytes() if team_file.is_file() else None
@@ -104,9 +115,9 @@ def apply_delivery_state_request(
 
     if phase == "start":
         if (
-            ticket["status"] != "ready"
+            not replacing and (ticket["status"] != "ready"
             or ticket["active_team_ordinal"] is not None
-            or ticket["current_candidate"] is not None
+            or ticket["current_candidate"] is not None)
             or team_file.exists()
         ):
             raise ValueError("Ticket cannot start Team generation 1")
@@ -125,17 +136,46 @@ def apply_delivery_state_request(
         ):
             raise ValueError("Delivery State request has an invalid branch")
         ticket_update.update(
-            status=_transition(ticket, "implementing"),
-            active_team_ordinal=1,
+            status="implementing" if replacing else _transition(ticket, "implementing"),
+            active_team_ordinal=ordinal,
+            current_candidate=None,
             worktree=worktree,
             branch=request["branch"],
         )
-        kind = "team-started"
+        if replacing and (worktree != ticket["worktree"] or request["branch"] != ticket["branch"]):
+            raise ValueError("A replacement Team must reuse the Ticket Worktree and branch")
+        kind = "team-replaced" if replacing else "team-started"
     else:
         if not team_file.is_file():
             raise ValueError("Team generation 1 does not exist")
         team_update = _read_team(team_file)
-        if phase == "member":
+        if team_update["status"] != "active" and phase != "retired":
+            raise ValueError("The Team has stopped starting new work")
+        if phase == "retiring":
+            if request["actor"] not in {"main", "user"} or os.environ.get("GRAPHTRAJ_ROLE"):
+                raise ValueError("Only Main or the user may retire a Team")
+            team_update.update(status="retiring", retired_by=request["actor"])
+            kind = "team-retiring"
+        elif phase == "retired":
+            if team_update["status"] != "retiring":
+                raise ValueError("The Team is not retiring")
+            if request["session_ref"] != team_update["members"]["team_leader"]["session_ref"]:
+                raise ValueError("Retirement must retain the current Leader Session")
+            expected_trace = (team_directory / "traces" / request["session_ref"] / "events.jsonl").relative_to(harness_root).as_posix()
+            if request["trace_ref"] != expected_trace or expected_trace not in request["evidence_refs"]:
+                raise ValueError("Retirement must retain the Leader Trace")
+            team_update.update(status="retired", final_session_ref=request["session_ref"], final_trace_ref=expected_trace)
+            kind = "team-retired"
+        elif phase == "replace-member":
+            member = request["member"]
+            if member not in _MEMBER_KEYS - {"team_leader"}:
+                raise ValueError("Replacing the Leader requires Team retirement")
+            configured = team_update["members"][member]
+            if configured["role"] != request["role"] or not request["session_ref"] or configured["session_ref"] == request["session_ref"]:
+                raise ValueError("Replacement must identify a fresh Session for the seat")
+            configured["session_ref"] = request["session_ref"]
+            kind = "team-member-replaced"
+        elif phase == "member":
             member = request["member"]
             if not isinstance(member, str) or member not in _MEMBER_KEYS:
                 raise ValueError("Delivery State request names an invalid Team member")
@@ -192,7 +232,7 @@ def apply_delivery_state_request(
         "caused_by_event_ids": list(request["caused_by_event_ids"]),
         "evidence_refs": list(request["evidence_refs"]),
         "ticket_id": ticket_id,
-        "team_ordinal": 1,
+        "team_ordinal": ordinal,
         "team_round": 1,
     }
     if phase == "candidate" or phase == "final":
@@ -207,7 +247,7 @@ def apply_delivery_state_request(
             if phase == "start":
                 team_directory.mkdir(parents=True, exist_ok=True)
                 team_update = {
-                    "team_ordinal": 1,
+                    "team_ordinal": ordinal,
                     "status": "active",
                     "members": members,
                     "current_round": 1,
@@ -216,6 +256,10 @@ def apply_delivery_state_request(
                 _validate_team(team_update)
                 write_yaml_durably(team_file, team_update)
             elif team_update is not None:
+                if phase == "retiring":
+                    team_update["retirement_event_id"] = recorded["event_id"]
+                elif phase == "retired":
+                    team_update["retired_at"] = recorded["captured_at"]
                 _validate_team(team_update)
                 write_yaml_durably(team_file, team_update)
             write_yaml_durably(ticket_directory / "ticket.yml", ticket_update)
@@ -279,15 +323,28 @@ def _read_team(path: Path) -> dict[str, Any]:
 
 
 def _validate_team(team: Any) -> None:
+    required = {"team_ordinal", "status", "members", "current_round", "started_at"}
+    if isinstance(team, dict) and team.get("status") in {"retiring", "retired"}:
+        required |= {"retired_by", "retirement_event_id"}
+        if team["status"] == "retired":
+            required |= {"retired_at", "final_session_ref", "final_trace_ref"}
     if (
         not isinstance(team, dict)
-        or set(team) != {"team_ordinal", "status", "members", "current_round", "started_at"}
-        or team["team_ordinal"] != 1
-        or team["status"] != "active"
+        or set(team) != required
+        or not isinstance(team.get("team_ordinal"), int)
+        or isinstance(team["team_ordinal"], bool)
+        or team["team_ordinal"] < 1
+        or team.get("status") not in {"active", "retiring", "retired"}
         or team["current_round"] != 1
         or not isinstance(team["started_at"], str)
     ):
         raise ValueError("Team state is invalid")
+    if team["status"] != "active" and (
+        team["retired_by"] not in {"main", "user"}
+        or any(not isinstance(team[name], str) or not team[name]
+               for name in required - {"team_ordinal", "status", "members", "current_round", "started_at"})
+    ):
+        raise ValueError("Team retirement facts are invalid")
     _validate_members(team["members"])
 
 

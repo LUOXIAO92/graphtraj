@@ -57,6 +57,9 @@ def register_child_batch(batch_file: Path, cwd: Path, registration: Path) -> Lau
     ):
         raise RunnerError("BATCH_SCHEMA_INVALID", "A direct child Batch must contain one Engineer or both Reviewers.")
     project = discover_project(Path(os.environ.get("GRAPHTRAJ_HARNESS_ROOT", cwd)))
+    from .team_replacement import require_active_session
+
+    require_active_session(project, os.environ["GRAPHTRAJ_PARENT_ALIAS"])
     retained = retain_batch(project.state_directory, batch)
     try:
         if registration.exists():
@@ -138,7 +141,12 @@ def _deliver_ticket(project: Any, requested: Task, retained_batch: Path, capacit
         ticket_content = definition.read_text(encoding="utf-8")
     except (KeyError, OSError, TypeError, yaml.YAMLError) as error:
         raise RunnerError("TICKET_FILE_INVALID", "The selected registered Ticket is invalid.") from error
-    if (
+    generation = state.get("active_team_ordinal")
+    previous_team = None
+    if generation is not None:
+        previous_team = yaml.safe_load((ticket_directory / "teams" / str(generation) / "team.yml").read_text())
+    replacing = previous_team is not None and previous_team["status"] == "retired"
+    if not replacing and (
         state.get("ticket_id") != requested.ticket_id
         or state.get("ticket_name") != requested.ticket_name
         or state.get("status") != "ready"
@@ -150,21 +158,29 @@ def _deliver_ticket(project: Any, requested: Task, retained_batch: Path, capacit
     task = replace(requested, ticket_file=definition.resolve(), ticket_content=ticket_content)
     worktree = (project.worktree_root / (requested.ticket_id + "-" + requested.ticket_name)).resolve()
     branch = "agent/{0}-{1}".format(requested.ticket_id, requested.ticket_name)
-    preflight_worktree(project, task, branch, worktree)
-    provision_worktree(project, task, branch, worktree)
+    if replacing:
+        worktree = project.harness_root / state["worktree"]
+        branch = state["branch"]
+    else:
+        preflight_worktree(project, task, branch, worktree)
+        provision_worktree(project, task, branch, worktree)
     _link_worktree(project, worktree, ticket_directory)
 
-    team_directory = ticket_directory / "teams" / "1"
+    generation = generation + 1 if replacing else 1
+    team_directory = ticket_directory / "teams" / str(generation)
     round_directory = team_directory / "rounds" / "1"
     traces = team_directory / "traces"
     round_directory.mkdir(parents=True)
     traces.mkdir()
 
     registration = project.runner_directory / "sessions" / (
-        requested.ticket_id + "-" + requested.ticket_name + "@l1"
+        _new_alias(project, task, "team-leader", generation)
     ) / "child-registration.yml"
     leader_alias, leader_session = _run_agent(
         project, task, "team-leader", worktree, ticket_directory, traces, None, None, registration, None, retained_batch,
+        (ticket_content + "\nContinue from the previous Leader's final Session "
+         + previous_team["final_session_ref"] + " and Trace " + previous_team["final_trace_ref"]
+         + ". Read that handoff before dispatching work.") if replacing else None,
         capacity_fd=capacity_fd,
     )
     engineer_batch, engineer_batch_path = _registered_batch(registration, worktree)
@@ -176,7 +192,9 @@ def _deliver_ticket(project: Any, requested: Task, retained_batch: Path, capacit
         ticket_content=ticket_content,
     )
 
-    predecessor = _readiness_predecessor(project, task.ticket_id)
+    predecessor = (next(event["event_id"] for event in reversed(read_worldline(project.state_directory, project.harness_root))
+                        if event.get("ticket_id") == task.ticket_id and event["kind"] == "team-retired")
+                   if replacing else _readiness_predecessor(project, task.ticket_id))
     members = {
         "team_leader": {"role": "team-leader", "session_ref": leader_alias},
         "engineer": {"role": engineer_task.role, "session_ref": None},
@@ -421,7 +439,13 @@ def _run_agent(
     prompt: str | None = None,
     *,
     capacity_fd: int | None = None,
+    retiring: bool = False,
 ) -> tuple[str, str]:
+    team_file = traces.parent / "team.yml"
+    if role != "delivery-state" and team_file.exists():
+        team = yaml.safe_load(team_file.read_text())
+        if team["status"] != "active" and not (retiring and role == "team-leader" and team["status"] == "retiring"):
+            raise RunnerError("team-not-active", "The Team has stopped starting new work.")
     with capacity_positions(project, 1, capacity_fd) as positions:
         return _execute_agent(
             project, task, role, worktree, evidence, traces, alias,
@@ -445,10 +469,9 @@ def _execute_agent(
     prompt: str | None,
     capacity_fd: int,
 ) -> tuple[str, str]:
+    generation = int(traces.parent.name)
     if alias is None:
-        marker = {"team-leader": "l", "engineer-junior": "j", "engineer-senior": "s", "engineer-expert": "e", "standards-reviewer": "r", "spec-reviewer": "r", "delivery-state": "d"}[role]
-        suffix = "2" if role == "spec-reviewer" else "1"
-        alias = "{0}-{1}@{2}{3}".format(task.ticket_id, task.ticket_name, marker, suffix)
+        alias = _new_alias(project, task, role, generation)
         session_directory = project.runner_directory / "sessions" / alias
         session_directory.mkdir(parents=True, exist_ok=False)
         trace_directory = traces / alias
@@ -487,7 +510,7 @@ def _execute_agent(
                     "alias": alias,
                     "runtime": context.runtime,
                     "ticket_id": task.ticket_id,
-                    "team_generation": 1,
+                    "team_generation": generation,
                     "role": role,
                     "parent": parent_alias,
                     "retained_batch_file": str(retained_batch),
@@ -506,12 +529,15 @@ def _execute_agent(
     task_prompt = prompt or task.ticket_content
     if task.instruction:
         task_prompt += "\n## Additional instruction\n\n" + task.instruction + "\n"
-    if role.startswith("engineer-"):
+    round_directory = traces.parent / "rounds" / "1"
+    if role.startswith("engineer-") and round_directory.stat().st_mode & 0o200:
         task_prompt += (
             "\nWrite the fixed candidate and self-review to "
-            ".state/teams/1/rounds/1/engineer.md and its test results to "
-            ".state/teams/1/rounds/1/validation.md. Include the candidate commit in both.\n"
+            f".state/teams/{generation}/rounds/1/engineer.md and its test results to "
+            f".state/teams/{generation}/rounds/1/validation.md. Include the candidate commit in both.\n"
         )
+    elif role == "team-leader" and not os.environ.get("GRAPHTRAJ_RETIRING"):
+        task_prompt += f"\nCurrent Team generation: {generation}. Write the final decision to .state/teams/{generation}/rounds/1/leader.md.\n"
     elif role.endswith("reviewer"):
         if task.report_file is None:
             raise RunnerError(
@@ -545,6 +571,7 @@ def _execute_agent(
         "GRAPHTRAJ_TICKET_ID": task.ticket_id,
         "GRAPHTRAJ_TICKET_NAME": task.ticket_name,
         "GRAPHTRAJ_HARNESS_ROOT": str(project.harness_root),
+        "GRAPHTRAJ_TEAM_GENERATION": str(generation),
     }
     if role.endswith("reviewer"):
         environment.update(
@@ -582,6 +609,17 @@ def _execute_agent(
             ),
         )
     return alias, session_id
+
+
+def _new_alias(project: Any, task: Task, role: str, generation: int) -> str:
+    marker = {"team-leader": "l", "engineer-junior": "j", "engineer-senior": "s", "engineer-expert": "e", "standards-reviewer": "r", "spec-reviewer": "r", "delivery-state": "d"}[role]
+    suffix = 2 if role == "spec-reviewer" else 1
+    prefix = f"{task.ticket_id}-{task.ticket_name}"
+    if generation > 1:
+        prefix += f"-team{generation}"
+    while (project.runner_directory / "sessions" / f"{prefix}@{marker}{suffix}").exists():
+        suffix += 2 if role.endswith("reviewer") else 1
+    return f"{prefix}@{marker}{suffix}"
 
 
 def _resume_job(
@@ -790,7 +828,7 @@ def _worker_main() -> None:
             )
             alias, session = _run_agent(
                 project, task, task.role, project.harness_root / state["worktree"],
-                evidence, evidence / "teams" / "1" / "traces",
+                evidence, evidence / "teams" / str(state["active_team_ordinal"]) / "traces",
                 None, None, None, sys.argv[4], retained, capacity_fd=capacity_fd,
             )
             result = {"role": task.role, "alias": alias, "session": session, "launch_status": "completed"}

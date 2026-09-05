@@ -100,6 +100,10 @@ def send_instruction(
     mapping, session_directory = read_alias_mapping(runner_directory, alias)
     if is_session_mapping(mapping):
         _require_project_events(cwd, caused_by_event_ids)
+        from .runner_project import discover_project
+        from .team_replacement import require_active_session
+
+        require_active_session(discover_project(cwd), alias)
         return _send_session(
             alias,
             instruction,
@@ -151,6 +155,7 @@ def _send_session(
         )
         worker_environment = dict(os.environ)
         worker_environment.update(_resume_environment(mapping, connection))
+        worker_environment["GRAPHTRAJ_ROLE"] = mapping["role"]
         with capacity_positions(load_project_configuration(cwd), 1) as positions:
             with (session_directory / "worker-stderr.log").open(
                 "w", encoding="utf-8"

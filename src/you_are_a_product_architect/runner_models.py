@@ -66,6 +66,9 @@ def ticket_stem(ticket_id: str, ticket_name: str) -> str:
 PUBLIC_ERROR_CODES = frozenset(
     {
         "invalid-input",
+        "authority-denied",
+        "team-not-active",
+        "seat-replaced",
         "insufficient-capacity",
         "invalid-config",
         "unsupported-runtime",

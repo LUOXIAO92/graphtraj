@@ -324,7 +324,7 @@ def preflight_runtime_context(
             role,
             repository_skill_source,
         )
-    elif role in REVIEWER_ROLES:
+    elif role in REVIEWER_ROLES or role == "team-leader":
         harness_skills = ()
     else:
         raise CodexAdapterError(
@@ -800,8 +800,10 @@ def _verify_packaged_guard(runtime_store: Path) -> None:
 ENGINEER_ROLES = frozenset(
     role for role in LOGICAL_ROLES if role.startswith("engineer-")
 )
-REVIEWER_ROLES = frozenset(LOGICAL_ROLES) - ENGINEER_ROLES
-SUPPORTED_ROLES = ENGINEER_ROLES | REVIEWER_ROLES
+REVIEWER_ROLES = frozenset(
+    role for role in LOGICAL_ROLES if role.endswith("reviewer")
+)
+SUPPORTED_ROLES = ENGINEER_ROLES | REVIEWER_ROLES | {"team-leader"}
 ENGINEER_REQUIRED_SKILLS = ("implement", "ponytail", "tdd")
 
 

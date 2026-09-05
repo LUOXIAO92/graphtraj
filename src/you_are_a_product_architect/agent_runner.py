@@ -1,5 +1,6 @@
 """The Agent Runner command surface."""
 
+import os
 from pathlib import Path
 
 import click
@@ -31,7 +32,15 @@ def main(context, batch_input):
             click.echo(error.message, err=True)
             raise click.exceptions.Exit(1)
         try:
-            response = launch_batch(batch_input, Path.cwd().resolve())
+            registration = os.environ.get("GRAPHTRAJ_PARENT_REGISTRATION")
+            if registration:
+                from .team_round import register_child_batch
+
+                response = register_child_batch(
+                    batch_input, Path.cwd().resolve(), Path(registration)
+                )
+            else:
+                response = launch_batch(batch_input, Path.cwd().resolve())
         except RunnerError as error:
             _emit_result({"error": error.as_document()})
             click.echo(error.message, err=True)

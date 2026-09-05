@@ -71,6 +71,10 @@ def launch_batch(batch_file: Path, cwd: Path) -> LaunchResponse:
     """Preflight and independently launch the exact supplied batch."""
 
     batch = read_batch(batch_file, cwd)
+    if batch.run_id is None:
+        from .team_round import launch_team_batch
+
+        return launch_team_batch(batch, cwd)
     project = discover_project(cwd)
     validate_batch_roles(batch, project.role_bindings)
     launch_plans = []

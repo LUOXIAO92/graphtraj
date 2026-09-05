@@ -10,6 +10,7 @@ from .project_roles import RolePreset
 
 
 ROLE_ALIAS_MARKERS = {
+    "team-leader": "l",
     "engineer-junior": "j",
     "engineer-senior": "s",
     "engineer-expert": "e",
@@ -167,7 +168,7 @@ class Task:
     ticket_id: str
     ticket_name: str
     role: str
-    ticket_file: Path
+    ticket_file: Optional[Path]
     ticket_content: str
     instruction: Optional[str]
     requested_skills: Tuple[str, ...] = ()
@@ -189,7 +190,7 @@ class Task:
 
 @dataclass(frozen=True)
 class Batch:
-    run_id: str
+    run_id: Optional[str]
     tasks: Tuple[Task, ...]
     source_bytes: bytes
 

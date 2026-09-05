@@ -79,6 +79,7 @@ PUBLIC_ERROR_CODES = frozenset(
         "turn-running",
         "live-input-unsupported",
         "operation-failed",
+        "cleanup-not-integrated",
         "cleanup-not-merged",
         "cleanup-dirty",
         "cleanup-ownership-mismatch",

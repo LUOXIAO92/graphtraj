@@ -173,17 +173,15 @@ def test_installed_worktree_guard_is_an_independent_ticket_process(
         [
             str(installed_commands.runner),
             "cleanup",
-            "--run-id",
-            "20260814-hook-process",
             "--ticket-id",
             "15",
         ],
         cwd=harness_root,
         env=environment,
     )
-    assert cleanup.returncode == 0, cleanup.stderr
-    assert yaml.safe_load(cleanup.stdout)["cleanup_status"] == "cleaned"
-    assert not ticket_worktree.exists()
+    assert cleanup.returncode == 1
+    assert yaml.safe_load(cleanup.stdout)["cleanup_status"] == "refused"
+    assert ticket_worktree.is_dir()
     assert context.read_text(encoding="utf-8") == "# Harness context\n"
     assert (documents / "guidance.md").read_text(encoding="utf-8") == (
         "# Harness guidance\n"

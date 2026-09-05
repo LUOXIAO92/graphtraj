@@ -288,8 +288,6 @@ def test_pinned_install_exercises_the_complete_v1_delivery_lifecycle(
         [
             str(installed_commands.runner),
             "cleanup",
-            "--run-id",
-            run_id,
             "--ticket-id",
             "15",
         ],
@@ -297,9 +295,9 @@ def test_pinned_install_exercises_the_complete_v1_delivery_lifecycle(
         env=environment,
         timeout=10,
     )
-    assert cleanup.returncode == 0, cleanup.stderr
-    assert yaml.safe_load(cleanup.stdout)["cleanup_status"] == "cleaned"
-    assert not ticket_worktree.exists()
+    assert cleanup.returncode == 1
+    assert yaml.safe_load(cleanup.stdout)["cleanup_status"] == "refused"
+    assert ticket_worktree.is_dir()
     assert (evidence / "result.md").is_file()
     assert (evidence / "validation.md").is_file()
     assert (evidence / "metadata.yml").is_file()

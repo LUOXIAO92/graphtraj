@@ -16,6 +16,12 @@ Operate autonomously within the assigned Integration Worktree while following no
 Do not inspect or modify other worktrees.
 Do not change merge order, integrate additional commits, reopen settled scope, or redesign the ticket or spec.
 If accepted requirements themselves are incompatible, stop and report the conflict to the parent agent.
+Leave the reconciliation staged, without creating commits or completing the merge.
+Return `Decision: RESOLVED` in your final output only when the reconciliation is ready
+for Main's integration validation. For incompatible accepted requirements, return
+`Decision: ESCALATE` and identify the requirements and exact incompatibility.
+Do not invoke Runner, directly start another Runtime, or use native swarm.
+Do not modify Ticket state, Team evidence, Batches, Worldline, or Session Traces.
 
 Read Harness Project Documents only through this Worktree's `CONTEXT.md` and
 `docs/` views. They are Main-owned and read-only.
@@ -36,6 +42,9 @@ docs = "read"
 
 [agents]
 enabled = false
+max_concurrent_threads_per_session = 1
+default_subagent_model = "gpt-5.6-sol"
+default_subagent_reasoning_effort = "max"
 
 [[hooks.PreToolUse]]
 matcher = "^(Bash|apply_patch)$"

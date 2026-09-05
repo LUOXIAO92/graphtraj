@@ -130,13 +130,15 @@ class _CodexRole:
             if (
                 skill.enabled
                 and skill.source in ("harness", "runtime-user")
-                and skill.name in ENGINEER_REQUIRED_SKILLS
+                and skill.name in (*ENGINEER_REQUIRED_SKILLS, "resolving-merge-conflicts")
             ):
                 developer_instructions = developer_instructions.replace(
                     "${0}".format(skill.name),
                     "[${0}]({1})".format(skill.name, skill.path),
                 )
         native_settings = copy.deepcopy(dict(self.native_settings))
+        if self.name == "merge-resolver":
+            native_settings["permissions"][self.default_permissions]["filesystem"][str(evidence)] = "read"
         if report_file is not None:
             native_settings["permissions"][self.default_permissions]["filesystem"][
                 str(evidence / "reviews" / report_file.name)
@@ -318,7 +320,7 @@ def preflight_runtime_context(
     _reject_legacy_user_sandbox_config()
     resolved_role = _resolve_codex_role(role)
     selected_model = resolved_role.model if model is None else model
-    if role in ENGINEER_ROLES:
+    if role in ENGINEER_ROLES or role == "merge-resolver":
         harness_skills = _resolve_engineer_harness_skills(
             runtime_store,
             role,
@@ -806,6 +808,7 @@ REVIEWER_ROLES = frozenset(
 SUPPORTED_ROLES = ENGINEER_ROLES | REVIEWER_ROLES | {
     "team-leader",
     "delivery-state",
+    "merge-resolver",
 }
 ENGINEER_REQUIRED_SKILLS = ("implement", "ponytail", "tdd")
 
@@ -817,7 +820,7 @@ def _resolve_engineer_harness_skills(
 ) -> Tuple[_EffectiveSkill, ...]:
     """Resolve the Engineer role's required external Harness Skills."""
 
-    if role not in ENGINEER_ROLES:
+    if role not in ENGINEER_ROLES and role != "merge-resolver":
         raise CodexAdapterError(
             "ROLE_NOT_SUPPORTED",
             "The configured Codex role is not supported by this Runner.",
@@ -831,7 +834,7 @@ def _resolve_engineer_harness_skills(
     )
     user_skills = _discover_skill_files(Path.home() / ".agents" / "skills")
     effective: List[_EffectiveSkill] = []
-    for name in ENGINEER_REQUIRED_SKILLS:
+    for name in (("resolving-merge-conflicts",) if role == "merge-resolver" else ENGINEER_REQUIRED_SKILLS):
         matches = runtime_skills.get(name, ())
         source = "harness"
         if not matches:

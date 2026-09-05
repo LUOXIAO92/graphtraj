@@ -71,6 +71,10 @@ def launch_batch(batch_file: Path, cwd: Path) -> LaunchResponse:
     """Preflight and independently launch the exact supplied batch."""
 
     batch = read_batch(batch_file, cwd)
+    if any(task.role == "merge-resolver" for task in batch.tasks):
+        from .merge_resolution import launch_merge_resolver
+
+        return launch_merge_resolver(batch, cwd)
     if batch.run_id is None:
         from .team_round import launch_team_batch
 

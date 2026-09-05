@@ -5,16 +5,24 @@ import os
 from pathlib import Path
 
 import yaml
+import pytest
 
 from conftest import FakeCodex, InstalledCommands, run_process, wait_for_file
 from test_agent_runner_batch import configure_harness
 
 
-def test_installed_runner_delivers_one_complete_run_free_team_round(
+@pytest.mark.parametrize(
+    ("leader_decision", "expected_status", "round_closed"),
+    (("accept", "awaiting-integration", True), ("reject", "reviewing", False)),
+)
+def test_installed_runner_obeys_the_explicit_leader_decision_for_a_run_free_team_round(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
     fake_codex: FakeCodex,
     tmp_path: Path,
+    leader_decision: str,
+    expected_status: str,
+    round_closed: bool,
 ) -> None:
     harness_root, worktree_root, _, environment = configure_harness(
         installed_commands,
@@ -79,6 +87,7 @@ def test_installed_runner_delivers_one_complete_run_free_team_round(
         {
             "FAKE_CODEX_LIFECYCLE_ACTION": "complete-team-round",
             "GRAPHTRAJ_AGENT_RUNNER": str(installed_commands.runner),
+            "FAKE_CODEX_LEADER_DECISION": leader_decision,
         }
     )
 
@@ -103,38 +112,49 @@ def test_installed_runner_delivers_one_complete_run_free_team_round(
 
     current = yaml.safe_load((ticket_directory / "ticket.yml").read_text())
     team = yaml.safe_load((ticket_directory / "teams" / "1" / "team.yml").read_text())
-    assert current["status"] == "awaiting-integration"
+    assert current["status"] == expected_status
     assert current["active_team_ordinal"] == 1
-    assert current["worktree"] == str(worktree.resolve())
+    assert current["worktree"] == ".graphtraj/.agent-worktrees/74-complete-team-round"
     assert current["branch"] == "agent/74-complete-team-round"
     assert len(current["current_candidate"]) == 40
-    assert team["status"] == "accepted"
-    assert team["current_round"] == 1
-    assert set(team["seats"]) == {
-        "team-leader",
-        "engineer",
-        "standards-reviewer",
-        "spec-reviewer",
+    assert set(team) == {
+        "team_ordinal", "status", "members", "current_round", "started_at"
     }
+    assert team["team_ordinal"] == 1
+    assert team["status"] == "active"
+    assert team["current_round"] == 1
+    assert set(team["members"]) == {
+        "team_leader",
+        "engineer",
+        "standards_reviewer",
+        "spec_reviewer",
+    }
+    assert all(set(member) == {"role", "session_ref"} for member in team["members"].values())
+    assert all(member["session_ref"] for member in team["members"].values())
     round_directory = ticket_directory / "teams" / "1" / "rounds" / "1"
     assert {path.name for path in round_directory.iterdir()} == {
         "engineer.md", "validation.md", "standards.md", "spec.md", "leader.md"
     }
-    assert round_directory.stat().st_mode & 0o222 == 0
-    assert all(path.stat().st_mode & 0o222 == 0 for path in round_directory.iterdir())
+    assert (round_directory.stat().st_mode & 0o222 == 0) is round_closed
+    assert all((path.stat().st_mode & 0o222 == 0) is round_closed for path in round_directory.iterdir())
     traces = list((ticket_directory / "teams" / "1" / "traces").glob("*/events.jsonl"))
-    assert len(traces) == 4
+    assert len(traces) >= 5
     mappings = [
         yaml.safe_load(path.read_text())
         for path in (harness_root / ".codex" / "agent-runner" / "sessions").glob("*/mapping.yml")
     ]
-    assert len(mappings) == 4
+    assert len(mappings) >= 5
     assert all("run_id" not in mapping and "turn" not in mapping for mapping in mappings)
     leader_alias = next(mapping["alias"] for mapping in mappings if mapping["role"] == "team-leader")
+    delivery_state_mappings = [mapping for mapping in mappings if mapping["role"] == "delivery-state"]
+    assert len(delivery_state_mappings) == 1
+    assert delivery_state_mappings[0]["alias"] not in {
+        member["session_ref"] for member in team["members"].values()
+    }
     assert all(
         mapping["parent"] == leader_alias
         for mapping in mappings
-        if mapping["role"] != "team-leader"
+        if mapping["role"] not in {"team-leader", "delivery-state"}
     )
     assert not list(ticket_directory.rglob("turn-*"))
     assert not (ticket_directory / "metadata.yml").exists()
@@ -146,6 +166,10 @@ def test_installed_runner_delivers_one_complete_run_free_team_round(
         for shard in (harness_root / ".graphtraj" / "state" / "worldline").glob("*.jsonl")
         for line in shard.read_text().splitlines()
     ]
-    assert [event["kind"] for event in worldline][-2:] == [
-        "team-round-started", "team-round-accepted"
-    ]
+    assert worldline[-1]["kind"] == (
+        "team-round-accepted" if round_closed else "team-round-rejected"
+    )
+    started = next(event for event in worldline if event["kind"] == "team-started")
+    assert team["started_at"] == started["captured_at"]
+    assert all(event["caused_by_event_ids"] for event in worldline[2:])
+    assert all(path.stat().st_mode & 0o222 == 0 for path in retained_batches)

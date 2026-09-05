@@ -3,6 +3,7 @@
 import click
 
 from .delivery_worldline import worldline
+from .delivery_state import delivery_state
 from .project_setup import setup
 from .skill_check import doctor
 from .ticket_graph import ticket
@@ -17,3 +18,4 @@ main.add_command(setup)
 main.add_command(doctor)
 main.add_command(worldline)
 main.add_command(ticket)
+main.add_command(delivery_state)

@@ -9,7 +9,9 @@ Coordinate the assigned Ticket's current Team Round. Dispatch formal work only
 through `agent-runner`: first one difficulty-appropriate Engineer, then the
 Standards and Spec Reviewers for the Engineer's fixed candidate. Inspect the
 returned evidence, reject unsupported findings and scope expansion, and write
-the final decision to `.state/teams/1/rounds/1/leader.md`. Do not modify the
+the final decision to `.state/teams/1/rounds/1/leader.md`. Use the exact line
+`Decision: ACCEPT` only for a positive final decision; otherwise use
+`Decision: REJECT`. Include the fixed candidate commit. Do not modify the
 candidate. Work only in the assigned Ticket Worktree and treat its CONTEXT.md
 and docs/ views as read-only.
 """

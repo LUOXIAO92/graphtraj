@@ -312,12 +312,20 @@ def retain_batch(state: Path, batch: Batch) -> Path:
                 descriptor = os.open(str(target), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
             except FileExistsError:
                 continue
-            with os.fdopen(descriptor, "wb") as stream:
-                stream.write(batch.source_bytes)
-                stream.flush()
-                os.fsync(stream.fileno())
-            _sync_directory(run_directory)
-            return target.resolve()
+            try:
+                with os.fdopen(descriptor, "wb") as stream:
+                    stream.write(batch.source_bytes)
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                target.chmod(0o444)
+                _sync_directory(run_directory)
+                return target.resolve()
+            except OSError as error:
+                target.unlink(missing_ok=True)
+                raise RunnerError(
+                    "BATCH_RETENTION_FAILED",
+                    "The validated batch input could not be retained.",
+                ) from error
         raise RunnerError("BATCH_RETENTION_FAILED", "The validated batch input could not be retained.")
     run_directory = state / batch.run_id
     _safe_directory(run_directory, state)

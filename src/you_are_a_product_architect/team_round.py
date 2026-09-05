@@ -6,6 +6,9 @@ import json
 import os
 import re
 import shutil
+import signal
+import subprocess
+import sys
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -16,9 +19,11 @@ from .codex_adapter import create_codex_resume_turn, create_codex_turn, prefligh
 from .delivery_state import apply_delivery_state_request
 from .delivery_worldline import read_worldline
 from .runner_batch import read_batch, retain_batch
+from .runner_capacity import capacity_positions
 from .runner_io import write_yaml_durably
 from .runner_models import Batch, LaunchResponse, RunnerError, Task
 from .runner_project import discover_project, preflight_worktree, provision_worktree, run_git, runtime_executable
+from .runtime_adapter import RuntimeAdapterError
 
 
 _COMMIT = re.compile(r"[0-9a-f]{40}")
@@ -77,15 +82,52 @@ def launch_team_batch(batch: Batch, cwd: Path) -> LaunchResponse:
     if any(task.role != "team-leader" for task in batch.tasks):
         raise RunnerError("ROLE_NOT_CONFIGURED", "A Main Batch must select the team-leader preset.")
     project = discover_project(cwd)
-    retained = retain_batch(project.state_directory, batch)
-    results = [_deliver_ticket(project, task, retained) for task in batch.tasks]
+    return _run_batch_workers(project, batch)
+
+
+def _run_batch_workers(
+    project: Any, batch: Batch, retained: Path | None = None, parent_alias: str = "",
+) -> LaunchResponse:
+    workers = []
+    with capacity_positions(project, len(batch.tasks)) as positions:
+        if retained is None:
+            retained = retain_batch(project.state_directory, batch)
+        for index, position in enumerate(positions):
+            try:
+                worker = subprocess.Popen(
+                    [sys.executable, "-m", "you_are_a_product_architect.team_round",
+                     str(retained), str(index), str(position.fileno()), parent_alias],
+                    cwd=project.harness_root, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                    pass_fds=(position.fileno(),),
+                )
+            except OSError as error:
+                worker = RunnerError("RUNTIME_WORKER_START_FAILED", str(error))
+            workers.append(worker)
+            position.close()
+    results = []
+    for task, worker in zip(batch.tasks, workers):
+        if isinstance(worker, RunnerError):
+            results.append(_failed_task(task, worker))
+            continue
+        output, diagnostic = worker.communicate()
+        if worker.returncode == 0:
+            results.append(yaml.safe_load(output))
+        else:
+            results.append(_failed_task(task, RunnerError("RUNTIME_WORKER_FAILED", diagnostic.strip())))
     return LaunchResponse(
         document={"retained_batch_file": str(retained), "tasks": results},
-        succeeded=True,
+        succeeded=all("error" not in result for result in results),
     )
 
 
-def _deliver_ticket(project: Any, requested: Task, retained_batch: Path) -> dict[str, Any]:
+def _failed_task(task: Task, error: RunnerError) -> dict[str, Any]:
+    return {
+        "ticket_id": task.ticket_id, "ticket_name": task.ticket_name,
+        "role": task.role, "launch_status": "failed", "error": error.as_document(),
+    }
+
+
+def _deliver_ticket(project: Any, requested: Task, retained_batch: Path, capacity_fd: int) -> dict[str, Any]:
     ticket_directory = project.state_directory / "tickets" / (
         requested.ticket_id + "-" + requested.ticket_name
     )
@@ -122,7 +164,8 @@ def _deliver_ticket(project: Any, requested: Task, retained_batch: Path) -> dict
         requested.ticket_id + "-" + requested.ticket_name + "@l1"
     ) / "child-registration.yml"
     leader_alias, leader_session = _run_agent(
-        project, task, "team-leader", worktree, ticket_directory, traces, None, None, registration, None, retained_batch
+        project, task, "team-leader", worktree, ticket_directory, traces, None, None, registration, None, retained_batch,
+        capacity_fd=capacity_fd,
     )
     engineer_batch, engineer_batch_path = _registered_batch(registration, worktree)
     if len(engineer_batch.tasks) != 1 or not engineer_batch.tasks[0].role.startswith("engineer-"):
@@ -218,20 +261,17 @@ def _deliver_ticket(project: Any, requested: Task, retained_batch: Path) -> dict
     if {child.role for child in reviewer_batch.tasks} != {"standards-reviewer", "spec-reviewer"}:
         raise RunnerError("BATCH_SCHEMA_INVALID", "The second direct child Batch must contain both Reviewers.")
     child_results = []
-    for child in reviewer_batch.tasks:
+    try:
+        reviewed = _run_batch_workers(project, reviewer_batch, reviewer_batch_path, leader_alias)
+    except RunnerError as error:
+        raise RunnerError(error.code, "Reviewer Batch: " + error.message) from error
+    for child, result in zip(reviewer_batch.tasks, reviewed.document["tasks"]):
+        if "error" in result:
+            raise RunnerError(result["error"]["code"], result["error"]["message"])
         report_name = (
             "standards.md" if child.role == "standards-reviewer" else "spec.md"
         )
-        child_task = replace(
-            child,
-            ticket_file=definition.resolve(),
-            ticket_content=ticket_content,
-            report_file=Path(".state") / "reviews" / report_name,
-        )
-        alias, session = _run_agent(
-            project, child_task, child.role, worktree, ticket_directory, traces,
-            None, None, None, leader_alias, reviewer_batch_path,
-        )
+        alias, session = result["alias"], result["session"]
         _collect_review_report(ticket_directory, round_directory, report_name)
         member = "standards_reviewer" if child.role == "standards-reviewer" else "spec_reviewer"
         state_alias, state_session, event = _request_state(
@@ -379,6 +419,29 @@ def _run_agent(
     parent_alias: str | None,
     retained_batch: Path,
     prompt: str | None = None,
+    *,
+    capacity_fd: int | None = None,
+) -> tuple[str, str]:
+    with capacity_positions(project, 1, capacity_fd):
+        return _execute_agent(
+            project, task, role, worktree, evidence, traces, alias,
+            expected_session, registration, parent_alias, retained_batch, prompt,
+        )
+
+
+def _execute_agent(
+    project: Any,
+    task: Task,
+    role: str,
+    worktree: Path,
+    evidence: Path,
+    traces: Path,
+    alias: str | None,
+    expected_session: str | None,
+    registration: Path | None,
+    parent_alias: str | None,
+    retained_batch: Path,
+    prompt: str | None,
 ) -> tuple[str, str]:
     if alias is None:
         marker = {"team-leader": "l", "engineer-junior": "j", "engineer-senior": "s", "engineer-expert": "e", "standards-reviewer": "r", "spec-reviewer": "r", "delivery-state": "d"}[role]
@@ -576,3 +639,40 @@ def _collect_review_report(
     source.replace(target)
     if not any(source.parent.iterdir()):
         source.parent.rmdir()
+
+
+def _worker_main() -> None:
+    # Raising inside the Adapter lets it stop its Runtime before the worker exits.
+    def stop(signum: int, frame: Any) -> None:
+        raise SystemExit(128 + signum)
+
+    signal.signal(signal.SIGTERM, stop)
+    retained = Path(sys.argv[1])
+    task = read_batch(retained, Path.cwd()).tasks[int(sys.argv[2])]
+    try:
+        project = discover_project(Path.cwd())
+        capacity_fd = int(sys.argv[3])
+        if task.role == "team-leader":
+            result = _deliver_ticket(project, task, retained, capacity_fd)
+        else:
+            evidence = project.state_directory / "tickets" / (task.ticket_id + "-" + task.ticket_name)
+            state = yaml.safe_load((evidence / "ticket.yml").read_text())
+            definition = evidence / state["current_definition"]
+            report_name = "standards.md" if task.role == "standards-reviewer" else "spec.md"
+            task = replace(
+                task, ticket_file=definition, ticket_content=definition.read_text(),
+                report_file=Path(".state") / "reviews" / report_name,
+            )
+            alias, session = _run_agent(
+                project, task, task.role, project.harness_root / state["worktree"],
+                evidence, evidence / "teams" / "1" / "traces",
+                None, None, None, sys.argv[4], retained, capacity_fd=capacity_fd,
+            )
+            result = {"role": task.role, "alias": alias, "session": session, "launch_status": "completed"}
+    except (RunnerError, RuntimeAdapterError) as error:
+        result = _failed_task(task, RunnerError(error.code, error.message))
+    print(yaml.safe_dump(result, sort_keys=False), end="")
+
+
+if __name__ == "__main__":
+    _worker_main()

@@ -134,7 +134,7 @@ def read_batch(
     ):
         raise RunnerError(
             "TICKET_ID_DUPLICATE",
-            "ticket_id values must be unique within a batch.",
+            "A Batch cannot repeat the same Ticket, Team generation, and role.",
         )
     return Batch(
         run_id=run_id,

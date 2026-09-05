@@ -389,6 +389,7 @@ def discover_project(
         integration_worktree=integration,
         dev_commit=dev_commit,
         role_bindings={role: roles.presets[role] for role in LOGICAL_ROLES},
+        max_concurrency=configuration.max_concurrency,
     )
 
 

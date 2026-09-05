@@ -66,6 +66,7 @@ def ticket_stem(ticket_id: str, ticket_name: str) -> str:
 PUBLIC_ERROR_CODES = frozenset(
     {
         "invalid-input",
+        "insufficient-capacity",
         "invalid-config",
         "unsupported-runtime",
         "integration-not-ready",
@@ -209,6 +210,7 @@ class Project:
     integration_worktree: Path
     dev_commit: str
     role_bindings: Mapping[str, RolePreset]
+    max_concurrency: int = 18
     repository_skill_allowlist: Tuple[str, ...] = ()
 
     @property

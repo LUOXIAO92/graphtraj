@@ -540,7 +540,7 @@ def _execute_agent(
             )
         )
     environment = {
-        **context.runtime_environment(),
+        **runtime_environment,
         "GRAPHTRAJ_ROLE": role,
         "GRAPHTRAJ_EVIDENCE": str(evidence),
         "GRAPHTRAJ_TICKET_ID": task.ticket_id,

@@ -147,7 +147,7 @@ class _CodexRole:
             ("default_permissions", self.default_permissions),
             ("model_reasoning_effort", self.reasoning_effort),
             ("developer_instructions", developer_instructions),
-            ("hooks", _root_owned_hooks(self.hooks, runtime_store, self.name)),
+            ("hooks", _root_owned_hooks(self.hooks, runtime_store, self.name, effective_skills)),
             ("agents", self.agents),
             (
                 "projects",
@@ -994,6 +994,7 @@ def _root_owned_hooks(
     packaged_hooks: Mapping[str, Any],
     runtime_store: Path,
     role: str,
+    effective_skills: Tuple[_EffectiveSkill, ...],
 ) -> Mapping[str, Any]:
     """Translate canonical Hooks to the root-owned Worktree Guard."""
     _verify_packaged_guard(runtime_store)
@@ -1004,6 +1005,9 @@ def _root_owned_hooks(
     )
     if role == "team-leader":
         command += " --team-leader"
+    for skill in effective_skills:
+        if skill.enabled:
+            command += " --read-skill " + shlex.quote(str(skill.path))
     try:
         for event in ("PreToolUse", "SubagentStart"):
             entries = hooks[event]

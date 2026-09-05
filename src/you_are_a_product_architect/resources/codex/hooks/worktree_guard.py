@@ -603,6 +603,8 @@ def target_reason(
     if scoped:
         return reason
     if not is_inside(target, root):
+        if allow_harness_document_read and target in readable_skill_paths():
+            return None
         if allow_harness_document_read and readable_harness_document_view(
             lexical,
             target,
@@ -611,6 +613,15 @@ def target_reason(
             return None
         return "Blocked target outside current worktree: {0}".format(raw)
     return None
+
+
+def readable_skill_paths() -> tuple[Path, ...]:
+    """Exact enabled Skill files supplied by the immutable Adapter Hook command."""
+    return tuple(
+        Path(value)
+        for index, value in enumerate(sys.argv[1:], start=1)
+        if sys.argv[index - 1] == "--read-skill"
+    )
 
 
 def optional_target_reason(raw: str, *, cwd: Path, root: Path) -> Optional[str]:
@@ -630,6 +641,10 @@ def references_foreign_worktree(
     worktrees: Iterable[Path],
 ) -> bool:
     normalized = command.replace("\\", "/")
+    # A Harness Skill can be under the Primary Worktree in a same-root project.
+    # target_reason still restricts these exact files to read commands.
+    for skill in readable_skill_paths():
+        normalized = normalized.replace(str(skill), "")
     for worktree in worktrees:
         if worktree == root:
             continue
@@ -970,7 +985,7 @@ def validate_segment(
         return "Cannot verify executable path: {0}".format(segment[0])
     arguments = segment[1:]
 
-    if command == "agent-runner" and sys.argv[1:] == ["--team-leader"]:
+    if command == "agent-runner" and "--team-leader" in sys.argv[1:]:
         return validate_policy(
             arguments,
             policy=Policy(NO_OPERANDS, options(
@@ -1196,7 +1211,7 @@ def main() -> int:
 
     try:
         read_only = False
-        if sys.argv[1:] == ["--team-leader"]:
+        if "--team-leader" in sys.argv[1:]:
             # Native helpers inherit the Leader's Hooks. Only the Runner-mapped
             # historical Session may use the Leader's command/write authority.
             registration = Path(os.environ["GRAPHTRAJ_PARENT_REGISTRATION"])

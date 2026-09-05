@@ -27,6 +27,7 @@ def test_fresh_install_exposes_graphtraj_and_separate_agent_runner_interfaces(
     assert "setup" in product_help.stdout
     assert "doctor" in product_help.stdout
     assert "worldline" in product_help.stdout
+    assert "ticket" in product_help.stdout
     assert not installed_commands.product.with_name(
         "you-are-a-product-architect"
     ).exists()

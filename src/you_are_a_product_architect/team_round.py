@@ -6,13 +6,15 @@ import json
 import os
 import re
 import shutil
+import subprocess
+import sys
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 import yaml
 
-from .codex_adapter import create_codex_resume_turn, create_codex_turn, preflight_runtime_context
+from .codex_adapter import codex_connection_environment, preflight_runtime_context
 from .delivery_state import apply_delivery_state_request
 from .delivery_worldline import read_worldline
 from .runner_batch import read_batch, retain_batch
@@ -393,41 +395,49 @@ def _run_agent(
         os.link(trace, session_directory / "events.jsonl")
     else:
         session_directory = project.runner_directory / "sessions" / alias
+        if not session_directory.is_dir():
+            raise RunnerError("RUNTIME_WORKER_FAILED", "The mapped Session is unavailable.")
 
-    preset = project.role_bindings[role]
-    context = preflight_runtime_context(
-        runtime_store=project.runtime_store,
-        executable=runtime_executable(preset.runtime),
-        git_common_directory=project.common_directory,
-        role=role,
-        model=preset.model,
-        base_url=preset.base_url,
-        api_key_env=preset.api_key_env,
-        worktree=worktree,
-        evidence=evidence,
-        repository_skill_source=worktree,
-        requested_skills=(),
-        report_file=task.report_file,
-    ).finalize()
-    session_id: str | None = expected_session
-
-    def record_session(value: str, runtime_pid: int) -> None:
-        nonlocal session_id
-        session_id = value
+    if expected_session is None:
+        preset = project.role_bindings[role]
+        context = preflight_runtime_context(
+            runtime_store=project.runtime_store,
+            executable=runtime_executable(preset.runtime),
+            git_common_directory=project.common_directory,
+            role=role,
+            model=preset.model,
+            base_url=preset.base_url,
+            api_key_env=preset.api_key_env,
+            worktree=worktree,
+            evidence=evidence,
+            repository_skill_source=worktree,
+            requested_skills=(),
+            report_file=task.report_file,
+        ).finalize()
+        launch_file = session_directory / "launch.yml"
         write_yaml_durably(
-            session_directory / "mapping.yml",
+            launch_file,
             {
-                "alias": alias,
-                "runtime": context.runtime,
-                "session": value,
-                "ticket_id": task.ticket_id,
-                "team_generation": 1,
-                "role": role,
-                "parent": parent_alias,
-                "retained_batch_file": str(retained_batch),
-                "worker_pid": os.getpid(),
-                "runtime_pid": runtime_pid,
+                **context.launch_document(),
+                "operation": "launch",
+                "mapping": {
+                    "alias": alias,
+                    "runtime": context.runtime,
+                    "ticket_id": task.ticket_id,
+                    "team_generation": 1,
+                    "role": role,
+                    "parent": parent_alias,
+                    "retained_batch_file": str(retained_batch),
+                    "worktree_path": str(worktree),
+                    "trace_file": str(session_directory / "events.jsonl"),
+                },
             },
+        )
+        job_file = launch_file
+        runtime_environment = context.runtime_environment()
+    else:
+        job_file, runtime_environment = _resume_job(
+            session_directory, expected_session
         )
 
     task_prompt = prompt or task.ticket_content
@@ -486,28 +496,136 @@ def _run_agent(
     previous = {name: os.environ.get(name) for name in environment}
     os.environ.update(environment)
     try:
-        request = context.launch_document()["adapter_request"]
-        turn = (
-            create_codex_turn(request, task_prompt, session_directory, record_session)
-            if expected_session is None
-            else create_codex_resume_turn(request, task_prompt, expected_session, session_directory, record_session)
+        session_id, outcome = _run_session_worker(
+            session_directory,
+            job_file,
+            worktree,
+            task_prompt,
+            runtime_environment,
         )
-        outcome = turn.run()
     finally:
         for name, value in previous.items():
             if value is None:
                 os.environ.pop(name, None)
             else:
                 os.environ[name] = value
-    if outcome.get("outcome") != "completed" or session_id is None:
+    if outcome != "completed":
         diagnostic = (session_directory / "stderr.log").read_text(encoding="utf-8")
         raise RunnerError(
             "RUNTIME_WORKER_FAILED",
-            "The {0} Team member did not complete successfully ({1}): {2}".format(
-                role, outcome.get("runtime_exit_code"), diagnostic.strip()
+            "The {0} Team member did not complete successfully: {1}".format(
+                role, diagnostic.strip()
             ),
         )
     return alias, session_id
+
+
+def _resume_job(
+    session_directory: Path, expected_session: str
+) -> tuple[Path, dict[str, str]]:
+    launch_file = session_directory / "launch.yml"
+    mapping_file = session_directory / "mapping.yml"
+    try:
+        launch = yaml.safe_load(launch_file.read_text(encoding="utf-8"))
+        mapping = yaml.safe_load(mapping_file.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, yaml.YAMLError) as error:
+        raise RunnerError("RUNTIME_WORKER_FAILED", "The mapped Session is unavailable.") from error
+    if (
+        not isinstance(launch, dict)
+        or not isinstance(mapping, dict)
+        or launch.get("runtime") != mapping.get("runtime")
+        or not isinstance(launch.get("adapter_request"), dict)
+        or mapping.get("session") != expected_session
+        or not isinstance(launch.get("connection"), dict)
+    ):
+        raise RunnerError("RUNTIME_WORKER_FAILED", "The mapped Session is unavailable.")
+    connection = launch["connection"]
+    if any(
+        key not in {"base_url", "api_key_env"}
+        or not isinstance(value, str)
+        or not value
+        for key, value in connection.items()
+    ):
+        raise RunnerError("RUNTIME_WORKER_FAILED", "The mapped Session is unavailable.")
+    resume_file = session_directory / "resume.yml"
+    write_yaml_durably(
+        resume_file,
+        {
+            "operation": "resume",
+            "runtime": mapping["runtime"],
+            "adapter_request": launch["adapter_request"],
+            "expected_session": expected_session,
+            "mapping": {
+                key: value
+                for key, value in mapping.items()
+                if key not in {"worker_pid", "runtime_pid"}
+            },
+        },
+    )
+    return resume_file, dict(
+        codex_connection_environment(
+            connection.get("base_url"), connection.get("api_key_env")
+        )
+    )
+
+
+def _run_session_worker(
+    session_directory: Path,
+    job_file: Path,
+    worktree: Path,
+    prompt: str,
+    runtime_environment: object,
+) -> tuple[str, str]:
+    if not isinstance(runtime_environment, dict):
+        raise RunnerError("RUNTIME_WORKER_FAILED", "The Runtime Session could not be started.")
+    execution = session_directory / "execution.yml"
+    execution.unlink(missing_ok=True)
+    error = session_directory / (
+        "resume-error.yml" if job_file.name == "resume.yml" else "launch-error.yml"
+    )
+    error.unlink(missing_ok=True)
+    worker_environment = dict(os.environ)
+    worker_environment.update(runtime_environment)
+    try:
+        with (session_directory / "worker-stderr.log").open(
+            "w", encoding="utf-8"
+        ) as diagnostics:
+            worker = subprocess.Popen(
+                [
+                    sys.executable,
+                    "-m",
+                    "you_are_a_product_architect.runner_worker",
+                    str(job_file),
+                ],
+                cwd=worktree,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.DEVNULL,
+                stderr=diagnostics,
+                text=True,
+                start_new_session=True,
+                env=worker_environment,
+            )
+            assert worker.stdin is not None
+            worker.stdin.write(prompt)
+            worker.stdin.close()
+            exit_code = worker.wait()
+        if exit_code != 0:
+            raise OSError("Session worker failed")
+        mapping = yaml.safe_load(
+            (session_directory / "mapping.yml").read_text(encoding="utf-8")
+        )
+        terminal = yaml.safe_load(execution.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, yaml.YAMLError) as failure:
+        raise RunnerError("RUNTIME_WORKER_FAILED", "The Runtime Session could not be started.") from failure
+    if (
+        not isinstance(mapping, dict)
+        or not isinstance(mapping.get("session"), str)
+        or not mapping["session"]
+        or not isinstance(terminal, dict)
+        or terminal.get("outcome") not in {"completed", "interrupted", "runtime-error"}
+    ):
+        raise RunnerError("RUNTIME_WORKER_FAILED", "The Runtime Session could not be started.")
+    return mapping["session"], terminal["outcome"]
 
 
 def _link_worktree(project: Any, worktree: Path, evidence: Path) -> None:

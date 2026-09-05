@@ -7,7 +7,7 @@ import click
 import yaml
 
 from .runner_cleanup import cleanup_ticket
-from .runner_control import interrupt_session, send_instruction
+from .runner_control import interrupt_session, send_instruction, send_legacy_instruction
 from .runner_launch import launch_batch
 from .runner_models import RunnerError
 from .runner_status import status_aliases
@@ -79,20 +79,37 @@ def status(aliases):
 @click.argument("alias")
 @click.option("--instruction", required=True)
 @click.option(
+    "--caused-by-event-id",
+    multiple=True,
+)
+@click.option(
     "--caused-by-worldline-seq",
     type=click.IntRange(min=1),
     multiple=True,
-    required=True,
+    hidden=True,
 )
-def send(alias, instruction, caused_by_worldline_seq):
+def send(alias, instruction, caused_by_event_id, caused_by_worldline_seq):
     """Send a follow-up to one recoverable Engineer session."""
     try:
-        response = send_instruction(
-            alias,
-            instruction,
-            Path.cwd().resolve(),
-            caused_by_worldline_seq,
-        )
+        if caused_by_event_id and not caused_by_worldline_seq:
+            response = send_instruction(
+                alias,
+                instruction,
+                Path.cwd().resolve(),
+                caused_by_event_id,
+            )
+        elif caused_by_worldline_seq and not caused_by_event_id:
+            response = send_legacy_instruction(
+                alias,
+                instruction,
+                Path.cwd().resolve(),
+                caused_by_worldline_seq,
+            )
+        else:
+            raise RunnerError(
+                "invalid-input",
+                "Send requires one or more causal Project Worldline event IDs.",
+            )
     except RunnerError as error:
         _emit_result({"alias": alias, "error": error.as_document()})
         click.echo(error.message, err=True)

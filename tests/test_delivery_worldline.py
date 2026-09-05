@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import json
+import os
+import re
 from pathlib import Path
 
 import pytest
 import yaml
 from click.testing import CliRunner
 
-from conftest import PROJECT_ROOT
+from conftest import PROJECT_ROOT, InstalledCommands, run_process
 
 
 def _trace(
@@ -25,6 +27,300 @@ def _trace(
     trace.parent.mkdir(parents=True, exist_ok=True)
     trace.write_text('{"type":"turn.completed"}\n', encoding="utf-8")
     return relative.as_posix()
+
+
+def _configure_project(project: Path) -> Path:
+    state = project / ".graphtraj" / "operator-state"
+    config = project / ".graphtraj" / "config.yml"
+    config.parent.mkdir()
+    config.write_text(
+        yaml.safe_dump(
+            {
+                "version": 1,
+                "paths": {
+                    "project_root": ".",
+                    "docs": "docs",
+                    "agent_worktrees": ".graphtraj/worktrees",
+                    "state": ".graphtraj/operator-state",
+                },
+                "agent_runner": {"dispatch_depth": 1, "max_concurrency": 2},
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    state.mkdir()
+    return state
+
+
+def _event_file(project: Path, name: str, event: object) -> Path:
+    path = project / name
+    path.write_text(yaml.safe_dump(event, sort_keys=False), encoding="utf-8")
+    return path
+
+
+def _worldline(
+    commands: InstalledCommands,
+    project: Path,
+    *arguments: str,
+    timezone: str = "Asia/Tokyo",
+):
+    environment = os.environ.copy()
+    environment["TZ"] = timezone
+    return run_process(
+        [str(commands.product), "worldline", *arguments],
+        cwd=project,
+        env=environment,
+    )
+
+
+def test_installed_command_appends_reads_and_renders_project_worldline(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+) -> None:
+    project = temporary_git_repository
+    state = _configure_project(project)
+    evidence = state / "evidence" / "candidate.txt"
+    evidence.parent.mkdir()
+    evidence.write_text("candidate\n", encoding="utf-8")
+    first_file = _event_file(
+        project,
+        "first.yml",
+        {
+            "kind": "user-decision",
+            "caused_by_event_ids": [],
+            "evidence_refs": [],
+            "decision": "Use the candidate.",
+        },
+    )
+
+    first_result = _worldline(
+        installed_commands, project, "append", "--event-file", str(first_file)
+    )
+
+    assert first_result.returncode == 0, first_result.stderr
+    first = yaml.safe_load(first_result.stdout)
+    assert re.fullmatch(
+        r"\d{8}T\d{6}\.\d{6}\+0900(?:-\d+)?", first["event_id"]
+    )
+    assert re.fullmatch(
+        r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}\+09:00",
+        first["captured_at"],
+    )
+    second_file = _event_file(
+        project,
+        "second.yml",
+        {
+            "kind": "candidate-recorded",
+            "caused_by_event_ids": [first["event_id"]],
+            "evidence_refs": ["evidence/candidate.txt"],
+            "candidate_commit": "a" * 40,
+        },
+    )
+    second_result = _worldline(
+        installed_commands,
+        project,
+        "append",
+        "--event-file",
+        str(second_file),
+        timezone="America/Los_Angeles",
+    )
+
+    assert second_result.returncode == 0, second_result.stderr
+    second = yaml.safe_load(second_result.stdout)
+    assert re.fullmatch(
+        r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}-07:00",
+        second["captured_at"],
+    )
+    read_result = _worldline(installed_commands, project, "read")
+    assert read_result.returncode == 0, read_result.stderr
+    assert [json.loads(line) for line in read_result.stdout.splitlines()] == [
+        first,
+        second,
+    ]
+    render_result = _worldline(installed_commands, project, "render")
+    assert render_result.returncode == 0, render_result.stderr
+    assert yaml.safe_load(render_result.stdout) == {"trajectory": [first, second]}
+    assert not (state / "ledger.yml").exists()
+    assert not (state / "dag.md").exists()
+
+
+@pytest.mark.parametrize(
+    "event,error",
+    [
+        (
+            {
+                "kind": "candidate-recorded",
+                "caused_by_event_ids": ["missing-event"],
+                "evidence_refs": [],
+            },
+            "causal predecessor",
+        ),
+        (
+            {
+                "kind": "candidate-recorded",
+                "caused_by_event_ids": [],
+                "evidence_refs": ["evidence/missing.txt"],
+            },
+            "retained evidence",
+        ),
+        (
+            {
+                "kind": "candidate-recorded",
+                "caused_by_event_ids": [],
+                "evidence_refs": [],
+                "captured_at": "2026-09-05T12:00:00+09:00",
+            },
+            "assigned fields",
+        ),
+        (
+            {"kind": "Not a plain kind", "caused_by_event_ids": [], "evidence_refs": []},
+            "plain kind",
+        ),
+        ([], "mapping"),
+    ],
+)
+def test_invalid_event_is_rejected_without_append(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    event: object,
+    error: str,
+) -> None:
+    project = temporary_git_repository
+    state = _configure_project(project)
+    event_file = _event_file(project, "event.yml", event)
+
+    result = _worldline(
+        installed_commands, project, "append", "--event-file", str(event_file)
+    )
+
+    assert result.returncode == 1
+    assert error in result.stderr
+    assert not tuple((state / "worldline").glob("*.jsonl"))
+
+
+@pytest.mark.parametrize(
+    "kind",
+    [
+        "synchronization",
+        "unchanged-polling",
+        "heartbeat",
+        "no-op-retry",
+        "projection-regeneration",
+        "repeated-read",
+    ],
+)
+def test_operation_without_a_new_fact_creates_no_event(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    kind: str,
+) -> None:
+    project = temporary_git_repository
+    state = _configure_project(project)
+    event_file = _event_file(
+        project,
+        "event.yml",
+        {"kind": kind, "caused_by_event_ids": [], "evidence_refs": []},
+    )
+
+    result = _worldline(
+        installed_commands, project, "append", "--event-file", str(event_file)
+    )
+
+    assert result.returncode == 1
+    assert "durable fact" in result.stderr
+    assert not tuple((state / "worldline").glob("*.jsonl"))
+
+
+def test_installed_command_rolls_200_events_into_a_new_immutable_shard(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+) -> None:
+    project = temporary_git_repository
+    state = _configure_project(project)
+    event_file = project / "event.yml"
+    predecessor: str | None = None
+
+    for number in range(201):
+        event_file.write_text(
+            yaml.safe_dump(
+                {
+                    "kind": "fact-recorded",
+                    "caused_by_event_ids": [predecessor] if predecessor else [],
+                    "evidence_refs": [],
+                    "number": number,
+                },
+                sort_keys=False,
+            ),
+            encoding="utf-8",
+        )
+        timezone = "Asia/Tokyo" if number < 200 else "America/Los_Angeles"
+        result = _worldline(
+            installed_commands,
+            project,
+            "append",
+            "--event-file",
+            str(event_file),
+            timezone=timezone,
+        )
+        assert result.returncode == 0, result.stderr
+        predecessor = yaml.safe_load(result.stdout)["event_id"]
+
+    shards = tuple((state / "worldline").glob("*.jsonl"))
+    assert len(shards) == 2
+    shard_lengths = sorted(
+        len(path.read_text(encoding="utf-8").splitlines()) for path in shards
+    )
+    assert shard_lengths == [1, 200]
+    full_shard = next(
+        path
+        for path in shards
+        if len(path.read_text(encoding="utf-8").splitlines()) == 200
+    )
+    full_contents = full_shard.read_bytes()
+    read_result = _worldline(installed_commands, project, "read")
+    assert read_result.returncode == 0, read_result.stderr
+    assert len(read_result.stdout.splitlines()) == 201
+    assert full_shard.read_bytes() == full_contents
+    assert json.loads(read_result.stdout.splitlines()[-1])["number"] == 200
+    assert sorted(shards)[0] != full_shard
+
+
+def test_malformed_retained_history_prevents_an_append(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+) -> None:
+    project = temporary_git_repository
+    state = _configure_project(project)
+    event_file = _event_file(
+        project,
+        "event.yml",
+        {
+            "kind": "fact-recorded",
+            "caused_by_event_ids": [],
+            "evidence_refs": [],
+            "fact": "first",
+        },
+    )
+    first = _worldline(
+        installed_commands, project, "append", "--event-file", str(event_file)
+    )
+    assert first.returncode == 0, first.stderr
+    shard = next((state / "worldline").glob("*.jsonl"))
+    malformed = json.loads(shard.read_text(encoding="utf-8"))
+    malformed["captured_at"] = malformed["captured_at"].replace(".000000", "")
+    if malformed["captured_at"] == yaml.safe_load(first.stdout)["captured_at"]:
+        malformed["captured_at"] = "2026-09-05T12:00:00+09:00"
+    shard.write_text(json.dumps(malformed) + "\n", encoding="utf-8")
+    before = shard.read_bytes()
+
+    result = _worldline(
+        installed_commands, project, "append", "--event-file", str(event_file)
+    )
+
+    assert result.returncode == 1
+    assert "malformed timestamp" in result.stderr
+    assert shard.read_bytes() == before
 
 
 def test_atomic_worldline_projects_interleaved_explicit_events_deterministically(

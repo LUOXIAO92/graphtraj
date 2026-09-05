@@ -211,6 +211,152 @@ def test_installed_send_resumes_an_idle_runtime_session_under_the_same_alias(
     assert turn_two_start["caused_by_worldline_seqs"] == [decision_seq]
 
 
+def test_installed_send_uses_launch_connection_context_after_roles_change(
+    installed_worktree_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    (
+        harness_root,
+        integration,
+        runner_directory,
+        _,
+        environment,
+    ) = configured_runner(
+        installed_worktree_commands,
+        temporary_git_repository,
+        fake_codex,
+        tmp_path,
+    )
+    roles_path = harness_root / ".graphtraj" / "roles.yml"
+    roles = yaml.safe_load(roles_path.read_text(encoding="utf-8"))
+    preset = roles["roles"]["engineer-expert"]
+    launch_model = "launch-selected-model"
+    launch_base_url = "https://launch.example.invalid"
+    launch_key_env = "ROTATING_ROLE_API_KEY"
+    launch_secret = "launch-secret-must-not-persist"
+    rotated_secret = "rotated-secret-must-not-persist"
+    wrong_secret = "wrong-secret-must-not-persist"
+    preset.update(
+        {
+            "runtime": "codex",
+            "model": launch_model,
+            "base_url": launch_base_url,
+            "api_key_env": launch_key_env,
+        }
+    )
+    roles_path.write_text(yaml.safe_dump(roles, sort_keys=False), encoding="utf-8")
+
+    session = "thread-launch-context"
+    alias, _ = launch_turn(
+        installed_worktree_commands,
+        harness_root,
+        integration,
+        {
+            **environment,
+            launch_key_env: launch_secret,
+            "FAKE_CODEX_EVENTS": json.dumps(
+                [{"type": "thread.started", "thread_id": session}]
+            ),
+            "FAKE_CODEX_CAPTURE_CONNECTION": "1",
+            "FAKE_CODEX_EXPECTED_API_KEY": launch_secret,
+        },
+        ticket_id="71",
+        ticket_name="immutable-launch-context",
+        role="engineer-expert",
+        run_id="20260905-immutable-launch-context",
+    )
+    session_directory = runner_directory / "sessions" / alias
+    wait_for_file(session_directory / "turn.yml")
+    original_mapping = yaml.safe_load(
+        (session_directory / "mapping.yml").read_text(encoding="utf-8")
+    )
+    wait_for_process_exit(original_mapping["worker_pid"])
+    initial_runtime_record = json.loads(
+        fake_codex.log_file.read_text(encoding="utf-8")
+    )
+    assert initial_runtime_record["connection"] == {
+        "base_url": launch_base_url,
+        "api_key_matches_expected": True,
+    }
+    launch_document = yaml.safe_load(
+        (session_directory / "launch.yml").read_text(encoding="utf-8")
+    )
+    assert launch_document["connection"] == {
+        "base_url": launch_base_url,
+        "api_key_env": launch_key_env,
+    }
+
+    preset.update(
+        {
+            "runtime": "unapproved",
+            "model": "changed-after-launch",
+            "base_url": "https://changed-after-launch.invalid",
+            "api_key_env": "CHANGED_ROLE_API_KEY",
+        }
+    )
+    roles_path.write_text(yaml.safe_dump(roles, sort_keys=False), encoding="utf-8")
+    resume_release = tmp_path / "allow-immutable-context-resume-to-finish"
+    resumed = send(
+        installed_worktree_commands,
+        integration,
+        {
+            **environment,
+            launch_key_env: rotated_secret,
+            "CHANGED_ROLE_API_KEY": wrong_secret,
+            "FAKE_CODEX_EVENTS": json.dumps(
+                [{"type": "thread.started", "thread_id": session}]
+            ),
+            "FAKE_CODEX_CAPTURE_CONNECTION": "1",
+            "FAKE_CODEX_EXPECTED_API_KEY": rotated_secret,
+            "FAKE_CODEX_RELEASE_FILE": str(resume_release),
+        },
+        alias,
+        "Resume with the frozen launch context.",
+    )
+
+    try:
+        assert resumed.returncode == 0, resumed.stderr
+        assert yaml.safe_load(resumed.stdout) == {
+            "alias": alias,
+            "send_status": "sent",
+        }
+        resumed_mapping = yaml.safe_load(
+            (session_directory / "mapping.yml").read_text(encoding="utf-8")
+        )
+        runtime_record = json.loads(
+            fake_codex.log_file.read_text(encoding="utf-8")
+        )
+        assert runtime_record["connection"] == {
+            "base_url": launch_base_url,
+            "api_key_matches_expected": True,
+        }
+        model_index = runtime_record["argv"].index("--model")
+        assert runtime_record["argv"][model_index + 1] == launch_model
+        assert runtime_record["argv"] == [
+            *initial_runtime_record["argv"][:-1],
+            "resume",
+            session,
+            "-",
+        ]
+        assert runtime_record["cwd"] == resumed_mapping["worktree_path"]
+        for secret in (launch_secret, rotated_secret, wrong_secret):
+            assert secret not in resumed.stdout
+            assert secret not in resumed.stderr
+            for root in (harness_root / ".graphtraj", harness_root / ".codex"):
+                for path in root.rglob("*"):
+                    if path.is_file():
+                        assert secret.encode() not in path.read_bytes()
+    finally:
+        resume_release.touch()
+        wait_for_file(session_directory / "turn.yml")
+        resumed_mapping = yaml.safe_load(
+            (session_directory / "mapping.yml").read_text(encoding="utf-8")
+        )
+        wait_for_process_exit(resumed_mapping["worker_pid"])
+
+
 def test_installed_send_rejects_running_codex_without_deferring_instruction(
     installed_worktree_commands: InstalledCommands,
     temporary_git_repository: Path,

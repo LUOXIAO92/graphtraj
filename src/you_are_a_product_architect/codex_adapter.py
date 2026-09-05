@@ -170,6 +170,8 @@ class _CodexRuntimePreflight:
     _git_common_directory: Path
     _role: _CodexRole
     _model: str
+    _base_url: str | None
+    _api_key_env: str | None
     _environment: Mapping[str, str]
     _worktree: Path
     _evidence: Path
@@ -200,6 +202,8 @@ class _CodexRuntimePreflight:
             _arguments=tuple(request["arguments"]),
             _worktree=self._worktree,
             _effective_skills=effective_skills,
+            _base_url=self._base_url,
+            _api_key_env=self._api_key_env,
             _environment=self._environment,
         )
 
@@ -212,6 +216,8 @@ class _CodexRuntimeContext:
     _arguments: Tuple[str, ...]
     _worktree: Path
     _effective_skills: Tuple[_EffectiveSkill, ...]
+    _base_url: str | None
+    _api_key_env: str | None
     _environment: Mapping[str, str]
     runtime: str = "codex"
 
@@ -223,6 +229,14 @@ class _CodexRuntimeContext:
             "adapter_request": {
                 "arguments": list(self._arguments),
                 "worktree_path": str(self._worktree),
+            },
+            "connection": {
+                key: value
+                for key, value in (
+                    ("base_url", self._base_url),
+                    ("api_key_env", self._api_key_env),
+                )
+                if value is not None
             },
         }
 
@@ -336,6 +350,8 @@ def preflight_runtime_context(
         _git_common_directory=git_common_directory,
         _role=resolved_role,
         _model=selected_model,
+        _base_url=base_url,
+        _api_key_env=api_key_env,
         _environment=_connection_environment(base_url, api_key_env),
         _worktree=worktree,
         _evidence=evidence,

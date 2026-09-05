@@ -74,7 +74,6 @@ def launch_ticket(
         yaml.safe_dump(
             {
                 "run_id": run_id,
-                "runtime": "codex",
                 "tasks": [
                     {
                         "ticket_id": "14",
@@ -840,7 +839,6 @@ def test_retired_alias_text_is_reusable_without_losing_run_scoped_history(
         yaml.safe_dump(
             {
                 "run_id": later_run,
-                "runtime": "codex",
                 "tasks": [
                     {
                         "ticket_id": launched.ticket_id,

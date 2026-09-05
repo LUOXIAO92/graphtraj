@@ -19,6 +19,7 @@ from .project_configuration import (
     ProjectConfigurationError,
     load_project_configuration,
 )
+from .project_roles import ProjectRolesError, load_project_roles
 
 
 ALLOWLISTED_RUNTIMES = frozenset({"codex"})
@@ -305,43 +306,47 @@ def _resolve_path(
         raise RunnerError(code, message) from error
 
 
-def discover_project(
-    cwd: Path,
-    selected_runtime: str | None = None,
-    *,
-    require_clean_integration: bool = True,
-    require_runtime_executable: bool = True,
-) -> Project:
-    """Discover one project from its single general configuration."""
-
-    configuration = _load_graphtraj_configuration(cwd)
-    invalid = "GraphTraj Config contains invalid project paths."
-    repository = configuration.project_root
-    common = _validate_source_repository(repository, invalid)
-    runtime_name = "codex" if selected_runtime is None else selected_runtime
+def runtime_executable(runtime_name: str) -> Path:
+    """Resolve the executable for one selected reusable role Runtime."""
     if runtime_name not in ALLOWLISTED_RUNTIMES:
         raise RunnerError(
             "RUNTIME_UNSUPPORTED",
             "The selected Agent Runtime is not supported by this Runner.",
         )
     executable = shutil.which(runtime_name)
-    runtime_executable = (
-        _resolve_path(
-            Path(executable),
-            code="RUNTIME_EXECUTABLE_INVALID",
-            message="The selected Agent Runtime executable is unavailable.",
-        )
-        if executable is not None
-        else Path(runtime_name)
-    )
-    if require_runtime_executable and (
-        not runtime_executable.is_file()
-        or not os.access(runtime_executable, os.X_OK)
-    ):
+    if executable is None:
         raise RunnerError(
             "RUNTIME_EXECUTABLE_INVALID",
             "The configured Codex Runtime executable is unavailable.",
         )
+    resolved = _resolve_path(
+        Path(executable),
+        code="RUNTIME_EXECUTABLE_INVALID",
+        message="The selected Agent Runtime executable is unavailable.",
+    )
+    if not resolved.is_file() or not os.access(resolved, os.X_OK):
+        raise RunnerError(
+            "RUNTIME_EXECUTABLE_INVALID",
+            "The configured Codex Runtime executable is unavailable.",
+        )
+    return resolved
+
+
+def discover_project(
+    cwd: Path,
+    *,
+    require_clean_integration: bool = True,
+) -> Project:
+    """Discover one project from its single general configuration."""
+
+    configuration = _load_graphtraj_configuration(cwd)
+    try:
+        roles = load_project_roles(configuration.harness_root)
+    except ProjectRolesError as error:
+        raise RunnerError("ROLE_CONFIG_INVALID", str(error)) from error
+    invalid = "GraphTraj Config contains invalid project paths."
+    repository = configuration.project_root
+    common = _validate_source_repository(repository, invalid)
     branch = "dev"
     integration = _worktree_for_branch(repository, branch)
     expected_integration = _resolve_path(
@@ -383,8 +388,7 @@ def discover_project(
         integration_branch=branch,
         integration_worktree=integration,
         dev_commit=dev_commit,
-        runtime_executable=runtime_executable,
-        role_bindings={role: role for role in LOGICAL_ROLES},
+        role_bindings={role: roles.presets[role] for role in LOGICAL_ROLES},
     )
 
 

@@ -24,7 +24,7 @@ from .runtime_adapter import (
     SessionStarted,
 )
 from .runner_transport import runtime_turn_outcome
-from .runner_models import LOGICAL_ROLES, managed_runtime_policy_matches
+from .runner_models import LOGICAL_ROLES
 from .git_repository import GitRepositoryError, SourceRepository
 from .skill_check import (
     declared_skill_name,
@@ -108,6 +108,7 @@ class _CodexRole:
         runtime_store: Path,
         effective_skills: Tuple[_EffectiveSkill, ...],
         report_file: Path | None,
+        model: str,
     ) -> Dict[str, Any]:
         """Render the private request consumed by this Adapter's worker."""
 
@@ -121,7 +122,7 @@ class _CodexRole:
             "--add-dir",
             str(git_common_directory),
             "--model",
-            self.model,
+            model,
             "--dangerously-bypass-hook-trust",
         ]
         developer_instructions = self.developer_instructions
@@ -168,6 +169,8 @@ class _CodexRuntimePreflight:
     _executable: Path
     _git_common_directory: Path
     _role: _CodexRole
+    _model: str
+    _environment: Mapping[str, str]
     _worktree: Path
     _evidence: Path
     _harness_skills: Tuple[_EffectiveSkill, ...]
@@ -188,14 +191,16 @@ class _CodexRuntimePreflight:
             runtime_store=self._runtime_store,
             effective_skills=effective_skills,
             report_file=self._report_file,
+            model=self._model,
         )
         return _CodexRuntimeContext(
             _role=self._role.name,
-            _model=self._role.model,
+            _model=self._model,
             _reasoning_effort=self._role.reasoning_effort,
             _arguments=tuple(request["arguments"]),
             _worktree=self._worktree,
             _effective_skills=effective_skills,
+            _environment=self._environment,
         )
 
 
@@ -207,6 +212,7 @@ class _CodexRuntimeContext:
     _arguments: Tuple[str, ...]
     _worktree: Path
     _effective_skills: Tuple[_EffectiveSkill, ...]
+    _environment: Mapping[str, str]
     runtime: str = "codex"
 
     def launch_document(self) -> Dict[str, Any]:
@@ -233,6 +239,10 @@ class _CodexRuntimeContext:
             ],
         }
 
+    def runtime_environment(self) -> Mapping[str, str]:
+        """Return the ephemeral connection settings for the Runtime process."""
+        return dict(self._environment)
+
 
 def preflight_engineer_runtime_context(
     *,
@@ -240,6 +250,9 @@ def preflight_engineer_runtime_context(
     executable: Path,
     git_common_directory: Path,
     role: str,
+    model: str | None = None,
+    base_url: str | None = None,
+    api_key_env: str | None = None,
     worktree: Path,
     evidence: Path,
     repository_skill_source: Path,
@@ -259,6 +272,9 @@ def preflight_engineer_runtime_context(
             executable=executable,
             git_common_directory=git_common_directory,
             role=role,
+            model=model,
+            base_url=base_url,
+            api_key_env=api_key_env,
             worktree=worktree,
             evidence=evidence,
             repository_skill_source=repository_skill_source,
@@ -274,6 +290,9 @@ def preflight_runtime_context(
     executable: Path,
     git_common_directory: Path,
     role: str,
+    model: str | None = None,
+    base_url: str | None = None,
+    api_key_env: str | None = None,
     worktree: Path,
     evidence: Path,
     repository_skill_source: Path,
@@ -283,7 +302,8 @@ def preflight_runtime_context(
     """Prepare one Codex role without crossing role-specific boundaries."""
 
     _reject_legacy_user_sandbox_config()
-    resolved_role = _resolve_codex_role(runtime_store, role)
+    resolved_role = _resolve_codex_role(role)
+    selected_model = resolved_role.model if model is None else model
     if role in ENGINEER_ROLES:
         harness_skills = _resolve_engineer_harness_skills(
             runtime_store,
@@ -308,12 +328,15 @@ def preflight_runtime_context(
         evidence=evidence,
         effective_skills=harness_skills + repository_skills,
         report_file=report_file,
+        model=selected_model,
     )
     return _CodexRuntimePreflight(
         _runtime_store=runtime_store,
         _executable=executable,
         _git_common_directory=git_common_directory,
         _role=resolved_role,
+        _model=selected_model,
+        _environment=_connection_environment(base_url, api_key_env),
         _worktree=worktree,
         _evidence=evidence,
         _harness_skills=harness_skills,
@@ -623,67 +646,11 @@ def _process_group_is_alive(process_group: int) -> bool:
     return True
 
 
-def _resolve_codex_role(runtime_store: Path, binding: str) -> _CodexRole:
-    """Resolve and vet one canonical role from the Harness Runtime Store."""
+def _resolve_codex_role(binding: str) -> _CodexRole:
+    """Load one fixed role policy from the installed GraphTraj resources."""
 
-    agent_directory = runtime_store / "agents"
-    if not agent_directory.is_dir() or agent_directory.is_symlink():
-        raise CodexAdapterError(
-            "ROLE_NOT_FOUND",
-            "The configured Codex role was not found in Harness Agent files.",
-        )
-
-    matching: List[Tuple[Path, Dict[str, Any]]] = []
-    canonical_document: Optional[Dict[str, Any]] = None
-    for path in sorted(agent_directory.glob("*.toml")):
-        if path.is_symlink() or not path.is_file():
-            raise CodexAdapterError(
-                "ROLE_CONFIG_INVALID",
-                "Harness Codex Agent files must be regular files.",
-            )
-        try:
-            document = tomllib.loads(path.read_text(encoding="utf-8"))
-        except (OSError, UnicodeError, tomllib.TOMLDecodeError) as error:
-            raise CodexAdapterError(
-                "ROLE_CONFIG_INVALID",
-                "A Harness Codex Agent file is not valid readable TOML.",
-            ) from error
-        if path.name == "{0}.toml".format(binding):
-            canonical_document = document
-        if document.get("name") == binding:
-            matching.append((path, document))
-
-    if not matching:
-        if canonical_document is not None:
-            _validate_role_schema(canonical_document)
-            raise CodexAdapterError(
-                "ROLE_CONFIG_MISMATCH",
-                "The configured Codex role contains managed policy drift.",
-            )
-        raise CodexAdapterError(
-            "ROLE_NOT_FOUND",
-            "The configured Codex role was not found in Harness Agent files.",
-        )
-    if len(matching) != 1:
-        raise CodexAdapterError(
-            "ROLE_DUPLICATE",
-            "The configured Codex role resolves to more than one Harness Agent file.",
-        )
-
-    _, document = matching[0]
+    document = _packaged_role(binding)
     _validate_role_schema(document)
-    expected = _packaged_role(binding, runtime_store)
-    if document["hooks"] != expected.get("hooks"):
-        raise CodexAdapterError(
-            "ROLE_HOOK_MISMATCH",
-            "The configured Codex role does not contain the packaged Worktree Guard hooks.",
-        )
-    if not managed_runtime_policy_matches(document, expected):
-        raise CodexAdapterError(
-            "ROLE_CONFIG_MISMATCH",
-            "The configured Codex role contains managed policy drift.",
-        )
-    _verify_packaged_guard(runtime_store)
 
     return _CodexRole(
         name=binding,
@@ -751,18 +718,39 @@ def _nonempty_string(value: Any) -> bool:
     return isinstance(value, str) and bool(value.strip())
 
 
-def _packaged_role(binding: str, runtime_store: Path) -> Dict[str, Any]:
+def _connection_environment(
+    base_url: str | None,
+    api_key_env: str | None,
+) -> Mapping[str, str]:
+    """Translate optional role connection choices without persisting a key."""
+    environment: dict[str, str] = {}
+    if base_url is not None:
+        environment["OPENAI_BASE_URL"] = base_url
+    if api_key_env is not None:
+        api_key = os.environ.get(api_key_env)
+        if api_key:
+            environment["OPENAI_API_KEY"] = api_key
+    return environment
+
+
+def codex_connection_environment(
+    base_url: str | None,
+    api_key_env: str | None,
+) -> Mapping[str, str]:
+    """Return transient Codex connection overrides for a resumed Session."""
+    return _connection_environment(base_url, api_key_env)
+
+
+def _packaged_role(binding: str) -> Dict[str, Any]:
     if binding not in SUPPORTED_ROLES:
         raise CodexAdapterError(
             "ROLE_NOT_SUPPORTED",
             "The configured Codex role is not supported by this Runner.",
         )
     try:
-        from .codex_project import CodexProjectFiles
-
-        content = CodexProjectFiles.load().runtime_resources(runtime_store)[
-            "agents/{0}.toml".format(binding)
-        ]
+        content = resources.files("you_are_a_product_architect.resources").joinpath(
+            "codex", "agents", "{0}.toml".format(binding)
+        ).read_bytes()
         return tomllib.loads(content.decode())
     except (OSError, UnicodeError, tomllib.TOMLDecodeError) as error:
         raise CodexAdapterError(

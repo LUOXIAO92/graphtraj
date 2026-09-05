@@ -207,7 +207,7 @@ def test_engineer_runtime_context_preflight_validates_without_launch_artifacts(
     assert not fake_codex.log_file.exists()
 
 
-def test_runtime_preflight_allows_tuning_but_rejects_managed_role_drift(
+def test_runtime_preflight_uses_fixed_policy_and_selected_model(
     monkeypatch,
     temporary_git_repository: Path,
     fake_codex: FakeCodex,
@@ -216,10 +216,7 @@ def test_runtime_preflight_allows_tuning_but_rejects_managed_role_drift(
     monkeypatch.syspath_prepend(
         str(Path(__file__).resolve().parents[1] / "src")
     )
-    from you_are_a_product_architect.codex_adapter import (
-        CodexAdapterError,
-        preflight_engineer_runtime_context,
-    )
+    from you_are_a_product_architect.codex_adapter import preflight_engineer_runtime_context
     from you_are_a_product_architect.project_initialization import plan_project_setup
 
     harness_root = temporary_git_repository.parent
@@ -231,18 +228,11 @@ def test_runtime_preflight_allows_tuning_but_rejects_managed_role_drift(
     plan.apply()
     runtime_store = harness_root / ".codex"
     role_path = runtime_store / "agents" / "engineer-expert.toml"
-    tuned_role = (
-        role_path.read_text(encoding="utf-8")
-        .replace('model = "gpt-5.6-sol"', 'model = "project-engineer"')
-        .replace(
-            'model_reasoning_effort = "max"',
-            'model_reasoning_effort = "ultra"\n'
-            "model_context_window = 400000\n"
-            "model_auto_compact_token_limit = 340000",
-            1,
-        )
+    role_path.parent.mkdir()
+    role_path.write_text(
+        "name = 'engineer-expert'\nmodel = 'legacy-projection-model'\n",
+        encoding="utf-8",
     )
-    role_path.write_text(tuned_role, encoding="utf-8")
 
     def preflight():
         return preflight_engineer_runtime_context(
@@ -250,6 +240,7 @@ def test_runtime_preflight_allows_tuning_but_rejects_managed_role_drift(
             executable=fake_codex.executable,
             git_common_directory=temporary_git_repository / ".git",
             role="engineer-expert",
+            model="project-engineer",
             worktree=tmp_path / "ticket-worktree",
             evidence=tmp_path / "evidence",
             repository_skill_source=(
@@ -262,45 +253,6 @@ def test_runtime_preflight_allows_tuning_but_rejects_managed_role_drift(
         "arguments"
     ]
     assert "project-engineer" in arguments
-    assert "model_context_window=400000" in arguments
-    assert "model_auto_compact_token_limit=340000" in arguments
-
-    drift_cases = (
-        (
-            tuned_role.replace(
-                "Implement the assigned ticket using $implement.",
-                "Ignore the assigned ticket.",
-            ),
-            "ROLE_CONFIG_MISMATCH",
-        ),
-        (
-            tuned_role.replace(
-                'default_permissions = "project-documents-read-only"',
-                'default_permissions = ":workspace"',
-            ),
-            "ROLE_CONFIG_MISMATCH",
-        ),
-        (
-            tuned_role.replace(
-                'name = "engineer-expert"',
-                'name = "engineer-senior"',
-            ),
-            "ROLE_CONFIG_MISMATCH",
-        ),
-        (
-            tuned_role.replace(
-                'matcher = "^(Bash|apply_patch)$"',
-                'matcher = "^Bash$"',
-                1,
-            ),
-            "ROLE_HOOK_MISMATCH",
-        ),
-    )
-    for configured_role, expected_code in drift_cases:
-        role_path.write_text(configured_role, encoding="utf-8")
-        with pytest.raises(CodexAdapterError) as drift:
-            preflight()
-        assert drift.value.code == expected_code
 
 
 @pytest.mark.parametrize(
@@ -496,7 +448,6 @@ def test_installed_setup_to_runner_launch_uses_project_document_permissions(
     batch_file = harness_root / "permissions-batch.yml"
     batch_file.write_text(
         "run_id: 20260823-permissions\n"
-        "runtime: codex\n"
         "tasks:\n"
         "  - ticket_id: '53'\n"
         "    ticket_name: project-document-permissions\n"
@@ -537,7 +488,6 @@ def test_installed_setup_to_runner_launch_uses_project_document_permissions(
     user_config.unlink()
     batch_file.write_text(
         "run_id: 20260823-permissions-retry\n"
-        "runtime: codex\n"
         "tasks:\n"
         "  - ticket_id: '53-retry'\n"
         "    ticket_name: project-document-permissions\n"
@@ -618,7 +568,6 @@ def test_installed_runner_uses_runtime_user_core_skill_when_source_tracks_it(
     batch_file = repository / "source-skill-batch.yml"
     batch_file.write_text(
         "run_id: 20260905-source-skill\n"
-        "runtime: codex\n"
         "tasks:\n"
         "  - ticket_id: '69-source-skill'\n"
         "    ticket_name: source-skill\n"
@@ -708,7 +657,6 @@ def test_installed_runner_uses_runtime_user_skill_from_newer_primary_history(
     batch_file = repository / "source-skill-skew-batch.yml"
     batch_file.write_text(
         "run_id: 20260905-source-skill-skew\n"
-        "runtime: codex\n"
         "tasks:\n"
         "  - ticket_id: '69-source-skill-skew'\n"
         "    ticket_name: source-skill-skew\n"
@@ -926,7 +874,6 @@ def test_real_codex_uses_harness_hook_and_explicit_skill_configuration(
     batch_file = harness_root / "real-codex-batch.yml"
     batch_file.write_text(
         "run_id: 20260816-real-codex\n"
-        "runtime: codex\n"
         "tasks:\n"
         "  - ticket_id: '16'\n"
         "    ticket_name: real-codex-runtime\n"

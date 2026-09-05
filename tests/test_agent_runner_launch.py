@@ -63,7 +63,6 @@ def test_installed_runner_launches_one_isolated_engineer_and_returns_early(
     batch_content = yaml.safe_dump(
         {
             "run_id": run_id,
-            "runtime": "codex",
             "tasks": [
                 {
                     "ticket_id": "10",
@@ -142,7 +141,6 @@ def test_installed_runner_launches_one_isolated_engineer_and_returns_early(
         ).resolve()
         task = document["tasks"][0]
         assert document["run_id"] == run_id
-        assert document["runtime"] == "codex"
         assert task["launch_status"] == "launched"
         assert task["worktree_path"] == str(ticket_worktree)
         assert task["alias"] == alias
@@ -175,6 +173,157 @@ def test_installed_runner_launches_one_isolated_engineer_and_returns_early(
         turn_file = session_directory / "turn.yml"
         if session_directory.exists():
             wait_for_file(turn_file)
+
+
+def test_installed_runner_uses_the_reusable_role_preset_model(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    harness_root = temporary_git_repository.parent
+    user_home = tmp_path / "operator-home"
+    install_user_skills(user_home)
+    setup = run_setup(
+        installed_commands,
+        harness_root=harness_root,
+        user_home=user_home,
+        fake_codex=fake_codex,
+        answers="y\n",
+    )
+    assert setup.returncode == 0, setup.stderr
+    roles_path = harness_root / ".graphtraj" / "roles.yml"
+    roles = yaml.safe_load(roles_path.read_text(encoding="utf-8"))
+    roles["roles"]["engineer-expert"]["model"] = "operator-selected-model"
+    roles_path.write_text(yaml.safe_dump(roles, sort_keys=False), encoding="utf-8")
+    legacy_role = harness_root / ".codex" / "agents" / "engineer-expert.toml"
+    legacy_role.parent.mkdir()
+    legacy_role.write_text(
+        "name = 'engineer-expert'\nmodel = 'legacy-projection-model'\n",
+        encoding="utf-8",
+    )
+    ticket_file = harness_root / "ticket.md"
+    ticket_file.write_text("# Launch\n", encoding="utf-8")
+    batch_file = harness_root / "batch.yml"
+    batch_file.write_text(
+        yaml.safe_dump(
+            {
+                "run_id": "20260905-role-preset",
+                "tasks": [
+                    {
+                        "ticket_id": "71",
+                        "ticket_name": "role-preset",
+                        "role": "engineer-expert",
+                        "ticket_file": str(ticket_file),
+                    }
+                ],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    environment = os.environ.copy()
+    environment.update(
+        {
+            "HOME": str(user_home),
+            "PATH": os.pathsep.join(
+                (str(fake_codex.executable.parent), os.environ.get("PATH", ""))
+            ),
+            "FAKE_CODEX_LOG": str(fake_codex.log_file),
+        }
+    )
+
+    result = run_process(
+        [str(installed_commands.runner), "--batch-input", str(batch_file)],
+        cwd=harness_root,
+        env=environment,
+        timeout=5,
+    )
+
+    assert result.returncode == 0, result.stderr
+    runtime_call = json.loads(fake_codex.log_file.read_text(encoding="utf-8"))
+    model_index = runtime_call["argv"].index("--model")
+    assert runtime_call["argv"][model_index + 1] == "operator-selected-model"
+
+
+def test_installed_runner_leaves_empty_role_connection_settings_to_codex_defaults(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    harness_root = temporary_git_repository.parent
+    user_home = tmp_path / "operator-home"
+    install_user_skills(user_home)
+    setup = run_setup(
+        installed_commands,
+        harness_root=harness_root,
+        user_home=user_home,
+        fake_codex=fake_codex,
+        answers="y\n",
+    )
+    assert setup.returncode == 0, setup.stderr
+    roles_path = harness_root / ".graphtraj" / "roles.yml"
+    roles = yaml.safe_load(roles_path.read_text(encoding="utf-8"))
+    roles["roles"]["engineer-expert"]["api_key_env"] = "EMPTY_ROLE_API_KEY"
+    roles_path.write_text(yaml.safe_dump(roles, sort_keys=False), encoding="utf-8")
+    ticket_file = harness_root / "ticket.md"
+    ticket_file.write_text("# Launch\n", encoding="utf-8")
+    batch_file = harness_root / "batch.yml"
+    batch_file.write_text(
+        yaml.safe_dump(
+            {
+                "run_id": "20260905-runtime-defaults",
+                "tasks": [
+                    {
+                        "ticket_id": "71.1",
+                        "ticket_name": "runtime-defaults",
+                        "role": "engineer-expert",
+                        "ticket_file": str(ticket_file),
+                    }
+                ],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    secret = "real-api-key-must-not-be-persisted"
+    environment = os.environ.copy()
+    environment.update(
+        {
+            "HOME": str(user_home),
+            "PATH": os.pathsep.join(
+                (str(fake_codex.executable.parent), os.environ.get("PATH", ""))
+            ),
+            "FAKE_CODEX_LOG": str(fake_codex.log_file),
+            "FAKE_CODEX_CAPTURE_ENV": "OPENAI_BASE_URL,OPENAI_API_KEY",
+            "EMPTY_ROLE_API_KEY": "",
+            "OPENAI_BASE_URL": "https://runtime-default.invalid",
+            "OPENAI_API_KEY": secret,
+        }
+    )
+
+    result = run_process(
+        [str(installed_commands.runner), "--batch-input", str(batch_file)],
+        cwd=harness_root,
+        env=environment,
+        timeout=5,
+    )
+
+    assert result.returncode == 0, result.stderr
+    runtime_call = json.loads(fake_codex.log_file.read_text(encoding="utf-8"))
+    assert runtime_call["environment"] == {
+        "OPENAI_BASE_URL": True,
+        "OPENAI_API_KEY": True,
+    }
+    assert secret not in roles_path.read_text(encoding="utf-8")
+    assert secret not in batch_file.read_text(encoding="utf-8")
+    assert secret not in result.stdout
+    assert secret not in result.stderr
+    for root in (harness_root / ".graphtraj", harness_root / ".codex"):
+        for path in root.rglob("*"):
+            if path.is_file():
+                assert secret.encode() not in path.read_bytes()
 
 
 def test_installed_runner_launches_a_standards_reviewer_for_a_fixed_candidate(
@@ -222,7 +371,6 @@ def test_installed_runner_launches_a_standards_reviewer_for_a_fixed_candidate(
         yaml.safe_dump(
             {
                 "run_id": "20260818-review-candidate",
-                "runtime": "codex",
                 "tasks": [
                     {
                         "ticket_id": "50",
@@ -345,7 +493,6 @@ def test_installed_runner_rejects_invalid_skills_before_starting_any_task(
         yaml.safe_dump(
             {
                 "run_id": "20260816-skill-preflight",
-                "runtime": "codex",
                 "tasks": [
                     {
                         "ticket_id": "16.1",
@@ -393,18 +540,13 @@ def test_installed_runner_rejects_invalid_skills_before_starting_any_task(
     ("mutation", "expected_code", "expected_message"),
     (
         (
-            "changed-hook-command",
-            "invalid-config",
-            "The configured Codex role does not contain the packaged Worktree Guard hooks.",
-        ),
-        (
             "changed-guard-script",
             "invalid-config",
             "The Harness Worktree Guard does not match the installed resource.",
         ),
     ),
 )
-def test_installed_runner_rejects_unvetted_role_or_guard_before_runtime_launch(
+def test_installed_runner_rejects_an_unvetted_guard_before_runtime_launch(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
     fake_codex: FakeCodex,
@@ -425,18 +567,8 @@ def test_installed_runner_rejects_unvetted_role_or_guard_before_runtime_launch(
     )
     assert setup_result.returncode == 0, setup_result.stderr
 
-    role_file = harness_root / ".codex" / "agents" / "engineer-expert.toml"
     guard_file = harness_root / ".codex" / "hooks" / "worktree_guard.py"
-    if mutation == "changed-hook-command":
-        role_file.write_text(
-            role_file.read_text(encoding="utf-8").replace(
-                'command = \'python3 "$(git rev-parse --show-toplevel)/.codex/hooks/worktree_guard.py"\'',
-                "command = 'python3 unvetted-hook.py'",
-                1,
-            ),
-            encoding="utf-8",
-        )
-    elif mutation == "changed-guard-script":
+    if mutation == "changed-guard-script":
         guard_file.write_text(
             guard_file.read_text(encoding="utf-8") + "\n# unvetted change\n",
             encoding="utf-8",
@@ -448,7 +580,6 @@ def test_installed_runner_rejects_unvetted_role_or_guard_before_runtime_launch(
         yaml.safe_dump(
             {
                 "run_id": "20260813-security-check",
-                "runtime": "codex",
                 "tasks": [
                     {
                         "ticket_id": "10",
@@ -517,7 +648,6 @@ def test_read_batch_rejects_physical_task_input(
         yaml.safe_dump(
             {
                 "run_id": "20260813-physical-input",
-                "runtime": "codex",
                 "tasks": [
                     {
                         "ticket_id": "10",
@@ -581,7 +711,6 @@ def test_installed_runner_separates_ambiguous_ticket_identity_pairs(
             yaml.safe_dump(
                 {
                     "run_id": run_id,
-                    "runtime": "codex",
                     "tasks": [
                         {
                             "ticket_id": ticket_id,
@@ -637,7 +766,6 @@ def test_concurrent_runner_processes_atomically_reserve_one_ticket_worktree(
         yaml.safe_dump(
             {
                 "run_id": run_id,
-                "runtime": "codex",
                 "tasks": [
                     {
                         "ticket_id": "10",
@@ -748,7 +876,6 @@ def test_failed_launch_retains_reservation_until_worker_and_runtime_terminate(
         yaml.safe_dump(
             {
                 "run_id": run_id,
-                "runtime": "codex",
                 "tasks": [
                     {
                         "ticket_id": "10",

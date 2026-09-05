@@ -90,6 +90,134 @@ def test_setup_initializes_the_current_git_repository(
     assert not (repository / ".codex" / "agent-runner" / "config.yml").exists()
 
 
+def test_setup_creates_reusable_role_presets(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+) -> None:
+    result = run_setup(installed_commands, temporary_git_repository)
+
+    assert result.returncode == 0, result.stderr
+    role_config = yaml.safe_load(
+        (temporary_git_repository / ".graphtraj" / "roles.yml").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert set(role_config) == {"roles"}
+    roles = role_config["roles"]
+    assert set(roles) == {
+        "team-leader",
+        "engineer-junior",
+        "engineer-senior",
+        "engineer-expert",
+        "standards-reviewer",
+        "spec-reviewer",
+        "delivery-state",
+        "merge-resolver",
+    }
+    assert "main" not in roles
+    for name, preset in roles.items():
+        assert isinstance(preset["runtime"], str) and preset["runtime"]
+        assert isinstance(preset["model"], str) and preset["model"]
+        assert set(preset).issubset(
+            {"runtime", "model", "base_url", "api_key_env", "allow_runtime_swarm"}
+        )
+        if name != "team-leader":
+            assert "allow_runtime_swarm" not in preset
+    assert roles["team-leader"]["allow_runtime_swarm"] is True
+    assert not (temporary_git_repository / ".codex" / "agents").exists()
+
+
+def test_setup_preserves_valid_operator_role_edits(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+) -> None:
+    first = run_setup(installed_commands, temporary_git_repository)
+    roles_path = temporary_git_repository / ".graphtraj" / "roles.yml"
+    edited = roles_path.read_bytes().replace(
+        b"model: gpt-5.6-luna", b"model: operator-selected-model", 1
+    )
+    roles_path.write_bytes(edited)
+
+    second = run_setup(installed_commands, temporary_git_repository, answers="")
+
+    assert first.returncode == 0, first.stderr
+    assert second.returncode == 0, second.stderr
+    assert roles_path.read_bytes() == edited
+
+
+def test_setup_leaves_legacy_runtime_role_files_unmanaged(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+) -> None:
+    first = run_setup(installed_commands, temporary_git_repository)
+    legacy_role = (
+        temporary_git_repository / ".codex" / "agents" / "engineer-expert.toml"
+    )
+    legacy_role.parent.mkdir()
+    legacy_role.write_text("legacy role projection\n", encoding="utf-8")
+    before = legacy_role.read_bytes()
+
+    second = run_setup(installed_commands, temporary_git_repository, answers="")
+
+    assert first.returncode == 0, first.stderr
+    assert second.returncode == 0, second.stderr
+    assert legacy_role.read_bytes() == before
+
+
+def test_setup_rejects_invalid_roles_before_project_mutation(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+) -> None:
+    roles_path = temporary_git_repository / ".graphtraj" / "roles.yml"
+    roles_path.parent.mkdir()
+    roles_path.write_text(
+        "roles:\n"
+        "  engineer-junior:\n"
+        "    runtime: codex\n"
+        "    model: ''\n"
+        "    command: codex\n",
+        encoding="utf-8",
+    )
+    before = roles_path.read_bytes()
+    worktrees_before = git_output(
+        temporary_git_repository, "worktree", "list", "--porcelain"
+    )
+
+    result = run_setup(installed_commands, temporary_git_repository, answers="")
+
+    assert result.returncode == 1
+    assert "GraphTraj Roles is invalid." in result.stderr
+    assert "engineer-junior.model" in result.stderr
+    assert "engineer-junior.command" in result.stderr
+    assert roles_path.read_bytes() == before
+    assert not (temporary_git_repository / ".codex").exists()
+    assert not (temporary_git_repository / ".graphtraj" / "state").exists()
+    assert git_output(
+        temporary_git_repository, "worktree", "list", "--porcelain"
+    ) == worktrees_before
+
+
+def test_setup_rejects_a_non_file_role_target_before_project_mutation(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+) -> None:
+    roles_path = temporary_git_repository / ".graphtraj" / "roles.yml"
+    roles_path.mkdir(parents=True)
+    worktrees_before = git_output(
+        temporary_git_repository, "worktree", "list", "--porcelain"
+    )
+
+    result = run_setup(installed_commands, temporary_git_repository, answers="")
+
+    assert result.returncode == 1
+    assert "roles.yml must be a regular readable file" in result.stderr
+    assert roles_path.is_dir()
+    assert not (temporary_git_repository / ".codex").exists()
+    assert git_output(
+        temporary_git_repository, "worktree", "list", "--porcelain"
+    ) == worktrees_before
+
+
 def test_setup_selects_the_only_git_child_and_preserves_root_documents(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,

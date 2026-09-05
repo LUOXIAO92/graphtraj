@@ -60,7 +60,6 @@ def test_installed_worktree_guard_is_an_independent_ticket_process(
         yaml.safe_dump(
             {
                 "run_id": "20260814-hook-process",
-                "runtime": "codex",
                 "tasks": [
                     {
                         "ticket_id": "15",

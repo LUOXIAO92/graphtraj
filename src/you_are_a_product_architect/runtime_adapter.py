@@ -51,6 +51,9 @@ class RuntimeContext(Protocol):
     def evidence_document(self) -> Dict[str, Any]:
         """Return a fresh document of the effective Context facts."""
 
+    def runtime_environment(self) -> Mapping[str, str]:
+        """Return non-persistent environment overrides for one Runtime turn."""
+
 
 class EngineerRuntimeContext(RuntimeContext, Protocol):
     """One immutable Context for an Engineer session."""

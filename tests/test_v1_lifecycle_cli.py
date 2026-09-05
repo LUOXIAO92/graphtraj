@@ -86,7 +86,6 @@ def test_pinned_install_exercises_the_complete_v1_delivery_lifecycle(
         yaml.safe_dump(
             {
                 "run_id": run_id,
-                "runtime": "codex",
                 "tasks": [
                     {
                         "ticket_id": "15",
@@ -211,7 +210,6 @@ def test_pinned_install_exercises_the_complete_v1_delivery_lifecycle(
             yaml.safe_dump(
                 {
                     "run_id": run_id,
-                    "runtime": "codex",
                     "tasks": [
                         {
                             "ticket_id": "15",
@@ -317,5 +315,4 @@ def test_pinned_install_exercises_the_complete_v1_delivery_lifecycle(
         )
         assert launch["alias"] == reviewer_alias
         assert launch["role"] == role
-        assert launch["runtime"] == "codex"
         assert launch["model"] == "gpt-5.6-sol"

@@ -97,7 +97,9 @@ def test_installed_send_resumes_an_idle_runtime_session_under_the_same_alias(
         fake_codex.log_file.read_text(encoding="utf-8")
     )
     wait_for_process_exit(original_mapping["worker_pid"])
-    (harness_root / ".codex" / "agents" / "engineer-expert.toml").write_text(
+    legacy_role = harness_root / ".codex" / "agents" / "engineer-expert.toml"
+    legacy_role.parent.mkdir()
+    legacy_role.write_text(
         'name = "changed-after-launch"\n', encoding="utf-8"
     )
     source_config = (

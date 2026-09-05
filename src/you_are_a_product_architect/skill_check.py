@@ -15,6 +15,7 @@ from .project_configuration import (
     configuration_exists,
     load_project_configuration,
 )
+from .project_roles import ProjectRolesError, load_project_roles, roles_exist
 
 
 CORE_SKILL_NAMES = (
@@ -200,5 +201,14 @@ def doctor() -> None:
             )
         )
 
-    if not all(status.discovered for status in statuses):
+    roles_ok = True
+    if configuration_exists(runtime_store.parent) or roles_exist(runtime_store.parent):
+        try:
+            load_project_roles(runtime_store.parent)
+        except ProjectRolesError as error:
+            roles_ok = False
+            click.echo(str(error))
+        else:
+            click.echo("roles: OK")
+    if not all(status.discovered for status in statuses) or not roles_ok:
         raise click.exceptions.Exit(1)

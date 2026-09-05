@@ -24,6 +24,15 @@ from .project_configuration import (
     default_project_configuration,
     load_project_configuration,
 )
+from .project_roles import (
+    ProjectRoles,
+    ProjectRolesError,
+    default_project_roles,
+    default_roles_content,
+    load_project_roles,
+    roles_exist,
+    roles_file,
+)
 from .skill_check import (
     CORE_SKILL_NAMES,
     check_core_skills,
@@ -182,17 +191,23 @@ class ProjectSetupPlan:
     harness_root: Path
     repository: SourceRepository
     configuration: ProjectConfiguration
+    roles: ProjectRoles
     codex_files: CodexProjectFiles
     supported_skills: SupportedSkills
     missing_skills: Tuple[str, ...]
     source_history_paths: frozenset[str]
     write_default_configuration: bool
+    write_default_roles: bool
     proposed_base: Optional[str]
     integration_revision: str
 
     @property
     def configuration_path(self) -> Path:
         return configuration_file(self.harness_root)
+
+    @property
+    def roles_path(self) -> Path:
+        return roles_file(self.harness_root)
 
     @property
     def runtime_store(self) -> Path:
@@ -249,6 +264,18 @@ class ProjectSetupPlan:
                 PlannedSetupAction(
                     "ALREADY CONFIGURED",
                     "GraphTraj Config: {0}".format(self.configuration_path),
+                )
+            )
+        if self.write_default_roles:
+            actions.append(
+                PlannedSetupAction(
+                    "CREATE", "GraphTraj Roles: {0}".format(self.roles_path)
+                )
+            )
+        else:
+            actions.append(
+                PlannedSetupAction(
+                    "ALREADY CONFIGURED", "GraphTraj Roles: {0}".format(self.roles_path)
                 )
             )
 
@@ -570,6 +597,10 @@ class ProjectSetupPlan:
                     encoding="utf-8",
                 )
                 mark_completed("GraphTraj Config: {0}".format(self.configuration_path))
+            if self.write_default_roles:
+                self.roles_path.parent.mkdir(parents=True, exist_ok=True)
+                self.roles_path.write_text(default_roles_content(), encoding="utf-8")
+                mark_completed("GraphTraj Roles: {0}".format(self.roles_path))
             self.configuration.agent_worktrees.mkdir(parents=True, exist_ok=True)
             mark_completed(
                 _directory_action(
@@ -669,6 +700,19 @@ def plan_project_setup(
                 )
             configuration = default_project_configuration(root, source_repository)
             write_default_configuration = True
+        if roles_exist(root):
+            roles = load_project_roles(root)
+            write_default_roles = False
+        else:
+            parent_kind = _entry_kind(roles_file(root).parent)
+            if parent_kind not in {None, "directory"}:
+                raise ProjectSetupError(
+                    "GraphTraj Roles is blocked by a non-directory path: {0}".format(
+                        roles_file(root).parent
+                    )
+                )
+            roles = default_project_roles()
+            write_default_roles = True
         repository = SourceRepository.from_root(configuration.project_root)
         if configuration.project_root == root:
             repository.require_main()
@@ -702,6 +746,7 @@ def plan_project_setup(
         GitRepositoryError,
         OSError,
         ProjectConfigurationError,
+        ProjectRolesError,
         SupportedSkillsError,
     ) as error:
         raise ProjectSetupError(str(error)) from error
@@ -709,11 +754,13 @@ def plan_project_setup(
         harness_root=root,
         repository=repository,
         configuration=configuration,
+        roles=roles,
         codex_files=codex_files,
         supported_skills=supported_skills,
         missing_skills=missing_skills,
         source_history_paths=source_paths,
         write_default_configuration=write_default_configuration,
+        write_default_roles=write_default_roles,
         proposed_base=proposed_base,
         integration_revision=integration_revision,
     )

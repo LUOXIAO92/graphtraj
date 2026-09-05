@@ -12,7 +12,8 @@ from typing import Any, Dict
 
 import yaml
 
-from .codex_adapter import read_codex_session_identity
+from .codex_adapter import codex_connection_environment, read_codex_session_identity
+from .project_roles import ProjectRolesError, load_project_roles
 from .runner_io import (
     ActiveTurnBusyError,
     ActiveTurnReservation,
@@ -89,6 +90,8 @@ def send_instruction(
     key = _mapping_active_turn_key(mapping)
     request = _read_resume_request(session_directory, mapping)
     _attest_runtime_session(session_directory, mapping)
+    worker_environment = dict(os.environ)
+    worker_environment.update(_resume_environment(runner_directory, mapping))
     try:
         reservation = create_active_turn_reservation(
             runner_directory,
@@ -153,6 +156,7 @@ def send_instruction(
                 stderr=diagnostics,
                 text=True,
                 start_new_session=True,
+                env=worker_environment,
             )
             worker_started = True
             assert worker.stdin is not None
@@ -226,6 +230,25 @@ def interrupt_session(alias: str, cwd: Path) -> Dict[str, str]:
         "operation-failed",
         "The active Engineer turn could not be confirmed interrupted.",
     )
+
+
+def _resume_environment(
+    runner_directory: Path,
+    mapping: Dict[str, Any],
+) -> Dict[str, str]:
+    """Resolve the current non-persistent connection settings for one resume."""
+    try:
+        roles = load_project_roles(runner_directory.parent.parent)
+    except ProjectRolesError as error:
+        raise RunnerError("ROLE_CONFIG_INVALID", str(error)) from error
+    role = mapping.get("role")
+    runtime = mapping.get("runtime")
+    preset = roles.presets.get(role) if isinstance(role, str) else None
+    if preset is None or preset.runtime != runtime:
+        raise _not_resumable()
+    if runtime == "codex":
+        return dict(codex_connection_environment(preset.base_url, preset.api_key_env))
+    raise _not_resumable()
 
 
 def _mapped_worktree(

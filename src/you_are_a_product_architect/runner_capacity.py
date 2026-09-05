@@ -18,7 +18,7 @@ def capacity_positions(
     positions = []
     try:
         if inherited_fd is not None:
-            positions.append(os.fdopen(inherited_fd, "rb"))
+            positions.append(os.fdopen(os.dup(inherited_fd), "rb"))
         directory = project.harness_root / ".graphtraj" / "runner" / "capacity"
         directory.mkdir(parents=True, exist_ok=True)
         for index in range(project.max_concurrency):

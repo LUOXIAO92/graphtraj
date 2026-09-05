@@ -43,7 +43,7 @@ probe_root = Path(os.environ['CAPACITY_PROBE'])
 def observe(kind):
     with (probe_root / 'observations.jsonl').open('a') as stream:
         fcntl.flock(stream, fcntl.LOCK_EX)
-        stream.write(json.dumps({'kind': kind, 'pid': os.getpid(), 'ticket': os.environ['GRAPHTRAJ_TICKET_ID'], 'role': os.environ['GRAPHTRAJ_ROLE']}) + '\\n')
+        stream.write(json.dumps({'kind': kind, 'pid': os.getpid(), 'ticket': os.environ['GRAPHTRAJ_TICKET_ID'], 'role': os.environ['GRAPHTRAJ_ROLE'], 'argv': sys.argv[1:]}) + '\\n')
         stream.flush()
 observe('start')
 atexit.register(observe, 'exit')
@@ -135,7 +135,7 @@ def test_separate_runners_share_capacity_and_reject_whole_batches(
     )
     output = yaml.safe_load(retry.stdout)
     assert "error" not in output, retry.stdout
-    # Their later child Batches may contend; serial low-capacity delivery is #78.
+    # The controlled Leader may decline to replace a rejected child Batch.
     assert all(task.get("error", {}).get("code") in {None, "insufficient-capacity"} for task in output["tasks"])
     active = set()
     maximum = 0
@@ -219,3 +219,46 @@ def test_duplicate_team_role_is_rejected_before_runtime_start(
     assert result.returncode == 1
     assert yaml.safe_load(result.stdout)["error"]["code"] == "invalid-input"
     assert not fake_codex.log_file.exists()
+
+
+def test_one_position_completes_one_round_with_sequential_reviewers(
+    installed_commands, temporary_git_repository, fake_codex, tmp_path,
+):
+    root, _, _, environment = configure_harness(installed_commands, temporary_git_repository, fake_codex, tmp_path)
+    environment.update(GRAPHTRAJ_AGENT_RUNNER=str(installed_commands.runner), FAKE_CODEX_SERIAL_TEAM="1")
+    config_file = root / ".graphtraj" / "config.yml"
+    config = yaml.safe_load(config_file.read_text())
+    config["agent_runner"]["max_concurrency"] = 1
+    config_file.write_text(yaml.safe_dump(config))
+    batch = ready_batch(installed_commands, root, ["78"], "serial")
+    observe_runtime(fake_codex, root, environment)
+    (root / "release").touch()
+    result = run_process([str(installed_commands.runner), "--batch-input", str(batch)], cwd=root, env=environment, timeout=60)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert yaml.safe_load(result.stdout)["tasks"][0]["launch_status"] == "accepted"
+    active = set()
+    roles = []
+    events = starts(root, 1)
+    for event in events:
+        if event["kind"] == "start":
+            active.add(event["pid"])
+            roles.append(event["role"])
+        else:
+            active.remove(event["pid"])
+        assert len(active) <= 1
+    assert not active
+    assert [role for role in roles if role != "delivery-state"] == [
+        "team-leader", "engineer-junior", "team-leader", "team-leader",
+        "standards-reviewer", "team-leader", "spec-reviewer", "team-leader",
+    ]
+    leaders = [event for event in events if event["kind"] == "start" and event["role"] == "team-leader"]
+    assert "resume" not in leaders[0]["argv"]
+    assert all("resume" in event["argv"] and "fake-thread" in event["argv"] for event in leaders[1:])
+    ticket = root / ".graphtraj" / "state" / "tickets" / "78-parallel"
+    team = yaml.safe_load((ticket / "teams" / "1" / "team.yml").read_text())
+    assert team["current_round"] == 1
+    assert yaml.safe_load((ticket / "ticket.yml").read_text())["status"] == "awaiting-integration"
+    reports = ticket / "teams" / "1" / "rounds" / "1"
+    assert {path.name for path in reports.iterdir()} == {"engineer.md", "validation.md", "standards.md", "spec.md", "leader.md"}
+    assert all(member["session_ref"] for member in team["members"].values())
+    assert len(list((root / ".graphtraj" / "state" / "batches").glob("*.yml"))) == 5

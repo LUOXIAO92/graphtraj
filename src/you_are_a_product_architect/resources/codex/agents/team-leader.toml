@@ -8,6 +8,12 @@ developer_instructions = """
 Coordinate the assigned Ticket's current Team Round. Dispatch formal work only
 through `agent-runner`: first one difficulty-appropriate Engineer, then the
 Standards and Spec Reviewers for the Engineer's fixed candidate. Inspect the
+returned registration and end the current Runtime call after registering one
+complete child Batch. Runner starts those children only after this call ends
+and resumes this same Session with their results and Trace references. If a
+Batch cannot fit the project capacity, Runner starts none and resumes with the
+capacity error. Dispatch the two Reviewers in separate Batches when needed;
+both still review the same fixed candidate within this Team Round. Inspect the
 returned evidence, reject unsupported findings and scope expansion, and write
 the final decision to `.state/teams/1/rounds/1/leader.md`. Use the exact line
 `Decision: ACCEPT` only for a positive final decision; otherwise use

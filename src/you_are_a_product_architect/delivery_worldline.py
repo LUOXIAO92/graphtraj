@@ -6,7 +6,7 @@ import fcntl
 import json
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -18,6 +18,7 @@ from .delivery_run_worldline import (
     project_worldline,
 )
 from .project_configuration import (
+    ProjectConfiguration,
     ProjectConfigurationError,
     load_project_configuration,
 )
@@ -79,7 +80,7 @@ def append_command(
         recorded = (
             append_worldline_event(run_root, run_id, event)
             if run_root is not None and run_id is not None
-            else append_project_worldline_event(_configured_state(), event)
+            else _append_configured_event(event)
         )
     except (
         OSError,
@@ -113,7 +114,7 @@ def read_command() -> None:
     """Read the complete Worldline as chronological JSONL."""
 
     try:
-        events = read_worldline(_configured_state())
+        events = _read_configured_worldline()
     except (
         OSError,
         UnicodeError,
@@ -131,7 +132,7 @@ def render_command() -> None:
     """Render a ledger-shaped YAML view without persisting it."""
 
     try:
-        events = read_worldline(_configured_state())
+        events = _read_configured_worldline()
     except (
         OSError,
         UnicodeError,
@@ -143,12 +144,27 @@ def render_command() -> None:
     click.echo(yaml.safe_dump({"trajectory": events}, sort_keys=False), nl=False)
 
 
-def _configured_state() -> Path:
-    return load_project_configuration(Path.cwd()).state
+def _configured_project() -> ProjectConfiguration:
+    return load_project_configuration(Path.cwd())
+
+
+def _append_configured_event(event: Mapping[str, Any]) -> dict[str, Any]:
+    configuration = _configured_project()
+    return append_project_worldline_event(
+        configuration.state,
+        configuration.harness_root,
+        event,
+    )
+
+
+def _read_configured_worldline() -> list[dict[str, Any]]:
+    configuration = _configured_project()
+    return read_worldline(configuration.state, configuration.harness_root)
 
 
 def append_project_worldline_event(
     state_directory: Path,
+    harness_root: Path,
     event: Mapping[str, Any],
 ) -> dict[str, Any]:
     """Validate and atomically append one project Worldline event."""
@@ -161,13 +177,13 @@ def append_project_worldline_event(
     )
     try:
         fcntl.flock(lock_descriptor, fcntl.LOCK_EX)
-        shards, existing = _read_shards(state_directory)
-        _validate_references(state_directory, event, existing)
-        captured = datetime.now().astimezone()
+        shards, existing = _read_shards(state_directory, harness_root)
+        _validate_references(harness_root, event, existing)
+        captured = _capture_time()
         if existing and captured < _parse_timestamp(existing[-1]["captured_at"]):
             raise ValueError("system time precedes the chronologically last event")
         captured_at = captured.isoformat(timespec="microseconds")
-        event_id = _next_event_id(captured, {item["event_id"] for item in existing})
+        event_id = _next_event_id(captured, existing)
         recorded = {
             "event_id": event_id,
             "captured_at": captured_at,
@@ -188,7 +204,10 @@ def append_project_worldline_event(
         os.close(lock_descriptor)
 
 
-def read_worldline(state_directory: Path) -> list[dict[str, Any]]:
+def read_worldline(
+    state_directory: Path,
+    harness_root: Path,
+) -> list[dict[str, Any]]:
     """Return validated events in absolute chronological shard order."""
 
     worldline_directory = state_directory / "worldline"
@@ -199,7 +218,7 @@ def read_worldline(state_directory: Path) -> list[dict[str, Any]]:
     )
     try:
         fcntl.flock(lock_descriptor, fcntl.LOCK_SH)
-        return _read_shards(state_directory)[1]
+        return _read_shards(state_directory, harness_root)[1]
     finally:
         fcntl.flock(lock_descriptor, fcntl.LOCK_UN)
         os.close(lock_descriptor)
@@ -207,6 +226,7 @@ def read_worldline(state_directory: Path) -> list[dict[str, Any]]:
 
 def _read_shards(
     state_directory: Path,
+    harness_root: Path,
 ) -> tuple[list[tuple[Path, list[dict[str, Any]]]], list[dict[str, Any]]]:
     directory = state_directory / "worldline"
     paths = list(directory.glob("*.jsonl")) if directory.is_dir() else []
@@ -214,7 +234,7 @@ def _read_shards(
     shards: list[tuple[Path, list[dict[str, Any]]]] = []
     events: list[dict[str, Any]] = []
     known_ids: set[str] = set()
-    collision_counts: dict[str, int] = {}
+    collision_counts: dict[datetime, int] = {}
     previous_time: datetime | None = None
     for path in paths:
         lines = path.read_text(encoding="utf-8").splitlines()
@@ -226,7 +246,7 @@ def _read_shards(
             if not isinstance(item, dict):
                 raise ValueError("worldline contains an invalid event")
             captured = _validate_recorded_event(
-                state_directory, item, known_ids, collision_counts
+                harness_root, item, known_ids, collision_counts
             )
             if previous_time is not None and captured < previous_time:
                 raise ValueError("worldline events are not chronological")
@@ -270,36 +290,36 @@ def _validate_string_list(event: Mapping[str, Any], field: str) -> list[str]:
 
 
 def _validate_references(
-    state_directory: Path,
+    harness_root: Path,
     event: Mapping[str, Any],
     existing: list[dict[str, Any]],
 ) -> None:
     known_ids = {item["event_id"] for item in existing}
     if any(item not in known_ids for item in event["caused_by_event_ids"]):
         raise ValueError("causal predecessor does not exist")
-    _validate_evidence(state_directory, event["evidence_refs"])
+    _validate_evidence(harness_root, event["evidence_refs"])
 
 
-def _validate_evidence(state_directory: Path, references: list[str]) -> None:
-    root = state_directory.resolve()
+def _validate_evidence(harness_root: Path, references: list[str]) -> None:
+    root = harness_root.resolve()
     for reference in references:
         relative = Path(reference)
         if relative.is_absolute():
-            raise ValueError("retained evidence reference must be state-relative")
-        evidence = state_directory / relative
+            raise ValueError("retained evidence reference must be project-relative")
+        evidence = harness_root / relative
         try:
             evidence.resolve().relative_to(root)
         except (OSError, ValueError) as error:
-            raise ValueError("retained evidence reference escapes project state") from error
+            raise ValueError("retained evidence reference escapes the Harness Project Root") from error
         if evidence.is_symlink() or not evidence.is_file():
             raise ValueError("retained evidence does not exist")
 
 
 def _validate_recorded_event(
-    state_directory: Path,
+    harness_root: Path,
     event: Mapping[str, Any],
     known_ids: set[str],
-    collision_counts: dict[str, int],
+    collision_counts: dict[datetime, int],
 ) -> datetime:
     if set(_EVENT_FIELDS | {"event_id", "captured_at"}) - set(event):
         raise ValueError("worldline contains an invalid event")
@@ -309,14 +329,15 @@ def _validate_recorded_event(
         raise ValueError("worldline contains an invalid event")
     captured = _parse_timestamp(captured_at)
     base = captured.strftime("%Y%m%dT%H%M%S.%f%z")
-    expected_count = collision_counts.get(base, 0)
+    instant = _absolute_instant(captured)
+    expected_count = collision_counts.get(instant, 0)
     expected_id = base if expected_count == 0 else "{0}-{1}".format(base, expected_count)
     if event_id != expected_id or event_id in known_ids:
         raise ValueError("worldline contains an invalid event ID")
-    collision_counts[base] = expected_count + 1
+    collision_counts[instant] = expected_count + 1
     supplied = {key: value for key, value in event.items() if key not in {"event_id", "captured_at"}}
     _validate_supplied_event(supplied)
-    _validate_references(state_directory, event, [{"event_id": item} for item in known_ids])
+    _validate_references(harness_root, event, [{"event_id": item} for item in known_ids])
     return captured
 
 
@@ -350,11 +371,24 @@ def _shard_order(path: Path) -> tuple[datetime, int]:
     return _parse_timestamp(timestamp), int(match.group("suffix") or 0)
 
 
-def _next_event_id(captured: datetime, existing_ids: set[str]) -> str:
+def _capture_time() -> datetime:
+    return datetime.now().astimezone()
+
+
+def _absolute_instant(value: datetime) -> datetime:
+    return value.astimezone(timezone.utc)
+
+
+def _next_event_id(
+    captured: datetime,
+    existing: list[dict[str, Any]],
+) -> str:
     base = captured.strftime("%Y%m%dT%H%M%S.%f%z")
-    if base not in existing_ids:
+    instant = _absolute_instant(captured)
+    suffix = sum(
+        _absolute_instant(_parse_timestamp(event["captured_at"])) == instant
+        for event in existing
+    )
+    if suffix == 0:
         return base
-    suffix = 1
-    while "{0}-{1}".format(base, suffix) in existing_ids:
-        suffix += 1
     return "{0}-{1}".format(base, suffix)

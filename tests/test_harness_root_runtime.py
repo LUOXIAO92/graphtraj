@@ -21,7 +21,10 @@ from test_project_setup import (
 
 def _runtime_executable(tmp_path: Path) -> Path:
     executable = tmp_path / "codex"
-    executable.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    executable.write_text(
+        "#!/bin/sh\necho --sandbox --dangerously-bypass-hook-trust\n",
+        encoding="utf-8",
+    )
     executable.chmod(0o755)
     return executable
 
@@ -853,9 +856,9 @@ def test_real_codex_uses_harness_hook_and_explicit_skill_configuration(
     )
     installed_guard = Path(package_hook.stdout.strip())
     harness_guard = harness_root / ".codex" / "hooks" / "worktree_guard.py"
-    instrumented_guard = (
-        "from pathlib import Path\n"
-        + "Path({0!r}).touch()\n".format(str(harness_hook_marker))
+    instrumented_guard = installed_guard.read_text().replace(
+        "def main() -> int:\n",
+        "def main() -> int:\n    Path({0!r}).touch()\n".format(str(harness_hook_marker)),
     )
     installed_guard.write_text(instrumented_guard, encoding="utf-8")
     harness_guard.write_text(instrumented_guard, encoding="utf-8")

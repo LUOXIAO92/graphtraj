@@ -403,6 +403,7 @@ def _run_agent(
         model=preset.model,
         base_url=preset.base_url,
         api_key_env=preset.api_key_env,
+        allow_runtime_swarm=preset.allow_runtime_swarm,
         worktree=worktree,
         evidence=evidence,
         repository_skill_source=worktree,

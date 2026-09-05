@@ -1,9 +1,5 @@
 # This orchestration template lives in the Harness Runtime Store. Engineer
 # Skill selection is supplied dynamically by the Adapter for each launch.
-model = "gpt-5.6-sol"
-# 75% of gpt-5.6-sol's 272000-token context window.
-model_auto_compact_token_limit = 204000
-model_reasoning_effort = "xhigh"
 personality = "pragmatic"
 service_tier = "default"
 
@@ -14,6 +10,13 @@ You are Main. Start in Soft Plan, an authorization boundary rather than the
 Runtime's formal Plan mode. Remain read-only and limit work to inspection,
 analysis, diagnosis, and planning unless the user's latest message explicitly
 authorizes a specific state-changing action.
+
+You may use your already selected Runtime's native helpers for temporary
+read-only investigation. They cannot implement, Review, own a Team seat, or
+replace formal agent-runner dispatch. Native helpers are outside Team state,
+Runner concurrency, and independent GraphTraj Session Trace guarantees. Use
+agent-runner for formal work or work requiring an independent Trace. Your
+Runtime's own configuration controls native-swarm limits.
 
 Harness Project Documents are owned at the Harness Project Root. Read and
 write its `AGENTS.md`, `CONTEXT.md`, and `docs/` there; Worktree document
@@ -41,8 +44,6 @@ mutation you would perform, and ask the user to authorize it.
 
 [agents]
 enabled = true
-# Main-owned auxiliary agents use this session; Runner roles have separate sessions.
-max_concurrent_threads_per_session = 12
 
 [mcp_servers.openaiDeveloperDocs]
 url = "https://developers.openai.com/mcp"

@@ -472,6 +472,8 @@ def ticket_evidence_scope(root: Path) -> Optional[Tuple[Path, Path]]:
         relative = root.relative_to(worktree_directory)
     except ValueError:
         return None
+    if len(relative.parts) == 1 and "-" in relative.name:
+        return root / ".state", state_root / "tickets" / relative.name
     if (
         len(relative.parts) != 3
         or relative.parts[0] != "runs"
@@ -502,7 +504,8 @@ def readable_harness_document_view(
     except ValueError:
         return False
     if relative != Path("dev") and not (
-        len(relative.parts) == 3 and relative.parts[0] == "runs"
+        len(relative.parts) == 1
+        or len(relative.parts) == 3 and relative.parts[0] == "runs"
     ):
         return False
     for name, directory, expected in (
@@ -967,6 +970,16 @@ def validate_segment(
         return "Cannot verify executable path: {0}".format(segment[0])
     arguments = segment[1:]
 
+    if command == "agent-runner" and sys.argv[1:] == ["--team-leader"]:
+        return validate_policy(
+            arguments,
+            policy=Policy(NO_OPERANDS, options(
+                flags("--help"), values(PATH, "--batch-input"),
+            )),
+            cwd=cwd,
+            root=root,
+        )
+
     if command in {"cd", "pushd", "popd", "bash", "sh", "env", "sed"}:
         return "Cannot verify stateful or executable command: {0}".format(command)
     if command == "git":
@@ -1087,6 +1100,7 @@ def pre_tool_use(
     process_cwd: Path,
     root: Path,
     worktrees: Iterable[Path],
+    read_only: bool = False,
 ) -> Optional[str]:
     event_cwd, reason = resolve_requested_cwd(event.get("cwd"), base=process_cwd, root=root)
     if reason:
@@ -1114,6 +1128,27 @@ def pre_tool_use(
     command = tool_input.get("command")
     if not isinstance(command, str):
         return "Cannot verify tool command."
+    if read_only:
+        if tool_name == "apply_patch":
+            return "Native investigation helpers cannot edit files."
+        segments, reason = split_segments(tokenize(command) or [])
+        if reason:
+            return reason
+        for segment in segments or []:
+            if any(token in REDIRECTS or token in DENIED_REDIRECTS for token in segment):
+                return "Native investigation helpers cannot redirect shell output."
+            executable = segment[0]
+            if executable == "git":
+                if len(segment) < 2 or segment[1] not in {
+                    "diff", "log", "show", "status", "rev-parse", "ls-files",
+                    "cat-file", "merge-base", "show-ref",
+                }:
+                    return "Native investigation helpers cannot change Git state."
+            elif executable not in {
+                "cat", "diff", "head", "ls", "readlink", "stat", "tail", "wc",
+                "grep", "rg", "pwd", "date", "id", "uname", "which", "whoami",
+            }:
+                return "Native helpers may only run read-only investigation commands."
     if tool_name == "apply_patch":
         return patch_targets(command, cwd=tool_cwd, root=root)
     return validate_shell_command(command, cwd=tool_cwd, root=root, worktrees=worktrees)
@@ -1146,6 +1181,11 @@ def main() -> int:
                     "additionalContext": (
                         "Worktree boundary: {0}. Stay inside this worktree. "
                         "Do not access any other Git worktree."
+                        " You are a temporary read-only investigation helper. "
+                        "Do not implement, Review, write files, own a Team seat, "
+                        "invoke agent-runner, or directly start an Agent Runtime. "
+                        "Return findings to your parent; GraphTraj does not retain "
+                        "an independent Session Trace for native helpers."
                     ).format(root),
                 }
             }
@@ -1155,11 +1195,21 @@ def main() -> int:
         return 0
 
     try:
+        read_only = False
+        if sys.argv[1:] == ["--team-leader"]:
+            # Native helpers inherit the Leader's Hooks. Only the Runner-mapped
+            # historical Session may use the Leader's command/write authority.
+            registration = Path(os.environ["GRAPHTRAJ_PARENT_REGISTRATION"])
+            mapping = yaml.safe_load(
+                (registration.parent / "mapping.yml").read_text(encoding="utf-8")
+            )
+            read_only = event.get("session_id") != mapping["session"]
         reason = pre_tool_use(
             event,
             process_cwd=process_cwd,
             root=root,
             worktrees=worktrees,
+            read_only=read_only,
         )
     except Exception as error:
         reason = "Cannot verify tool action: {0}".format(error)

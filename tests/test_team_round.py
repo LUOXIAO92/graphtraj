@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import tomllib
 from pathlib import Path
 
 import yaml
@@ -12,12 +13,14 @@ from test_agent_runner_batch import configure_harness
 
 
 @pytest.mark.parametrize(
-    ("leader_decision", "expected_status", "round_closed", "runner_succeeds"),
+    ("leader_decision", "expected_status", "round_closed", "runner_succeeds", "swarm"),
     (
-        ("accept", "awaiting-integration", True, True),
-        ("reject", "reviewing", False, True),
-        ("conflict", "reviewing", False, True),
-        ("tamper", "reviewing", False, False),
+        ("accept", "awaiting-integration", True, True, None),
+        ("accept", "awaiting-integration", True, True, False),
+        ("accept", "awaiting-integration", True, True, True),
+        ("reject", "reviewing", False, True, None),
+        ("conflict", "reviewing", False, True, None),
+        ("tamper", "reviewing", False, False, None),
     ),
 )
 def test_installed_runner_obeys_the_explicit_leader_decision_for_a_run_free_team_round(
@@ -29,6 +32,7 @@ def test_installed_runner_obeys_the_explicit_leader_decision_for_a_run_free_team
     expected_status: str,
     round_closed: bool,
     runner_succeeds: bool,
+    swarm: bool | None,
 ) -> None:
     harness_root, worktree_root, _, environment = configure_harness(
         installed_commands,
@@ -36,6 +40,16 @@ def test_installed_runner_obeys_the_explicit_leader_decision_for_a_run_free_team
         fake_codex,
         tmp_path,
     )
+    roles_file = harness_root / '.graphtraj' / 'roles.yml'
+    roles = yaml.safe_load(roles_file.read_text())
+    roles['roles']['team-leader'].pop('allow_runtime_swarm', None)
+    if swarm is not None:
+        roles['roles']['team-leader']['allow_runtime_swarm'] = swarm
+    roles_file.write_text(yaml.safe_dump(roles))
+    policy_log = tmp_path / 'policy.jsonl'
+    environment['FAKE_CODEX_POLICY_LOG'] = str(policy_log)
+    main_config = harness_root / '.codex' / 'config.toml'
+    main_before = main_config.read_bytes()
     ticket_input = harness_root / "ticket.yml"
     ticket_input.write_text(
         yaml.safe_dump(
@@ -106,10 +120,23 @@ def test_installed_runner_obeys_the_explicit_leader_decision_for_a_run_free_team
         [str(installed_commands.runner), "--batch-input", str(batch)],
         cwd=harness_root,
         env=environment,
-        timeout=10,
+        timeout=45,
     )
 
     assert (launched.returncode == 0) is runner_succeeds, launched.stderr
+    assert main_config.read_bytes() == main_before
+    assert 'max_concurrent_threads_per_session' not in tomllib.loads(main_before.decode()).get('agents', {})
+    calls = [json.loads(line) for line in policy_log.read_text().splitlines()]
+    for call in calls:
+        leader = call['role'] == 'team-leader'
+        assert call['settings']['agents']['enabled'] is (leader and swarm is not False)
+        assert 'max_concurrent_threads_per_session' not in call['settings']['agents']
+        assert 'max_depth' not in call['settings']['agents']
+        for command, decision in call['decisions'].items():
+            permitted = command == 'pwd' or (leader and command == 'agent-runner --help')
+            assert (not decision) is permitted, (call['role'], command, decision)
+        for command, decision in call['helper_decisions'].items():
+            assert (not decision) is (command in {'pwd', 'cat README.md'})
     retained_directory = harness_root / ".graphtraj" / "state" / "batches"
     retained_batches = list(retained_directory.glob("*.yml"))
     assert len(retained_batches) == 3
@@ -151,12 +178,12 @@ def test_installed_runner_obeys_the_explicit_leader_decision_for_a_run_free_team
     assert (round_directory.stat().st_mode & 0o222 == 0) is round_closed
     assert all((path.stat().st_mode & 0o222 == 0) is round_closed for path in round_directory.iterdir())
     traces = list((ticket_directory / "teams" / "1" / "traces").glob("*/events.jsonl"))
-    assert len(traces) >= 5
+    assert len(traces) == 5
     mappings = [
         yaml.safe_load(path.read_text())
         for path in (harness_root / ".codex" / "agent-runner" / "sessions").glob("*/mapping.yml")
     ]
-    assert len(mappings) >= 5
+    assert len(mappings) == 5
     assert all("run_id" not in mapping and "turn" not in mapping for mapping in mappings)
     leader_alias = next(mapping["alias"] for mapping in mappings if mapping["role"] == "team-leader")
     delivery_state_mappings = [mapping for mapping in mappings if mapping["role"] == "delivery-state"]
@@ -228,3 +255,26 @@ def test_installed_runner_rejects_non_run_free_main_batch_fields(
         assert yaml.safe_load(result.stdout)["error"]["code"] == "invalid-input"
 
     assert not (harness_root / ".graphtraj" / "state" / "batches").exists()
+
+
+def test_installed_runner_rejects_a_runtime_without_required_permission_controls(
+    installed_commands, temporary_git_repository, fake_codex, tmp_path,
+):
+    harness_root, _, _, environment = configure_harness(
+        installed_commands, temporary_git_repository, fake_codex, tmp_path,
+    )
+    ticket = harness_root / 'ticket.md'
+    ticket.write_text('# Test required Runtime capabilities\n')
+    batch = harness_root / 'batch.yml'
+    batch.write_text(yaml.safe_dump({'run_id': '20260905-capabilities', 'tasks': [{
+        'ticket_id': '82', 'ticket_name': 'capabilities',
+        'role': 'engineer-junior', 'ticket_file': str(ticket),
+    }]}))
+    environment['FAKE_CODEX_UNSUPPORTED'] = '1'
+    result = run_process(
+        [str(installed_commands.runner), '--batch-input', str(batch)],
+        cwd=harness_root, env=environment,
+    )
+    assert result.returncode == 1
+    assert yaml.safe_load(result.stdout)['error']['code'] == 'invalid-config'
+    assert not fake_codex.log_file.exists()

@@ -74,7 +74,10 @@ def launch_batch(batch_file: Path, cwd: Path) -> LaunchResponse:
     if batch.run_id is None:
         from .team_round import launch_team_batch
 
-        return launch_team_batch(batch, cwd)
+        try:
+            return launch_team_batch(batch, cwd)
+        except RuntimeAdapterError as error:
+            raise RunnerError(error.code, error.message) from error
     project = discover_project(cwd)
     validate_batch_roles(batch, project.role_bindings)
     launch_plans = []

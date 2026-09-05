@@ -99,7 +99,10 @@ def _status_session(
             "last_outcome": read_terminal_outcome(execution_file),
         }
     if process_is_alive(mapping["worker_pid"]):
-        return {"alias": alias, "activity": "running"}
+        status = {"alias": alias, "activity": "running"}
+        if "last_outcome" in mapping:
+            status["last_outcome"] = mapping["last_outcome"]
+        return status
     raise _invalid_activity()
 
 
@@ -171,6 +174,11 @@ def _valid_session_mapping(mapping: Dict[str, Any], alias: str) -> bool:
     ):
         return False
     if mapping["parent"] is not None and not isinstance(mapping["parent"], str):
+        return False
+    if "last_outcome" in mapping and (
+        not isinstance(mapping["last_outcome"], str)
+        or mapping["last_outcome"] not in TERMINAL_OUTCOMES
+    ):
         return False
     return (
         isinstance(mapping["team_generation"], int)

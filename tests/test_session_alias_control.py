@@ -165,7 +165,13 @@ def test_installed_alias_control_resumes_and_interrupts_one_team_session(
     )
     assert running.returncode == 0, running.stderr
     assert yaml.safe_load(running.stdout) == {
-        "aliases": [{"alias": alias, "activity": "running"}]
+        "aliases": [
+            {
+                "alias": alias,
+                "activity": "running",
+                "last_outcome": "completed",
+            }
+        ]
     }
 
     unsupported = run_process(

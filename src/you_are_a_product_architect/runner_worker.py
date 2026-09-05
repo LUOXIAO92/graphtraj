@@ -258,12 +258,21 @@ def _run_session(job_file: Path) -> int:
                         "RUNTIME_SESSION_NOT_RESUMABLE",
                         "The mapped Runtime session could not be resumed.",
                     )
+                previous_outcome = _previous_outcome(
+                    session_directory / "execution.yml"
+                )
                 mapping = {
-                    **base_mapping,
+                    **{
+                        key: value
+                        for key, value in base_mapping.items()
+                        if key != "last_outcome"
+                    },
                     "session": session,
                     "worker_pid": os.getpid(),
                     "runtime_pid": runtime_pid,
                 }
+                if previous_outcome is not None:
+                    mapping["last_outcome"] = previous_outcome
                 if causes:
                     _append_follow_up(session_directory / "events.jsonl", causes)
                 (session_directory / "execution.yml").unlink(missing_ok=True)
@@ -331,6 +340,21 @@ def _append_follow_up(events_file: Path, causes: list[str]) -> None:
         )
         events.flush()
         os.fsync(events.fileno())
+
+
+def _previous_outcome(execution_file: Path) -> str | None:
+    if not os.path.lexists(str(execution_file)):
+        return None
+    if execution_file.is_symlink() or not execution_file.is_file():
+        raise ValueError("Session terminal outcome is invalid")
+    outcome = yaml.safe_load(execution_file.read_text(encoding="utf-8"))
+    if not isinstance(outcome, dict) or outcome.get("outcome") not in {
+        "completed",
+        "interrupted",
+        "runtime-error",
+    }:
+        raise ValueError("Session terminal outcome is invalid")
+    return outcome["outcome"]
 
 
 def _prepare_trace(

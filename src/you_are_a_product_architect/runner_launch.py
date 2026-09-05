@@ -41,7 +41,9 @@ from .runner_project import (
     discover_project,
     preflight_worktree,
     provision_worktree,
+    runtime_executable,
 )
+from .project_roles import RolePreset
 from .runtime_adapter import (
     RuntimeContext,
     RuntimeContextPreflight,
@@ -58,7 +60,7 @@ RUNTIME_CONTEXT_PREFLIGHTS = {
 @dataclass
 class _TaskLaunchPlan:
     task: Task
-    binding: str
+    preset: RolePreset
     branch: str
     worktree: Path
     context_preflight: Optional[RuntimeContextPreflight] = None
@@ -69,15 +71,16 @@ def launch_batch(batch_file: Path, cwd: Path) -> LaunchResponse:
     """Preflight and independently launch the exact supplied batch."""
 
     batch = read_batch(batch_file, cwd)
-    project = discover_project(cwd, batch.runtime)
+    project = discover_project(cwd)
     validate_batch_roles(batch, project.role_bindings)
     launch_plans = []
     for task in batch.tasks:
         branch, worktree = _task_coordinates(project, batch.run_id, task)
+        preset = project.role_bindings[task.role]
         launch_plans.append(
             _TaskLaunchPlan(
                 task=task,
-                binding=project.role_bindings[task.role],
+                preset=preset,
                 branch=branch,
                 worktree=worktree,
             )
@@ -92,8 +95,7 @@ def launch_batch(batch_file: Path, cwd: Path) -> LaunchResponse:
         )
         plan.context_preflight = _preflight_runtime_context(
             project,
-            batch.runtime,
-            plan.binding,
+            plan.preset,
             plan.worktree,
             evidence_path(project.state_directory, batch.run_id, plan.task),
             plan.worktree if exists else project.integration_worktree,
@@ -126,7 +128,6 @@ def launch_batch(batch_file: Path, cwd: Path) -> LaunchResponse:
     return LaunchResponse(
         document={
             "run_id": batch.run_id,
-            "runtime": batch.runtime,
             "retained_batch_file": str(retained_batch),
             "tasks": results,
         },
@@ -412,6 +413,8 @@ def _start_turn(
         )
         worker_stderr = session_directory / "worker-stderr.log"
         prompt = _task_prompt(task)
+        worker_environment = dict(os.environ)
+        worker_environment.update(runtime_context.runtime_environment())
         with worker_stderr.open("w", encoding="utf-8") as diagnostics:
             worker = subprocess.Popen(
                 [
@@ -426,6 +429,7 @@ def _start_turn(
                 stderr=diagnostics,
                 text=True,
                 start_new_session=True,
+                env=worker_environment,
             )
             assert worker.stdin is not None
             worker.stdin.write(prompt)
@@ -678,19 +682,21 @@ def _write_metadata(
 
 def _preflight_runtime_context(
     project: Project,
-    runtime: str,
-    binding: str,
+    preset: RolePreset,
     worktree: Path,
     evidence: Path,
     repository_skill_source: Path,
     task: Task,
 ) -> RuntimeContextPreflight:
     try:
-        return RUNTIME_CONTEXT_PREFLIGHTS[runtime](
+        return RUNTIME_CONTEXT_PREFLIGHTS[preset.runtime](
             runtime_store=project.runtime_store,
-            executable=project.runtime_executable,
+            executable=runtime_executable(preset.runtime),
             git_common_directory=project.common_directory,
-            role=binding,
+            role=task.role,
+            model=preset.model,
+            base_url=preset.base_url,
+            api_key_env=preset.api_key_env,
             worktree=worktree,
             evidence=evidence,
             repository_skill_source=repository_skill_source,

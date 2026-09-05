@@ -73,6 +73,65 @@ def test_doctor_finds_core_skills_in_project_and_user_scopes(
     ]
 
 
+def test_doctor_reports_all_invalid_reusable_role_fields_without_mutating(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    tmp_path: Path,
+) -> None:
+    repository = temporary_git_repository
+    for name in CORE_SKILL_NAMES:
+        install_skill(repository / ".agents" / "skills", name)
+    graphtraj = repository / ".graphtraj"
+    graphtraj.mkdir()
+    (graphtraj / "config.yml").write_text(
+        """version: 1
+paths:
+  project_root: .
+  docs: docs
+  agent_worktrees: .graphtraj/.agent-worktrees
+  state: .graphtraj/state
+agent_runner:
+  dispatch_depth: 2
+  max_concurrency: 18
+""",
+        encoding="utf-8",
+    )
+    roles_path = graphtraj / "roles.yml"
+    roles_path.write_text(
+        "roles:\n"
+        "  team-leader:\n"
+        "    runtime: ''\n"
+        "    model: 3\n"
+        "    allow_runtime_swarm: sometimes\n"
+        "  engineer-junior:\n"
+        "    runtime: codex\n"
+        "    model: gpt-5.6-luna\n"
+        "    permissions: write\n"
+        "  unknown-role:\n"
+        "    runtime: codex\n"
+        "    model: gpt-5.6-sol\n",
+        encoding="utf-8",
+    )
+    before = roles_path.read_bytes()
+
+    result = run_process(
+        [str(installed_commands.product), "doctor"],
+        cwd=repository,
+        env=doctor_environment(tmp_path / "operator-home"),
+    )
+
+    assert result.returncode == 1
+    assert result.stderr == ""
+    assert "GraphTraj Roles is invalid." in result.stdout
+    assert "team-leader.runtime" in result.stdout
+    assert "team-leader.model" in result.stdout
+    assert "team-leader.allow_runtime_swarm" in result.stdout
+    assert "engineer-junior.permissions" in result.stdout
+    assert "unknown-role" in result.stdout
+    assert roles_path.read_bytes() == before
+    assert not (repository / ".codex" / "agents").exists()
+
+
 def test_doctor_reports_one_and_multiple_missing_core_skills(
     installed_commands: InstalledCommands,
     tmp_path: Path,
@@ -230,6 +289,11 @@ agent_runner:
             "MISSING" if name == "implement" else "OK",
         )
         for name in CORE_SKILL_NAMES
+    ] + [
+        "GraphTraj Roles is invalid.",
+        "- roles.yml was not found at {0}.".format(
+            repository / ".graphtraj" / "roles.yml"
+        ),
     ]
 
 

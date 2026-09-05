@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import json
 import os
-import shlex
 import tomllib
 from dataclasses import dataclass
 from importlib import resources
@@ -16,13 +14,6 @@ from .runner_models import managed_runtime_policy_matches
 
 RESOURCE_PATHS = (
     "config.toml",
-    "agents/delivery-state.toml",
-    "agents/engineer-expert.toml",
-    "agents/engineer-junior.toml",
-    "agents/engineer-senior.toml",
-    "agents/merge-resolver.toml",
-    "agents/spec-reviewer.toml",
-    "agents/standards-reviewer.toml",
     "hooks/worktree_guard.py",
 )
 
@@ -140,20 +131,7 @@ class CodexProjectFiles:
 
     def runtime_resources(self, runtime_store: Path) -> Dict[str, bytes]:
         """Return the root-owned resources rendered for this Runtime Store."""
-        rendered = dict(self.resources_by_path)
-        relative_path = "agents/merge-resolver.toml"
-        packaged_command = (
-            b'command = \'python3 "$(git rev-parse --show-toplevel)/.codex/'
-            b'hooks/worktree_guard.py"\''
-        )
-        guard_command = "python3 {0}".format(
-            shlex.quote(str(runtime_store / "hooks" / "worktree_guard.py"))
-        )
-        rendered[relative_path] = rendered[relative_path].replace(
-            packaged_command,
-            "command = {0}".format(json.dumps(guard_command)).encode(),
-        )
-        return rendered
+        return dict(self.resources_by_path)
 
     def _write_resources(
         self,

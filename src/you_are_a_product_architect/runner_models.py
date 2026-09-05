@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional, Tuple
 
+from .project_roles import RolePreset
+
 
 ROLE_ALIAS_MARKERS = {
     "engineer-junior": "j",
@@ -101,12 +103,8 @@ DETAIL_ERROR_CATEGORIES = {
     "HARNESS_SKILL_NOT_FOUND": "invalid-config",
     "PROJECT_NOT_FOUND": "invalid-config",
     "RUNTIME_EXECUTABLE_INVALID": "invalid-config",
-    "RUNTIME_INVALID": "invalid-input",
-    "ROLE_NOT_FOUND": "invalid-config",
-    "ROLE_DUPLICATE": "invalid-config",
     "ROLE_CONFIG_INVALID": "invalid-config",
     "ROLE_CONFIG_UNSUPPORTED": "invalid-config",
-    "ROLE_CONFIG_MISMATCH": "invalid-config",
     "LEGACY_SANDBOX_CONFIG_CONFLICT": "invalid-config",
     "ROLE_HOOK_MISMATCH": "invalid-config",
     "ROLE_GUARD_MISMATCH": "invalid-config",
@@ -192,7 +190,6 @@ class Task:
 @dataclass(frozen=True)
 class Batch:
     run_id: str
-    runtime: str
     tasks: Tuple[Task, ...]
     source_bytes: bytes
 
@@ -209,8 +206,7 @@ class Project:
     integration_branch: str
     integration_worktree: Path
     dev_commit: str
-    runtime_executable: Path
-    role_bindings: Mapping[str, str]
+    role_bindings: Mapping[str, RolePreset]
     repository_skill_allowlist: Tuple[str, ...] = ()
 
     @property

@@ -122,7 +122,6 @@ def cleanup_ticket(cwd: Path, run_id: str, ticket_id: str) -> CleanupResponse:
     project = discover_project(
         cwd,
         require_clean_integration=False,
-        require_runtime_executable=False,
     )
     try:
         registration = _resolve_registration(project, run_id, ticket_id)

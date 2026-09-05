@@ -17,7 +17,6 @@ RUN_ID = re.compile(
 )
 TICKET_ID = re.compile(r"^[A-Za-z0-9._-]{1,32}$")
 TICKET_NAME = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
-RUNTIME_NAME = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 class _UniqueKeyLoader(yaml.SafeLoader):
     """Safe YAML loader that treats repeated mapping keys as malformed."""
 
@@ -77,16 +76,6 @@ def valid_ticket_name(value: object) -> bool:
     )
 
 
-def valid_runtime_name(value: object) -> bool:
-    """Return whether a value is one semantic Agent Runtime name."""
-
-    return (
-        isinstance(value, str)
-        and len(value) <= 64
-        and RUNTIME_NAME.fullmatch(value) is not None
-    )
-
-
 def read_batch(
     batch_file: Path,
     cwd: Path,
@@ -111,14 +100,10 @@ def read_batch(
         raise RunnerError(
             "BATCH_YAML_INVALID", "Batch input is not valid YAML."
         ) from error
-    if not isinstance(document, dict) or set(document) != {
-        "run_id",
-        "runtime",
-        "tasks",
-    }:
+    if not isinstance(document, dict) or set(document) != {"run_id", "tasks"}:
         raise RunnerError(
             "BATCH_SCHEMA_INVALID",
-            "Batch input must contain only run_id, runtime, and tasks.",
+            "Batch input must contain only run_id and tasks.",
         )
     run_id = document["run_id"]
     if not valid_run_id(run_id):
@@ -129,12 +114,6 @@ def read_batch(
                 "short name of at most 48 ASCII characters and at most 64 "
                 "characters overall."
             ),
-        )
-    runtime = document["runtime"]
-    if not valid_runtime_name(runtime):
-        raise RunnerError(
-            "RUNTIME_INVALID",
-            "runtime must be a 1-64 character lowercase kebab-case Agent Runtime name.",
         )
     tasks = document["tasks"]
     if not isinstance(tasks, list) or not 1 <= len(tasks) <= 4:
@@ -154,7 +133,6 @@ def read_batch(
         )
     return Batch(
         run_id=run_id,
-        runtime=runtime,
         tasks=validated_tasks,
         source_bytes=source_bytes,
     )
@@ -162,7 +140,7 @@ def read_batch(
 
 def validate_batch_roles(
     batch: Batch,
-    role_bindings: Mapping[str, str],
+    role_bindings: Mapping[str, object],
 ) -> None:
     """Require every logical task role to have a selected-Runtime binding."""
 

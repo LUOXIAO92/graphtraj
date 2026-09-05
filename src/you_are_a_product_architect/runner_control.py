@@ -8,11 +8,11 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Tuple
 
 import yaml
 
-from .codex_adapter import read_codex_session_identity
+from .codex_adapter import codex_connection_environment, read_codex_session_identity
 from .runner_io import (
     ActiveTurnBusyError,
     ActiveTurnReservation,
@@ -87,8 +87,10 @@ def send_instruction(
 
     worktree = _mapped_worktree(mapping, runner_directory)
     key = _mapping_active_turn_key(mapping)
-    request = _read_resume_request(session_directory, mapping)
+    request, connection = _read_resume_request(session_directory, mapping)
     _attest_runtime_session(session_directory, mapping)
+    worker_environment = dict(os.environ)
+    worker_environment.update(_resume_environment(mapping, connection))
     try:
         reservation = create_active_turn_reservation(
             runner_directory,
@@ -153,6 +155,7 @@ def send_instruction(
                 stderr=diagnostics,
                 text=True,
                 start_new_session=True,
+                env=worker_environment,
             )
             worker_started = True
             assert worker.stdin is not None
@@ -228,6 +231,20 @@ def interrupt_session(alias: str, cwd: Path) -> Dict[str, str]:
     )
 
 
+def _resume_environment(
+    mapping: Dict[str, Any],
+    connection: Dict[str, str],
+) -> Dict[str, str]:
+    """Resolve one resume environment from the immutable launch Context."""
+    if mapping.get("runtime") == "codex":
+        return dict(
+            codex_connection_environment(
+                connection.get("base_url"), connection.get("api_key_env")
+            )
+        )
+    raise _not_resumable()
+
+
 def _mapped_worktree(
     mapping: Dict[str, Any], runner_directory: Path
 ) -> Path:
@@ -273,7 +290,7 @@ def _mapping_active_turn_key(mapping: Dict[str, Any]) -> str:
 
 def _read_resume_request(
     session_directory: Path, mapping: Dict[str, Any]
-) -> Dict[str, Any]:
+) -> Tuple[Dict[str, Any], Dict[str, str]]:
     launch_file = session_directory / "launch.yml"
     if launch_file.is_symlink() or not launch_file.is_file():
         raise _not_resumable()
@@ -289,8 +306,15 @@ def _read_resume_request(
         raise _not_resumable()
     original_mapping = launch.get("mapping")
     request = launch["adapter_request"]
+    connection = launch.get("connection")
     if (
         not isinstance(original_mapping, dict)
+        or not isinstance(connection, dict)
+        or any(key not in {"base_url", "api_key_env"} for key in connection)
+        or any(
+            not isinstance(value, str) or not value
+            for value in connection.values()
+        )
         or any(
             original_mapping.get(field) != mapping[field]
             for field in IMMUTABLE_MAPPING_FIELDS
@@ -299,7 +323,7 @@ def _read_resume_request(
         or request.get("worktree_path") != mapping["worktree_path"]
     ):
         raise _invalid_mapping()
-    return request
+    return request, connection
 
 
 def _attest_runtime_session(

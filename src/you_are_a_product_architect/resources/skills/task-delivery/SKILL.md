@@ -105,20 +105,20 @@ authority to the Delivery State Agent.
    reports the integration result, synchronize the Run and continue with the
    next Main-selected frontier.
 
-## Select one Agent Runtime per batch
+## Select reusable role presets for a batch
 
-- Let explicit user direction choose the Runtime before Harness Project policy,
-  and let Harness Project policy choose before Main's current Runtime.
-- When those sources do not permit a confident choice, ask the user and record
-  the answer.
-- Record one selected Runtime once at batch level as `runtime`; each task keeps
-  only its logical role and task access. Do not repeat Runtime, model,
-  configuration, Hook, command, or path details in task objects.
-- Main may select a different Runtime or configured model for either Reviewer.
-  The same Runtime and model remain valid. Claim Review Diversity only when the
-  selected Reviewer's Runtime or model actually differs from the implementing
-  Engineer's; otherwise record the selections without a diversity claim.
-- Let the Runner validate the selected configured built-in Adapter before it
+- Keep `run_id` and selected tasks at batch level. Do not add a top-level
+  Runtime selection.
+- Each string `role` resolves Runtime, model, and optional connection settings
+  from `.graphtraj/roles.yml`. Task objects keep only their logical role and
+  task access; do not repeat
+  Runtime, model, connection, configuration, Hook, command, or path details.
+- The configured presets for either Reviewer may differ from the implementing
+  Engineer's. The same Runtime and model remain valid. Claim Review Diversity
+  only when the configured Reviewer's Runtime or model actually differs from
+  the implementing Engineer's; otherwise record the selections without a
+  diversity claim.
+- Let the Runner validate each selected configured built-in Adapter before it
   reserves a task, provisions a Worktree, retains a batch, or starts a Runtime.
 
 ## Diagnose review failure

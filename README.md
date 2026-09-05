@@ -26,8 +26,11 @@ Repository and its disposable and durable Harness material:
 ├── AGENTS.md                            Harness Guidance for Main
 ├── CONTEXT.md                           shared Harness vocabulary
 ├── docs/                                active Harness decisions/configuration
+├── .graphtraj/
+│   ├── config.yml                       project paths and Runner-wide limits
+│   └── roles.yml                        reusable child-role Runtime settings
 ├── .codex/                               Harness Runtime Store
-│   ├── agents/                            canonical Harness roles
+│   ├── config.toml                        Main Runtime configuration
 │   └── hooks/                             Harness Worktree Guard
 ├── .agents/skills/                        supported Harness Skills
 ├── <repository-directory>/                  Primary Worktree on main
@@ -59,19 +62,23 @@ graphtraj setup
 Select the existing Primary Worktree when prompted. If required Skills are
 missing, setup asks once whether to install the supported copies in the
 Harness Project's `.agents/skills/`; declining stops before setup writes
-anything. Setup
-creates or registers `dev`, installs configuration, roles, and Hooks under the
-root `.codex/` Runtime Store, installs supported Skills under the root
-`.agents/skills/`, manages Harness Guidance in the root `AGENTS.md`, makes the
-Integration Worktree's ignored `.state` and `.scratch` point at the Harness
-State and Scratch directories, and creates ignored `CONTEXT.md` and `docs`
-views of the authoritative root documents. It does
-not clone a source repository, write `~/.codex`, alter credentials, or change
-the Primary Worktree or Source Repository Runtime files.
+anything. Setup creates or registers `dev`, writes project configuration and
+reusable child-role Runtime settings under `.graphtraj/`, installs Main Runtime
+configuration and the Harness Worktree Guard under `.codex/`, installs
+supported Skills under the root `.agents/skills/`, manages Harness Guidance in
+the root `AGENTS.md`, makes the Integration Worktree's ignored `.state` and
+`.scratch` point at the Harness State and Scratch directories, and creates
+ignored `CONTEXT.md` and `docs` views of the authoritative root documents. It
+does not clone a source repository, write `~/.codex`, alter credentials, or
+change the Primary Worktree or Source Repository Runtime files.
 
-The Runtime Store is Harness-owned rather than committed into `dev`; Ticket
-Worktrees do not inherit Harness roles, Hooks, or Harness Skills. Runner still
-requires a clean `dev` Integration Worktree before dispatching a role.
+The Runtime Store is Harness-owned rather than committed into `dev`. Runner
+resolves each child role from `.graphtraj/roles.yml` and combines only its
+Runtime, model, and optional connection settings with GraphTraj's installed
+fixed role policy; it does not generate or consult Runtime-specific child-role
+directories. Ticket Worktrees do not inherit Harness Hooks or Harness Skills.
+Runner still requires a clean `dev` Integration Worktree before dispatching a
+role.
 
 Harness Project Documents and Harness Guidance remain outside Source Repository
 history. The Source Repository `AGENTS.md` stays concise Repository Guidance;
@@ -81,17 +88,18 @@ mutation. The Primary Worktree receives no Harness-created document links.
 
 ## Deliver a selected ticket
 
-Main selects the ticket, Engineer tier, optional Reviewers, Runtime, and
-integration order. The Runner is mechanical transport only: it neither reads a
-tracker nor discovers a queue.
+Main selects the ticket, Engineer tier, optional Reviewers, and integration
+order. Each selected string role resolves its Runtime, model, and optional
+connection settings from `.graphtraj/roles.yml`. The Runner is mechanical
+transport only: it neither reads a tracker nor discovers a queue.
 
-Create a YAML batch containing one `run_id`, one selected `runtime`, and one
-to four selected tasks
+Create a YAML batch containing one `run_id` and one to four selected tasks
 (`ticket_id`, `ticket_name`, `role`, `ticket_file`, optional semantic `skills`,
 and optionally a concise `instruction`). Reviewer tasks additionally carry a
 positive `review_round` and one exact relative `report_file`; Engineer tasks
-carry neither. Runtime, model, configuration, Hook, and command details never
-belong in task objects. Then launch it from the Harness Project Root:
+carry neither. Runtime, model, connection, configuration, Hook, and command
+details never belong in task objects. Then launch it from the Harness Project
+Root:
 
 ```text
 agent-runner --batch-input <batch.yml>

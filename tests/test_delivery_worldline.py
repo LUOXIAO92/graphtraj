@@ -305,8 +305,8 @@ def test_same_instant_offset_collisions_keep_causal_order_across_shards(
     monkeypatch.syspath_prepend(str(PROJECT_ROOT / "src"))
     monkeypatch.chdir(tmp_path)
     state = _configure_project(tmp_path)
-    from you_are_a_product_architect.cli import main
-    from you_are_a_product_architect import delivery_worldline
+    from graphtraj.cli import main
+    from graphtraj import delivery_worldline
 
     instant = datetime(2026, 1, 1, tzinfo=timezone.utc)
 

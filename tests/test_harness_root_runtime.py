@@ -145,9 +145,9 @@ def test_setup_creates_a_root_owned_runtime_and_runner_discovers_it(
     monkeypatch.syspath_prepend(
         str(Path(__file__).resolve().parents[1] / "src")
     )
-    from you_are_a_product_architect.project_initialization import plan_project_setup
-    from you_are_a_product_architect.runner_models import RunnerError
-    from you_are_a_product_architect.runner_project import discover_project
+    from graphtraj.project_initialization import plan_project_setup
+    from graphtraj.runner_models import RunnerError
+    from graphtraj.runner_project import discover_project
 
     harness_root = temporary_git_repository.parent
     primary = temporary_git_repository
@@ -198,10 +198,10 @@ def test_setup_uses_runtime_user_core_skills_without_root_skill_config(
     monkeypatch.syspath_prepend(
         str(Path(__file__).resolve().parents[1] / "src")
     )
-    from you_are_a_product_architect.codex_adapter import (
+    from graphtraj.codex_adapter import (
         preflight_engineer_runtime_context,
     )
-    from you_are_a_product_architect.project_initialization import plan_project_setup
+    from graphtraj.project_initialization import plan_project_setup
 
     harness_root = temporary_git_repository.parent
     user_home = tmp_path / "runtime-user"
@@ -240,11 +240,11 @@ def test_engineer_runtime_context_preflight_validates_without_launch_artifacts(
     monkeypatch.syspath_prepend(
         str(Path(__file__).resolve().parents[1] / "src")
     )
-    from you_are_a_product_architect.codex_adapter import (
+    from graphtraj.codex_adapter import (
         CodexAdapterError,
         preflight_engineer_runtime_context,
     )
-    from you_are_a_product_architect.project_initialization import plan_project_setup
+    from graphtraj.project_initialization import plan_project_setup
 
     harness_root = temporary_git_repository.parent
     user_home = tmp_path / "runtime-user"
@@ -327,8 +327,8 @@ def test_runtime_preflight_uses_fixed_policy_and_selected_model(
     monkeypatch.syspath_prepend(
         str(Path(__file__).resolve().parents[1] / "src")
     )
-    from you_are_a_product_architect.codex_adapter import preflight_engineer_runtime_context
-    from you_are_a_product_architect.project_initialization import plan_project_setup
+    from graphtraj.codex_adapter import preflight_engineer_runtime_context
+    from graphtraj.project_initialization import plan_project_setup
 
     harness_root = temporary_git_repository.parent
     user_home = tmp_path / "runtime-user"
@@ -389,11 +389,11 @@ def test_engineer_runtime_context_preflight_rejects_unresolved_repository_skills
     monkeypatch.syspath_prepend(
         str(Path(__file__).resolve().parents[1] / "src")
     )
-    from you_are_a_product_architect.codex_adapter import (
+    from graphtraj.codex_adapter import (
         CodexAdapterError,
         preflight_engineer_runtime_context,
     )
-    from you_are_a_product_architect.project_initialization import plan_project_setup
+    from graphtraj.project_initialization import plan_project_setup
 
     harness_root = temporary_git_repository.parent
     user_home = tmp_path / "runtime-user"
@@ -439,10 +439,10 @@ def test_engineer_runtime_context_finalizes_worktree_facts_once(
     monkeypatch.syspath_prepend(
         str(Path(__file__).resolve().parents[1] / "src")
     )
-    from you_are_a_product_architect.codex_adapter import (
+    from graphtraj.codex_adapter import (
         preflight_engineer_runtime_context,
     )
-    from you_are_a_product_architect.project_initialization import plan_project_setup
+    from graphtraj.project_initialization import plan_project_setup
 
     harness_root = temporary_git_repository.parent
     user_home = tmp_path / "runtime-user"
@@ -766,7 +766,7 @@ def test_real_codex_uses_harness_hook_and_explicit_skill_configuration(
             "-c",
             (
                 "from importlib.resources import files; "
-                "print(files('you_are_a_product_architect.resources')."
+                "print(files('graphtraj.resources')."
                 "joinpath('codex', 'hooks', 'worktree_guard.py'))"
             ),
         ],

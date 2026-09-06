@@ -14,8 +14,8 @@ dependencies = [
 ]
 
 [project.scripts]
-graphtraj = "you_are_a_product_architect.cli:main"
-agent-runner = "you_are_a_product_architect.agent_runner:main"
+graphtraj = "graphtraj.cli:main"
+agent-runner = "graphtraj.agent_runner:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
@@ -24,7 +24,7 @@ package-dir = {"" = "src"}
 where = ["src"]
 
 [tool.setuptools.package-data]
-you_are_a_product_architect = [
+graphtraj = [
     "resources/codex/config.toml",
     "resources/codex/agents/*.toml",
     "resources/codex/hooks/*.py",

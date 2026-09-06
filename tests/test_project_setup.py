@@ -53,7 +53,7 @@ def supported_skill_contents(name: str) -> dict[str, bytes]:
     package_root = (
         Path(__file__).resolve().parents[1]
         / "src"
-        / "you_are_a_product_architect"
+        / "graphtraj"
         / "resources"
     )
     root = (

@@ -152,7 +152,7 @@ def _run_batch_workers(
         for index, position in enumerate(positions):
             try:
                 worker = subprocess.Popen(
-                    [sys.executable, "-m", "you_are_a_product_architect.team_round",
+                    [sys.executable, "-m", "graphtraj.team_round",
                      str(retained), str(index), str(position.fileno()), parent_alias],
                     cwd=project.harness_root, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
                     pass_fds=(position.fileno(),),
@@ -1028,7 +1028,7 @@ def _run_session_worker(
                 [
                     sys.executable,
                     "-m",
-                    "you_are_a_product_architect.runner_worker",
+                    "graphtraj.runner_worker",
                     str(job_file),
                 ],
                 cwd=worktree,

@@ -809,7 +809,7 @@ def _packaged_role(binding: str) -> Dict[str, Any]:
             "The configured Codex role is not supported by this Runner.",
         )
     try:
-        content = resources.files("you_are_a_product_architect.resources").joinpath(
+        content = resources.files("graphtraj.resources").joinpath(
             "codex", "agents", "{0}.toml".format(binding)
         ).read_bytes()
         return tomllib.loads(content.decode())
@@ -821,7 +821,7 @@ def _packaged_role(binding: str) -> Dict[str, Any]:
 
 
 def _verify_packaged_guard(runtime_store: Path) -> None:
-    resource = resources.files("you_are_a_product_architect.resources").joinpath(
+    resource = resources.files("graphtraj.resources").joinpath(
         "codex", "hooks", "worktree_guard.py"
     )
     guard = runtime_store / "hooks" / "worktree_guard.py"

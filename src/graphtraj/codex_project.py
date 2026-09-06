@@ -74,7 +74,7 @@ class CodexProjectFiles:
 
     @classmethod
     def load(cls) -> "CodexProjectFiles":
-        root = resources.files("you_are_a_product_architect.resources").joinpath(
+        root = resources.files("graphtraj.resources").joinpath(
             "codex"
         )
         return cls(

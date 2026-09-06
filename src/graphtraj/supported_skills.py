@@ -99,7 +99,7 @@ class SupportedSkills:
 
     @classmethod
     def load(cls) -> "SupportedSkills":
-        root = resources.files("you_are_a_product_architect.resources")
+        root = resources.files("graphtraj.resources")
         resources_by_name = {
             name: _resource_at(root, _resource_path(name))
             for name in CORE_SKILL_NAMES

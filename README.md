@@ -10,7 +10,7 @@ The installed commands provide setup, isolated execution and durable evidence.
 Python 3.12 or newer is required. Install a reviewed tag or commit:
 
 ```text
-uv tool install "git+https://<repository-url>@<tag-or-commit>"
+uv tool install "git+https://github.com/LUOXIAO92/graphtraj.git@<tag-or-commit>"
 graphtraj doctor
 graphtraj setup
 ```

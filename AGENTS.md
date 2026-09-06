@@ -7,7 +7,7 @@ Harness Project Documents.
 
 ## Project structure
 
-- `src/you_are_a_product_architect/` contains the Python package and packaged
+- `src/graphtraj/` contains the Python package and packaged
   Runtime, role, Hook, and Skill resources.
 - `tests/` contains behavior-focused pytest coverage.
 - `README.md` is the product-facing installation and operation guide.

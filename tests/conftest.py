@@ -193,7 +193,7 @@ def fake_codex(tmp_path: Path) -> FakeCodex:
         "        while not mapping.exists():\n"
         "            time.sleep(0.01)\n"
         "    hook = settings['hooks']['PreToolUse'][0]['hooks'][0]['command']\n"
-        "    for command in ('agent-runner --help', 'codex exec hello', 'python -m you_are_a_product_architect.agent_runner', 'pwd'):\n"
+        "    for command in ('agent-runner --help', 'codex exec hello', 'python -m graphtraj.agent_runner', 'pwd'):\n"
         "        checked = subprocess.run(shlex.split(hook), input=json.dumps({\n"
         "            'hook_event_name': 'PreToolUse', 'tool_name': 'Bash',\n"
         "            'session_id': 'fake-thread',\n"

@@ -146,7 +146,7 @@ def _send_session(
                     [
                         sys.executable,
                         "-m",
-                        "you_are_a_product_architect.runner_worker",
+                        "graphtraj.runner_worker",
                         str(resume_file),
                     ],
                     cwd=worktree,

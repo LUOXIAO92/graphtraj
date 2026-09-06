@@ -10,7 +10,7 @@ from conftest import run_process
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-RESOURCE_ROOT = PROJECT_ROOT / "src" / "you_are_a_product_architect" / "resources" / "codex"
+RESOURCE_ROOT = PROJECT_ROOT / "src" / "graphtraj" / "resources" / "codex"
 WORKTREE_GUARD = RESOURCE_ROOT / "hooks" / "worktree_guard.py"
 
 

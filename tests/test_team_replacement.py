@@ -11,9 +11,9 @@ from test_agent_runner_batch import configure_harness
 from test_session_alias_control import _register_ready_ticket
 
 
-@pytest.mark.parametrize("during_implementation", [False, True])
+@pytest.mark.parametrize("during_implementation", [False, True, "reviewing"])
 def test_installed_team_and_member_replacement(
-    installed_commands, temporary_git_repository, fake_codex, tmp_path, during_implementation,
+    installed_commands, temporary_git_repository, fake_codex, tmp_path, during_implementation, request,
 ):
     root, _, _, environment = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path,
@@ -49,13 +49,40 @@ def test_installed_team_and_member_replacement(
     script = script.replace("elif role.startswith('engineer-'):", """elif role.startswith('engineer-') and 'Continue this Team seat' in sys.stdin.read():
         print(json.dumps({'type': 'item.completed', 'item': {'type': 'agent_message', 'text': 'Engineer replacement ready to continue.'}}), flush=True)
     elif role.startswith('engineer-'):""")
-    if during_implementation:
+    if during_implementation is True:
         script = script.replace("elif role.startswith('engineer-'):", """elif role.startswith('engineer-'):
         if os.environ.get('GRAPHTRAJ_TEAM_GENERATION') == '1':
             Path(os.environ['ENGINEER_STARTED']).touch()
             deadline = time.monotonic() + 30
             while time.monotonic() < deadline:
                 time.sleep(0.01)
+""")
+    if during_implementation == "reviewing":
+        config_file = root / ".graphtraj/config.yml"
+        config = yaml.safe_load(config_file.read_text())
+        config["agent_runner"]["max_concurrency"] = 2
+        config_file.write_text(yaml.safe_dump(config))
+        environment["RETIREMENT_PROBE"] = str(tmp_path)
+        script = script.replace("configured_events =", """
+import atexit, fcntl
+probe = Path(os.environ['RETIREMENT_PROBE'])
+def observe(kind):
+    with (probe / 'executions.jsonl').open('a') as stream:
+        fcntl.flock(stream, fcntl.LOCK_EX)
+        stream.write(json.dumps({'kind': kind, 'pid': os.getpid(),
+                                'role': os.environ['GRAPHTRAJ_ROLE'],
+                                'generation': os.environ['GRAPHTRAJ_TEAM_GENERATION'],
+                                'retiring': bool(os.environ.get('GRAPHTRAJ_RETIRING'))}) + '\\n')
+        stream.flush()
+observe('start')
+atexit.register(observe, 'exit')
+signal.signal(signal.SIGTERM, lambda signum, frame: sys.exit(128 + signum))
+configured_events =""", 1)
+        script = script.replace("round_dir.mkdir(parents=True, exist_ok=True)", """round_dir.mkdir(parents=True, exist_ok=True)
+    if role.endswith('reviewer') and os.environ['GRAPHTRAJ_TEAM_GENERATION'] == '1':
+        (probe / (role + '-started')).touch()
+        while not (probe / 'release-reviewers').exists():
+            time.sleep(0.01)
 """)
     fake_codex.executable.write_text(script)
     environment.update(
@@ -72,7 +99,23 @@ def test_installed_team_and_member_replacement(
         environment["ENGINEER_STARTED"] = str(tmp_path / "engineer-started")
         launched = subprocess.Popen([str(installed_commands.runner), "--batch-input", str(batch)],
                                     cwd=root, env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        wait_for_file(tmp_path / "engineer-started", timeout=15)
+        def finish_original_batch():
+            (tmp_path / "release-reviewers").touch()
+            launched.communicate(timeout=60)
+        request.addfinalizer(finish_original_batch)
+        if during_implementation == "reviewing":
+            for role in ("standards-reviewer", "spec-reviewer"):
+                wait_for_file(tmp_path / (role + "-started"), timeout=15)
+            observed = [json.loads(line) for line in (tmp_path / "executions.jsonl").read_text().splitlines()]
+            active = set()
+            for event in observed:
+                if event["kind"] == "start":
+                    active.add(event["pid"])
+                else:
+                    active.remove(event["pid"])
+            assert len(active) == 2
+        else:
+            wait_for_file(tmp_path / "engineer-started", timeout=15)
     else:
         launched = command("--batch-input", str(batch))
         assert launched.returncode == 0, launched.stdout + launched.stderr
@@ -81,7 +124,9 @@ def test_installed_team_and_member_replacement(
     team_file = ticket_dir / "teams/1/team.yml"
     team = yaml.safe_load(team_file.read_text())
     leader = team["members"]["team_leader"]["session_ref"]
-    reviewer = team["members"]["spec_reviewer"]["session_ref"] or "76-session-alias-control@j1"
+    reviewer = team["members"]["spec_reviewer"]["session_ref"] or (
+        "76-session-alias-control@r2" if during_implementation == "reviewing" else "76-session-alias-control@j1"
+    )
     trace = ticket_dir / "teams/1/traces" / reviewer / "events.jsonl"
     prior = trace.read_bytes()
 
@@ -143,3 +188,20 @@ def test_installed_team_and_member_replacement(
     assert stale.returncode == 1
     assert yaml.safe_load(stale.stdout)["error"]["code"] == "team-not-active"
     assert not list(ticket_dir.rglob("*handoff*"))
+    if during_implementation == "reviewing":
+        for old_alias in ("76-session-alias-control@r1", "76-session-alias-control@r2"):
+            status = command("status", old_alias)
+            assert yaml.safe_load(status.stdout)["aliases"][0]["last_outcome"] == "interrupted"
+        active = set()
+        maximum = 0
+        for event in [json.loads(line) for line in (tmp_path / "executions.jsonl").read_text().splitlines()]:
+            if event["kind"] == "start":
+                active.add(event["pid"])
+            else:
+                active.remove(event["pid"])
+            maximum = max(maximum, len(active))
+        assert maximum == 2
+        assert not active
+        later = [json.loads(line) for line in (tmp_path / "executions.jsonl").read_text().splitlines()][len(observed):]
+        assert all(event["role"] == "delivery-state" or event["retiring"]
+                   for event in later if event["kind"] == "start" and event["generation"] == "1")

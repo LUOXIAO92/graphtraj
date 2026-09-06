@@ -77,17 +77,19 @@ def replace_session(alias, actor, caused_by_event_ids, cwd):
             interrupt_session(current_alias, cwd)
 
     if seat == "team_leader":
-        if team["status"] == "active":
-            record("retiring", [_trace_ref(project, traces, alias)], actor=actor)
-        elif team["status"] != "retiring":
+        if team["status"] not in {"active", "retiring"}:
             raise RunnerError("team-not-active", "The Team is already retired.")
+        # Interrupting makes the owning Team worker stop instead of scheduling
+        # subsequent work. Release its execution capacity before Delivery State
+        # records retirement; a fully occupied project needs no spare position.
         # A running child already has a mapping before its completed seat is recorded.
         for path in (project.runner_directory / "sessions").glob("*/mapping.yml"):
             current = yaml.safe_load(path.read_text())
             if (current.get("ticket_id") == task.ticket_id
-                    and current.get("team_generation") == generation
-                    and current.get("role") != "delivery-state"):
+                    and current.get("team_generation") == generation):
                 stop(current["alias"])
+        if team["status"] == "active":
+            record("retiring", [_trace_ref(project, traces, alias)], actor=actor)
         os.environ["GRAPHTRAJ_RETIRING"] = "1"
         try:
             _run_agent(

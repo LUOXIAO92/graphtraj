@@ -10,6 +10,7 @@ import signal
 import subprocess
 import sys
 from dataclasses import replace
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -52,25 +53,25 @@ def register_child_batch(batch_file: Path, cwd: Path, registration: Path) -> Lau
     reviewers = [task for task in batch.tasks if task.role.endswith("reviewer")]
     if not (
         (len(batch.tasks) == 1 and len(engineers) == 1)
-        or {task.role for task in reviewers} == {"standards-reviewer", "spec-reviewer"}
-        and len(batch.tasks) == 2
+        or len(reviewers) == len(batch.tasks) and 1 <= len(reviewers) <= 2
     ):
-        raise RunnerError("BATCH_SCHEMA_INVALID", "A direct child Batch must contain one Engineer or both Reviewers.")
+        raise RunnerError("BATCH_SCHEMA_INVALID", "A direct child Batch must contain one Engineer or one or both Reviewers.")
     project = discover_project(Path(os.environ.get("GRAPHTRAJ_HARNESS_ROOT", cwd)))
-    retained = retain_batch(project.state_directory, batch)
+    children = [
+        {"ticket_id": task.ticket_id, "role": task.role,
+         "alias": _agent_alias(task, task.role), "launch_status": "registered"}
+        for task in batch.tasks
+    ]
     try:
-        if registration.exists():
-            raise OSError("a child Batch is already registered")
-        write_yaml_durably(registration, {"retained_batch_file": str(retained)})
+        with registration.open("x", encoding="utf-8") as stream:
+            retained = retain_batch(project.state_directory, batch)
+            yaml.safe_dump({"retained_batch_file": str(retained), "tasks": children}, stream)
     except (OSError, yaml.YAMLError) as error:
         raise RunnerError("BATCH_RETENTION_FAILED", "The parent worker could not register the child Batch.") from error
     return LaunchResponse(
         document={
             "retained_batch_file": str(retained),
-            "tasks": [
-                {"ticket_id": task.ticket_id, "role": task.role, "launch_status": "registered"}
-                for task in batch.tasks
-            ],
+            "tasks": children,
         },
         succeeded=True,
     )
@@ -87,9 +88,10 @@ def launch_team_batch(batch: Batch, cwd: Path) -> LaunchResponse:
 
 def _run_batch_workers(
     project: Any, batch: Batch, retained: Path | None = None, parent_alias: str = "",
+    capacity_fd: int | None = None,
 ) -> LaunchResponse:
     workers = []
-    with capacity_positions(project, len(batch.tasks)) as positions:
+    with capacity_positions(project, len(batch.tasks), capacity_fd) as positions:
         if retained is None:
             retained = retain_batch(project.state_directory, batch)
         for index, position in enumerate(positions):
@@ -128,6 +130,10 @@ def _failed_task(task: Task, error: RunnerError) -> dict[str, Any]:
 
 
 def _deliver_ticket(project: Any, requested: Task, retained_batch: Path, capacity_fd: int) -> dict[str, Any]:
+    # The stopped Leader lends its worker-held position and resumes only after
+    # the direct children have exited. PID values are never capacity positions.
+    run_agent = partial(_run_agent, capacity_fd=capacity_fd)
+    request_state = partial(_request_state, capacity_fd=capacity_fd)
     ticket_directory = project.state_directory / "tickets" / (
         requested.ticket_id + "-" + requested.ticket_name
     )
@@ -163,9 +169,8 @@ def _deliver_ticket(project: Any, requested: Task, retained_batch: Path, capacit
     registration = project.runner_directory / "sessions" / (
         requested.ticket_id + "-" + requested.ticket_name + "@l1"
     ) / "child-registration.yml"
-    leader_alias, leader_session = _run_agent(
+    leader_alias, leader_session = run_agent(
         project, task, "team-leader", worktree, ticket_directory, traces, None, None, registration, None, retained_batch,
-        capacity_fd=capacity_fd,
     )
     engineer_batch, engineer_batch_path = _registered_batch(registration, worktree)
     if len(engineer_batch.tasks) != 1 or not engineer_batch.tasks[0].role.startswith("engineer-"):
@@ -183,7 +188,7 @@ def _deliver_ticket(project: Any, requested: Task, retained_batch: Path, capacit
         "standards_reviewer": {"role": "standards-reviewer", "session_ref": None},
         "spec_reviewer": {"role": "spec-reviewer", "session_ref": None},
     }
-    state_alias, state_session, event = _request_state(
+    state_alias, state_session, event = request_state(
         project,
         task,
         worktree,
@@ -206,7 +211,7 @@ def _deliver_ticket(project: Any, requested: Task, retained_batch: Path, capacit
     )
     predecessor = event["event_id"]
 
-    engineer_alias, engineer_session = _run_agent(
+    engineer_alias, engineer_session = run_agent(
         project,
         engineer_task,
         engineer_task.role,
@@ -219,7 +224,7 @@ def _deliver_ticket(project: Any, requested: Task, retained_batch: Path, capacit
         leader_alias,
         engineer_batch_path,
     )
-    state_alias, state_session, event = _request_state(
+    state_alias, state_session, event = request_state(
         project, task, worktree, ticket_directory, traces,
         state_alias, state_session, leader_alias, engineer_batch_path,
         {
@@ -233,7 +238,7 @@ def _deliver_ticket(project: Any, requested: Task, retained_batch: Path, capacit
     )
     predecessor = event["event_id"]
     candidate = _candidate(round_directory, worktree)
-    state_alias, state_session, event = _request_state(
+    state_alias, state_session, event = request_state(
         project, task, worktree, ticket_directory, traces,
         state_alias, state_session, leader_alias, engineer_batch_path,
         {
@@ -249,50 +254,66 @@ def _deliver_ticket(project: Any, requested: Task, retained_batch: Path, capacit
     )
     predecessor = event["event_id"]
 
-    leader_alias, leader_session = _run_agent(
+    leader_alias, leader_session = run_agent(
         project, task, "team-leader", worktree, ticket_directory, traces,
         leader_alias, leader_session, registration, None, retained_batch,
         "Engineer completed:\n" + yaml.safe_dump(
-            {"role": engineer_task.role, "alias": engineer_alias, "session": engineer_session},
+            {"role": engineer_task.role, "alias": engineer_alias, "session": engineer_session,
+             "trace": _trace_ref(project, traces, engineer_alias)},
             sort_keys=False,
         ),
     )
-    reviewer_batch, reviewer_batch_path = _registered_batch(registration, worktree)
-    if {child.role for child in reviewer_batch.tasks} != {"standards-reviewer", "spec-reviewer"}:
-        raise RunnerError("BATCH_SCHEMA_INVALID", "The second direct child Batch must contain both Reviewers.")
     child_results = []
-    try:
-        reviewed = _run_batch_workers(project, reviewer_batch, reviewer_batch_path, leader_alias)
-    except RunnerError as error:
-        raise RunnerError(error.code, "Reviewer Batch: " + error.message) from error
-    for child, result in zip(reviewer_batch.tasks, reviewed.document["tasks"]):
-        if "error" in result:
-            raise RunnerError(result["error"]["code"], result["error"]["message"])
-        report_name = (
-            "standards.md" if child.role == "standards-reviewer" else "spec.md"
-        )
-        alias, session = result["alias"], result["session"]
-        _collect_review_report(ticket_directory, round_directory, report_name)
-        member = "standards_reviewer" if child.role == "standards-reviewer" else "spec_reviewer"
-        state_alias, state_session, event = _request_state(
-            project, task, worktree, ticket_directory, traces,
-            state_alias, state_session, leader_alias, reviewer_batch_path,
-            {
-                "phase": "member", "ticket_id": task.ticket_id,
-                "caused_by_event_ids": [predecessor],
-                "evidence_refs": [_trace_ref(project, traces, alias)],
-                "member": member, "role": child.role, "session_ref": alias,
-            },
-            "member-" + member,
-        )
-        predecessor = event["event_id"]
-        child_results.append({"role": child.role, "alias": alias, "session": session})
+    remaining = {"standards-reviewer", "spec-reviewer"}
+    while remaining:
+        reviewer_batch, reviewer_batch_path = _registered_batch(registration, worktree)
+        if not {child.role for child in reviewer_batch.tasks} <= remaining:
+            raise RunnerError("BATCH_SCHEMA_INVALID", "The child Batch must select remaining Review axes for this candidate.")
+        try:
+            reviewed = _run_batch_workers(
+                project, reviewer_batch, reviewer_batch_path, leader_alias, capacity_fd,
+            )
+        except RunnerError as error:
+            if error.code != "insufficient-capacity":
+                raise
+            leader_alias, leader_session = run_agent(
+                project, task, "team-leader", worktree, ticket_directory, traces,
+                leader_alias, leader_session, registration, None, retained_batch,
+                "Child Batch did not start:\n" + yaml.safe_dump(error.as_document()),
+            )
+            if not registration.exists():
+                raise error
+            continue
+        for child, result in zip(reviewer_batch.tasks, reviewed.document["tasks"]):
+            if "error" in result:
+                raise RunnerError(result["error"]["code"], result["error"]["message"])
+            report_name = (
+                "standards.md" if child.role == "standards-reviewer" else "spec.md"
+            )
+            alias, session = result["alias"], result["session"]
+            _collect_review_report(ticket_directory, round_directory, report_name)
+            member = "standards_reviewer" if child.role == "standards-reviewer" else "spec_reviewer"
+            state_alias, state_session, event = request_state(
+                project, task, worktree, ticket_directory, traces,
+                state_alias, state_session, leader_alias, reviewer_batch_path,
+                {
+                    "phase": "member", "ticket_id": task.ticket_id,
+                    "caused_by_event_ids": [predecessor],
+                    "evidence_refs": [_trace_ref(project, traces, alias)],
+                    "member": member, "role": child.role, "session_ref": alias,
+                },
+                "member-" + member,
+            )
+            predecessor = event["event_id"]
+            remaining.remove(child.role)
+            child_results.append({"role": child.role, "alias": alias, "session": session,
+                                  "trace": _trace_ref(project, traces, alias)})
 
-    leader_alias, leader_session = _run_agent(
-        project, task, "team-leader", worktree, ticket_directory, traces,
-        leader_alias, leader_session, registration, None, retained_batch,
-        "Reviewers completed:\n" + yaml.safe_dump(child_results, sort_keys=False),
-    )
+        leader_alias, leader_session = run_agent(
+            project, task, "team-leader", worktree, ticket_directory, traces,
+            leader_alias, leader_session, registration, None, retained_batch,
+            "Reviewers completed:\n" + yaml.safe_dump(child_results, sort_keys=False),
+        )
     if registration.exists():
         raise RunnerError("BATCH_SCHEMA_INVALID", "The completed Team Round cannot register another child Batch.")
     candidate = _validate_round(round_directory, worktree)
@@ -301,7 +322,7 @@ def _deliver_ticket(project: Any, requested: Task, retained_batch: Path, capacit
         path.relative_to(project.harness_root).as_posix()
         for path in sorted(round_directory.iterdir())
     ]
-    _request_state(
+    request_state(
         project, task, worktree, ticket_directory, traces,
         state_alias, state_session, leader_alias, retained_batch,
         {
@@ -343,6 +364,8 @@ def _request_state(
     retained_batch: Path,
     facts: dict[str, Any],
     request_name: str,
+    *,
+    capacity_fd: int,
 ) -> tuple[str, str, dict[str, Any]]:
     state_alias = alias or "{0}-{1}@d1".format(task.ticket_id, task.ticket_name)
     runtime_request = worktree / ".scratch" / "delivery-state" / (request_name + ".yml")
@@ -360,6 +383,7 @@ def _request_state(
             "Request the strict Delivery State change for these supplied facts:\n"
             + yaml.safe_dump(facts, sort_keys=False)
             + "\nWrite only that request to {0}.\n".format(runtime_request),
+            capacity_fd=capacity_fd,
         )
     finally:
         for name, value in previous.items():
@@ -446,9 +470,7 @@ def _execute_agent(
     capacity_fd: int,
 ) -> tuple[str, str]:
     if alias is None:
-        marker = {"team-leader": "l", "engineer-junior": "j", "engineer-senior": "s", "engineer-expert": "e", "standards-reviewer": "r", "spec-reviewer": "r", "delivery-state": "d"}[role]
-        suffix = "2" if role == "spec-reviewer" else "1"
-        alias = "{0}-{1}@{2}{3}".format(task.ticket_id, task.ticket_name, marker, suffix)
+        alias = _agent_alias(task, role)
         session_directory = project.runner_directory / "sessions" / alias
         session_directory.mkdir(parents=True, exist_ok=False)
         trace_directory = traces / alias
@@ -697,6 +719,12 @@ def _run_session_worker(
     ):
         raise RunnerError("RUNTIME_WORKER_FAILED", "The Runtime Session could not be started.")
     return mapping["session"], terminal["outcome"]
+
+
+def _agent_alias(task: Task, role: str) -> str:
+    marker = {"team-leader": "l", "engineer-junior": "j", "engineer-senior": "s", "engineer-expert": "e", "standards-reviewer": "r", "spec-reviewer": "r", "delivery-state": "d"}[role]
+    suffix = "2" if role == "spec-reviewer" else "1"
+    return "{0}-{1}@{2}{3}".format(task.ticket_id, task.ticket_name, marker, suffix)
 
 
 def _link_worktree(project: Any, worktree: Path, evidence: Path) -> None:

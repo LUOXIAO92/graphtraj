@@ -8,6 +8,7 @@ from pathlib import Path
 import yaml
 
 from conftest import FakeCodex, InstalledCommands, run_process, wait_for_file
+from runner_fixtures import engineer_probe
 from test_project_setup import (
     install_user_skills,
     run_ready_setup as run_setup,
@@ -53,35 +54,8 @@ def test_installed_worktree_guard_is_an_independent_ticket_process(
     )
     assert setup.returncode == 0, setup.stderr
 
-    ticket_file = harness_root / "ticket.md"
-    ticket_file.write_text("# Hook process ticket\n", encoding="utf-8")
-    batch_file = harness_root / "batch.yml"
-    batch_file.write_text(
-        yaml.safe_dump(
-            {
-                "run_id": "20260814-hook-process",
-                "tasks": [
-                    {
-                        "ticket_id": "15",
-                        "ticket_name": "hook-process",
-                        "role": "engineer-expert",
-                        "ticket_file": str(ticket_file),
-                    }
-                ],
-            },
-            sort_keys=False,
-        ),
-        encoding="utf-8",
-    )
-    launch = run_process(
-        [str(installed_commands.runner), "--batch-input", str(batch_file)],
-        cwd=harness_root,
-        env=environment,
-        timeout=10,
-    )
-    assert launch.returncode == 0, launch.stderr
-    task = yaml.safe_load(launch.stdout)["tasks"][0]
-    ticket_worktree = Path(task["worktree_path"])
+    with engineer_probe(installed_commands, harness_root, fake_codex, environment) as (alias, ticket_worktree, _):
+        task = {"alias": alias}
     hook = harness_root / ".codex" / "hooks" / "worktree_guard.py"
     assert not (ticket_worktree / ".codex").exists()
     assert (ticket_worktree / "CONTEXT.md").resolve() == context.resolve()
@@ -108,8 +82,7 @@ def test_installed_worktree_guard_is_an_independent_ticket_process(
             "cwd": str(ticket_worktree),
             "tool_name": "Bash",
             "tool_input": {
-                "command": "mkdir -p .state/reviews && touch "
-                ".state/result.md"
+                "command": "touch .state/teams/1/rounds/1/engineer.md"
             },
         },
         ticket_worktree,
@@ -166,15 +139,15 @@ def test_installed_worktree_guard_is_an_independent_ticket_process(
     assert json.loads(denied.stdout)["hookSpecificOutput"]["permissionDecision"] == "deny"
 
     session = (
-        harness_root / ".codex" / "agent-runner" / "sessions" / task["alias"]
+        harness_root / ".graphtraj" / "runner" / "sessions" / task["alias"]
     )
-    wait_for_file(session / "turn.yml")
+    wait_for_file(session / "execution.yml")
     cleanup = run_process(
         [
             str(installed_commands.runner),
             "cleanup",
             "--ticket-id",
-            "15",
+            "82",
         ],
         cwd=harness_root,
         env=environment,

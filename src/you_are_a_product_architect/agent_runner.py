@@ -7,7 +7,7 @@ import click
 import yaml
 
 from .runner_cleanup import cleanup_ticket
-from .runner_control import interrupt_session, send_instruction, send_legacy_instruction
+from .runner_control import interrupt_session, send_instruction
 from .runner_launch import launch_batch
 from .runner_models import RunnerError
 from .runner_status import status_aliases
@@ -18,11 +18,11 @@ from .runner_status import status_aliases
     "--batch-input",
     metavar="YAML_FILE",
     type=click.Path(path_type=Path),
-    help="Launch a Main-selected task batch (the default operation).",
+    help="Dispatch the exact Team work selected by Main or a Team Leader.",
 )
 @click.pass_context
 def main(context, batch_input):
-    """Default operation: launch Engineers and transport their sessions."""
+    """Launch formal GraphTraj roles and control their Sessions; no compatibility commands."""
     if context.invoked_subcommand is None:
         if batch_input is None:
             error = RunnerError(
@@ -61,7 +61,7 @@ def _emit_result(document):
 @main.command()
 @click.argument("aliases", nargs=-1, required=True)
 def status(aliases):
-    """Inspect the explicitly supplied Engineer aliases."""
+    """Inspect the explicitly supplied Session aliases."""
     try:
         response = status_aliases(aliases, Path.cwd().resolve())
     except RunnerError as error:
@@ -82,34 +82,12 @@ def status(aliases):
     "--caused-by-event-id",
     multiple=True,
 )
-@click.option(
-    "--caused-by-worldline-seq",
-    type=click.IntRange(min=1),
-    multiple=True,
-    hidden=True,
-)
-def send(alias, instruction, caused_by_event_id, caused_by_worldline_seq):
-    """Send a follow-up to one recoverable Engineer session."""
+def send(alias, instruction, caused_by_event_id):
+    """Resume one Session using causal Project Worldline event IDs."""
     try:
-        if caused_by_event_id and not caused_by_worldline_seq:
-            response = send_instruction(
-                alias,
-                instruction,
-                Path.cwd().resolve(),
-                caused_by_event_id,
-            )
-        elif caused_by_worldline_seq and not caused_by_event_id:
-            response = send_legacy_instruction(
-                alias,
-                instruction,
-                Path.cwd().resolve(),
-                caused_by_worldline_seq,
-            )
-        else:
-            raise RunnerError(
-                "invalid-input",
-                "Send requires one or more causal Project Worldline event IDs.",
-            )
+        response = send_instruction(
+            alias, instruction, Path.cwd().resolve(), caused_by_event_id,
+        )
     except RunnerError as error:
         _emit_result({"alias": alias, "error": error.as_document()})
         click.echo(error.message, err=True)
@@ -120,7 +98,7 @@ def send(alias, instruction, caused_by_event_id, caused_by_worldline_seq):
 @main.command()
 @click.argument("alias")
 def interrupt(alias):
-    """Interrupt one active Engineer turn while preserving its alias."""
+    """Interrupt one Runtime execution while preserving its Session alias."""
     try:
         response = interrupt_session(alias, Path.cwd().resolve())
     except RunnerError as error:

@@ -221,7 +221,7 @@ def test_setup_installs_only_missing_core_skills_at_the_harness_root(
             assert tree_contents(target) == supported_skill_contents(name)
     assert tree_contents(user_home) == user_before
     assert not (
-        harness_root / ".codex" / "agent-runner" / "config.yml"
+        harness_root / ".graphtraj" / "runner" / "config.yml"
     ).exists()
 
 
@@ -537,7 +537,7 @@ def test_setup_preflights_runtime_conflicts_before_creating_dev(
     assert result.returncode == 1
     assert "Harness Runtime resource conflicts" in result.stderr
     assert not (harness_root / ".graphtraj").exists()
-    assert not (harness_root / ".codex" / "agent-runner").exists()
+    assert not (harness_root / ".graphtraj" / "runner").exists()
     assert git_output(temporary_git_repository, "worktree", "list", "--porcelain") == before
 
 
@@ -592,7 +592,7 @@ def test_setup_reports_partial_execution_and_rerun_recovers(
         ["git", "show-ref", "--verify", "--quiet", "refs/heads/dev"],
         cwd=temporary_git_repository,
     ).returncode == 0
-    assert not (harness_root / ".codex" / "agent-runner" / "config.yml").exists()
+    assert not (harness_root / ".graphtraj" / "runner" / "config.yml").exists()
 
     rerun = run_setup(
         installed_commands,
@@ -605,8 +605,8 @@ def test_setup_reports_partial_execution_and_rerun_recovers(
     assert rerun.returncode == 0, rerun.stderr
     assert (worktree_root / "dev").is_dir()
     assert git_output(worktree_root / "dev", "branch", "--show-current") == "dev"
-    assert (harness_root / ".codex" / "agent-runner").is_dir()
-    assert not (harness_root / ".codex" / "agent-runner" / "config.yml").exists()
+    assert (harness_root / ".graphtraj" / "runner").is_dir()
+    assert not (harness_root / ".graphtraj" / "runner" / "config.yml").exists()
 
 
 def test_setup_registers_an_existing_dev_at_the_configured_location(

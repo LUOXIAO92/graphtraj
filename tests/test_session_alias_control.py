@@ -6,7 +6,7 @@ from pathlib import Path
 import yaml
 
 from conftest import FakeCodex, InstalledCommands, run_process, wait_for_file
-from test_agent_runner_batch import configure_harness
+from runner_fixtures import configure_harness
 
 
 def _register_ready_ticket(
@@ -113,7 +113,7 @@ def test_installed_alias_control_resumes_and_interrupts_one_team_session(
     )
     assert launched.returncode == 0, launched.stderr
 
-    session_root = harness_root / ".codex" / "agent-runner" / "sessions"
+    session_root = harness_root / ".graphtraj" / "runner" / "sessions"
     mapping_file = next(
         path
         for path in session_root.glob("*/mapping.yml")

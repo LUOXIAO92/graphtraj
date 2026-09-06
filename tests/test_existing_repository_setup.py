@@ -87,7 +87,7 @@ def test_setup_initializes_the_current_git_repository(
     assert (integration / "docs").is_symlink()
     assert (integration / "docs").resolve() == docs.resolve()
     assert {path: path.read_bytes() for path in documents_before} == documents_before
-    assert not (repository / ".codex" / "agent-runner" / "config.yml").exists()
+    assert not (repository / ".graphtraj" / "runner" / "config.yml").exists()
 
 
 def test_setup_creates_reusable_role_presets(

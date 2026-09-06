@@ -8,7 +8,7 @@ from pathlib import Path
 import yaml
 
 from conftest import run_process
-from test_agent_runner_batch import configure_harness
+from runner_fixtures import configure_harness
 
 
 def ready_batch(commands, root, ids, name):

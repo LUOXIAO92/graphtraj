@@ -474,18 +474,7 @@ def ticket_evidence_scope(root: Path) -> Optional[Tuple[Path, Path]]:
         return None
     if len(relative.parts) == 1 and "-" in relative.name:
         return root / ".state", state_root / "tickets" / relative.name
-    if (
-        len(relative.parts) != 3
-        or relative.parts[0] != "runs"
-        or not relative.parts[1]
-        or "-" not in relative.parts[2]
-        or relative.parts[2].startswith("-")
-        or relative.parts[2].endswith("-")
-    ):
-        return None
-    run_id = relative.parts[1]
-    ticket_directory = relative.parts[2]
-    return root / ".state", state_root / run_id / "tickets" / ticket_directory
+    return None
 
 
 def readable_harness_document_view(

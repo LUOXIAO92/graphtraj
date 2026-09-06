@@ -202,6 +202,11 @@ role:
 The Batch retains the exact inline definition; it does not become a preset.
 Fixed role restrictions still apply. Omitted connection settings use Runtime
 defaults; store an API-key environment-variable name, never credentials.
+Engineer child tasks may select Repository Skills by semantic name with
+`skills: [skill-name]`. Unselected Repository Skills remain disabled.
+The exact selection stays in the retained Batch and the Adapter's immutable
+launch context; resuming the Session preserves that selection.
+
 Main's Runtime is outside child presets. Claim Review Diversity only when the
 configured Runtime or model actually differs.
 

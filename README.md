@@ -1,187 +1,188 @@
 # GraphTraj
 
-V1 is a soft delivery Harness: Main makes delivery decisions, while the
-installed commands provide safe setup, isolated Engineer transport, and cleanup.
+GraphTraj is a Harness for delivering a graph of accepted Tickets through
+Teams. Main manages the whole request, dependencies and integration. Each
+Team Leader coordinates one Engineer, two Reviewers and the Team's decisions.
+The installed commands provide setup, isolated execution and durable evidence.
 
-## Pinned installation
+## Install and set up
 
-Install a reviewed tag or commit, never a moving branch. Python 3.12 or newer
-is required.
+Python 3.12 or newer is required. Install a reviewed tag or commit:
 
 ```text
 uv tool install "git+https://<repository-url>@<tag-or-commit>"
-```
-
-This installs the `graphtraj` and `agent-runner` commands in
-an isolated tool environment. It does not install project configuration into a
-user-global Codex Runtime directory.
-
-## Project layout
-
-Run setup from the **Harness Project Root**, which contains one Source
-Repository and its disposable and durable Harness material:
-
-```text
-<harness-project-root>/
-├── AGENTS.md                            Harness Guidance for Main
-├── CONTEXT.md                           shared Harness vocabulary
-├── docs/                                active Harness decisions/configuration
-├── .graphtraj/
-│   ├── config.yml                       project paths and Runner-wide limits
-│   └── roles.yml                        reusable child-role Runtime settings
-├── .codex/                               Harness Runtime Store
-│   ├── config.toml                        Main Runtime configuration
-│   └── hooks/                             Harness Worktree Guard
-├── .agents/skills/                        supported Harness Skills
-├── <repository-directory>/                  Primary Worktree on main
-├── .agent-worktrees/
-│   ├── integration/                         Integration Worktree on dev
-│   └── runs/<run-id>/<ticket-stem>/         Ticket Worktrees
-├── state/<run-id>/                          authoritative Delivery Run state
-└── .scratch/                                disposable working material
-```
-
-The Primary Worktree is the operator's existing clone and remains untouched by
-setup. The Integration Worktree is the only normal development-integration
-checkout; Ticket Worktrees are isolated, disposable Engineer checkouts.
-
-## Diagnose and set up
-
-From the Harness Project Root, first inspect the core Skill names:
-
-```text
 graphtraj doctor
-```
-
-Then run the interactive setup:
-
-```text
 graphtraj setup
 ```
 
-Select the existing Primary Worktree when prompted. If required Skills are
-missing, setup asks once whether to install the supported copies in the
-Harness Project's `.agents/skills/`; declining stops before setup writes
-anything. Setup creates or registers `dev`, writes project configuration and
-reusable child-role Runtime settings under `.graphtraj/`, installs Main Runtime
-configuration and the Harness Worktree Guard under `.codex/`, installs
-supported Skills under the root `.agents/skills/`, manages Harness Guidance in
-the root `AGENTS.md`, makes the Integration Worktree's ignored `.state` and
-`.scratch` point at the Harness State and Scratch directories, and creates
-ignored `CONTEXT.md` and `docs` views of the authoritative root documents. It
-does not clone a source repository, write `~/.codex`, alter credentials, or
-change the Primary Worktree or Source Repository Runtime files.
+Run setup from the Harness Project Root. An existing Git repository is the
+default: its Primary Worktree remains on `main`, and the current directory
+becomes both the Harness Project Root and Source Repository. In the separated layout, setup selects the sole direct Git
+child, or asks for an explicit choice when there are zero or several candidates.
+Later commands use the recorded paths.
 
-The Runtime Store is Harness-owned rather than committed into `dev`. Runner
-resolves each child role from `.graphtraj/roles.yml` and combines only its
-Runtime, model, and optional connection settings with GraphTraj's installed
-fixed role policy; it does not generate or consult Runtime-specific child-role
-directories. Ticket Worktrees do not inherit Harness Hooks or Harness Skills.
-Runner still requires a clean `dev` Integration Worktree before dispatching a
-role.
+Setup is interactive and checks conflicts before writing. It preserves
+project-owned content and valid operator configuration, creates or registers
+the `dev` Integration Worktree, and installs missing supported Harness Skills
+after confirmation. It does not clone a repository, configure credentials,
+modify Runtime-global settings or promote `dev` to `main`.
 
-Harness Project Documents and Harness Guidance remain outside Source Repository
-history. The Source Repository `AGENTS.md` stays concise Repository Guidance;
-setup neither creates nor rewrites it. Repository-owned `CONTEXT.md` or `docs`
-paths conflict with the reserved Worktree views and make setup stop before any
-mutation. The Primary Worktree receives no Harness-created document links.
-
-## Deliver a selected ticket
-
-Main selects the ticket, Engineer tier, optional Reviewers, and integration
-order. Each selected string role resolves its Runtime, model, and optional
-connection settings from `.graphtraj/roles.yml`. The Runner is mechanical
-transport only: it neither reads a tracker nor discovers a queue.
-
-Create a YAML batch containing one `run_id` and one to four selected tasks
-(`ticket_id`, `ticket_name`, `role`, `ticket_file`, optional semantic `skills`,
-and optionally a concise `instruction`). Reviewer tasks additionally carry a
-positive `review_round` and one exact relative `report_file`; Engineer tasks
-carry neither. Runtime, model, connection, configuration, Hook, and command
-details never belong in task objects. Then launch it from the Harness Project
-Root:
+The default layout is:
 
 ```text
-agent-runner --batch-input <batch.yml>
+<harness-project-root>/                  also the Source Repository by default
+├── AGENTS.md                           Harness Guidance
+├── CONTEXT.md                          shared vocabulary
+├── docs/                               Project Documents
+├── .agents/skills/                     Harness Skills
+├── .codex/                             Main's project-local Runtime resources
+└── .graphtraj/
+    ├── config.yml                      paths and Runner limits
+    ├── roles.yml                       child-role Runtime settings
+    ├── .agent-worktrees/
+    │   ├── dev/                        Integration Worktree
+    │   └── <ticket-id>-<ticket-name>/   disposable Ticket Worktree
+    └── state/
+        ├── batches/                    exact dispatch inputs
+        ├── tickets/                    definitions, Team state and evidence
+        └── worldline/                  append-only event shards
 ```
 
-Run every public Runner command from the Harness Project Root; each emits one
-YAML result document on stdout:
+Runner-private execution records also live beneath `.graphtraj`, outside
+durable state. Their filenames are implementation details. The separated
+layout keeps the Source Repository in its configured child directory while
+Project Documents remain at the Harness Project Root. Linked Worktrees expose
+read-only `CONTEXT.md` and `docs/` views. Main owns Project Document changes.
+
+## Configuration and roles
+
+The default `.graphtraj/config.yml` is:
+
+```yaml
+version: 1
+paths:
+  project_root: .
+  docs: docs
+  agent_worktrees: .graphtraj/.agent-worktrees
+  state: .graphtraj/state
+agent_runner:
+  dispatch_depth: 2
+  max_concurrency: 18
+```
+
+Paths resolve from the Harness Project Root. `dispatch_depth` limits formal
+descendants below Main; a Team Leader is depth 1 and its children depth 2.
+`max_concurrency` limits executing Agents across the project. Operating-system
+locks enforce capacity; lock-file presence is not occupancy. A normal Batch
+starts all its tasks or none. Team delivery also works at capacity one, with
+the two Reviewers running sequentially in the same Round.
+
+`.graphtraj/roles.yml` contains a `roles` mapping. Each preset selects `runtime`
+and `model`, with optional `base_url` and `api_key_env`. The latter names an
+environment variable, never stores the credential. Omitted settings use the
+Runtime's defaults. Team Leader additionally supports `allow_runtime_swarm`,
+which defaults to true. Presets include Team Leader, Engineer tiers, both
+Reviewer axes, Delivery State and Merge Resolver. Main's already selected
+Runtime is outside these presets.
+
+A task can use a preset name or a one-entry inline role with the same Runtime
+settings. Inline roles stay in their Batch and never become presets
+automatically. Fixed role instructions, file access and dispatch permissions
+are bundled policy; role settings cannot replace them. Setup does not generate
+Runtime-specific child-role directories.
+
+Engineer child tasks select Repository Skills explicitly through their `skills`
+list. Other role tasks do not accept that field; Session resumption preserves
+the original Adapter selection.
+In the default same-directory layout, Source history distinguishes a tracked
+Repository Skill from a Harness-owned Skill at the same physical path.
+
+## Deliver accepted Tickets
+
+Use the installed `task-delivery` Skill for the full workflow. Main registers
+accepted GitHub Issue definitions and dependencies, generates the current
+graph with `graphtraj ticket graph`, and selects ready Tickets and difficulty.
+Only validated `dev` integration satisfies a dependency.
+
+Main dispatches ready Tickets to Team Leaders with a block-style YAML Batch:
+
+```yaml
+tasks:
+  - ticket_id: "123"
+    ticket_name: example-feature
+    role: team-leader
+    instruction: Senior difficulty. Deliver the current accepted Ticket.
+```
+
+The Ticket must already be registered. The Batch selects work; its optional
+instruction adds concise dispatch details to the accepted definition. Several
+ready Tickets may share one Batch when capacity permits. It has no Delivery
+Run identifier or Batch-level Runtime setting.
+
+Run public commands from the Harness Project Root:
 
 ```text
+agent-runner --batch-input batch.yml
 agent-runner status <alias> [<alias>...]
-agent-runner send <alias> --instruction <text> \
-  --caused-by-worldline-seq <seq> [--caused-by-worldline-seq <seq> ...]
+agent-runner send <alias> --instruction <text> --caused-by-event-id <event-id>
 agent-runner interrupt <alias>
-agent-runner cleanup --run-id <run-id> --ticket-id <ticket-id>
+agent-runner replace <leader-alias> --actor main --caused-by-event-id <event-id>
+graphtraj ticket graph
+graphtraj worldline read
+graphtraj worldline render
+graphtraj ticket integrate --ticket-id <id> -- <validation-command> <arguments>
+agent-runner cleanup --ticket-id <id>
 ```
 
-Repository Skills are disabled by default. A task may name only the Repository
-Skills it needs; Runner resolves each name in the Ticket Worktree and records
-both requested and effective selections in durable ticket evidence. The
-root-owned Runner configuration exposes a persistent Repository Skill allowlist
-for Main, but allowlisting never enables a Skill by itself.
+Each Team Leader schedules its Engineer and both Reviewers through the same
+Runner, against a fixed candidate and comparison point, then makes the final
+adversarial decision. Process corrections stay in the current Team Round.
+Only a compliant implementation rejection confirmed by the Leader opens the
+next Round. Main or the user can retire a Team; replacement retains the
+Ticket branch and Worktree, and reads handoff from the prior Leader's Trace.
+Replacing another member changes only that seat.
 
-Engineer tasks use `engineer-junior`, `engineer-senior`, or `engineer-expert`.
-After an Engineer returns a fixed candidate and validation evidence, Main may
-omit review or launch `standards-reviewer` and `spec-reviewer` concurrently
-as separate tasks against that same Ticket Worktree. Neither axis gates the
-other. Main supplies the same exact candidate and comparison point in each
-instruction. Reviewer roles receive a read-only candidate and are limited to
-their exact raw-report paths; Main waits for both reports and verifies the
-candidate and Git state before one round decision. Merge and integration
-actions do not use Reviewers.
+Main corrects Ticket boundaries or dependencies when delivery evidence
+disproves them, using `graphtraj ticket revise --revision-file <revision.yml>`.
+Product-preserving graph corrections retain prior definitions and evidence;
+product changes or new external authority require user direction. Delivery
+State records supplied semantic decisions through validated commands; Runner
+records only the execution facts it observes.
 
-Main applies the minimum-finding policy from Harness Guidance at the Harness
-Project Root. Runtime role prompts and Skills route delegated Agents to the
-read-only Worktree document views instead of copying that policy into Source
-Repository Guidance.
+Main integrates accepted candidates serially into `dev` and supplies the
+project's validation command. For an actual textual or semantic conflict,
+the integration command accepts `--resolve-conflict <diagnosis>` to dispatch
+a Merge Resolver. Successful Team Review alone does not merge a candidate.
+Cleanup verifies integration and a clean disposable Worktree, removes safe
+live mappings and the Ticket Worktree/branch, and preserves durable evidence.
 
-Use `status` only for aliases Main explicitly supplies. With the Codex V1
-Runtime, `send` can resume an idle session but cannot inject live input into a
-running turn. A resume names the prior Worldline sequence or sequences that
-caused it; Main may explicitly interrupt and then send when that is the intended
-recovery. Review and commit the candidate in its Ticket Worktree.
-Main adjudicates any dispatched Standards and Spec reports; when it omits
-review, it records that decision without inventing a review verdict. Main then
-merges the accepted candidate into `dev` in the Integration Worktree and runs
-the target project's validation there.
+## Evidence and limits
 
-After that validation succeeds, run `agent-runner cleanup` for the stable run
-and ticket IDs. It verifies that the branch is merged into `dev` and that the
-Ticket Worktree is clean before removing the worktree, merged branch, aliases,
-and transient Runtime diagnostics. Repeating successful cleanup reports an
-idempotent already-cleaned result.
+Each Ticket retains its initial definition, accepted revisions, current state,
+successive Teams, closed Round reports and append-only Session Traces. Exact
+Batches and the sharded Project Worldline connect the causal history.
+Readiness and ledger-shaped views are generated on request; they are not
+additional persisted state. Session aliases identify historical conversations,
+not processes or invocation counters.
 
-## Evidence and tracker portability
+Historical `state/<run-id>` directories are left byte-for-byte untouched.
+GraphTraj does not migrate them, read them as fallback or offer compatibility
+for the old project command, Run-based Batch syntax or configuration sources.
 
-Persistent evidence stays outside Git Worktrees under
-`state/<run-id>/`: exact retained batches, ticket metadata,
-Engineer result and validation summaries, and Main-retained raw Reviewer
-reports remain after cleanup. Review Diversity is recorded only when the
-selected Reviewer Runtime or model actually differs from the Engineer's; using
-the same Runtime and model is valid. ADR 0025 owns the append-only Worldline and
-derived `ledger.yml`; ADR 0003 owns current `task-map.yml` and `dag.md`; ADR
-0004 owns retained batch input. The Runner owns only mechanical metadata. There
-is no deletion command: an operator may
-manually delete a completed run's `state/<run-id>/` directory
-through the filesystem or file manager when its retention period ends.
+The current Adapter supports Codex. Formal implementation and Review always
+use Runner. Main and permitted Team Leaders may use Runtime-native helpers
+only for temporary read-only investigation; those helpers have no independent
+GraphTraj Trace and cannot occupy a Team seat. Engineers and Reviewers cannot
+dispatch child Agents or start another Runtime.
 
-This repository itself uses GitHub Issues, but a target project chooses its own
-tracker binding. GitHub, GitLab, local Markdown, and other Harness-root Project
-Document workflows are all valid; Main must read or establish that
-target-specific binding instead of inheriting this repository's tracker choice.
+GraphTraj has no queue, daemon, automatic crash-recovery service or automatic
+release promotion. One Harness Project contains one Source Repository.
 
-## V1 limitations
 
-- Runtime support is Codex-only; other Adapters are future work.
-- Core Skill discovery is name-only: contents are not locked or attested, and
-  duplicate Skill names can resolve differently. Operators should avoid them.
-- There is no hard scheduler or queue. Main selects readiness, tiers, dispatch,
-  retry, escalation, and integration ordering.
-- There is no automatic state watcher; Main asks the Delivery State Agent to
-  synchronize durable evidence after meaningful events.
-- One Harness Project contains one Source Repository. V1 does not coordinate
-  multiple Source Repositories.
-- There is no automatic promotion from `dev` to `main`; release promotion is a
-  separate explicit operator action.
+The test suite exercises installed commands with controlled Runtime behavior.
+With an authenticated supported Codex executable, run the narrow live Adapter
+probe explicitly:
+
+```text
+CODEX_REAL_ACCEPTANCE=1 pytest -p no:cacheprovider -q tests/test_harness_root_runtime.py -k test_real_codex --tb=short
+```

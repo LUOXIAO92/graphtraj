@@ -25,30 +25,6 @@ from .project_roles import ProjectRolesError, load_project_roles
 ALLOWLISTED_RUNTIMES = frozenset({"codex"})
 
 
-def configured_worktree_root(runner_directory: Path) -> Path:
-    """Read the canonical Ticket Worktree root needed by recovery checks."""
-
-    configuration = _load_graphtraj_configuration(runner_directory.parent.parent)
-    if runner_directory != configuration.harness_root / ".codex" / "agent-runner":
-        raise RunnerError("PROJECT_CONFIG_MISMATCH", "GraphTraj Config is invalid.")
-    if not configuration.agent_worktrees.is_dir():
-        raise RunnerError("PROJECT_CONFIG_MISMATCH", "GraphTraj Config is invalid.")
-    return configuration.agent_worktrees
-
-
-def registered_worktree_owns_branch(worktree: Path, branch: str) -> bool:
-    """Return whether Git registers this exact Worktree on this exact branch."""
-
-    expected_worktree = worktree.resolve()
-    expected_branch = "refs/heads/{0}".format(branch)
-    matches = [
-        record
-        for record in registered_worktrees(worktree)
-        if Path(record["worktree"]).resolve() == expected_worktree
-    ]
-    return len(matches) == 1 and matches[0].get("branch") == expected_branch
-
-
 def provision_worktree(
     project: Project,
     task: Task,
@@ -133,35 +109,17 @@ def preflight_worktree(
 
     records = registered_worktrees(project.repository)
     expected_branch = "refs/heads/{0}".format(branch)
-    ticket_runs = (project.worktree_root / "runs").resolve()
     registered = None
     for record in records:
         record_path = Path(record["worktree"]).resolve()
         record_branch = record.get("branch")
         if record_path == worktree:
             registered = record
-        elif _registered_ticket_path_matches(record_path, ticket_runs, task):
-            raise RunnerError(
-                "TICKET_ALREADY_ACTIVE",
-                "This ticket already has a live Ticket Worktree in another Run.",
-            )
         if record_branch == expected_branch and record_path != worktree:
             raise RunnerError(
                 "WORKTREE_CONFLICT",
                 "The derived Ticket branch is registered at a different Worktree.",
             )
-        if (
-            record_branch is not None
-            and record_branch.startswith("refs/heads/agent/")
-            and record_branch != expected_branch
-        ):
-            relative_branch = record_branch[len("refs/heads/agent/") :]
-            _, separator, ticket_part = relative_branch.partition("/")
-            if separator and ticket_part.startswith(task.id_stem_prefix):
-                raise RunnerError(
-                    "TICKET_ALREADY_ACTIVE",
-                    "This ticket already has a live Ticket Worktree in another Run.",
-                )
     if registered is not None:
         if registered.get("branch") != expected_branch or not worktree.is_dir():
             raise RunnerError(
@@ -192,23 +150,6 @@ def preflight_worktree(
             "The existing Ticket branch is not at the current validated dev state.",
         )
     return False
-
-
-def _registered_ticket_path_matches(
-    worktree: Path,
-    ticket_runs: Path,
-    task: Task,
-) -> bool:
-    """Return whether a registered run-scoped path owns the task identity."""
-
-    try:
-        relative = worktree.relative_to(ticket_runs)
-    except ValueError:
-        return False
-    return (
-        len(relative.parts) == 2
-        and relative.parts[1].startswith(task.id_stem_prefix)
-    )
 
 
 def _worktree_for_branch(repository: Path, branch: str) -> Path:
@@ -376,7 +317,7 @@ def discover_project(
         harness_root=configuration.harness_root,
         repository=repository,
         common_directory=common,
-        runner_directory=configuration.harness_root / ".codex" / "agent-runner",
+        runner_directory=configuration.harness_root / ".graphtraj" / "runner",
         worktree_root=configuration.agent_worktrees,
         state_directory=_resolve_path(
             configuration.state,
@@ -396,7 +337,7 @@ def discover_project(
 def discover_runner_directory(cwd: Path) -> Path:
     """Locate Runner-owned transport state from the Harness Project Root."""
     configuration = _load_graphtraj_configuration(cwd)
-    return configuration.harness_root / ".codex" / "agent-runner"
+    return configuration.harness_root / ".graphtraj" / "runner"
 
 
 def _load_graphtraj_configuration(cwd: Path) -> ProjectConfiguration:

@@ -8,7 +8,7 @@ developer_instructions = """
 Implement the assigned ticket using $implement.
 Use $ponytail to choose the smallest implementation that fully satisfies the ticket.
 Use $tdd for behavior changes.
-Follow $implement for implementation, but leave any review after candidate handoff to Main.
+Follow $implement for implementation, but perform self-review and return the candidate to the Team Leader.
 
 Operate autonomously within the assigned Ticket Worktree while following normal Codex approval and network controls.
 Work exclusively inside the current worktree.
@@ -20,16 +20,19 @@ Read Harness Project Documents only through this Worktree's `CONTEXT.md` and
 `docs/` views. They are Main-owned and read-only; do not modify, replace, move,
 or delete those views or their targets.
 
-Keep the current delivery evidence through the scoped Ticket Worktree link:
-- Write the current outcome to `.state/result.md`.
-- Include the candidate commit in `result.md` when implementation succeeds.
-- Write `.state/validation.md`, including the candidate commit and tests run with their results.
-- If blocked, record the blocker, supporting evidence, attempted work, and the decision or condition needed to continue in `result.md`.
+Write the candidate commit, implementation outcome, and self-review to the
+Runner-supplied engineer.md destination in the current Team Round. Write the
+candidate commit and commands run with their results to the supplied
+validation.md destination. If blocked, record the blocker, supporting evidence,
+attempted work, and the condition needed to continue in engineer.md.
 
-Return the candidate commit, validation evidence, and any outstanding concern.
-Do not invoke a review Skill. Do not dispatch Reviewers or create an authoritative Reviewer set. Do not claim review acceptance; Main owns those decisions.
-The Runner owns `metadata.yml` and its mechanical `run_id` and `ticket_id` metadata; do not generate or alter them.
-The Delivery State Agent owns the ledger and DAG; do not create, update, or repeat that control state.
+Return the candidate commit, validation evidence, and any outstanding concern
+to the Team Leader. Do not invoke a review Skill, dispatch Reviewers, or claim
+Team acceptance.
+The Team Leader owns the formal Review and final Team decision.
+The Delivery State Agent requests semantic Ticket, Team, and Worldline changes;
+do not edit those records. Preserve closed Team Rounds and Session Traces.
+
 """
 
 default_permissions = "project-documents-read-only"

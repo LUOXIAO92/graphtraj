@@ -9,9 +9,10 @@ import re
 import shlex
 import signal
 import subprocess
+import sys
 import time
 import tomllib
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from importlib import resources
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Tuple, cast
@@ -148,7 +149,7 @@ class _CodexRole:
             ("default_permissions", self.default_permissions),
             ("model_reasoning_effort", self.reasoning_effort),
             ("developer_instructions", developer_instructions),
-            ("hooks", _root_owned_hooks(self.hooks, runtime_store)),
+            ("hooks", _root_owned_hooks(self.hooks, runtime_store, self.name, effective_skills)),
             ("agents", self.agents),
             (
                 "projects",
@@ -309,6 +310,7 @@ def preflight_runtime_context(
     model: str | None = None,
     base_url: str | None = None,
     api_key_env: str | None = None,
+    allow_runtime_swarm: bool = True,
     worktree: Path,
     evidence: Path,
     repository_skill_source: Path,
@@ -318,7 +320,25 @@ def preflight_runtime_context(
     """Prepare one Codex role without crossing role-specific boundaries."""
 
     _reject_legacy_user_sandbox_config()
+    _require_codex_permissions(executable)
     resolved_role = _resolve_codex_role(role)
+    resolved_role = replace(
+        resolved_role,
+        agents={"enabled": role == "team-leader" and allow_runtime_swarm},
+        developer_instructions=resolved_role.developer_instructions + (
+            "\nNative helpers are permitted only for temporary read-only investigation. "
+            "They cannot implement, Review, own a Team seat, or replace formal "
+            "agent-runner dispatch. They are excluded from Team state and Runner "
+            "concurrency and have no independent GraphTraj Session Trace guarantee. "
+            "Use agent-runner for work requiring an independent Trace.\n"
+            if role == "team-leader" and allow_runtime_swarm else
+            "\nDo not use Runtime-native swarm or dispatch native helpers.\n"
+        ) + (
+            "Do not invoke agent-runner or start an Agent Runtime directly.\n"
+            if role != "team-leader" else
+            "Never start an Agent Runtime directly; formal work uses agent-runner.\n"
+        ),
+    )
     selected_model = resolved_role.model if model is None else model
     if role in ENGINEER_ROLES or role == "merge-resolver":
         harness_skills = _resolve_engineer_harness_skills(
@@ -558,6 +578,25 @@ def _validate_launch_request(
             "The durable Codex launch request is invalid.",
         )
     return arguments, worktree
+
+
+def _require_codex_permissions(executable: Path) -> None:
+    """Refuse Codex releases without the invocation-local hard controls."""
+    try:
+        result = subprocess.run(
+            [str(executable), "exec", "--help"],
+            check=False, capture_output=True, text=True, timeout=10,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise CodexAdapterError(
+            "ROLE_CONFIG_UNSUPPORTED", "Cannot verify Codex permission controls.",
+        ) from error
+    required = ("--sandbox", "--dangerously-bypass-hook-trust")
+    if result.returncode or any(flag not in result.stdout for flag in required):
+        raise CodexAdapterError(
+            "ROLE_CONFIG_UNSUPPORTED",
+            "Codex must support filesystem sandboxing and invocation-local Hooks.",
+        )
 
 
 def _reject_legacy_user_sandbox_config() -> None:
@@ -957,13 +996,21 @@ def _discover_skill_files(
 def _root_owned_hooks(
     packaged_hooks: Mapping[str, Any],
     runtime_store: Path,
+    role: str,
+    effective_skills: Tuple[_EffectiveSkill, ...],
 ) -> Mapping[str, Any]:
     """Translate canonical Hooks to the root-owned Worktree Guard."""
     _verify_packaged_guard(runtime_store)
     hooks = copy.deepcopy(dict(packaged_hooks))
-    command = "python3 {0}".format(
-        shlex.quote(str(runtime_store / "hooks" / "worktree_guard.py"))
+    command = "{0} {1}".format(
+        shlex.quote(sys.executable),
+        shlex.quote(str(runtime_store / "hooks" / "worktree_guard.py")),
     )
+    if role == "team-leader":
+        command += " --team-leader"
+    for skill in effective_skills:
+        if skill.enabled:
+            command += " --read-skill " + shlex.quote(str(skill.path))
     try:
         for event in ("PreToolUse", "SubagentStart"):
             entries = hooks[event]

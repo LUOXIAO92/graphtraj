@@ -144,6 +144,7 @@ def test_installed_alias_control_resumes_and_interrupts_one_team_session(
     )
     peer_alias = yaml.safe_load(peer_mapping_file.read_text())["alias"]
 
+    policy_log = tmp_path / "resumed-policy.jsonl"
     resumed = run_process(
         [
             str(installed_commands.runner),
@@ -158,9 +159,10 @@ def test_installed_alias_control_resumes_and_interrupts_one_team_session(
         env={
             **environment,
             "FAKE_CODEX_EVENTS": json.dumps(
-                [{"type": "thread.started", "thread_id": session}]
+                [{"type": "thread.started", "thread_id": session}, {"type": "turn.started"}]
             ),
             "FAKE_CODEX_RELEASE_FILE": str(release),
+            "FAKE_CODEX_POLICY_LOG": str(policy_log),
         },
         timeout=10,
     )
@@ -199,6 +201,7 @@ def test_installed_alias_control_resumes_and_interrupts_one_team_session(
     assert unsupported.returncode == 1
     assert yaml.safe_load(unsupported.stdout)["error"]["code"] == "live-input-unsupported"
 
+    wait_for_file(policy_log)
     peer_before = peer_mapping_file.read_text()
     denied = run_process(
         [str(installed_commands.runner), "send", peer_alias,
@@ -253,6 +256,12 @@ def test_installed_alias_control_resumes_and_interrupts_one_team_session(
     resumed_mapping = yaml.safe_load(mapping_file.read_text(encoding="utf-8"))
     assert resumed_mapping["alias"] == alias
     assert resumed_mapping["session"] == session
+    policy = json.loads(policy_log.read_text().splitlines()[0])
+    assert policy["settings"]["agents"]["enabled"] is True
+    assert not policy["decisions"]["agent-runner --help"]
+    assert not policy["decisions"]["pwd"]
+    assert policy["decisions"]["codex exec hello"]
+    assert policy["helper_decisions"]["agent-runner --help"]
     assert (worktree_root / "76-session-alias-control").is_dir()
     assert "run_id" not in resumed_mapping
     assert "turn" not in resumed_mapping

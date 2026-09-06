@@ -3,7 +3,9 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import shlex
 import subprocess
+import time
 import tomllib
 from pathlib import Path
 
@@ -16,12 +18,142 @@ from test_project_setup import (
     install_skills,
     supported_skill_contents,
     tree_contents,
+    run_ready_setup,
 )
+
+
+def wait_for_probe_completion(commands, alias, harness_root, environment):
+    deadline = time.monotonic() + 300
+    while time.monotonic() < deadline:
+        result = run_process(
+            [str(commands.runner), 'status', alias],
+            cwd=harness_root, env=environment, timeout=15,
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        status = yaml.safe_load(result.stdout)['aliases'][0]
+        if status['activity'] == 'idle':
+            assert status['last_outcome'] == 'completed', status
+            return
+        time.sleep(1)
+    interrupted = run_process(
+        [str(commands.runner), 'interrupt', alias],
+        cwd=harness_root, env=environment, timeout=30,
+    )
+    raise AssertionError('Probe timed out; Runner interruption: ' + interrupted.stdout + interrupted.stderr)
+
+
+def wait_for_probe_artifacts(commands, alias, harness_root, environment, proofs, timeout=300):
+    deadline = time.monotonic() + timeout
+    while not all(path.is_file() for path in proofs) and time.monotonic() < deadline:
+        time.sleep(1)
+    result = run_process(
+        [str(commands.runner), 'status', alias],
+        cwd=harness_root, env=environment, timeout=15,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    if yaml.safe_load(result.stdout)['aliases'][0]['activity'] != 'idle':
+        interrupted = run_process(
+            [str(commands.runner), 'interrupt', alias],
+            cwd=harness_root, env=environment, timeout=30,
+        )
+        assert interrupted.returncode == 0, interrupted.stdout + interrupted.stderr
+    assert all(path.is_file() for path in proofs), 'Missing probe proofs: ' + ', '.join(
+        str(path) for path in proofs if not path.is_file()
+    )
+
+
+@pytest.mark.parametrize('missing_proof', (False, True))
+def test_probe_artifact_boundary_interrupts_running_runtime(
+    installed_commands, temporary_git_repository, fake_codex, tmp_path, missing_proof,
+):
+    from test_agent_runner_batch import configure_harness
+
+    harness, _, _, environment = configure_harness(
+        installed_commands, temporary_git_repository, fake_codex, tmp_path,
+    )
+    environment['FAKE_CODEX_RELEASE_FILE'] = str(tmp_path / 'hold-runtime')
+    ticket = harness / 'probe.md'
+    ticket.write_text('# Controlled probe\n')
+    batch = harness / 'probe.yml'
+    batch.write_text(yaml.safe_dump({'run_id': '20260906-probe-boundary', 'tasks': [{
+        'ticket_id': '82', 'ticket_name': 'probe-boundary', 'role': 'engineer-junior',
+        'ticket_file': str(ticket),
+    }]}))
+    launched = run_process(
+        [str(installed_commands.runner), '--batch-input', str(batch)],
+        cwd=harness, env=environment,
+    )
+    assert launched.returncode == 0, launched.stderr
+    alias = yaml.safe_load(launched.stdout)['tasks'][0]['alias']
+    proofs = [fake_codex.log_file, tmp_path / 'missing'] if missing_proof else [fake_codex.log_file]
+    if missing_proof:
+        with pytest.raises(AssertionError, match='Missing probe proofs'):
+            wait_for_probe_artifacts(installed_commands, alias, harness, environment, proofs, timeout=0)
+    else:
+        wait_for_probe_artifacts(installed_commands, alias, harness, environment, proofs)
+    status = run_process(
+        [str(installed_commands.runner), 'status', alias], cwd=harness, env=environment,
+    )
+    assert status.returncode == 0, status.stderr
+    assert yaml.safe_load(status.stdout)['aliases'][0]['last_outcome'] == 'interrupted'
+
+
+@pytest.mark.parametrize('same_root', (False, True))
+def test_installed_hook_allows_only_reads_of_enabled_external_skills(
+    installed_commands, temporary_git_repository, fake_codex, tmp_path, same_root,
+):
+    harness = temporary_git_repository if same_root else temporary_git_repository.parent
+    user_home = tmp_path / 'operator-home'
+    install_skills(user_home / '.agents' / 'skills', CORE_SKILL_NAMES)
+    setup = run_ready_setup(
+        installed_commands, harness_root=harness, user_home=user_home,
+        fake_codex=fake_codex, answers='y\n',
+    )
+    assert setup.returncode == 0, setup.stderr
+    environment = dict(os.environ, HOME=str(user_home), FAKE_CODEX_LOG=str(fake_codex.log_file))
+    environment['PATH'] = str(fake_codex.executable.parent) + os.pathsep + environment['PATH']
+    user_skills = Path(environment['HOME']) / '.agents' / 'skills'
+    harness_skill = harness / '.agents' / 'skills' / 'implement' / 'SKILL.md'
+    harness_skill.parent.mkdir(parents=True)
+    shutil.move(user_skills / 'implement' / 'SKILL.md', harness_skill)
+    unselected = harness_skill.parent.parent / 'unselected' / 'SKILL.md'
+    unselected.parent.mkdir()
+    unselected.write_text('---\nname: unselected\ndescription: Unselected.\n---\n')
+    ticket = harness / 'probe.md'
+    ticket.write_text('# Read the selected Skills\n')
+    batch = harness / 'probe.yml'
+    batch.write_text(yaml.safe_dump({'run_id': '20260905-skill-read', 'tasks': [{
+        'ticket_id': '82', 'ticket_name': 'skill-read', 'role': 'engineer-junior',
+        'ticket_file': str(ticket),
+    }]}))
+    launched = run_process(
+        [str(installed_commands.runner), '--batch-input', str(batch)],
+        cwd=harness, env=environment,
+    )
+    assert launched.returncode == 0, launched.stderr
+    task = yaml.safe_load(launched.stdout)['tasks'][0]
+    wait_for_file(fake_codex.log_file)
+    arguments = json.loads(fake_codex.log_file.read_text())['argv']
+    hooks = tomllib.loads(next(arg for arg in arguments if arg.startswith('hooks=')))['hooks']
+    hook = shlex.split(hooks['PreToolUse'][0]['hooks'][0]['command'])
+    for path, allowed in ((harness_skill, True), (user_skills / 'ponytail' / 'SKILL.md', True), (unselected, False)):
+        for verb in ('cat', 'touch'):
+            checked = subprocess.run(
+                hook, cwd=task['worktree_path'], env=environment,
+                input=json.dumps({'hook_event_name': 'PreToolUse', 'tool_name': 'Bash',
+                                  'tool_input': {'command': verb + ' ' + shlex.quote(str(path))}}),
+                text=True, capture_output=True, check=True,
+            )
+            assert (not checked.stdout) is (allowed and verb == 'cat'), checked.stdout
+    wait_for_probe_completion(installed_commands, task['alias'], harness, environment)
 
 
 def _runtime_executable(tmp_path: Path) -> Path:
     executable = tmp_path / "codex"
-    executable.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    executable.write_text(
+        "#!/bin/sh\necho --sandbox --dangerously-bypass-hook-trust\n",
+        encoding="utf-8",
+    )
     executable.chmod(0o755)
     return executable
 
@@ -758,45 +890,11 @@ def test_real_codex_uses_harness_hook_and_explicit_skill_configuration(
     runtime_environment = os.environ.copy()
     environment = runtime_environment.copy()
     environment["HOME"] = str(runtime_user)
-    codex_executable = shutil.which("codex")
-    assert codex_executable is not None
-    trusted_control = subprocess.run(
-        [
-            codex_executable,
-            "exec",
-            "-C",
-            str(primary),
-            "--sandbox",
-            "read-only",
-            "--dangerously-bypass-hook-trust",
-            "-c",
-            "hooks={ PreToolUse = [{ matcher = \"Bash\", hooks = "
-            + "[{ type = \"command\", command = "
-            + json.dumps("python3 {0}".format(source_hook))
-            + ", timeout = 5 }] }] }",
-            "--json",
-            "-",
-        ],
-        env=runtime_environment,
-        input=(
-            "Use Bash to run `pwd` once, then reply with "
-            "`SOURCE_HOOK_CONTROL`.\n"
-        ),
-        check=False,
-        text=True,
-        capture_output=True,
-        timeout=60,
-    )
-    assert trusted_control.returncode == 0, (
-        trusted_control.stdout + trusted_control.stderr
-    )
-    assert source_hook_marker.is_file()
-    source_hook_marker.unlink(missing_ok=True)
     setup = subprocess.run(
         [str(mutable_installed_commands.product), "setup"],
         cwd=harness_root,
         env=environment,
-        input="{0}\ny\ny\n".format(primary.name),
+        input="y\ny\n",
         check=False,
         text=True,
         capture_output=True,
@@ -822,7 +920,7 @@ def test_real_codex_uses_harness_hook_and_explicit_skill_configuration(
         "`touch .state/native-evidence-write-proof`.\n",
         encoding="utf-8",
     )
-    for name in ("tdd", "code-review"):
+    for name in ("ponytail", "tdd", "code-review"):
         no_action_skill = (
             harness_root / ".agents" / "skills" / name / "SKILL.md"
         )
@@ -853,9 +951,9 @@ def test_real_codex_uses_harness_hook_and_explicit_skill_configuration(
     )
     installed_guard = Path(package_hook.stdout.strip())
     harness_guard = harness_root / ".codex" / "hooks" / "worktree_guard.py"
-    instrumented_guard = (
-        "from pathlib import Path\n"
-        + "Path({0!r}).touch()\n".format(str(harness_hook_marker))
+    instrumented_guard = installed_guard.read_text().replace(
+        "def main() -> int:\n",
+        "def main() -> int:\n    Path({0!r}).touch()\n".format(str(harness_hook_marker)),
     )
     installed_guard.write_text(instrumented_guard, encoding="utf-8")
     harness_guard.write_text(instrumented_guard, encoding="utf-8")
@@ -864,6 +962,10 @@ def test_real_codex_uses_harness_hook_and_explicit_skill_configuration(
     ticket_file.parent.mkdir()
     ticket_file.write_text(
         "# Real Codex Runtime isolation\n\n"
+        "This is only the Harness Skill acceptance probe. Read enabled Skill "
+        "files with Bash cat using their supplied paths; do not use sed. "
+        "Do not explore the repository, run implementation or Review workflows, "
+        "commit, or delegate. The test Skills stub those workflows. "
         "Perform the Harness Skill acceptance probe. Follow every enabled Skill "
         "that instructs you to create a proof file; use apply_patch for each "
         "requested proof file, and do not create a proof file unless an enabled "
@@ -892,13 +994,17 @@ def test_real_codex_uses_harness_hook_and_explicit_skill_configuration(
     assert launched.returncode == 0, launched.stderr
     task = yaml.safe_load(launched.stdout)["tasks"][0]
     alias = task["alias"]
-    session = harness_root / ".codex" / "agent-runner" / "sessions" / alias
-    wait_for_file(session / "turn.yml", timeout=180)
-    assert yaml.safe_load(
-        (session / "turn.yml").read_text(encoding="utf-8")
-    )["outcome"] == "completed"
-
     ticket_worktree = Path(task["worktree_path"])
+    wait_for_probe_artifacts(
+        mutable_installed_commands, alias, harness_root, runtime_environment,
+        [
+            ticket_worktree / '.harness-skill-proof',
+            ticket_worktree / '.repository-selected-skill-proof',
+            ticket_worktree / '.native-code-write-proof',
+            ticket_worktree / '.state' / 'native-evidence-write-proof',
+            harness_hook_marker,
+        ],
+    )
     assert (ticket_worktree / ".harness-skill-proof").read_text(
         encoding="utf-8"
     ).strip() == "implement"

@@ -151,6 +151,14 @@ def _send_session(
         )
         worker_environment = dict(os.environ)
         worker_environment.update(_resume_environment(mapping, connection))
+        if mapping["role"] == "team-leader":
+            worker_environment.update(
+                GRAPHTRAJ_ROLE=mapping["role"],
+                GRAPHTRAJ_TICKET_ID=mapping["ticket_id"],
+                GRAPHTRAJ_HARNESS_ROOT=str(cwd),
+                GRAPHTRAJ_PARENT_ALIAS=alias,
+                GRAPHTRAJ_PARENT_REGISTRATION=str(session_directory / "child-registration.yml"),
+            )
         with capacity_positions(load_project_configuration(cwd), 1) as positions:
             with (session_directory / "worker-stderr.log").open(
                 "w", encoding="utf-8"

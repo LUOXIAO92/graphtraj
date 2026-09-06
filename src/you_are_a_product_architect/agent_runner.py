@@ -131,6 +131,25 @@ def interrupt(alias):
 
 
 @main.command()
+@click.argument("alias")
+@click.option("--actor", type=click.Choice(["main", "user"]), required=True)
+@click.option("--caused-by-event-id", multiple=True, required=True)
+def replace(alias, actor, caused_by_event_id):
+    """Replace a seat; replacing the Leader retires the whole Team."""
+    from .team_replacement import replace_session
+
+    try:
+        response = replace_session(alias, actor, caused_by_event_id, Path.cwd().resolve())
+    except (RunnerError, OSError, ValueError, yaml.YAMLError) as error:
+        if not isinstance(error, RunnerError):
+            error = RunnerError("operation-failed", str(error))
+        _emit_result({"alias": alias, "error": error.as_document()})
+        click.echo(error.message, err=True)
+        raise click.exceptions.Exit(1)
+    _emit_result(response)
+
+
+@main.command()
 @click.option("--ticket-id")
 def cleanup(ticket_id):
     """Clean up one safely integrated ticket by stable identity."""

@@ -131,7 +131,7 @@ class _CodexRole:
             if (
                 skill.enabled
                 and skill.source in ("harness", "runtime-user")
-                and skill.name in (*ENGINEER_REQUIRED_SKILLS, "resolving-merge-conflicts")
+                and skill.name in (*ENGINEER_REQUIRED_SKILLS, "resolving-merge-conflicts", "handoff")
             ):
                 developer_instructions = developer_instructions.replace(
                     "${0}".format(skill.name),
@@ -340,7 +340,7 @@ def preflight_runtime_context(
         ),
     )
     selected_model = resolved_role.model if model is None else model
-    if role in ENGINEER_ROLES or role == "merge-resolver":
+    if role in ENGINEER_ROLES or role in {"merge-resolver", "team-leader"}:
         harness_skills = _resolve_engineer_harness_skills(
             runtime_store,
             role,
@@ -864,7 +864,7 @@ def _resolve_engineer_harness_skills(
 ) -> Tuple[_EffectiveSkill, ...]:
     """Resolve the Engineer role's required external Harness Skills."""
 
-    if role not in ENGINEER_ROLES and role != "merge-resolver":
+    if role not in ENGINEER_ROLES and role not in {"merge-resolver", "team-leader"}:
         raise CodexAdapterError(
             "ROLE_NOT_SUPPORTED",
             "The configured Codex role is not supported by this Runner.",
@@ -878,7 +878,7 @@ def _resolve_engineer_harness_skills(
     )
     user_skills = _discover_skill_files(Path.home() / ".agents" / "skills")
     effective: List[_EffectiveSkill] = []
-    for name in (("resolving-merge-conflicts",) if role == "merge-resolver" else ENGINEER_REQUIRED_SKILLS):
+    for name in (("resolving-merge-conflicts",) if role == "merge-resolver" else ("handoff",) if role == "team-leader" else ENGINEER_REQUIRED_SKILLS):
         matches = runtime_skills.get(name, ())
         source = "harness"
         if not matches:

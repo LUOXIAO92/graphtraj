@@ -100,6 +100,10 @@ def send_instruction(
     mapping, session_directory = read_alias_mapping(runner_directory, alias)
     if is_session_mapping(mapping):
         _require_project_events(cwd, caused_by_event_ids)
+        from .runner_project import discover_project
+        from .team_replacement import require_active_session
+
+        require_active_session(discover_project(cwd), alias)
         return _send_session(
             alias,
             instruction,
@@ -151,9 +155,10 @@ def _send_session(
         )
         worker_environment = dict(os.environ)
         worker_environment.update(_resume_environment(mapping, connection))
+        worker_environment["GRAPHTRAJ_ROLE"] = mapping["role"]
         if mapping["role"] == "team-leader":
             worker_environment.update(
-                GRAPHTRAJ_ROLE=mapping["role"],
+                GRAPHTRAJ_TEAM_GENERATION=str(mapping["team_generation"]),
                 GRAPHTRAJ_TICKET_ID=mapping["ticket_id"],
                 GRAPHTRAJ_HARNESS_ROOT=str(cwd),
                 GRAPHTRAJ_PARENT_ALIAS=alias,

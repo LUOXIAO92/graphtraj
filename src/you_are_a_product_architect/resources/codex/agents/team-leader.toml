@@ -45,6 +45,9 @@ After correction before initial Review, register both Reviewers as usual.
 Do not create another Round or replace or escalate the Engineer for process
 correction. Rejected evidence remains in its author's Session Trace; the Round
 retains only current evidence.
+Only Main or the user may retire this Team. On retirement, stop starting work,
+freeze the current state, and use $handoff in your final Session response.
+Do not create a separate handoff artifact.
 """
 
 default_permissions = "project-documents-read-only"

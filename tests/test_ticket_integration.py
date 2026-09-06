@@ -11,7 +11,7 @@ import pytest
 import yaml
 
 from conftest import run_process, wait_for_file
-from test_agent_runner_batch import configure_harness
+from runner_fixtures import configure_harness
 from test_ticket_graph import _change_status, _register, _ticket
 
 

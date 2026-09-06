@@ -14,7 +14,7 @@ RUNTIME_DIAGNOSTIC_FILES = frozenset(
         "resume-error.yml",
         "resume.yml",
         "stderr.log",
-        "turn.yml",
+        "execution.yml",
         "worker-stderr.log",
     }
 )

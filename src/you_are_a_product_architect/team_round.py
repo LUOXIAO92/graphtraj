@@ -38,7 +38,7 @@ def register_child_batch(batch_file: Path, cwd: Path, registration: Path) -> Lau
 
     batch = read_batch(batch_file, cwd)
     parent_ticket = os.environ.get("GRAPHTRAJ_TICKET_ID")
-    if batch.run_id is not None or any(
+    if any(
         task.ticket_id != parent_ticket
         or (
             _task_policy(task) not in _CHILD_ROLES
@@ -804,7 +804,7 @@ def _execute_agent(
             worktree=worktree,
             evidence=evidence,
             repository_skill_source=worktree,
-            requested_skills=(),
+            requested_skills=task.requested_skills if policy_role in _ENGINEER_ROLES else (),
             report_file=task.report_file,
         ).finalize()
         launch_file = session_directory / "launch.yml"

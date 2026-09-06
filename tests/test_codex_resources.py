@@ -420,19 +420,16 @@ def test_worktree_guard_allows_only_ticket_scoped_persistent_evidence(
     temporary_git_repository: Path,
     tmp_path: Path,
 ) -> None:
-    run_id = "20260813-source"
     ticket_name = "7-source"
     harness_root = tmp_path / "harness"
     ticket_worktree = (
         harness_root
         / ".graphtraj"
         / ".agent-worktrees"
-        / "runs"
-        / run_id
         / ticket_name
     )
     evidence = (
-        harness_root / ".graphtraj" / "state" / run_id / "tickets" / ticket_name
+        harness_root / ".graphtraj" / "state" / "tickets" / ticket_name
     )
     config = harness_root / ".graphtraj" / "config.yml"
     config.parent.mkdir(parents=True)
@@ -460,8 +457,8 @@ agent_runner:
     scoped_state.symlink_to(evidence, target_is_directory=True)
 
     for command in (
-        "touch .state/result.md",
-        "touch .state/reviews/7-source-r1-spec.md",
+        "touch .state/teams/1/rounds/1/engineer.md",
+        "touch .state/teams/1/rounds/1/spec.md",
     ):
         allowed = run_worktree_guard(
             {
@@ -482,7 +479,7 @@ agent_runner:
             "tool_name": "apply_patch",
             "tool_input": {
                 "command": """*** Begin Patch
-*** Add File: .state/reviews/7-source-r1-spec.md
+*** Add File: .state/teams/1/rounds/1/spec.md
 +Raw Spec Reviewer report
 *** End Patch
 """
@@ -526,7 +523,7 @@ agent_runner:
             "hook_event_name": "PreToolUse",
             "cwd": str(ticket_worktree),
             "tool_name": "Bash",
-            "tool_input": {"command": "touch .state/result.md"},
+            "tool_input": {"command": "touch .state/teams/1/rounds/1/engineer.md"},
         },
         cwd=ticket_worktree,
     )

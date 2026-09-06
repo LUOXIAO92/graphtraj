@@ -101,12 +101,20 @@ def test_installed_delivery_corrects_a_split_and_delivers_the_current_graph(
     installed_commands, temporary_git_repository, fake_codex, tmp_path, layout,
 ):
     root = temporary_git_repository if layout == "same" else temporary_git_repository.parent
+    old_state = root / "state" / "20260814-historical"
+    old_state.mkdir(parents=True)
+    for name in ("run.yml", "ledger.yml", "task-map.yml", "history.jsonl", "handoff.md"):
+        (old_state / name).write_bytes(b"Historical user evidence: \x00\xff\n")
+    old_evidence = {path.relative_to(old_state): path.read_bytes() for path in old_state.iterdir()}
     user_home = tmp_path / "operator-home"
     setup = run_setup(
         installed_commands, harness_root=root, user_home=user_home,
         fake_codex=fake_codex, answers="y\ny\n",
     )
     assert setup.returncode == 0, setup.stdout + setup.stderr
+    assert not (root / ".codex" / "agent-runner").exists()
+    assert not (root / ".codex" / "agents").exists()
+    assert not (root / ".pi" / "agents").exists()
     assert (root / ".agents/skills/task-delivery/SKILL.md").is_file()
     config_file = root / ".graphtraj/config.yml"
     config = yaml.safe_load(config_file.read_text())
@@ -208,3 +216,6 @@ def test_installed_delivery_corrects_a_split_and_delivers_the_current_graph(
     assert events()[:len(before)] == before
     assert {path.name for path in state.iterdir()} == {"tickets", "batches", "worldline"}
     assert not any(path.name in {"run.yml", "metadata.yml", "ledger.yml", "dag.md", "handoff.md"} for path in state.rglob("*"))
+
+    assert {path.relative_to(old_state): path.read_bytes() for path in old_state.rglob("*") if path.is_file()} == old_evidence
+    assert not any(path.name in {"task-map.yml", "history.jsonl", "turn.yml"} or path.name.startswith("turn-") for path in state.rglob("*"))

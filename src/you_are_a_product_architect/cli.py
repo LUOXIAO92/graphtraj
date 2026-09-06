@@ -12,7 +12,10 @@ from .ticket_integration import integrate_command
 
 @click.group()
 def main():
-    """Configure and diagnose a Harness Project."""
+    """Set up GraphTraj and manage Ticket, Team, and Project Worldline evidence.
+
+    Configuration lives in .graphtraj; historical Delivery Runs have no
+    compatibility reader or migration."""
 
 
 main.add_command(setup)

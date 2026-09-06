@@ -9,7 +9,7 @@ import yaml
 import pytest
 
 from conftest import FakeCodex, InstalledCommands, run_process, wait_for_file
-from test_agent_runner_batch import configure_harness
+from runner_fixtures import configure_harness
 
 
 def _register_ready_inline_ticket(harness_root: Path, product: Path) -> None:
@@ -296,7 +296,7 @@ def test_installed_runner_obeys_the_explicit_leader_decision_for_a_run_free_team
     assert len(traces) == 5
     mappings = [
         yaml.safe_load(path.read_text())
-        for path in (harness_root / ".codex" / "agent-runner" / "sessions").glob("*/mapping.yml")
+        for path in (harness_root / ".graphtraj" / "runner" / "sessions").glob("*/mapping.yml")
     ]
     assert len(mappings) == 5
     assert all("run_id" not in mapping and "turn" not in mapping for mapping in mappings)
@@ -409,12 +409,10 @@ def test_installed_runner_rejects_a_runtime_without_required_permission_controls
     harness_root, _, _, environment = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path,
     )
-    ticket = harness_root / 'ticket.md'
-    ticket.write_text('# Test required Runtime capabilities\n')
+    _register_ready_inline_ticket(harness_root, installed_commands.product)
     batch = harness_root / 'batch.yml'
-    batch.write_text(yaml.safe_dump({'run_id': '20260905-capabilities', 'tasks': [{
-        'ticket_id': '82', 'ticket_name': 'capabilities',
-        'role': 'engineer-junior', 'ticket_file': str(ticket),
+    batch.write_text(yaml.safe_dump({'tasks': [{
+        'ticket_id': '75', 'ticket_name': 'inline-specialist', 'role': 'team-leader',
     }]}))
     environment['FAKE_CODEX_UNSUPPORTED'] = '1'
     result = run_process(
@@ -422,7 +420,7 @@ def test_installed_runner_rejects_a_runtime_without_required_permission_controls
         cwd=harness_root, env=environment,
     )
     assert result.returncode == 1
-    assert yaml.safe_load(result.stdout)['error']['code'] == 'invalid-config'
+    assert yaml.safe_load(result.stdout)['tasks'][0]['error']['code'] == 'invalid-config'
     assert not fake_codex.log_file.exists()
 
 
@@ -489,8 +487,8 @@ def test_installed_runner_runs_a_main_inline_specialist_without_creating_a_prese
     session = yaml.safe_load(
         (
             harness_root
-            / ".codex"
-            / "agent-runner"
+            / ".graphtraj"
+            / "runner"
             / "sessions"
             / task["alias"]
             / "mapping.yml"
@@ -500,8 +498,8 @@ def test_installed_runner_runs_a_main_inline_specialist_without_creating_a_prese
     assert session["parent"] is None
     assert (
         harness_root
-        / ".codex"
-        / "agent-runner"
+        / ".graphtraj"
+        / "runner"
         / "sessions"
         / task["alias"]
         / "events.jsonl"
@@ -650,7 +648,7 @@ def test_installed_runner_runs_a_team_leader_inline_specialist_outside_the_team(
     team = yaml.safe_load((ticket_directory / "teams" / "1" / "team.yml").read_text())
     mappings = [
         yaml.safe_load(path.read_text())
-        for path in (harness_root / ".codex" / "agent-runner" / "sessions").glob(
+        for path in (harness_root / ".graphtraj" / "runner" / "sessions").glob(
             "*/mapping.yml"
         )
     ]

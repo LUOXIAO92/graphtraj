@@ -215,7 +215,7 @@ class ProjectSetupPlan:
 
     @property
     def runner_store(self) -> Path:
-        return self.runtime_store / "agent-runner"
+        return self.harness_root / ".graphtraj" / "runner"
 
     def _skill_names_to_install(
         self,

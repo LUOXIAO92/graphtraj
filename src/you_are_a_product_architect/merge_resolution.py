@@ -18,7 +18,7 @@ from .ticket_graph import _load_states
 
 def launch_merge_resolver(batch: Batch, cwd: Path) -> LaunchResponse:
     """Launch only the one conflict already selected by Main for recovery."""
-    if os.environ.get("GRAPHTRAJ_ROLE") or batch.run_id is not None or len(batch.tasks) != 1:
+    if os.environ.get("GRAPHTRAJ_ROLE") or len(batch.tasks) != 1:
         raise RunnerError("invalid-input", "Only Main may dispatch one Merge Resolver for an observed conflict.")
     project = discover_project(cwd, require_clean_integration=False)
     task = batch.tasks[0]

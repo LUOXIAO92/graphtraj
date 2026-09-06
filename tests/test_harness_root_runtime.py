@@ -13,6 +13,7 @@ import pytest
 import yaml
 
 from conftest import FakeCodex, InstalledCommands, run_process, wait_for_file
+from runner_fixtures import engineer_probe
 from test_project_setup import (
     CORE_SKILL_NAMES,
     install_skills,
@@ -66,36 +67,24 @@ def wait_for_probe_artifacts(commands, alias, harness_root, environment, proofs,
 def test_probe_artifact_boundary_interrupts_running_runtime(
     installed_commands, temporary_git_repository, fake_codex, tmp_path, missing_proof,
 ):
-    from test_agent_runner_batch import configure_harness
+    from runner_fixtures import configure_harness
 
     harness, _, _, environment = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path,
     )
     environment['FAKE_CODEX_RELEASE_FILE'] = str(tmp_path / 'hold-runtime')
-    ticket = harness / 'probe.md'
-    ticket.write_text('# Controlled probe\n')
-    batch = harness / 'probe.yml'
-    batch.write_text(yaml.safe_dump({'run_id': '20260906-probe-boundary', 'tasks': [{
-        'ticket_id': '82', 'ticket_name': 'probe-boundary', 'role': 'engineer-junior',
-        'ticket_file': str(ticket),
-    }]}))
-    launched = run_process(
-        [str(installed_commands.runner), '--batch-input', str(batch)],
-        cwd=harness, env=environment,
-    )
-    assert launched.returncode == 0, launched.stderr
-    alias = yaml.safe_load(launched.stdout)['tasks'][0]['alias']
-    proofs = [fake_codex.log_file, tmp_path / 'missing'] if missing_proof else [fake_codex.log_file]
-    if missing_proof:
-        with pytest.raises(AssertionError, match='Missing probe proofs'):
-            wait_for_probe_artifacts(installed_commands, alias, harness, environment, proofs, timeout=0)
-    else:
-        wait_for_probe_artifacts(installed_commands, alias, harness, environment, proofs)
-    status = run_process(
-        [str(installed_commands.runner), 'status', alias], cwd=harness, env=environment,
-    )
-    assert status.returncode == 0, status.stderr
-    assert yaml.safe_load(status.stdout)['aliases'][0]['last_outcome'] == 'interrupted'
+    with engineer_probe(installed_commands, harness, fake_codex, environment) as (alias, _, env):
+        proofs = [fake_codex.log_file, tmp_path / 'missing'] if missing_proof else [fake_codex.log_file]
+        if missing_proof:
+            with pytest.raises(AssertionError, match='Missing probe proofs'):
+                wait_for_probe_artifacts(installed_commands, alias, harness, env, proofs, timeout=0)
+        else:
+            wait_for_probe_artifacts(installed_commands, alias, harness, env, proofs)
+        status = run_process(
+            [str(installed_commands.runner), 'status', alias], cwd=harness, env=env,
+        )
+        assert status.returncode == 0, status.stderr
+        assert yaml.safe_load(status.stdout)['aliases'][0]['last_outcome'] == 'interrupted'
 
 
 @pytest.mark.parametrize('same_root', (False, True))
@@ -119,21 +108,10 @@ def test_installed_hook_allows_only_reads_of_enabled_external_skills(
     unselected = harness_skill.parent.parent / 'unselected' / 'SKILL.md'
     unselected.parent.mkdir()
     unselected.write_text('---\nname: unselected\ndescription: Unselected.\n---\n')
-    ticket = harness / 'probe.md'
-    ticket.write_text('# Read the selected Skills\n')
-    batch = harness / 'probe.yml'
-    batch.write_text(yaml.safe_dump({'run_id': '20260905-skill-read', 'tasks': [{
-        'ticket_id': '82', 'ticket_name': 'skill-read', 'role': 'engineer-junior',
-        'ticket_file': str(ticket),
-    }]}))
-    launched = run_process(
-        [str(installed_commands.runner), '--batch-input', str(batch)],
-        cwd=harness, env=environment,
-    )
-    assert launched.returncode == 0, launched.stderr
-    task = yaml.safe_load(launched.stdout)['tasks'][0]
-    wait_for_file(fake_codex.log_file)
-    arguments = json.loads(fake_codex.log_file.read_text())['argv']
+    with engineer_probe(installed_commands, harness, fake_codex, environment) as (alias, worktree, _):
+        records = [json.loads(line) for line in fake_codex.log_file.read_text().splitlines()]
+        arguments = next(record['argv'] for record in records if record['role'].startswith('engineer-'))
+    task = {'worktree_path': str(worktree), 'alias': alias}
     hooks = tomllib.loads(next(arg for arg in arguments if arg.startswith('hooks=')))['hooks']
     hook = shlex.split(hooks['PreToolUse'][0]['hooks'][0]['command'])
     for path, allowed in ((harness_skill, True), (user_skills / 'ponytail' / 'SKILL.md', True), (unselected, False)):
@@ -145,7 +123,6 @@ def test_installed_hook_allows_only_reads_of_enabled_external_skills(
                 text=True, capture_output=True, check=True,
             )
             assert (not checked.stdout) is (allowed and verb == 'cat'), checked.stdout
-    wait_for_probe_completion(installed_commands, task['alias'], harness, environment)
 
 
 def _runtime_executable(tmp_path: Path) -> Path:
@@ -196,10 +173,10 @@ def test_setup_creates_a_root_owned_runtime_and_runner_discovers_it(
 
     project = discover_project(harness_root)
     assert project.harness_root == harness_root.resolve()
-    assert project.runner_directory == runtime_store / "agent-runner"
+    assert project.runner_directory == harness_root / ".graphtraj" / "runner"
     assert project.integration_worktree == integration.resolve()
     assert (runtime_store / "config.toml").is_file()
-    assert (runtime_store / "agent-runner").is_dir()
+    assert (harness_root / ".graphtraj" / "runner").is_dir()
     assert not (runtime_store / "agent-runner" / "config.yml").exists()
     assert not (harness_root / ".agents").exists()
     assert source_config.read_bytes() == source_before
@@ -540,120 +517,6 @@ def test_engineer_runtime_context_finalizes_worktree_facts_once(
     } == {"implement", "ponytail", "tdd"}
 
 
-def test_installed_setup_to_runner_launch_uses_project_document_permissions(
-    installed_commands: InstalledCommands,
-    temporary_git_repository: Path,
-    fake_codex: FakeCodex,
-    tmp_path: Path,
-) -> None:
-    harness_root = temporary_git_repository.parent
-    runtime_user = tmp_path / "runtime-user"
-    runtime_user.mkdir()
-    install_skills(runtime_user / ".agents" / "skills", ("implement", "ponytail", "tdd"))
-    user_config = runtime_user / ".codex" / "config.toml"
-    user_config.parent.mkdir()
-    user_config.write_text('sandbox_mode = "workspace-write"\n', encoding="utf-8")
-    environment = os.environ.copy()
-    environment["HOME"] = str(runtime_user)
-    environment["PATH"] = "{0}{1}{2}".format(
-        fake_codex.executable.parent,
-        os.pathsep,
-        environment.get("PATH", ""),
-    )
-    environment["FAKE_CODEX_LOG"] = str(fake_codex.log_file)
-    environment["FAKE_CODEX_LIFECYCLE_ACTION"] = "deliver-representative-ticket"
-    setup = subprocess.run(
-        [str(installed_commands.product), "setup"],
-        cwd=harness_root,
-        env=environment,
-        input="y\ny\n",
-        check=False,
-        text=True,
-        capture_output=True,
-        timeout=60,
-    )
-    assert setup.returncode == 0, setup.stderr
-
-    ticket_file = harness_root / "tickets" / "permissions.md"
-    ticket_file.parent.mkdir()
-    ticket_file.write_text("# Verify native permissions\n", encoding="utf-8")
-    batch_file = harness_root / "permissions-batch.yml"
-    batch_file.write_text(
-        "run_id: 20260823-permissions\n"
-        "tasks:\n"
-        "  - ticket_id: '53'\n"
-        "    ticket_name: project-document-permissions\n"
-        "    role: engineer-junior\n"
-        "    ticket_file: {0}\n".format(ticket_file),
-        encoding="utf-8",
-    )
-
-    launched = run_process(
-        [str(installed_commands.runner), "--batch-input", str(batch_file)],
-        cwd=harness_root,
-        env=environment,
-        timeout=60,
-    )
-
-    assert launched.returncode == 1
-    assert yaml.safe_load(launched.stdout) == {
-        "error": {
-            "code": "invalid-config",
-            "message": (
-                "The loaded Codex user configuration contains sandbox_mode, "
-                "which disables the selected permission profile."
-            ),
-        }
-    }
-    assert not fake_codex.log_file.exists()
-    assert not (
-        harness_root
-        / ".graphtraj"
-        / ".agent-worktrees"
-        / "runs"
-        / "20260823-permissions"
-    ).exists()
-    assert not (
-        harness_root / ".graphtraj" / "state" / "20260823-permissions"
-    ).exists()
-
-    user_config.unlink()
-    batch_file.write_text(
-        "run_id: 20260823-permissions-retry\n"
-        "tasks:\n"
-        "  - ticket_id: '53-retry'\n"
-        "    ticket_name: project-document-permissions\n"
-        "    role: engineer-junior\n"
-        "    ticket_file: {0}\n".format(ticket_file),
-        encoding="utf-8",
-    )
-    launched = run_process(
-        [str(installed_commands.runner), "--batch-input", str(batch_file)],
-        cwd=harness_root,
-        env=environment,
-        timeout=60,
-    )
-
-    assert launched.returncode == 0, launched.stderr
-    task = yaml.safe_load(launched.stdout)["tasks"][0]
-    wait_for_file(fake_codex.log_file)
-    runtime_call = json.loads(fake_codex.log_file.read_text(encoding="utf-8"))
-    arguments = runtime_call["argv"]
-    assert runtime_call["cwd"] == task["worktree_path"]
-    assert 'default_permissions="project-documents-read-only"' in arguments
-    permission_override = next(
-        argument for argument in arguments if argument.startswith("permissions=")
-    )
-    assert '"AGENTS.md" = "read"' in permission_override
-    assert '".agents" = "read"' in permission_override
-    assert 'docs = "read"' in permission_override
-    evidence = (Path(task["worktree_path"]) / ".state").resolve()
-    assert str(evidence) in arguments
-    wait_for_file(Path(task["worktree_path"]) / "V1_DELIVERED.txt")
-    wait_for_file(evidence / "result.md")
-    wait_for_file(evidence / "validation.md")
-
-
 def test_installed_runner_uses_runtime_user_core_skill_when_source_tracks_it(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
@@ -694,31 +557,10 @@ def test_installed_runner_uses_runtime_user_core_skill_when_source_tracks_it(
     )
     assert setup.returncode == 0, setup.stderr
 
-    ticket_file = repository / "tickets" / "source-skill.md"
-    ticket_file.parent.mkdir()
-    ticket_file.write_text("# Source Skill\n", encoding="utf-8")
-    batch_file = repository / "source-skill-batch.yml"
-    batch_file.write_text(
-        "run_id: 20260905-source-skill\n"
-        "tasks:\n"
-        "  - ticket_id: '69-source-skill'\n"
-        "    ticket_name: source-skill\n"
-        "    role: engineer-junior\n"
-        "    ticket_file: {0}\n".format(ticket_file),
-        encoding="utf-8",
-    )
-
-    launched = run_process(
-        [str(installed_commands.runner), "--batch-input", str(batch_file)],
-        cwd=repository,
-        env=environment,
-        timeout=60,
-    )
-
-    assert launched.returncode == 0, launched.stderr
-    task = yaml.safe_load(launched.stdout)["tasks"][0]
-    wait_for_file(fake_codex.log_file)
-    arguments = json.loads(fake_codex.log_file.read_text(encoding="utf-8"))["argv"]
+    with engineer_probe(installed_commands, repository, fake_codex, environment) as (alias, worktree, _):
+        records = [json.loads(line) for line in fake_codex.log_file.read_text().splitlines()]
+        arguments = next(record["argv"] for record in records if record["role"].startswith("engineer-"))
+    task = {"alias": alias, "worktree_path": str(worktree)}
     skills_argument = next(
         argument for argument in arguments if argument.startswith("skills=")
     )
@@ -783,30 +625,10 @@ def test_installed_runner_uses_runtime_user_skill_from_newer_primary_history(
     )
     assert setup.returncode == 0, setup.stderr
 
-    ticket_file = repository / "tickets" / "source-skill-skew.md"
-    ticket_file.parent.mkdir()
-    ticket_file.write_text("# Source Skill\n", encoding="utf-8")
-    batch_file = repository / "source-skill-skew-batch.yml"
-    batch_file.write_text(
-        "run_id: 20260905-source-skill-skew\n"
-        "tasks:\n"
-        "  - ticket_id: '69-source-skill-skew'\n"
-        "    ticket_name: source-skill-skew\n"
-        "    role: engineer-junior\n"
-        "    ticket_file: {0}\n".format(ticket_file),
-        encoding="utf-8",
-    )
-
-    launched = run_process(
-        [str(installed_commands.runner), "--batch-input", str(batch_file)],
-        cwd=repository,
-        env=environment,
-        timeout=60,
-    )
-
-    assert launched.returncode == 0, launched.stderr
-    wait_for_file(fake_codex.log_file)
-    arguments = json.loads(fake_codex.log_file.read_text(encoding="utf-8"))["argv"]
+    with engineer_probe(installed_commands, repository, fake_codex, environment) as (alias, worktree, _):
+        records = [json.loads(line) for line in fake_codex.log_file.read_text().splitlines()]
+        arguments = next(record["argv"] for record in records if record["role"].startswith("engineer-"))
+    task = {"alias": alias, "worktree_path": str(worktree)}
     skills_argument = next(
         argument for argument in arguments if argument.startswith("skills=")
     )
@@ -826,6 +648,7 @@ def test_installed_runner_uses_runtime_user_skill_from_newer_primary_history(
 def test_real_codex_uses_harness_hook_and_explicit_skill_configuration(
     mutable_installed_commands: InstalledCommands,
     temporary_git_repository: Path,
+    fake_codex: FakeCodex,
     tmp_path: Path,
 ) -> None:
     """Exercise source Runtime isolation against a real installed Codex process."""
@@ -973,44 +796,27 @@ def test_real_codex_uses_harness_hook_and_explicit_skill_configuration(
         "`ROOT_RUNTIME_OK`.\n",
         encoding="utf-8",
     )
-    batch_file = harness_root / "real-codex-batch.yml"
-    batch_file.write_text(
-        "run_id: 20260816-real-codex\n"
-        "tasks:\n"
-        "  - ticket_id: '16'\n"
-        "    ticket_name: real-codex-runtime\n"
-        "    role: engineer-expert\n"
-        "    ticket_file: {0}\n"
-        "    skills:\n"
-        "      - repository-selected\n".format(ticket_file),
-        encoding="utf-8",
-    )
-    launched = run_process(
-        [str(mutable_installed_commands.runner), "--batch-input", str(batch_file)],
-        cwd=harness_root,
-        env=runtime_environment,
-        timeout=60,
-    )
-    assert launched.returncode == 0, launched.stderr
-    task = yaml.safe_load(launched.stdout)["tasks"][0]
-    alias = task["alias"]
-    ticket_worktree = Path(task["worktree_path"])
-    wait_for_probe_artifacts(
-        mutable_installed_commands, alias, harness_root, runtime_environment,
-        [
-            ticket_worktree / '.harness-skill-proof',
-            ticket_worktree / '.repository-selected-skill-proof',
-            ticket_worktree / '.native-code-write-proof',
-            ticket_worktree / '.state' / 'native-evidence-write-proof',
-            harness_hook_marker,
-        ],
-    )
+    runtime_environment["FAKE_CODEX_ENGINEER_SKILLS"] = '["repository-selected"]'
+    real_codex = shutil.which("codex")
+    assert real_codex is not None
+    with engineer_probe(
+        mutable_installed_commands, harness_root, fake_codex, runtime_environment,
+        body=ticket_file.read_text(), executable=real_codex,
+    ) as (alias, ticket_worktree, probe_environment):
+        wait_for_probe_artifacts(
+            mutable_installed_commands, alias, harness_root, probe_environment,
+            [
+                ticket_worktree / '.harness-skill-proof',
+                ticket_worktree / '.repository-selected-skill-proof',
+                ticket_worktree / '.native-code-write-proof',
+                ticket_worktree / '.state' / 'native-evidence-write-proof',
+                harness_hook_marker,
+            ],
+        )
     assert (ticket_worktree / ".harness-skill-proof").read_text(
         encoding="utf-8"
     ).strip() == "implement"
-    assert (ticket_worktree / ".repository-selected-skill-proof").read_text(
-        encoding="utf-8"
-    ).strip() == "repository-selected"
+    assert (ticket_worktree / ".repository-selected-skill-proof").read_text().strip() == "repository-selected"
     assert not (ticket_worktree / ".repository-disabled-skill-proof").exists()
     assert (ticket_worktree / "README.md").read_text(encoding="utf-8") == (
         "# Target project\n"

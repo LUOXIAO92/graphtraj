@@ -59,19 +59,6 @@ def managed_runtime_policy_matches(
     return managed(configured) == managed(packaged)
 
 
-def ticket_id_stem_prefix(ticket_id: str) -> str:
-    """Return the unambiguous artifact prefix for one stable ticket ID."""
-
-    encoded_id = ticket_id.replace(".", "%2E")
-    return "{0}-{1}-".format(len(ticket_id), encoded_id)
-
-
-def ticket_stem(ticket_id: str, ticket_name: str) -> str:
-    """Return the injective, Git-safe visible ticket artifact stem."""
-
-    return "{0}{1}".format(ticket_id_stem_prefix(ticket_id), ticket_name)
-
-
 PUBLIC_ERROR_CODES = frozenset(
     {
         "invalid-input",
@@ -104,7 +91,6 @@ DETAIL_ERROR_CATEGORIES = {
     "BATCH_FILE_INVALID": "invalid-input",
     "BATCH_YAML_INVALID": "invalid-input",
     "BATCH_SCHEMA_INVALID": "invalid-input",
-    "RUN_ID_INVALID": "invalid-input",
     "TASK_COUNT_UNSUPPORTED": "invalid-input",
     "TASK_SCHEMA_INVALID": "invalid-input",
     "TICKET_ID_INVALID": "invalid-input",
@@ -188,26 +174,13 @@ class Task:
     instruction: Optional[str]
     requested_skills: Tuple[str, ...] = ()
     report_file: Optional[Path] = None
-    review_round: Optional[int] = None
     inline_preset: RolePreset | None = None
     policy_role: str | None = None
 
-    @property
-    def stem(self) -> str:
-        """Return the injective, Git-safe visible ticket artifact stem."""
-
-        return ticket_stem(self.ticket_id, self.ticket_name)
-
-    @property
-    def id_stem_prefix(self) -> str:
-        """Return the unambiguous branch prefix for this stable ticket ID."""
-
-        return ticket_id_stem_prefix(self.ticket_id)
 
 
 @dataclass(frozen=True)
 class Batch:
-    run_id: Optional[str]
     tasks: Tuple[Task, ...]
     source_bytes: bytes
 

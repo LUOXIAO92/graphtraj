@@ -10,7 +10,7 @@ import pytest
 import yaml
 
 from conftest import FakeCodex, InstalledCommands, run_process
-from test_agent_runner_batch import configure_harness
+from runner_fixtures import configure_harness
 from test_ticket_graph import _change_status, _register, _ticket
 
 
@@ -145,7 +145,7 @@ def _cleanup(ticket: DeliveredTicket):
 
 
 def _ticket_mappings(ticket: DeliveredTicket) -> list[Path]:
-    sessions = ticket.root / ".codex" / "agent-runner" / "sessions"
+    sessions = ticket.root / ".graphtraj" / "runner" / "sessions"
     mappings = []
     for directory in sessions.iterdir():
         mapping_file = directory / "mapping.yml"

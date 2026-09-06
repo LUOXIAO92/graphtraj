@@ -8,7 +8,7 @@ import pytest
 import yaml
 
 from conftest import run_process
-from test_agent_runner_batch import configure_harness
+from runner_fixtures import configure_harness
 from test_session_alias_control import _register_ready_ticket
 
 

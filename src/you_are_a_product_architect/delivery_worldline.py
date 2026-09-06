@@ -13,10 +13,6 @@ from typing import Any, Callable, Mapping
 import click
 import yaml
 
-from .delivery_run_worldline import (
-    append_worldline_event,
-    project_worldline,
-)
 from .project_configuration import (
     ProjectConfiguration,
     ProjectConfigurationError,
@@ -55,18 +51,11 @@ def worldline() -> None:
 
 @worldline.command("append")
 @click.option(
-    "--run-root",
-    type=click.Path(path_type=Path, file_okay=False),
-)
-@click.option("--run-id")
-@click.option(
     "--event-file",
     required=True,
     type=click.Path(path_type=Path, exists=True, dir_okay=False),
 )
 def append_command(
-    run_root: Path | None,
-    run_id: str | None,
     event_file: Path,
 ) -> None:
     """Append one explicit durable fact from a YAML file."""
@@ -75,13 +64,7 @@ def append_command(
         event = yaml.safe_load(event_file.read_text(encoding="utf-8"))
         if not isinstance(event, dict):
             raise ValueError("event file must contain one mapping")
-        if (run_root is None) != (run_id is None):
-            raise ValueError("--run-root and --run-id must be supplied together")
-        recorded = (
-            append_worldline_event(run_root, run_id, event)
-            if run_root is not None and run_id is not None
-            else _append_configured_event(event)
-        )
+        recorded = _append_configured_event(event)
     except (
         OSError,
         UnicodeError,
@@ -91,22 +74,6 @@ def append_command(
     ) as error:
         raise click.ClickException(str(error)) from error
     click.echo(yaml.safe_dump(recorded, sort_keys=False), nl=False)
-
-
-@worldline.command("project")
-@click.option(
-    "--run-root",
-    required=True,
-    type=click.Path(path_type=Path, exists=True, file_okay=False),
-)
-def project_command(run_root: Path) -> None:
-    """Regenerate a legacy Run-local ledger.yml."""
-
-    try:
-        ledger = project_worldline(run_root)
-    except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as error:
-        raise click.ClickException(str(error)) from error
-    click.echo(str(ledger))
 
 
 @worldline.command("read")

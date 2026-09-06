@@ -1,9 +1,9 @@
 # Repository Guidance
 
 Keep this file limited to stable facts and constraints that apply to ordinary
-work in this Source Repository. Harness orchestration, Delivery Run policy,
-review findings, and task-specific instructions belong at the Harness Project
-Root.
+work in this Source Repository. Harness orchestration, Ticket-and-Team delivery
+policy, review findings, and task-specific instructions belong in Main-owned
+Harness Project Documents.
 
 ## Project structure
 
@@ -11,8 +11,11 @@ Root.
   Runtime, role, Hook, and Skill resources.
 - `tests/` contains behavior-focused pytest coverage.
 - `README.md` is the product-facing installation and operation guide.
-- `pyproject.toml` defines the package and the
-  `you-are-a-product-architect` / `agent-runner` command surfaces.
+- `pyproject.toml` defines the GraphTraj distribution and the `graphtraj` /
+  `agent-runner` command surfaces.
+- New delivery uses `.graphtraj` configuration, Ticket/Team state, retained
+  Batches, Session Traces, and the Project Worldline. Historical Run state is
+  never migrated, read as fallback, or modified by supported commands.
 - `CONTEXT.md` and `docs/` inside linked Worktrees are read-only Harness
   Project Document views, not Source Repository content.
 

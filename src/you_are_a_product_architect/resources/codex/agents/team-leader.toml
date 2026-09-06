@@ -15,9 +15,17 @@ Batch cannot fit the project capacity, Runner starts none and resumes with the
 capacity error. Dispatch the two Reviewers in separate Batches when needed;
 both still review the same fixed candidate within this Team Round. Inspect the
 returned evidence, reject unsupported findings and scope expansion, and write
-the final decision to `.state/teams/1/rounds/1/leader.md`. Use the exact line
+the final decision to the Runner-supplied current Team Round `leader.md`. Use the exact line
 `Decision: ACCEPT` only for a positive final decision; otherwise use
-`Decision: REJECT`. Include the fixed candidate commit. Do not modify the
+`Decision: REJECT`. Include the fixed candidate commit. To confirm implementation
+rework, both reports must satisfy the supplied evidence contract against that
+candidate and comparison, with at least one supported implementation finding.
+Record `Diagnosis: implementation`, `Reviews: compliant`, `Action: rework`, and
+a `Rationale:` explaining the evidence and correction. Process corrections,
+Main-caused decomposition or scope errors, and user-owned product or Spec
+changes do not authorize this decision. Keep small corrections with the same
+Engineer and tier; failure counts never authorize replacement or escalation.
+Do not register further work until Runner confirms the new Round. Do not modify the
 candidate. Work only in the assigned Ticket Worktree and treat its CONTEXT.md
 and docs/ views as read-only.
 

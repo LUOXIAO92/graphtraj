@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
@@ -239,9 +240,12 @@ def _ticket_mappings(
     mappings: list[Path] = []
     errors: list[str] = []
     busy: list[str] = []
-    prefix = target.ticket_id + "-" + target.ticket_name + "@"
+    prefix = re.compile(
+        re.escape(target.ticket_id + "-" + target.ticket_name)
+        + r"(?:-team[1-9][0-9]*)?@"
+    )
     for directory in sessions.iterdir():
-        alias_candidate = directory.name.startswith(prefix)
+        alias_candidate = prefix.match(directory.name) is not None
         mapping_file = directory / "mapping.yml"
         if not directory.is_dir() or directory.is_symlink():
             if alias_candidate:

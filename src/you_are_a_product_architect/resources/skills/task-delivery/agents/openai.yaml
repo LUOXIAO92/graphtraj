@@ -1,4 +1,4 @@
 interface:
   display_name: "Task Delivery"
-  short_description: "Orchestrate accepted Ticket DAG delivery"
-  default_prompt: "Use $task-delivery to deliver this accepted Ticket DAG through review and integration."
+  short_description: "Deliver the current Ticket graph through Teams"
+  default_prompt: "Use $task-delivery to deliver the current accepted Ticket DAG through Team Leaders, correct its structure from delivery evidence, and continue through validated dev integration."

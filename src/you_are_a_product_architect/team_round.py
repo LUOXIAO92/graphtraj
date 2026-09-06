@@ -19,24 +19,18 @@ import yaml
 from .codex_adapter import codex_connection_environment, preflight_runtime_context
 from .delivery_state import apply_delivery_state_request
 from .delivery_worldline import read_worldline
-from .runner_batch import read_batch, retain_batch
+from .runner_batch import read_batch, resolved_role_preset, retain_batch
 from .runner_capacity import capacity_positions
 from .runner_io import write_yaml_durably
-from .runner_models import Batch, LaunchResponse, RunnerError, Task
+from .runner_models import Batch, LaunchResponse, RunnerError, Task, role_alias_marker
 from .runner_project import discover_project, preflight_worktree, provision_worktree, run_git, runtime_executable
 from .runtime_adapter import RuntimeAdapterError
 
 
 _COMMIT = re.compile(r"[0-9a-f]{40}")
-_CHILD_ROLES = frozenset(
-    {
-        "engineer-junior",
-        "engineer-senior",
-        "engineer-expert",
-        "standards-reviewer",
-        "spec-reviewer",
-    }
-)
+_ENGINEER_ROLES = frozenset({"engineer-junior", "engineer-senior", "engineer-expert"})
+_REVIEWER_ROLES = frozenset({"standards-reviewer", "spec-reviewer"})
+_CHILD_ROLES = _ENGINEER_ROLES | _REVIEWER_ROLES
 
 
 def register_child_batch(batch_file: Path, cwd: Path, registration: Path) -> LaunchResponse:
@@ -45,21 +39,26 @@ def register_child_batch(batch_file: Path, cwd: Path, registration: Path) -> Lau
     batch = read_batch(batch_file, cwd)
     parent_ticket = os.environ.get("GRAPHTRAJ_TICKET_ID")
     if batch.run_id is not None or any(
-        task.role not in _CHILD_ROLES or task.ticket_id != parent_ticket
+        task.ticket_id != parent_ticket
+        or (
+            _task_policy(task) not in _CHILD_ROLES
+            and not _is_inline_specialist(task)
+        )
         for task in batch.tasks
     ):
         raise RunnerError("BATCH_SCHEMA_INVALID", "A direct child Batch must contain formal roles for its parent Ticket.")
-    engineers = [task for task in batch.tasks if task.role.startswith("engineer-")]
-    reviewers = [task for task in batch.tasks if task.role.endswith("reviewer")]
+    engineers = [task for task in batch.tasks if _task_policy(task) in _ENGINEER_ROLES]
+    reviewers = [task for task in batch.tasks if _task_policy(task) in _REVIEWER_ROLES]
     if not (
         (len(batch.tasks) == 1 and len(engineers) == 1)
         or len(reviewers) == len(batch.tasks) and 1 <= len(reviewers) <= 2
+        or len(batch.tasks) == 1 and _is_inline_specialist(batch.tasks[0])
     ):
-        raise RunnerError("BATCH_SCHEMA_INVALID", "A direct child Batch must contain one Engineer or one or both Reviewers.")
+        raise RunnerError("BATCH_SCHEMA_INVALID", "A direct child Batch must contain one Engineer, one or both Reviewers, or one temporary specialist.")
     project = discover_project(Path(os.environ.get("GRAPHTRAJ_HARNESS_ROOT", cwd)))
     children = [
         {"ticket_id": task.ticket_id, "role": task.role,
-         "alias": _agent_alias(task, task.role), "launch_status": "registered"}
+         "alias": _agent_alias(project, task, task.role), "launch_status": "registered"}
         for task in batch.tasks
     ]
     try:
@@ -77,13 +76,65 @@ def register_child_batch(batch_file: Path, cwd: Path, registration: Path) -> Lau
     )
 
 
+def _is_inline_specialist(task: Task) -> bool:
+    """Return whether a task uses the fixed non-Team temporary policy."""
+
+    return task.inline_preset is not None and task.policy_role == "temporary-role"
+
+
+def _task_policy(task: Task, role: str | None = None) -> str:
+    """Return the fixed policy applied to this invocation."""
+
+    if role is None or task.role == role:
+        return task.policy_role or task.role
+    return role
+
+
 def launch_team_batch(batch: Batch, cwd: Path) -> LaunchResponse:
     """Deliver each Main-selected registered Ticket through generation 1."""
 
-    if any(task.role != "team-leader" for task in batch.tasks):
+    if all(task.role == "team-leader" for task in batch.tasks):
+        return _run_batch_workers(discover_project(cwd), batch)
+    if any(task.policy_role != "temporary-role" for task in batch.tasks):
         raise RunnerError("ROLE_NOT_CONFIGURED", "A Main Batch must select the team-leader preset.")
     project = discover_project(cwd)
-    return _run_batch_workers(project, batch)
+    with capacity_positions(project, len(batch.tasks)) as positions:
+        retained = retain_batch(project.state_directory, batch)
+        traces = project.runner_directory / "traces"
+        evidence = project.runner_directory / "inline-evidence"
+        traces.mkdir(parents=True, exist_ok=True)
+        evidence.mkdir(parents=True, exist_ok=True)
+        results = []
+        for requested, position in zip(batch.tasks, positions):
+            task = _registered_ticket_task(project, requested)
+            alias, session = _run_agent(
+                project,
+                task,
+                task.role,
+                project.integration_worktree,
+                evidence,
+                traces,
+                None,
+                None,
+                None,
+                None,
+                retained,
+                capacity_fd=position.fileno(),
+            )
+            results.append(
+                {
+                    "ticket_id": task.ticket_id,
+                    "ticket_name": task.ticket_name,
+                    "role": task.role,
+                    "launch_status": "completed",
+                    "alias": alias,
+                    "session": session,
+                }
+            )
+        return LaunchResponse(
+            document={"retained_batch_file": str(retained), "tasks": results},
+            succeeded=True,
+        )
 
 
 def _run_batch_workers(
@@ -129,11 +180,29 @@ def _failed_task(task: Task, error: RunnerError) -> dict[str, Any]:
     }
 
 
+def _registered_ticket_task(project: Any, requested: Task) -> Task:
+    """Read one registered Ticket definition without changing its state."""
+
+    ticket_directory = project.state_directory / "tickets" / (
+        requested.ticket_id + "-" + requested.ticket_name
+    )
+    try:
+        state = yaml.safe_load((ticket_directory / "ticket.yml").read_text(encoding="utf-8"))
+        definition = ticket_directory / state["current_definition"]
+        content = definition.read_text(encoding="utf-8")
+    except (KeyError, OSError, TypeError, yaml.YAMLError) as error:
+        raise RunnerError("TICKET_FILE_INVALID", "The selected registered Ticket is invalid.") from error
+    if state.get("ticket_id") != requested.ticket_id or state.get("ticket_name") != requested.ticket_name:
+        raise RunnerError("TICKET_FILE_INVALID", "The selected registered Ticket is invalid.")
+    return replace(requested, ticket_file=definition.resolve(), ticket_content=content)
+
+
 def _deliver_ticket(project: Any, requested: Task, retained_batch: Path, capacity_fd: int) -> dict[str, Any]:
     # The stopped Leader lends its worker-held position and resumes only after
     # the direct children have exited. PID values are never capacity positions.
     run_agent = partial(_run_agent, capacity_fd=capacity_fd)
     request_state = partial(_request_state, capacity_fd=capacity_fd)
+    next_formal_batch = partial(_next_formal_batch, capacity_fd=capacity_fd)
     ticket_directory = project.state_directory / "tickets" / (
         requested.ticket_id + "-" + requested.ticket_name
     )
@@ -172,8 +241,23 @@ def _deliver_ticket(project: Any, requested: Task, retained_batch: Path, capacit
     leader_alias, leader_session = run_agent(
         project, task, "team-leader", worktree, ticket_directory, traces, None, None, registration, None, retained_batch,
     )
-    engineer_batch, engineer_batch_path = _registered_batch(registration, worktree)
-    if len(engineer_batch.tasks) != 1 or not engineer_batch.tasks[0].role.startswith("engineer-"):
+    engineer_batch, engineer_batch_path, leader_alias, leader_session = next_formal_batch(
+        project,
+        task,
+        definition,
+        ticket_content,
+        worktree,
+        ticket_directory,
+        traces,
+        leader_alias,
+        leader_session,
+        registration,
+        retained_batch,
+    )
+    if (
+        len(engineer_batch.tasks) != 1
+        or _task_policy(engineer_batch.tasks[0]) not in _ENGINEER_ROLES
+    ):
         raise RunnerError("BATCH_SCHEMA_INVALID", "The first direct child Batch must contain one Engineer.")
     engineer_task = replace(
         engineer_batch.tasks[0],
@@ -266,7 +350,10 @@ def _deliver_ticket(project: Any, requested: Task, retained_batch: Path, capacit
     child_results = []
     remaining = {"standards-reviewer", "spec-reviewer"}
     while remaining:
-        reviewer_batch, reviewer_batch_path = _registered_batch(registration, worktree)
+        reviewer_batch, reviewer_batch_path, leader_alias, leader_session = next_formal_batch(
+            project, task, definition, ticket_content, worktree, ticket_directory,
+            traces, leader_alias, leader_session, registration, retained_batch,
+        )
         if not {child.role for child in reviewer_batch.tasks} <= remaining:
             raise RunnerError("BATCH_SCHEMA_INVALID", "The child Batch must select remaining Review axes for this candidate.")
         try:
@@ -314,8 +401,11 @@ def _deliver_ticket(project: Any, requested: Task, retained_batch: Path, capacit
             leader_alias, leader_session, registration, None, retained_batch,
             "Reviewers completed:\n" + yaml.safe_dump(child_results, sort_keys=False),
         )
-    if registration.exists():
-        raise RunnerError("BATCH_SCHEMA_INVALID", "The completed Team Round cannot register another child Batch.")
+    _, _, leader_alias, leader_session = next_formal_batch(
+        project, task, definition, ticket_content, worktree, ticket_directory,
+        traces, leader_alias, leader_session, registration, retained_batch,
+        allow_no_formal=True,
+    )
     candidate = _validate_round(round_directory, worktree)
     decision = _leader_decision(round_directory / "leader.md")
     evidence = [
@@ -350,6 +440,73 @@ def _registered_batch(registration: Path, worktree: Path) -> tuple[Batch, Path]:
     registration.unlink()
     retained = Path(document["retained_batch_file"])
     return read_batch(retained, worktree), retained
+
+
+def _next_formal_batch(
+    project: Any,
+    task: Task,
+    definition: Path,
+    ticket_content: str,
+    worktree: Path,
+    ticket_directory: Path,
+    traces: Path,
+    leader_alias: str,
+    leader_session: str,
+    registration: Path,
+    retained_batch: Path,
+    *,
+    capacity_fd: int,
+    allow_no_formal: bool = False,
+) -> tuple[Batch | None, Path | None, str, str]:
+    """Run temporary child specialists before returning the next formal Batch."""
+
+    run_agent = partial(_run_agent, capacity_fd=capacity_fd)
+    while registration.exists():
+        batch, batch_path = _registered_batch(registration, worktree)
+        if len(batch.tasks) != 1 or not _is_inline_specialist(batch.tasks[0]):
+            if allow_no_formal:
+                raise RunnerError("BATCH_SCHEMA_INVALID", "The completed Team Round cannot register another child Batch.")
+            return batch, batch_path, leader_alias, leader_session
+        specialist = replace(
+            batch.tasks[0],
+            ticket_file=definition.resolve(),
+            ticket_content=ticket_content,
+        )
+        alias, session = run_agent(
+            project,
+            specialist,
+            specialist.role,
+            worktree,
+            ticket_directory,
+            traces,
+            None,
+            None,
+            None,
+            leader_alias,
+            batch_path,
+        )
+        leader_alias, leader_session = run_agent(
+            project,
+            task,
+            "team-leader",
+            worktree,
+            ticket_directory,
+            traces,
+            leader_alias,
+            leader_session,
+            registration,
+            None,
+            retained_batch,
+            "Specialist completed:\n"
+            + yaml.safe_dump(
+                {"role": specialist.role, "alias": alias, "session": session,
+                 "trace": _trace_ref(project, traces, alias)},
+                sort_keys=False,
+            ),
+        )
+    if allow_no_formal:
+        return None, None, leader_alias, leader_session
+    raise RunnerError("BATCH_SCHEMA_INVALID", "The Team Leader did not register its required direct child Batch.")
 
 
 def _request_state(
@@ -470,7 +627,7 @@ def _execute_agent(
     capacity_fd: int,
 ) -> tuple[str, str]:
     if alias is None:
-        alias = _agent_alias(task, role)
+        alias = _agent_alias(project, task, role)
         session_directory = project.runner_directory / "sessions" / alias
         session_directory.mkdir(parents=True, exist_ok=False)
         trace_directory = traces / alias
@@ -483,13 +640,18 @@ def _execute_agent(
         if not session_directory.is_dir():
             raise RunnerError("RUNTIME_WORKER_FAILED", "The mapped Session is unavailable.")
 
+    policy_role = _task_policy(task, role)
     if expected_session is None:
-        preset = project.role_bindings[role]
+        preset = (
+            resolved_role_preset(task, project.role_bindings)
+            if task.inline_preset is not None and task.role == role
+            else project.role_bindings[role]
+        )
         context = preflight_runtime_context(
             runtime_store=project.runtime_store,
             executable=runtime_executable(preset.runtime),
             git_common_directory=project.common_directory,
-            role=role,
+            role=policy_role,
             model=preset.model,
             base_url=preset.base_url,
             api_key_env=preset.api_key_env,
@@ -529,13 +691,13 @@ def _execute_agent(
     task_prompt = prompt or task.ticket_content
     if task.instruction:
         task_prompt += "\n## Additional instruction\n\n" + task.instruction + "\n"
-    if role.startswith("engineer-"):
+    if policy_role in _ENGINEER_ROLES:
         task_prompt += (
             "\nWrite the fixed candidate and self-review to "
             ".state/teams/1/rounds/1/engineer.md and its test results to "
             ".state/teams/1/rounds/1/validation.md. Include the candidate commit in both.\n"
         )
-    elif role.endswith("reviewer"):
+    elif policy_role in _REVIEWER_ROLES:
         if task.report_file is None:
             raise RunnerError(
                 "REPORT_FILE_INVALID",
@@ -553,7 +715,7 @@ def _execute_agent(
         candidate = run_git(worktree, "rev-parse", "HEAD")
         brief = (
             "Review only for Repository Guidance and established project standards."
-            if role == "standards-reviewer"
+            if policy_role == "standards-reviewer"
             else "Review only against the accepted Ticket and its acceptance criteria."
         )
         task_prompt += (
@@ -570,7 +732,7 @@ def _execute_agent(
         "GRAPHTRAJ_TICKET_NAME": task.ticket_name,
         "GRAPHTRAJ_HARNESS_ROOT": str(project.harness_root),
     }
-    if role.endswith("reviewer"):
+    if policy_role in _REVIEWER_ROLES:
         environment.update(
             GRAPHTRAJ_REVIEW_CANDIDATE=candidate,
             GRAPHTRAJ_REVIEW_COMPARISON=comparison,
@@ -722,10 +884,15 @@ def _run_session_worker(
     return mapping["session"], terminal["outcome"]
 
 
-def _agent_alias(task: Task, role: str) -> str:
-    marker = {"team-leader": "l", "engineer-junior": "j", "engineer-senior": "s", "engineer-expert": "e", "standards-reviewer": "r", "spec-reviewer": "r", "delivery-state": "d"}[role]
-    suffix = "2" if role == "spec-reviewer" else "1"
-    return "{0}-{1}@{2}{3}".format(task.ticket_id, task.ticket_name, marker, suffix)
+def _agent_alias(project: Any, task: Task, role: str) -> str:
+    marker = role_alias_marker(role)
+    suffix = 2 if role == "spec-reviewer" else 1
+    alias = "{0}-{1}@{2}{3}".format(task.ticket_id, task.ticket_name, marker, suffix)
+    while marker == "x" and (project.runner_directory / "sessions" / alias).exists():
+        suffix += 1
+        alias = "{0}-{1}@{2}{3}".format(task.ticket_id, task.ticket_name, marker, suffix)
+    return alias
+
 
 
 def _link_worktree(project: Any, worktree: Path, evidence: Path) -> None:

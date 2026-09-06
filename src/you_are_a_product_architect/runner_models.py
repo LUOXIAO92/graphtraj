@@ -20,6 +20,14 @@ ROLE_ALIAS_MARKERS = {
     "spec-reviewer": "r",
 }
 LOGICAL_ROLES = tuple(ROLE_ALIAS_MARKERS)
+
+
+def role_alias_marker(role: str) -> str:
+    """Return the stable alias marker for a configured or temporary role."""
+
+    return ROLE_ALIAS_MARKERS.get(role, "x")
+
+
 RUNTIME_TUNING_PATHS = frozenset(
     {
         ("model",),
@@ -178,6 +186,8 @@ class Task:
     requested_skills: Tuple[str, ...] = ()
     report_file: Optional[Path] = None
     review_round: Optional[int] = None
+    inline_preset: RolePreset | None = None
+    policy_role: str | None = None
 
     @property
     def stem(self) -> str:

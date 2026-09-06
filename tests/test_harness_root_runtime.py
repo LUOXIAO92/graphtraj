@@ -72,6 +72,8 @@ def test_probe_artifact_boundary_interrupts_running_runtime(
     harness, _, _, environment = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path,
     )
+    # The live probe starts with a Runtime environment without fake log settings.
+    environment.pop('FAKE_CODEX_LOG', None)
     environment['FAKE_CODEX_RELEASE_FILE'] = str(tmp_path / 'hold-runtime')
     with engineer_probe(installed_commands, harness, fake_codex, environment) as (alias, _, env):
         proofs = [fake_codex.log_file, tmp_path / 'missing'] if missing_proof else [fake_codex.log_file]

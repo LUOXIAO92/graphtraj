@@ -68,6 +68,7 @@ def engineer_probe(commands, harness, fake_codex, environment, *, body="Probe th
         + "os.execv(target, [target, *sys.argv[1:]])\n"
     )
     env = dict(environment, FAKE_CODEX_LIFECYCLE_ACTION="complete-team-round",
+               FAKE_CODEX_LOG=str(fake_codex.log_file),
                FAKE_CODEX_APPEND_LOG="1", FAKE_CODEX_CAPTURE_ROLE="1",
                GRAPHTRAJ_AGENT_RUNNER=str(commands.runner))
     env["PATH"] = str(fake_codex.executable.parent) + os.pathsep + env.get("PATH", "")

@@ -30,5 +30,6 @@ graphtraj = [
     "resources/codex/hooks/*.py",
     "resources/skills/task-delivery/SKILL.md",
     "resources/skills/task-delivery/agents/openai.yaml",
+    "resources/skills/task-delivery/references/*.md",
     "resources/codex/skills/**/*",
 ]

@@ -16,8 +16,9 @@ Harness Project Documents.
 - New delivery uses `.graphtraj` configuration, Ticket/Team state, retained
   Batches, Session Traces, and the Project Worldline. Historical Run state is
   never migrated, read as fallback, or modified by supported commands.
-- `CONTEXT.md` and `docs/` inside linked Worktrees are read-only Harness
-  Project Document views, not Source Repository content.
+- Reuse existing `CONTEXT.md` and `docs/` in linked Worktrees, preserving their
+  contents and Git tracking. Missing paths may link to shared Project Documents.
+  Delegated Agents retain read-only access; Main owns document updates.
 
 ## Standard checks
 
@@ -29,6 +30,11 @@ Harness Project Documents.
 
 ## Working constraints
 
+- Record every code change in a Git commit after proportionate validation,
+  before handoff or further Agent dispatch. Immediately commit completed
+  merges and conflict resolutions; an existing merge or fast-forward commit
+  already satisfies this requirement. Do not leave completed code changes
+  uncommitted.
 - Prefer the smallest direct implementation that satisfies the accepted
   requirement. Do not add speculative abstractions, compatibility layers,
   configuration switches, fallback paths, or defense-in-depth work.

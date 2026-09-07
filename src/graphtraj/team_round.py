@@ -16,6 +16,7 @@ from typing import Any, Callable
 
 import yaml
 
+from .codex_project import ignore_worktree_documents
 from .codex_adapter import codex_connection_environment, preflight_runtime_context
 from .delivery_state import apply_delivery_state_request, confirmed_rework
 from .delivery_worldline import read_worldline
@@ -1086,13 +1087,21 @@ def _link_worktree(project: Any, worktree: Path, evidence: Path) -> None:
         "CONTEXT.md": project.harness_root / "CONTEXT.md",
         "docs": project.documents_directory,
     }
+    created_documents = []
     for name, target in links.items():
         link = worktree / name
         if os.path.lexists(link):
+            if (name == "docs" and (link.is_dir() or link.is_symlink())) or (
+                name == "CONTEXT.md" and (link.is_file() or link.is_symlink())
+            ):
+                continue
             if not link.is_symlink() or link.resolve() != target.resolve():
                 raise RunnerError("STATE_LINK_FAILED", "A Ticket Worktree retained path points elsewhere.")
             continue
         link.symlink_to(os.path.relpath(target, worktree), target_is_directory=target.is_dir())
+        if name in {"docs", "CONTEXT.md"}:
+            created_documents.append(name)
+    ignore_worktree_documents(worktree, created_documents)
 
 
 def _validate_round(round_directory: Path, worktree: Path) -> str:

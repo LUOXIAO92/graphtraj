@@ -7,6 +7,8 @@ import sys
 from pathlib import Path
 from typing import Iterable
 
+import pytest
+
 from conftest import FakeCodex, InstalledCommands, run_process
 
 
@@ -271,7 +273,7 @@ def test_setup_preflights_missing_skill_targets_before_project_mutation(
     ) == worktrees_before
 
 
-def test_setup_preflights_source_document_views_before_mutating(
+def test_setup_reuses_tracked_source_documents(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
     fake_codex: FakeCodex,
@@ -289,10 +291,6 @@ def test_setup_preflights_source_document_views_before_mutating(
             "docs/decision.md": "Repository-owned documentation.\n",
         },
     )
-    worktrees_before = git_output(
-        temporary_git_repository, "worktree", "list", "--porcelain"
-    )
-
     result = run_setup(
         installed_commands,
         harness_root=harness_root,
@@ -301,17 +299,19 @@ def test_setup_preflights_source_document_views_before_mutating(
         answers="",
     )
 
-    assert result.returncode == 1
-    assert str(integration / "CONTEXT.md") in result.stderr
-    assert str(integration / "docs") in result.stderr
-    assert not (harness_root / ".graphtraj").exists()
-    assert not (harness_root / ".codex").exists()
-    assert git_output(
-        temporary_git_repository, "worktree", "list", "--porcelain"
-    ) == worktrees_before
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert not (integration / "CONTEXT.md").is_symlink()
+    assert not (integration / "docs").is_symlink()
+    assert (integration / "CONTEXT.md").read_text() == "Repository-owned context.\n"
+    assert (integration / "docs/decision.md").read_text() == "Repository-owned documentation.\n"
+    assert git_output(integration, "ls-files", "CONTEXT.md", "docs") == "CONTEXT.md\ndocs/decision.md"
+    repeated = run_setup(installed_commands, harness_root=harness_root,
+                         user_home=user_home, fake_codex=fake_codex, answers="")
+    assert repeated.returncode == 0, repeated.stdout + repeated.stderr
+    assert not (integration / "docs").is_symlink()
 
 
-def test_same_root_setup_preflights_source_document_views_before_mutating(
+def test_same_root_setup_reuses_tracked_documents(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
     fake_codex: FakeCodex,
@@ -330,26 +330,30 @@ def test_same_root_setup_preflights_source_document_views_before_mutating(
     documents_before = {context: context.read_bytes(), documents: documents.read_bytes()}
     user_home = tmp_path / "operator-home"
     install_user_skills(user_home)
-    worktrees_before = git_output(repository, "worktree", "list", "--porcelain")
 
     result = run_setup(
         installed_commands,
         harness_root=repository,
         user_home=user_home,
         fake_codex=fake_codex,
-        answers="",
+        answers="y\n",
     )
 
-    assert result.returncode == 1
-    assert str(repository / ".graphtraj" / ".agent-worktrees" / "dev" / "CONTEXT.md") in result.stderr
-    assert str(repository / ".graphtraj" / ".agent-worktrees" / "dev" / "docs") in result.stderr
-    assert not (repository / ".graphtraj").exists()
-    assert not (repository / ".codex").exists()
+    assert result.returncode == 0, result.stdout + result.stderr
+    integration = repository / ".graphtraj/.agent-worktrees/dev"
+    for name in ("CONTEXT.md", "docs/decision.md"):
+        assert (integration / name).read_bytes() == (repository / name).read_bytes()
+    assert not (integration / "CONTEXT.md").is_symlink()
+    assert not (integration / "docs").is_symlink()
     assert {path: path.read_bytes() for path in documents_before} == documents_before
-    assert git_output(repository, "worktree", "list", "--porcelain") == worktrees_before
+    assert git_output(repository, "ls-files", "CONTEXT.md", "docs") == "CONTEXT.md\ndocs/decision.md"
+    repeated = run_setup(installed_commands, harness_root=repository,
+                         user_home=user_home, fake_codex=fake_codex, answers="")
+    assert repeated.returncode == 0, repeated.stdout + repeated.stderr
+    assert not (integration / "CONTEXT.md").is_symlink()
 
 
-def test_same_root_setup_preflights_primary_history_documents_when_dev_is_older(
+def test_same_root_setup_reuses_primary_documents_when_dev_is_older(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
     fake_codex: FakeCodex,
@@ -373,7 +377,6 @@ def test_same_root_setup_preflights_primary_history_documents_when_dev_is_older(
     documents_before = {context: context.read_bytes(), documents: documents.read_bytes()}
     user_home = tmp_path / "operator-home"
     install_user_skills(user_home)
-    worktrees_before = git_output(repository, "worktree", "list", "--porcelain")
 
     result = run_setup(
         installed_commands,
@@ -384,14 +387,37 @@ def test_same_root_setup_preflights_primary_history_documents_when_dev_is_older(
     )
 
     integration = repository / ".graphtraj" / ".agent-worktrees" / "dev"
-    assert result.returncode == 1
-    assert str(integration / "CONTEXT.md") in result.stderr
-    assert str(integration / "docs") in result.stderr
-    assert not (repository / ".graphtraj").exists()
-    assert not (repository / ".codex").exists()
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (integration / "CONTEXT.md").resolve() == context
+    assert (integration / "docs").resolve() == documents.parent
     assert {path: path.read_bytes() for path in documents_before} == documents_before
-    assert git_output(repository, "worktree", "list", "--porcelain") == worktrees_before
+    assert git_output(repository, "ls-files", "CONTEXT.md", "docs") == "CONTEXT.md\ndocs/decision.md"
 
+
+
+@pytest.mark.parametrize("layout", ("same", "separated"))
+def test_setup_reuses_repository_document_symlinks(
+    installed_commands, temporary_git_repository, fake_codex, tmp_path, layout,
+):
+    repository = temporary_git_repository
+    (repository / "project-context.md").write_text("Existing context.\n")
+    (repository / "documentation").mkdir()
+    (repository / "documentation/decision.md").write_text("Existing decision.\n")
+    (repository / "CONTEXT.md").symlink_to("project-context.md")
+    (repository / "docs").symlink_to("documentation", target_is_directory=True)
+    run_process(["git", "add", "."], cwd=repository).check_returncode()
+    run_process(["git", "commit", "-m", "Existing document links"], cwd=repository).check_returncode()
+    root = repository if layout == "same" else repository.parent
+    user_home = tmp_path / "operator-home"
+    install_user_skills(user_home)
+    result = run_setup(installed_commands, harness_root=root, user_home=user_home,
+                       fake_codex=fake_codex, answers="y\n")
+    assert result.returncode == 0, result.stdout + result.stderr
+    worktree = root / ".graphtraj/.agent-worktrees/dev"
+    for name in ("CONTEXT.md", "docs"):
+        assert (worktree / name).readlink() == (repository / name).readlink()
+    assert (worktree / "CONTEXT.md").read_text() == "Existing context.\n"
+    assert (worktree / "docs/decision.md").read_text() == "Existing decision.\n"
 
 def test_same_root_setup_rejects_a_tracked_core_skill_before_mutating(
     installed_commands: InstalledCommands,
@@ -635,3 +661,76 @@ def test_setup_registers_an_existing_dev_at_the_configured_location(
     assert (integration / ".state").resolve() == (
         harness_root / ".graphtraj" / "state"
     ).resolve()
+
+
+@pytest.mark.parametrize("layout", ("same", "separated"))
+@pytest.mark.parametrize("tracked_documents", (False, True))
+@pytest.mark.parametrize("legacy_rules", (False, True))
+def test_setup_scopes_document_ignores_to_generated_links(
+    installed_commands, temporary_git_repository, fake_codex, tmp_path,
+    layout, tracked_documents, legacy_rules,
+):
+    repository = temporary_git_repository
+    root = repository if layout == "same" else repository.parent
+    (repository / "docs").mkdir()
+    (repository / "docs/decision.md").write_text("Existing decision.\n")
+    (repository / "CONTEXT.md").write_text("Existing context.\n")
+    if tracked_documents:
+        run_process(["git", "add", "docs", "CONTEXT.md"], cwd=repository).check_returncode()
+        run_process(["git", "commit", "-m", "Existing documents"], cwd=repository).check_returncode()
+    user_home = tmp_path / "operator-home"
+    install_user_skills(user_home)
+    user_ignore = tmp_path / "user-ignore"
+    user_ignore.write_text("*.local\n")
+    run_process(["git", "config", "core.excludesFile", str(user_ignore)], cwd=repository).check_returncode()
+    shared_exclude = repository / ".git/info/exclude"
+    user_rules = "# User rules\n/user-only\n"
+    shared_exclude.write_text(user_rules + (
+        "/.state\n/.scratch\n/CONTEXT.md\n/docs\n" if legacy_rules else ""
+    ))
+    for answers in ("y\n", ""):
+        result = run_setup(installed_commands, harness_root=root,
+                           user_home=user_home, fake_codex=fake_codex, answers=answers)
+        assert result.returncode == 0, result.stdout + result.stderr
+    integration = root / ".graphtraj/.agent-worktrees/dev"
+
+    def ignored(worktree, path):
+        result = run_process(["git", "check-ignore", "--no-index", "-q", path], cwd=worktree)
+        assert result.returncode in (0, 1), result.stderr
+        return result.returncode == 0
+
+    (repository / "docs/new.md").write_text("New document.\n")
+    assert not ignored(repository, "docs/new.md")
+    assert not ignored(repository, "CONTEXT.md")
+    for name in ("docs", "CONTEXT.md"):
+        assert ignored(integration, name) is (not tracked_documents)
+    if tracked_documents:
+        (integration / "docs/new.md").write_text("New document.\n")
+        assert not ignored(integration, "docs/new.md")
+        assert "docs/new.md" in git_output(integration, "ls-files", "--others", "--exclude-standard")
+    for worktree in (repository, integration):
+        assert ignored(worktree, "secret.local")
+        assert ignored(worktree, "user-only")
+    assert user_ignore.read_text() == "*.local\n"
+    assert shared_exclude.read_text() == user_rules + "/.state\n/.scratch\n"
+    # Git's local registration must not alter the repository's tracked files.
+    assert not git_output(repository, "diff", "--name-only")
+    assert not git_output(integration, "diff", "--name-only")
+
+
+def test_setup_preserves_user_document_ignore_rules(
+    installed_commands, temporary_git_repository, fake_codex, tmp_path,
+):
+    repository = temporary_git_repository
+    user_home = tmp_path / "operator-home"
+    install_user_skills(user_home)
+    exclude = repository / ".git/info/exclude"
+    user_rules = "/CONTEXT.md\n/docs/private/\n"
+    exclude.write_text(user_rules)
+    result = run_setup(installed_commands, harness_root=repository,
+                       user_home=user_home, fake_codex=fake_codex, answers="y\n")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert exclude.read_text() == user_rules + "/.state\n/.scratch\n"
+    assert run_process(["git", "check-ignore", "-q", "CONTEXT.md"], cwd=repository).returncode == 0
+    assert run_process(["git", "check-ignore", "-q", "docs/private/secret.md"], cwd=repository).returncode == 0
+    assert run_process(["git", "check-ignore", "-q", "docs/public.md"], cwd=repository).returncode == 1

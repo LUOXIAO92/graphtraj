@@ -52,7 +52,18 @@ Runner-private execution records also live beneath `.graphtraj`, outside
 durable state. Their filenames are implementation details. The separated
 layout keeps the Source Repository in its configured child directory while
 Project Documents remain at the Harness Project Root. Linked Worktrees expose
-read-only `CONTEXT.md` and `docs/` views. Main owns Project Document changes.
+`CONTEXT.md` and `docs/` from their checkout when those already exist. Setup
+and Runner preserve their contents and Git tracking; they create links to the
+shared project documents only where those paths are absent. Existing documents
+are the basis for later updates. Delegated Agents retain read-only document
+access, and Main owns Project Document changes.
+
+Generated document links use Worktree-specific Git ignore rules. Existing
+repository documents and new files beneath them remain visible to Git unless
+user rules exclude them. Setup preserves user ignore files and includes their
+current rules in the Worktree-local copy, refreshed when setup or Worktree
+preparation runs. Setup migrates the old installer's complete shared ignore
+rule group; standalone user rules remain unchanged.
 
 ## Configuration and roles
 

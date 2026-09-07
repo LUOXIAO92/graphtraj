@@ -12,8 +12,10 @@ the Harness Project Root. Read `.graphtraj/config.yml` for the recorded Source
 Repository, documents, Worktrees, state, dispatch depth, and concurrency limit.
 This works when the Source Repository is the Harness Project Root and when it
 is its configured direct child. Do not rediscover the layout or treat Source
-history as authority for Harness Project Documents. Team members use read-only
-`CONTEXT.md` and `docs/` Worktree views.
+history as a reason to reject existing Project Documents. Reuse existing
+`CONTEXT.md` and `docs/` as the document base, preserving their contents and Git
+tracking. Team members read their Worktree documents; only missing paths use
+links to shared documents. Main retains document-update authority.
 
 Consume accepted GitHub Tickets and explicit dependencies. Register missing
 Tickets in dependency order with `graphtraj ticket register --ticket-file

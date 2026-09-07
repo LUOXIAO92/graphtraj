@@ -173,6 +173,10 @@ def _preflight_link(
 ) -> None:
     if entry is None:
         actions.append(PlannedSetupAction("CREATE", description))
+    elif (link.name == "docs" and entry.kind in {"directory", "symlink"}) or (
+        link.name == "CONTEXT.md" and entry.kind in {"file", "symlink"}
+    ):
+        actions.append(PlannedSetupAction("PRESERVE", str(link)))
     elif entry.kind == "symlink" and _symlink_resolves_to(
         link, entry.content, target
     ):
@@ -499,13 +503,6 @@ class ProjectSetupPlan:
             ("CONTEXT.md", self.harness_root / "CONTEXT.md"),
             ("docs", self.configuration.docs),
         )
-        primary_entries = {}
-        if self.configuration.project_root == self.harness_root:
-            primary_revision = self.repository.head
-            primary_entries = {
-                name: self.repository.tree_entry(primary_revision, name)
-                for name in ("CONTEXT.md", "docs")
-            }
         for name, target in links:
             description = self.codex_files.link_action(
                 self.configuration.integration_worktree,
@@ -520,14 +517,6 @@ class ProjectSetupPlan:
                 actions,
                 conflicts,
             )
-            if primary_entries.get(name) is not None:
-                _append_conflict(
-                    conflicts,
-                    "{0} conflicts at {1}.".format(
-                        description,
-                        self.configuration.integration_worktree / name,
-                    ),
-                )
 
     def _preflight_exclude_registration(
         self,
@@ -563,10 +552,11 @@ class ProjectSetupPlan:
                     ),
                 )
             else:
-                required = ("/.state", "/.scratch", "/CONTEXT.md", "/docs")
+                required = ("/.state", "/.scratch")
                 disposition = (
                     "ALREADY CONFIGURED"
                     if all(path in lines for path in required)
+                    and "/.state\n/.scratch\n/CONTEXT.md\n/docs\n" not in (exclude.content or b"").decode()
                     else "REGISTER"
                 )
                 actions.append(PlannedSetupAction(disposition, description))

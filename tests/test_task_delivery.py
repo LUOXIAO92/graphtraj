@@ -26,6 +26,10 @@ if sys.argv[1:] == ['exec', '--help']:
     print('--config --json --sandbox --dangerously-bypass-hook-trust')
     raise SystemExit(0)
 
+assert Path('CONTEXT.md').read_text() == 'Existing project context.\n'
+assert Path('docs/decision.md').read_text() == 'Existing project decision.\n'
+assert not Path('CONTEXT.md').is_symlink()
+assert not Path('docs').is_symlink()
 role = os.environ['GRAPHTRAJ_ROLE']
 ticket = os.environ['GRAPHTRAJ_TICKET_ID']
 generation = os.environ['GRAPHTRAJ_TEAM_GENERATION']
@@ -101,6 +105,14 @@ def test_installed_delivery_corrects_a_split_and_delivers_the_current_graph(
     installed_commands, temporary_git_repository, fake_codex, tmp_path, layout,
 ):
     root = temporary_git_repository if layout == "same" else temporary_git_repository.parent
+    documents = {"CONTEXT.md": "Existing project context.\n",
+                 "docs/decision.md": "Existing project decision.\n"}
+    for name, content in documents.items():
+        path = temporary_git_repository / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content)
+    run_process(["git", "add", "CONTEXT.md", "docs"], cwd=temporary_git_repository).check_returncode()
+    run_process(["git", "commit", "-m", "Existing project documents"], cwd=temporary_git_repository).check_returncode()
     old_state = root / "state" / "20260814-historical"
     old_state.mkdir(parents=True)
     for name in ("run.yml", "ledger.yml", "task-map.yml", "history.jsonl", "handoff.md"):
@@ -208,7 +220,13 @@ def test_installed_delivery_corrects_a_split_and_delivers_the_current_graph(
     assert not any(item["ready"] for item in graph)
     assert not (worktrees / "1-renderer").exists()
     assert not (worktrees / "3-cli").exists()
-    assert (worktrees / "dev/docs").resolve() == (root / "docs").resolve()
+    for name, content in documents.items():
+        assert (worktrees / "dev" / name).read_text() == content
+        assert (temporary_git_repository / name).read_text() == content
+    assert not (worktrees / "dev/docs").is_symlink()
+    assert not (worktrees / "dev/CONTEXT.md").is_symlink()
+    tracked = run_process(["git", "ls-files", "CONTEXT.md", "docs"], cwd=worktrees / "dev")
+    assert tracked.stdout.splitlines() == ["CONTEXT.md", "docs/decision.md"]
     assert {path: path.read_bytes() for path in original_definitions} == original_definitions
     assert {path: path.read_bytes() for path in historical} == historical
     assert {path: path.read_bytes() for path in batches} == batches

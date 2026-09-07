@@ -105,8 +105,7 @@ def test_installed_hook_allows_only_reads_of_enabled_external_skills(
     environment['PATH'] = str(fake_codex.executable.parent) + os.pathsep + environment['PATH']
     user_skills = Path(environment['HOME']) / '.agents' / 'skills'
     harness_skill = harness / '.agents' / 'skills' / 'implement' / 'SKILL.md'
-    harness_skill.parent.mkdir(parents=True)
-    shutil.move(user_skills / 'implement' / 'SKILL.md', harness_skill)
+    assert harness_skill.is_file()
     unselected = harness_skill.parent.parent / 'unselected' / 'SKILL.md'
     unselected.parent.mkdir()
     unselected.write_text('---\nname: unselected\ndescription: Unselected.\n---\n')
@@ -116,7 +115,7 @@ def test_installed_hook_allows_only_reads_of_enabled_external_skills(
     task = {'worktree_path': str(worktree), 'alias': alias}
     hooks = tomllib.loads(next(arg for arg in arguments if arg.startswith('hooks=')))['hooks']
     hook = shlex.split(hooks['PreToolUse'][0]['hooks'][0]['command'])
-    for path, allowed in ((harness_skill, True), (user_skills / 'ponytail' / 'SKILL.md', True), (unselected, False)):
+    for path, allowed in ((harness_skill, True), (harness_skill.parent.parent / 'ponytail/SKILL.md', True), (user_skills / 'ponytail/SKILL.md', False), (unselected, False)):
         for verb in ('cat', 'touch'):
             checked = subprocess.run(
                 hook, cwd=task['worktree_path'], env=environment,
@@ -190,7 +189,7 @@ def test_setup_creates_a_root_owned_runtime_and_runner_discovers_it(
     assert non_root.value.code == "PROJECT_CONFIG_MISMATCH"
 
 
-def test_setup_uses_runtime_user_core_skills_without_root_skill_config(
+def test_setup_installs_project_core_skills_even_with_user_copies(
     monkeypatch,
     temporary_git_repository: Path,
     tmp_path: Path,
@@ -209,14 +208,16 @@ def test_setup_uses_runtime_user_core_skills_without_root_skill_config(
     monkeypatch.setenv("HOME", str(user_home))
 
     plan = plan_project_setup(harness_root, temporary_git_repository)
-    assert plan.apply() == "Created Integration Worktree on dev."
+    assert plan.apply(install_missing_skills=True) == "Created Integration Worktree on dev."
 
     runtime_store = harness_root / ".codex"
     runtime_config = runtime_store / "config.toml"
     assert runtime_config.read_bytes() == plan.codex_files.resources_by_path[
         "config.toml"
     ]
-    assert not (harness_root / ".agents").exists()
+    for name in CORE_SKILL_NAMES:
+        assert (harness_root / ".agents/skills" / name / "SKILL.md").is_file()
+        assert (user_home / ".agents/skills" / name / "SKILL.md").is_file()
     preflight_engineer_runtime_context(
         runtime_store=runtime_store,
         executable=_runtime_executable(tmp_path),
@@ -526,7 +527,7 @@ def test_installed_runner_uses_runtime_user_core_skill_when_source_tracks_it(
     tmp_path: Path,
 ) -> None:
     repository = temporary_git_repository
-    source_skill = repository / ".agents" / "skills" / "implement" / "SKILL.md"
+    source_skill = repository / ".agents" / "skills" / "repository-implement" / "SKILL.md"
     source_skill.parent.mkdir(parents=True)
     source_skill.write_text(
         "---\nname: implement\ndescription: Repository Skill.\n---\n",
@@ -551,13 +552,15 @@ def test_installed_runner_uses_runtime_user_core_skill_when_source_tracks_it(
         [str(installed_commands.product), "setup"],
         cwd=repository,
         env=environment,
-        input="y\n",
+        input="y\ny\n",
         check=False,
         text=True,
         capture_output=True,
         timeout=60,
     )
     assert setup.returncode == 0, setup.stderr
+    # An existing project may lose its local copy; Runner still resolves the user Skill.
+    shutil.rmtree(repository / ".agents/skills/implement")
 
     with engineer_probe(installed_commands, repository, fake_codex, environment) as (alias, worktree, _):
         records = [json.loads(line) for line in fake_codex.log_file.read_text().splitlines()]
@@ -574,7 +577,7 @@ def test_installed_runner_uses_runtime_user_core_skill_when_source_tracks_it(
         Path(task["worktree_path"])
         / ".agents"
         / "skills"
-        / "implement"
+        / "repository-implement"
         / "SKILL.md"
     )
     assert {"path": str(runtime_user_skill.resolve()), "enabled": True} in configured_skills
@@ -590,7 +593,7 @@ def test_installed_runner_uses_runtime_user_skill_from_newer_primary_history(
 ) -> None:
     repository = temporary_git_repository
     run_process(["git", "branch", "dev"], cwd=repository).check_returncode()
-    source_skill = repository / ".agents" / "skills" / "implement" / "SKILL.md"
+    source_skill = repository / ".agents" / "skills" / "repository-implement" / "SKILL.md"
     source_skill.parent.mkdir(parents=True)
     source_skill.write_text(
         "---\nname: implement\ndescription: Repository Skill.\n---\n",
@@ -619,13 +622,15 @@ def test_installed_runner_uses_runtime_user_skill_from_newer_primary_history(
         [str(installed_commands.product), "setup"],
         cwd=repository,
         env=environment,
-        input="",
+        input="y\n",
         check=False,
         text=True,
         capture_output=True,
         timeout=60,
     )
     assert setup.returncode == 0, setup.stderr
+    # An existing project may lose its local copy; Runner still resolves the user Skill.
+    shutil.rmtree(repository / ".agents/skills/implement")
 
     with engineer_probe(installed_commands, repository, fake_codex, environment) as (alias, worktree, _):
         records = [json.loads(line) for line in fake_codex.log_file.read_text().splitlines()]

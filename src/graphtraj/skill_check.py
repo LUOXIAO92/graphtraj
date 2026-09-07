@@ -95,6 +95,7 @@ def core_skill_paths(
     user_skill_root: Path,
     *,
     source_history_paths: frozenset[str] = frozenset(),
+    include_user_skills: bool = True,
 ) -> Dict[str, Path]:
     """Resolve each core Skill to its Harness-root or Runtime-user file path."""
 
@@ -103,6 +104,8 @@ def core_skill_paths(
         (harness_skill_root(runtime_store), True),
         (user_skill_root, False),
     ):
+        if not ignore_source_history and not include_user_skills:
+            continue
         try:
             candidates = tuple(sorted(skill_root.iterdir()))
         except OSError:
@@ -129,6 +132,7 @@ def check_core_skills(
     user_skill_root: Path,
     *,
     source_history_paths: frozenset[str] = frozenset(),
+    include_user_skills: bool = True,
 ) -> Tuple[SkillStatus, ...]:
     """Check core names in the Harness-root and Runtime user scopes."""
 
@@ -136,6 +140,7 @@ def check_core_skills(
         runtime_store,
         user_skill_root,
         source_history_paths=source_history_paths,
+        include_user_skills=include_user_skills,
     )
     return tuple(
         SkillStatus(name=name, discovered=name in discovered)

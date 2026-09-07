@@ -23,8 +23,10 @@ Later commands use the recorded paths.
 
 Setup is interactive and checks conflicts before writing. It preserves
 project-owned content and valid operator configuration, creates or registers
-the `dev` Integration Worktree, and installs missing supported Harness Skills
-after confirmation. It does not clone a repository, configure credentials,
+the `dev` Integration Worktree, and installs every missing core Skill into the Harness Project Root’s
+`.agents/skills` after confirmation, even when a user-global copy exists.
+Existing project Skills are preserved; project-local copies take precedence
+over user-global Skills. It does not clone a repository, configure credentials,
 modify Runtime-global settings or promote `dev` to `main`.
 
 The default layout is:

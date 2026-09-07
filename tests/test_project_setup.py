@@ -88,6 +88,17 @@ def run_setup(
     fake_codex: FakeCodex,
     answers: str,
 ) -> subprocess.CompletedProcess[str]:
+    # These fixtures previously relied on user Skills to skip installation.
+    # Accept the new project-local installation prompt before their other answers.
+    if (all((user_home / ".agents/skills" / name / "SKILL.md").is_file()
+            for name in CORE_SKILL_NAMES)
+            and not (harness_root / ".agents/skills/task-delivery/SKILL.md").exists()):
+        candidates = [p for p in harness_root.iterdir() if (p / ".git").exists()]
+        if not (harness_root / ".git").exists() and len(candidates) > 1:
+            selection, _, remaining = answers.partition("\n")
+            answers = selection + "\ny\n" + remaining
+        else:
+            answers = "y\n" + answers
     return subprocess.run(
         [str(installed_commands.product), "setup"],
         cwd=harness_root,
@@ -217,8 +228,6 @@ def test_setup_installs_only_missing_core_skills_at_the_harness_root(
         target = harness_skills / name
         if name == "grilling":
             assert target.joinpath("SKILL.md").read_bytes() == grilling_before
-        elif name == "tdd":
-            assert not target.exists()
         else:
             assert tree_contents(target) == supported_skill_contents(name)
     assert tree_contents(user_home) == user_before
@@ -454,7 +463,8 @@ def test_same_root_setup_rejects_a_tracked_core_skill_before_mutating(
     )
 
     assert result.returncode == 1
-    assert "Missing required core Skills: implement" in result.stdout
+    assert "Missing required core Skills:" in result.stdout
+    assert "implement" in result.stdout
     assert "Source Repository history" in result.stderr
     assert source_skill.read_bytes() == source_before
     assert not (repository / ".graphtraj").exists()

@@ -724,6 +724,7 @@ def plan_project_setup(
             root / ".codex",
             Path.home() / ".agents" / "skills",
             source_history_paths=source_paths,
+            include_user_skills=False,
         )
         discovered_skills = {
             status.name for status in skill_statuses if status.discovered

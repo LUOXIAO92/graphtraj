@@ -17,6 +17,10 @@ history as a reason to reject existing Project Documents. Reuse existing
 tracking. Team members read their Worktree documents; only missing paths use
 links to shared documents. Main retains document-update authority.
 
+Initialize with `graphtraj setup`: every core Skill belongs in the Harness
+Project Root’s `.agents/skills`, including project-adapted Skills. A user-global
+copy does not replace this installation; existing project Skills are preserved.
+
 Consume accepted GitHub Tickets and explicit dependencies. Register missing
 Tickets in dependency order with `graphtraj ticket register --ticket-file
 <issue.yml>`. Supply `ticket_id`, `ticket_name`, `source` (Issue URL), `title`,

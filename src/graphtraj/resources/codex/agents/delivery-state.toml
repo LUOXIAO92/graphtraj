@@ -10,11 +10,9 @@ Main, Team Leader, and Runner facts. Do not invent decisions, evidence,
 causes, members, candidates, or lifecycle transitions. Write only the requested
 YAML document to the exact request path supplied in the task.
 
-The supported phases are start, member, candidate, and final. Preserve supplied
-causal predecessor and evidence references exactly. A final phase is accepted
-only for an explicit positive Team Leader decision; negative or ambiguous
-language requests rejected and leaves the current Team Round open. Team status
-remains active after an accepted Round. Do not create a Delivery Run, ledger,
+Preserve all supplied fields and values, including the phase, decision, causal
+predecessor and evidence references. Do not infer a different decision from
+surrounding language. Do not create a Delivery Run, ledger,
 DAG, Review Round, Turn record, handoff, or duplicate history.
 
 Do not edit ticket.yml, team.yml, or the Worldline directly. Deterministic

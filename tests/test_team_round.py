@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import tomllib
 from pathlib import Path
 
@@ -244,6 +245,11 @@ def test_installed_runner_obeys_the_explicit_leader_decision_for_a_run_free_team
     calls = [json.loads(line) for line in policy_log.read_text().splitlines()]
     for call in calls:
         leader = call['role'] == 'team-leader'
+        filesystem = call['settings']['permissions'][call['settings']['default_permissions']]['filesystem']
+        registration = harness_root / '.graphtraj/runner/sessions/74-complete-team-round@l1/child-registration.yml'
+        batch_directory = harness_root / '.graphtraj/state/batches'
+        assert (filesystem.get(str(registration)) == 'write') is leader
+        assert (filesystem.get(str(batch_directory)) == 'write') is leader
         assert call['settings']['agents']['enabled'] is (leader and swarm is not False)
         assert 'max_concurrent_threads_per_session' not in call['settings']['agents']
         assert 'max_depth' not in call['settings']['agents']
@@ -479,6 +485,101 @@ def test_installed_runner_retries_an_unregistered_team_and_preserves_history(
     assert (team_directory / 'team.yml').read_bytes() == accepted_team
 
 
+@pytest.mark.skipif(
+    os.environ.get('CODEX_SANDBOX_ACCEPTANCE') != '1' or shutil.which('codex') is None,
+    reason='set CODEX_SANDBOX_ACCEPTANCE=1 with a Codex sandbox executable; no model is used',
+)
+def test_installed_leader_registers_children_inside_the_codex_sandbox(
+    installed_commands, temporary_git_repository, fake_codex, tmp_path,
+):
+    harness_root, _, _, environment = configure_harness(
+        installed_commands, temporary_git_repository, fake_codex, tmp_path,
+    )
+    _register_ready_inline_ticket(harness_root, installed_commands.product)
+    batch = harness_root / 'batch.yml'
+    batch.write_text(yaml.safe_dump({'tasks': [{
+        'ticket_id': '75', 'ticket_name': 'inline-specialist', 'role': 'team-leader',
+    }]}))
+    wrapper = tmp_path / 'sandbox-child-runner'
+    wrapper.write_text('#!' + str(installed_commands.runner.parent / 'python') + '\n' + '''
+import json, os, shlex, subprocess, sys, tomllib
+from pathlib import Path
+import yaml
+from graphtraj.codex_adapter import _toml_value
+
+registration = Path(os.environ['GRAPHTRAJ_PARENT_REGISTRATION'])
+launch = yaml.safe_load((registration.parent / 'launch.yml').read_text())
+arguments = launch['adapter_request']['arguments']
+settings = {}
+for index, argument in enumerate(arguments[:-1]):
+    if argument == '-c':
+        settings.update(tomllib.loads(arguments[index + 1]))
+profile = settings['default_permissions']
+filesystem = settings['permissions'][profile]['filesystem']
+targets = [Path(path) for path, access in filesystem.items() if access == 'write']
+assert registration in targets
+assert len(targets) == 2
+assert registration.parent not in targets
+hook = shlex.split(settings['hooks']['PreToolUse'][0]['hooks'][0]['command'])
+mapping = yaml.safe_load((registration.parent / 'mapping.yml').read_text())
+for session in (mapping['session'], 'native-helper'):
+    for target in targets:
+        target = target / 'forbidden.yml' if target.is_dir() else target
+        for tool, command in (
+            ('Bash', 'touch ' + shlex.quote(str(target))),
+            ('apply_patch', '*** Begin Patch\\n*** Add File: ' + str(target) + '\\n+forbidden\\n*** End Patch'),
+        ):
+            event = {'hook_event_name': 'PreToolUse', 'session_id': session,
+                     'tool_name': tool, 'tool_input': {'command': command}}
+            checked = subprocess.run(hook, input=json.dumps(event), text=True, capture_output=True, check=True)
+            assert json.loads(checked.stdout)['hookSpecificOutput']['permissionDecision'] == 'deny'
+
+command = [os.environ['TEST_CODEX_SANDBOX'], 'sandbox', '-C', str(Path.cwd()), '-P', profile]
+# The test Harness is below the OS temp directory, which :workspace normally
+# permits. Match a real separated Harness by making its root read-only first.
+filesystem[os.environ['GRAPHTRAJ_HARNESS_ROOT']] = 'read'
+for index, argument in enumerate(arguments[:-1]):
+    if argument == '--add-dir':
+        filesystem[arguments[index + 1]] = 'write'
+allowed_permissions = 'permissions=' + _toml_value(settings['permissions'])
+for target in targets:
+    filesystem[str(target)] = 'read'
+denied_permissions = 'permissions=' + _toml_value(settings['permissions'])
+denied = subprocess.run(command + ['-c', denied_permissions, '--', os.environ['TEST_INSTALLED_RUNNER'], *sys.argv[1:]],
+                        text=True, capture_output=True)
+assert denied.returncode == 1, denied.stdout + denied.stderr
+assert denied.stdout, denied.stderr
+assert yaml.safe_load(denied.stdout)['error']['code'] == 'operation-failed'
+assert not registration.exists()
+completed = subprocess.run(command + ['-c', allowed_permissions, '--', os.environ['TEST_INSTALLED_RUNNER'], *sys.argv[1:]],
+                           text=True, capture_output=True)
+sys.stdout.write(completed.stdout)
+sys.stderr.write(completed.stderr)
+if completed.returncode == 0:
+    result = yaml.safe_load(completed.stdout)
+    assert Path(result['retained_batch_file']).read_bytes() == Path(sys.argv[-1]).read_bytes()
+    registered = yaml.safe_load(registration.read_text())
+    assert registered['tasks'] == result['tasks']
+    assert registered['retained_batch_file'] == result['retained_batch_file']
+raise SystemExit(completed.returncode)
+''')
+    wrapper.chmod(0o755)
+    environment.update(
+        FAKE_CODEX_LIFECYCLE_ACTION='complete-team-round',
+        FAKE_CODEX_POLICY_LOG=str(tmp_path / 'policy.jsonl'),
+        GRAPHTRAJ_AGENT_RUNNER=str(wrapper),
+        TEST_CODEX_SANDBOX=shutil.which('codex'),
+        TEST_INSTALLED_RUNNER=str(installed_commands.runner),
+    )
+    result = run_process(
+        [str(installed_commands.runner), '--batch-input', str(batch)],
+        cwd=harness_root, env=environment, timeout=45,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    ticket = harness_root / '.graphtraj/state/tickets/75-inline-specialist/ticket.yml'
+    assert yaml.safe_load(ticket.read_text())['status'] == 'awaiting-integration'
+
+
 def test_installed_runner_runs_a_main_inline_specialist_without_creating_a_preset(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
@@ -532,6 +633,15 @@ def test_installed_runner_runs_a_main_inline_specialist_without_creating_a_prese
     assert roles_file.read_bytes() == roles_before
     runtime = json.loads(fake_codex.log_file.read_text())
     assert runtime["cwd"] == str(integration)
+    permissions = tomllib.loads(next(
+        argument for argument in runtime['argv'] if argument.startswith('permissions=')
+    ))['permissions']
+    assert all(
+        access != 'write'
+        for profile in permissions.values()
+        for path, access in profile['filesystem'].items()
+        if Path(path).is_absolute()
+    )
     assert "Investigate the accepted Ticket." in runtime["stdin"]
     assert "Inspect the Ticket without joining its Team." in runtime["stdin"]
     assert runtime["connection"]["base_url"] is None

@@ -110,6 +110,7 @@ class _CodexRole:
         effective_skills: Tuple[_EffectiveSkill, ...],
         report_file: Path | None,
         model: str,
+        child_batch_write_paths: Tuple[Path, ...] = (),
     ) -> Dict[str, Any]:
         """Render the private request consumed by this Adapter's worker."""
 
@@ -138,6 +139,11 @@ class _CodexRole:
                     "[${0}]({1})".format(skill.name, skill.path),
                 )
         native_settings = copy.deepcopy(dict(self.native_settings))
+        if self.name == "team-leader":
+            # Runner retains and registers a child Batch before returning to the
+            # Leader. The Guard still rejects direct writes to these paths.
+            for path in child_batch_write_paths:
+                native_settings["permissions"][self.default_permissions]["filesystem"][str(path)] = "write"
         if self.name == "merge-resolver":
             native_settings["permissions"][self.default_permissions]["filesystem"][str(evidence)] = "read"
         if report_file is not None:
@@ -181,6 +187,7 @@ class _CodexRuntimePreflight:
     _harness_skills: Tuple[_EffectiveSkill, ...]
     _requested_skills: Tuple[str, ...]
     _report_file: Path | None
+    _child_batch_write_paths: Tuple[Path, ...]
 
     def finalize(self) -> RuntimeContext:
         """Resolve Ticket Worktree facts shared by supported role boundaries."""
@@ -197,6 +204,7 @@ class _CodexRuntimePreflight:
             effective_skills=effective_skills,
             report_file=self._report_file,
             model=self._model,
+            child_batch_write_paths=self._child_batch_write_paths,
         )
         return _CodexRuntimeContext(
             _role=self._role.name,
@@ -316,6 +324,7 @@ def preflight_runtime_context(
     repository_skill_source: Path,
     requested_skills: Tuple[str, ...],
     report_file: Path | None = None,
+    child_batch_write_paths: Tuple[Path, ...] = (),
 ) -> RuntimeContextPreflight:
     """Prepare one Codex role without crossing role-specific boundaries."""
 
@@ -369,6 +378,7 @@ def preflight_runtime_context(
         effective_skills=harness_skills + repository_skills,
         report_file=report_file,
         model=selected_model,
+        child_batch_write_paths=child_batch_write_paths,
     )
     return _CodexRuntimePreflight(
         _runtime_store=runtime_store,
@@ -384,6 +394,7 @@ def preflight_runtime_context(
         _harness_skills=harness_skills,
         _requested_skills=requested_skills,
         _report_file=report_file,
+        _child_batch_write_paths=child_batch_write_paths,
     )
 
 

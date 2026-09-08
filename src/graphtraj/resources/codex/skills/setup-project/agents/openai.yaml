@@ -1,5 +1,5 @@
 interface:
   display_name: "Setup Project"
-  short_description: "Configure a repo for the skills"
+  short_description: "Configure task tracking and project skill choices"
 policy:
   allow_implicit_invocation: false

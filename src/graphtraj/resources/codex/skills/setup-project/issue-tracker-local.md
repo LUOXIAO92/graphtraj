@@ -1,12 +1,12 @@
 # Issue tracker: Local Markdown
 
-Issues and specs for this repo live as durable Project Documents under `docs/agents/issues/`.
+Tasks and their specifications for this project live as durable Project Documents under `docs/agents/issues/`.
 
 ## Conventions
 
-- One feature per directory: `docs/agents/issues/<feature-slug>/`
+- One effort per directory: `docs/agents/issues/<feature-slug>/`
 - The spec is `docs/agents/issues/<feature-slug>/spec.md`
-- Implementation issues are one file per ticket at `docs/agents/issues/<feature-slug>/issues/<NN>-<slug>.md`, numbered from `01` — never a single combined tickets file
+- Task nodes are one file per ticket at `docs/agents/issues/<feature-slug>/issues/<NN>-<slug>.md`, numbered from `01` — never a single combined tickets file
 - Triage state is recorded as a `Status:` line near the top of each issue file (see `triage-labels.md` for the role strings)
 - Comments and conversation history append to the bottom of the file under a `## Comments` heading
 

@@ -1,59 +1,14 @@
-# Domain Docs
+# Domain documents
 
-How the engineering skills should consume this repo's domain documentation when exploring the codebase.
+Read the project's `CONTEXT.md` for shared vocabulary. If a `CONTEXT-MAP.md`
+exists, follow its pointers to the contexts relevant to the current task.
+Read decisions in `docs/adr/` that govern that task, and any decision locations
+named by the context map.
 
-## Harness Project override
+In a Harness Project these are Main-owned Project Documents at the Harness
+Project Root. Delegated roles consume their Worktree views read-only.
 
-For a Harness Project, the Harness Project Root is the Project Document root.
-Read `AGENTS.md`, `CONTEXT.md`, `CONTEXT-MAP.md`, and `docs/` there. Source
-Repository Guidance is read-only: never create, edit, or migrate its
-`AGENTS.md`, `CLAUDE.md`, `CONTEXT.md`, or `docs/`. Outside a Harness Project,
-use the repository-root layout below.
-
-## Before exploring, read these
-
-- **`CONTEXT.md`** at the repo root, or
-- **`CONTEXT-MAP.md`** at the repo root if it exists — it points at one `CONTEXT.md` per context. Read each one relevant to the topic.
-- **`docs/adr/`** — read ADRs that touch the area you're about to work in. In multi-context repos, also check `src/<context>/docs/adr/` for context-scoped decisions.
-
-If any of these files don't exist, **proceed silently**. Don't flag their absence; don't suggest creating them upfront. The `/domain-modeling` skill (reached via `/grill-with-docs` and `/improve-codebase-architecture`) creates them lazily when terms or decisions actually get resolved.
-
-## File structure
-
-Single-context repo (most repos):
-
-```
-/
-├── CONTEXT.md
-├── docs/adr/
-│   ├── 0001-event-sourced-orders.md
-│   └── 0002-postgres-for-write-model.md
-└── src/
-```
-
-Multi-context repo (presence of `CONTEXT-MAP.md` at the root):
-
-```
-/
-├── CONTEXT-MAP.md
-├── docs/adr/                          ← system-wide decisions
-└── src/
-    ├── ordering/
-    │   ├── CONTEXT.md
-    │   └── docs/adr/                  ← context-specific decisions
-    └── billing/
-        ├── CONTEXT.md
-        └── docs/adr/
-```
-
-## Use the glossary's vocabulary
-
-When your output names a domain concept (in an issue title, a refactor proposal, a hypothesis, a test name), use the term as defined in `CONTEXT.md`. Don't drift to synonyms the glossary explicitly avoids.
-
-If the concept you need isn't in the glossary yet, that's a signal — either you're inventing language the project doesn't use (reconsider) or there's a real gap (note it for `/domain-modeling`).
-
-## Flag ADR conflicts
-
-If your output contradicts an existing ADR, surface it explicitly rather than silently overriding:
-
-> _Contradicts ADR-0007 (event-sourced orders) — but worth reopening because…_
+Use existing vocabulary in findings, tasks and results. When actual evidence
+conflicts with a recorded decision, show the exact conflict before proposing
+a change. A missing document is not itself a problem: continue the task and
+use `domain-modeling` when a term or decision actually needs recording.

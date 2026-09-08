@@ -1,0 +1,5 @@
+interface:
+  display_name: "Retro"
+  short_description: "Find session-backed improvements to Agent work"
+policy:
+  allow_implicit_invocation: false

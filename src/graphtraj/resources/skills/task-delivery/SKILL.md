@@ -1,112 +1,86 @@
 ---
 name: task-delivery
-description: Deliver an accepted Ticket DAG through Team Leaders, from readiness and dispatch to validated dev integration.
+description: Coordinate an accepted task graph through readiness, team selection, dispatch, acceptance and validated integration.
 ---
 
 # Task Delivery
 
-## Read the current work
+Read Harness Guidance, the current task graph and its accepted requirements.
+Use the configured project paths, roles and execution limits. Run Harness
+commands from the Harness Project Root.
 
-Read Harness Guidance, `CONTEXT.md`, the accepted Spec, and referenced ADRs
-at the Harness Project Root. Read `.graphtraj/config.yml` for project paths,
-dispatch depth, and concurrency; use `.graphtraj/roles.yml` for role presets.
-Run commands from the Harness Project Root.
+## Select the work and its executor
 
-Consume accepted GitHub Tickets and explicit dependencies. Register missing
-Tickets in dependency order; otherwise use the existing `current_definition`.
-Read [command inputs](references/command-inputs.md) before registering Tickets,
-recording readiness, or submitting a graph revision.
+Select active nodes whose required predecessor results have been accepted
+and integrated. Read the existing current definition before registering or
+changing a Ticket; use [command inputs](references/command-inputs.md) for
+registration, readiness and graph revisions.
 
-Use `graphtraj ticket graph` for the current graph and
-`graphtraj worldline read` for causal evidence. Generated views need no separate
-persisted ledger or DAG. Historical Delivery Run state remains untouched.
+Choose the executor from the task's needed expertise and accepted completion
+criteria. Direct work stays with the current Agent when it needs no formal
+team. Small auxiliary scripts receive suitable checks without automatically
+creating tickets or triggering a team workflow.
 
-## Select and dispatch ready Tickets
+For engineering delivery, read [coding dispatch](references/coding.md).
+For another task type, use its actually available role or agreed direct work
+arrangement; a team protocol must exist before it can be dispatched.
 
-Main owns readiness, difficulty, cross-Ticket decisions, graph revisions,
-integration, and Team retirement. Each Leader owns its Engineer, both Reviewers,
-and Team Round decisions under the Runner-supplied role instructions.
-Formal work uses `agent-runner`; state changes use validated commands.
-Delivery State records supplied decisions; Runner records execution facts.
-Neither decides acceptance on Main's or the Leader's behalf.
+Give the executor the authoritative task, required inputs, acceptance mapping
+and relevant predecessor evidence. Keep dispatch details concise. Main owns
+cross-task decisions and integration; a selected team's Leader owns its
+internal specialist workflow and acceptance decision.
 
-1. Select active Tickets whose prerequisites have validated `dev` integration.
-   Record readiness for selected pending Tickets using the command reference.
-2. Classify each as Junior, Senior, or Expert. Give its Leader the difficulty,
-   current Ticket/Spec, acceptance mapping, and relevant cross-Ticket evidence.
-   Keep dispatch instructions concise; the Ticket remains the scope source.
-3. Dispatch selected Tickets with `agent-runner --batch-input <batch.yml>`:
+## Dispatch and follow up
 
-   ```yaml
-   tasks:
-     - ticket_id: "86"
-       ticket_name: team-delivery
-       role: team-leader
-       instruction: Senior difficulty. Deliver the current accepted Ticket.
-   ```
+Formal team work uses `agent-runner --batch-input <batch.yml>`.
+Respect configured depth and concurrency. A Batch starts all selected tasks
+or none; reduce it or wait when there is insufficient capacity.
 
-A Batch starts all selected tasks or none. Respect project-wide
-`max_concurrency`: reduce the Batch or wait for executing work when capacity
-is insufficient. Leaders schedule their own children within the same limit.
+Use `agent-runner status <alias>` for execution status and
+`graphtraj worldline read` for retained evidence. Send relevant new evidence
+with `agent-runner send <alias> --instruction <text>
+--caused-by-event-id <event-id>`. Use `agent-runner interrupt <alias>` when
+interruption is intended.
 
-## Follow the Teams
+Receive the result, validation, required review evidence and acceptance
+decision. Runtime success alone does not establish acceptance. Return
+team-internal problems to its Leader; correct Main's scope or graph errors
+as Main. Diagnose evidence before choosing further work or replacement.
 
-Let each Leader run implementation and both review axes against the same fixed
-candidate and comparison point. Main receives the candidate, validation,
-both Reviews, and the Leader's decision; it does not schedule the Reviewers
-or take over Team adjudication. Runtime success alone is not acceptance.
+Only Main or the user retires a formal Team. Use
+`agent-runner replace <leader-alias> --actor main
+--caused-by-event-id <event-id>`; the successor uses the existing task
+definition, branch, Worktree and predecessor's handoff.
 
-Use `agent-runner status <alias>` for execution status. Send relevant evidence
-to an existing Leader Session with `agent-runner send <alias> --instruction
-<text> --caused-by-event-id <event-id>`. Use `agent-runner interrupt <alias>`
-when interruption is intended.
+## Revise the graph when evidence requires it
 
-Return Team-internal problems to the Leader. Correct Main-caused graph or
-scope errors as Main; seek user direction for product or Spec changes.
-Diagnose failures before choosing further work or replacement; failure counts
-alone do not establish an Engineer capability mismatch.
+When implementation, validation or integration disproves a boundary or edge,
+pause affected dispatch and make the smallest product-preserving correction
+under Harness Guidance. Use `graphtraj ticket revise` and the command
+reference, retaining prior definitions and the evidence for the change.
 
-Only Main or the user initiates Team retirement. To replace a Team, use
-`agent-runner replace <leader-alias> --actor main --caused-by-event-id <event-id>`.
-The successor continues on the same Ticket branch and Worktree using the
-current definition and the predecessor's handoff. Recover from retained state
-and alias status after worker failure.
-
-## Correct the graph when evidence requires it
-
-Pause affected dispatch when implementation, Review, or integration shows an
-incorrect Ticket boundary, dependency, acceptance mapping, or unnecessary work.
-Apply the Harness Guidance rules for product-preserving graph revisions;
-product changes and new external authority require user direction.
-
-Submit the complete affected definitions through `graphtraj ticket revise`
-using the command reference. Preserve prior definitions and evidence.
-Regenerate the graph and give affected Leaders the current definitions and
-revision event before continuing. Decide whether their Teams can continue or
-need replacement. Integration requires Team evidence for the revised scope;
-a graph correction alone does not open a new Round or accept an old candidate.
+Give affected executors the current definitions and revision evidence before
+continuing. Changes to the product goal or acceptance require user direction.
+A graph revision alone does not accept a candidate or manufacture Team evidence.
 
 ## Integrate and continue
 
-Main integrates accepted candidates serially in the configured `dev` Worktree:
+Integrate accepted file results into the configured shared branch with the
+validation appropriate to those results. For a registered formal Ticket use:
 
 ```text
 graphtraj ticket integrate --ticket-id <id> -- <validation-command> <arguments>
 ```
 
-Supply the project's required validation. Only a candidate present in `dev`
-with passing validation counts as integrated and unlocks dependents.
-For an observed textual or semantic conflict, add
-`--resolve-conflict <evidence-based instruction>` before `--` to dispatch a
-Merge Resolver. Main adjudicates the resolution and retains required validation.
-If integration disproves the graph, correct it before further affected dispatch.
+Only an accepted candidate present in `dev` with passing validation satisfies
+the current Harness's integration gate. Commit completed changes and merges
+under project guidance. For an actual conflict, select a resolver with the
+required domain expertise; Main adjudicates the result and validation.
 
-After accepted integration, use `agent-runner cleanup --ticket-id <id>`.
-It checks integration and Worktree cleanliness and preserves durable evidence.
-Regenerate readiness and continue independent ready work even if another Ticket
-is blocked. An accepted Team Round awaiting integration is not completion.
+After formal Ticket integration use `agent-runner cleanup --ticket-id <id>`.
+Regenerate the current graph with `graphtraj ticket graph` and continue ready
+independent work. Keep original Batch and Session evidence; generated views
+need no separate persisted ledger.
 
-Finish when every active Ticket has validated `dev` integration or no authorized
-progress remains. Honor user interruption or redirection immediately. Report
-delivered Tickets, integration and validation evidence, graph corrections, and
-remaining blockers. Do not promote `dev` to `main`.
+Finish when the accepted scope is integrated or no authorized progress remains.
+Report delivered results, validation, graph changes and concrete blockers.

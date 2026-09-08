@@ -29,11 +29,11 @@ from pathlib import Path
 from graphtraj.supported_skills import SupportedSkills
 
 runtime_store = Path(sys.argv[1]) / ".codex"
-SupportedSkills.load().install_missing(runtime_store, ("task-delivery", "tdd"))
+SupportedSkills.load().install_missing(runtime_store, ("task-delivery", "tdd", "setup-project"))
 skill_root = runtime_store.parent / ".agents" / "skills"
 print(json.dumps({
     name: (skill_root / name / "SKILL.md").read_text(encoding="utf-8")
-    for name in ("task-delivery", "tdd")
+    for name in ("task-delivery", "tdd", "setup-project")
 }))
 
 """
@@ -52,3 +52,4 @@ print(json.dumps({
     resources = json.loads(result.stdout)
     assert resources["task-delivery"].startswith("---\nname: task-delivery\n")
     assert resources["tdd"].startswith("---\nname: tdd\n")
+    assert resources["setup-project"].startswith("---\nname: setup-project\n")

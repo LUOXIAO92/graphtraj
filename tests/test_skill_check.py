@@ -8,7 +8,7 @@ from conftest import InstalledCommands, run_process
 
 
 CORE_SKILL_NAMES = (
-    "setup-matt-pocock-skills",
+    "setup-project",
     "grill-with-docs",
     "grilling",
     "domain-modeling",

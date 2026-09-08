@@ -19,7 +19,7 @@ from .project_roles import ProjectRolesError, load_project_roles, roles_exist
 
 
 CORE_SKILL_NAMES = (
-    "setup-matt-pocock-skills",
+    "setup-project",
     "grill-with-docs",
     "grilling",
     "domain-modeling",

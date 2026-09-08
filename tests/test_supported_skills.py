@@ -6,7 +6,7 @@ from conftest import PROJECT_ROOT
 
 
 CORE_SKILL_NAMES = (
-    "setup-matt-pocock-skills",
+    "setup-project",
     "grill-with-docs",
     "grilling",
     "domain-modeling",

@@ -67,6 +67,35 @@ current rules in the Worktree-local copy, refreshed when setup or Worktree
 preparation runs. Setup migrates the old installer's complete shared ignore
 rule group; standalone user rules remain unchanged.
 
+## Core Skills and their sources
+
+After `graphtraj setup` installs the core Skills, invoke `$setup-project` to
+configure the issue tracker, triage labels and domain document locations.
+`setup-project` is GraphTraj's name for its adaptation of Matt Pocock's
+`setup-matt-pocock-skills`. `graphtraj setup` prepares the Harness; the Skill
+guides the project-document configuration.
+
+The release bundles these 13 core Skills. The table describes the bundled
+workflows and their GraphTraj adaptations; user-installed Skills outside this
+set are managed separately. Matt Pocock sources are from
+[mattpocock/skills](https://github.com/mattpocock/skills).
+
+| Project Skill | Source | GraphTraj adaptation |
+| --- | --- | --- |
+| `setup-project` | Matt Pocock: `setup-matt-pocock-skills` | Shorter project name; configuration documents and guidance belong to the Harness Project Root. |
+| `grill-with-docs` | Matt Pocock: same name | Retains the interview and domain-modeling composition. |
+| `grilling` | Matt Pocock: same name | Retains the decision-tree interview workflow. |
+| `domain-modeling` | Matt Pocock: same name | Main owns the shared glossary and ADRs; delegated Worktree document views are read-only. |
+| `to-spec` | Matt Pocock: same name | Retains the software specification workflow; refers to `setup-project` for configuration. |
+| `to-tickets` | Matt Pocock: same name | Local Ticket documents use `docs/agents/issues/`; configuration references use `setup-project`. |
+| `implement` | Matt Pocock: same name | Team Engineers self-review and return evidence to their Leader, who schedules Reviewers; standalone work retains the code-review step. |
+| `code-review` | Matt Pocock: same name | Distinguishes Leader-owned Team Review from standalone review orchestration; assigned Reviewers perform only their supplied axis. |
+| `resolving-merge-conflicts` | Matt Pocock: same name | A dispatched Resolver stages the result for Main to commit and validate; incompatible accepted requirements return to Main. |
+| `handoff` | Matt Pocock: same name | Project-specific Team continuation instructions covering scope, candidate, evidence and unfinished work in the final Session response. |
+| `tdd` | Matt Pocock: same name | Retains the upstream test-driven development workflow. |
+| `ponytail` | [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail) | Bundled minimal-implementation guidance, with no GraphTraj-specific changes to its instructions. |
+| `task-delivery` | GraphTraj | Project-authored Ticket/Team dispatch, graph revision and integration workflow. |
+
 ## Configuration and roles
 
 The default `.graphtraj/config.yml` is:

@@ -808,6 +808,8 @@ def _execute_agent(
             repository_skill_source=worktree,
             requested_skills=task.requested_skills if policy_role in _ENGINEER_ROLES else (),
             report_file=task.report_file,
+            child_batch_write_paths=(registration, project.state_directory / "batches")
+            if policy_role == "team-leader" and registration is not None else (),
         ).finalize()
         launch_file = session_directory / "launch.yml"
         write_yaml_durably(

@@ -247,8 +247,9 @@ def _deliver_ticket(project: Any, requested: Task, retained_batch: Path, capacit
     team_directory = ticket_directory / "teams" / str(generation)
     round_directory = team_directory / "rounds" / "1"
     traces = team_directory / "traces"
-    round_directory.mkdir(parents=True)
-    traces.mkdir()
+    # A failed launch can leave these directories before the Team is registered.
+    round_directory.mkdir(parents=True, exist_ok=True)
+    traces.mkdir(exist_ok=True)
 
     registration = project.runner_directory / "sessions" / (
         _agent_alias(project, task, "team-leader", generation)

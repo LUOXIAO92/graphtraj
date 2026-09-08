@@ -403,8 +403,9 @@ def test_installed_runner_rejects_non_run_free_main_batch_fields(
     assert not (harness_root / ".graphtraj" / "state" / "batches").exists()
 
 
-def test_installed_runner_rejects_a_runtime_without_required_permission_controls(
-    installed_commands, temporary_git_repository, fake_codex, tmp_path,
+@pytest.mark.parametrize("startup_failure", ["unsupported-runtime", "missing-child-batch"])
+def test_installed_runner_retries_an_unregistered_team_and_preserves_history(
+    installed_commands, temporary_git_repository, fake_codex, tmp_path, startup_failure,
 ):
     harness_root, _, _, environment = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path,
@@ -414,14 +415,68 @@ def test_installed_runner_rejects_a_runtime_without_required_permission_controls
     batch.write_text(yaml.safe_dump({'tasks': [{
         'ticket_id': '75', 'ticket_name': 'inline-specialist', 'role': 'team-leader',
     }]}))
-    environment['FAKE_CODEX_UNSUPPORTED'] = '1'
+    if startup_failure == 'unsupported-runtime':
+        environment['FAKE_CODEX_UNSUPPORTED'] = '1'
     result = run_process(
         [str(installed_commands.runner), '--batch-input', str(batch)],
         cwd=harness_root, env=environment,
     )
     assert result.returncode == 1
-    assert yaml.safe_load(result.stdout)['tasks'][0]['error']['code'] == 'invalid-config'
-    assert not fake_codex.log_file.exists()
+    error = yaml.safe_load(result.stdout)['tasks'][0]['error']
+    if startup_failure == 'unsupported-runtime':
+        assert error['code'] == 'invalid-config'
+        assert not fake_codex.log_file.exists()
+    else:
+        assert 'did not register its required direct child Batch' in error['message']
+
+    state_root = harness_root / '.graphtraj' / 'state'
+    ticket_directory = state_root / 'tickets' / '75-inline-specialist'
+    team_directory = ticket_directory / 'teams' / '1'
+    ticket_before = (ticket_directory / 'ticket.yml').read_bytes()
+    current = yaml.safe_load(ticket_before)
+    assert current['status'] == 'ready'
+    assert current['active_team_ordinal'] is None
+    assert current['current_candidate'] is None
+    assert not (team_directory / 'team.yml').exists()
+    history_roots = [
+        state_root / 'batches',
+        harness_root / '.graphtraj' / 'runner' / 'sessions',
+        team_directory / 'traces',
+    ]
+    retained = {
+        path: path.read_bytes()
+        for directory in history_roots for path in directory.rglob('*') if path.is_file()
+    }
+    assert list((team_directory / 'traces').glob('*/events.jsonl'))
+
+    environment.pop('FAKE_CODEX_UNSUPPORTED', None)
+    environment.update(
+        FAKE_CODEX_LIFECYCLE_ACTION='complete-team-round',
+        GRAPHTRAJ_AGENT_RUNNER=str(installed_commands.runner),
+    )
+    retried = run_process(
+        [str(installed_commands.runner), '--batch-input', str(batch)],
+        cwd=harness_root, env=environment, timeout=45,
+    )
+    assert retried.returncode == 0, retried.stdout + retried.stderr
+    current = yaml.safe_load((ticket_directory / 'ticket.yml').read_text())
+    assert current['status'] == 'awaiting-integration'
+    assert current['active_team_ordinal'] == 1
+    assert current['current_candidate']
+    team = yaml.safe_load((team_directory / 'team.yml').read_text())
+    assert team['members']['team_leader']['session_ref'].endswith('@l2')
+    assert all(path.read_bytes() == content for path, content in retained.items())
+    accepted_ticket = (ticket_directory / 'ticket.yml').read_bytes()
+    accepted_team = (team_directory / 'team.yml').read_bytes()
+
+    reopened = run_process(
+        [str(installed_commands.runner), '--batch-input', str(batch)],
+        cwd=harness_root, env=environment,
+    )
+    assert reopened.returncode == 1
+    assert yaml.safe_load(reopened.stdout)['tasks'][0]['error']['code'] == 'ticket-already-live'
+    assert (ticket_directory / 'ticket.yml').read_bytes() == accepted_ticket
+    assert (team_directory / 'team.yml').read_bytes() == accepted_team
 
 
 def test_installed_runner_runs_a_main_inline_specialist_without_creating_a_preset(

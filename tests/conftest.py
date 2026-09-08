@@ -66,6 +66,14 @@ def find_uv() -> Optional[Path]:
     return None
 
 
+@pytest.fixture(autouse=True)
+def isolated_runner_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test Harnesses must not inherit the invoking Agent's role or Session."""
+    for name in tuple(os.environ):
+        if name.startswith("GRAPHTRAJ_"):
+            monkeypatch.delenv(name)
+
+
 @pytest.fixture
 def temporary_git_repository(tmp_path: Path) -> Path:
     repository = tmp_path / "target-project"
@@ -293,7 +301,7 @@ def fake_codex(tmp_path: Path) -> FakeCodex:
         "                        '    instruction: Investigate before delivery.',\n"
         "                    ]\n"
         "                else:\n"
-        "                    lines += ['    role: ' + child_role]\n"
+        "                    lines += ['    role: coding-team.' + child_role]\n"
         "                if child_role.startswith('engineer-') and os.environ.get('FAKE_CODEX_ENGINEER_SKILLS'):\n"
         "                    lines += ['    skills: ' + os.environ['FAKE_CODEX_ENGINEER_SKILLS']]\n"
         "            child.write_text('\\n'.join(lines) + '\\n')\n"

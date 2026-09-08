@@ -1026,7 +1026,12 @@ def _root_owned_hooks(
         command += " --team-leader"
     for skill in effective_skills:
         if skill.enabled:
-            command += " --read-skill " + shlex.quote(str(skill.path))
+            for path in sorted(skill.path.parent.rglob("*")):
+                if (
+                    path.is_file() and not path.is_symlink()
+                    and path.resolve().is_relative_to(skill.path.parent)
+                ):
+                    command += " --read-skill " + shlex.quote(str(path))
     try:
         for event in ("PreToolUse", "SubagentStart"):
             entries = hooks[event]

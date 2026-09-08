@@ -1,5 +1,5 @@
-name = "merge-resolver"
-description = "Integration specialist for textual and semantic conflicts during serialized integration."
+name = "coding-team.merge-resolver"
+description = "Code integration specialist for textual and semantic conflicts during serialized integration."
 
 model = "gpt-5.6-sol"
 model_reasoning_effort = "max"

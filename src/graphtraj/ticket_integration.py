@@ -173,7 +173,7 @@ def _integrate(configuration: ProjectConfiguration, ticket_id: str, validation_c
 
 
 def _resolve(configuration: ProjectConfiguration, record: dict, log) -> dict:
-    batch = {"tasks": [{"ticket_id": record["ticket_id"], "ticket_name": record["ticket_name"], "role": "merge-resolver"}]}
+    batch = {"tasks": [{"ticket_id": record["ticket_id"], "ticket_name": record["ticket_name"], "role": "coding-team.merge-resolver"}]}
     with tempfile.TemporaryDirectory(dir=configuration.harness_root / ".graphtraj") as temporary:
         path = Path(temporary) / "batch.yml"
         path.write_text(yaml.safe_dump(batch))

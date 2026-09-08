@@ -19,6 +19,11 @@ CORE_SKILL_NAMES = (
     "tdd",
     "code-review",
     "resolving-merge-conflicts",
+    "task-breakdown",
+    "research",
+    "retro",
+    "wayfinder",
+    "prototype",
 )
 
 

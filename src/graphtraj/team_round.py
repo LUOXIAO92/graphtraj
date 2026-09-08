@@ -20,6 +20,7 @@ from .codex_project import ignore_worktree_documents
 from .codex_adapter import codex_connection_environment, preflight_runtime_context
 from .delivery_state import apply_delivery_state_request, confirmed_rework
 from .delivery_worldline import read_worldline
+from .project_roles import ROLE_REFERENCES
 from .runner_batch import read_batch, resolved_role_preset, retain_batch
 from .runner_capacity import capacity_positions
 from .runner_io import write_yaml_durably
@@ -373,7 +374,7 @@ def _deliver_ticket(project: Any, requested: Task, retained_batch: Path, capacit
                     if len(values) != 1 or not values[0].strip():
                         raise RunnerError("BATCH_SCHEMA_INVALID", "Correction requires one responsible role, accepted rule, and evidence-backed reason.")
                     fields[name] = values[0]
-                role = fields["Responsible"]
+                role = ROLE_REFERENCES.get(fields["Responsible"], fields["Responsible"])
                 if role not in sessions or registration.exists():
                     raise RunnerError("BATCH_SCHEMA_INVALID", "Correction must resume an existing member without registering a new Batch.")
                 child, alias, session, child_batch = sessions[role]

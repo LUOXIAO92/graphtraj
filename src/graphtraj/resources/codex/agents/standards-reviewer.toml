@@ -1,5 +1,5 @@
-name = "standards-reviewer"
-description = "Reviewer for the Standards axis of one fixed candidate."
+name = "coding-team.standards-reviewer"
+description = "Code Reviewer for the Standards axis of one fixed candidate."
 
 model = "gpt-5.6-sol"
 model_reasoning_effort = "max"

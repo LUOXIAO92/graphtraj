@@ -109,13 +109,24 @@ def test_installed_hook_allows_only_reads_of_enabled_external_skills(
     unselected = harness_skill.parent.parent / 'unselected' / 'SKILL.md'
     unselected.parent.mkdir()
     unselected.write_text('---\nname: unselected\ndescription: Unselected.\n---\n')
+    reference = harness_skill.parent.parent / 'tdd' / 'tests.md'
+    redirected = harness_skill.parent / 'redirected.md'
+    redirected.symlink_to(unselected)
     with engineer_probe(installed_commands, harness, fake_codex, environment) as (alias, worktree, _):
         records = [json.loads(line) for line in fake_codex.log_file.read_text().splitlines()]
         arguments = next(record['argv'] for record in records if record['role'].startswith('engineer-'))
     task = {'worktree_path': str(worktree), 'alias': alias}
     hooks = tomllib.loads(next(arg for arg in arguments if arg.startswith('hooks=')))['hooks']
     hook = shlex.split(hooks['PreToolUse'][0]['hooks'][0]['command'])
-    for path, allowed in ((harness_skill, True), (harness_skill.parent.parent / 'ponytail/SKILL.md', True), (user_skills / 'ponytail/SKILL.md', False), (unselected, False)):
+    for path, allowed in (
+        (harness_skill, True),
+        (harness_skill.parent.parent / 'ponytail/SKILL.md', True),
+        (reference, True),
+        (harness_skill.parent.parent / 'research/references/coding.md', False),
+        (user_skills / 'ponytail/SKILL.md', False),
+        (unselected, False),
+        (redirected, False),
+    ):
         for verb in ('cat', 'touch'):
             checked = subprocess.run(
                 hook, cwd=task['worktree_path'], env=environment,
@@ -124,6 +135,10 @@ def test_installed_hook_allows_only_reads_of_enabled_external_skills(
                 text=True, capture_output=True, check=True,
             )
             assert (not checked.stdout) is (allowed and verb == 'cat'), checked.stdout
+            if allowed and verb == 'cat':
+                read = run_process(['cat', str(path)], cwd=worktree, env=environment)
+                assert read.returncode == 0, read.stderr
+                assert read.stdout.strip()
 
 
 def _runtime_executable(tmp_path: Path) -> Path:

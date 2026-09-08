@@ -12,6 +12,7 @@ import yaml
 
 
 ROLES_PATH = Path(".graphtraj") / "roles.yml"
+# Keep the established policy and Session identifiers behind grouped references.
 ROLE_NAMES = (
     "team-leader",
     "engineer-junior",
@@ -22,6 +23,10 @@ ROLE_NAMES = (
     "delivery-state",
     "merge-resolver",
 )
+ROLE_REFERENCES = {
+    "coding-team." + name if name != "delivery-state" else name: name
+    for name in ROLE_NAMES
+}
 _REQUIRED_FIELDS = frozenset({"runtime", "model"})
 _CONNECTION_FIELDS = frozenset({"base_url", "api_key_env"})
 _ENVIRONMENT_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
@@ -113,7 +118,13 @@ def roles_exist(harness_root: Path) -> bool:
 
 def default_roles_content() -> str:
     """Render the established reusable coding-role presets."""
-    return yaml.safe_dump({"roles": _DEFAULT_PRESETS}, sort_keys=False)
+    return yaml.safe_dump({"roles": {
+        "coding-team": {
+            name: preset for name, preset in _DEFAULT_PRESETS.items()
+            if name != "delivery-state"
+        },
+        "delivery-state": _DEFAULT_PRESETS["delivery-state"],
+    }}, sort_keys=False)
 
 
 def default_project_roles() -> ProjectRoles:
@@ -151,10 +162,13 @@ def parse_inline_role(value: object) -> tuple[str, RolePreset]:
             ("An inline Batch role must contain exactly one role entry.",)
         )
     name, settings = next(iter(value.items()))
-    if not isinstance(name, str) or not _ROLE_NAME.fullmatch(name):
+    if not isinstance(name, str) or (
+        name not in ROLE_REFERENCES and not _ROLE_NAME.fullmatch(name)
+    ):
         raise ProjectRolesError(
-            ("An inline Batch role must use a lowercase kebab-case name.",)
+            ("An inline Batch role must use a preset reference or lowercase kebab-case name.",)
         )
+    name = ROLE_REFERENCES.get(name, name)
     diagnostics: list[str] = []
     preset = _role_preset(name, settings, diagnostics)
     if diagnostics or preset is None:
@@ -173,6 +187,22 @@ def _roles_from_document(document: Any) -> ProjectRoles:
     if not isinstance(entries, dict):
         diagnostics.append("roles.yml.roles must be a mapping.")
         raise ProjectRolesError(tuple(diagnostics))
+
+    # Resolve the one supported team explicitly; YAML dots have no path meaning.
+    # Read older flat presets without rewriting operator settings or history.
+    entries = dict(entries)
+    if "coding-team" in entries:
+        coding = entries.pop("coding-team")
+        if not isinstance(coding, dict):
+            diagnostics.append("roles.coding-team must be a mapping.")
+        else:
+            for name, value in coding.items():
+                if name not in ROLE_NAMES or name == "delivery-state":
+                    diagnostics.append("roles.coding-team.{0} is not a supported preset.".format(name))
+                elif name in entries:
+                    diagnostics.append("{0} preset is defined more than once.".format(name))
+                else:
+                    entries[name] = value
 
     known_entries: dict[str, object] = {}
     for name, value in entries.items():

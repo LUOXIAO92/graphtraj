@@ -3,7 +3,38 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from conftest import InstalledCommands, run_process
+from test_existing_repository_setup import run_setup
+
+
+@pytest.mark.parametrize("separate_source", (False, True))
+def test_setup_installs_all_core_skills_and_their_readable_references(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    separate_source: bool,
+) -> None:
+    root = temporary_git_repository.parent if separate_source else temporary_git_repository
+    result = run_setup(installed_commands, root)
+    assert result.returncode == 0, result.stderr
+    skills = root / ".agents" / "skills"
+    assert {path.name for path in skills.iterdir()} == {
+        "setup-project", "grill-with-docs", "grilling", "domain-modeling",
+        "to-spec", "to-tickets", "task-delivery", "implement", "handoff",
+        "ponytail", "tdd", "code-review", "resolving-merge-conflicts",
+        "task-breakdown", "research", "retro", "wayfinder", "prototype",
+    }
+    for name in (
+        "setup-project", "task-delivery", "domain-modeling", "research", "retro", "wayfinder",
+    ):
+        assert (skills / name / "references" / "coding.md").read_text().strip()
+    for reference in ("UI.md", "LOGIC.md"):
+        assert (skills / "prototype" / reference).read_text().strip()
+
+    doctor = run_process([str(installed_commands.product), "doctor"], cwd=root)
+    assert doctor.returncode == 0, doctor.stdout + doctor.stderr
+    assert len(doctor.stdout.splitlines()) == 19  # 18 Skills and reusable roles.
 
 
 def installed_python(installed_commands: InstalledCommands) -> Path:

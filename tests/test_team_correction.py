@@ -38,7 +38,7 @@ def git(*args):
 
 def dispatch(roles):
     batch = scratch / 'children.yml'
-    batch.write_text(json.dumps({'tasks': [dict(ticket_id='76', ticket_name='session-alias-control', role=r) for r in roles]}))
+    batch.write_text(json.dumps({'tasks': [dict(ticket_id='76', ticket_name='session-alias-control', role='coding-team.' + r if isinstance(r, str) else r) for r in roles]}))
     result = subprocess.run([os.environ['GRAPHTRAJ_AGENT_RUNNER'], '--batch-input', str(batch)], capture_output=True, text=True)
     assert result.returncode == 0, result.stdout + result.stderr
 
@@ -54,7 +54,7 @@ elif role == 'team-leader':
             dispatch([{'investigation-specialist': {'runtime': 'codex', 'model': 'gpt-5.6-luna'}}])
             decision = None
         elif expanded and (reviewed or os.environ['CORRECTION_TIMING'] == 'before-review'):
-            decision = 'Decision: CORRECT\nResponsible: engineer-junior\nRule: Accepted Ticket limits work to Session transport.\nReason: UNREQUESTED.txt adds an unrelated feature.\n'
+            decision = 'Decision: CORRECT\nResponsible: coding-team.engineer-junior\nRule: Accepted Ticket limits work to Session transport.\nReason: UNREQUESTED.txt adds an unrelated feature.\n'
         elif not reviewed:
             if os.environ.get('CORRECTION_SERIAL'):
                 dispatch(['spec-reviewer'] if (round_dir / 'standards.md').exists() else ['standards-reviewer'])
@@ -62,7 +62,7 @@ elif role == 'team-leader':
                 dispatch(['standards-reviewer', 'spec-reviewer'])
             decision = None
         elif 'Unsupported finding' in (round_dir / 'spec.md').read_text():
-            decision = 'Decision: CORRECT\nResponsible: spec-reviewer\nRule: Findings must cite an accepted requirement and observable failure.\nReason: The report demands an unrequested cache without a requirement.\n'
+            decision = 'Decision: CORRECT\nResponsible: coding-team.spec-reviewer\nRule: Findings must cite an accepted requirement and observable failure.\nReason: The report demands an unrequested cache without a requirement.\n'
         else:
             decision = 'Decision: ACCEPT\n'
         if decision:
@@ -110,7 +110,7 @@ def test_installed_team_corrects_engineer_and_reviewer_in_same_round(
         environment['CORRECTION_SERIAL'] = '1'
     log = tmp_path / 'corrections.jsonl'
     batch = harness / 'batch.yml'
-    batch.write_text('tasks:\n  - ticket_id: "76"\n    ticket_name: session-alias-control\n    role: team-leader\n')
+    batch.write_text('tasks:\n  - ticket_id: "76"\n    ticket_name: session-alias-control\n    role: coding-team.team-leader\n')
     result = run_process(
         [str(installed_commands.runner), '--batch-input', str(batch)], cwd=harness,
         env={**environment, 'GRAPHTRAJ_AGENT_RUNNER': str(installed_commands.runner),

@@ -12,6 +12,7 @@ import yaml
 
 from .project_roles import (
     ROLE_NAMES,
+    ROLE_REFERENCES,
     ProjectRolesError,
     RolePreset,
     parse_inline_role,
@@ -175,7 +176,7 @@ def _read_task(
     role_value = task_document["role"]
     inline_preset = None
     if isinstance(role_value, str):
-        role = role_value
+        role = ROLE_REFERENCES.get(role_value, role_value)
         if role not in ROLE_NAMES:
             raise RunnerError(
                 "ROLE_NOT_CONFIGURED",

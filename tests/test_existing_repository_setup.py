@@ -90,7 +90,7 @@ def test_setup_initializes_the_current_git_repository(
     assert not (repository / ".graphtraj" / "runner" / "config.yml").exists()
 
 
-def test_setup_creates_reusable_role_presets(
+def test_setup_creates_grouped_coding_presets_and_shared_delivery_state(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
 ) -> None:
@@ -103,7 +103,8 @@ def test_setup_creates_reusable_role_presets(
         )
     )
     assert set(role_config) == {"roles"}
-    roles = role_config["roles"]
+    assert set(role_config["roles"]) == {"coding-team", "delivery-state"}
+    roles = role_config["roles"]["coding-team"]
     assert set(roles) == {
         "team-leader",
         "engineer-junior",
@@ -111,7 +112,6 @@ def test_setup_creates_reusable_role_presets(
         "engineer-expert",
         "standards-reviewer",
         "spec-reviewer",
-        "delivery-state",
         "merge-resolver",
     }
     assert "main" not in roles
@@ -124,6 +124,7 @@ def test_setup_creates_reusable_role_presets(
         if name != "team-leader":
             assert "allow_runtime_swarm" not in preset
     assert roles["team-leader"]["allow_runtime_swarm"] is True
+    assert role_config["roles"]["delivery-state"]["runtime"] == "codex"
     assert not (temporary_git_repository / ".codex" / "agents").exists()
 
 

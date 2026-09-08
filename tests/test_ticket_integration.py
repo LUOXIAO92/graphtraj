@@ -11,6 +11,7 @@ import pytest
 import yaml
 
 from conftest import run_process, wait_for_file
+from test_existing_repository_setup import run_setup
 from runner_fixtures import configure_harness
 from test_ticket_graph import _change_status, _register, _ticket
 
@@ -25,7 +26,7 @@ def accepted_ticket(installed_commands, temporary_git_repository, fake_codex, tm
         _register(installed_commands, root, _ticket(identifier, "dependent", dependencies=dependencies))
     _change_status(installed_commands, root, "83", "ready")
     batch = root / "batch.yml"
-    batch.write_text(yaml.safe_dump({"tasks": [{"ticket_id": "83", "ticket_name": "integration", "role": "team-leader"}]}))
+    batch.write_text(yaml.safe_dump({"tasks": [{"ticket_id": "83", "ticket_name": "integration", "role": "coding-team.team-leader"}]}))
     environment.update(
         FAKE_CODEX_LIFECYCLE_ACTION="complete-team-round",
         GRAPHTRAJ_AGENT_RUNNER=str(installed_commands.runner),
@@ -85,6 +86,65 @@ def test_main_integrates_an_accepted_candidate_and_unlocks_only_satisfied_depend
     assert {event["ticket_id"] for event in unlocked} == {"84", "85"}
     assert all(event["caused_by_event_ids"] == [integrated["event_id"]] for event in unlocked)
     assert not any(path.name in {"task-map.yml", "dag.md", "ledger.yml"} for path in state.rglob("*"))
+
+
+@pytest.mark.parametrize("flat_roles", (False, True))
+def test_grouped_presets_apply_operator_settings_and_preserve_existing_history(
+    installed_commands, accepted_ticket, fake_codex, flat_roles,
+):
+    root, _, state, _ = accepted_ticket
+    roles_file = root / ".graphtraj/roles.yml"
+    document = yaml.safe_load(roles_file.read_text())
+    presets = document["roles"]["coding-team"]
+    for name, preset in presets.items():
+        preset.update(model="operator-" + name, base_url="https://runtime.example.invalid/" + name)
+    if flat_roles:
+        document["roles"] = {**presets, "delivery-state": document["roles"]["delivery-state"]}
+    roles_file.write_text(yaml.safe_dump(document))
+    roles_before = roles_file.read_bytes()
+    retained = {
+        path: path.read_bytes()
+        for directory in (state / "batches", state / "worldline", state / "tickets/83-integration/teams")
+        for path in directory.rglob("*") if path.is_file()
+    }
+    setup = run_setup(installed_commands, root, answers="")
+    assert setup.returncode == 0, setup.stderr
+    assert roles_file.read_bytes() == roles_before
+    assert {path: path.read_bytes() for path in retained} == retained
+
+    _register(installed_commands, root, _ticket("89", "grouped-settings"))
+    _change_status(installed_commands, root, "89", "ready")
+    batch = root / "grouped-settings.yml"
+    batch.write_text(yaml.safe_dump({"tasks": [{
+        "ticket_id": "89", "ticket_name": "grouped-settings", "role": "coding-team.team-leader",
+    }]}))
+    fake_codex.log_file.write_text("")
+    environment = dict(
+        os.environ, HOME=str(root / "operator-home"),
+        PATH=str(fake_codex.executable.parent) + os.pathsep + os.environ["PATH"],
+        FAKE_CODEX_LOG=str(fake_codex.log_file), FAKE_CODEX_CAPTURE_ROLE="1",
+        FAKE_CODEX_APPEND_LOG="1", FAKE_CODEX_CAPTURE_CONNECTION="1",
+        FAKE_CODEX_LIFECYCLE_ACTION="complete-team-round",
+        GRAPHTRAJ_AGENT_RUNNER=str(installed_commands.runner),
+    )
+    launched = run_process([str(installed_commands.runner), "--batch-input", str(batch)], cwd=root, env=environment)
+    assert launched.returncode == 0, launched.stderr
+    records = [json.loads(line) for line in fake_codex.log_file.read_text().splitlines()]
+    assert {record["role"] for record in records} == {
+        "team-leader", "engineer-junior", "standards-reviewer", "spec-reviewer", "delivery-state",
+    }
+    for record in records:
+        if record["role"] == "delivery-state":
+            continue
+        selected = presets[record["role"]]
+        assert record["argv"][record["argv"].index("--model") + 1] == selected["model"]
+        assert record["connection"]["base_url"] == selected["base_url"]
+    assert roles_file.read_bytes() == roles_before
+    for path, content in retained.items():
+        if path.parent == state / "worldline":
+            assert path.read_bytes().startswith(content)
+        else:
+            assert path.read_bytes() == content
 
 
 def test_failed_validation_retains_evidence_without_unlocking_and_main_can_retry(
@@ -150,7 +210,7 @@ def test_main_resolves_observed_textual_conflict_then_validates_dev(
     root, worktrees, state, candidate = accepted_ticket
     roles_file = root / ".graphtraj/roles.yml"
     roles = yaml.safe_load(roles_file.read_text())
-    roles["roles"]["merge-resolver"]["model"] = "gpt-5.6-luna"
+    roles["roles"]["coding-team"]["merge-resolver"]["model"] = "gpt-5.6-luna"
     roles_file.write_text(yaml.safe_dump(roles))
     dev = worktrees / "dev"
     (dev / "TEAM_ROUND_DELIVERED.txt").write_text("conflicting integration work\n")
@@ -172,7 +232,7 @@ def test_main_resolves_observed_textual_conflict_then_validates_dev(
     }
     interrupted = run_process(command + ["--resolve-conflict", "Preserve both accepted lines", "--", *validator], cwd=root, env={**environment, "FAKE_CODEX_EXIT_CODE": "1"})
     assert interrupted.returncode == 1
-    assert yaml.safe_load(interrupted.stdout)["status"] == "integrating"
+    assert yaml.safe_load(interrupted.stdout).get("status") == "integrating", interrupted.stdout + interrupted.stderr
     result = run_process(command + ["--resolve-conflict", "Preserve both accepted lines", "--", *validator], cwd=root, env=environment)
     output = yaml.safe_load(result.stdout)
     assert result.returncode == 0, result.stdout + result.stderr + (root / output["evidence"]).read_text()

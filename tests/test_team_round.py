@@ -80,7 +80,7 @@ def test_installed_runner_applies_inline_settings_to_an_existing_preset(
         "  - ticket_id: \"75\"\n"
         "    ticket_name: inline-specialist\n"
         "    role:\n"
-        "      team-leader:\n"
+        "      coding-team.team-leader:\n"
         "        runtime: codex\n"
         "        model: gpt-5.6-luna\n"
         "        allow_runtime_swarm: false\n"
@@ -154,9 +154,9 @@ def test_installed_runner_obeys_the_explicit_leader_decision_for_a_run_free_team
     )
     roles_file = harness_root / '.graphtraj' / 'roles.yml'
     roles = yaml.safe_load(roles_file.read_text())
-    roles['roles']['team-leader'].pop('allow_runtime_swarm', None)
+    roles['roles']['coding-team']['team-leader'].pop('allow_runtime_swarm', None)
     if swarm is not None:
-        roles['roles']['team-leader']['allow_runtime_swarm'] = swarm
+        roles['roles']['coding-team']['team-leader']['allow_runtime_swarm'] = swarm
     roles_file.write_text(yaml.safe_dump(roles))
     policy_log = tmp_path / 'policy.jsonl'
     environment['FAKE_CODEX_POLICY_LOG'] = str(policy_log)
@@ -211,7 +211,7 @@ def test_installed_runner_obeys_the_explicit_leader_decision_for_a_run_free_team
         "tasks:\n"
         "  - ticket_id: \"74\"\n"
         "    ticket_name: complete-team-round\n"
-        "    role: team-leader\n"
+        "    role: coding-team.team-leader\n"
         "    instruction: Keep the accepted Ticket exact.\n"
     ).encode()
     batch.write_bytes(batch_bytes)
@@ -860,6 +860,19 @@ def test_installed_runner_runs_a_team_leader_inline_specialist_outside_the_team(
 @pytest.mark.parametrize(
     "role",
     (
+        {
+            "coding-team.team-leader": {
+                "runtime": "codex", "model": "operator-model",
+                "developer_instructions": "Replace the fixed policy.",
+            },
+        },
+        {
+            "coding-team.spec-reviewer": {
+                "runtime": "codex", "model": "operator-model",
+                "allow_runtime_swarm": True,
+            },
+        },
+        {"other-team.team-leader": {"runtime": "codex", "model": "operator-model"}},
         {
             "first-specialist": {
                 "runtime": "codex",

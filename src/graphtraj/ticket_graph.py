@@ -767,7 +767,11 @@ def _rollback_revision(changed: list[tuple[Path, bytes | None, Path]]) -> None:
 
 
 def _snapshot_source(path: Path) -> str:
-    for line in path.read_text(encoding="utf-8").splitlines():
+    snapshot = path.read_text(encoding="utf-8")
+    front_matter = split_execution_budget_front_matter(snapshot)
+    if front_matter is not None:
+        _, _, snapshot = front_matter
+    for line in snapshot.splitlines():
         if line.startswith("Source: "):
             return line.removeprefix("Source: ")
     raise ValueError("Ticket snapshot is invalid")

@@ -232,6 +232,66 @@ def test_installed_command_revises_non_coding_ticket_with_front_matter(
     assert snapshot.startswith("---\ntask_type: analysis\n---\n")
 
 
+def test_installed_command_revises_non_coding_ticket_with_source_front_matter(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+) -> None:
+    project = temporary_git_repository
+    state = _configure(project)
+    ticket = {
+        **_non_coding_ticket("74", "research-ticket", task_type="research"),
+        "body": (
+            "---\n"
+            "task_type: research\n"
+            "Source: field-notes\n"
+            "---\n\n"
+            "Investigate research-ticket."
+        ),
+    }
+    _register(installed_commands, project, ticket)
+    directory = state / "tickets" / "74-research-ticket"
+    initial_snapshot = (directory / "ticket.md").read_text(encoding="utf-8")
+    assert initial_snapshot.startswith(
+        "---\ntask_type: research\nSource: field-notes\n---\n"
+    )
+    assert "Source: https://github.com/example/project/issues/74" in initial_snapshot
+
+    evidence = project / "source-revision.md"
+    evidence.write_text("Research notes were extended.\n", encoding="utf-8")
+    revision = _write(
+        project / "source-revision.yml",
+        {
+            "product_preserving": True,
+            "caused_by_event_ids": [],
+            "evidence_refs": ["source-revision.md"],
+            "tickets": [
+                {
+                    **ticket,
+                    "body": ticket["body"] + "\n\nPreserve field notes.",
+                    "active": True,
+                    "replaced_by": [],
+                }
+            ],
+        },
+    )
+
+    result = _run(
+        installed_commands, project, "revise", "--revision-file", str(revision)
+    )
+
+    assert result.returncode == 0, result.stderr
+    state_record = yaml.safe_load((directory / "ticket.yml").read_text(encoding="utf-8"))
+    revised_snapshot = (directory / state_record["current_definition"]).read_text(
+        encoding="utf-8"
+    )
+    assert state_record["current_definition"].startswith("definitions/")
+    assert (directory / "ticket.md").read_text(encoding="utf-8") == initial_snapshot
+    assert revised_snapshot.startswith(
+        "---\ntask_type: research\nSource: field-notes\n---\n"
+    )
+    assert "Source: https://github.com/example/project/issues/74" in revised_snapshot
+
+
 def test_installed_command_corrects_a_dependency_and_generates_current_readiness(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,

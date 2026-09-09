@@ -377,7 +377,23 @@ def _team_runtime_environment(mapping: Dict[str, Any], cwd: Path) -> Dict[str, s
         if not isinstance(candidate, str) or not candidate:
             raise _not_resumable()
         axis = "Standards" if mapping["role"] == "standards-reviewer" else "Spec"
-        report = evidence / "reviews" / ("standards.md" if axis == "Standards" else "spec.md")
+        report_file = mapping.get("report_file")
+        if report_file is None:
+            report = evidence / "reviews" / (
+                "standards.md" if axis == "Standards" else "spec.md"
+            )
+        else:
+            report_path = Path(report_file) if isinstance(report_file, str) else None
+            if (
+                report_path is None
+                or report_path.is_absolute()
+                or len(report_path.parts) != 3
+                or report_path.parts[:2] != (".state", "reviews")
+                or ".." in report_path.parts
+                or report_path.suffix != ".md"
+            ):
+                raise _not_resumable()
+            report = evidence.joinpath(*report_path.parts[1:])
         try:
             if report.parent.is_symlink():
                 raise OSError("review report directory is a symlink")

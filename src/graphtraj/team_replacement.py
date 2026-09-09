@@ -49,7 +49,16 @@ def replace_session(alias, actor, caused_by_event_ids, cwd):
     generation = mapping["team_generation"]
     team_file = directory / "teams" / str(generation) / "team.yml"
     team = yaml.safe_load(team_file.read_text())
-    seat = next((name for name, member in team["members"].items() if member["session_ref"] == alias), None)
+    seats = [
+        name
+        for name, member in team["members"].items()
+        if member["session_ref"] == alias
+        or (
+            member["session_ref"] is None
+            and member["role"] == mapping["role"]
+        )
+    ]
+    seat = seats[0] if len(seats) == 1 else None
     if seat is None or ticket["active_team_ordinal"] != generation:
         raise RunnerError("seat-replaced", "The alias must identify a current Team seat.")
     if ticket["status"] in {"integrating", "resolving-integration", "integrated"}:

@@ -7,6 +7,7 @@ import pytest
 
 from conftest import InstalledCommands, run_process
 from test_existing_repository_setup import run_setup
+from test_project_setup import supported_skill_contents, tree_contents
 
 
 @pytest.mark.parametrize("separate_source", (False, True))
@@ -25,6 +26,8 @@ def test_setup_installs_all_core_skills_and_their_readable_references(
         "ponytail", "tdd", "code-review", "resolving-merge-conflicts",
         "task-breakdown", "research", "retro", "wayfinder", "prototype",
     }
+    for skill in skills.iterdir():
+        assert tree_contents(skill) == supported_skill_contents(skill.name)
     for name in (
         "setup-project", "task-delivery", "domain-modeling", "research", "retro", "wayfinder",
     ):

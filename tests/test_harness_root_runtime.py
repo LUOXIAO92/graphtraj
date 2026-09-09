@@ -141,6 +141,13 @@ def test_installed_hook_allows_only_reads_of_enabled_external_skills(
                 assert read.stdout.strip()
 
 
+def _engineer_role(model: str = "gpt-5.6-sol"):
+    from graphtraj.project_roles import RolePreset
+    from graphtraj.role_definitions import resolve_child_role
+
+    return resolve_child_role("engineer-expert", RolePreset("codex", model, None, None))
+
+
 def _runtime_executable(tmp_path: Path) -> Path:
     executable = tmp_path / "codex"
     executable.write_text(
@@ -191,7 +198,7 @@ def test_setup_creates_a_root_owned_runtime_and_runner_discovers_it(
     assert project.harness_root == harness_root.resolve()
     assert project.runner_directory == harness_root / ".graphtraj" / "runner"
     assert project.integration_worktree == integration.resolve()
-    assert (runtime_store / "config.toml").is_file()
+    assert not (runtime_store / "config.toml").exists()
     assert (harness_root / ".graphtraj" / "runner").is_dir()
     assert not (runtime_store / "agent-runner" / "config.yml").exists()
     assert not (harness_root / ".agents").exists()
@@ -213,7 +220,7 @@ def test_setup_installs_project_core_skills_even_with_user_copies(
         str(Path(__file__).resolve().parents[1] / "src")
     )
     from graphtraj.codex_adapter import (
-        preflight_engineer_runtime_context,
+        preflight_runtime_context,
     )
     from graphtraj.project_initialization import plan_project_setup
 
@@ -226,18 +233,15 @@ def test_setup_installs_project_core_skills_even_with_user_copies(
     assert plan.apply(install_missing_skills=True) == "Created Integration Worktree on dev."
 
     runtime_store = harness_root / ".codex"
-    runtime_config = runtime_store / "config.toml"
-    assert runtime_config.read_bytes() == plan.codex_files.resources_by_path[
-        "config.toml"
-    ]
+    assert not (runtime_store / "config.toml").exists()
     for name in CORE_SKILL_NAMES:
         assert (harness_root / ".agents/skills" / name / "SKILL.md").is_file()
         assert (user_home / ".agents/skills" / name / "SKILL.md").is_file()
-    preflight_engineer_runtime_context(
+    preflight_runtime_context(
         runtime_store=runtime_store,
         executable=_runtime_executable(tmp_path),
         git_common_directory=temporary_git_repository / ".git",
-        role="engineer-expert",
+        role=_engineer_role(),
         worktree=tmp_path / "ticket-worktree",
         evidence=tmp_path / "evidence",
         repository_skill_source=(
@@ -258,7 +262,7 @@ def test_engineer_runtime_context_preflight_validates_without_launch_artifacts(
     )
     from graphtraj.codex_adapter import (
         CodexAdapterError,
-        preflight_engineer_runtime_context,
+        preflight_runtime_context,
     )
     from graphtraj.project_initialization import plan_project_setup
 
@@ -271,7 +275,6 @@ def test_engineer_runtime_context_preflight_validates_without_launch_artifacts(
     plan.apply()
 
     runtime_store = harness_root / ".codex"
-    (runtime_store / "config.toml").unlink()
     target_worktree = tmp_path / "ticket-worktree"
     evidence = tmp_path / "evidence"
     user_config = user_home / ".codex" / "config.toml"
@@ -279,11 +282,11 @@ def test_engineer_runtime_context_preflight_validates_without_launch_artifacts(
     user_config.write_text('sandbox_mode = "workspace-write"\n', encoding="utf-8")
 
     with pytest.raises(CodexAdapterError) as legacy_sandbox:
-        preflight_engineer_runtime_context(
+        preflight_runtime_context(
             runtime_store=runtime_store,
             executable=fake_codex.executable,
             git_common_directory=temporary_git_repository / ".git",
-            role="engineer-expert",
+            role=_engineer_role(),
             worktree=target_worktree,
             evidence=evidence,
             repository_skill_source=(
@@ -297,11 +300,11 @@ def test_engineer_runtime_context_preflight_validates_without_launch_artifacts(
     assert not fake_codex.log_file.exists()
 
     user_config.unlink()
-    preflight_engineer_runtime_context(
+    preflight_runtime_context(
         runtime_store=runtime_store,
         executable=fake_codex.executable,
         git_common_directory=temporary_git_repository / ".git",
-        role="engineer-expert",
+        role=_engineer_role(),
         worktree=target_worktree,
         evidence=evidence,
         repository_skill_source=(
@@ -316,11 +319,11 @@ def test_engineer_runtime_context_preflight_validates_without_launch_artifacts(
     (user_home / ".agents" / "skills" / "implement" / "SKILL.md").unlink()
 
     with pytest.raises(CodexAdapterError) as unavailable:
-        preflight_engineer_runtime_context(
+        preflight_runtime_context(
             runtime_store=runtime_store,
             executable=fake_codex.executable,
             git_common_directory=temporary_git_repository / ".git",
-            role="engineer-expert",
+            role=_engineer_role(),
             worktree=target_worktree,
             evidence=evidence,
             repository_skill_source=(
@@ -343,7 +346,7 @@ def test_runtime_preflight_uses_fixed_policy_and_selected_model(
     monkeypatch.syspath_prepend(
         str(Path(__file__).resolve().parents[1] / "src")
     )
-    from graphtraj.codex_adapter import preflight_engineer_runtime_context
+    from graphtraj.codex_adapter import preflight_runtime_context
     from graphtraj.project_initialization import plan_project_setup
 
     harness_root = temporary_git_repository.parent
@@ -362,12 +365,11 @@ def test_runtime_preflight_uses_fixed_policy_and_selected_model(
     )
 
     def preflight():
-        return preflight_engineer_runtime_context(
+        return preflight_runtime_context(
             runtime_store=runtime_store,
             executable=fake_codex.executable,
             git_common_directory=temporary_git_repository / ".git",
-            role="engineer-expert",
-            model="project-engineer",
+            role=_engineer_role("project-engineer"),
             worktree=tmp_path / "ticket-worktree",
             evidence=tmp_path / "evidence",
             repository_skill_source=(
@@ -407,7 +409,7 @@ def test_engineer_runtime_context_preflight_rejects_unresolved_repository_skills
     )
     from graphtraj.codex_adapter import (
         CodexAdapterError,
-        preflight_engineer_runtime_context,
+        preflight_runtime_context,
     )
     from graphtraj.project_initialization import plan_project_setup
 
@@ -430,11 +432,11 @@ def test_engineer_runtime_context_preflight_rejects_unresolved_repository_skills
     evidence = tmp_path / "evidence"
 
     with pytest.raises(CodexAdapterError) as raised:
-        preflight_engineer_runtime_context(
+        preflight_runtime_context(
             runtime_store=harness_root / ".codex",
             executable=fake_codex.executable,
             git_common_directory=temporary_git_repository / ".git",
-            role="engineer-expert",
+            role=_engineer_role(),
             worktree=worktree,
             evidence=evidence,
             repository_skill_source=source,
@@ -456,7 +458,7 @@ def test_engineer_runtime_context_finalizes_worktree_facts_once(
         str(Path(__file__).resolve().parents[1] / "src")
     )
     from graphtraj.codex_adapter import (
-        preflight_engineer_runtime_context,
+        preflight_runtime_context,
     )
     from graphtraj.project_initialization import plan_project_setup
 
@@ -487,13 +489,13 @@ def test_engineer_runtime_context_finalizes_worktree_facts_once(
         )
     evidence.mkdir()
     git_common.mkdir()
-    preflight = preflight_engineer_runtime_context(
+    preflight = preflight_runtime_context(
         runtime_store=runtime_store,
         executable=_runtime_executable(tmp_path),
         worktree=ticket,
         evidence=evidence,
         git_common_directory=git_common,
-        role="engineer-expert",
+        role=_engineer_role(),
         repository_skill_source=source,
         requested_skills=("repo-selected",),
     )

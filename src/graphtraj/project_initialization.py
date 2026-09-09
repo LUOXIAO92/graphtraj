@@ -11,7 +11,6 @@ from typing import List, Optional, Tuple
 from .codex_project import (
     CodexProjectError,
     CodexProjectFiles,
-    runtime_resource_matches,
 )
 from .git_repository import GitRepositoryError, GitTreeEntry, SourceRepository
 from .path_safety import relative_parent_paths
@@ -471,9 +470,7 @@ class ProjectSetupPlan:
                 )
                 if entry is None:
                     actions.append(PlannedSetupAction("CREATE", description))
-                elif entry.kind == "file" and runtime_resource_matches(
-                    relative_path, entry.content or b"", content
-                ):
+                elif entry.kind == "file" and entry.content == content:
                     actions.append(
                         PlannedSetupAction("ALREADY CONFIGURED", description)
                     )

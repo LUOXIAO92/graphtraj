@@ -12,20 +12,19 @@ import subprocess
 import sys
 import time
 import tomllib
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Tuple, cast
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from .runtime_adapter import (
-    EngineerRuntimeContextPreflight,
     RuntimeAdapterError,
     RuntimeContext,
     RuntimeContextPreflight,
     SessionStarted,
 )
 from .runner_transport import runtime_turn_outcome
-from .runner_models import LOGICAL_ROLES
+from .role_definitions import ResolvedChildRole
 from .git_repository import GitRepositoryError, SourceRepository
 from .skill_check import (
     declared_skill_name,
@@ -36,23 +35,9 @@ from .skill_check import (
 
 ADAPTER_ROLE_KEYS = frozenset(
     {
-        "name",
-        "description",
-        "model",
         "model_reasoning_effort",
-        "developer_instructions",
         "default_permissions",
         "hooks",
-        "agents",
-    }
-)
-REQUIRED_ROLE_KEYS = ADAPTER_ROLE_KEYS - {"description"}
-SUPPORTED_AGENT_KEYS = frozenset(
-    {
-        "enabled",
-        "max_concurrent_threads_per_session",
-        "default_subagent_model",
-        "default_subagent_reasoning_effort",
     }
 )
 REASONING_EFFORTS = frozenset(
@@ -91,9 +76,9 @@ class _CodexRole:
     """Validated effective settings for one Harness-owned custom Agent."""
 
     name: str
-    model: str
     reasoning_effort: str
     developer_instructions: str
+    required_skills: Tuple[str, ...]
     default_permissions: str
     hooks: Mapping[str, Any]
     agents: Mapping[str, Any]
@@ -132,7 +117,7 @@ class _CodexRole:
             if (
                 skill.enabled
                 and skill.source in ("harness", "runtime-user")
-                and skill.name in (*ENGINEER_REQUIRED_SKILLS, "resolving-merge-conflicts", "handoff")
+                and skill.name in self.required_skills
             ):
                 developer_instructions = developer_instructions.replace(
                     "${0}".format(skill.name),
@@ -269,56 +254,12 @@ class _CodexRuntimeContext:
         return dict(self._environment)
 
 
-def preflight_engineer_runtime_context(
-    *,
-    runtime_store: Path,
-    executable: Path,
-    git_common_directory: Path,
-    role: str,
-    model: str | None = None,
-    base_url: str | None = None,
-    api_key_env: str | None = None,
-    worktree: Path,
-    evidence: Path,
-    repository_skill_source: Path,
-    requested_skills: Tuple[str, ...],
-) -> EngineerRuntimeContextPreflight:
-    """Validate every Engineer Context fact available before provisioning."""
-
-    if role not in ENGINEER_ROLES:
-        raise CodexAdapterError(
-            "ROLE_NOT_SUPPORTED",
-            "The configured Codex role is not supported by this Runner.",
-        )
-    return cast(
-        EngineerRuntimeContextPreflight,
-        preflight_runtime_context(
-            runtime_store=runtime_store,
-            executable=executable,
-            git_common_directory=git_common_directory,
-            role=role,
-            model=model,
-            base_url=base_url,
-            api_key_env=api_key_env,
-            worktree=worktree,
-            evidence=evidence,
-            repository_skill_source=repository_skill_source,
-            requested_skills=requested_skills,
-            report_file=None,
-        ),
-    )
-
-
 def preflight_runtime_context(
     *,
     runtime_store: Path,
     executable: Path,
     git_common_directory: Path,
-    role: str,
-    model: str | None = None,
-    base_url: str | None = None,
-    api_key_env: str | None = None,
-    allow_runtime_swarm: bool = True,
+    role: ResolvedChildRole,
     worktree: Path,
     evidence: Path,
     repository_skill_source: Path,
@@ -331,41 +272,10 @@ def preflight_runtime_context(
     _reject_legacy_user_sandbox_config()
     _require_codex_permissions(executable)
     resolved_role = _resolve_codex_role(role)
-    resolved_role = replace(
-        resolved_role,
-        agents={"enabled": role == "team-leader" and allow_runtime_swarm},
-        developer_instructions=resolved_role.developer_instructions + (
-            "\nNative helpers are permitted only for temporary read-only investigation. "
-            "They cannot implement, Review, own a Team seat, or replace formal "
-            "agent-runner dispatch. They are excluded from Team state and Runner "
-            "concurrency and have no independent GraphTraj Session Trace guarantee. "
-            "Use agent-runner for work requiring an independent Trace.\n"
-            if role == "team-leader" and allow_runtime_swarm else
-            "\nDo not use Runtime-native swarm or dispatch native helpers.\n"
-        ) + (
-            "Do not invoke agent-runner or start an Agent Runtime directly.\n"
-            if role != "team-leader" else
-            "Never start an Agent Runtime directly; formal work uses agent-runner.\n"
-        ),
+    settings = role.settings
+    harness_skills = _resolve_harness_skills(
+        runtime_store, role.required_skills, repository_skill_source,
     )
-    selected_model = resolved_role.model if model is None else model
-    if role in ENGINEER_ROLES or role in {"merge-resolver", "team-leader"}:
-        harness_skills = _resolve_engineer_harness_skills(
-            runtime_store,
-            role,
-            repository_skill_source,
-        )
-    elif role in REVIEWER_ROLES or role in {
-        "team-leader",
-        "delivery-state",
-        "temporary-role",
-    }:
-        harness_skills = ()
-    else:
-        raise CodexAdapterError(
-            "ROLE_NOT_SUPPORTED",
-            "The configured Codex role is not supported by this Runner.",
-        )
     repository_skills = _resolve_repository_skills(
         repository_skill_source, requested_skills
     )
@@ -377,7 +287,7 @@ def preflight_runtime_context(
         evidence=evidence,
         effective_skills=harness_skills + repository_skills,
         report_file=report_file,
-        model=selected_model,
+        model=settings.model,
         child_batch_write_paths=child_batch_write_paths,
     )
     return _CodexRuntimePreflight(
@@ -385,10 +295,10 @@ def preflight_runtime_context(
         _executable=executable,
         _git_common_directory=git_common_directory,
         _role=resolved_role,
-        _model=selected_model,
-        _base_url=base_url,
-        _api_key_env=api_key_env,
-        _environment=_connection_environment(base_url, api_key_env),
+        _model=settings.model,
+        _base_url=settings.base_url,
+        _api_key_env=settings.api_key_env,
+        _environment=_connection_environment(settings.base_url, settings.api_key_env),
         _worktree=worktree,
         _evidence=evidence,
         _harness_skills=harness_skills,
@@ -718,20 +628,20 @@ def _process_group_is_alive(process_group: int) -> bool:
     return True
 
 
-def _resolve_codex_role(binding: str) -> _CodexRole:
-    """Load one fixed role policy from the installed GraphTraj resources."""
+def _resolve_codex_role(role: ResolvedChildRole) -> _CodexRole:
+    """Translate a resolved child role using its fixed native permissions and Hooks."""
 
-    document = _packaged_role(binding)
+    document = _packaged_role(role.name)
     _validate_role_schema(document)
 
     return _CodexRole(
-        name=binding,
-        model=document["model"],
+        name=role.name,
         reasoning_effort=document["model_reasoning_effort"],
-        developer_instructions=document["developer_instructions"],
+        developer_instructions=role.instructions,
+        required_skills=role.required_skills,
         default_permissions=document["default_permissions"],
         hooks=document["hooks"],
-        agents=document["agents"],
+        agents={"enabled": role.allow_runtime_swarm},
         native_settings={
             key: value
             for key, value in document.items()
@@ -742,41 +652,17 @@ def _resolve_codex_role(binding: str) -> _CodexRole:
 
 def _validate_role_schema(document: Mapping[str, Any]) -> None:
     keys = frozenset(document)
-    if not REQUIRED_ROLE_KEYS.issubset(keys):
+    if not ADAPTER_ROLE_KEYS.issubset(keys):
         raise CodexAdapterError(
             "ROLE_CONFIG_UNSUPPORTED",
             "The configured Codex role uses an unsupported top-level schema.",
         )
-    if not isinstance(document["name"], str):
-        raise _invalid_role_value("name")
-    if "description" in document and not isinstance(document["description"], str):
-        raise _invalid_role_value("description")
-    if not _nonempty_string(document["model"]):
-        raise _invalid_role_value("model")
     if document["model_reasoning_effort"] not in REASONING_EFFORTS:
         raise _invalid_role_value("model_reasoning_effort")
-    if not _nonempty_string(document["developer_instructions"]):
-        raise _invalid_role_value("developer_instructions")
     if not _nonempty_string(document["default_permissions"]):
         raise _invalid_role_value("default_permissions")
     if not isinstance(document["hooks"], dict):
         raise _invalid_role_value("hooks")
-
-    agents = document["agents"]
-    if not isinstance(agents, dict) or frozenset(agents) != SUPPORTED_AGENT_KEYS:
-        raise CodexAdapterError(
-            "ROLE_CONFIG_UNSUPPORTED",
-            "The configured Codex role uses an unsupported agents schema.",
-        )
-    if not isinstance(agents["enabled"], bool):
-        raise _invalid_role_value("agents.enabled")
-    maximum = agents["max_concurrent_threads_per_session"]
-    if isinstance(maximum, bool) or not isinstance(maximum, int) or maximum < 1:
-        raise _invalid_role_value("agents.max_concurrent_threads_per_session")
-    if not _nonempty_string(agents["default_subagent_model"]):
-        raise _invalid_role_value("agents.default_subagent_model")
-    if agents["default_subagent_reasoning_effort"] not in REASONING_EFFORTS:
-        raise _invalid_role_value("agents.default_subagent_reasoning_effort")
 
 
 def _invalid_role_value(field: str) -> CodexAdapterError:
@@ -814,11 +700,6 @@ def codex_connection_environment(
 
 
 def _packaged_role(binding: str) -> Dict[str, Any]:
-    if binding not in SUPPORTED_ROLES:
-        raise CodexAdapterError(
-            "ROLE_NOT_SUPPORTED",
-            "The configured Codex role is not supported by this Runner.",
-        )
     try:
         content = resources.files("graphtraj.resources").joinpath(
             "codex", "agents", "{0}.toml".format(binding)
@@ -853,33 +734,15 @@ def _verify_packaged_guard(runtime_store: Path) -> None:
         )
 
 
-ENGINEER_ROLES = frozenset(
-    role for role in LOGICAL_ROLES if role.startswith("engineer-")
-)
-REVIEWER_ROLES = frozenset(
-    role for role in LOGICAL_ROLES if role.endswith("reviewer")
-)
-SUPPORTED_ROLES = ENGINEER_ROLES | REVIEWER_ROLES | {
-    "team-leader",
-    "delivery-state",
-    "merge-resolver",
-    "temporary-role",
-}
-ENGINEER_REQUIRED_SKILLS = ("implement", "ponytail", "tdd")
-
-
-def _resolve_engineer_harness_skills(
+def _resolve_harness_skills(
     runtime_store: Path,
-    role: str,
+    required_skills: Tuple[str, ...],
     repository_skill_source: Path,
 ) -> Tuple[_EffectiveSkill, ...]:
-    """Resolve the Engineer role's required external Harness Skills."""
+    """Locate the external Skills required by the resolved GraphTraj role."""
 
-    if role not in ENGINEER_ROLES and role not in {"merge-resolver", "team-leader"}:
-        raise CodexAdapterError(
-            "ROLE_NOT_SUPPORTED",
-            "The configured Codex role is not supported by this Runner.",
-        )
+    if not required_skills:
+        return ()
     runtime_skills = _discover_skill_files(
         harness_skill_root(runtime_store),
         source_history_paths=_runtime_source_history_paths(
@@ -889,7 +752,7 @@ def _resolve_engineer_harness_skills(
     )
     user_skills = _discover_skill_files(Path.home() / ".agents" / "skills")
     effective: List[_EffectiveSkill] = []
-    for name in (("resolving-merge-conflicts",) if role == "merge-resolver" else ("handoff",) if role == "team-leader" else ENGINEER_REQUIRED_SKILLS):
+    for name in required_skills:
         matches = runtime_skills.get(name, ())
         source = "harness"
         if not matches:

@@ -25,11 +25,8 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 graphtraj = [
-    "resources/codex/config.toml",
     "resources/codex/agents/*.toml",
     "resources/codex/hooks/*.py",
-    "resources/skills/task-delivery/SKILL.md",
-    "resources/skills/task-delivery/agents/openai.yaml",
-    "resources/skills/task-delivery/references/*.md",
-    "resources/codex/skills/**/*",
+    "resources/roles/*.yml",
+    "resources/skills/**/*",
 ]

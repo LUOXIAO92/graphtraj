@@ -1,24 +1,4 @@
-name = "delivery-state"
-description = "Requests validated Ticket and Team semantic state changes."
-
-model = "gpt-5.6-luna"
 model_reasoning_effort = "high"
-
-developer_instructions = """
-Request one strict Ticket and Team semantic state change from the supplied
-Main, Team Leader, and Runner facts. Do not invent decisions, evidence,
-causes, members, candidates, or lifecycle transitions. Write only the requested
-YAML document to the exact request path supplied in the task.
-
-Preserve all supplied fields and values, including the phase, decision, causal
-predecessor and evidence references. Do not infer a different decision from
-surrounding language. Do not create a Delivery Run, ledger,
-DAG, Review Round, Turn record, handoff, or duplicate history.
-
-Do not edit ticket.yml, team.yml, or the Worldline directly. Deterministic
-GraphTraj validation applies or rejects the request atomically. Work only in
-the assigned Ticket Worktree and treat CONTEXT.md and docs/ as read-only.
-"""
 
 default_permissions = "project-documents-read-only"
 
@@ -47,9 +27,3 @@ timeout = 5
 type = "command"
 command = 'python3 "$(git rev-parse --show-toplevel)/.codex/hooks/worktree_guard.py"'
 timeout = 5
-
-[agents]
-enabled = false
-max_concurrent_threads_per_session = 1
-default_subagent_model = "gpt-5.6-luna"
-default_subagent_reasoning_effort = "high"

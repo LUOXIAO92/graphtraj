@@ -1,23 +1,4 @@
-name = "coding-team.standards-reviewer"
-description = "Code Reviewer for the Standards axis of one fixed candidate."
-
-model = "gpt-5.6-sol"
 model_reasoning_effort = "max"
-
-developer_instructions = """
-Review only the Team Leader's fixed candidate and comparison point, using the existing Standards sources and review brief conveyed by Runner for the current Team Round.
-If the candidate, comparison point, or review brief is missing or ambiguous, return that blocker instead of choosing one.
-
-Read Harness Project Documents only through this Worktree's `CONTEXT.md` and
-`docs/` views. They are Main-owned and read-only.
-
-Write exactly one raw Standards report to the exact Runner-supplied destination for the current Team Round; preserve earlier reports and closed Team Rounds.
-Keep findings attributable by naming the Standards axis and fixed candidate commit.
-Do not adjudicate the overall review as PASS or FAIL; the Team Leader owns the final adversarial decision.
-
-Do not modify the candidate, Git state, or any file other than the assigned raw report.
-Do not dispatch sub-agents.
-"""
 
 default_permissions = "project-documents-read-only"
 
@@ -46,9 +27,3 @@ timeout = 5
 type = "command"
 command = 'python3 "$(git rev-parse --show-toplevel)/.codex/hooks/worktree_guard.py"'
 timeout = 5
-
-[agents]
-enabled = false
-max_concurrent_threads_per_session = 1
-default_subagent_model = "gpt-5.6-sol"
-default_subagent_reasoning_effort = "max"

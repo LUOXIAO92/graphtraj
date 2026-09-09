@@ -161,6 +161,7 @@ def test_installed_runner_obeys_the_explicit_leader_decision_for_a_run_free_team
     policy_log = tmp_path / 'policy.jsonl'
     environment['FAKE_CODEX_POLICY_LOG'] = str(policy_log)
     main_config = harness_root / '.codex' / 'config.toml'
+    main_config.write_text('developer_instructions = "User-owned Main instructions."\n')
     main_before = main_config.read_bytes()
     ticket_input = harness_root / "ticket.yml"
     ticket_input.write_text(
@@ -246,6 +247,20 @@ def test_installed_runner_obeys_the_explicit_leader_decision_for_a_run_free_team
     for call in calls:
         leader = call['role'] == 'team-leader'
         filesystem = call['settings']['permissions'][call['settings']['default_permissions']]['filesystem']
+        assert filesystem[':workspace_roots']['.'] == (
+            'read' if call['role'] in {'standards-reviewer', 'spec-reviewer'} else 'write'
+        )
+        assert filesystem[':workspace_roots']['CONTEXT.md'] == 'read'
+        assert filesystem[':workspace_roots']['docs'] == 'read'
+        required_skills = {
+            'team-leader': {'handoff'},
+            'engineer-junior': {'implement', 'ponytail', 'tdd'},
+            'standards-reviewer': set(), 'spec-reviewer': set(), 'delivery-state': set(),
+        }
+        assert {
+            Path(skill['path']).parent.name
+            for skill in call['settings']['skills']['config'] if skill['enabled']
+        } == required_skills[call['role']]
         registration = harness_root / '.graphtraj/runner/sessions/74-complete-team-round@l1/child-registration.yml'
         batch_directory = harness_root / '.graphtraj/state/batches'
         assert (filesystem.get(str(registration)) == 'write') is leader

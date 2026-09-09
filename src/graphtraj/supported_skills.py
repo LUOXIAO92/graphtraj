@@ -17,19 +17,6 @@ class SupportedSkillsError(Exception):
     """A release-supported Skill resource could not be installed."""
 
 
-def _resource_path(name: str) -> tuple[str, ...]:
-    if name == "task-delivery":
-        return ("skills", name)
-    return ("codex", "skills", name)
-
-
-def _resource_at(root: Traversable, path: tuple[str, ...]) -> Traversable:
-    resource = root
-    for child in path:
-        resource = resource.joinpath(child)
-    return resource
-
-
 def _resource_manifest(
     source: Traversable,
     prefix: str = "",
@@ -101,7 +88,7 @@ class SupportedSkills:
     def load(cls) -> "SupportedSkills":
         root = resources.files("graphtraj.resources")
         resources_by_name = {
-            name: _resource_at(root, _resource_path(name))
+            name: root.joinpath("skills").joinpath(name)
             for name in CORE_SKILL_NAMES
         }
         missing_resources = tuple(

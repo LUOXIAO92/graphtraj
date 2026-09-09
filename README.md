@@ -101,7 +101,7 @@ set are managed separately. Matt Pocock sources are from
 | `grilling` | Matt Pocock: same name | Retains the decision-tree interview workflow. |
 | `domain-modeling` | Matt Pocock: same name | Shared terminology and decisions in the entrypoint; code checks and architecture examples in a conditional reference. Main owns Project Documents. |
 | `to-spec` | Matt Pocock: same name | Retains the software specification workflow; refers to `setup-project` for configuration. |
-| `to-tickets` | Matt Pocock: same name | Code tickets follow accepted task nodes at their existing granularity or refine a coarse node; preserve node acceptance and real dependencies. |
+| `to-tickets` | Matt Pocock: same name | Code tickets preserve accepted task nodes, acceptance and dependencies; add justified difficulty and execution budgets as YAML front matter. |
 | `implement` | Matt Pocock: same name | Team Engineers self-review and return evidence to their Leader, who schedules Reviewers; standalone work retains the code-review step. |
 | `code-review` | Matt Pocock: same name | Distinguishes Leader-owned Team Review from standalone review orchestration; assigned Reviewers perform only their supplied axis. |
 | `resolving-merge-conflicts` | Matt Pocock: same name | A dispatched Resolver stages the result for Main to commit and validate; incompatible accepted requirements return to Main. |

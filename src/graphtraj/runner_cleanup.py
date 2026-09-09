@@ -24,6 +24,7 @@ class CleanupTarget:
     project: Project
     ticket_id: str
     ticket_name: str
+    ticket_directory: Path
     worktree: Path
     branch: str
     status: str
@@ -69,7 +70,7 @@ def _target(project: Project, ticket_id: str) -> CleanupTarget | CleanupResponse
             "No canonical Ticket belongs to the supplied identity.",
             {"ticket": "not-found"},
         )
-    _, state = states[ticket_id]
+    ticket_directory, state = states[ticket_id]
     ticket_name = state["ticket_name"]
     worktree = project.worktree_root / (ticket_id + "-" + ticket_name)
     branch = "agent/" + ticket_id + "-" + ticket_name
@@ -93,6 +94,7 @@ def _target(project: Project, ticket_id: str) -> CleanupTarget | CleanupResponse
         project=project,
         ticket_id=ticket_id,
         ticket_name=ticket_name,
+        ticket_directory=ticket_directory,
         worktree=worktree,
         branch=branch,
         status=state["status"],
@@ -244,6 +246,10 @@ def _ticket_mappings(
         re.escape(target.ticket_id + "-" + target.ticket_name)
         + r"(?:-team[1-9][0-9]*)?@"
     )
+    unstarted_alias = re.compile(
+        re.escape(target.ticket_id + "-" + target.ticket_name)
+        + r"(?:-team(?P<generation>[2-9][0-9]*|1[0-9]+))?@[deljmsrx][1-9][0-9]*"
+    )
     for directory in sessions.iterdir():
         alias_candidate = prefix.match(directory.name) is not None
         mapping_file = directory / "mapping.yml"
@@ -253,7 +259,13 @@ def _ticket_mappings(
             continue
         if not mapping_file.is_file() or mapping_file.is_symlink():
             if alias_candidate:
-                errors.append(directory.name)
+                match = unstarted_alias.fullmatch(directory.name)
+                if match is not None and _unstarted_session_directory(
+                    target, directory, match.group("generation") or "1"
+                ):
+                    mappings.append(directory)
+                else:
+                    errors.append(directory.name)
             continue
         try:
             mapping = yaml.safe_load(mapping_file.read_text(encoding="utf-8"))
@@ -280,6 +292,32 @@ def _ticket_mappings(
         ):
             busy.append(directory.name)
     return mappings, errors, busy
+
+
+def _unstarted_session_directory(
+    target: CleanupTarget, directory: Path, generation: str
+) -> bool:
+    events = directory / "events.jsonl"
+    trace = (
+        target.ticket_directory
+        / "teams"
+        / generation
+        / "traces"
+        / directory.name
+        / "events.jsonl"
+    )
+    try:
+        return (
+            {path.name for path in directory.iterdir()} == {"events.jsonl"}
+            and not events.is_symlink()
+            and events.is_file()
+            and events.stat().st_size == 0
+            and not trace.is_symlink()
+            and trace.is_file()
+            and os.path.samefile(events, trace)
+        )
+    except OSError:
+        return False
 
 
 def _valid_mapping(mapping: dict[str, Any], alias: str, ticket_id: str) -> bool:

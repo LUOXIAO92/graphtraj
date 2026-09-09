@@ -110,6 +110,18 @@ elif role.startswith('engineer-'):
     if target == 'access' and not resumed:
         sys.stderr.write('Permission denied by Runtime filesystem sandbox\n')
         raise SystemExit(1)
+    missing_report = target == 'completed-wrong-target' and not resumed
+    if missing_report:
+        print(json.dumps({'type': 'item.completed', 'item': {
+            'type': 'command_execution',
+            'aggregated_output': (
+                'Blocked path target: requested=.state/teams/1/rounds/1; '
+                'resolved=' + str(round_dir) + '; '
+                'condition=the report target is not authorized for this role'
+            ),
+            'exit_code': 1,
+            'status': 'failed',
+        }}), flush=True)
     delivered = Path.cwd() / 'RECOVERY_DELIVERED.txt'
     if not delivered.exists():
         delivered.write_text('delivered\n')
@@ -122,12 +134,13 @@ elif role.startswith('engineer-'):
         else:
             delivered.write_text('uncommitted\n')
     candidate = git('rev-parse', 'HEAD')
-    (round_dir / 'engineer.md').write_text('Candidate commit: ' + candidate + '\nSelf-review: complete.\n')
-    validation = round_dir / 'validation.md'
-    if target == 'engineer-junior' and not resumed:
-        validation.write_text('Candidate commit: invalid\n')
-    else:
-        validation.write_text('Candidate commit: ' + candidate + '\nTests: passed.\n')
+    if not missing_report:
+        (round_dir / 'engineer.md').write_text('Candidate commit: ' + candidate + '\nSelf-review: complete.\n')
+        validation = round_dir / 'validation.md'
+        if target == 'engineer-junior' and not resumed:
+            validation.write_text('Candidate commit: invalid\n')
+        else:
+            validation.write_text('Candidate commit: ' + candidate + '\nTests: passed.\n')
 else:
     if target == 'provider-review' and role == 'spec-reviewer' and not resumed:
         raise SystemExit(1)
@@ -140,10 +153,18 @@ else:
     if target == 'completed-access' and role == 'spec-reviewer':
         print(json.dumps({'type': 'item.completed', 'item': {
             'type': 'command_execution',
-            'aggregated_output': 'Permission denied by Runtime filesystem sandbox',
+            'aggregated_output': (
+                'Blocked path target: requested=.state/reviews/spec.md; '
+                'resolved=' + os.environ['GRAPHTRAJ_REVIEW_REPORT'] + '; '
+                'condition=the report target is not authorized for this role'
+            ),
             'exit_code': 1,
             'status': 'failed',
         }}), flush=True)
+    elif target == 'completed-native-root' and role == 'spec-reviewer':
+        sys.stderr.write(
+            'Native startup failed: symlinked writable roots are not supported\n'
+        )
     elif (
         target == 'completed-parse'
         and role == 'spec-reviewer'
@@ -183,7 +204,7 @@ print(json.dumps({'type': 'turn.completed'}), flush=True)
 '''
 
 
-@pytest.mark.parametrize('target', ('engineer-junior', 'spec-reviewer', 'team-leader', 'uncommitted', 'delivery-state', 'dispatch'))
+@pytest.mark.parametrize('target', ('engineer-junior', 'spec-reviewer', 'team-leader', 'uncommitted', 'delivery-state', 'dispatch', 'completed-wrong-target'))
 def test_installed_team_corrects_missing_member_evidence_in_its_existing_session(
     installed_commands, temporary_git_repository, fake_codex, tmp_path, target,
 ):
@@ -224,6 +245,7 @@ def test_installed_team_corrects_missing_member_evidence_in_its_existing_session
             'spec-reviewer': 'spec_reviewer',
             'team-leader': 'team_leader',
             'dispatch': 'team_leader',
+            'completed-wrong-target': 'engineer',
         }[target]
         trace = ticket / 'teams/1/traces' / team['members'][seat]['session_ref'] / 'events.jsonl'
     recovered = trace.read_text()
@@ -231,12 +253,16 @@ def test_installed_team_corrects_missing_member_evidence_in_its_existing_session
     recovery_role = {
         'uncommitted': 'engineer-junior',
         'dispatch': 'team-leader',
+        'completed-wrong-target': 'engineer-junior',
     }.get(target, target)
     prompt = (harness / state['worktree'] / '.scratch' / ('recovery-prompt-' + recovery_role)).read_text()
     assert 'Recovery required:' in prompt
     assert 'Failure:' in prompt
     assert 'Evidence:' in prompt
     assert 'Expected result:' in prompt
+    if target == 'completed-wrong-target':
+        assert '.state/teams/1/rounds/1/engineer.md' in prompt
+        assert '.state/teams/1/rounds/1/validation.md' in prompt
     if target == 'uncommitted':
         assert 'Tracked project changes must be committed' in prompt
         status = run_process(['git', 'status', '--short'], cwd=harness / state['worktree'])
@@ -593,8 +619,10 @@ def test_replacement_reviewer_report_continues_the_current_team_once(
     assert len(sessions) == 2
 
 
-def test_completed_current_access_denial_returns_to_the_operator(
+@pytest.mark.parametrize('target', ('completed-access', 'completed-native-root'))
+def test_completed_current_configuration_failure_returns_to_the_operator(
     installed_commands, temporary_git_repository, fake_codex, tmp_path,
+    target,
 ):
     harness, _, _, environment = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path,
@@ -615,7 +643,7 @@ def test_completed_current_access_denial_returns_to_the_operator(
         env={
             **environment,
             'GRAPHTRAJ_AGENT_RUNNER': str(installed_commands.runner),
-            'RECOVERY_TARGET': 'completed-access',
+            'RECOVERY_TARGET': target,
         },
         timeout=45,
     )

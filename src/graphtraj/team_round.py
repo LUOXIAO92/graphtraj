@@ -1568,17 +1568,31 @@ def _runtime_error_text(event: dict[str, Any]) -> str:
     return "\n".join(values)
 
 
-def _runtime_access_failure(diagnostic: str) -> bool:
+def _runtime_access_failure(
+    diagnostic: str, reports: tuple[Path, ...]
+) -> bool:
     observed = diagnostic.lower()
-    return any(
+    if any(
         marker in observed
         for marker in (
             "permission denied",
             "operation not permitted",
             "filesystem sandbox",
-            "permissiondecision",
-            "report target is not authorized",
         )
+    ):
+        return True
+    if (
+        "writable root" in observed
+        and "symlink" in observed
+        and "not supported" in observed
+    ):
+        return True
+    condition = "the report target is not authorized for this role"
+    return condition in observed and any(
+        "resolved={0}; condition={1}".format(
+            report.resolve(strict=False), condition
+        ) in diagnostic
+        for report in reports
     )
 
 
@@ -1858,7 +1872,7 @@ def _execute_agent(
         session_directory, stderr_offset, event_offset
     )
     if outcome != "completed":
-        if _runtime_access_failure(diagnostic):
+        if _runtime_access_failure(diagnostic, tuple(reports)):
             raise RunnerError(
                 "RUNTIME_ACCESS_DENIED",
                 "The {0} Team member encountered a Runtime access/configuration failure. "
@@ -1877,7 +1891,7 @@ def _execute_agent(
         )
     if (
         any(not path.is_file() for path in reports)
-        and _runtime_access_failure(diagnostic)
+        and _runtime_access_failure(diagnostic, tuple(reports))
     ):
         raise RunnerError(
             "RUNTIME_ACCESS_DENIED",

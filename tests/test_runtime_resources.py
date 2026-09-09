@@ -172,6 +172,7 @@ def test_current_runtime_diagnostic_uses_only_current_error_events(
 
     session = tmp_path / "session"
     session.mkdir()
+    report = session / "assigned-report.md"
     stderr = session / "stderr.log"
     stderr.write_text("retained Permission denied diagnostic\n", encoding="utf-8")
     stderr_offset = stderr.stat().st_size
@@ -213,7 +214,7 @@ def test_current_runtime_diagnostic_uses_only_current_error_events(
     diagnostic = _current_runtime_diagnostic(
         session, stderr_offset, event_offset
     )
-    assert not _runtime_access_failure(diagnostic)
+    assert not _runtime_access_failure(diagnostic, (report,))
 
     parse_offset = events.stat().st_size
     with events.open("a", encoding="utf-8") as stream:
@@ -234,8 +235,33 @@ def test_current_runtime_diagnostic_uses_only_current_error_events(
     parse_diagnostic = _current_runtime_diagnostic(
         session, stderr_offset, parse_offset
     )
-    assert not _runtime_access_failure(parse_diagnostic)
+    assert not _runtime_access_failure(parse_diagnostic, (report,))
     assert _runtime_command_parse_error(parse_diagnostic) == "Cannot verify option: --glob"
+
+    wrong_target_offset = events.stat().st_size
+    with events.open("a", encoding="utf-8") as stream:
+        stream.write(
+            json.dumps(
+                {
+                    "type": "item.completed",
+                    "item": {
+                        "type": "command_execution",
+                        "aggregated_output": (
+                            "Blocked path target: requested=.state/teams/1/rounds/2; "
+                            "resolved={0}; condition=the report target is not "
+                            "authorized for this role"
+                        ).format(session / "rounds" / "2"),
+                        "exit_code": 1,
+                        "status": "failed",
+                    },
+                }
+            )
+            + "\n"
+        )
+    wrong_target = _current_runtime_diagnostic(
+        session, stderr_offset, wrong_target_offset
+    )
+    assert not _runtime_access_failure(wrong_target, (report,))
 
     denial_offset = events.stat().st_size
     with events.open("a", encoding="utf-8") as stream:
@@ -246,18 +272,23 @@ def test_current_runtime_diagnostic_uses_only_current_error_events(
                     "item": {
                         "type": "command_execution",
                         "aggregated_output": (
-                            "permissionDecision deny: the report target is not "
+                            "Blocked path target: requested=.state/reviews/assigned-report.md; "
+                            "resolved={0}; condition=the report target is not "
                             "authorized for this role"
-                        ),
+                        ).format(report),
                         "exit_code": 1,
                         "status": "failed",
                     },
                 }
             )
             + "\n"
-        )
+    )
     denial = _current_runtime_diagnostic(session, stderr_offset, denial_offset)
-    assert _runtime_access_failure(denial)
+    assert _runtime_access_failure(denial, (report,))
+    assert _runtime_access_failure(
+        "Native startup failed: symlinked writable roots are not supported",
+        (report,),
+    )
 
 
 def test_reviewer_send_refreshes_exact_replacement_report_permissions(

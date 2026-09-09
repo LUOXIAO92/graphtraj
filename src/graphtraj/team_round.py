@@ -22,6 +22,7 @@ from .codex_adapter import (
     preflight_runtime_context,
     refresh_codex_report_paths,
 )
+from .execution_budget import ExecutionBudgetMonitor, execution_budget_monitor
 from .role_definitions import resolve_child_role
 from .delivery_state import apply_delivery_state_request, confirmed_rework
 from .delivery_worldline import read_worldline
@@ -154,36 +155,59 @@ def _run_batch_workers(
     project: Any, batch: Batch, retained: Path | None = None, parent_alias: str = "",
     capacity_fd: int | None = None,
 ) -> LaunchResponse:
-    workers = []
-    with capacity_positions(project, len(batch.tasks), capacity_fd) as positions:
-        if retained is None:
-            retained = retain_batch(project.state_directory, batch)
-        for index, position in enumerate(positions):
-            try:
-                worker = subprocess.Popen(
-                    [sys.executable, "-m", "graphtraj.team_round",
-                     str(retained), str(index), str(position.fileno()), parent_alias],
-                    cwd=project.harness_root, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-                    pass_fds=(position.fileno(),),
-                )
-            except OSError as error:
-                worker = RunnerError("RUNTIME_WORKER_START_FAILED", str(error))
-            workers.append(worker)
-            position.close()
-    results = []
-    for task, worker in zip(batch.tasks, workers):
-        if isinstance(worker, RunnerError):
-            results.append(_failed_task(task, worker))
-            continue
-        output, diagnostic = worker.communicate()
-        if worker.returncode == 0:
-            results.append(yaml.safe_load(output))
-        else:
-            results.append(_failed_task(task, RunnerError("RUNTIME_WORKER_FAILED", diagnostic.strip())))
-    return LaunchResponse(
-        document={"retained_batch_file": str(retained), "tasks": results},
-        succeeded=all("error" not in result for result in results),
-    )
+    notice_fd, close_notice_fd = _caller_notice_fd()
+    try:
+        workers = []
+        with capacity_positions(project, len(batch.tasks), capacity_fd) as positions:
+            if retained is None:
+                retained = retain_batch(project.state_directory, batch)
+            for index, position in enumerate(positions):
+                try:
+                    environment = dict(os.environ)
+                    if notice_fd is not None:
+                        environment["GRAPHTRAJ_BUDGET_NOTICE_FD"] = str(notice_fd)
+                    worker = subprocess.Popen(
+                        [sys.executable, "-m", "graphtraj.team_round",
+                         str(retained), str(index), str(position.fileno()), parent_alias],
+                        cwd=project.harness_root, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                        env=environment,
+                        pass_fds=(position.fileno(),) if notice_fd is None else (position.fileno(), notice_fd),
+                    )
+                except OSError as error:
+                    worker = RunnerError("RUNTIME_WORKER_START_FAILED", str(error))
+                workers.append(worker)
+                position.close()
+        results = []
+        for task, worker in zip(batch.tasks, workers):
+            if isinstance(worker, RunnerError):
+                results.append(_failed_task(task, worker))
+                continue
+            output, diagnostic = worker.communicate()
+            if worker.returncode == 0:
+                results.append(yaml.safe_load(output))
+            else:
+                results.append(_failed_task(task, RunnerError("RUNTIME_WORKER_FAILED", diagnostic.strip())))
+        return LaunchResponse(
+            document={"retained_batch_file": str(retained), "tasks": results},
+            succeeded=all("error" not in result for result in results),
+        )
+    finally:
+        if close_notice_fd and notice_fd is not None:
+            os.close(notice_fd)
+
+
+def _caller_notice_fd() -> tuple[int | None, bool]:
+    try:
+        descriptor = int(os.environ.get("GRAPHTRAJ_BUDGET_NOTICE_FD", ""))
+        if descriptor < 3:
+            raise ValueError("budget notice descriptor is not inherited")
+        os.fstat(descriptor)
+        return descriptor, False
+    except (OSError, ValueError):
+        try:
+            return os.dup(sys.stderr.fileno()), True
+        except OSError:
+            return None, False
 
 
 def _failed_task(task: Task, error: RunnerError) -> dict[str, Any]:
@@ -1441,6 +1465,9 @@ def _process_corrections(
             capacity_fd=capacity_fd,
         )
         predecessor = event["event_id"]
+        monitor = execution_budget_monitor(task, evidence)
+        if monitor is not None:
+            monitor.record_correction(role)
         affected = [role]
         if _task_policy(child, role) in _ENGINEER_ROLES:
             affected += [
@@ -1731,6 +1758,8 @@ def _execute_agent(
             raise RunnerError("RUNTIME_WORKER_FAILED", "The mapped Session is unavailable.")
 
     policy_role = _task_policy(task, role)
+    monitor = execution_budget_monitor(task, evidence)
+    budget_stage = _budget_stage(policy_role, role)
     team_file = traces.parent / "team.yml"
     ordinal = yaml.safe_load(team_file.read_text())["current_round"] if team_file.exists() else 1
     report_files = _role_report_files(task, policy_role, role, generation, ordinal)
@@ -1886,6 +1915,10 @@ def _execute_agent(
             task_prompt,
             runtime_environment,
             capacity_fd,
+            monitor,
+            role,
+            budget_stage,
+            expected_session is None,
         )
     finally:
         for name, value in previous.items():
@@ -2016,6 +2049,10 @@ def _run_session_worker(
     prompt: str,
     runtime_environment: object,
     capacity_fd: int,
+    monitor: ExecutionBudgetMonitor | None,
+    role: str,
+    stage: str,
+    new_session: bool,
 ) -> tuple[str, str]:
     if not isinstance(runtime_environment, dict):
         raise RunnerError("RUNTIME_WORKER_FAILED", "The Runtime Session could not be started.")
@@ -2050,7 +2087,22 @@ def _run_session_worker(
             worker.stdin.write(prompt)
             worker.stdin.close()
             try:
-                exit_code = worker.wait()
+                session_recorded = not new_session
+                while worker.poll() is None:
+                    if monitor is not None:
+                        if not session_recorded and (session_directory / "mapping.yml").is_file():
+                            monitor.record_session(role, stage)
+                            session_recorded = True
+                        monitor.check(role, stage)
+                    try:
+                        worker.wait(timeout=0.05)
+                    except subprocess.TimeoutExpired:
+                        pass
+                if monitor is not None:
+                    if not session_recorded and (session_directory / "mapping.yml").is_file():
+                        monitor.record_session(role, stage)
+                    monitor.check(role, stage)
+                exit_code = worker.returncode
             except BaseException:
                 worker.terminate()
                 worker.wait()
@@ -2083,6 +2135,16 @@ def _agent_alias(project: Any, task: Task, role: str, generation: int = 1) -> st
     while (project.runner_directory / "sessions" / f"{prefix}@{marker}{suffix}").exists():
         suffix += 2 if marker == "r" else 1
     return f"{prefix}@{marker}{suffix}"
+
+
+def _budget_stage(policy_role: str, role: str) -> str:
+    if policy_role in _ENGINEER_ROLES:
+        return "implementation"
+    if policy_role in _REVIEWER_ROLES:
+        return "review"
+    if role == "delivery-state":
+        return "delivery-state"
+    return "team-lead"
 
 
 def _role_report_files(

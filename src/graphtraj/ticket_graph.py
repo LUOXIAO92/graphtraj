@@ -13,6 +13,11 @@ import click
 import yaml
 
 from .delivery_worldline import append_project_worldline_event
+from .execution_budget import (
+    ExecutionBudgetError,
+    read_execution_budget,
+    split_execution_budget_front_matter,
+)
 from .project_configuration import ProjectConfigurationError, load_project_configuration
 
 
@@ -218,6 +223,10 @@ def _validate_issue(issue: Any) -> None:
         or ticket_id in dependencies
     ):
         raise ValueError("accepted Ticket definition is invalid")
+    try:
+        read_execution_budget(body)
+    except ExecutionBudgetError as error:
+        raise ValueError("accepted Ticket execution budget is invalid") from error
 
 
 def _validate_revision(revision: Any) -> None:
@@ -387,6 +396,23 @@ def _revise(
                     or _snapshot_source(directory / "ticket.md") != definition["source"]
                 ):
                     raise ValueError("a stable Ticket identity cannot change")
+                previous_budget = read_execution_budget(
+                    (directory / old["current_definition"]).read_text(
+                        encoding="utf-8"
+                    )
+                )
+                revised_budget = read_execution_budget(definition["body"])
+                if previous_budget is not None and revised_budget is None:
+                    raise ValueError("a coding Ticket budget cannot be removed")
+                if (
+                    (
+                        previous_budget is None
+                        or previous_budget.definition != revised_budget.definition
+                    )
+                    and revised_budget is not None
+                    and revised_budget.revision_reason is None
+                ):
+                    raise ValueError("a revised execution budget requires its reason")
                 meaningful = meaningful or (
                     (directory / old["current_definition"]).read_text(
                         encoding="utf-8"
@@ -592,14 +618,13 @@ def _update_state(
 def _render_definition(definition: dict[str, Any]) -> str:
     replacements = ", ".join(definition["replaced_by"]) or "none"
     dependencies = ", ".join(definition["dependencies"]) or "none"
-    return (
+    metadata = (
         "# Ticket {0}: {1}\n\n"
         "Ticket name: {2}\n\n"
         "Source: {3}\n\n"
         "Active: {4}\n\n"
         "Replaced by: {5}\n\n"
         "Dependencies: {6}\n\n"
-        "{7}\n"
     ).format(
         definition["ticket_id"],
         definition["title"],
@@ -608,8 +633,14 @@ def _render_definition(definition: dict[str, Any]) -> str:
         str(definition["active"]).lower(),
         replacements,
         dependencies,
-        definition["body"],
     )
+    front_matter = split_execution_budget_front_matter(definition["body"])
+    if front_matter is None:
+        return metadata + definition["body"] + "\n"
+    preserved, _, body = front_matter
+    separator = "\n" if preserved.endswith(("\n", "\r")) else "\n\n"
+    body = body.lstrip("\r\n")
+    return preserved + separator + metadata + body + ("" if body.endswith("\n") else "\n")
 
 
 def _load_states(tickets: Path) -> dict[str, tuple[Path, dict[str, Any]]]:

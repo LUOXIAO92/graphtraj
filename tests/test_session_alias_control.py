@@ -13,6 +13,8 @@ from runner_fixtures import configure_harness
 def _register_ready_ticket(
     installed_commands: InstalledCommands,
     harness_root: Path,
+    *,
+    body: str = "Deliver the accepted Session transport behavior.",
 ) -> None:
     ticket = harness_root / "ticket.yml"
     ticket.write_text(
@@ -22,7 +24,7 @@ def _register_ready_ticket(
                 "ticket_name": "session-alias-control",
                 "source": "https://github.com/example/project/issues/76",
                 "title": "Session alias control",
-                "body": "Deliver the accepted Session transport behavior.",
+                "body": body,
                 "dependencies": [],
             },
             sort_keys=False,

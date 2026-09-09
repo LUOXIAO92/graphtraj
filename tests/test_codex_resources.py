@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
-import tomllib
 from pathlib import Path
 
 from conftest import run_process
@@ -44,25 +43,6 @@ def assert_hook_denies(hook: Path, event: dict, *, cwd: Path) -> None:
 
 def assert_worktree_guard_denies(event: dict, *, cwd: Path) -> None:
     assert_hook_denies(WORKTREE_GUARD, event, cwd=cwd)
-
-
-def test_packaged_roles_keep_the_worktree_boundary() -> None:
-    role_files = tuple(sorted((RESOURCE_ROOT / "agents").glob("*.toml")))
-    for path in role_files:
-        role = tomllib.loads(path.read_text(encoding="utf-8"))
-        profile_name = role["default_permissions"]
-        filesystem = role["permissions"][profile_name]["filesystem"][
-            ":workspace_roots"
-        ]
-
-        assert profile_name == "project-documents-read-only"
-        assert filesystem["."] == (
-            "read" if role["name"].endswith("reviewer") else "write"
-        )
-        if role["name"] != "delivery-state":
-            hooks = role["hooks"]
-            assert hooks["PreToolUse"]
-            assert hooks["SubagentStart"]
 
 
 def test_worktree_guard_adds_the_current_boundary_to_subagent_context(

@@ -4,37 +4,18 @@ from __future__ import annotations
 
 import os
 import subprocess
-import tomllib
 from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path
 from typing import Callable, Dict, Optional
 
-from .runner_models import managed_runtime_policy_matches
-
-
 RESOURCE_PATHS = (
-    "config.toml",
     "hooks/worktree_guard.py",
 )
 
 
 class CodexProjectError(Exception):
     """Accepted Codex Runtime files could not be installed."""
-
-
-def runtime_resource_matches(
-    relative_path: str, configured: bytes, packaged: bytes
-) -> bool:
-    """Compare managed TOML policy and exact non-TOML Runtime resources."""
-    if not relative_path.endswith(".toml"):
-        return configured == packaged
-    try:
-        configured_document = tomllib.loads(configured.decode())
-        packaged_document = tomllib.loads(packaged.decode())
-    except (UnicodeError, tomllib.TOMLDecodeError):
-        return False
-    return managed_runtime_policy_matches(configured_document, packaged_document)
 
 
 @dataclass(frozen=True)
@@ -148,9 +129,7 @@ class CodexProjectFiles:
         for relative_path, content in self.runtime_resources(runtime_store).items():
             target = runtime_store / relative_path
             if target.exists():
-                if target.is_file() and runtime_resource_matches(
-                    relative_path, target.read_bytes(), content
-                ):
+                if target.is_file() and target.read_bytes() == content:
                     continue
                 raise CodexProjectError(
                     "Runtime resource already exists with different content: "

@@ -18,6 +18,7 @@ import yaml
 
 from .codex_project import ignore_worktree_documents
 from .codex_adapter import codex_connection_environment, preflight_runtime_context
+from .role_definitions import resolve_child_role
 from .delivery_state import apply_delivery_state_request, confirmed_rework
 from .delivery_worldline import read_worldline
 from .project_roles import ROLE_REFERENCES
@@ -799,11 +800,7 @@ def _execute_agent(
             runtime_store=project.runtime_store,
             executable=runtime_executable(preset.runtime),
             git_common_directory=project.common_directory,
-            role=policy_role,
-            model=preset.model,
-            base_url=preset.base_url,
-            api_key_env=preset.api_key_env,
-            allow_runtime_swarm=preset.allow_runtime_swarm,
+            role=resolve_child_role(policy_role, preset),
             worktree=worktree,
             evidence=evidence,
             repository_skill_source=worktree,

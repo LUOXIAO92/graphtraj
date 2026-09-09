@@ -1,16 +1,4 @@
-name = "temporary-role"
-description = "Traceable one-Batch specialist without a Team seat or dispatch authority."
-
-model = "gpt-5.6-luna"
 model_reasoning_effort = "high"
-
-developer_instructions = """
-Perform only the task-specific instruction supplied with the accepted Ticket.
-You are not a Team member and may not create a Team, dispatch another Agent,
-use native swarm, perform formal implementation or Review, or change delivery
-state. Work only in the current Worktree and treat CONTEXT.md and docs/ as
-read-only. Return concise findings through this Session.
-"""
 
 default_permissions = "project-documents-read-only"
 
@@ -39,9 +27,3 @@ timeout = 5
 type = "command"
 command = 'python3 "$(git rev-parse --show-toplevel)/.codex/hooks/worktree_guard.py"'
 timeout = 5
-
-[agents]
-enabled = false
-max_concurrent_threads_per_session = 1
-default_subagent_model = "gpt-5.6-luna"
-default_subagent_reasoning_effort = "high"

@@ -63,11 +63,7 @@ def supported_skill_contents(name: str) -> dict[str, bytes]:
         / "graphtraj"
         / "resources"
     )
-    root = (
-        package_root / "skills" / name
-        if name == "task-delivery"
-        else package_root / "codex" / "skills" / name
-    )
+    root = package_root / "skills" / name
     return tree_contents(root)
 
 
@@ -563,8 +559,8 @@ def test_setup_preflights_runtime_conflicts_before_creating_dev(
     user_home = tmp_path / "operator-home"
     install_user_skills(user_home)
     runtime_store = harness_root / ".codex"
-    runtime_store.mkdir()
-    (runtime_store / "config.toml").write_text("unmanaged = true\n", encoding="utf-8")
+    (runtime_store / "hooks").mkdir(parents=True)
+    (runtime_store / "hooks" / "worktree_guard.py").write_text("unmanaged = True\n", encoding="utf-8")
     before = git_output(temporary_git_repository, "worktree", "list", "--porcelain")
 
     result = run_setup(

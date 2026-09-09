@@ -28,37 +28,6 @@ def role_alias_marker(role: str) -> str:
     return ROLE_ALIAS_MARKERS.get(role, "x")
 
 
-RUNTIME_TUNING_PATHS = frozenset(
-    {
-        ("model",),
-        ("model_reasoning_effort",),
-        ("model_context_window",),
-        ("model_auto_compact_token_limit",),
-        ("agents", "default_subagent_model"),
-        ("agents", "default_subagent_reasoning_effort"),
-    }
-)
-
-
-def managed_runtime_policy_matches(
-    configured: Mapping[str, Any], packaged: Mapping[str, Any]
-) -> bool:
-    """Compare Runtime policy while preserving supported local tuning."""
-
-    def managed(value: Any, path: Tuple[str, ...] = ()) -> Any:
-        if isinstance(value, Mapping):
-            return {
-                key: managed(item, (*path, key))
-                for key, item in value.items()
-                if (*path, key) not in RUNTIME_TUNING_PATHS
-            }
-        if isinstance(value, list):
-            return [managed(item, path) for item in value]
-        return value
-
-    return managed(configured) == managed(packaged)
-
-
 PUBLIC_ERROR_CODES = frozenset(
     {
         "invalid-input",

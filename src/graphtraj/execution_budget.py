@@ -10,7 +10,7 @@ import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 import yaml
 
@@ -97,10 +97,12 @@ def read_execution_budget(body: str) -> ExecutionBudget | None:
     return ExecutionBudget(value)
 
 
-def execution_budget_monitor(task: Any, ticket_directory: Path) -> "ExecutionBudgetMonitor | None":
+def execution_budget_monitor(
+    ticket_directory: Path, ticket_id: str, ticket_name: str
+) -> "ExecutionBudgetMonitor | None":
     """Return a monitor only for a registered coding Ticket with a budget."""
 
-    if task.ticket_file is None or not (ticket_directory / "ticket.yml").is_file():
+    if not (ticket_directory / "ticket.yml").is_file():
         return None
     try:
         budget = _current_budget(ticket_directory)
@@ -110,7 +112,53 @@ def execution_budget_monitor(task: Any, ticket_directory: Path) -> "ExecutionBud
         ) from error
     if budget is None:
         return None
-    return ExecutionBudgetMonitor(ticket_directory, task.ticket_id, task.ticket_name)
+    return ExecutionBudgetMonitor(ticket_directory, ticket_id, ticket_name)
+
+
+def execution_budget_monitor_from_environment(
+    mapping: Mapping[str, object],
+) -> "ExecutionBudgetMonitor | None":
+    """Resolve one resumed Session's monitor from its retained Team context."""
+
+    evidence = os.environ.get("GRAPHTRAJ_EVIDENCE")
+    ticket_id = mapping.get("ticket_id")
+    ticket_name = os.environ.get("GRAPHTRAJ_TICKET_NAME")
+    if (
+        not isinstance(evidence, str)
+        or not evidence
+        or not isinstance(ticket_id, str)
+        or not ticket_id
+        or not isinstance(ticket_name, str)
+        or not ticket_name
+    ):
+        return None
+    return execution_budget_monitor(Path(evidence), ticket_id, ticket_name)
+
+
+def caller_notice_fd() -> tuple[int | None, bool]:
+    """Return a caller stderr descriptor suitable for a detached Session."""
+
+    try:
+        descriptor = int(os.environ.get("GRAPHTRAJ_BUDGET_NOTICE_FD", ""))
+        if descriptor < 3:
+            raise ValueError("budget notice descriptor is not inherited")
+        os.fstat(descriptor)
+        return descriptor, False
+    except (OSError, ValueError):
+        try:
+            return os.dup(sys.stderr.fileno()), True
+        except OSError:
+            return None, False
+
+
+def execution_budget_stage(role: str) -> str:
+    if role.startswith("engineer-"):
+        return "implementation"
+    if role in {"standards-reviewer", "spec-reviewer"}:
+        return "review"
+    if role == "delivery-state":
+        return "delivery-state"
+    return "team-lead"
 
 
 class ExecutionBudgetMonitor:

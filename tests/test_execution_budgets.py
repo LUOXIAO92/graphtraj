@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 import time
 from pathlib import Path
 
 import yaml
 
-from conftest import FakeCodex, InstalledCommands, run_process
+from conftest import FakeCodex, InstalledCommands, run_process, wait_for_file
 from runner_fixtures import configure_harness, engineer_probe
 from test_session_alias_control import _register_ready_ticket
 from test_team_correction import RUNTIME as CORRECTION_RUNTIME
@@ -344,4 +345,250 @@ def test_installed_runner_notifies_once_when_a_replacement_exceeds_session_plan(
     assert notices[0]["threshold"] == {"kind": "planned_sessions.engineer", "limit": 1}
     assert notices[0]["actual"]["sessions"]["engineer"] == 2
     assert notices[0]["stage"] == "implementation"
+    assert notices[0]["responsible_role"] == "engineer-junior"
+
+
+def test_installed_send_notifies_its_caller_while_a_budgeted_resume_runs(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    harness, _, _, environment = configure_harness(
+        installed_commands, temporary_git_repository, fake_codex, tmp_path
+    )
+    _register_ready_ticket(
+        installed_commands,
+        harness,
+        body=_budget_body(total=60),
+    )
+    batch = harness / "budget-send-batch.yml"
+    batch.write_text(
+        "tasks:\n"
+        "  - ticket_id: \"76\"\n"
+        "    ticket_name: session-alias-control\n"
+        "    role: coding-team.team-leader\n",
+        encoding="utf-8",
+    )
+    launched = run_process(
+        [str(installed_commands.runner), "--batch-input", str(batch)],
+        cwd=harness,
+        env={
+            **environment,
+            "FAKE_CODEX_LIFECYCLE_ACTION": "complete-team-round",
+            "GRAPHTRAJ_AGENT_RUNNER": str(installed_commands.runner),
+        },
+        timeout=30,
+    )
+    assert launched.returncode == 0, launched.stdout + launched.stderr
+    ticket = harness / ".graphtraj/state/tickets/76-session-alias-control"
+    team_file = ticket / "teams/1/team.yml"
+    team = yaml.safe_load(team_file.read_text(encoding="utf-8"))
+    team["current_round"] = 2
+    team_file.write_text(yaml.safe_dump(team), encoding="utf-8")
+    mapping_file = next(
+        path
+        for path in (harness / ".graphtraj/runner/sessions").glob("*/mapping.yml")
+        if yaml.safe_load(path.read_text(encoding="utf-8"))["role"] == "team-leader"
+    )
+    mapping = yaml.safe_load(mapping_file.read_text(encoding="utf-8"))
+    cause = [
+        json.loads(line)["event_id"]
+        for path in (harness / ".graphtraj/state/worldline").glob("*.jsonl")
+        for line in path.read_text(encoding="utf-8").splitlines()
+    ][-1]
+    evidence = harness / "send-budget-revision.md"
+    evidence.write_text("Caller approved the resumed elapsed budget.\n", encoding="utf-8")
+    revision = harness / "send-budget-revision.yml"
+    revised = _budget_body(
+        total=0.01,
+        revision_reason="Caller approved the retained Session retry budget",
+    )
+    revision.write_text(
+        yaml.safe_dump(
+            {
+                "product_preserving": True,
+                "caused_by_event_ids": [],
+                "evidence_refs": ["send-budget-revision.md"],
+                "tickets": [
+                    {
+                        "ticket_id": "76",
+                        "ticket_name": "session-alias-control",
+                        "source": "https://github.com/example/project/issues/76",
+                        "title": "Session Alias Control",
+                        "body": revised,
+                        "dependencies": [],
+                        "active": True,
+                        "replaced_by": [],
+                    }
+                ],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    revised_result = run_process(
+        [
+            str(installed_commands.product),
+            "ticket",
+            "revise",
+            "--revision-file",
+            str(revision),
+        ],
+        cwd=harness,
+    )
+    assert revised_result.returncode == 0, revised_result.stderr
+
+    release = tmp_path / "release-sent-leader"
+    stdout = tmp_path / "send.stdout"
+    stderr = tmp_path / "send.stderr"
+    send_environment = {
+        **environment,
+        "FAKE_CODEX_EVENTS": json.dumps(
+            [
+                {"type": "thread.started", "thread_id": mapping["session"]},
+                {"type": "turn.started"},
+            ]
+        ),
+        "FAKE_CODEX_LIFECYCLE_ACTION": "complete-team-round",
+        "FAKE_CODEX_RELEASE_FILE": str(release),
+        "GRAPHTRAJ_AGENT_RUNNER": str(installed_commands.runner),
+    }
+    with stdout.open("w+", encoding="utf-8") as out, stderr.open(
+        "w+", encoding="utf-8"
+    ) as err:
+        sent = subprocess.Popen(
+            [
+                str(installed_commands.runner),
+                "send",
+                mapping["alias"],
+                "--instruction",
+                "Retry the retained Team Leader Session.",
+                "--caused-by-event-id",
+                cause,
+            ],
+            cwd=harness,
+            env=send_environment,
+            text=True,
+            stdout=out,
+            stderr=err,
+        )
+        try:
+            assert sent.wait(timeout=10) == 0
+            assert yaml.safe_load(stdout.read_text(encoding="utf-8")) == {
+                "alias": mapping["alias"],
+                "send_status": "sent",
+            }
+            deadline = time.monotonic() + 5
+            notices = _notices(stderr)
+            while not notices and time.monotonic() < deadline:
+                time.sleep(0.02)
+                notices = _notices(stderr)
+
+            assert len(notices) == 1
+            assert notices[0]["threshold"] == {
+                "kind": "elapsed_minutes",
+                "limit": 0.01,
+            }
+            running = run_process(
+                [str(installed_commands.runner), "status", mapping["alias"]],
+                cwd=harness,
+                env=environment,
+            )
+            assert yaml.safe_load(running.stdout)["aliases"][0]["activity"] == "running"
+            assert yaml.safe_load(mapping_file.read_text(encoding="utf-8"))["session"] == mapping["session"]
+            assert (mapping_file.parent / "resume.yml").is_file()
+        finally:
+            release.touch()
+    wait_for_file(mapping_file.parent / "execution.yml")
+    trace = ticket / "teams/1/traces" / mapping["alias"] / "events.jsonl"
+    assert cause in trace.read_text(encoding="utf-8")
+    assert (mapping_file.parent / "worker-stderr.log").is_file()
+
+
+def test_installed_runner_counts_implementation_rework_as_correction(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    harness, _, _, environment = configure_harness(
+        installed_commands, temporary_git_repository, fake_codex, tmp_path
+    )
+    _register_ready_ticket(
+        installed_commands,
+        harness,
+        body=_budget_body(total=60, correction_rounds=0),
+    )
+    fake_codex.executable.write_text("#!" + sys.executable + "\n" + RECOVERY_RUNTIME)
+    batch = harness / "budget-rework-batch.yml"
+    batch.write_text(
+        "tasks:\n"
+        "  - ticket_id: \"76\"\n"
+        "    ticket_name: session-alias-control\n"
+        "    role: coding-team.team-leader\n",
+        encoding="utf-8",
+    )
+    runtime_environment = {
+        **environment,
+        "GRAPHTRAJ_AGENT_RUNNER": str(installed_commands.runner),
+        "RECOVERY_TARGET": "provider-rework",
+    }
+    failed = run_process(
+        [str(installed_commands.runner), "--batch-input", str(batch)],
+        cwd=harness,
+        env=runtime_environment,
+        timeout=45,
+    )
+    assert failed.returncode == 1
+    ticket = harness / ".graphtraj/state/tickets/76-session-alias-control"
+    mapping_file = next(
+        path
+        for path in (harness / ".graphtraj/runner/sessions").glob("*/mapping.yml")
+        if yaml.safe_load(path.read_text(encoding="utf-8"))["role"] == "engineer-junior"
+    )
+    mapping = yaml.safe_load(mapping_file.read_text(encoding="utf-8"))
+    cause = [
+        json.loads(line)["event_id"]
+        for path in (harness / ".graphtraj/state/worldline").glob("*.jsonl")
+        for line in path.read_text(encoding="utf-8").splitlines()
+    ][-1]
+    retried = run_process(
+        [
+            str(installed_commands.runner),
+            "send",
+            mapping["alias"],
+            "--instruction",
+            "Retry the interrupted current Team step.",
+            "--caused-by-event-id",
+            cause,
+        ],
+        cwd=harness,
+        env=runtime_environment,
+        timeout=45,
+    )
+    assert retried.returncode == 0, retried.stdout + retried.stderr
+    wait_for_file(mapping_file.parent / "execution.yml")
+
+    continued = run_process(
+        [str(installed_commands.runner), "--batch-input", str(batch)],
+        cwd=harness,
+        env=runtime_environment,
+        timeout=45,
+    )
+
+    assert continued.returncode == 0, continued.stdout + continued.stderr
+    usage = yaml.safe_load((ticket / "execution-budget.yml").read_text(encoding="utf-8"))
+    assert usage["corrections"] == 1
+    events = [
+        json.loads(line)
+        for path in (harness / ".graphtraj/state/worldline").glob("*.jsonl")
+        for line in path.read_text(encoding="utf-8").splitlines()
+    ]
+    assert any(event["kind"] == "team-round-rework-started" for event in events)
+    assert not any(event["kind"] == "team-process-correction" for event in events)
+    notices = _stderr_notices(continued.stderr)
+    assert len(notices) == 1
+    assert notices[0]["threshold"] == {"kind": "correction_rounds", "limit": 0}
+    assert notices[0]["stage"] == "correction"
     assert notices[0]["responsible_role"] == "engineer-junior"

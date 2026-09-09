@@ -22,7 +22,12 @@ from .codex_adapter import (
     preflight_runtime_context,
     refresh_codex_report_paths,
 )
-from .execution_budget import ExecutionBudgetMonitor, execution_budget_monitor
+from .execution_budget import (
+    ExecutionBudgetMonitor,
+    caller_notice_fd,
+    execution_budget_monitor,
+    execution_budget_stage,
+)
 from .role_definitions import resolve_child_role
 from .delivery_state import apply_delivery_state_request, confirmed_rework
 from .delivery_worldline import read_worldline
@@ -155,7 +160,7 @@ def _run_batch_workers(
     project: Any, batch: Batch, retained: Path | None = None, parent_alias: str = "",
     capacity_fd: int | None = None,
 ) -> LaunchResponse:
-    notice_fd, close_notice_fd = _caller_notice_fd()
+    notice_fd, close_notice_fd = caller_notice_fd()
     try:
         workers = []
         with capacity_positions(project, len(batch.tasks), capacity_fd) as positions:
@@ -194,20 +199,6 @@ def _run_batch_workers(
     finally:
         if close_notice_fd and notice_fd is not None:
             os.close(notice_fd)
-
-
-def _caller_notice_fd() -> tuple[int | None, bool]:
-    try:
-        descriptor = int(os.environ.get("GRAPHTRAJ_BUDGET_NOTICE_FD", ""))
-        if descriptor < 3:
-            raise ValueError("budget notice descriptor is not inherited")
-        os.fstat(descriptor)
-        return descriptor, False
-    except (OSError, ValueError):
-        try:
-            return os.dup(sys.stderr.fileno()), True
-        except OSError:
-            return None, False
 
 
 def _failed_task(task: Task, error: RunnerError) -> dict[str, Any]:
@@ -621,6 +612,11 @@ def _deliver_ticket(project: Any, requested: Task, retained_batch: Path, capacit
             "rework",
         )
         predecessor = event["event_id"]
+        monitor = execution_budget_monitor(
+            ticket_directory, task.ticket_id, task.ticket_name
+        )
+        if monitor is not None:
+            monitor.record_correction(engineer_task.role)
         first_round = False
         round_directory = round_directory.parent / str(int(round_directory.name) + 1)
         leader_alias, leader_session = run_agent(
@@ -766,6 +762,11 @@ def _resume_active_ticket(
             capacity_fd=capacity_fd,
         )
         predecessor = event["event_id"]
+        monitor = execution_budget_monitor(
+            ticket_directory, task.ticket_id, task.ticket_name
+        )
+        if monitor is not None:
+            monitor.record_correction(engineer_role)
         round_directory = round_directory.parent / str(
             int(round_directory.name) + 1
         )
@@ -1465,7 +1466,7 @@ def _process_corrections(
             capacity_fd=capacity_fd,
         )
         predecessor = event["event_id"]
-        monitor = execution_budget_monitor(task, evidence)
+        monitor = execution_budget_monitor(evidence, task.ticket_id, task.ticket_name)
         if monitor is not None:
             monitor.record_correction(role)
         affected = [role]
@@ -1758,8 +1759,8 @@ def _execute_agent(
             raise RunnerError("RUNTIME_WORKER_FAILED", "The mapped Session is unavailable.")
 
     policy_role = _task_policy(task, role)
-    monitor = execution_budget_monitor(task, evidence)
-    budget_stage = _budget_stage(policy_role, role)
+    monitor = execution_budget_monitor(evidence, task.ticket_id, task.ticket_name)
+    budget_stage = execution_budget_stage(role)
     team_file = traces.parent / "team.yml"
     ordinal = yaml.safe_load(team_file.read_text())["current_round"] if team_file.exists() else 1
     report_files = _role_report_files(task, policy_role, role, generation, ordinal)
@@ -2135,16 +2136,6 @@ def _agent_alias(project: Any, task: Task, role: str, generation: int = 1) -> st
     while (project.runner_directory / "sessions" / f"{prefix}@{marker}{suffix}").exists():
         suffix += 2 if marker == "r" else 1
     return f"{prefix}@{marker}{suffix}"
-
-
-def _budget_stage(policy_role: str, role: str) -> str:
-    if policy_role in _ENGINEER_ROLES:
-        return "implementation"
-    if policy_role in _REVIEWER_ROLES:
-        return "review"
-    if role == "delivery-state":
-        return "delivery-state"
-    return "team-lead"
 
 
 def _role_report_files(

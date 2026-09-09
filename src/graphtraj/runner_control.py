@@ -18,6 +18,7 @@ from .codex_adapter import (
     refresh_codex_report_paths,
 )
 from .delivery_worldline import read_worldline
+from .execution_budget import caller_notice_fd, execution_budget_monitor
 from .project_configuration import ProjectConfigurationError, load_project_configuration
 from .runner_io import confirm_alias_mapping_durable, write_yaml_durably
 from .runner_capacity import capacity_positions
@@ -115,28 +116,44 @@ def _send_session(
     request = _refresh_current_team_report_request(
         request, mapping, worktree, team_environment
     )
+    evidence = team_environment.get("GRAPHTRAJ_EVIDENCE")
+    ticket_name = team_environment.get("GRAPHTRAJ_TICKET_NAME")
+    monitor = (
+        execution_budget_monitor(Path(evidence), mapping["ticket_id"], ticket_name)
+        if isinstance(evidence, str) and isinstance(ticket_name, str)
+        else None
+    )
     resume_file = session_directory / "resume.yml"
     error_file = session_directory / "resume-error.yml"
     error_file.unlink(missing_ok=True)
+    notice_fd = None
+    close_notice_fd = False
     try:
+        resume = {
+            "operation": "resume",
+            "runtime": mapping["runtime"],
+            "adapter_request": request,
+            "expected_session": mapping["session"],
+            "caused_by_event_ids": list(caused_by_event_ids),
+            "mapping": {
+                key: value
+                for key, value in mapping.items()
+                if key not in {"worker_pid", "runtime_pid"}
+            },
+        }
+        if monitor is not None:
+            resume["monitor_execution_budget"] = True
         write_yaml_durably(
             resume_file,
-            {
-                "operation": "resume",
-                "runtime": mapping["runtime"],
-                "adapter_request": request,
-                "expected_session": mapping["session"],
-                "caused_by_event_ids": list(caused_by_event_ids),
-                "mapping": {
-                    key: value
-                    for key, value in mapping.items()
-                    if key not in {"worker_pid", "runtime_pid"}
-                },
-            },
+            resume,
         )
         worker_environment = dict(os.environ)
         worker_environment.update(_resume_environment(mapping, connection))
         worker_environment.update(team_environment)
+        if monitor is not None:
+            notice_fd, close_notice_fd = caller_notice_fd()
+            if notice_fd is not None:
+                worker_environment["GRAPHTRAJ_BUDGET_NOTICE_FD"] = str(notice_fd)
         if mapping["role"] == "team-leader":
             worker_environment.update(
                 GRAPHTRAJ_PARENT_ALIAS=alias,
@@ -160,7 +177,9 @@ def _send_session(
                     text=True,
                     start_new_session=True,
                     env=worker_environment,
-                    pass_fds=(positions[0].fileno(),),
+                    pass_fds=(positions[0].fileno(),) if notice_fd is None else (
+                        positions[0].fileno(), notice_fd,
+                    ),
                 )
                 assert worker.stdin is not None
                 worker.stdin.write(instruction)
@@ -176,6 +195,9 @@ def _send_session(
         raise RunnerError(
             "operation-failed", "The mapped Runtime session could not be resumed."
         ) from error
+    finally:
+        if close_notice_fd and notice_fd is not None:
+            os.close(notice_fd)
     return {"alias": alias, "send_status": "sent"}
 
 

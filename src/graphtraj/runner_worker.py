@@ -6,12 +6,18 @@ import json
 import os
 import signal
 import sys
+import threading
 from pathlib import Path
 from typing import Mapping
 
 import yaml
 
 from .codex_adapter import create_codex_resume_turn, create_codex_turn
+from .execution_budget import (
+    ExecutionBudgetMonitor,
+    execution_budget_monitor_from_environment,
+    execution_budget_stage,
+)
 from .runner_io import write_yaml_durably
 from .runner_transport import runtime_launch_failure
 from .runtime_adapter import (
@@ -38,6 +44,9 @@ def run(job_file: Path) -> int:
     interrupted = False
     operation = "launch"
     previous_sigterm = None
+    budget_monitor: ExecutionBudgetMonitor | None = None
+    monitor_stop: threading.Event | None = None
+    monitor_thread: threading.Thread | None = None
 
     def request_termination(signum: int, frame: object) -> None:
         nonlocal interrupted
@@ -57,6 +66,18 @@ def run(job_file: Path) -> int:
             base_mapping = job["mapping"]
             if not isinstance(base_mapping, dict):
                 raise ValueError("session mapping is not a mapping")
+            monitor_execution_budget = job.get("monitor_execution_budget", False)
+            if not isinstance(monitor_execution_budget, bool):
+                raise ValueError("budget monitor request is invalid")
+            if monitor_execution_budget:
+                budget_monitor = execution_budget_monitor_from_environment(
+                    base_mapping
+                )
+                if budget_monitor is not None:
+                    role = base_mapping.get("role")
+                    if not isinstance(role, str) or not role:
+                        raise ValueError("session role is invalid")
+                    monitor_stop = threading.Event()
             prompt = sys.stdin.read()
             expected_session = job.get("expected_session")
             if operation == "resume" and (
@@ -73,7 +94,7 @@ def run(job_file: Path) -> int:
             adapter = ADAPTERS[runtime]
 
             def record_session(session: str, runtime_pid: int) -> None:
-                nonlocal mapping_recorded
+                nonlocal mapping_recorded, monitor_thread
                 if operation == "resume" and session != expected_session:
                     raise RuntimeAdapterError(
                         "RUNTIME_SESSION_NOT_RESUMABLE",
@@ -99,6 +120,17 @@ def run(job_file: Path) -> int:
                 (session_directory / "execution.yml").unlink(missing_ok=True)
                 write_yaml_durably(session_directory / "mapping.yml", mapping)
                 mapping_recorded = True
+                if (
+                    budget_monitor is not None
+                    and monitor_stop is not None
+                    and monitor_thread is None
+                ):
+                    monitor_thread = threading.Thread(
+                        target=_monitor_execution_budget,
+                        args=(budget_monitor, mapping["role"], monitor_stop),
+                        daemon=True,
+                    )
+                    monitor_thread.start()
 
             if operation == "resume":
                 turn_handle = RESUME_ADAPTERS[runtime](
@@ -116,7 +148,13 @@ def run(job_file: Path) -> int:
                     record_session,
                 )
             previous_sigterm = signal.signal(signal.SIGTERM, request_termination)
-            result = turn_handle.run()
+            try:
+                result = turn_handle.run()
+            finally:
+                if monitor_stop is not None:
+                    monitor_stop.set()
+                if monitor_thread is not None:
+                    monitor_thread.join()
             terminal = _terminal_turn(result, interrupted)
         except RuntimeAdapterError as error:
             if mapping_recorded:
@@ -161,6 +199,14 @@ def _append_follow_up(events_file: Path, causes: list[str]) -> None:
         )
         events.flush()
         os.fsync(events.fileno())
+
+
+def _monitor_execution_budget(
+    monitor: ExecutionBudgetMonitor, role: str, stop: threading.Event
+) -> None:
+    while not stop.is_set():
+        monitor.check(role, execution_budget_stage(role))
+        stop.wait(0.05)
 
 
 def _previous_outcome(execution_file: Path) -> str | None:

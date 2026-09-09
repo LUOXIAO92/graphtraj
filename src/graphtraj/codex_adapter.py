@@ -131,11 +131,16 @@ class _CodexRole:
                 native_settings["permissions"][self.default_permissions]["filesystem"][str(path)] = "write"
         if self.name == "merge-resolver":
             native_settings["permissions"][self.default_permissions]["filesystem"][str(evidence)] = "read"
-        report_paths = _report_write_paths(worktree, evidence, report_files)
-        for path in report_paths:
+        native_report_paths = _canonical_report_write_paths(
+            evidence, report_files
+        )
+        for path in native_report_paths:
             native_settings["permissions"][self.default_permissions]["filesystem"][
                 str(path)
             ] = "write"
+        hook_report_paths = _report_write_paths(
+            worktree, evidence, report_files
+        )
         overrides = (
             *native_settings.items(),
             ("default_permissions", self.default_permissions),
@@ -145,7 +150,7 @@ class _CodexRole:
                 "hooks",
                 _root_owned_hooks(
                     self.hooks, runtime_store, self.name, effective_skills,
-                    report_paths,
+                    hook_report_paths,
                 ),
             ),
             ("agents", self.agents),
@@ -851,6 +856,19 @@ def _report_write_paths(
     report_files: Tuple[Path, ...],
 ) -> Tuple[Path, ...]:
     """Return both supported spellings of each exact ticket report target."""
+    canonical_paths = _canonical_report_write_paths(evidence, report_files)
+    return tuple(
+        path
+        for report, canonical in zip(report_files, canonical_paths)
+        for path in (worktree / report, canonical)
+    )
+
+
+def _canonical_report_write_paths(
+    evidence: Path,
+    report_files: Tuple[Path, ...],
+) -> Tuple[Path, ...]:
+    """Return the native canonical target for each exact ticket report."""
     paths: list[Path] = []
     for report in report_files:
         if (
@@ -862,7 +880,7 @@ def _report_write_paths(
             raise CodexAdapterError(
                 "ROLE_CONFIG_INVALID", "A report path must be inside .state."
             )
-        paths.extend((worktree / report, evidence.joinpath(*report.parts[1:])))
+        paths.append(evidence.joinpath(*report.parts[1:]))
     return tuple(paths)
 
 
@@ -884,7 +902,10 @@ def refresh_codex_report_paths(
     if not report_files:
         return {"arguments": refreshed, "worktree_path": str(request_worktree)}
 
-    report_paths = _report_write_paths(worktree, evidence, report_files)
+    native_report_paths = _canonical_report_write_paths(
+        evidence, report_files
+    )
+    hook_report_paths = _report_write_paths(worktree, evidence, report_files)
     _, default_permissions = _resume_request_setting(
         refreshed, "default_permissions"
     )
@@ -911,7 +932,7 @@ def refresh_codex_report_paths(
             path, evidence, report_files
         ):
             del filesystem[path]
-    for path in report_paths:
+    for path in native_report_paths:
         filesystem[str(path)] = "write"
     refreshed[permissions_index + 1] = "permissions={0}".format(
         _toml_value(permissions)
@@ -937,7 +958,7 @@ def refresh_codex_report_paths(
                     if not isinstance(hook, dict) or hook.get("type") != "command":
                         raise ValueError("Hook must be a command")
                     hook["command"] = _refresh_guard_write_paths(
-                        hook["command"], report_paths
+                        hook["command"], hook_report_paths
                     )
     except (KeyError, TypeError, ValueError) as error:
         raise CodexAdapterError(

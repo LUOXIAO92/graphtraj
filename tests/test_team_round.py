@@ -285,18 +285,17 @@ def test_installed_runner_obeys_the_explicit_leader_decision_for_a_run_free_team
         if report_names is None:
             assert not report_writes
         else:
-            assert len(report_writes) == 2 * len(report_names)
+            assert len(report_writes) == len(report_names)
             canonical = {
                 Path(path).relative_to(ticket_directory)
                 for path in report_writes
                 if path.startswith(str(ticket_directory))
             }
-            views = {
-                Path(path).relative_to(worktree / ".state")
+            assert not {
+                path
                 for path in report_writes
                 if path.startswith(str(worktree / ".state"))
             }
-            assert canonical == views
             assert {path.name for path in canonical} == report_names
             if call["role"] in {"engineer-junior", "team-leader"}:
                 assert canonical == {
@@ -311,7 +310,10 @@ def test_installed_runner_obeys_the_explicit_leader_decision_for_a_run_free_team
             for index, value in enumerate(hook[:-1])
             if value == '--write-path'
         }
-        assert write_paths == report_writes
+        assert write_paths == report_writes | {
+            str(worktree / ".state" / Path(path).relative_to(ticket_directory))
+            for path in report_writes
+        }
         assert call['settings']['agents']['enabled'] is (leader and swarm is not False)
         assert 'max_concurrent_threads_per_session' not in call['settings']['agents']
         assert 'max_depth' not in call['settings']['agents']

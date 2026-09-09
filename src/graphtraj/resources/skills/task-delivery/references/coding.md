@@ -1,5 +1,10 @@
 # Coding dispatch
 
+Before dispatch, read [the ticket budget](coding-budget.md) and check it against
+the current ticket. Present difficulty, expected total time, selected Engineer
+tier and planned Sessions before launching. Budget notices require the calling
+Agent to inspect progress and record a recovery or continuation decision.
+
 Select the configured coding-team.team-leader preset and give the Leader the
 Junior, Senior or Expert difficulty of the accepted code Ticket. A Batch task
 uses its ticket_id, ticket_name, role and concise instruction; the registered

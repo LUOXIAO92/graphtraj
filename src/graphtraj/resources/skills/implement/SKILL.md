@@ -14,4 +14,6 @@ When assigned to a GraphTraj Team, self-review the work and return the candidate
 and validation evidence to the Team Leader, who schedules both Reviewers.
 For standalone implementation, use /code-review once done.
 
-Commit your work to the current branch.
+Commit authorized tracked project changes before ending the modifying turn or
+handing off, including unfinished work with its status stated honestly. A commit
+is not Team acceptance.

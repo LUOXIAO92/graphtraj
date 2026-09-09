@@ -51,6 +51,13 @@ Give each ticket its **blocking edges** — the other tickets that must complete
 
 **Wide refactors are the exception to vertical slicing.** A **wide refactor** is one mechanical change — rename a column, retype a shared symbol — whose **blast radius** fans across the whole codebase, so a single edit breaks thousands of call sites at once and no vertical slice can land green. Don't force it into a tracer bullet; sequence it as **expand–contract**. First expand: add the new form beside the old so nothing breaks. Then migrate the call sites over in batches sized by blast radius (per package, per directory), each batch its own ticket blocked by the expand, keeping CI green batch to batch because the old form still exists. Finally contract: delete the old form once no caller remains, in a ticket blocked by every migrate batch. Explain why independent vertical changes cannot stay green before choosing this exception. Keep non-deliverable intermediate steps within one ticket.
 
+Before publishing each concrete code ticket, read
+[the coding-budget reference](../task-delivery/references/coding-budget.md).
+Assess difficulty, Engineer tier and execution budget with reasons, and put the
+YAML front matter at the very start of the ticket. Resolve unknown scope before
+claiming a usable budget; retain uncertainty as explanation. Keep the existing
+source node and real dependencies.
+
 ### 4. Quiz the user
 
 Present the proposed breakdown as a numbered list. For each ticket, show:
@@ -82,6 +89,8 @@ Do NOT close or modify any parent issue.
 
 <local-ticket-template>
 
+<YAML front matter from the coding-budget reference>
+
 # <NN> — <Ticket title>
 
 **Source task node:** the accepted node this ticket delivers or refines.
@@ -98,6 +107,8 @@ Do NOT close or modify any parent issue.
 </local-ticket-template>
 
 <issue-template>
+
+<YAML front matter from the coding-budget reference>
 
 ## Parent
 

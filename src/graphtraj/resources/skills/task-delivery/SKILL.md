@@ -43,9 +43,10 @@ with `agent-runner send <alias> --instruction <text>
 interruption is intended.
 
 Receive the result, validation, required review evidence and acceptance
-decision. Runtime success alone does not establish acceptance. Return
-team-internal problems to its Leader; correct Main's scope or graph errors
-as Main. Diagnose evidence before choosing further work or replacement.
+decision. Runtime success alone does not establish acceptance. For an execution
+failure or repeated unproductive correction, read
+[recovery decisions](references/recovery.md). Correct Main's scope or dispatch
+errors as Main; the responsible Agent and its superior judge internal recovery.
 
 Only Main or the user retires a formal Team. Use
 `agent-runner replace <leader-alias> --actor main

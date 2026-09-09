@@ -30,11 +30,13 @@ Harness Project Documents.
 
 ## Working constraints
 
-- Record every code change in a Git commit after proportionate validation,
-  before handoff or further Agent dispatch. Immediately commit completed
-  merges and conflict resolutions; an existing merge or fast-forward commit
-  already satisfies this requirement. Do not leave completed code changes
-  uncommitted.
+- Commit all authorized tracked project changes before ending a modifying turn
+  or handing off, including documentation, Skills, configuration and resources.
+  Mark incomplete or failing work honestly. Continuous user-interactive drafting
+  may batch adjacent turns; commit before that editing segment ends or changes
+  owner. Do not initialize Git or force-add ignored state for this rule.
+  Immediately commit completed merges/conflict resolutions; an existing merge
+  commit or fast-forward satisfies this requirement.
 - Prefer the smallest direct implementation that satisfies the accepted
   requirement. Do not add speculative abstractions, compatibility layers,
   configuration switches, fallback paths, or defense-in-depth work.

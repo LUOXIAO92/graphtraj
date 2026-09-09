@@ -783,7 +783,24 @@ def _resume_active_ticket(
             traces, engineer_alias, engineer_session, None, leader_alias,
             engineer_batch_path, capacity_fd=capacity_fd,
         )
-        candidate = _candidate(round_directory, worktree)
+        try:
+            candidate = _candidate(round_directory, worktree)
+        except RunnerError as error:
+            if error.code != _AGENT_EVIDENCE_ERROR:
+                raise
+            engineer_alias, engineer_session = _run_agent(
+                project, engineer_task, engineer_role, worktree,
+                ticket_directory, traces, engineer_alias, engineer_session,
+                None, leader_alias, engineer_batch_path,
+                _evidence_recovery_prompt(
+                    project, engineer_task, traces, engineer_alias, worktree,
+                    error,
+                    "commit tracked project changes and write both current Round "
+                    "Engineer reports with the fixed candidate commit",
+                ),
+                capacity_fd=capacity_fd,
+            )
+            candidate = _candidate(round_directory, worktree)
         state_alias, state_session, _ = _request_state(
             project, task, worktree, ticket_directory, traces,
             state_alias, state_session, leader_alias, engineer_batch_path,
@@ -912,6 +929,33 @@ def _resume_active_ticket(
             {"role": role, "alias": alias, "session": session,
              "trace": _trace_ref(project, traces, alias)}
         )
+
+    def correct_process() -> None:
+        nonlocal leader_alias, leader_session, state_alias, state_session, predecessor
+        (
+            leader_alias,
+            leader_session,
+            state_alias,
+            state_session,
+            predecessor,
+        ) = _process_corrections(
+            project,
+            task,
+            worktree,
+            ticket_directory,
+            traces,
+            round_directory,
+            leader_alias,
+            leader_session,
+            state_alias,
+            state_session,
+            predecessor,
+            registration,
+            team_batch,
+            sessions,
+            capacity_fd=capacity_fd,
+        )
+
     reviewers_dispatched = bool(remaining)
     if remaining:
         leader_alias, leader_session = _run_agent(
@@ -933,7 +977,7 @@ def _resume_active_ticket(
         reviewer_batch, reviewer_batch_path, leader_alias, leader_session = _next_formal_batch(
             project, task, definition, ticket_content, worktree, ticket_directory,
             traces, leader_alias, leader_session, registration, team_batch,
-            capacity_fd=capacity_fd,
+            capacity_fd=capacity_fd, correct_process=correct_process,
         )
         assert reviewer_batch is not None and reviewer_batch_path is not None
         if not {child.role for child in reviewer_batch.tasks} <= remaining:
@@ -946,15 +990,18 @@ def _resume_active_ticket(
                 raise RunnerError(result["error"]["code"], result["error"]["message"])
             report_name = "standards.md" if child.role == "standards-reviewer" else "spec.md"
             alias, session = result["alias"], result["session"]
+            mapping, _ = read_alias_mapping(project.runner_directory, alias)
+            report_file = _review_report_file(child.role, mapping)
             reviewer_task = replace(
                 child,
                 ticket_file=definition.resolve(),
                 ticket_content=ticket_content,
-                report_file=Path(".state") / "reviews" / report_name,
+                report_file=report_file,
             )
             _collect_review_report(
                 ticket_directory,
                 round_directory,
+                report_file.name,
                 report_name,
                 session_directory=project.runner_directory / "sessions" / alias,
             )
@@ -999,29 +1046,7 @@ def _resume_active_ticket(
             "Reviewers completed:\n" + yaml.safe_dump(reviewer_results, sort_keys=False),
             capacity_fd=capacity_fd,
         )
-    (
-        leader_alias,
-        leader_session,
-        state_alias,
-        state_session,
-        predecessor,
-    ) = _process_corrections(
-        project,
-        task,
-        worktree,
-        ticket_directory,
-        traces,
-        round_directory,
-        leader_alias,
-        leader_session,
-        state_alias,
-        state_session,
-        predecessor,
-        registration,
-        team_batch,
-        sessions,
-        capacity_fd=capacity_fd,
-    )
+    correct_process()
     _, _, leader_alias, leader_session = _next_formal_batch(
         project, task, definition, ticket_content, worktree, ticket_directory,
         traces, leader_alias, leader_session, registration, team_batch,

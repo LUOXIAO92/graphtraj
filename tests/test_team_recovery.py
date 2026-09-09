@@ -67,6 +67,22 @@ elif role == 'team-leader':
     if not (round_dir / 'engineer.md').exists():
         if target != 'dispatch' or 'Recovery required:' in prompt:
             dispatch(['engineer-junior'])
+    elif target == 'provider-before-review-correct':
+        corrected = Path.cwd() / '.scratch' / 'provider-before-review-correct-written'
+        if not corrected.exists():
+            corrected.write_text('corrected\n')
+            (round_dir / 'leader.md').write_text(
+                'Decision: CORRECT\nResponsible: coding-team.engineer-junior\n'
+                'Rule: accepted Ticket\nReason: correct the current Engineer work.\n'
+                'Candidate commit: ' + git('rev-parse', 'HEAD') + '\n'
+            )
+        elif (round_dir / 'leader.md').exists():
+            pass
+        elif not (round_dir / 'standards.md').exists() or not (round_dir / 'spec.md').exists():
+            dispatch(['standards-reviewer', 'spec-reviewer'])
+        else:
+            candidate = git('rev-parse', 'HEAD')
+            (round_dir / 'leader.md').write_text('Decision: ACCEPT\nCandidate commit: ' + candidate + '\n')
     elif not (round_dir / 'standards.md').exists() or not (round_dir / 'spec.md').exists():
         dispatch(['standards-reviewer', 'spec-reviewer'])
     elif target == 'team-leader' and 'Recovery required:' not in prompt:
@@ -81,7 +97,7 @@ elif role == 'team-leader':
                 'Rule: accepted Ticket\nReason: repeat the current Spec review.\n'
                 'Candidate commit: ' + candidate + '\n'
             )
-        elif target == 'provider-rework' and round_dir.name == '1':
+        elif target in {'provider-rework', 'provider-rework-evidence', 'replacement-rework'} and round_dir.name == '1':
             (round_dir / 'leader.md').write_text(
                 'Decision: REJECT\nDiagnosis: implementation\nReviews: compliant\n'
                 'Action: rework\nRationale: bounded correction.\n'
@@ -90,7 +106,7 @@ elif role == 'team-leader':
         else:
             (round_dir / 'leader.md').write_text('Decision: ACCEPT\nCandidate commit: ' + candidate + '\n')
 elif role.startswith('engineer-'):
-    if target in {'provider', 'provider-correct', 'provider-quoted', 'provider-rework'} and not resumed:
+    if target in {'provider', 'provider-before-review-correct', 'provider-correct', 'provider-quoted', 'provider-rework', 'provider-rework-evidence'} and not resumed:
         if target == 'provider-quoted':
             print(json.dumps({'type': 'item.completed', 'item': {
                 'type': 'command_execution',
@@ -111,6 +127,12 @@ elif role.startswith('engineer-'):
         sys.stderr.write('Permission denied by Runtime filesystem sandbox\n')
         raise SystemExit(1)
     missing_report = target == 'completed-wrong-target' and not resumed
+    missing_validation = False
+    if target == 'provider-rework-evidence' and round_dir.name == '2':
+        missing = Path.cwd() / '.scratch' / 'provider-rework-validation-missing'
+        if not missing.exists():
+            missing.write_text('missing\n')
+            missing_validation = True
     if missing_report:
         print(json.dumps({'type': 'item.completed', 'item': {
             'type': 'command_execution',
@@ -137,7 +159,9 @@ elif role.startswith('engineer-'):
     if not missing_report:
         (round_dir / 'engineer.md').write_text('Candidate commit: ' + candidate + '\nSelf-review: complete.\n')
         validation = round_dir / 'validation.md'
-        if target == 'engineer-junior' and not resumed:
+        if missing_validation:
+            pass
+        elif target == 'engineer-junior' and not resumed:
             validation.write_text('Candidate commit: invalid\n')
         else:
             validation.write_text('Candidate commit: ' + candidate + '\nTests: passed.\n')
@@ -145,7 +169,7 @@ else:
     if target == 'provider-review' and role == 'spec-reviewer' and not resumed:
         raise SystemExit(1)
     if (
-        target == 'replacement-review'
+        target in {'replacement-review', 'replacement-rework'}
         and role == 'spec-reviewer'
         and not Path(os.environ['GRAPHTRAJ_REVIEW_REPORT']).name.endswith('-replacement.md')
     ):
@@ -180,11 +204,11 @@ else:
         pass
     else:
         candidate = git('rev-parse', 'HEAD')
-        if target == 'replacement-review' and role == 'spec-reviewer':
+        if target in {'replacement-review', 'replacement-rework'} and role == 'spec-reviewer':
             (Path.cwd() / '.scratch' / 'replacement-review-target').write_text(
                 os.environ['GRAPHTRAJ_REVIEW_REPORT']
             )
-        if target == 'provider-rework' and round_dir.name == '1':
+        if target in {'provider-rework', 'provider-rework-evidence', 'replacement-rework'} and round_dir.name == '1':
             axis = 'Standards' if role == 'standards-reviewer' else 'Spec'
             Path(os.environ['GRAPHTRAJ_REVIEW_REPORT']).write_text(
                 'Candidate commit: ' + candidate + '\n'
@@ -279,7 +303,14 @@ def test_installed_team_corrects_missing_member_evidence_in_its_existing_session
 
 @pytest.mark.parametrize(
     ('target', 'round_ordinal'),
-    (('provider', 1), ('provider-correct', 1), ('provider-quoted', 1), ('provider-rework', 2)),
+    (
+        ('provider', 1),
+        ('provider-before-review-correct', 1),
+        ('provider-correct', 1),
+        ('provider-quoted', 1),
+        ('provider-rework', 2),
+        ('provider-rework-evidence', 2),
+    ),
 )
 def test_provider_failure_returns_to_the_caller_for_an_explicit_same_session_retry(
     installed_commands, temporary_git_repository, fake_codex, tmp_path,
@@ -369,13 +400,23 @@ def test_provider_failure_returns_to_the_caller_for_an_explicit_same_session_ret
     assert current['status'] == 'awaiting-integration'
     team = yaml.safe_load((ticket / 'teams/1/team.yml').read_text())
     assert team['current_round'] == round_ordinal
-    if target == 'provider-correct':
+    if target in {'provider-before-review-correct', 'provider-correct'}:
         events = [
             json.loads(line)
             for path in (harness / '.graphtraj/state/worldline').glob('*.jsonl')
             for line in path.read_text().splitlines()
         ]
         assert any(event['kind'] == 'team-process-correction' for event in events)
+    if target == 'provider-before-review-correct':
+        assert trace.read_text().count('thread.started') == 3
+    if target == 'provider-rework-evidence':
+        assert trace.read_text().count('thread.started') == 4
+        prompt = (
+            harness / current['worktree']
+            / '.scratch/recovery-prompt-engineer-junior'
+        ).read_text()
+        assert 'Recovery required:' in prompt
+        assert 'Engineer evidence is missing or unreadable' in prompt
 
 
 def test_access_failure_returns_to_the_responsible_operator_without_agent_reflection(
@@ -526,8 +567,13 @@ def test_main_replaces_an_unregistered_failed_engineer_from_its_durable_alias(
     assert trace.read_bytes() == trace_before
 
 
+@pytest.mark.parametrize(
+    ('target', 'round_ordinal'),
+    (('replacement-review', 1), ('replacement-rework', 2)),
+)
 def test_replacement_reviewer_report_continues_the_current_team_once(
     installed_commands, temporary_git_repository, fake_codex, tmp_path,
+    target, round_ordinal,
 ):
     harness, _, _, environment = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path,
@@ -544,7 +590,7 @@ def test_replacement_reviewer_report_continues_the_current_team_once(
     runtime_environment = {
         **environment,
         'GRAPHTRAJ_AGENT_RUNNER': str(installed_commands.runner),
-        'RECOVERY_TARGET': 'replacement-review',
+        'RECOVERY_TARGET': target,
     }
 
     failed = run_process(
@@ -599,8 +645,8 @@ def test_replacement_reviewer_report_continues_the_current_team_once(
     )
     assert resumed.returncode == 0, resumed.stdout + resumed.stderr
     wait_for_file(target_file)
-    target = target_file.read_text()
-    assert target.endswith(alias + '-replacement.md')
+    report_target = target_file.read_text()
+    assert report_target.endswith(alias + '-replacement.md')
 
     continued = run_process(
         [str(installed_commands.runner), '--batch-input', str(batch)],
@@ -610,7 +656,8 @@ def test_replacement_reviewer_report_continues_the_current_team_once(
     assert continued.returncode == 0, continued.stdout + continued.stderr
     state = yaml.safe_load((ticket / 'ticket.yml').read_text())
     assert state['status'] == 'awaiting-integration'
-    assert (ticket / 'teams/1/rounds/1/spec.md').is_file()
+    assert (ticket / 'teams/1/rounds' / str(round_ordinal) / 'spec.md').is_file()
+    assert yaml.safe_load(team_file.read_text())['current_round'] == round_ordinal
     sessions = [
         yaml.safe_load(path.read_text())
         for path in (harness / '.graphtraj/runner/sessions').glob('*/mapping.yml')

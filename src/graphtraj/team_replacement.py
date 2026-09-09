@@ -15,7 +15,7 @@ from .runner_capacity import capacity_positions
 from .runner_control import _require_project_events, interrupt_session
 from .runner_models import RunnerError
 from .runner_process import OPERATION_TIMEOUT_SECONDS
-from .runner_project import discover_project
+from .runner_project import discover_project, run_git
 from .runner_status import read_alias_mapping
 from .team_round import _deliver_ticket, _request_state, _run_agent, _trace_ref
 from .ticket_graph import _load_states
@@ -49,7 +49,16 @@ def replace_session(alias, actor, caused_by_event_ids, cwd):
     generation = mapping["team_generation"]
     team_file = directory / "teams" / str(generation) / "team.yml"
     team = yaml.safe_load(team_file.read_text())
-    seat = next((name for name, member in team["members"].items() if member["session_ref"] == alias), None)
+    seats = [
+        name
+        for name, member in team["members"].items()
+        if member["session_ref"] == alias
+        or (
+            member["session_ref"] is None
+            and member["role"] == mapping["role"]
+        )
+    ]
+    seat = seats[0] if len(seats) == 1 else None
     if seat is None or ticket["active_team_ordinal"] != generation:
         raise RunnerError("seat-replaced", "The alias must identify a current Team seat.")
     if ticket["status"] in {"integrating", "resolving-integration", "integrated"}:
@@ -132,11 +141,18 @@ def replace_session(alias, actor, caused_by_event_ids, cwd):
     stop(alias)
     if task.role.endswith("reviewer"):
         task = replace(task, report_file=Path(".state/reviews") / (alias + "-replacement.md"))
+    current_commit = run_git(worktree, "rev-parse", "HEAD")
+    prior_trace = _trace_ref(project, traces, alias)
     replacement, _ = _run_agent(
         project, task, task.role, worktree, directory, traces,
         None, None, None, leader, retained,
-        f"Continue this Team seat from previous Session {alias} and Trace {_trace_ref(project, traces, alias)}. "
-        "Preserve closed Team Round evidence; report your current findings in your Session output.",
+        "Continue this Team seat from previous Session {0} and Trace {1}.\n"
+        "Accepted Ticket and constraints:\n{2}\n"
+        "Current commit: {3}\n"
+        "Valid retained evidence: {1}\n"
+        "Failed attempts: inspect the previous Session Trace before changing work.\n"
+        "Remaining work: continue only the current {4} Team seat, preserving closed Team Round evidence."
+        .format(alias, prior_trace, task.ticket_content, current_commit, task.role),
     )
     record("replace-member", [_trace_ref(project, traces, replacement)], member=seat, role=task.role, session_ref=replacement)
     return {"alias": alias, "replacement_alias": replacement, "team_ordinal": generation}

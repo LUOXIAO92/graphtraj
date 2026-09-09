@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import copy
 import json
+import shlex
 import sys
+import tomllib
 from dataclasses import replace
 from pathlib import Path
 
@@ -121,3 +124,239 @@ print(json.dumps({'type': 'turn.completed'}), flush=True)
     assert result["model"] == "operator-model"
     assert result["filesystem"]["."] == "write"
     assert result["filesystem"]["CONTEXT.md"] == "read"
+
+
+def test_codex_turn_appends_stderr_for_later_diagnostic_boundaries(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.syspath_prepend(str(PROJECT_ROOT / "src"))
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path / "empty-codex-home"))
+    from graphtraj.codex_adapter import create_codex_turn
+
+    executable = tmp_path / "runtime"
+    executable.write_text(
+        "#!{0}\n".format(sys.executable)
+        + "import json, sys\n"
+        + "sys.stderr.write(sys.stdin.read() + '\\n')\n"
+        + "print(json.dumps({'type': 'thread.started', 'thread_id': 'diagnostic'}))\n"
+        + "print(json.dumps({'type': 'turn.completed'}))\n",
+        encoding="utf-8",
+    )
+    executable.chmod(0o755)
+    session = tmp_path / "session"
+    session.mkdir()
+    request = {
+        "arguments": [str(executable), "exec", "--json", "-"],
+        "worktree_path": str(tmp_path),
+    }
+
+    create_codex_turn(request, "first diagnostic", session, lambda *_: None).run()
+    create_codex_turn(request, "second diagnostic", session, lambda *_: None).run()
+
+    assert (session / "stderr.log").read_text(encoding="utf-8") == (
+        "first diagnostic\nsecond diagnostic\n"
+    )
+
+
+def test_current_runtime_diagnostic_uses_only_current_error_events(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.syspath_prepend(str(PROJECT_ROOT / "src"))
+    from graphtraj.team_round import (
+        _current_runtime_diagnostic,
+        _runtime_access_failure,
+        _runtime_command_parse_error,
+    )
+
+    session = tmp_path / "session"
+    session.mkdir()
+    report = session / "assigned-report.md"
+    stderr = session / "stderr.log"
+    stderr.write_text("retained Permission denied diagnostic\n", encoding="utf-8")
+    stderr_offset = stderr.stat().st_size
+    events = session / "events.jsonl"
+    events.write_text(
+        json.dumps({"type": "report-observed", "content": "Permission denied"})
+        + "\n",
+        encoding="utf-8",
+    )
+    event_offset = events.stat().st_size
+    with events.open("a", encoding="utf-8") as stream:
+        stream.write(
+            json.dumps(
+                {
+                    "type": "item.completed",
+                    "item": {
+                        "type": "command_execution",
+                        "aggregated_output": "source says Permission denied",
+                        "exit_code": 0,
+                        "status": "completed",
+                    },
+                }
+            )
+            + "\n"
+        )
+        stream.write(
+            json.dumps(
+                {
+                    "type": "item.completed",
+                    "item": {
+                        "type": "agent_message",
+                        "text": "the Agent quoted Permission denied",
+                    },
+                }
+            )
+            + "\n"
+        )
+
+    diagnostic = _current_runtime_diagnostic(
+        session, stderr_offset, event_offset
+    )
+    assert not _runtime_access_failure(diagnostic, (report,))
+
+    parse_offset = events.stat().st_size
+    with events.open("a", encoding="utf-8") as stream:
+        stream.write(
+            json.dumps(
+                {
+                    "type": "item.completed",
+                    "item": {
+                        "type": "command_execution",
+                        "aggregated_output": "Cannot verify option: --glob",
+                        "exit_code": 1,
+                        "status": "failed",
+                    },
+                }
+            )
+            + "\n"
+        )
+    parse_diagnostic = _current_runtime_diagnostic(
+        session, stderr_offset, parse_offset
+    )
+    assert not _runtime_access_failure(parse_diagnostic, (report,))
+    assert _runtime_command_parse_error(parse_diagnostic) == "Cannot verify option: --glob"
+
+    wrong_target_offset = events.stat().st_size
+    with events.open("a", encoding="utf-8") as stream:
+        stream.write(
+            json.dumps(
+                {
+                    "type": "item.completed",
+                    "item": {
+                        "type": "command_execution",
+                        "aggregated_output": (
+                            "Blocked path target: requested=.state/teams/1/rounds/2; "
+                            "resolved={0}; condition=the report target is not "
+                            "authorized for this role"
+                        ).format(session / "rounds" / "2"),
+                        "exit_code": 1,
+                        "status": "failed",
+                    },
+                }
+            )
+            + "\n"
+        )
+    wrong_target = _current_runtime_diagnostic(
+        session, stderr_offset, wrong_target_offset
+    )
+    assert not _runtime_access_failure(wrong_target, (report,))
+
+    denial_offset = events.stat().st_size
+    with events.open("a", encoding="utf-8") as stream:
+        stream.write(
+            json.dumps(
+                {
+                    "type": "item.completed",
+                    "item": {
+                        "type": "command_execution",
+                        "aggregated_output": (
+                            "Blocked path target: requested=.state/reviews/assigned-report.md; "
+                            "resolved={0}; condition=the report target is not "
+                            "authorized for this role"
+                        ).format(report),
+                        "exit_code": 1,
+                        "status": "failed",
+                    },
+                }
+            )
+            + "\n"
+    )
+    denial = _current_runtime_diagnostic(session, stderr_offset, denial_offset)
+    assert _runtime_access_failure(denial, (report,))
+    assert _runtime_access_failure(
+        "Native startup failed: symlinked writable roots are not supported",
+        (report,),
+    )
+
+
+def test_reviewer_send_refreshes_exact_replacement_report_permissions(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.syspath_prepend(str(PROJECT_ROOT / "src"))
+    from graphtraj.codex_adapter import _toml_value
+    from graphtraj.runner_control import _refresh_current_team_report_request
+
+    worktree = tmp_path / "worktree"
+    evidence = tmp_path / "evidence"
+    worktree.mkdir()
+    evidence.mkdir()
+    hooks = {
+        event: [{"hooks": [{"type": "command", "command": "python /tmp/worktree_guard.py"}]}]
+        for event in ("PreToolUse", "SubagentStart")
+    }
+    request = {
+        "arguments": [
+            "/tmp/codex",
+            "exec",
+            "--model",
+            "reviewer-model",
+            "-c",
+            'default_permissions="restricted"',
+            "-c",
+            'permissions={ restricted = { filesystem = { "." = "write" } } }',
+            "-c",
+            "hooks={0}".format(_toml_value(hooks)),
+            "--json",
+            "-",
+        ],
+        "worktree_path": str(worktree),
+    }
+    original = copy.deepcopy(request)
+    report = Path(".state") / "reviews" / "r1-replacement.md"
+
+    refreshed = _refresh_current_team_report_request(
+        request,
+        {"role": "spec-reviewer", "report_file": report.as_posix()},
+        worktree,
+        {
+            "GRAPHTRAJ_EVIDENCE": str(evidence),
+            "GRAPHTRAJ_TEAM_GENERATION": "1",
+            "GRAPHTRAJ_TEAM_ROUND": "2",
+        },
+    )
+
+    assert request == original
+    arguments = refreshed["arguments"]
+    assert arguments[:4] == ["/tmp/codex", "exec", "--model", "reviewer-model"]
+    permissions = tomllib.loads(
+        next(argument for argument in arguments if argument.startswith("permissions="))
+    )["permissions"]
+    filesystem = permissions["restricted"]["filesystem"]
+    canonical = evidence / "reviews" / report.name
+    view = worktree / report
+    assert filesystem[str(canonical)] == "write"
+    assert str(view) not in filesystem
+    hooks = tomllib.loads(
+        next(argument for argument in arguments if argument.startswith("hooks="))
+    )["hooks"]
+    for event in ("PreToolUse", "SubagentStart"):
+        hook = shlex.split(hooks[event][0]["hooks"][0]["command"])
+        write_paths = {
+            hook[index + 1]
+            for index, value in enumerate(hook[:-1])
+            if value == "--write-path"
+        }
+        assert write_paths == {str(canonical), str(view)}

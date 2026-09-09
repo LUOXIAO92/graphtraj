@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import shutil
 import tomllib
 from pathlib import Path
@@ -244,6 +245,7 @@ def test_installed_runner_obeys_the_explicit_leader_decision_for_a_run_free_team
     assert main_config.read_bytes() == main_before
     assert 'max_concurrent_threads_per_session' not in tomllib.loads(main_before.decode()).get('agents', {})
     calls = [json.loads(line) for line in policy_log.read_text().splitlines()]
+    worktree = worktree_root / "74-complete-team-round"
     for call in calls:
         leader = call['role'] == 'team-leader'
         filesystem = call['settings']['permissions'][call['settings']['default_permissions']]['filesystem']
@@ -265,11 +267,63 @@ def test_installed_runner_obeys_the_explicit_leader_decision_for_a_run_free_team
         batch_directory = harness_root / '.graphtraj/state/batches'
         assert (filesystem.get(str(registration)) == 'write') is leader
         assert (filesystem.get(str(batch_directory)) == 'write') is leader
+        report_names = {
+            "engineer-junior": {"engineer.md", "validation.md"},
+            "standards-reviewer": {"standards.md"},
+            "spec-reviewer": {"spec.md"},
+            "team-leader": {"leader.md"},
+        }.get(call["role"])
+        report_writes = {
+            path
+            for path, access in filesystem.items()
+            if access == "write"
+            and (
+                path.startswith(str(ticket_directory))
+                or path.startswith(str(worktree / ".state"))
+            )
+        }
+        if report_names is None:
+            assert not report_writes
+        else:
+            assert len(report_writes) == len(report_names)
+            canonical = {
+                Path(path).relative_to(ticket_directory)
+                for path in report_writes
+                if path.startswith(str(ticket_directory))
+            }
+            assert not {
+                path
+                for path in report_writes
+                if path.startswith(str(worktree / ".state"))
+            }
+            assert {path.name for path in canonical} == report_names
+            if call["role"] in {"engineer-junior", "team-leader"}:
+                assert canonical == {
+                    Path("teams") / "1" / "rounds" / call["round"] / name
+                    for name in report_names
+                }
+        hook = shlex.split(
+            call['settings']['hooks']['PreToolUse'][0]['hooks'][0]['command']
+        )
+        write_paths = {
+            hook[index + 1]
+            for index, value in enumerate(hook[:-1])
+            if value == '--write-path'
+        }
+        assert write_paths == report_writes | {
+            str(worktree / ".state" / Path(path).relative_to(ticket_directory))
+            for path in report_writes
+        }
         assert call['settings']['agents']['enabled'] is (leader and swarm is not False)
         assert 'max_concurrent_threads_per_session' not in call['settings']['agents']
         assert 'max_depth' not in call['settings']['agents']
         for command, decision in call['decisions'].items():
-            permitted = command == 'pwd' or (leader and command == 'agent-runner --help')
+            permitted = (
+                command == 'pwd'
+                or command.startswith('touch .state/teams/')
+                or command.startswith('touch ' + str(ticket_directory / 'teams'))
+                or (leader and command == 'agent-runner --help')
+            )
             assert (not decision) is permitted, (call['role'], command, decision)
         for command, decision in call['helper_decisions'].items():
             assert (not decision) is (command in {'pwd', 'cat README.md'})

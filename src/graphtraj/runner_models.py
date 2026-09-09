@@ -98,6 +98,8 @@ DETAIL_ERROR_CATEGORIES = {
     "RUNTIME_LAUNCH_FAILED": "launch-failed",
     "RUNTIME_LAUNCH_TIMEOUT": "launch-failed",
     "RUNTIME_WORKER_FAILED": "launch-failed",
+    "RUNTIME_PROVIDER_FAILED": "launch-failed",
+    "RUNTIME_ACCESS_DENIED": "invalid-config",
     "RUNTIME_START_FAILED": "launch-failed",
     "RUNTIME_SESSION_MISSING": "launch-failed",
     "RUNTIME_REQUEST_INVALID": "launch-failed",

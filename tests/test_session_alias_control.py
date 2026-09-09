@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shlex
 from pathlib import Path
 
 import yaml
@@ -125,6 +126,10 @@ def test_installed_alias_control_resumes_and_interrupts_one_team_session(
     ticket_directory = (
         harness_root / ".graphtraj" / "state" / "tickets" / "76-session-alias-control"
     )
+    team_file = ticket_directory / "teams" / "1" / "team.yml"
+    team = yaml.safe_load(team_file.read_text(encoding="utf-8"))
+    team["current_round"] = 2
+    team_file.write_text(yaml.safe_dump(team), encoding="utf-8")
     trace = ticket_directory / "teams" / "1" / "traces" / alias / "events.jsonl"
     trace_before = trace.read_text(encoding="utf-8")
     worldline = [
@@ -257,9 +262,37 @@ def test_installed_alias_control_resumes_and_interrupts_one_team_session(
     assert resumed_mapping["alias"] == alias
     assert resumed_mapping["session"] == session
     policy = json.loads(policy_log.read_text().splitlines()[0])
+    assert policy["round"] == "2"
     assert policy["settings"]["agents"]["enabled"] is True
+    filesystem = policy["settings"]["permissions"][
+        policy["settings"]["default_permissions"]
+    ]["filesystem"]
+    report_writes = {
+        path
+        for path, access in filesystem.items()
+        if access == "write"
+        and (
+            path.startswith(str(ticket_directory / "teams"))
+            or path.startswith(str(worktree_root / "76-session-alias-control" / ".state" / "teams"))
+        )
+    }
+    report = ticket_directory / "teams" / "1" / "rounds" / "2" / "leader.md"
+    assert report_writes == {str(report)}
+    hook = shlex.split(
+        policy["settings"]["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+    )
+    assert {
+        hook[index + 1]
+        for index, value in enumerate(hook[:-1])
+        if value == "--write-path"
+    } == {
+        str(report),
+        str(worktree_root / "76-session-alias-control" / ".state" / "teams" / "1" / "rounds" / "2" / "leader.md"),
+    }
     assert not policy["decisions"]["agent-runner --help"]
     assert not policy["decisions"]["pwd"]
+    assert not policy["decisions"]["touch .state/teams/1/rounds/2/leader.md"]
+    assert not policy["decisions"]["touch " + str(report)]
     assert policy["decisions"]["codex exec hello"]
     assert policy["helper_decisions"]["agent-runner --help"]
     assert (worktree_root / "76-session-alias-control").is_dir()

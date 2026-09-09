@@ -12,7 +12,11 @@ from typing import Any, Dict, Tuple
 
 import yaml
 
-from .codex_adapter import codex_connection_environment, read_codex_session_identity
+from .codex_adapter import (
+    codex_connection_environment,
+    read_codex_session_identity,
+    refresh_codex_report_paths,
+)
 from .delivery_worldline import read_worldline
 from .project_configuration import ProjectConfigurationError, load_project_configuration
 from .runner_io import confirm_alias_mapping_durable, write_yaml_durably
@@ -23,7 +27,7 @@ from .runner_process import (
     process_is_alive,
     stop_worker,
 )
-from .runner_project import discover_runner_directory
+from .runner_project import discover_project, discover_runner_directory
 from .runner_status import (
     is_session_mapping,
     read_alias_mapping,
@@ -74,7 +78,6 @@ def send_instruction(
     mapping, session_directory = read_alias_mapping(runner_directory, alias)
     if is_session_mapping(mapping):
         _require_project_events(cwd, caused_by_event_ids)
-        from .runner_project import discover_project
         from .team_replacement import require_active_session
 
         require_active_session(discover_project(cwd), alias)
@@ -108,6 +111,10 @@ def _send_session(
         raise _invalid_mapping()
     request, connection = _read_session_resume_request(session_directory, mapping)
     _attest_runtime_session(session_directory, mapping)
+    team_environment = _team_runtime_environment(mapping, cwd)
+    request = _refresh_current_team_report_request(
+        request, mapping, worktree, team_environment
+    )
     resume_file = session_directory / "resume.yml"
     error_file = session_directory / "resume-error.yml"
     error_file.unlink(missing_ok=True)
@@ -129,12 +136,9 @@ def _send_session(
         )
         worker_environment = dict(os.environ)
         worker_environment.update(_resume_environment(mapping, connection))
-        worker_environment["GRAPHTRAJ_ROLE"] = mapping["role"]
+        worker_environment.update(team_environment)
         if mapping["role"] == "team-leader":
             worker_environment.update(
-                GRAPHTRAJ_TEAM_GENERATION=str(mapping["team_generation"]),
-                GRAPHTRAJ_TICKET_ID=mapping["ticket_id"],
-                GRAPHTRAJ_HARNESS_ROOT=str(cwd),
                 GRAPHTRAJ_PARENT_ALIAS=alias,
                 GRAPHTRAJ_PARENT_REGISTRATION=str(session_directory / "child-registration.yml"),
             )
@@ -321,6 +325,148 @@ def _resume_environment(
             )
         )
     raise _not_resumable()
+
+
+def _team_runtime_environment(mapping: Dict[str, Any], cwd: Path) -> Dict[str, str]:
+    """Restore the immutable Team context needed by a resumed member Session."""
+    try:
+        configuration = load_project_configuration(cwd)
+        matches = []
+        for evidence in (configuration.state / "tickets").iterdir():
+            if (
+                evidence.is_symlink()
+                or not evidence.is_dir()
+                or not evidence.name.startswith(mapping["ticket_id"] + "-")
+            ):
+                continue
+            ticket = yaml.safe_load((evidence / "ticket.yml").read_text(encoding="utf-8"))
+            if isinstance(ticket, dict) and ticket.get("ticket_id") == mapping["ticket_id"]:
+                matches.append((evidence, ticket))
+        if len(matches) != 1:
+            raise ValueError("missing Ticket context")
+        evidence, ticket = matches[0]
+        ticket_name = ticket.get("ticket_name")
+        team_file = evidence / "teams" / str(mapping["team_generation"]) / "team.yml"
+        if not team_file.is_file():
+            return {"GRAPHTRAJ_ROLE": mapping["role"]}
+        project = discover_project(cwd)
+        team = yaml.safe_load(team_file.read_text(encoding="utf-8"))
+        round_ordinal = team["current_round"]
+        if (
+            not isinstance(ticket, dict)
+            or not isinstance(ticket_name, str)
+            or not ticket_name
+            or not isinstance(team, dict)
+            or type(round_ordinal) is not int
+            or round_ordinal < 1
+        ):
+            raise ValueError("invalid Team context")
+    except (OSError, TypeError, ValueError, yaml.YAMLError, ProjectConfigurationError) as error:
+        raise RunnerError("session-not-resumable", "Cannot restore the Team Runtime context: {0}".format(error)) from error
+    environment = {
+        "GRAPHTRAJ_ROLE": mapping["role"],
+        "GRAPHTRAJ_EVIDENCE": str(evidence),
+        "GRAPHTRAJ_TICKET_ID": mapping["ticket_id"],
+        "GRAPHTRAJ_TICKET_NAME": ticket_name,
+        "GRAPHTRAJ_HARNESS_ROOT": str(configuration.harness_root),
+        "GRAPHTRAJ_TEAM_GENERATION": str(mapping["team_generation"]),
+        "GRAPHTRAJ_TEAM_ROUND": str(round_ordinal),
+    }
+    if mapping["role"] in {"standards-reviewer", "spec-reviewer"}:
+        candidate = ticket.get("current_candidate")
+        if not isinstance(candidate, str) or not candidate:
+            raise _not_resumable()
+        axis = "Standards" if mapping["role"] == "standards-reviewer" else "Spec"
+        try:
+            report_path = _reviewer_report_file(mapping)
+        except ValueError:
+            raise _not_resumable() from None
+        report = evidence.joinpath(*report_path.parts[1:])
+        try:
+            if report.parent.is_symlink():
+                raise OSError("review report directory is a symlink")
+            report.parent.mkdir(exist_ok=True)
+        except OSError as error:
+            raise _not_resumable() from error
+        environment.update(
+            GRAPHTRAJ_REVIEW_CANDIDATE=candidate,
+            GRAPHTRAJ_REVIEW_COMPARISON=project.dev_commit,
+            GRAPHTRAJ_REVIEW_BRIEF=(
+                "Review only for Repository Guidance and established project standards."
+                if axis == "Standards"
+                else "Review only against the accepted Ticket and its acceptance criteria."
+            ),
+            GRAPHTRAJ_REVIEW_REPORT=str(report),
+        )
+    return environment
+
+
+def _refresh_current_team_report_request(
+    request: Dict[str, Any],
+    mapping: Dict[str, Any],
+    worktree: Path,
+    environment: Dict[str, str],
+) -> Dict[str, Any]:
+    role = mapping["role"]
+    if role in {
+        "engineer-junior", "engineer-senior", "engineer-expert",
+    }:
+        names = ("engineer.md", "validation.md")
+    elif role == "team-leader":
+        names = ("leader.md",)
+    elif role in {"standards-reviewer", "spec-reviewer"}:
+        try:
+            report_files = (_reviewer_report_file(mapping),)
+        except ValueError:
+            raise _not_resumable() from None
+    else:
+        return request
+    evidence = environment.get("GRAPHTRAJ_EVIDENCE")
+    generation = environment.get("GRAPHTRAJ_TEAM_GENERATION")
+    ordinal = environment.get("GRAPHTRAJ_TEAM_ROUND")
+    if not isinstance(evidence, str) or not evidence:
+        raise _not_resumable()
+    if role not in {"standards-reviewer", "spec-reviewer"}:
+        if not all(
+            isinstance(value, str) and value
+            for value in (generation, ordinal)
+        ):
+            raise _not_resumable()
+        directory = Path(".state") / "teams" / generation / "rounds" / ordinal
+        report_files = tuple(directory / name for name in names)
+    try:
+        return refresh_codex_report_paths(
+            request,
+            worktree=worktree,
+            evidence=Path(evidence),
+            report_files=report_files,
+        )
+    except RuntimeAdapterError as error:
+        raise RunnerError(error.code, error.message) from error
+
+
+def _reviewer_report_file(mapping: Dict[str, Any]) -> Path:
+    names = {
+        "standards-reviewer": "standards.md",
+        "spec-reviewer": "spec.md",
+    }
+    default_name = names.get(mapping.get("role"))
+    if default_name is None:
+        raise ValueError("invalid Reviewer role")
+    value = mapping.get("report_file")
+    if value is None:
+        return Path(".state") / "reviews" / default_name
+    report = Path(value) if isinstance(value, str) else None
+    if (
+        report is None
+        or report.is_absolute()
+        or len(report.parts) != 3
+        or report.parts[:2] != (".state", "reviews")
+        or ".." in report.parts
+        or report.suffix != ".md"
+    ):
+        raise ValueError("invalid Reviewer report")
+    return report
 
 
 def _attest_runtime_session(

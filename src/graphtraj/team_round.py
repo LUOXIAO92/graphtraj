@@ -17,7 +17,11 @@ from typing import Any, Callable
 import yaml
 
 from .codex_project import ignore_worktree_documents
-from .codex_adapter import codex_connection_environment, preflight_runtime_context
+from .codex_adapter import (
+    codex_connection_environment,
+    preflight_runtime_context,
+    refresh_codex_report_paths,
+)
 from .role_definitions import resolve_child_role
 from .delivery_state import apply_delivery_state_request, confirmed_rework
 from .delivery_worldline import read_worldline
@@ -26,7 +30,8 @@ from .runner_batch import read_batch, resolved_role_preset, retain_batch
 from .runner_capacity import capacity_positions
 from .runner_io import write_yaml_durably
 from .runner_models import Batch, LaunchResponse, RunnerError, Task, role_alias_marker
-from .runner_project import discover_project, preflight_worktree, provision_worktree, run_git, runtime_executable
+from .runner_project import discover_project, git_succeeds, preflight_worktree, provision_worktree, run_git, runtime_executable
+from .runner_status import read_alias_mapping
 from .runtime_adapter import RuntimeAdapterError
 
 
@@ -34,6 +39,7 @@ _COMMIT = re.compile(r"[0-9a-f]{40}")
 _ENGINEER_ROLES = frozenset({"engineer-junior", "engineer-senior", "engineer-expert"})
 _REVIEWER_ROLES = frozenset({"standards-reviewer", "spec-reviewer"})
 _CHILD_ROLES = _ENGINEER_ROLES | _REVIEWER_ROLES
+_AGENT_EVIDENCE_ERROR = "AGENT_EVIDENCE_INVALID"
 
 
 def register_child_batch(batch_file: Path, cwd: Path, registration: Path) -> LaunchResponse:
@@ -225,6 +231,17 @@ def _deliver_ticket(project: Any, requested: Task, retained_batch: Path, capacit
     if generation is not None:
         previous_team = yaml.safe_load((ticket_directory / "teams" / str(generation) / "team.yml").read_text())
     replacing = previous_team is not None and previous_team["status"] == "retired"
+    if previous_team is not None and previous_team["status"] == "active":
+        return _resume_active_ticket(
+            project,
+            requested,
+            capacity_fd,
+            ticket_directory,
+            state,
+            definition,
+            ticket_content,
+            previous_team,
+        )
     if not replacing and (
         state.get("ticket_id") != requested.ticket_id
         or state.get("ticket_name") != requested.ticket_name
@@ -262,6 +279,35 @@ def _deliver_ticket(project: Any, requested: Task, retained_batch: Path, capacit
          + previous_team["final_session_ref"] + " and Trace " + previous_team["final_trace_ref"]
          + ". Read that handoff before dispatching work.") if replacing else None,
     )
+
+    def recover_evidence(
+        child: Task,
+        role: str,
+        alias: str,
+        session: str,
+        child_batch: Path,
+        error: RunnerError,
+        expected: str,
+    ) -> tuple[str, str]:
+        if error.code != _AGENT_EVIDENCE_ERROR:
+            raise error
+        return run_agent(
+            project,
+            child,
+            role,
+            worktree,
+            ticket_directory,
+            traces,
+            alias,
+            session,
+            registration if role == "team-leader" else None,
+            None if role == "team-leader" else leader_alias,
+            child_batch,
+            _evidence_recovery_prompt(
+                project, child, traces, alias, worktree, error, expected
+            ),
+        )
+
     engineer_batch, engineer_batch_path, leader_alias, leader_session = next_formal_batch(
         project,
         task,
@@ -348,7 +394,19 @@ def _deliver_ticket(project: Any, requested: Task, retained_batch: Path, capacit
                 "member-engineer",
             )
             predecessor = event["event_id"]
-        candidate = _candidate(round_directory, worktree)
+        try:
+            candidate = _candidate(round_directory, worktree)
+        except RunnerError as error:
+            engineer_alias, engineer_session = recover_evidence(
+                engineer_task,
+                engineer_task.role,
+                engineer_alias,
+                engineer_session,
+                engineer_batch_path,
+                error,
+                "commit tracked project changes and write both current Round Engineer reports with the fixed candidate commit",
+            )
+            candidate = _candidate(round_directory, worktree)
         state_alias, state_session, event = request_state(
             project, task, worktree, ticket_directory, traces,
             state_alias, state_session, leader_alias, engineer_batch_path,
@@ -366,74 +424,29 @@ def _deliver_ticket(project: Any, requested: Task, retained_batch: Path, capacit
 
         def correct_process() -> None:
             nonlocal state_alias, state_session, predecessor, leader_alias, leader_session
-            leader_report = round_directory / "leader.md"
-            while leader_report.is_file() and "Decision: CORRECT" in leader_report.read_text().splitlines():
-                judgment = leader_report.read_text(encoding="utf-8")
-                fields = {}
-                for name in ("Responsible", "Rule", "Reason"):
-                    values = [line[len(name) + 2:] for line in judgment.splitlines() if line.startswith(name + ": ")]
-                    if len(values) != 1 or not values[0].strip():
-                        raise RunnerError("BATCH_SCHEMA_INVALID", "Correction requires one responsible role, accepted rule, and evidence-backed reason.")
-                    fields[name] = values[0]
-                role = ROLE_REFERENCES.get(fields["Responsible"], fields["Responsible"])
-                if role not in sessions or registration.exists():
-                    raise RunnerError("BATCH_SCHEMA_INVALID", "Correction must resume an existing member without registering a new Batch.")
-                child, alias, session, child_batch = sessions[role]
-                state_alias, state_session, event = request_state(
-                    project, task, worktree, ticket_directory, traces,
-                    state_alias, state_session, leader_alias, retained_batch,
-                    {
-                        "phase": "correction", "ticket_id": task.ticket_id,
-                        "caused_by_event_ids": [predecessor],
-                        "evidence_refs": [_trace_ref(project, traces, leader_alias), _trace_ref(project, traces, alias)],
-                        "responsible_role": role, "session_ref": alias,
-                    },
-                    "correction",
-                )
-                predecessor = event["event_id"]
-                affected = [role]
-                if _task_policy(sessions[role][0]) in _ENGINEER_ROLES:
-                    affected += [r for r in sessions if _task_policy(sessions[r][0]) in _REVIEWER_ROLES]
-                leader_report.unlink()
-                for affected_role in affected:
-                    names = ("engineer.md", "validation.md") if _task_policy(sessions[affected_role][0]) in _ENGINEER_ROLES else (
-                        "standards.md" if affected_role == "standards-reviewer" else "spec.md",
-                    )
-                    for name in names:
-                        (round_directory / name).unlink(missing_ok=True)
-                for affected_role in affected:
-                    child, alias, session, child_batch = sessions[affected_role]
-                    followup = (
-                        "Reflect on the Team Leader's judgment and correct your work against the accepted Ticket and review rules.\n" + judgment
-                        if affected_role == role else
-                        "Repeat your affected Review against the corrected fixed candidate and the accepted review rules.\n"
-                    )
-                    run_agent(
-                        project, child, affected_role, worktree, ticket_directory, traces,
-                        alias, session, None, leader_alias, child_batch,
-                        followup + "\nCaused by Project Worldline event: " + predecessor,
-                    )
-                    if _task_policy(sessions[affected_role][0]) in _ENGINEER_ROLES:
-                        candidate = _candidate(round_directory, worktree)
-                        state_alias, state_session, event = request_state(
-                            project, task, worktree, ticket_directory, traces,
-                            state_alias, state_session, leader_alias, child_batch,
-                            {
-                                "phase": "candidate", "ticket_id": task.ticket_id,
-                                "caused_by_event_ids": [predecessor],
-                                "evidence_refs": [_trace_ref(project, traces, alias)],
-                                "candidate": candidate,
-                            }, "candidate",
-                        )
-                        predecessor = event["event_id"]
-                    else:
-                        _collect_review_report(ticket_directory, round_directory, child.report_file.name)
-                leader_alias, leader_session = run_agent(
-                    project, task, "team-leader", worktree, ticket_directory, traces,
-                    leader_alias, leader_session, registration, None, retained_batch,
-                    "Correction and affected Reviews completed in the same Team Round. Assess the current evidence.\n"
-                    + "Caused by Project Worldline event: " + predecessor,
-                )
+            (
+                leader_alias,
+                leader_session,
+                state_alias,
+                state_session,
+                predecessor,
+            ) = _process_corrections(
+                project,
+                task,
+                worktree,
+                ticket_directory,
+                traces,
+                round_directory,
+                leader_alias,
+                leader_session,
+                state_alias,
+                state_session,
+                predecessor,
+                registration,
+                retained_batch,
+                sessions,
+                capacity_fd=capacity_fd,
+            )
 
         next_formal_batch = partial(next_formal_batch, correct_process=correct_process)
 
@@ -478,12 +491,42 @@ def _deliver_ticket(project: Any, requested: Task, retained_batch: Path, capacit
                     "standards.md" if child.role == "standards-reviewer" else "spec.md"
                 )
                 alias, session = result["alias"], result["session"]
+                reviewer_task = replace(
+                    child,
+                    ticket_file=definition,
+                    ticket_content=ticket_content,
+                    report_file=Path(".state") / "reviews" / report_name,
+                )
                 sessions[child.role] = (
-                    replace(child, ticket_file=definition, ticket_content=ticket_content,
-                            report_file=Path(".state") / "reviews" / report_name),
+                    reviewer_task,
                     alias, session, reviewer_batch_path,
                 )
-                _collect_review_report(ticket_directory, round_directory, report_name)
+                try:
+                    _collect_review_report(
+                        ticket_directory,
+                        round_directory,
+                        report_name,
+                        session_directory=project.runner_directory / "sessions" / alias,
+                    )
+                except RunnerError as error:
+                    alias, session = recover_evidence(
+                        reviewer_task,
+                        child.role,
+                        alias,
+                        session,
+                        reviewer_batch_path,
+                        error,
+                        "write the exact current Round raw Review report",
+                    )
+                    sessions[child.role] = (
+                        reviewer_task, alias, session, reviewer_batch_path,
+                    )
+                    _collect_review_report(
+                        ticket_directory,
+                        round_directory,
+                        report_name,
+                        session_directory=project.runner_directory / "sessions" / alias,
+                    )
                 member = "standards_reviewer" if child.role == "standards-reviewer" else "spec_reviewer"
                 if first_round:
                     state_alias, state_session, event = request_state(
@@ -512,7 +555,19 @@ def _deliver_ticket(project: Any, requested: Task, retained_batch: Path, capacit
             traces, leader_alias, leader_session, registration, retained_batch,
             allow_no_formal=True,
         )
-        candidate = _validate_round(round_directory, worktree)
+        try:
+            candidate = _validate_round(round_directory, worktree)
+        except RunnerError as error:
+            leader_alias, leader_session = recover_evidence(
+                task,
+                "team-leader",
+                leader_alias,
+                leader_session,
+                retained_batch,
+                error,
+                "write the current Round Leader decision for the fixed candidate",
+            )
+            candidate = _validate_round(round_directory, worktree)
         decision = _leader_decision(round_directory / "leader.md")
         if decision == "rejected" and confirmed_rework(round_directory / "leader.md"):
             decision = "implementation-rejected"
@@ -570,6 +625,491 @@ def _deliver_ticket(project: Any, requested: Task, retained_batch: Path, capacit
     }
 
 
+def _resume_active_ticket(
+    project: Any,
+    requested: Task,
+    capacity_fd: int,
+    ticket_directory: Path,
+    state: dict[str, Any],
+    definition: Path,
+    ticket_content: str,
+    team: dict[str, Any],
+) -> dict[str, Any]:
+    """Continue the current Team from retained member Sessions and evidence."""
+    if state.get("status") not in {"implementing", "reviewing", "reworking"}:
+        raise RunnerError("TICKET_ALREADY_ACTIVE", "The active Ticket cannot continue its current Team step.")
+    generation = state["active_team_ordinal"]
+    worktree = project.harness_root / state["worktree"]
+    traces = ticket_directory / "teams" / str(generation) / "traces"
+    round_directory = traces.parent / "rounds" / str(team["current_round"])
+    task = replace(requested, ticket_file=definition.resolve(), ticket_content=ticket_content)
+
+    def member_session(role: str, alias: str | None) -> tuple[str, str, dict[str, Any]]:
+        candidates = [alias] if alias else [
+            path.parent.name
+            for path in (project.runner_directory / "sessions").glob("*/mapping.yml")
+        ]
+        matched = []
+        for candidate in candidates:
+            if candidate is None:
+                continue
+            try:
+                mapping, _ = read_alias_mapping(project.runner_directory, candidate)
+            except RunnerError:
+                continue
+            if (
+                mapping["ticket_id"] == task.ticket_id
+                and mapping["team_generation"] == generation
+                and mapping["role"] == role
+            ):
+                matched.append((candidate, mapping["session"], mapping))
+        if len(matched) != 1:
+            raise RunnerError(
+                "RUNTIME_WORKER_FAILED",
+                "The interrupted {0} Session is unavailable; return the retained evidence to the caller or superior.".format(role),
+            )
+        return matched[0]
+
+    leader_alias, leader_session, leader_mapping = member_session(
+        "team-leader", team["members"]["team_leader"]["session_ref"]
+    )
+    team_batch = Path(leader_mapping["retained_batch_file"])
+    engineer_role = team["members"]["engineer"]["role"]
+    engineer_alias, engineer_session, engineer_mapping = member_session(
+        engineer_role, team["members"]["engineer"]["session_ref"]
+    )
+
+    def session_task(
+        role: str, mapping: dict[str, Any]
+    ) -> tuple[Task, Path]:
+        retained = Path(mapping["retained_batch_file"])
+        try:
+            child = next(
+                child
+                for child in read_batch(retained, worktree).tasks
+                if child.ticket_id == task.ticket_id and child.role == role
+            )
+        except (RunnerError, StopIteration) as error:
+            raise RunnerError(
+                "BATCH_SCHEMA_INVALID",
+                "The interrupted Team member has no retained child Batch.",
+            ) from error
+        report_file = (
+            _review_report_file(role, mapping)
+            if role in _REVIEWER_ROLES else child.report_file
+        )
+        return (
+            replace(
+                child,
+                ticket_file=definition.resolve(),
+                ticket_content=ticket_content,
+                report_file=report_file,
+            ),
+            retained,
+        )
+
+    engineer_task, engineer_batch_path = session_task(
+        engineer_role, engineer_mapping
+    )
+    sessions = {
+        engineer_role: (
+            engineer_task, engineer_alias, engineer_session, engineer_batch_path
+        )
+    }
+    try:
+        state_alias, state_session, _ = member_session("delivery-state", None)
+    except RunnerError:
+        state_alias = state_session = None
+
+    if state.get("status") == "reworking":
+        predecessor = next(
+            event["event_id"]
+            for event in reversed(read_worldline(project.state_directory, project.harness_root))
+            if event.get("ticket_id") == task.ticket_id
+        )
+        evidence = [
+            path.relative_to(project.harness_root).as_posix()
+            for path in sorted(round_directory.iterdir())
+        ]
+        state_alias, state_session, event = _request_state(
+            project, task, worktree, ticket_directory, traces,
+            state_alias, state_session, leader_alias, team_batch,
+            {
+                "phase": "rework", "ticket_id": task.ticket_id,
+                "caused_by_event_ids": [predecessor], "evidence_refs": evidence,
+            },
+            "rework-recovery",
+            capacity_fd=capacity_fd,
+        )
+        predecessor = event["event_id"]
+        round_directory = round_directory.parent / str(
+            int(round_directory.name) + 1
+        )
+        registration = (
+            project.runner_directory / "sessions" / leader_alias
+            / "child-registration.yml"
+        )
+        leader_alias, leader_session = _run_agent(
+            project, task, "team-leader", worktree, ticket_directory, traces,
+            leader_alias, leader_session, registration, None, team_batch,
+            "The confirmed implementation rejection is closed. Dispatch the same "
+            "Engineer and tier for the small correction in the new Round.\n",
+            capacity_fd=capacity_fd,
+        )
+        engineer_batch, engineer_batch_path, leader_alias, leader_session = (
+            _next_formal_batch(
+                project, task, definition, ticket_content, worktree,
+                ticket_directory, traces, leader_alias, leader_session,
+                registration, team_batch, capacity_fd=capacity_fd,
+            )
+        )
+        assert engineer_batch is not None and engineer_batch_path is not None
+        if (
+            len(engineer_batch.tasks) != 1
+            or engineer_batch.tasks[0].role != engineer_role
+        ):
+            raise RunnerError(
+                "BATCH_SCHEMA_INVALID",
+                "Rework must retain the Engineer and tier; a changed seat requires "
+                "a separate evidence-based decision.",
+            )
+        engineer_task = replace(
+            engineer_batch.tasks[0],
+            ticket_file=definition.resolve(),
+            ticket_content=ticket_content,
+        )
+        engineer_alias, engineer_session = _run_agent(
+            project, engineer_task, engineer_role, worktree, ticket_directory,
+            traces, engineer_alias, engineer_session, None, leader_alias,
+            engineer_batch_path, capacity_fd=capacity_fd,
+        )
+        try:
+            candidate = _candidate(round_directory, worktree)
+        except RunnerError as error:
+            if error.code != _AGENT_EVIDENCE_ERROR:
+                raise
+            engineer_alias, engineer_session = _run_agent(
+                project, engineer_task, engineer_role, worktree,
+                ticket_directory, traces, engineer_alias, engineer_session,
+                None, leader_alias, engineer_batch_path,
+                _evidence_recovery_prompt(
+                    project, engineer_task, traces, engineer_alias, worktree,
+                    error,
+                    "commit tracked project changes and write both current Round "
+                    "Engineer reports with the fixed candidate commit",
+                ),
+                capacity_fd=capacity_fd,
+            )
+            candidate = _candidate(round_directory, worktree)
+        state_alias, state_session, _ = _request_state(
+            project, task, worktree, ticket_directory, traces,
+            state_alias, state_session, leader_alias, engineer_batch_path,
+            {
+                "phase": "candidate", "ticket_id": task.ticket_id,
+                "caused_by_event_ids": [predecessor],
+                "evidence_refs": [_trace_ref(project, traces, engineer_alias)],
+                "candidate": candidate,
+            },
+            "candidate-rework-recovery",
+            capacity_fd=capacity_fd,
+        )
+        return _resume_active_ticket(
+            project,
+            requested,
+            capacity_fd,
+            ticket_directory,
+            yaml.safe_load((ticket_directory / "ticket.yml").read_text()),
+            definition,
+            ticket_content,
+            yaml.safe_load((traces.parent / "team.yml").read_text()),
+        )
+
+    try:
+        candidate = _candidate(round_directory, worktree)
+    except RunnerError as error:
+        raise RunnerError(
+            error.code,
+            "{0} Expected result: retry the interrupted {1} Session with its retained Trace.".format(
+                error.message, engineer_role
+            ),
+        ) from error
+
+    predecessor = next(
+        event["event_id"]
+        for event in reversed(read_worldline(project.state_directory, project.harness_root))
+        if event.get("ticket_id") == task.ticket_id
+    )
+    if team["members"]["engineer"]["session_ref"] is None:
+        state_alias, state_session, event = _request_state(
+            project, task, worktree, ticket_directory, traces,
+            state_alias, state_session, leader_alias, team_batch,
+            {
+                "phase": "member",
+                "ticket_id": task.ticket_id,
+                "caused_by_event_ids": [predecessor],
+                "evidence_refs": [_trace_ref(project, traces, engineer_alias)],
+                "member": "engineer",
+                "role": engineer_role,
+                "session_ref": engineer_alias,
+            },
+            "member-engineer-recovery",
+            capacity_fd=capacity_fd,
+        )
+        predecessor = event["event_id"]
+        team["members"]["engineer"]["session_ref"] = engineer_alias
+    if state.get("current_candidate") is None:
+        state_alias, state_session, event = _request_state(
+            project, task, worktree, ticket_directory, traces,
+            state_alias, state_session, leader_alias, team_batch,
+            {
+                "phase": "candidate",
+                "ticket_id": task.ticket_id,
+                "caused_by_event_ids": [predecessor],
+                "evidence_refs": [_trace_ref(project, traces, engineer_alias)],
+                "candidate": candidate,
+            },
+            "candidate-recovery",
+            capacity_fd=capacity_fd,
+        )
+        predecessor = event["event_id"]
+        state["current_candidate"] = candidate
+
+    registration = project.runner_directory / "sessions" / leader_alias / "child-registration.yml"
+    remaining = set()
+    reviewer_results = []
+    for role, report_name, seat in (
+        ("standards-reviewer", "standards.md", "standards_reviewer"),
+        ("spec-reviewer", "spec.md", "spec_reviewer"),
+    ):
+        target = round_directory / report_name
+        try:
+            alias, session, mapping = member_session(
+                role, team["members"][seat]["session_ref"]
+            )
+        except RunnerError:
+            if target.is_file():
+                raise
+            remaining.add(role)
+            continue
+        report_file = _review_report_file(role, mapping)
+        reviewer_task, reviewer_batch_path = session_task(role, mapping)
+        source = ticket_directory / "reviews" / report_file.name
+        if not target.is_file() and not source.is_file():
+            remaining.add(role)
+            continue
+        if not target.is_file():
+            _collect_review_report(
+                ticket_directory,
+                round_directory,
+                report_file.name,
+                report_name,
+                project.runner_directory / "sessions" / alias,
+            )
+        sessions[role] = (reviewer_task, alias, session, reviewer_batch_path)
+        if team["members"][seat]["session_ref"] is None:
+            state_alias, state_session, event = _request_state(
+                project, task, worktree, ticket_directory, traces,
+                state_alias, state_session, leader_alias, reviewer_batch_path,
+                {
+                    "phase": "member",
+                    "ticket_id": task.ticket_id,
+                    "caused_by_event_ids": [predecessor],
+                    "evidence_refs": [_trace_ref(project, traces, alias)],
+                    "member": seat,
+                    "role": role,
+                    "session_ref": alias,
+                },
+                "member-" + seat + "-recovery",
+                capacity_fd=capacity_fd,
+            )
+            predecessor = event["event_id"]
+            team["members"][seat]["session_ref"] = alias
+        remaining.discard(role)
+        reviewer_results.append(
+            {"role": role, "alias": alias, "session": session,
+             "trace": _trace_ref(project, traces, alias)}
+        )
+
+    def correct_process() -> None:
+        nonlocal leader_alias, leader_session, state_alias, state_session, predecessor
+        (
+            leader_alias,
+            leader_session,
+            state_alias,
+            state_session,
+            predecessor,
+        ) = _process_corrections(
+            project,
+            task,
+            worktree,
+            ticket_directory,
+            traces,
+            round_directory,
+            leader_alias,
+            leader_session,
+            state_alias,
+            state_session,
+            predecessor,
+            registration,
+            team_batch,
+            sessions,
+            capacity_fd=capacity_fd,
+        )
+
+    reviewers_dispatched = bool(remaining)
+    if remaining:
+        leader_alias, leader_session = _run_agent(
+            project, task, "team-leader", worktree, ticket_directory, traces,
+            leader_alias, leader_session, registration, None, team_batch,
+            "Engineer completed:\n" + yaml.safe_dump(
+                {
+                    "role": engineer_role,
+                    "alias": engineer_alias,
+                    "session": engineer_session,
+                    "trace": _trace_ref(project, traces, engineer_alias),
+                    "completed_reviews": reviewer_results,
+                },
+                sort_keys=False,
+            ),
+            capacity_fd=capacity_fd,
+        )
+    while remaining:
+        reviewer_batch, reviewer_batch_path, leader_alias, leader_session = _next_formal_batch(
+            project, task, definition, ticket_content, worktree, ticket_directory,
+            traces, leader_alias, leader_session, registration, team_batch,
+            capacity_fd=capacity_fd, correct_process=correct_process,
+        )
+        assert reviewer_batch is not None and reviewer_batch_path is not None
+        if not {child.role for child in reviewer_batch.tasks} <= remaining:
+            raise RunnerError("BATCH_SCHEMA_INVALID", "The child Batch must select remaining Review axes for this candidate.")
+        reviewed = _run_batch_workers(
+            project, reviewer_batch, reviewer_batch_path, leader_alias, capacity_fd,
+        )
+        for child, result in zip(reviewer_batch.tasks, reviewed.document["tasks"]):
+            if "error" in result:
+                raise RunnerError(result["error"]["code"], result["error"]["message"])
+            report_name = "standards.md" if child.role == "standards-reviewer" else "spec.md"
+            alias, session = result["alias"], result["session"]
+            mapping, _ = read_alias_mapping(project.runner_directory, alias)
+            report_file = _review_report_file(child.role, mapping)
+            reviewer_task = replace(
+                child,
+                ticket_file=definition.resolve(),
+                ticket_content=ticket_content,
+                report_file=report_file,
+            )
+            _collect_review_report(
+                ticket_directory,
+                round_directory,
+                report_file.name,
+                report_name,
+                session_directory=project.runner_directory / "sessions" / alias,
+            )
+            sessions[child.role] = (
+                reviewer_task, alias, session, reviewer_batch_path
+            )
+            seat = "standards_reviewer" if child.role == "standards-reviewer" else "spec_reviewer"
+            if team["members"][seat]["session_ref"] is None:
+                state_alias, state_session, event = _request_state(
+                    project, task, worktree, ticket_directory, traces,
+                    state_alias, state_session, leader_alias, reviewer_batch_path,
+                    {
+                        "phase": "member",
+                        "ticket_id": task.ticket_id,
+                        "caused_by_event_ids": [predecessor],
+                        "evidence_refs": [_trace_ref(project, traces, alias)],
+                        "member": seat,
+                        "role": child.role,
+                        "session_ref": alias,
+                    },
+                    "member-" + seat + "-recovery",
+                    capacity_fd=capacity_fd,
+                )
+                predecessor = event["event_id"]
+                team["members"][seat]["session_ref"] = alias
+            remaining.remove(child.role)
+            reviewer_results.append(
+                {"role": child.role, "alias": alias, "session": session,
+                 "trace": _trace_ref(project, traces, alias)}
+            )
+
+        leader_alias, leader_session = _run_agent(
+            project, task, "team-leader", worktree, ticket_directory, traces,
+            leader_alias, leader_session, registration, None, team_batch,
+            "Reviewers completed:\n" + yaml.safe_dump(reviewer_results, sort_keys=False),
+            capacity_fd=capacity_fd,
+        )
+    if not reviewers_dispatched and reviewer_results:
+        leader_alias, leader_session = _run_agent(
+            project, task, "team-leader", worktree, ticket_directory, traces,
+            leader_alias, leader_session, registration, None, team_batch,
+            "Reviewers completed:\n" + yaml.safe_dump(reviewer_results, sort_keys=False),
+            capacity_fd=capacity_fd,
+        )
+    correct_process()
+    _, _, leader_alias, leader_session = _next_formal_batch(
+        project, task, definition, ticket_content, worktree, ticket_directory,
+        traces, leader_alias, leader_session, registration, team_batch,
+        capacity_fd=capacity_fd, allow_no_formal=True,
+    )
+    try:
+        candidate = _validate_round(round_directory, worktree)
+    except RunnerError as error:
+        if error.code != _AGENT_EVIDENCE_ERROR:
+            raise
+        leader_alias, leader_session = _run_agent(
+            project, task, "team-leader", worktree, ticket_directory, traces,
+            leader_alias, leader_session, registration, None, team_batch,
+            _evidence_recovery_prompt(
+                project, task, traces, leader_alias, worktree, error,
+                "write the current Round Leader decision for the fixed candidate",
+            ),
+            capacity_fd=capacity_fd,
+        )
+        candidate = _validate_round(round_directory, worktree)
+    decision = _leader_decision(round_directory / "leader.md")
+    if decision == "rejected" and confirmed_rework(round_directory / "leader.md"):
+        decision = "implementation-rejected"
+    evidence = [
+        path.relative_to(project.harness_root).as_posix()
+        for path in sorted(round_directory.iterdir())
+    ]
+    state_alias, state_session, event = _request_state(
+        project, task, worktree, ticket_directory, traces,
+        state_alias, state_session, leader_alias, team_batch,
+        {
+            "phase": "final",
+            "ticket_id": task.ticket_id,
+            "caused_by_event_ids": [predecessor],
+            "evidence_refs": evidence,
+            "candidate": candidate,
+            "decision": decision,
+        },
+        "final-recovery",
+        capacity_fd=capacity_fd,
+    )
+    if decision == "implementation-rejected":
+        return _resume_active_ticket(
+            project,
+            requested,
+            capacity_fd,
+            ticket_directory,
+            yaml.safe_load((ticket_directory / "ticket.yml").read_text()),
+            definition,
+            ticket_content,
+            yaml.safe_load((traces.parent / "team.yml").read_text()),
+        )
+    return {
+        "ticket_id": requested.ticket_id,
+        "ticket_name": requested.ticket_name,
+        "role": "team-leader",
+        "launch_status": "accepted" if decision == "accepted" else "not-accepted",
+        "worktree_path": str(worktree),
+        "alias": leader_alias,
+        "session": leader_session,
+    }
+
+
 def _registered_batch(registration: Path, worktree: Path) -> tuple[Batch, Path]:
     if not registration.is_file():
         raise RunnerError("BATCH_SCHEMA_INVALID", "The Team Leader did not register its required direct child Batch.")
@@ -599,15 +1139,63 @@ def _next_formal_batch(
     """Run temporary child specialists before returning the next formal Batch."""
 
     run_agent = partial(_run_agent, capacity_fd=capacity_fd)
+    recovered_dispatch = False
+
+    def recover_dispatch(error: RunnerError) -> None:
+        nonlocal leader_alias, leader_session, recovered_dispatch
+        if error.code != "BATCH_SCHEMA_INVALID" or recovered_dispatch:
+            raise error
+        recovered_dispatch = True
+        leader_alias, leader_session = run_agent(
+            project,
+            task,
+            "team-leader",
+            worktree,
+            ticket_directory,
+            traces,
+            leader_alias,
+            leader_session,
+            registration,
+            None,
+            retained_batch,
+            _evidence_recovery_prompt(
+                project,
+                task,
+                traces,
+                leader_alias,
+                worktree,
+                error,
+                "finish without another child Batch" if allow_no_formal else "register the required valid child Batch",
+            ),
+        )
+
     while True:
         if correct_process is not None:
             correct_process()
         if not registration.exists():
-            break
-        batch, batch_path = _registered_batch(registration, worktree)
+            if allow_no_formal:
+                return None, None, leader_alias, leader_session
+            recover_dispatch(
+                RunnerError(
+                    "BATCH_SCHEMA_INVALID",
+                    "The Team Leader did not register its required direct child Batch.",
+                )
+            )
+            continue
+        try:
+            batch, batch_path = _registered_batch(registration, worktree)
+        except RunnerError as error:
+            recover_dispatch(error)
+            continue
         if len(batch.tasks) != 1 or not _is_inline_specialist(batch.tasks[0]):
             if allow_no_formal:
-                raise RunnerError("BATCH_SCHEMA_INVALID", "The completed Team Round cannot register another child Batch.")
+                recover_dispatch(
+                    RunnerError(
+                        "BATCH_SCHEMA_INVALID",
+                        "The completed Team Round cannot register another child Batch.",
+                    )
+                )
+                continue
             return batch, batch_path, leader_alias, leader_session
         specialist = replace(
             batch.tasks[0],
@@ -646,9 +1234,6 @@ def _next_formal_batch(
                 sort_keys=False,
             ),
         )
-    if allow_no_formal:
-        return None, None, leader_alias, leader_session
-    raise RunnerError("BATCH_SCHEMA_INVALID", "The Team Leader did not register its required direct child Batch.")
 
 
 def _request_state(
@@ -690,23 +1275,379 @@ def _request_state(
                 os.environ.pop(name, None)
             else:
                 os.environ[name] = value
-    if not runtime_request.is_file():
-        raise RunnerError("RUNTIME_WORKER_FAILED", "Delivery State did not produce its requested state change.")
-    request_file = project.runner_directory / "sessions" / alias / "requests" / (request_name + ".yml")
-    request_file.parent.mkdir(exist_ok=True)
-    shutil.move(runtime_request, request_file)
-    request = yaml.safe_load(request_file.read_text(encoding="utf-8"))
-    try:
-        event = apply_delivery_state_request(
-            project.state_directory, project.harness_root, request, facts
+    requests = project.runner_directory / "sessions" / alias / "requests"
+    requests.mkdir(exist_ok=True)
+    for attempt in range(2):
+        failure = None
+        request_file = _next_request_file(
+            requests,
+            request_name if not attempt else request_name + "-recovered",
         )
-    except (OSError, ValueError, yaml.YAMLError) as error:
-        raise RunnerError("STATE_DIRECTORY_INVALID", "Delivery State produced an invalid state change.") from error
-    return alias, session, event
+        if runtime_request.is_symlink() or not runtime_request.is_file():
+            failure = RunnerError(
+                _AGENT_EVIDENCE_ERROR,
+                "Delivery State did not produce its requested state change.",
+            )
+        else:
+            shutil.move(runtime_request, request_file)
+            try:
+                request = yaml.safe_load(request_file.read_text(encoding="utf-8"))
+                event = apply_delivery_state_request(
+                    project.state_directory, project.harness_root, request, facts
+                )
+                return alias, session, event
+            except (OSError, ValueError, yaml.YAMLError) as error:
+                failure = RunnerError(
+                    _AGENT_EVIDENCE_ERROR,
+                    "Delivery State produced an invalid state change.",
+                )
+        assert failure is not None
+        if attempt:
+            raise failure
+        previous = {name: os.environ.get(name) for name in environment}
+        os.environ.update(environment)
+        try:
+            alias, session = _run_agent(
+                project,
+                task,
+                "delivery-state",
+                worktree,
+                evidence,
+                traces,
+                alias,
+                session,
+                None,
+                parent_alias,
+                retained_batch,
+                _evidence_recovery_prompt(
+                    project,
+                    task,
+                    traces,
+                    alias,
+                    worktree,
+                    failure,
+                    "write exactly the supplied Delivery State request",
+                ),
+                capacity_fd=capacity_fd,
+            )
+        finally:
+            for name, value in previous.items():
+                if value is None:
+                    os.environ.pop(name, None)
+                else:
+                    os.environ[name] = value
+    raise AssertionError("Delivery State recovery did not return")
+
+
+def _next_request_file(directory: Path, name: str) -> Path:
+    target = directory / (name + ".yml")
+    suffix = 2
+    while os.path.lexists(target):
+        target = directory / (name + "-" + str(suffix) + ".yml")
+        suffix += 1
+    return target
 
 
 def _trace_ref(project: Any, traces: Path, alias: str) -> str:
     return (traces / alias / "events.jsonl").relative_to(project.harness_root).as_posix()
+
+
+def _evidence_recovery_prompt(
+    project: Any,
+    task: Task,
+    traces: Path,
+    alias: str,
+    worktree: Path,
+    error: RunnerError,
+    expected: str,
+) -> str:
+    return (
+        "Recovery required: correct your current Team step.\n"
+        "Failure: {0}: {1}\n"
+        "Evidence: {2}\n"
+        "Expected result: {3}\n"
+        "Current commit: {4}\n"
+        "Preserve the accepted Ticket, current candidate, and valid completed evidence. "
+        "Correct only this failed step; do not repeat completed Team work."
+    ).format(
+        error.code,
+        error.message,
+        _trace_ref(project, traces, alias),
+        expected,
+        run_git(worktree, "rev-parse", "HEAD"),
+    )
+
+
+def _process_corrections(
+    project: Any,
+    task: Task,
+    worktree: Path,
+    evidence: Path,
+    traces: Path,
+    round_directory: Path,
+    leader_alias: str,
+    leader_session: str,
+    state_alias: str | None,
+    state_session: str | None,
+    predecessor: str,
+    registration: Path,
+    retained_batch: Path,
+    sessions: dict[str, tuple[Task, str, str, Path]],
+    *,
+    capacity_fd: int,
+) -> tuple[str, str, str | None, str | None, str]:
+    """Apply supported Leader corrections without leaving the current Team."""
+    leader_report = round_directory / "leader.md"
+    while (
+        leader_report.is_file()
+        and "Decision: CORRECT" in leader_report.read_text().splitlines()
+    ):
+        judgment = leader_report.read_text(encoding="utf-8")
+        fields = {}
+        for name in ("Responsible", "Rule", "Reason"):
+            values = [
+                line[len(name) + 2:]
+                for line in judgment.splitlines()
+                if line.startswith(name + ": ")
+            ]
+            if len(values) != 1 or not values[0].strip():
+                raise RunnerError(
+                    "BATCH_SCHEMA_INVALID",
+                    "Correction requires one responsible role, accepted rule, "
+                    "and evidence-backed reason.",
+                )
+            fields[name] = values[0]
+        role = ROLE_REFERENCES.get(fields["Responsible"], fields["Responsible"])
+        if role not in sessions or registration.exists():
+            raise RunnerError(
+                "BATCH_SCHEMA_INVALID",
+                "Correction must resume an existing member without registering "
+                "a new Batch.",
+            )
+        child, alias, session, child_batch = sessions[role]
+        state_alias, state_session, event = _request_state(
+            project, task, worktree, evidence, traces,
+            state_alias, state_session, leader_alias, retained_batch,
+            {
+                "phase": "correction", "ticket_id": task.ticket_id,
+                "caused_by_event_ids": [predecessor],
+                "evidence_refs": [
+                    _trace_ref(project, traces, leader_alias),
+                    _trace_ref(project, traces, alias),
+                ],
+                "responsible_role": role, "session_ref": alias,
+            },
+            "correction",
+            capacity_fd=capacity_fd,
+        )
+        predecessor = event["event_id"]
+        affected = [role]
+        if _task_policy(child, role) in _ENGINEER_ROLES:
+            affected += [
+                current
+                for current, (member, _, _, _) in sessions.items()
+                if _task_policy(member, current) in _REVIEWER_ROLES
+            ]
+        leader_report.unlink()
+        for affected_role in affected:
+            member, _, _, _ = sessions[affected_role]
+            names = (
+                ("engineer.md", "validation.md")
+                if _task_policy(member, affected_role) in _ENGINEER_ROLES
+                else (_review_report_name(affected_role),)
+            )
+            for name in names:
+                (round_directory / name).unlink(missing_ok=True)
+        for affected_role in affected:
+            member, alias, session, child_batch = sessions[affected_role]
+            followup = (
+                "Reflect on the Team Leader's judgment and correct your work "
+                "against the accepted Ticket and review rules.\n" + judgment
+                if affected_role == role else
+                "Repeat your affected Review against the corrected fixed "
+                "candidate and the accepted review rules.\n"
+            )
+            alias, session = _run_agent(
+                project, member, affected_role, worktree, evidence, traces,
+                alias, session, None, leader_alias, child_batch,
+                followup + "\nCaused by Project Worldline event: " + predecessor,
+                capacity_fd=capacity_fd,
+            )
+            sessions[affected_role] = (member, alias, session, child_batch)
+            if _task_policy(member, affected_role) in _ENGINEER_ROLES:
+                candidate = _candidate(round_directory, worktree)
+                state_alias, state_session, event = _request_state(
+                    project, task, worktree, evidence, traces,
+                    state_alias, state_session, leader_alias, child_batch,
+                    {
+                        "phase": "candidate", "ticket_id": task.ticket_id,
+                        "caused_by_event_ids": [predecessor],
+                        "evidence_refs": [_trace_ref(project, traces, alias)],
+                        "candidate": candidate,
+                    },
+                    "candidate",
+                    capacity_fd=capacity_fd,
+                )
+                predecessor = event["event_id"]
+            else:
+                assert member.report_file is not None
+                _collect_review_report(
+                    evidence,
+                    round_directory,
+                    member.report_file.name,
+                    _review_report_name(affected_role),
+                    project.runner_directory / "sessions" / alias,
+                )
+        leader_alias, leader_session = _run_agent(
+            project, task, "team-leader", worktree, evidence, traces,
+            leader_alias, leader_session, registration, None, retained_batch,
+            "Correction and affected Reviews completed in the same Team Round. "
+            "Assess the current evidence.\n"
+            + "Caused by Project Worldline event: " + predecessor,
+            capacity_fd=capacity_fd,
+        )
+    return leader_alias, leader_session, state_alias, state_session, predecessor
+
+
+def _current_runtime_diagnostic(
+    session_directory: Path, stderr_offset: int, event_offset: int
+) -> str:
+    diagnostics = [_diagnostic_since(session_directory / "stderr.log", stderr_offset)]
+    try:
+        diagnostics.append(
+            (session_directory / "worker-stderr.log").read_text(encoding="utf-8")
+        )
+    except (OSError, UnicodeError):
+        pass
+    try:
+        with (session_directory / "events.jsonl").open("rb") as events:
+            events.seek(event_offset)
+            diagnostics.extend(_runtime_event_errors(events.read()))
+    except OSError:
+        pass
+    return "\n".join(diagnostic for diagnostic in diagnostics if diagnostic)
+
+
+def _diagnostic_since(path: Path, offset: int) -> str:
+    try:
+        with path.open("rb") as diagnostic:
+            diagnostic.seek(offset)
+            return diagnostic.read().decode("utf-8", errors="replace")
+    except OSError:
+        return ""
+
+
+def _runtime_event_errors(events: bytes) -> list[str]:
+    errors = []
+    for line in events.splitlines():
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(event, dict):
+            continue
+        event_type = event.get("type")
+        if event_type in {"error", "turn.failed"}:
+            error = _runtime_error_text(event)
+        else:
+            item = event.get("item")
+            error = (
+                _runtime_error_text(item)
+                if isinstance(item, dict)
+                and (
+                    item.get("type") in {"error", "tool_error"}
+                    or (
+                        item.get("type") == "command_execution"
+                        and (
+                            item.get("status") in {"failed", "error"}
+                            or isinstance(item.get("error"), (dict, str))
+                            or (
+                                isinstance(item.get("exit_code"), int)
+                                and item["exit_code"] != 0
+                            )
+                        )
+                    )
+                )
+                else ""
+            )
+        if error:
+            errors.append(error)
+    return errors
+
+
+def _runtime_error_text(event: dict[str, Any]) -> str:
+    values = []
+    for key in ("aggregated_output", "message", "detail"):
+        value = event.get(key)
+        if isinstance(value, str) and value:
+            values.append(value)
+    error = event.get("error")
+    if isinstance(error, str) and error:
+        values.append(error)
+    elif isinstance(error, dict):
+        values.extend(
+            value
+            for key in ("message", "detail")
+            if isinstance(value := error.get(key), str) and value
+        )
+    return "\n".join(values)
+
+
+def _runtime_access_failure(
+    diagnostic: str, reports: tuple[Path, ...]
+) -> bool:
+    observed = diagnostic.lower()
+    if any(
+        marker in observed
+        for marker in (
+            "permission denied",
+            "operation not permitted",
+            "filesystem sandbox",
+        )
+    ):
+        return True
+    if (
+        "writable root" in observed
+        and "symlink" in observed
+        and "not supported" in observed
+    ):
+        return True
+    condition = "the report target is not authorized for this role"
+    return condition in observed and any(
+        "resolved={0}; condition={1}".format(
+            report.resolve(strict=False), condition
+        ) in diagnostic
+        for report in reports
+    )
+
+
+def _runtime_command_parse_error(diagnostic: str) -> str | None:
+    observed = diagnostic.lower()
+    for marker in ("cannot verify ", "cannot parse "):
+        index = observed.rfind(marker)
+        if index >= 0:
+            return diagnostic[index:].splitlines()[0].strip()
+    return None
+
+
+def _current_command_parse_error(session_directory: Path) -> str | None:
+    try:
+        lines = (session_directory / "events.jsonl").read_text(
+            encoding="utf-8"
+        ).splitlines()
+    except (OSError, UnicodeError):
+        return None
+    for line in reversed(lines):
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if event.get("type") == "runner-execution-start":
+            return None
+        if event.get("type") == "runtime-command-parse":
+            message = event.get("message")
+            return message if isinstance(message, str) else None
+    return None
 
 
 def _readiness_predecessor(project: Any, ticket_id: str) -> str:
@@ -790,6 +1731,9 @@ def _execute_agent(
             raise RunnerError("RUNTIME_WORKER_FAILED", "The mapped Session is unavailable.")
 
     policy_role = _task_policy(task, role)
+    team_file = traces.parent / "team.yml"
+    ordinal = yaml.safe_load(team_file.read_text())["current_round"] if team_file.exists() else 1
+    report_files = _role_report_files(task, policy_role, role, generation, ordinal)
     if expected_session is None:
         preset = (
             resolved_role_preset(task, project.role_bindings)
@@ -805,7 +1749,7 @@ def _execute_agent(
             evidence=evidence,
             repository_skill_source=worktree,
             requested_skills=task.requested_skills if policy_role in _ENGINEER_ROLES else (),
-            report_file=task.report_file,
+            report_files=report_files,
             child_batch_write_paths=(registration, project.state_directory / "batches")
             if policy_role == "team-leader" and registration is not None else (),
         ).finalize()
@@ -825,6 +1769,10 @@ def _execute_agent(
                     "retained_batch_file": str(retained_batch),
                     "worktree_path": str(worktree),
                     "trace_file": str(session_directory / "events.jsonl"),
+                    "report_file": (
+                        task.report_file.as_posix()
+                        if task.report_file is not None else None
+                    ),
                 },
             },
         )
@@ -832,11 +1780,9 @@ def _execute_agent(
         runtime_environment = context.runtime_environment()
     else:
         job_file, runtime_environment = _resume_job(
-            session_directory, expected_session
+            session_directory, expected_session, worktree, evidence, report_files
         )
 
-    team_file = traces.parent / "team.yml"
-    ordinal = yaml.safe_load(team_file.read_text())["current_round"] if team_file.exists() else 1
     task_prompt = prompt or task.ticket_content
     if task.instruction:
         task_prompt += "\n## Additional instruction\n\n" + task.instruction + "\n"
@@ -896,6 +1842,20 @@ def _execute_agent(
             "supported input, caller path, observable failure, and retained evidence. "
             "The Team Leader adjudicates report compliance and the implementation outcome.\n"
         )
+    reports = (
+        [round_directory / "engineer.md", round_directory / "validation.md"]
+        if policy_role in _ENGINEER_ROLES else
+        [report] if policy_role in _REVIEWER_ROLES else
+        [round_directory / "leader.md"] if role == "team-leader" else []
+    )
+    events_file = session_directory / "events.jsonl"
+    try:
+        stderr_offset = (session_directory / "stderr.log").stat().st_size
+    except OSError:
+        stderr_offset = 0
+    with events_file.open("a", encoding="utf-8") as events:
+        events.write(json.dumps({"type": "runner-execution-start"}) + "\n")
+    event_offset = events_file.stat().st_size
     environment = {
         **runtime_environment,
         "GRAPHTRAJ_TEAM_ROUND": str(ordinal),
@@ -933,21 +1893,52 @@ def _execute_agent(
                 os.environ.pop(name, None)
             else:
                 os.environ[name] = value
+    diagnostic = _current_runtime_diagnostic(
+        session_directory, stderr_offset, event_offset
+    )
     if outcome != "completed":
-        diagnostic = (session_directory / "stderr.log").read_text(encoding="utf-8")
+        if _runtime_access_failure(diagnostic, tuple(reports)):
+            raise RunnerError(
+                "RUNTIME_ACCESS_DENIED",
+                "The {0} Team member encountered a Runtime access/configuration failure. "
+                "Return it to the responsible operator; do not ask the Agent to self-correct. "
+                "Evidence: {1}. {2}".format(
+                    role, _trace_ref(project, traces, alias), diagnostic.strip()
+                ),
+            )
         raise RunnerError(
-            "RUNTIME_WORKER_FAILED",
-            "The {0} Team member did not complete successfully: {1}".format(
-                role, diagnostic.strip()
+            "RUNTIME_PROVIDER_FAILED",
+            "The {0} Team member ended with {1}. Return this system/provider failure "
+            "to the caller or superior for a later retry; do not ask the Agent to "
+            "self-correct. Evidence: {2}. {3}".format(
+                role, outcome, _trace_ref(project, traces, alias), diagnostic.strip()
             ),
         )
-    round_directory = traces.parent / "rounds" / str(ordinal)
-    reports = (
-        [round_directory / "engineer.md", round_directory / "validation.md"]
-        if policy_role in _ENGINEER_ROLES else
-        [report] if policy_role in _REVIEWER_ROLES else
-        [round_directory / "leader.md"] if role == "team-leader" else []
-    )
+    if (
+        any(not path.is_file() for path in reports)
+        and _runtime_access_failure(diagnostic, tuple(reports))
+    ):
+        raise RunnerError(
+            "RUNTIME_ACCESS_DENIED",
+            "The {0} Team member encountered a Runtime access/configuration failure. "
+            "Return it to the responsible operator; do not ask the Agent to "
+            "self-correct. Evidence: {1}. {2}".format(
+                role, _trace_ref(project, traces, alias), diagnostic.strip()
+            ),
+        )
+    if any(not path.is_file() for path in reports):
+        command_error = _runtime_command_parse_error(diagnostic)
+        if command_error is not None:
+            with events_file.open("a", encoding="utf-8") as events:
+                events.write(
+                    json.dumps(
+                        {
+                            "type": "runtime-command-parse",
+                            "message": command_error,
+                        }
+                    )
+                    + "\n"
+                )
     with (session_directory / "events.jsonl").open("a", encoding="utf-8") as trace:
         for path in reports:
             if path.is_file():
@@ -957,7 +1948,11 @@ def _execute_agent(
 
 
 def _resume_job(
-    session_directory: Path, expected_session: str
+    session_directory: Path,
+    expected_session: str,
+    worktree: Path,
+    evidence: Path,
+    report_files: tuple[Path, ...],
 ) -> tuple[Path, dict[str, str]]:
     launch_file = session_directory / "launch.yml"
     mapping_file = session_directory / "mapping.yml"
@@ -983,13 +1978,22 @@ def _resume_job(
         for key, value in connection.items()
     ):
         raise RunnerError("RUNTIME_WORKER_FAILED", "The mapped Session is unavailable.")
+    try:
+        adapter_request = refresh_codex_report_paths(
+            launch["adapter_request"],
+            worktree=worktree,
+            evidence=evidence,
+            report_files=report_files,
+        )
+    except RuntimeAdapterError as error:
+        raise RunnerError(error.code, error.message) from error
     resume_file = session_directory / "resume.yml"
     write_yaml_durably(
         resume_file,
         {
             "operation": "resume",
             "runtime": mapping["runtime"],
-            "adapter_request": launch["adapter_request"],
+            "adapter_request": adapter_request,
             "expected_session": expected_session,
             "mapping": {
                 key: value
@@ -1081,6 +2085,52 @@ def _agent_alias(project: Any, task: Task, role: str, generation: int = 1) -> st
     return f"{prefix}@{marker}{suffix}"
 
 
+def _role_report_files(
+    task: Task,
+    policy_role: str,
+    role: str,
+    generation: int,
+    ordinal: int,
+) -> tuple[Path, ...]:
+    if policy_role in _ENGINEER_ROLES:
+        directory = Path(".state") / "teams" / str(generation) / "rounds" / str(ordinal)
+        return (directory / "engineer.md", directory / "validation.md")
+    if role == "team-leader":
+        return (
+            Path(".state") / "teams" / str(generation) / "rounds" / str(ordinal) / "leader.md",
+        )
+    return (task.report_file,) if policy_role in _REVIEWER_ROLES and task.report_file else ()
+
+
+def _review_report_name(role: str) -> str:
+    if role == "standards-reviewer":
+        return "standards.md"
+    if role == "spec-reviewer":
+        return "spec.md"
+    raise RunnerError("REPORT_FILE_INVALID", "The Team Reviewer role is invalid.")
+
+
+def _review_report_file(role: str, mapping: dict[str, Any]) -> Path:
+    default = Path(".state") / "reviews" / _review_report_name(role)
+    value = mapping.get("report_file")
+    if value is None:
+        return default
+    report = Path(value) if isinstance(value, str) else None
+    if (
+        report is None
+        or report.is_absolute()
+        or len(report.parts) != 3
+        or report.parts[:2] != (".state", "reviews")
+        or ".." in report.parts
+        or report.suffix != ".md"
+    ):
+        raise RunnerError(
+            "REPORT_FILE_INVALID",
+            "The Reviewer Session report target is invalid.",
+        )
+    return report
+
+
 def _link_worktree(project: Any, worktree: Path, evidence: Path) -> None:
     (worktree / ".scratch").mkdir(exist_ok=True)
     links = {
@@ -1107,31 +2157,74 @@ def _link_worktree(project: Any, worktree: Path, evidence: Path) -> None:
 
 def _validate_round(round_directory: Path, worktree: Path) -> str:
     required = {"engineer.md", "validation.md", "standards.md", "spec.md", "leader.md"}
-    paths = tuple(round_directory.iterdir())
+    try:
+        paths = tuple(round_directory.iterdir())
+    except OSError as error:
+        raise RunnerError(
+            _AGENT_EVIDENCE_ERROR,
+            "The Team Round evidence is missing or unreadable.",
+        ) from error
     if (
         {path.name for path in paths} != required
         or any(path.is_symlink() or not path.is_file() for path in paths)
     ):
-        raise RunnerError("RUNTIME_WORKER_FAILED", "The Team Round did not produce its complete evidence.")
+        raise RunnerError(
+            _AGENT_EVIDENCE_ERROR,
+            "The Team Round did not produce its complete evidence.",
+        )
     candidate = _candidate(round_directory, worktree)
-    engineer = (round_directory / "engineer.md").read_text(encoding="utf-8")
-    if any(candidate not in (round_directory / name).read_text(encoding="utf-8") for name in required):
-        raise RunnerError("RUNTIME_WORKER_FAILED", "All Team evidence must inspect the same fixed candidate.")
+    try:
+        engineer = (round_directory / "engineer.md").read_text(encoding="utf-8")
+        inspected = [
+            (round_directory / name).read_text(encoding="utf-8")
+            for name in required
+        ]
+    except (OSError, UnicodeError) as error:
+        raise RunnerError(
+            _AGENT_EVIDENCE_ERROR,
+            "The Team Round evidence is missing or unreadable.",
+        ) from error
+    if any(candidate not in report for report in inspected):
+        raise RunnerError(
+            _AGENT_EVIDENCE_ERROR,
+            "All Team evidence must inspect the same fixed candidate.",
+        )
     if "self-review" not in engineer.lower():
-        raise RunnerError("RUNTIME_WORKER_FAILED", "The Team Round is missing Engineer self-review.")
+        raise RunnerError(
+            _AGENT_EVIDENCE_ERROR,
+            "The Team Round is missing Engineer self-review.",
+        )
     return candidate
 
 
 def _candidate(round_directory: Path, worktree: Path) -> str:
-    engineer = (round_directory / "engineer.md").read_text(encoding="utf-8")
+    try:
+        engineer = (round_directory / "engineer.md").read_text(encoding="utf-8")
+        validation = (round_directory / "validation.md").read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as error:
+        raise RunnerError(
+            _AGENT_EVIDENCE_ERROR,
+            "The Engineer evidence is missing or unreadable.",
+        ) from error
     match = _COMMIT.search(engineer)
     candidate = match.group(0) if match else ""
     if (
         not candidate
         or run_git(worktree, "rev-parse", "HEAD") != candidate
-        or candidate not in (round_directory / "validation.md").read_text(encoding="utf-8")
+        or candidate not in validation
     ):
-        raise RunnerError("RUNTIME_WORKER_FAILED", "The Engineer evidence does not identify the fixed candidate.")
+        raise RunnerError(
+            _AGENT_EVIDENCE_ERROR,
+            "The Engineer evidence does not identify the fixed candidate.",
+        )
+    if not (
+        git_succeeds(worktree, "diff", "--quiet")
+        and git_succeeds(worktree, "diff", "--cached", "--quiet")
+    ):
+        raise RunnerError(
+            _AGENT_EVIDENCE_ERROR,
+            "Tracked project changes must be committed before the Team handoff.",
+        )
     return candidate
 
 
@@ -1146,12 +2239,26 @@ def _leader_decision(path: Path) -> str:
 def _collect_review_report(
     evidence: Path,
     round_directory: Path,
-    report_name: str,
+    source_name: str,
+    target_name: str | None = None,
+    session_directory: Path | None = None,
 ) -> None:
-    source = evidence / "reviews" / report_name
-    target = round_directory / report_name
+    source = evidence / "reviews" / source_name
+    target = round_directory / (target_name or source_name)
     if source.is_symlink() or not source.is_file() or target.exists():
-        raise RunnerError("REPORT_FILE_INVALID", "The Reviewer did not produce its exact report.")
+        command_error = (
+            _current_command_parse_error(session_directory)
+            if session_directory is not None else None
+        )
+        raise RunnerError(
+            _AGENT_EVIDENCE_ERROR,
+            (
+                "The Reviewer did not produce its exact report. Unsupported input: "
+                + command_error
+                if command_error is not None
+                else "The Reviewer did not produce its exact report."
+            ),
+        )
     source.replace(target)
     if not any(source.parent.iterdir()):
         source.parent.rmdir()
@@ -1174,18 +2281,21 @@ def _worker_main() -> None:
             evidence = project.state_directory / "tickets" / (task.ticket_id + "-" + task.ticket_name)
             state = yaml.safe_load((evidence / "ticket.yml").read_text())
             definition = evidence / state["current_definition"]
-            report_name = "standards.md" if task.role == "standards-reviewer" else "spec.md"
-            task = replace(
-                task, ticket_file=definition, ticket_content=definition.read_text(),
-                report_file=Path(".state") / "reviews" / report_name,
-            )
             team = yaml.safe_load((evidence / "teams" / str(state["active_team_ordinal"]) / "team.yml").read_text())
             seat = "standards_reviewer" if task.role == "standards-reviewer" else "spec_reviewer"
             member = team["members"][seat]
             session = None
+            report_file = Path(".state") / "reviews" / _review_report_name(task.role)
             if member["session_ref"]:
-                mapping = project.runner_directory / "sessions" / member["session_ref"] / "mapping.yml"
-                session = yaml.safe_load(mapping.read_text())["session"]
+                mapping, _ = read_alias_mapping(
+                    project.runner_directory, member["session_ref"]
+                )
+                session = mapping["session"]
+                report_file = _review_report_file(task.role, mapping)
+            task = replace(
+                task, ticket_file=definition, ticket_content=definition.read_text(),
+                report_file=report_file,
+            )
             alias, session = _run_agent(
                 project, task, task.role, project.harness_root / state["worktree"],
                 evidence, evidence / "teams" / str(state["active_team_ordinal"]) / "traces",

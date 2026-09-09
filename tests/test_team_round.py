@@ -298,6 +298,11 @@ def test_installed_runner_obeys_the_explicit_leader_decision_for_a_run_free_team
             }
             assert canonical == views
             assert {path.name for path in canonical} == report_names
+            if call["role"] in {"engineer-junior", "team-leader"}:
+                assert canonical == {
+                    Path("teams") / "1" / "rounds" / call["round"] / name
+                    for name in report_names
+                }
         hook = shlex.split(
             call['settings']['hooks']['PreToolUse'][0]['hooks'][0]['command']
         )
@@ -311,7 +316,12 @@ def test_installed_runner_obeys_the_explicit_leader_decision_for_a_run_free_team
         assert 'max_concurrent_threads_per_session' not in call['settings']['agents']
         assert 'max_depth' not in call['settings']['agents']
         for command, decision in call['decisions'].items():
-            permitted = command == 'pwd' or (leader and command == 'agent-runner --help')
+            permitted = (
+                command == 'pwd'
+                or command.startswith('touch .state/teams/')
+                or command.startswith('touch ' + str(ticket_directory / 'teams'))
+                or (leader and command == 'agent-runner --help')
+            )
             assert (not decision) is permitted, (call['role'], command, decision)
         for command, decision in call['helper_decisions'].items():
             assert (not decision) is (command in {'pwd', 'cat README.md'})

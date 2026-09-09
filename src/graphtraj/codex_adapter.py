@@ -866,6 +866,177 @@ def _report_write_paths(
     return tuple(paths)
 
 
+def refresh_codex_report_paths(
+    request: Mapping[str, Any],
+    *,
+    worktree: Path,
+    evidence: Path,
+    report_files: Tuple[Path, ...],
+) -> Dict[str, Any]:
+    """Refresh only exact report permissions in one durable resume request."""
+    arguments, request_worktree = _validate_launch_request(request)
+    if request_worktree != worktree:
+        raise CodexAdapterError(
+            "RUNTIME_REQUEST_INVALID",
+            "The durable Codex launch request targets another Worktree.",
+        )
+    refreshed = list(arguments)
+    if not report_files:
+        return {"arguments": refreshed, "worktree_path": str(request_worktree)}
+
+    report_paths = _report_write_paths(worktree, evidence, report_files)
+    _, default_permissions = _resume_request_setting(
+        refreshed, "default_permissions"
+    )
+    permissions_index, permissions = _resume_request_setting(
+        refreshed, "permissions"
+    )
+    if not isinstance(default_permissions, str) or not isinstance(permissions, dict):
+        raise CodexAdapterError(
+            "RUNTIME_REQUEST_INVALID",
+            "The durable Codex launch request has invalid report permissions.",
+        )
+    permissions = copy.deepcopy(permissions)
+    profile = permissions.get(default_permissions)
+    if not isinstance(profile, dict) or not isinstance(
+        profile.get("filesystem"), dict
+    ):
+        raise CodexAdapterError(
+            "RUNTIME_REQUEST_INVALID",
+            "The durable Codex launch request has invalid report permissions.",
+        )
+    filesystem = profile["filesystem"]
+    for path, access in tuple(filesystem.items()):
+        if access == "write" and _is_prior_report_path(
+            path, evidence, report_files
+        ):
+            del filesystem[path]
+    for path in report_paths:
+        filesystem[str(path)] = "write"
+    refreshed[permissions_index + 1] = "permissions={0}".format(
+        _toml_value(permissions)
+    )
+
+    hooks_index, hooks = _resume_request_setting(refreshed, "hooks")
+    if not isinstance(hooks, dict):
+        raise CodexAdapterError(
+            "RUNTIME_REQUEST_INVALID",
+            "The durable Codex launch request has invalid report Hooks.",
+        )
+    hooks = copy.deepcopy(hooks)
+    try:
+        for event in ("PreToolUse", "SubagentStart"):
+            entries = hooks[event]
+            if not isinstance(entries, list):
+                raise ValueError("Hook entries must be a list")
+            for entry in entries:
+                commands = entry["hooks"]
+                if not isinstance(commands, list):
+                    raise ValueError("Nested Hook entries must be a list")
+                for hook in commands:
+                    if not isinstance(hook, dict) or hook.get("type") != "command":
+                        raise ValueError("Hook must be a command")
+                    hook["command"] = _refresh_guard_write_paths(
+                        hook["command"], report_paths
+                    )
+    except (KeyError, TypeError, ValueError) as error:
+        raise CodexAdapterError(
+            "RUNTIME_REQUEST_INVALID",
+            "The durable Codex launch request has invalid report Hooks.",
+        ) from error
+    refreshed[hooks_index + 1] = "hooks={0}".format(_toml_value(hooks))
+    return {"arguments": refreshed, "worktree_path": str(request_worktree)}
+
+
+def _resume_request_setting(
+    arguments: List[str], name: str
+) -> Tuple[int, Any]:
+    matches: list[Tuple[int, Any]] = []
+    for index, argument in enumerate(arguments[:-1]):
+        if argument != "-c" or not arguments[index + 1].startswith(name + "="):
+            continue
+        try:
+            setting = tomllib.loads(arguments[index + 1])
+        except tomllib.TOMLDecodeError as error:
+            raise CodexAdapterError(
+                "RUNTIME_REQUEST_INVALID",
+                "The durable Codex launch request has an invalid {0} setting.".format(
+                    name
+                ),
+            ) from error
+        if set(setting) != {name}:
+            raise CodexAdapterError(
+                "RUNTIME_REQUEST_INVALID",
+                "The durable Codex launch request has an invalid {0} setting.".format(
+                    name
+                ),
+            )
+        matches.append((index, setting[name]))
+    if len(matches) != 1:
+        raise CodexAdapterError(
+            "RUNTIME_REQUEST_INVALID",
+            "The durable Codex launch request has an invalid {0} setting.".format(
+                name
+            ),
+        )
+    return matches[0]
+
+
+def _is_prior_report_path(
+    path: Any,
+    evidence: Path,
+    report_files: Tuple[Path, ...],
+) -> bool:
+    if not isinstance(path, str):
+        return False
+    try:
+        candidate = Path(path).resolve(strict=False).relative_to(
+            evidence.resolve(strict=False)
+        ).parts
+    except (OSError, ValueError):
+        return False
+    for report in report_files:
+        expected = report.parts[1:]
+        if candidate == expected:
+            return True
+        if (
+            len(expected) >= 5
+            and expected[-3] == "rounds"
+            and candidate[:-2] == expected[:-2]
+            and candidate[-1:] == expected[-1:]
+        ):
+            return True
+    return False
+
+
+def _refresh_guard_write_paths(
+    command: Any, report_paths: Tuple[Path, ...]
+) -> str:
+    if not isinstance(command, str):
+        raise ValueError("Hook command must be text")
+    try:
+        tokens = shlex.split(command)
+    except ValueError as error:
+        raise ValueError("Hook command cannot be parsed") from error
+    if not any(Path(token).name == "worktree_guard.py" for token in tokens):
+        raise ValueError("Hook command is not the Worktree Guard")
+    refreshed: list[str] = []
+    index = 0
+    while index < len(tokens):
+        if tokens[index] == "--write-path":
+            if index + 1 == len(tokens):
+                raise ValueError("Hook write path is missing")
+            index += 2
+            continue
+        if tokens[index].startswith("--write-path="):
+            raise ValueError("Hook write path is unsupported")
+        refreshed.append(tokens[index])
+        index += 1
+    for path in report_paths:
+        refreshed.extend(("--write-path", str(path)))
+    return shlex.join(refreshed)
+
+
 def _discover_skill_files(
     root: Path,
     *,

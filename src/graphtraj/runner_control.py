@@ -12,7 +12,11 @@ from typing import Any, Dict, Tuple
 
 import yaml
 
-from .codex_adapter import codex_connection_environment, read_codex_session_identity
+from .codex_adapter import (
+    codex_connection_environment,
+    read_codex_session_identity,
+    refresh_codex_report_paths,
+)
 from .delivery_worldline import read_worldline
 from .project_configuration import ProjectConfigurationError, load_project_configuration
 from .runner_io import confirm_alias_mapping_durable, write_yaml_durably
@@ -107,6 +111,10 @@ def _send_session(
         raise _invalid_mapping()
     request, connection = _read_session_resume_request(session_directory, mapping)
     _attest_runtime_session(session_directory, mapping)
+    team_environment = _team_runtime_environment(mapping, cwd)
+    request = _refresh_current_team_report_request(
+        request, mapping, worktree, team_environment
+    )
     resume_file = session_directory / "resume.yml"
     error_file = session_directory / "resume-error.yml"
     error_file.unlink(missing_ok=True)
@@ -128,7 +136,7 @@ def _send_session(
         )
         worker_environment = dict(os.environ)
         worker_environment.update(_resume_environment(mapping, connection))
-        worker_environment.update(_team_runtime_environment(mapping, cwd))
+        worker_environment.update(team_environment)
         if mapping["role"] == "team-leader":
             worker_environment.update(
                 GRAPHTRAJ_PARENT_ALIAS=alias,
@@ -387,6 +395,40 @@ def _team_runtime_environment(mapping: Dict[str, Any], cwd: Path) -> Dict[str, s
             GRAPHTRAJ_REVIEW_REPORT=str(report),
         )
     return environment
+
+
+def _refresh_current_team_report_request(
+    request: Dict[str, Any],
+    mapping: Dict[str, Any],
+    worktree: Path,
+    environment: Dict[str, str],
+) -> Dict[str, Any]:
+    if mapping["role"] in {
+        "engineer-junior", "engineer-senior", "engineer-expert",
+    }:
+        names = ("engineer.md", "validation.md")
+    elif mapping["role"] == "team-leader":
+        names = ("leader.md",)
+    else:
+        return request
+    evidence = environment.get("GRAPHTRAJ_EVIDENCE")
+    generation = environment.get("GRAPHTRAJ_TEAM_GENERATION")
+    ordinal = environment.get("GRAPHTRAJ_TEAM_ROUND")
+    if not all(
+        isinstance(value, str) and value
+        for value in (evidence, generation, ordinal)
+    ):
+        raise _not_resumable()
+    directory = Path(".state") / "teams" / generation / "rounds" / ordinal
+    try:
+        return refresh_codex_report_paths(
+            request,
+            worktree=worktree,
+            evidence=Path(evidence),
+            report_files=tuple(directory / name for name in names),
+        )
+    except RuntimeAdapterError as error:
+        raise RunnerError(error.code, error.message) from error
 
 
 def _attest_runtime_session(

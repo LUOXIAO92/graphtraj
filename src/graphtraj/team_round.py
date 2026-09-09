@@ -17,7 +17,11 @@ from typing import Any, Callable
 import yaml
 
 from .codex_project import ignore_worktree_documents
-from .codex_adapter import codex_connection_environment, preflight_runtime_context
+from .codex_adapter import (
+    codex_connection_environment,
+    preflight_runtime_context,
+    refresh_codex_report_paths,
+)
 from .role_definitions import resolve_child_role
 from .delivery_state import apply_delivery_state_request, confirmed_rework
 from .delivery_worldline import read_worldline
@@ -1340,7 +1344,7 @@ def _execute_agent(
         runtime_environment = context.runtime_environment()
     else:
         job_file, runtime_environment = _resume_job(
-            session_directory, expected_session
+            session_directory, expected_session, worktree, evidence, report_files
         )
 
     task_prompt = prompt or task.ticket_content
@@ -1478,7 +1482,11 @@ def _execute_agent(
 
 
 def _resume_job(
-    session_directory: Path, expected_session: str
+    session_directory: Path,
+    expected_session: str,
+    worktree: Path,
+    evidence: Path,
+    report_files: tuple[Path, ...],
 ) -> tuple[Path, dict[str, str]]:
     launch_file = session_directory / "launch.yml"
     mapping_file = session_directory / "mapping.yml"
@@ -1504,13 +1512,22 @@ def _resume_job(
         for key, value in connection.items()
     ):
         raise RunnerError("RUNTIME_WORKER_FAILED", "The mapped Session is unavailable.")
+    try:
+        adapter_request = refresh_codex_report_paths(
+            launch["adapter_request"],
+            worktree=worktree,
+            evidence=evidence,
+            report_files=report_files,
+        )
+    except RuntimeAdapterError as error:
+        raise RunnerError(error.code, error.message) from error
     resume_file = session_directory / "resume.yml"
     write_yaml_durably(
         resume_file,
         {
             "operation": "resume",
             "runtime": mapping["runtime"],
-            "adapter_request": launch["adapter_request"],
+            "adapter_request": adapter_request,
             "expected_session": expected_session,
             "mapping": {
                 key: value

@@ -1484,22 +1484,88 @@ def _process_corrections(
     return leader_alias, leader_session, state_alias, state_session, predecessor
 
 
-def _current_runtime_diagnostic(session_directory: Path, event_offset: int) -> str:
-    diagnostics = []
-    for name in ("stderr.log", "worker-stderr.log"):
-        try:
-            diagnostics.append(
-                (session_directory / name).read_text(encoding="utf-8")
-            )
-        except (OSError, UnicodeError):
-            continue
+def _current_runtime_diagnostic(
+    session_directory: Path, stderr_offset: int, event_offset: int
+) -> str:
+    diagnostics = [_diagnostic_since(session_directory / "stderr.log", stderr_offset)]
+    try:
+        diagnostics.append(
+            (session_directory / "worker-stderr.log").read_text(encoding="utf-8")
+        )
+    except (OSError, UnicodeError):
+        pass
     try:
         with (session_directory / "events.jsonl").open("rb") as events:
             events.seek(event_offset)
-            diagnostics.append(events.read().decode("utf-8", errors="replace"))
+            diagnostics.extend(_runtime_event_errors(events.read()))
     except OSError:
         pass
-    return "\n".join(diagnostics)
+    return "\n".join(diagnostic for diagnostic in diagnostics if diagnostic)
+
+
+def _diagnostic_since(path: Path, offset: int) -> str:
+    try:
+        with path.open("rb") as diagnostic:
+            diagnostic.seek(offset)
+            return diagnostic.read().decode("utf-8", errors="replace")
+    except OSError:
+        return ""
+
+
+def _runtime_event_errors(events: bytes) -> list[str]:
+    errors = []
+    for line in events.splitlines():
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(event, dict):
+            continue
+        event_type = event.get("type")
+        if event_type in {"error", "turn.failed"}:
+            error = _runtime_error_text(event)
+        else:
+            item = event.get("item")
+            error = (
+                _runtime_error_text(item)
+                if isinstance(item, dict)
+                and (
+                    item.get("type") in {"error", "tool_error"}
+                    or (
+                        item.get("type") == "command_execution"
+                        and (
+                            item.get("status") in {"failed", "error"}
+                            or isinstance(item.get("error"), (dict, str))
+                            or (
+                                isinstance(item.get("exit_code"), int)
+                                and item["exit_code"] != 0
+                            )
+                        )
+                    )
+                )
+                else ""
+            )
+        if error:
+            errors.append(error)
+    return errors
+
+
+def _runtime_error_text(event: dict[str, Any]) -> str:
+    values = []
+    for key in ("aggregated_output", "message", "detail"):
+        value = event.get(key)
+        if isinstance(value, str) and value:
+            values.append(value)
+    error = event.get("error")
+    if isinstance(error, str) and error:
+        values.append(error)
+    elif isinstance(error, dict):
+        values.extend(
+            value
+            for key in ("message", "detail")
+            if isinstance(value := error.get(key), str) and value
+        )
+    return "\n".join(values)
 
 
 def _runtime_access_failure(diagnostic: str) -> bool:
@@ -1745,12 +1811,9 @@ def _execute_agent(
     )
     events_file = session_directory / "events.jsonl"
     try:
-        (session_directory / "stderr.log").write_text("", encoding="utf-8")
-    except OSError as error:
-        raise RunnerError(
-            "RUNTIME_WORKER_FAILED",
-            "The Runtime Session diagnostics could not be prepared.",
-        ) from error
+        stderr_offset = (session_directory / "stderr.log").stat().st_size
+    except OSError:
+        stderr_offset = 0
     with events_file.open("a", encoding="utf-8") as events:
         events.write(json.dumps({"type": "runner-execution-start"}) + "\n")
     event_offset = events_file.stat().st_size
@@ -1791,7 +1854,9 @@ def _execute_agent(
                 os.environ.pop(name, None)
             else:
                 os.environ[name] = value
-    diagnostic = _current_runtime_diagnostic(session_directory, event_offset)
+    diagnostic = _current_runtime_diagnostic(
+        session_directory, stderr_offset, event_offset
+    )
     if outcome != "completed":
         if _runtime_access_failure(diagnostic):
             raise RunnerError(

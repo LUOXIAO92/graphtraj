@@ -349,7 +349,7 @@ class CodexTurn:
         stderr_file = self._session_directory / "stderr.log"
         session: Optional[str] = None
         try:
-            with stderr_file.open("w", encoding="utf-8") as runtime_stderr:
+            with stderr_file.open("a", encoding="utf-8") as runtime_stderr:
                 self._process = subprocess.Popen(
                     arguments,
                     cwd=worktree,

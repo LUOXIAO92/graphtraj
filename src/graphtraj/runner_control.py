@@ -377,23 +377,11 @@ def _team_runtime_environment(mapping: Dict[str, Any], cwd: Path) -> Dict[str, s
         if not isinstance(candidate, str) or not candidate:
             raise _not_resumable()
         axis = "Standards" if mapping["role"] == "standards-reviewer" else "Spec"
-        report_file = mapping.get("report_file")
-        if report_file is None:
-            report = evidence / "reviews" / (
-                "standards.md" if axis == "Standards" else "spec.md"
-            )
-        else:
-            report_path = Path(report_file) if isinstance(report_file, str) else None
-            if (
-                report_path is None
-                or report_path.is_absolute()
-                or len(report_path.parts) != 3
-                or report_path.parts[:2] != (".state", "reviews")
-                or ".." in report_path.parts
-                or report_path.suffix != ".md"
-            ):
-                raise _not_resumable()
-            report = evidence.joinpath(*report_path.parts[1:])
+        try:
+            report_path = _reviewer_report_file(mapping)
+        except ValueError:
+            raise _not_resumable() from None
+        report = evidence.joinpath(*report_path.parts[1:])
         try:
             if report.parent.is_symlink():
                 raise OSError("review report directory is a symlink")
@@ -419,32 +407,66 @@ def _refresh_current_team_report_request(
     worktree: Path,
     environment: Dict[str, str],
 ) -> Dict[str, Any]:
-    if mapping["role"] in {
+    role = mapping["role"]
+    if role in {
         "engineer-junior", "engineer-senior", "engineer-expert",
     }:
         names = ("engineer.md", "validation.md")
-    elif mapping["role"] == "team-leader":
+    elif role == "team-leader":
         names = ("leader.md",)
+    elif role in {"standards-reviewer", "spec-reviewer"}:
+        try:
+            report_files = (_reviewer_report_file(mapping),)
+        except ValueError:
+            raise _not_resumable() from None
     else:
         return request
     evidence = environment.get("GRAPHTRAJ_EVIDENCE")
     generation = environment.get("GRAPHTRAJ_TEAM_GENERATION")
     ordinal = environment.get("GRAPHTRAJ_TEAM_ROUND")
-    if not all(
-        isinstance(value, str) and value
-        for value in (evidence, generation, ordinal)
-    ):
+    if not isinstance(evidence, str) or not evidence:
         raise _not_resumable()
-    directory = Path(".state") / "teams" / generation / "rounds" / ordinal
+    if role not in {"standards-reviewer", "spec-reviewer"}:
+        if not all(
+            isinstance(value, str) and value
+            for value in (generation, ordinal)
+        ):
+            raise _not_resumable()
+        directory = Path(".state") / "teams" / generation / "rounds" / ordinal
+        report_files = tuple(directory / name for name in names)
     try:
         return refresh_codex_report_paths(
             request,
             worktree=worktree,
             evidence=Path(evidence),
-            report_files=tuple(directory / name for name in names),
+            report_files=report_files,
         )
     except RuntimeAdapterError as error:
         raise RunnerError(error.code, error.message) from error
+
+
+def _reviewer_report_file(mapping: Dict[str, Any]) -> Path:
+    names = {
+        "standards-reviewer": "standards.md",
+        "spec-reviewer": "spec.md",
+    }
+    default_name = names.get(mapping.get("role"))
+    if default_name is None:
+        raise ValueError("invalid Reviewer role")
+    value = mapping.get("report_file")
+    if value is None:
+        return Path(".state") / "reviews" / default_name
+    report = Path(value) if isinstance(value, str) else None
+    if (
+        report is None
+        or report.is_absolute()
+        or len(report.parts) != 3
+        or report.parts[:2] != (".state", "reviews")
+        or ".." in report.parts
+        or report.suffix != ".md"
+    ):
+        raise ValueError("invalid Reviewer report")
+    return report
 
 
 def _attest_runtime_session(

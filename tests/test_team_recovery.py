@@ -90,7 +90,18 @@ elif role == 'team-leader':
         else:
             (round_dir / 'leader.md').write_text('Decision: ACCEPT\nCandidate commit: ' + candidate + '\n')
 elif role.startswith('engineer-'):
-    if target in {'provider', 'provider-correct', 'provider-rework'} and not resumed:
+    if target in {'provider', 'provider-correct', 'provider-quoted', 'provider-rework'} and not resumed:
+        if target == 'provider-quoted':
+            print(json.dumps({'type': 'item.completed', 'item': {
+                'type': 'command_execution',
+                'aggregated_output': 'source says Permission denied',
+                'exit_code': 0,
+                'status': 'completed',
+            }}), flush=True)
+            print(json.dumps({'type': 'item.completed', 'item': {
+                'type': 'agent_message',
+                'text': 'the Agent quoted Permission denied',
+            }}), flush=True)
         raise SystemExit(1)
     replacement_failure = Path.cwd() / '.scratch' / 'provider-replace-failed'
     if target == 'provider-replace' and not replacement_failure.exists():
@@ -127,13 +138,23 @@ else:
     ):
         raise SystemExit(1)
     if target == 'completed-access' and role == 'spec-reviewer':
-        message = 'Permission denied by Runtime filesystem sandbox'
+        print(json.dumps({'type': 'item.completed', 'item': {
+            'type': 'command_execution',
+            'aggregated_output': 'Permission denied by Runtime filesystem sandbox',
+            'exit_code': 1,
+            'status': 'failed',
+        }}), flush=True)
     elif (
         target == 'completed-parse'
         and role == 'spec-reviewer'
         and not resumed
     ):
-        message = 'Cannot verify option: --glob'
+        print(json.dumps({'type': 'item.completed', 'item': {
+            'type': 'command_execution',
+            'aggregated_output': 'Cannot verify option: --glob',
+            'exit_code': 1,
+            'status': 'failed',
+        }}), flush=True)
     elif target == role and not resumed:
         pass
     else:
@@ -232,7 +253,7 @@ def test_installed_team_corrects_missing_member_evidence_in_its_existing_session
 
 @pytest.mark.parametrize(
     ('target', 'round_ordinal'),
-    (('provider', 1), ('provider-correct', 1), ('provider-rework', 2)),
+    (('provider', 1), ('provider-correct', 1), ('provider-quoted', 1), ('provider-rework', 2)),
 )
 def test_provider_failure_returns_to_the_caller_for_an_explicit_same_session_retry(
     installed_commands, temporary_git_repository, fake_codex, tmp_path,

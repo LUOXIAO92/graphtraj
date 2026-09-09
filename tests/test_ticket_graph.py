@@ -52,6 +52,23 @@ def _ticket(
     }
 
 
+def _non_coding_ticket(
+    ticket_id: str,
+    name: str,
+    *,
+    task_type: str,
+) -> dict[str, object]:
+    return {
+        **_ticket(ticket_id, name),
+        "body": (
+            "---\n"
+            "task_type: {0}\n"
+            "---\n\n"
+            "Investigate {1}."
+        ).format(task_type, name),
+    }
+
+
 def _run(
     commands: InstalledCommands, project: Path, *arguments: str
 ):
@@ -138,6 +155,81 @@ def test_installed_command_registers_an_accepted_issue_as_a_ticket(
     assert events[0]["evidence_refs"] == [
         ".graphtraj/state/tickets/73-ticket-readiness/ticket.md"
     ]
+
+
+def test_installed_command_registers_non_coding_ticket_with_front_matter(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+) -> None:
+    project = temporary_git_repository
+    state = _configure(project)
+    issue = _write(
+        project / "research-ticket.yml",
+        _non_coding_ticket("74", "research-ticket", task_type="research"),
+    )
+
+    result = _run(
+        installed_commands, project, "register", "--ticket-file", str(issue)
+    )
+
+    assert result.returncode == 0, result.stderr
+    snapshot = (state / "tickets" / "74-research-ticket" / "ticket.md").read_text(
+        encoding="utf-8"
+    )
+    assert snapshot.startswith("---\ntask_type: research\n---\n")
+    assert snapshot.endswith("Investigate research-ticket.\n")
+
+
+def test_installed_command_revises_non_coding_ticket_with_front_matter(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+) -> None:
+    project = temporary_git_repository
+    state = _configure(project)
+    _register(
+        installed_commands,
+        project,
+        _non_coding_ticket("74", "research-ticket", task_type="research"),
+    )
+    evidence = project / "research-revision.md"
+    evidence.write_text("Research scope changed.\n", encoding="utf-8")
+    revision = _write(
+        project / "research-revision.yml",
+        {
+            "product_preserving": True,
+            "caused_by_event_ids": [],
+            "evidence_refs": ["research-revision.md"],
+            "tickets": [
+                {
+                    **_non_coding_ticket(
+                        "74", "research-ticket", task_type="analysis"
+                    ),
+                    "active": True,
+                    "replaced_by": [],
+                }
+            ],
+        },
+    )
+
+    result = _run(
+        installed_commands, project, "revise", "--revision-file", str(revision)
+    )
+
+    assert result.returncode == 0, result.stderr
+    event = yaml.safe_load(result.stdout)
+    state_record = yaml.safe_load(
+        (state / "tickets" / "74-research-ticket" / "ticket.yml").read_text(
+            encoding="utf-8"
+        )
+    )
+    snapshot = (
+        state
+        / "tickets"
+        / "74-research-ticket"
+        / state_record["current_definition"]
+    ).read_text(encoding="utf-8")
+    assert state_record["current_definition"] == f"definitions/{event['event_id']}.md"
+    assert snapshot.startswith("---\ntask_type: analysis\n---\n")
 
 
 def test_installed_command_corrects_a_dependency_and_generates_current_readiness(

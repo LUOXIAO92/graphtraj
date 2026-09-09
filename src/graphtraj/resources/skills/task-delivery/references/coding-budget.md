@@ -36,6 +36,10 @@ zero. Total is an elapsed-time budget, not summed parallel Agent time. Record
 uncertainty in estimation_note, not min/max thresholds. Do not budget tokens.
 Count the roles actually needed, including state maintenance when applicable.
 
+Count a Runtime Session once across resumptions. The correction allowance covers
+both same-Round process corrections and implementation rework that opens another
+Round; keep their existing lifecycle records distinct.
+
 Keep this front matter in the authoritative ticket and its retained snapshot.
 Before dispatch, check scope, Engineer selection and checks still fit it. If
 missing or stale, update the ticket through the configured authorized workflow,

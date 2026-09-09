@@ -4,6 +4,17 @@ GraphTraj is a Harness for delivering a graph of accepted Tickets through
 Teams. Main manages the whole request, dependencies and integration. Each
 Team Leader coordinates one Engineer, two Reviewers and the Team's decisions.
 The installed commands provide setup, isolated execution and durable evidence.
+This coding Team protocol applies to dispatched `coding-team.*` members.
+Shared Delivery State and temporary Batch specialists retain their own duties
+and permissions.
+
+Main is started and configured by the user. It follows the user's instructions
+and the `AGENTS.md` files applicable to the task, reading Skills as needed.
+GraphTraj does not generate, install, append or restore developer instructions
+for Main, and using GraphTraj does not assign Main to a coding Team. Setup
+preserves existing user Runtime configuration and prompts without using them
+as template validation conditions. It does not distribute this development
+repository's `AGENTS.md` or operating procedures to user projects.
 
 ## Install and set up
 
@@ -33,11 +44,11 @@ The default layout is:
 
 ```text
 <harness-project-root>/                  also the Source Repository by default
-├── AGENTS.md                           Harness Guidance
+├── AGENTS.md                           user/project instructions
 ├── CONTEXT.md                          shared vocabulary
 ├── docs/                               Project Documents
 ├── .agents/skills/                     Harness Skills
-├── .codex/                             Main's project-local Runtime resources
+├── .codex/                             Runner Hooks and user Runtime configuration
 └── .graphtraj/
     ├── config.yml                      paths and Runner limits
     ├── roles.yml                       child-role Runtime settings
@@ -111,6 +122,20 @@ for the coding role's work. Existing explicit-only invocation policies are
 preserved; a returned Skill name is not assumed to activate another Skill.
 
 ## Configuration and roles
+
+All bundled Skill bodies and references live in `resources/skills` and install
+through the same path. GraphTraj child definitions in `resources/roles` hold
+responsibilities and required Skills independently of Codex configuration
+syntax. `role_definitions.py` resolves these definitions and their logical
+dispatch constraints with the Runtime, model and connection settings selected
+in `.graphtraj/roles.yml`.
+
+Runner passes the resolved child role to the Codex Adapter. The Adapter
+locates its Skills and translates that role into native launch arguments,
+permissions, Hooks and session calls. `resources/codex` contains only the
+Codex integration: native child permission/Hook settings, reasoning settings
+and tool-event handling. Main has no Runner child preset or managed Runtime
+configuration template.
 
 The default `.graphtraj/config.yml` is:
 
@@ -227,11 +252,12 @@ Historical `state/<run-id>` directories are left byte-for-byte untouched.
 GraphTraj does not migrate them, read them as fallback or offer compatibility
 for the old project command, Run-based Batch syntax or configuration sources.
 
-The current Adapter supports Codex. Formal implementation and Review always
-use Runner. Main and permitted Team Leaders may use Runtime-native helpers
-only for temporary read-only investigation; those helpers have no independent
-GraphTraj Trace and cannot occupy a Team seat. Engineers and Reviewers cannot
-dispatch child Agents or start another Runtime.
+The current Adapter supports Codex. Dispatched coding Teams use Runner for
+formal implementation and Review. Permitted Team Leaders may use Runtime-native
+helpers only for temporary read-only investigation; those helpers have no
+independent GraphTraj Trace and cannot occupy a Team seat. Engineers and
+Reviewers cannot dispatch child Agents or start another Runtime. Main's
+Runtime and helper settings remain under user control.
 
 GraphTraj has no queue, daemon, automatic crash-recovery service or automatic
 release promotion. One Harness Project contains one Source Repository.

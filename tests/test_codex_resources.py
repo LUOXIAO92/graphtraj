@@ -18,9 +18,10 @@ def run_hook(
     event: dict,
     *,
     cwd: Path,
+    arguments: tuple[str, ...] = (),
 ) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, str(hook)],
+        [sys.executable, str(hook), *arguments],
         cwd=cwd,
         input=json.dumps(event),
         check=False,
@@ -29,20 +30,36 @@ def run_hook(
     )
 
 
-def run_worktree_guard(event: dict, *, cwd: Path) -> subprocess.CompletedProcess[str]:
-    return run_hook(WORKTREE_GUARD, event, cwd=cwd)
+def run_worktree_guard(
+    event: dict,
+    *,
+    cwd: Path,
+    arguments: tuple[str, ...] = (),
+) -> subprocess.CompletedProcess[str]:
+    return run_hook(WORKTREE_GUARD, event, cwd=cwd, arguments=arguments)
 
 
-def assert_hook_denies(hook: Path, event: dict, *, cwd: Path) -> None:
-    result = run_hook(hook, event, cwd=cwd)
+def assert_hook_denies(
+    hook: Path,
+    event: dict,
+    *,
+    cwd: Path,
+    arguments: tuple[str, ...] = (),
+) -> None:
+    result = run_hook(hook, event, cwd=cwd, arguments=arguments)
 
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout)
     assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
-def assert_worktree_guard_denies(event: dict, *, cwd: Path) -> None:
-    assert_hook_denies(WORKTREE_GUARD, event, cwd=cwd)
+def assert_worktree_guard_denies(
+    event: dict,
+    *,
+    cwd: Path,
+    arguments: tuple[str, ...] = (),
+) -> None:
+    assert_hook_denies(WORKTREE_GUARD, event, cwd=cwd, arguments=arguments)
 
 
 def test_worktree_guard_adds_the_current_boundary_to_subagent_context(
@@ -292,6 +309,22 @@ def test_worktree_guard_checks_newlines_equals_options_and_unknown_wrappers(
     )
 
 
+def test_worktree_guard_reports_unsupported_command_input_without_a_path_denial(
+    temporary_git_repository: Path,
+) -> None:
+    result = run_worktree_guard(
+        {
+            "hook_event_name": "PreToolUse",
+            "cwd": str(temporary_git_repository),
+            "tool_name": "Bash",
+            "tool_input": {"command": "rg --glob py needle ."},
+        },
+        cwd=temporary_git_repository,
+    )
+    reason = json.loads(result.stdout)["hookSpecificOutput"]["permissionDecisionReason"]
+    assert reason == "Cannot verify option: --glob"
+
+
 def test_worktree_guard_rejects_unsafe_command_forms(
     temporary_git_repository: Path,
 ) -> None:
@@ -435,10 +468,19 @@ agent_runner:
     ).check_returncode()
     scoped_state = ticket_worktree / ".state"
     scoped_state.symlink_to(evidence, target_is_directory=True)
+    report_view = scoped_state / "teams" / "1" / "rounds" / "1" / "engineer.md"
+    report_target = evidence / "teams" / "1" / "rounds" / "1" / "engineer.md"
+    authorization = (
+        "--write-path",
+        str(report_view),
+        "--write-path",
+        str(report_target),
+    )
 
     for command in (
         "touch .state/teams/1/rounds/1/engineer.md",
-        "touch .state/teams/1/rounds/1/spec.md",
+        "touch {0}".format(report_target),
+        "tee .state/teams/1/rounds/1/engineer.md",
     ):
         allowed = run_worktree_guard(
             {
@@ -448,6 +490,7 @@ agent_runner:
                 "tool_input": {"command": command},
             },
             cwd=ticket_worktree,
+            arguments=authorization,
         )
         assert allowed.returncode == 0, allowed.stderr
         assert allowed.stdout == ""
@@ -459,16 +502,38 @@ agent_runner:
             "tool_name": "apply_patch",
             "tool_input": {
                 "command": """*** Begin Patch
-*** Add File: .state/teams/1/rounds/1/spec.md
-+Raw Spec Reviewer report
+*** Add File: .state/teams/1/rounds/1/engineer.md
++Engineer report
 *** End Patch
 """
             },
         },
         cwd=ticket_worktree,
+        arguments=authorization,
     )
     assert allowed_patch.returncode == 0, allowed_patch.stderr
     assert allowed_patch.stdout == ""
+
+    denied_report = run_worktree_guard(
+        {
+            "hook_event_name": "PreToolUse",
+            "cwd": str(ticket_worktree),
+            "tool_name": "Bash",
+            "tool_input": {
+                "command": "touch .state/teams/1/rounds/1/validation.md"
+            },
+        },
+        cwd=ticket_worktree,
+        arguments=authorization,
+    )
+    denied_payload = json.loads(denied_report.stdout)
+    reason = denied_payload["hookSpecificOutput"]["permissionDecisionReason"]
+    assert denied_payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "source=Worktree Guard" in reason
+    assert "current_worktree={0}".format(ticket_worktree) in reason
+    assert "requested=.state/teams/1/rounds/1/validation.md" in reason
+    assert "resolved=" in reason
+    assert "condition=" in reason
 
     assert_worktree_guard_denies(
         {

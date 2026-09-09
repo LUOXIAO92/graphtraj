@@ -93,7 +93,7 @@ class _CodexRole:
         git_common_directory: Path,
         runtime_store: Path,
         effective_skills: Tuple[_EffectiveSkill, ...],
-        report_file: Path | None,
+        report_files: Tuple[Path, ...],
         model: str,
         child_batch_write_paths: Tuple[Path, ...] = (),
     ) -> Dict[str, Any]:
@@ -131,16 +131,23 @@ class _CodexRole:
                 native_settings["permissions"][self.default_permissions]["filesystem"][str(path)] = "write"
         if self.name == "merge-resolver":
             native_settings["permissions"][self.default_permissions]["filesystem"][str(evidence)] = "read"
-        if report_file is not None:
+        report_paths = _report_write_paths(worktree, evidence, report_files)
+        for path in report_paths:
             native_settings["permissions"][self.default_permissions]["filesystem"][
-                str(evidence / "reviews" / report_file.name)
+                str(path)
             ] = "write"
         overrides = (
             *native_settings.items(),
             ("default_permissions", self.default_permissions),
             ("model_reasoning_effort", self.reasoning_effort),
             ("developer_instructions", developer_instructions),
-            ("hooks", _root_owned_hooks(self.hooks, runtime_store, self.name, effective_skills)),
+            (
+                "hooks",
+                _root_owned_hooks(
+                    self.hooks, runtime_store, self.name, effective_skills,
+                    report_paths,
+                ),
+            ),
             ("agents", self.agents),
             (
                 "projects",
@@ -171,7 +178,7 @@ class _CodexRuntimePreflight:
     _evidence: Path
     _harness_skills: Tuple[_EffectiveSkill, ...]
     _requested_skills: Tuple[str, ...]
-    _report_file: Path | None
+    _report_files: Tuple[Path, ...]
     _child_batch_write_paths: Tuple[Path, ...]
 
     def finalize(self) -> RuntimeContext:
@@ -187,7 +194,7 @@ class _CodexRuntimePreflight:
             git_common_directory=self._git_common_directory,
             runtime_store=self._runtime_store,
             effective_skills=effective_skills,
-            report_file=self._report_file,
+            report_files=self._report_files,
             model=self._model,
             child_batch_write_paths=self._child_batch_write_paths,
         )
@@ -264,7 +271,7 @@ def preflight_runtime_context(
     evidence: Path,
     repository_skill_source: Path,
     requested_skills: Tuple[str, ...],
-    report_file: Path | None = None,
+    report_files: Tuple[Path, ...] = (),
     child_batch_write_paths: Tuple[Path, ...] = (),
 ) -> RuntimeContextPreflight:
     """Prepare one Codex role without crossing role-specific boundaries."""
@@ -286,7 +293,7 @@ def preflight_runtime_context(
         worktree=worktree,
         evidence=evidence,
         effective_skills=harness_skills + repository_skills,
-        report_file=report_file,
+        report_files=report_files,
         model=settings.model,
         child_batch_write_paths=child_batch_write_paths,
     )
@@ -303,7 +310,7 @@ def preflight_runtime_context(
         _evidence=evidence,
         _harness_skills=harness_skills,
         _requested_skills=requested_skills,
-        _report_file=report_file,
+        _report_files=report_files,
         _child_batch_write_paths=child_batch_write_paths,
     )
 
@@ -838,6 +845,27 @@ def _resolve_repository_skills(
     return tuple(effective)
 
 
+def _report_write_paths(
+    worktree: Path,
+    evidence: Path,
+    report_files: Tuple[Path, ...],
+) -> Tuple[Path, ...]:
+    """Return both supported spellings of each exact ticket report target."""
+    paths: list[Path] = []
+    for report in report_files:
+        if (
+            report.is_absolute()
+            or len(report.parts) < 2
+            or report.parts[0] != ".state"
+            or ".." in report.parts
+        ):
+            raise CodexAdapterError(
+                "ROLE_CONFIG_INVALID", "A report path must be inside .state."
+            )
+        paths.extend((worktree / report, evidence.joinpath(*report.parts[1:])))
+    return tuple(paths)
+
+
 def _discover_skill_files(
     root: Path,
     *,
@@ -877,6 +905,7 @@ def _root_owned_hooks(
     runtime_store: Path,
     role: str,
     effective_skills: Tuple[_EffectiveSkill, ...],
+    write_paths: Tuple[Path, ...],
 ) -> Mapping[str, Any]:
     """Translate canonical Hooks to the root-owned Worktree Guard."""
     _verify_packaged_guard(runtime_store)
@@ -887,6 +916,8 @@ def _root_owned_hooks(
     )
     if role == "team-leader":
         command += " --team-leader"
+    for path in write_paths:
+        command += " --write-path " + shlex.quote(str(path))
     for skill in effective_skills:
         if skill.enabled:
             for path in sorted(skill.path.parent.rglob("*")):

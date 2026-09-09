@@ -532,6 +532,7 @@ def scoped_evidence_reason(
     target: Path,
     *,
     root: Path,
+    write: bool = False,
 ) -> Tuple[bool, Optional[str]]:
     """Validate the sole external path exception for a Ticket Worktree."""
     scope = ticket_evidence_scope(root)
@@ -557,13 +558,15 @@ def scoped_evidence_reason(
         return True, "Cannot resolve the scoped evidence link."
 
     if not is_inside(target, expected_evidence):
-        return True, "Blocked target outside the current ticket evidence directory."
+        return True, "target is outside the current ticket evidence directory"
 
     cursor = scoped_state
     for part in relative.parts:
         cursor = cursor / part
         if cursor.is_symlink():
-            return True, "Blocked inner symlink in the ticket evidence path."
+            return True, "an inner ticket evidence path component is a symlink"
+    if write and target not in writable_evidence_paths():
+        return True, "the report target is not authorized for this role"
     return True, None
 
 
@@ -580,6 +583,7 @@ def target_reason(
     root: Path,
     required: bool = True,
     allow_harness_document_read: bool = False,
+    write: bool = False,
 ) -> Optional[str]:
     target = path_from(raw, cwd=cwd, required=required)
     lexical = lexical_path_from(raw, cwd=cwd)
@@ -587,10 +591,14 @@ def target_reason(
         return "Cannot verify path target: {0}".format(raw)
     git_metadata = root / ".git"
     if is_inside(lexical, git_metadata) or is_inside(target, git_metadata):
-        return "Blocked Git metadata target: {0}".format(raw)
-    scoped, reason = scoped_evidence_reason(lexical, target, root=root)
+        return _path_denial(raw, target, root, "target is Git metadata")
+    scoped, reason = scoped_evidence_reason(lexical, target, root=root, write=write)
     if scoped:
-        return reason
+        return _path_denial(raw, target, root, reason) if reason else None
+    scope = ticket_evidence_scope(root)
+    if scope is not None and is_inside(target, scope[1]):
+        reason = direct_evidence_reason(target, scope[1], write=write)
+        return _path_denial(raw, target, root, reason) if reason else None
     if not is_inside(target, root):
         if allow_harness_document_read and target in readable_skill_paths():
             return None
@@ -600,7 +608,38 @@ def target_reason(
             root=root,
         ):
             return None
-        return "Blocked target outside current worktree: {0}".format(raw)
+        return _path_denial(raw, target, root, "target is outside the current Worktree")
+    return None
+
+
+def _path_denial(raw: str, target: Path, root: Path, condition: str) -> str:
+    return (
+        "Blocked path target: source=Worktree Guard; current_worktree={0}; "
+        "requested={1}; resolved={2}; condition={3}"
+    ).format(root, raw, target, condition)
+
+
+def direct_evidence_reason(
+    target: Path,
+    expected_evidence: Path,
+    *,
+    write: bool,
+) -> Optional[str]:
+    if target == expected_evidence:
+        return "direct operation on the ticket evidence directory is not allowed"
+    try:
+        if expected_evidence.resolve(strict=False) != expected_evidence:
+            return "the expected ticket evidence directory cannot be verified"
+    except (OSError, RuntimeError, ValueError):
+        return "the expected ticket evidence directory cannot be resolved"
+    relative = target.relative_to(expected_evidence)
+    cursor = expected_evidence
+    for part in relative.parts:
+        cursor = cursor / part
+        if cursor.is_symlink():
+            return "an inner ticket evidence path component is a symlink"
+    if write and target not in writable_evidence_paths():
+        return "the report target is not authorized for this role"
     return None
 
 
@@ -613,13 +652,30 @@ def readable_skill_paths() -> tuple[Path, ...]:
     )
 
 
-def optional_target_reason(raw: str, *, cwd: Path, root: Path) -> Optional[str]:
+def writable_evidence_paths() -> tuple[Path, ...]:
+    """Return exact report targets supplied by the immutable Adapter Hook command."""
+    paths = []
+    for index, value in enumerate(sys.argv[1:], start=1):
+        if sys.argv[index - 1] != "--write-path":
+            continue
+        try:
+            paths.append(Path(value).resolve(strict=False))
+        except (OSError, RuntimeError, ValueError):
+            continue
+    return tuple(paths)
+
+
+def optional_target_reason(
+    raw: str,
+    *,
+    cwd: Path,
+    root: Path,
+    write: bool = False,
+) -> Optional[str]:
     target = path_from(raw, cwd=cwd)
     if target is None:
         return None
-    if not is_inside(target, root):
-        return "Blocked target outside current worktree: {0}".format(raw)
-    return None
+    return target_reason(raw, cwd=cwd, root=root, required=False, write=write)
 
 
 def references_foreign_worktree(
@@ -628,7 +684,7 @@ def references_foreign_worktree(
     cwd: Path,
     root: Path,
     worktrees: Iterable[Path],
-) -> bool:
+) -> Optional[Path]:
     normalized = command.replace("\\", "/")
     # A Harness Skill can be under the Primary Worktree in a same-root project.
     # target_reason still restricts these exact files to read commands.
@@ -643,8 +699,8 @@ def references_foreign_worktree(
             if relative not in {"", "."}:
                 spellings.add(relative)
         if any(spelling.replace("\\", "/") in normalized for spelling in spellings):
-            return True
-    return False
+            return worktree
+    return None
 
 
 def tokenize(command: str) -> Optional[list[str]]:
@@ -700,7 +756,12 @@ def strip_redirections(
         if token in REDIRECTS:
             if index + 1 >= len(segment):
                 return None, "Cannot verify shell redirection target."
-            reason = target_reason(segment[index + 1], cwd=cwd, root=root)
+            reason = target_reason(
+                segment[index + 1],
+                cwd=cwd,
+                root=root,
+                write=token in {">", ">>"},
+            )
             if reason:
                 return None, reason
             index += 2
@@ -724,9 +785,10 @@ def validate_option_value(
     *,
     cwd: Path,
     root: Path,
+    write: bool = False,
 ) -> Optional[str]:
     if kind == PATH:
-        return target_reason(value, cwd=cwd, root=root)
+        return target_reason(value, cwd=cwd, root=root, write=write)
     if kind == INTEGER and not INTEGER_VALUE.fullmatch(value):
         return "Cannot verify integer option value: {0}".format(value)
     if kind == PACKAGE and not PACKAGE_VALUE.fullmatch(value):
@@ -761,6 +823,7 @@ def validate_policy(
     cwd: Path,
     root: Path,
     allow_harness_document_read: bool = False,
+    write: bool = False,
 ) -> Optional[str]:
     operands: list[str] = []
     index = 0
@@ -784,7 +847,9 @@ def validate_policy(
                     return "Cannot verify option value: {0}".format(name)
                 value = arguments[index + 1]
                 index += 1
-            reason = validate_option_value(spec.kind, value, cwd=cwd, root=root)
+            reason = validate_option_value(
+                spec.kind, value, cwd=cwd, root=root, write=write
+            )
             if reason:
                 return reason
             index += 1
@@ -803,6 +868,7 @@ def validate_policy(
                 cwd=cwd,
                 root=root,
                 allow_harness_document_read=allow_harness_document_read,
+                write=write,
             )
             if reason:
                 return reason
@@ -813,12 +879,13 @@ def validate_policy(
                 cwd=cwd,
                 root=root,
                 allow_harness_document_read=allow_harness_document_read,
+                write=write,
             )
             if reason:
                 return reason
     elif policy.operands == OPTIONAL_PATHS:
         for operand in operands:
-            reason = optional_target_reason(operand, cwd=cwd, root=root)
+            reason = optional_target_reason(operand, cwd=cwd, root=root, write=write)
             if reason:
                 return reason
     return None
@@ -872,7 +939,16 @@ def validate_git(arguments: Sequence[str], *, cwd: Path, root: Path) -> Optional
         policy = GIT_POLICIES.get(token)
         if policy is None:
             return "Cannot verify Git subcommand: {0}".format(token)
-        return validate_policy(arguments[index + 1 :], policy=policy, cwd=git_cwd, root=root)
+        return validate_policy(
+            arguments[index + 1 :],
+            policy=policy,
+            cwd=git_cwd,
+            root=root,
+            write=token in {
+                "add", "apply", "branch", "cherry-pick", "clean", "commit",
+                "merge", "mv", "rebase", "reset", "restore", "rm", "tag",
+            },
+        )
     return "Cannot verify Git command."
 
 
@@ -995,7 +1071,10 @@ def validate_segment(
     if command == "pytest":
         return validate_policy(arguments, policy=PYTEST_POLICY, cwd=cwd, root=root)
     if command == "ruff":
-        return validate_policy(arguments, policy=RUFF_POLICY, cwd=cwd, root=root)
+        return validate_policy(
+            arguments, policy=RUFF_POLICY, cwd=cwd, root=root,
+            write="--fix" in arguments,
+        )
     if command in {"mypy", "pyright"}:
         return validate_policy(arguments, policy=TYPECHECK_POLICY, cwd=cwd, root=root)
     if command == "rg" and "--files" in arguments:
@@ -1018,6 +1097,7 @@ def validate_segment(
         policy=policy,
         cwd=cwd,
         root=root,
+        write=command in {"cp", "mkdir", "mv", "rm", "rmdir", "tee", "touch"},
         allow_harness_document_read=command
         in {
             "cat",
@@ -1050,8 +1130,11 @@ def validate_shell_command(
 ) -> Optional[str]:
     if contains_unmodelled_shell_syntax(command):
         return "Cannot verify shell expansion or escape."
-    if references_foreign_worktree(command, cwd=cwd, root=root, worktrees=worktrees):
-        return "Blocked reference to another Git worktree."
+    foreign = references_foreign_worktree(command, cwd=cwd, root=root, worktrees=worktrees)
+    if foreign is not None:
+        return _path_denial(
+            command, foreign, root, "command references another Git Worktree"
+        )
     tokens = tokenize(command)
     if tokens is None:
         return "Cannot parse shell command safely."
@@ -1077,7 +1160,9 @@ def patch_targets(patch: str, *, cwd: Path, root: Path) -> Optional[str]:
     for line in patch.splitlines():
         if line.startswith(("*** Add File:", "*** Update File:", "*** Delete File:", "*** Move to:")):
             seen = True
-            reason = target_reason(line.split(":", 1)[1].strip(), cwd=cwd, root=root)
+            reason = target_reason(
+                line.split(":", 1)[1].strip(), cwd=cwd, root=root, write=True
+            )
             if reason:
                 return reason
     if not seen:
@@ -1094,7 +1179,9 @@ def resolve_requested_cwd(raw: Any, *, base: Path, root: Path) -> Tuple[Optional
     if target is None:
         return None, "Cannot verify requested working directory."
     if not is_inside(target, root):
-        return None, "Blocked working directory outside current worktree: {0}".format(raw)
+        return None, _path_denial(
+            raw, target, root, "working directory is outside the current Worktree"
+        )
     return target, None
 
 

@@ -16,9 +16,14 @@ from test_project_setup import (
 )
 
 
-def run_guard(hook: Path, event: dict[str, object], cwd: Path) -> subprocess.CompletedProcess[str]:
+def run_guard(
+    hook: Path,
+    event: dict[str, object],
+    cwd: Path,
+    arguments: tuple[str, ...] = (),
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, str(hook)],
+        [sys.executable, str(hook), *arguments],
         cwd=cwd,
         input=json.dumps(event),
         check=False,
@@ -75,6 +80,7 @@ def test_installed_worktree_guard_is_an_independent_ticket_process(
     start_payload = json.loads(start.stdout)
     assert str(ticket_worktree) in start_payload["hookSpecificOutput"]["additionalContext"]
 
+    report = ticket_worktree / ".state" / "teams" / "1" / "rounds" / "1" / "engineer.md"
     allowed = run_guard(
         hook,
         {
@@ -86,6 +92,12 @@ def test_installed_worktree_guard_is_an_independent_ticket_process(
             },
         },
         ticket_worktree,
+        (
+            "--write-path",
+            str(report),
+            "--write-path",
+            str(report.resolve(strict=False)),
+        ),
     )
     assert allowed.returncode == 0, allowed.stderr
     assert allowed.stdout == ""

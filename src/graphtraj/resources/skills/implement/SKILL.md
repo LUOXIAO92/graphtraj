@@ -8,7 +8,11 @@ Implement the software behavior described by the user in the spec or code ticket
 
 Use /tdd where possible, at pre-agreed seams.
 
-Run typechecking regularly, single test files regularly, and the full test suite once at the end.
+Use the assigned validation plan and the narrowest public-interface checks that
+can falsify the change. Carry forward valid results for unchanged code. Run a
+full suite for a final candidate when wider behavior may change; after bounded
+follow-up work, validate the affected delta. When shared validation belongs to
+Main, return your focused results for that check rather than duplicating it.
 
 When assigned to a GraphTraj Team, self-review the work and return the candidate
 and validation evidence to the Team Leader, who schedules both Reviewers.

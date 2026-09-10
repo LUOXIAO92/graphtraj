@@ -211,9 +211,12 @@ def _cleanup(target: CleanupTarget) -> CleanupResponse:
     deletion_targets = (target.worktree, *mappings)
     for event in events:
         for reference in event["evidence_refs"]:
-            evidence = (target.project.harness_root / reference).resolve()
+            evidence_path = target.project.harness_root / reference
+            evidence = evidence_path.resolve()
             for deletion_target in deletion_targets:
-                if evidence.is_relative_to(deletion_target):
+                if evidence_path.is_relative_to(
+                    deletion_target
+                ) or evidence.is_relative_to(deletion_target):
                     return _refused(
                         target,
                         "cleanup-failed",

@@ -257,7 +257,7 @@ def test_installed_cleanup_uses_only_ticket_identity_and_preserves_trajectory(
     assert historical_marker.read_text(encoding="utf-8") == "historical evidence\n"
 
 
-@pytest.mark.parametrize("referenced_path", ("mapping", "worktree"))
+@pytest.mark.parametrize("referenced_path", ("mapping", "worktree", "worktree-state"))
 def test_installed_cleanup_refuses_worldline_evidence_selected_for_deletion(
     referenced_path: str,
     integrated_ticket: DeliveredTicket,
@@ -267,7 +267,11 @@ def test_installed_cleanup_refuses_worldline_evidence_selected_for_deletion(
     evidence = (
         mappings[0] / "mapping.yml"
         if referenced_path == "mapping"
-        else ticket.worktree / "README.md"
+        else (
+            ticket.worktree / "README.md"
+            if referenced_path == "worktree"
+            else ticket.worktree / ".state" / "ticket.yml"
+        )
     )
     evidence_before = evidence.read_bytes()
     branch_before = run_process(

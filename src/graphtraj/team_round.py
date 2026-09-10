@@ -695,9 +695,22 @@ def _resume_active_ticket(
     )
     team_batch = Path(leader_mapping["retained_batch_file"])
     engineer_role = team["members"]["engineer"]["role"]
-    engineer_alias, engineer_session, engineer_mapping = member_session(
-        engineer_role, team["members"]["engineer"]["session_ref"]
-    )
+
+    def has_member_mapping(role: str) -> bool:
+        for path in (project.runner_directory / "sessions").glob("*/mapping.yml"):
+            try:
+                mapping, _ = read_alias_mapping(
+                    project.runner_directory, path.parent.name
+                )
+            except RunnerError:
+                continue
+            if (
+                mapping["ticket_id"] == task.ticket_id
+                and mapping["team_generation"] == generation
+                and mapping["role"] == role
+            ):
+                return True
+        return False
 
     def session_task(
         role: str, mapping: dict[str, Any]
@@ -728,9 +741,50 @@ def _resume_active_ticket(
             retained,
         )
 
-    engineer_task, engineer_batch_path = session_task(
-        engineer_role, engineer_mapping
-    )
+    try:
+        engineer_alias, engineer_session, engineer_mapping = member_session(
+            engineer_role, team["members"]["engineer"]["session_ref"]
+        )
+    except RunnerError:
+        if (
+            team["members"]["engineer"]["session_ref"] is not None
+            or has_member_mapping(engineer_role)
+        ):
+            raise
+        registration = (
+            project.runner_directory / "sessions" / leader_alias
+            / "child-registration.yml"
+        )
+        engineer_batch, engineer_batch_path, leader_alias, leader_session = (
+            _next_formal_batch(
+                project, task, definition, ticket_content, worktree,
+                ticket_directory, traces, leader_alias, leader_session,
+                registration, team_batch, capacity_fd=capacity_fd,
+            )
+        )
+        assert engineer_batch is not None and engineer_batch_path is not None
+        if (
+            len(engineer_batch.tasks) != 1
+            or engineer_batch.tasks[0].role != engineer_role
+        ):
+            raise RunnerError(
+                "BATCH_SCHEMA_INVALID",
+                "The interrupted Team Engineer must retain its registered role.",
+            )
+        engineer_task = replace(
+            engineer_batch.tasks[0],
+            ticket_file=definition.resolve(),
+            ticket_content=ticket_content,
+        )
+        engineer_alias, engineer_session = _run_agent(
+            project, engineer_task, engineer_role, worktree, ticket_directory,
+            traces, None, None, None, leader_alias, engineer_batch_path,
+            capacity_fd=capacity_fd,
+        )
+    else:
+        engineer_task, engineer_batch_path = session_task(
+            engineer_role, engineer_mapping
+        )
     sessions = {
         engineer_role: (
             engineer_task, engineer_alias, engineer_session, engineer_batch_path
@@ -1317,15 +1371,30 @@ def _request_state(
             shutil.move(runtime_request, request_file)
             try:
                 request = yaml.safe_load(request_file.read_text(encoding="utf-8"))
-                event = apply_delivery_state_request(
-                    project.state_directory, project.harness_root, request, facts
-                )
-                return alias, session, event
-            except (OSError, ValueError, yaml.YAMLError) as error:
+            except (OSError, yaml.YAMLError):
                 failure = RunnerError(
                     _AGENT_EVIDENCE_ERROR,
                     "Delivery State produced an invalid state change.",
                 )
+            else:
+                if request != facts:
+                    failure = RunnerError(
+                        _AGENT_EVIDENCE_ERROR,
+                        "Delivery State produced an invalid state change.",
+                    )
+                else:
+                    try:
+                        event = apply_delivery_state_request(
+                            project.state_directory, project.harness_root,
+                            request, facts,
+                        )
+                    except (OSError, ValueError) as error:
+                        raise RunnerError(
+                            _AGENT_EVIDENCE_ERROR,
+                            "Delivery State could not apply its requested state change: "
+                            + str(error),
+                        ) from error
+                    return alias, session, event
         assert failure is not None
         if attempt:
             raise failure

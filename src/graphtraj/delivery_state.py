@@ -420,32 +420,51 @@ def _validate_implementation_rejection(directory: Path, candidate: str) -> None:
     comparisons = []
     findings = []
     for axis in ("Standards", "Spec"):
-        report = (directory / (axis.lower() + ".md")).read_text()
+        path = directory / (axis.lower() + ".md")
+        report = path.read_text(encoding="utf-8")
         lines = report.splitlines()
+
+        def report_error(message: str) -> ValueError:
+            return ValueError("Review report {0} (Axis: {1}) {2}".format(path, axis, message))
+
         for prefix, expected in (("Candidate commit:", candidate), ("Axis:", axis)):
             if [line.removeprefix(prefix).strip() for line in lines if line.startswith(prefix)] != [expected]:
-                raise ValueError("Rework requires attributable dual-axis reports")
+                raise report_error("is missing an attributable {0} field".format(prefix))
         comparison = [line.removeprefix("Comparison:").strip() for line in lines if line.startswith("Comparison:")]
         if len(comparison) != 1:
-            raise ValueError("Review comparison is missing or ambiguous")
-        comparisons.append(_validate_candidate(comparison[0]))
-        blocks = report.split("Finding:")[1:]
-        if not blocks:
-            raise ValueError("Review must report findings or explicitly report none")
-        for block in blocks:
-            if block.strip() == "none":
-                if len(blocks) != 1:
-                    raise ValueError("Review findings contradict each other")
-                continue
-            if not block.strip() or not block.splitlines()[0].strip():
-                raise ValueError("Review finding is empty")
+            raise report_error("has a missing or ambiguous Comparison field")
+        try:
+            comparisons.append(_validate_candidate(comparison[0]))
+        except ValueError as error:
+            raise report_error("has an invalid Comparison field") from error
+        finding_fields = [
+            (index, line.removeprefix("Finding:").strip())
+            for index, line in enumerate(lines)
+            if line.startswith("Finding:")
+        ]
+        if not finding_fields:
+            raise report_error("must report findings or explicitly report none")
+        if any(value == "none" for _, value in finding_fields):
+            if len(finding_fields) != 1:
+                raise report_error("mixes Finding: none with another Finding")
+            continue
+        for position, (index, value) in enumerate(finding_fields):
+            if not value:
+                raise report_error("has an empty Finding field")
+            following = (
+                finding_fields[position + 1][0]
+                if position + 1 < len(finding_fields) else len(lines)
+            )
+            block = lines[index + 1:following]
             for prefix in ("Rule:", "Input:", "Trace:", "Failure:", "Evidence:"):
-                values = [line.removeprefix(prefix).strip() for line in block.splitlines() if line.startswith(prefix)]
+                values = [line.removeprefix(prefix).strip() for line in block if line.startswith(prefix)]
                 if len(values) != 1 or not values[0]:
-                    raise ValueError("Review finding lacks accepted evidence requirements")
-            findings.append(block)
-    if comparisons[0] != comparisons[1] or not findings:
-        raise ValueError("Rework requires a common comparison and an implementation finding")
+                    raise report_error("Finding lacks accepted evidence requirements")
+            findings.append(value)
+    if comparisons[0] != comparisons[1]:
+        raise ValueError("Rework requires matching Comparison fields in Standards and Spec reports")
+    if not findings:
+        raise ValueError("Rework requires an implementation finding in the Standards or Spec report")
 
 
 def _validate_worktree(harness_root: Path, value: Any) -> str:

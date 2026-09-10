@@ -37,10 +37,8 @@ def dispatch(roles):
     batch = Path.cwd() / '.scratch' / 'children.yml'
     bad_skill = (
         target == 'startup-preflight'
-        and not (Path.cwd() / '.scratch' / 'startup-preflight-dispatched').exists()
+        and 'Register the corrected Engineer child Batch.' not in prompt
     )
-    if bad_skill:
-        (Path.cwd() / '.scratch' / 'startup-preflight-dispatched').write_text('first\n')
     batch.write_text(yaml.safe_dump({'tasks': [
         {
             'ticket_id': '76',
@@ -220,6 +218,14 @@ else:
             )
         if target in {'provider-rework', 'provider-rework-evidence', 'replacement-rework', 'state-invalid-report'} and round_dir.name == '1':
             axis = 'Standards' if role == 'standards-reviewer' else 'Spec'
+            if target == 'provider-rework' and role == 'standards-reviewer':
+                Path(os.environ['GRAPHTRAJ_REVIEW_REPORT']).write_text(
+                    'Candidate commit: ' + candidate + '\n'
+                    'Comparison: ' + os.environ['GRAPHTRAJ_REVIEW_COMPARISON'] + '\n'
+                    'Axis: Standards\nFinding: none\n'
+                    'Explanation: an earlier Finding: implementation was not attributable.\n'
+                )
+                raise SystemExit(0)
             evidence_line = (
                 ''
                 if target == 'state-invalid-report' and role == 'standards-reviewer'
@@ -472,6 +478,24 @@ def test_preflight_failed_engineer_starts_once_from_the_leader_correction(
     leader_alias = team['members']['team_leader']['session_ref']
     assert state['status'] == 'implementing'
     assert team['members']['engineer']['session_ref'] is None
+    assert not [
+        path for path in (harness / '.graphtraj/runner/sessions').glob('*/mapping.yml')
+        if yaml.safe_load(path.read_text())['role'] == 'engineer-junior'
+    ]
+    repeated = run_process(
+        [str(installed_commands.runner), '--batch-input', str(batch)],
+        cwd=harness, env=runtime_environment, timeout=45,
+    )
+    assert repeated.returncode == 1
+    repeated_error = yaml.safe_load(repeated.stdout)['tasks'][0]['error']
+    assert repeated_error['code'] == 'invalid-input'
+    assert 'Repository Skill ponytail was not found' in repeated_error['message']
+    repeated_state = yaml.safe_load((ticket / 'ticket.yml').read_text())
+    repeated_team = yaml.safe_load((ticket / 'teams/1/team.yml').read_text())
+    assert repeated_state['status'] == 'implementing'
+    assert repeated_team['team_ordinal'] == 1
+    assert repeated_team['members']['team_leader']['session_ref'] == leader_alias
+    assert repeated_team['members']['engineer']['session_ref'] is None
     assert not [
         path for path in (harness / '.graphtraj/runner/sessions').glob('*/mapping.yml')
         if yaml.safe_load(path.read_text())['role'] == 'engineer-junior'

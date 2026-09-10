@@ -12,6 +12,8 @@ still valid. Report transport failure calls for report delivery, not a new
 implementation or unchanged review. Check that the actual continuation input
 contains the failed step and reusable evidence, not merely a generic handoff.
 
+When the same defect recurs at another entrypoint, inspect the shared cause
+and the adequacy of the existing check before assigning another isolated fix.
 Judge Session health from evidence. Repeated same-kind errors, expanding repair
 scope or demonstrated context decay may justify a fresh member Session.
 Preserve the previous scene and provide accepted goals/constraints, current

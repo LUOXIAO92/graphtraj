@@ -9,7 +9,10 @@ Implement the software behavior described by the user in the spec or code ticket
 Use /tdd where possible, at pre-agreed seams.
 
 Use the assigned validation plan and the narrowest public-interface checks that
-can falsify the change. Carry forward valid results for unchanged code. Run a
+can falsify the change. For Runtime, permissions or recovery work, first
+exercise the affected real boundary with a narrow probe; a test double that
+bypasses that boundary cannot establish it works. Stub unrelated work.
+Carry forward valid results for unchanged code. Run a
 full suite for a final candidate when wider behavior may change; after bounded
 follow-up work, validate the affected delta. When shared validation belongs to
 Main, return your focused results for that check rather than duplicating it.

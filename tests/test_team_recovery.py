@@ -35,9 +35,19 @@ def git(*arguments):
 
 def dispatch(roles):
     batch = Path.cwd() / '.scratch' / 'children.yml'
+    bad_skill = (
+        target == 'startup-preflight'
+        and not (Path.cwd() / '.scratch' / 'startup-preflight-dispatched').exists()
+    )
+    if bad_skill:
+        (Path.cwd() / '.scratch' / 'startup-preflight-dispatched').write_text('first\n')
     batch.write_text(yaml.safe_dump({'tasks': [
-        {'ticket_id': '76', 'ticket_name': 'session-alias-control',
-         'role': 'coding-team.' + child}
+        {
+            'ticket_id': '76',
+            'ticket_name': 'session-alias-control',
+            'role': 'coding-team.' + child,
+            **({'skills': ['ponytail']} if bad_skill and child.startswith('engineer-') else {}),
+        }
         for child in roles
     ]}, sort_keys=False))
     result = subprocess.run(
@@ -97,7 +107,7 @@ elif role == 'team-leader':
                 'Rule: accepted Ticket\nReason: repeat the current Spec review.\n'
                 'Candidate commit: ' + candidate + '\n'
             )
-        elif target in {'provider-rework', 'provider-rework-evidence', 'replacement-rework'} and round_dir.name == '1':
+        elif target in {'provider-rework', 'provider-rework-evidence', 'replacement-rework', 'state-invalid-report'} and round_dir.name == '1':
             (round_dir / 'leader.md').write_text(
                 'Decision: REJECT\nDiagnosis: implementation\nReviews: compliant\n'
                 'Action: rework\nRationale: bounded correction.\n'
@@ -208,15 +218,20 @@ else:
             (Path.cwd() / '.scratch' / 'replacement-review-target').write_text(
                 os.environ['GRAPHTRAJ_REVIEW_REPORT']
             )
-        if target in {'provider-rework', 'provider-rework-evidence', 'replacement-rework'} and round_dir.name == '1':
+        if target in {'provider-rework', 'provider-rework-evidence', 'replacement-rework', 'state-invalid-report'} and round_dir.name == '1':
             axis = 'Standards' if role == 'standards-reviewer' else 'Spec'
+            evidence_line = (
+                ''
+                if target == 'state-invalid-report' and role == 'standards-reviewer'
+                else 'Evidence: retained report\\n'
+            )
             Path(os.environ['GRAPHTRAJ_REVIEW_REPORT']).write_text(
                 'Candidate commit: ' + candidate + '\n'
                 'Comparison: ' + os.environ['GRAPHTRAJ_REVIEW_COMPARISON'] + '\n'
                 'Axis: ' + axis + '\n'
                 'Finding: implementation\nRule: accepted Ticket\nInput: recovered Team\n'
                 'Trace: retained Session\nFailure: correction required\n'
-                'Evidence: retained report\n'
+                + evidence_line
             )
         else:
             Path(os.environ['GRAPHTRAJ_REVIEW_REPORT']).write_text(
@@ -417,6 +432,137 @@ def test_provider_failure_returns_to_the_caller_for_an_explicit_same_session_ret
         ).read_text()
         assert 'Recovery required:' in prompt
         assert 'Engineer evidence is missing or unreadable' in prompt
+    if target == 'provider-rework':
+        state_trace = next((ticket / 'teams/1/traces').glob('*@d*/events.jsonl'))
+        assert state_trace.read_text().count('thread.started') == 9
+
+
+def test_preflight_failed_engineer_starts_once_from_the_leader_correction(
+    installed_commands, temporary_git_repository, fake_codex, tmp_path,
+):
+    harness, _, _, environment = configure_harness(
+        installed_commands, temporary_git_repository, fake_codex, tmp_path,
+    )
+    _register_ready_ticket(installed_commands, harness)
+    fake_codex.executable.write_text('#!' + sys.executable + '\n' + RUNTIME)
+    batch = harness / 'batch.yml'
+    batch.write_text(
+        'tasks:\n'
+        '  - ticket_id: "76"\n'
+        '    ticket_name: session-alias-control\n'
+        '    role: coding-team.team-leader\n'
+    )
+    runtime_environment = {
+        **environment,
+        'GRAPHTRAJ_AGENT_RUNNER': str(installed_commands.runner),
+        'RECOVERY_TARGET': 'startup-preflight',
+    }
+
+    failed = run_process(
+        [str(installed_commands.runner), '--batch-input', str(batch)],
+        cwd=harness, env=runtime_environment, timeout=45,
+    )
+    assert failed.returncode == 1
+    error = yaml.safe_load(failed.stdout)['tasks'][0]['error']
+    assert error['code'] == 'invalid-input'
+    assert 'Repository Skill ponytail was not found' in error['message']
+    ticket = harness / '.graphtraj/state/tickets/76-session-alias-control'
+    state = yaml.safe_load((ticket / 'ticket.yml').read_text())
+    team = yaml.safe_load((ticket / 'teams/1/team.yml').read_text())
+    leader_alias = team['members']['team_leader']['session_ref']
+    assert state['status'] == 'implementing'
+    assert team['members']['engineer']['session_ref'] is None
+    assert not [
+        path for path in (harness / '.graphtraj/runner/sessions').glob('*/mapping.yml')
+        if yaml.safe_load(path.read_text())['role'] == 'engineer-junior'
+    ]
+    events = [
+        json.loads(line)
+        for path in (harness / '.graphtraj/state/worldline').glob('*.jsonl')
+        for line in path.read_text().splitlines()
+    ]
+
+    corrected = run_process(
+        [
+            str(installed_commands.runner), 'send', leader_alias,
+            '--instruction', 'Register the corrected Engineer child Batch.',
+            '--caused-by-event-id', events[-1]['event_id'],
+        ],
+        cwd=harness, env=runtime_environment, timeout=45,
+    )
+    assert corrected.returncode == 0, corrected.stdout + corrected.stderr
+
+    continued = run_process(
+        [str(installed_commands.runner), '--batch-input', str(batch)],
+        cwd=harness, env=runtime_environment, timeout=45,
+    )
+    assert continued.returncode == 0, continued.stdout + continued.stderr
+    state = yaml.safe_load((ticket / 'ticket.yml').read_text())
+    team = yaml.safe_load((ticket / 'teams/1/team.yml').read_text())
+    assert state['status'] == 'awaiting-integration'
+    assert team['team_ordinal'] == 1
+    assert team['current_round'] == 1
+    assert team['members']['team_leader']['session_ref'] == leader_alias
+    engineer_mapping = next(
+        path for path in (harness / '.graphtraj/runner/sessions').glob('*/mapping.yml')
+        if yaml.safe_load(path.read_text())['role'] == 'engineer-junior'
+    )
+    engineer = yaml.safe_load(engineer_mapping.read_text())
+    trace = ticket / 'teams/1/traces' / engineer['alias'] / 'events.jsonl'
+    assert trace.read_text().count('thread.started') == 1
+    retained = [
+        yaml.safe_load(path.read_text())
+        for path in (harness / '.graphtraj/state/batches').glob('*.yml')
+    ]
+    assert any(
+        task['role'] == 'coding-team.engineer-junior'
+        and task.get('skills') == ['ponytail']
+        for retained_batch in retained for task in retained_batch['tasks']
+    )
+    assert any(
+        task['role'] == 'coding-team.engineer-junior'
+        and 'skills' not in task
+        for retained_batch in retained for task in retained_batch['tasks']
+    )
+
+
+def test_invalid_review_report_stops_the_matching_state_request_without_retry(
+    installed_commands, temporary_git_repository, fake_codex, tmp_path,
+):
+    harness, _, _, environment = configure_harness(
+        installed_commands, temporary_git_repository, fake_codex, tmp_path,
+    )
+    _register_ready_ticket(installed_commands, harness)
+    fake_codex.executable.write_text('#!' + sys.executable + '\n' + RUNTIME)
+    batch = harness / 'batch.yml'
+    batch.write_text(
+        'tasks:\n'
+        '  - ticket_id: "76"\n'
+        '    ticket_name: session-alias-control\n'
+        '    role: coding-team.team-leader\n'
+    )
+
+    result = run_process(
+        [str(installed_commands.runner), '--batch-input', str(batch)],
+        cwd=harness,
+        env={
+            **environment,
+            'GRAPHTRAJ_AGENT_RUNNER': str(installed_commands.runner),
+            'RECOVERY_TARGET': 'state-invalid-report',
+        },
+        timeout=45,
+    )
+
+    assert result.returncode == 1
+    error = yaml.safe_load(result.stdout)['tasks'][0]['error']
+    assert 'Delivery State could not apply its requested state change' in error['message']
+    assert 'Review report ' in error['message']
+    assert '(Axis: Standards)' in error['message']
+    ticket = harness / '.graphtraj/state/tickets/76-session-alias-control'
+    state = yaml.safe_load((ticket / 'ticket.yml').read_text())
+    assert state['status'] == 'reviewing'
+    state_trace = next((ticket / 'teams/1/traces').glob('*@d*/events.jsonl'))
+    assert state_trace.read_text().count('thread.started') == 6
 
 
 def test_access_failure_returns_to_the_responsible_operator_without_agent_reflection(

@@ -145,7 +145,7 @@ def append_project_worldline_event(
     )
     try:
         fcntl.flock(lock_descriptor, fcntl.LOCK_EX)
-        shards, existing = _read_shards(state_directory, harness_root)
+        shards, existing = _read_shards(state_directory)
         _validate_causes(event, existing)
         captured = _capture_time()
         if existing and captured < _parse_timestamp(existing[-1]["captured_at"]):
@@ -204,7 +204,7 @@ def read_worldline(
     )
     try:
         fcntl.flock(lock_descriptor, fcntl.LOCK_SH)
-        return _read_shards(state_directory, harness_root)[1]
+        return _read_shards(state_directory)[1]
     finally:
         fcntl.flock(lock_descriptor, fcntl.LOCK_UN)
         os.close(lock_descriptor)
@@ -212,7 +212,6 @@ def read_worldline(
 
 def _read_shards(
     state_directory: Path,
-    harness_root: Path,
 ) -> tuple[list[tuple[Path, list[dict[str, Any]]]], list[dict[str, Any]]]:
     directory = state_directory / "worldline"
     paths = list(directory.glob("*.jsonl")) if directory.is_dir() else []
@@ -231,9 +230,7 @@ def _read_shards(
             item = json.loads(line)
             if not isinstance(item, dict):
                 raise ValueError("worldline contains an invalid event")
-            captured = _validate_recorded_event(
-                harness_root, item, known_ids, collision_counts
-            )
+            captured = _validate_recorded_event(item, known_ids, collision_counts)
             if previous_time is not None and captured < previous_time:
                 raise ValueError("worldline events are not chronological")
             previous_time = captured
@@ -275,15 +272,6 @@ def _validate_string_list(event: Mapping[str, Any], field: str) -> list[str]:
     return value
 
 
-def _validate_references(
-    harness_root: Path,
-    event: Mapping[str, Any],
-    existing: list[dict[str, Any]],
-) -> None:
-    _validate_causes(event, existing)
-    _validate_evidence(harness_root, event["evidence_refs"])
-
-
 def _validate_causes(
     event: Mapping[str, Any],
     existing: list[dict[str, Any]],
@@ -309,7 +297,6 @@ def _validate_evidence(harness_root: Path, references: list[str]) -> None:
 
 
 def _validate_recorded_event(
-    harness_root: Path,
     event: Mapping[str, Any],
     known_ids: set[str],
     collision_counts: dict[datetime, int],
@@ -330,7 +317,7 @@ def _validate_recorded_event(
     collision_counts[instant] = expected_count + 1
     supplied = {key: value for key, value in event.items() if key not in {"event_id", "captured_at"}}
     _validate_supplied_event(supplied)
-    _validate_references(harness_root, event, [{"event_id": item} for item in known_ids])
+    _validate_causes(event, [{"event_id": item} for item in known_ids])
     return captured
 
 

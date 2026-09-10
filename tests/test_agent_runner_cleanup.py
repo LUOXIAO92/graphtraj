@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -257,58 +258,38 @@ def test_installed_cleanup_uses_only_ticket_identity_and_preserves_trajectory(
     assert historical_marker.read_text(encoding="utf-8") == "historical evidence\n"
 
 
-@pytest.mark.parametrize("referenced_path", ("mapping", "worktree", "worktree-state"))
-def test_installed_cleanup_refuses_worldline_evidence_selected_for_deletion(
-    referenced_path: str,
+def test_installed_cleanup_allows_missing_worldline_evidence(
     integrated_ticket: DeliveredTicket,
 ) -> None:
     ticket = integrated_ticket
     mappings = _ticket_mappings(ticket)
-    evidence = (
-        mappings[0] / "mapping.yml"
-        if referenced_path == "mapping"
-        else (
-            ticket.worktree / "README.md"
-            if referenced_path == "worktree"
-            else ticket.worktree / ".state" / "ticket.yml"
-        )
-    )
-    evidence_before = evidence.read_bytes()
-    branch_before = run_process(
-        ["git", "rev-parse", ticket.branch], cwd=ticket.repository
-    ).stdout
-    event = _append_worldline_reference(ticket, evidence)
-    durable_before = _durable_contents(ticket)
+    event = _append_worldline_reference(ticket, mappings[0] / "mapping.yml")
 
     result = _cleanup(ticket)
 
-    assert result.returncode == 1
+    assert result.returncode == 0, result.stderr
     document = yaml.safe_load(result.stdout)
-    assert document["cleanup_status"] == "refused"
-    assert document["error"]["code"] == "cleanup-failed"
-    assert document["evidence"] == {
-        "event_id": event["event_id"],
-        "evidence_ref": evidence.relative_to(ticket.root).as_posix(),
-        "deletion_target": str(
-            mappings[0] if referenced_path == "mapping" else ticket.worktree
-        ),
-    }
-    assert evidence.read_bytes() == evidence_before
-    assert ticket.worktree.is_dir()
-    assert all(path.is_dir() for path in mappings)
-    assert run_process(
-        ["git", "rev-parse", ticket.branch], cwd=ticket.repository
-    ).stdout == branch_before
-    assert run_process(
-        ["git", "show-ref", "--verify", "--quiet", "refs/heads/" + ticket.branch],
-        cwd=ticket.repository,
-    ).returncode == 0
-    assert _durable_contents(ticket) == durable_before
-    assert run_process(
+    assert document["cleanup_status"] == "cleaned"
+    assert not ticket.worktree.exists()
+    assert all(not path.exists() for path in mappings)
+    read_after_cleanup = run_process(
         [str(ticket.commands.product), "worldline", "read"],
         cwd=ticket.root,
         env=ticket.environment,
-    ).returncode == 0
+    )
+    assert read_after_cleanup.returncode == 0, read_after_cleanup.stderr
+    assert event in [json.loads(line) for line in read_after_cleanup.stdout.splitlines()]
+    new_evidence = ticket.root / "new-evidence.md"
+    new_evidence.write_text("new evidence\n", encoding="utf-8")
+    appended = _append_worldline_reference(ticket, new_evidence)
+    assert appended in [
+        json.loads(line)
+        for line in run_process(
+            [str(ticket.commands.product), "worldline", "read"],
+            cwd=ticket.root,
+            env=ticket.environment,
+        ).stdout.splitlines()
+    ]
 
 
 def test_installed_cleanup_removes_a_preflight_failed_team_session_after_integration(

@@ -131,9 +131,35 @@ def test_installed_command_appends_reads_and_renders_project_worldline(
         path: path.read_bytes() for path in (state / "worldline").glob("*.jsonl")
     }
     evidence.unlink()
-    assert _worldline(installed_commands, project, "read").returncode == 1
-    assert _worldline(installed_commands, project, "render").returncode == 1
-    assert {path: path.read_bytes() for path in shard_contents} == shard_contents
+    read_after_removal = _worldline(installed_commands, project, "read")
+    assert read_after_removal.returncode == 0, read_after_removal.stderr
+    assert [json.loads(line) for line in read_after_removal.stdout.splitlines()] == [
+        first,
+        second,
+    ]
+    assert _worldline(installed_commands, project, "render").returncode == 0
+    new_evidence = project / "evidence" / "new-candidate.txt"
+    new_evidence.write_text("new candidate\n", encoding="utf-8")
+    third_file = _event_file(
+        project,
+        "third.yml",
+        {
+            "kind": "candidate-recorded",
+            "caused_by_event_ids": [second["event_id"]],
+            "evidence_refs": ["evidence/new-candidate.txt"],
+            "candidate_commit": "b" * 40,
+        },
+    )
+
+    third_result = _worldline(
+        installed_commands, project, "append", "--event-file", str(third_file)
+    )
+
+    assert third_result.returncode == 0, third_result.stderr
+    assert all(
+        path.read_bytes().startswith(contents)
+        for path, contents in shard_contents.items()
+    )
 
 
 @pytest.mark.parametrize(

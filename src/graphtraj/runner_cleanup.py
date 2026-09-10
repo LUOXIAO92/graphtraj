@@ -11,6 +11,7 @@ from typing import Any
 
 import yaml
 
+from .delivery_worldline import read_worldline
 from .runner_batch import valid_ticket_id
 from .runner_models import CleanupResponse, Project, RunnerError
 from .runner_project import discover_project, git_succeeds, registered_worktrees, run_git
@@ -195,6 +196,34 @@ def _cleanup(target: CleanupTarget) -> CleanupResponse:
                 "ticket_commit": ticket_commit,
             },
         )
+
+    try:
+        events = read_worldline(
+            target.project.state_directory, target.project.harness_root
+        )
+    except (OSError, RuntimeError, UnicodeError, ValueError) as error:
+        return _refused(
+            target,
+            "cleanup-failed",
+            "The Project Worldline could not be read before cleanup.",
+            {"worldline_error": str(error)},
+        )
+    deletion_targets = (target.worktree, *mappings)
+    for event in events:
+        for reference in event["evidence_refs"]:
+            evidence = (target.project.harness_root / reference).resolve()
+            for deletion_target in deletion_targets:
+                if evidence.is_relative_to(deletion_target):
+                    return _refused(
+                        target,
+                        "cleanup-failed",
+                        "The Project Worldline references a path selected for cleanup.",
+                        {
+                            "event_id": event["event_id"],
+                            "evidence_ref": reference,
+                            "deletion_target": str(deletion_target),
+                        },
+                    )
 
     completed_actions: list[str] = []
     try:

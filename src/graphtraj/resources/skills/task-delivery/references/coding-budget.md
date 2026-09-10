@@ -1,6 +1,7 @@
 # Coding-ticket execution budget
 
-Read this when issuing a code ticket or preparing its dispatch. Estimate from
+Read this when issuing a code ticket, preparing its dispatch, or responding to
+a coding-budget notice or forced stop. Estimate from
 its concrete behavior, acceptance, current implementation and required checks.
 A general task node's size or rough estimate is not a code-ticket budget.
 
@@ -26,7 +27,7 @@ execution_budget:
     delivery_state: 1
   correction_rounds: 1
   estimation_note: Existing integration checks may dominate elapsed time
-  on_exceed: Inspect progress and failures; reuse evidence and record the decision
+  on_exceed: Escalating reminders, forced stop, then required retro diagnosis before resuming
 ---
 ```
 
@@ -46,12 +47,22 @@ missing or stale, update the ticket through the configured authorized workflow,
 retaining its previous definition and the reason. This does not invoke the
 explicit-only to-tickets skill or redo task decomposition.
 
-On a Runner overrun notice, inspect the reported threshold, actual consumption,
-current stage and evidence. Decide whether to continue, correct the failed step,
-replace a member Session, or revise the budget with reasons. A continuation
-decision names the remaining work, estimates its remaining minutes, and sets
-the next time or observable milestone for inspection. Reassess when another
-confirmed defect invalidates that estimate; recording an overrun alone does
-not justify continuing. Preserve the original start and consumed budget.
-Elapsed time alone is neither a failed acceptance criterion nor authority to
-restart or escalate.
+The first crossed elapsed, Session or correction threshold starts one Ticket
+overrun interval. Runner reminds immediately, then at 4, 6, 7, 8, 9 and 10
+minutes, and forcibly stops the affected Ticket's execution at 11 minutes.
+Further crossings do not restart that interval. Preserve the original start,
+consumption, Sessions, candidate and available evidence.
+
+On each notice, inspect current progress and failures. A continuation decision
+names the remaining work, remaining minutes and next inspection point; another
+confirmed defect can invalidate that estimate. These decisions do not replace
+the enforced stop and diagnosis requirement.
+
+After a forced stop, use Runner's designated diagnosis entrypoint to execute
+$retro against the retained Session/Trace evidence. Identify the actual cause,
+repeated work, current candidate and valid checks, and the smallest recovery
+action. The caller then explicitly decides continuation from that diagnosis,
+including remaining work and budget. Complete this required diagnosis before
+ordinary dispatch, send or replacement may continue the stopped Ticket.
+Budget stops do not by themselves establish failed acceptance, model mismatch
+or a need to replace the Team. Judge those decisions from the evidence.

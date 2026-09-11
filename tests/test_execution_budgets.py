@@ -79,8 +79,30 @@ def test_installed_runner_notifies_its_nested_caller_before_the_worker_finishes(
     harness, _, _, environment = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path
     )
+    clock = tmp_path / "nested-caller-clock"
+    clock.write_text(str(time.time()), encoding="utf-8")
+    started = float(clock.read_text(encoding="utf-8"))
+    controls = tmp_path / "nested-caller-controls"
+    controls.mkdir()
+    (controls / "sitecustomize.py").write_text(
+        "import os\n"
+        "from pathlib import Path\n"
+        "try:\n"
+        "    import graphtraj.execution_budget as budget\n"
+        "except ModuleNotFoundError:\n"
+        "    pass\n"
+        "else:\n"
+        "    budget.time.time = lambda: float(Path(os.environ['BUDGET_CLOCK']).read_text())\n"
+        "    budget.random.uniform = lambda lower, upper: lower\n",
+        encoding="utf-8",
+    )
     release = tmp_path / "release-engineer"
-    environment = {**environment, "FAKE_CODEX_RELEASE_FILE": str(release)}
+    environment = {
+        **environment,
+        "BUDGET_CLOCK": str(clock),
+        "FAKE_CODEX_RELEASE_FILE": str(release),
+        "PYTHONPATH": str(controls),
+    }
 
     with engineer_probe(
         installed_commands,
@@ -89,6 +111,7 @@ def test_installed_runner_notifies_its_nested_caller_before_the_worker_finishes(
         environment,
         body=_budget_body(total=0.01),
     ) as (alias, _, probe_environment):
+        clock.write_text(str(started + 0.0105 * 60), encoding="utf-8")
         output = harness / "probe-output.log"
         deadline = time.monotonic() + 5
         notices = _notices(output)

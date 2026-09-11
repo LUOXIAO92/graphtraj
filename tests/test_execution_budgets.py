@@ -822,6 +822,115 @@ def test_installed_send_notifies_its_caller_while_a_budgeted_resume_runs(
     assert cause in trace.read_text(encoding="utf-8")
     assert (mapping_file.parent / "worker-stderr.log").is_file()
 
+    engineer_mapping_file = next(
+        path
+        for path in (harness / ".graphtraj/runner/sessions").glob("*/mapping.yml")
+        if yaml.safe_load(path.read_text(encoding="utf-8"))["role"]
+        == "engineer-junior"
+    )
+    engineer_mapping = yaml.safe_load(
+        engineer_mapping_file.read_text(encoding="utf-8")
+    )
+    usage_file = ticket / "execution-budget.yml"
+    usage = yaml.safe_load(usage_file.read_text(encoding="utf-8"))
+    clock = tmp_path / "send-stop-clock"
+    clock.write_text(
+        str(
+            usage["started_at"]
+            + (0.01 + usage["allowance_minutes"] + 2.1) * 60
+        ),
+        encoding="utf-8",
+    )
+    controls = tmp_path / "send-stop-controls"
+    controls.mkdir()
+    (controls / "sitecustomize.py").write_text(
+        "import os\n"
+        "from pathlib import Path\n"
+        "try:\n"
+        "    import graphtraj.execution_budget as budget\n"
+        "except ModuleNotFoundError:\n"
+        "    pass\n"
+        "else:\n"
+        "    budget.time.time = lambda: float(Path(os.environ['BUDGET_CLOCK']).read_text())\n"
+        "    budget.random.random = lambda: 0.99\n",
+        encoding="utf-8",
+    )
+    engineer_release = tmp_path / "release-detached-engineer"
+    stopped_environment = {
+        **environment,
+        "BUDGET_CLOCK": str(clock),
+        "FAKE_CODEX_APPEND_LOG": "1",
+        "FAKE_CODEX_CAPTURE_STDIN": "1",
+        "FAKE_CODEX_CAPTURE_ROLE": "1",
+        "FAKE_CODEX_ENGINEER_RELEASE_FILE": str(engineer_release),
+        "FAKE_CODEX_LIFECYCLE_ACTION": "complete-team-round",
+        "GRAPHTRAJ_AGENT_RUNNER": str(installed_commands.runner),
+        "PYTHONPATH": str(controls),
+    }
+    stopped_send = run_process(
+        [
+            str(installed_commands.runner),
+            "send",
+            engineer_mapping["alias"],
+            "--instruction",
+            "Continue the retained implementation.",
+            "--caused-by-event-id",
+            cause,
+        ],
+        cwd=harness,
+        env=stopped_environment,
+    )
+    assert stopped_send.returncode == 0, stopped_send.stderr
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        usage = yaml.safe_load(usage_file.read_text(encoding="utf-8"))
+        execution_file = engineer_mapping_file.parent / "execution.yml"
+        if (
+            usage["stopped"]
+            and all(notice["delivered"] for notice in usage["leader_notices"])
+            and execution_file.is_file()
+            and yaml.safe_load(execution_file.read_text(encoding="utf-8"))[
+                "outcome"
+            ]
+            == "interrupted"
+        ):
+            break
+        time.sleep(0.02)
+    engineer_release.touch()
+    assert yaml.safe_load(execution_file.read_text(encoding="utf-8"))[
+        "outcome"
+    ] == "interrupted"
+    leader_inputs = [
+        json.loads(line)["stdin"]
+        for line in fake_codex.log_file.read_text(encoding="utf-8").splitlines()
+        if json.loads(line).get("role") == "team-leader"
+        and "stdin" in json.loads(line)
+    ]
+    assert any("must stop" in prompt for prompt in leader_inputs)
+
+    reported = run_process(
+        [
+            str(installed_commands.runner),
+            "send",
+            engineer_mapping["alias"],
+            "--instruction",
+            "Report the retained result.",
+            "--caused-by-event-id",
+            cause,
+        ],
+        cwd=harness,
+        env=stopped_environment,
+    )
+    assert reported.returncode == 0, reported.stderr
+    wait_for_file(execution_file)
+    engineer_inputs = [
+        json.loads(line)["stdin"]
+        for line in fake_codex.log_file.read_text(encoding="utf-8").splitlines()
+        if json.loads(line).get("role", "").startswith("engineer-")
+        and "stdin" in json.loads(line)
+    ]
+    assert "Execution was stopped by Runner" in engineer_inputs[-1]
+
 
 def test_installed_runner_counts_implementation_rework_as_correction(
     installed_commands: InstalledCommands,

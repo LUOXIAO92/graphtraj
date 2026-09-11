@@ -228,7 +228,7 @@ def fake_codex(tmp_path: Path) -> FakeCodex:
         "            helper_decisions[command] = json.loads(checked.stdout) if checked.stdout else {}\n"
         "    with Path(policy_log).open('a') as stream:\n"
         "        stream.write(json.dumps({'role': os.environ['GRAPHTRAJ_ROLE'], 'round': os.environ.get('GRAPHTRAJ_TEAM_ROUND'), 'settings': settings, 'decisions': decisions, 'helper_decisions': helper_decisions}) + '\\n')\n"
-        "release_file = (os.environ.get('FAKE_CODEX_REVIEW_RELEASE_FILE') if os.environ.get('GRAPHTRAJ_ROLE') in {'standards-reviewer', 'spec-reviewer'} else os.environ.get('FAKE_CODEX_RELEASE_FILE'))\n"
+        "release_file = (os.environ.get('FAKE_CODEX_REVIEW_RELEASE_FILE') if os.environ.get('GRAPHTRAJ_ROLE') in {'standards-reviewer', 'spec-reviewer'} else os.environ.get('FAKE_CODEX_ENGINEER_RELEASE_FILE') if os.environ.get('GRAPHTRAJ_ROLE', '').startswith('engineer-') and os.environ.get('FAKE_CODEX_ENGINEER_RELEASE_FILE') else os.environ.get('FAKE_CODEX_RELEASE_FILE'))\n"
         "for index, event in enumerate(events):\n"
         "    print(json.dumps(event, sort_keys=True), flush=True)\n"
         "    if index == 0 and event_release is not None:\n"

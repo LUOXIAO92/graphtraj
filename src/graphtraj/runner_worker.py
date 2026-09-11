@@ -232,6 +232,7 @@ def _monitor_execution_budget(
             parent_mapping,
             (),
             Path(harness_root),
+            budget_notice=True,
         )
 
     while not stop.is_set():

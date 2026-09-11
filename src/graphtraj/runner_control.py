@@ -100,6 +100,8 @@ def _send_session(
     mapping: Dict[str, Any],
     caused_by_event_ids: tuple[str, ...],
     cwd: Path,
+    *,
+    budget_notice: bool = False,
 ) -> Dict[str, str]:
     execution_file = session_directory / "execution.yml"
     if not os.path.lexists(str(execution_file)):
@@ -120,7 +122,7 @@ def _send_session(
         if isinstance(evidence, str) and isinstance(ticket_name, str)
         else None
     )
-    stopped = monitor is not None and monitor.is_stopped()
+    stopped = budget_notice or (monitor is not None and monitor.is_stopped())
     if stopped and mapping["role"] not in {
         "engineer-junior", "engineer-senior", "engineer-expert", "team-leader",
     }:
@@ -133,9 +135,15 @@ def _send_session(
     )
     if stopped:
         instruction = (
-            "Execution was stopped by Runner. Ordinary implementation and new "
-            "dispatch are prohibited. Report only the existing result and commit "
-            "only already-made authorized changes.\n" + instruction
+            (
+                "This continuation has read-only Worktree access and can only "
+                "receive the system notices below.\n"
+                if budget_notice
+                else "Execution was stopped by Runner. Ordinary implementation and "
+                "new dispatch are prohibited. Report only the existing result and "
+                "commit only already-made authorized changes.\n"
+            )
+            + instruction
         )
         monitor = None
     resume_file = session_directory / "resume.yml"

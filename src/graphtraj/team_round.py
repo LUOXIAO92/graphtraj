@@ -9,6 +9,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import threading
 from dataclasses import replace
 from functools import partial
 from pathlib import Path
@@ -75,6 +76,17 @@ def register_child_batch(batch_file: Path, cwd: Path, registration: Path) -> Lau
     from .team_replacement import require_active_session
 
     team = require_active_session(project, os.environ["GRAPHTRAJ_PARENT_ALIAS"])
+    ticket = project.state_directory / "tickets" / (
+        batch.tasks[0].ticket_id + "-" + batch.tasks[0].ticket_name
+    )
+    budget_monitor = execution_budget_monitor(
+        ticket, batch.tasks[0].ticket_id, batch.tasks[0].ticket_name
+    )
+    if budget_monitor is not None and budget_monitor.is_stopped():
+        raise RunnerError(
+            "EXECUTION_BUDGET_STOPPED",
+            "Runner selected stopping; the Team Leader cannot dispatch new work.",
+        )
     members = {seat["role"]: seat["session_ref"] for seat in team["members"].values()} if team else {}
     children = [
         {"ticket_id": task.ticket_id, "role": task.role,
@@ -246,6 +258,33 @@ def _deliver_ticket(project: Any, requested: Task, retained_batch: Path, capacit
     previous_team = None
     if generation is not None:
         previous_team = yaml.safe_load((ticket_directory / "teams" / str(generation) / "team.yml").read_text())
+    budget_monitor = execution_budget_monitor(
+        ticket_directory, requested.ticket_id, requested.ticket_name
+    )
+    if budget_monitor is not None and budget_monitor.is_stopped():
+        leader_alias = (
+            previous_team["members"]["team_leader"]["session_ref"]
+            if previous_team is not None else None
+        )
+        if not isinstance(leader_alias, str):
+            raise RunnerError(
+                "EXECUTION_BUDGET_STOPPED",
+                "Runner selected stopping before another Team dispatch.",
+            )
+        mapping = yaml.safe_load(
+            (
+                project.runner_directory / "sessions" / leader_alias / "mapping.yml"
+            ).read_text(encoding="utf-8")
+        )
+        return {
+            "ticket_id": requested.ticket_id,
+            "ticket_name": requested.ticket_name,
+            "role": "team-leader",
+            "launch_status": "stopped",
+            "worktree_path": str(project.harness_root / state["worktree"]),
+            "alias": leader_alias,
+            "session": mapping["session"],
+        }
     replacing = previous_team is not None and previous_team["status"] == "retired"
     if previous_team is not None and previous_team["status"] == "active":
         return _resume_active_ticket(
@@ -383,19 +422,29 @@ def _deliver_ticket(project: Any, requested: Task, retained_batch: Path, capacit
     engineer_alias = engineer_session = None
     first_round = True
     while True:
-        engineer_alias, engineer_session = run_agent(
-            project,
-            engineer_task,
-            engineer_task.role,
-            worktree,
-            ticket_directory,
-            traces,
-            engineer_alias,
-            engineer_session,
-            None,
-            leader_alias,
-            engineer_batch_path,
-        )
+        try:
+            engineer_alias, engineer_session = run_agent(
+                project,
+                engineer_task,
+                engineer_task.role,
+                worktree,
+                ticket_directory,
+                traces,
+                engineer_alias,
+                engineer_session,
+                None,
+                leader_alias,
+                engineer_batch_path,
+            )
+        except RunnerError as error:
+            if error.code != "EXECUTION_BUDGET_STOPPED":
+                raise
+            return _wrap_up_budget_stop(
+                project, requested, task, engineer_task, worktree,
+                ticket_directory, traces, engineer_alias, engineer_batch_path,
+                leader_alias, leader_session, registration, retained_batch,
+                capacity_fd,
+            )
         if first_round:
             state_alias, state_session, event = request_state(
                 project, task, worktree, ticket_directory, traces,
@@ -560,6 +609,29 @@ def _deliver_ticket(project: Any, requested: Task, retained_batch: Path, capacit
                 remaining.remove(child.role)
                 child_results.append({"role": child.role, "alias": alias, "session": session,
                                       "trace": _trace_ref(project, traces, alias)})
+
+            current_monitor = execution_budget_monitor(
+                ticket_directory, task.ticket_id, task.ticket_name
+            )
+            if current_monitor is not None and current_monitor.is_stopped():
+                leader_alias, leader_session = run_agent(
+                    project, task, "team-leader", worktree, ticket_directory,
+                    traces, leader_alias, leader_session, registration, None,
+                    retained_batch,
+                    "Execution stopped while Reviewers were running. Their completed "
+                    "reports were collected. Freeze the scene and report remaining work; "
+                    "do not dispatch another Reviewer or decide acceptance.",
+                    reports_only=True,
+                )
+                return {
+                    "ticket_id": requested.ticket_id,
+                    "ticket_name": requested.ticket_name,
+                    "role": "team-leader",
+                    "launch_status": "stopped",
+                    "worktree_path": str(worktree),
+                    "alias": leader_alias,
+                    "session": leader_session,
+                }
 
             leader_alias, leader_session = run_agent(
                 project, task, "team-leader", worktree, ticket_directory, traces,
@@ -777,11 +849,21 @@ def _resume_active_ticket(
             ticket_file=definition.resolve(),
             ticket_content=ticket_content,
         )
-        engineer_alias, engineer_session = _run_agent(
-            project, engineer_task, engineer_role, worktree, ticket_directory,
-            traces, None, None, None, leader_alias, engineer_batch_path,
-            capacity_fd=capacity_fd,
-        )
+        try:
+            engineer_alias, engineer_session = _run_agent(
+                project, engineer_task, engineer_role, worktree, ticket_directory,
+                traces, None, None, None, leader_alias, engineer_batch_path,
+                capacity_fd=capacity_fd,
+            )
+        except RunnerError as error:
+            if error.code != "EXECUTION_BUDGET_STOPPED":
+                raise
+            return _wrap_up_budget_stop(
+                project, requested, task, engineer_task, worktree,
+                ticket_directory, traces, None, engineer_batch_path,
+                leader_alias, leader_session, registration, team_batch,
+                capacity_fd,
+            )
     else:
         engineer_task, engineer_batch_path = session_task(
             engineer_role, engineer_mapping
@@ -858,11 +940,21 @@ def _resume_active_ticket(
             ticket_file=definition.resolve(),
             ticket_content=ticket_content,
         )
-        engineer_alias, engineer_session = _run_agent(
-            project, engineer_task, engineer_role, worktree, ticket_directory,
-            traces, engineer_alias, engineer_session, None, leader_alias,
-            engineer_batch_path, capacity_fd=capacity_fd,
-        )
+        try:
+            engineer_alias, engineer_session = _run_agent(
+                project, engineer_task, engineer_role, worktree, ticket_directory,
+                traces, engineer_alias, engineer_session, None, leader_alias,
+                engineer_batch_path, capacity_fd=capacity_fd,
+            )
+        except RunnerError as error:
+            if error.code != "EXECUTION_BUDGET_STOPPED":
+                raise
+            return _wrap_up_budget_stop(
+                project, requested, task, engineer_task, worktree,
+                ticket_directory, traces, engineer_alias, engineer_batch_path,
+                leader_alias, leader_session, registration, team_batch,
+                capacity_fd,
+            )
         try:
             candidate = _candidate(round_directory, worktree)
         except RunnerError as error:
@@ -1112,6 +1204,30 @@ def _resume_active_ticket(
                 {"role": child.role, "alias": alias, "session": session,
                  "trace": _trace_ref(project, traces, alias)}
             )
+
+        current_monitor = execution_budget_monitor(
+            ticket_directory, task.ticket_id, task.ticket_name
+        )
+        if current_monitor is not None and current_monitor.is_stopped():
+            leader_alias, leader_session = _run_agent(
+                project, task, "team-leader", worktree, ticket_directory,
+                traces, leader_alias, leader_session, registration, None,
+                team_batch,
+                "Execution stopped while Reviewers were running. Their completed "
+                "reports were collected. Freeze the scene and report remaining work; "
+                "do not dispatch another Reviewer or decide acceptance.",
+                capacity_fd=capacity_fd,
+                reports_only=True,
+            )
+            return {
+                "ticket_id": requested.ticket_id,
+                "ticket_name": requested.ticket_name,
+                "role": "team-leader",
+                "launch_status": "stopped",
+                "worktree_path": str(worktree),
+                "alias": leader_alias,
+                "session": leader_session,
+            }
 
         leader_alias, leader_session = _run_agent(
             project, task, "team-leader", worktree, ticket_directory, traces,
@@ -1786,6 +1902,7 @@ def _run_agent(
     *,
     capacity_fd: int | None = None,
     retiring: bool = False,
+    reports_only: bool = False,
 ) -> tuple[str, str]:
     team_file = traces.parent / "team.yml"
     if role != "delivery-state" and team_file.exists():
@@ -1796,8 +1913,66 @@ def _run_agent(
         return _execute_agent(
             project, task, role, worktree, evidence, traces, alias,
             expected_session, registration, parent_alias, retained_batch, prompt,
-            positions[0].fileno(),
+            positions[0].fileno(), reports_only,
         )
+
+
+def _wrap_up_budget_stop(
+    project: Any,
+    requested: Task,
+    task: Task,
+    engineer_task: Task,
+    worktree: Path,
+    evidence: Path,
+    traces: Path,
+    engineer_alias: str | None,
+    engineer_batch: Path,
+    leader_alias: str,
+    leader_session: str,
+    registration: Path,
+    retained_batch: Path,
+    capacity_fd: int,
+) -> dict[str, Any]:
+    if engineer_alias is None:
+        engineer_alias = next(
+            path.parent.name
+            for path in (project.runner_directory / "sessions").glob("*/mapping.yml")
+            if yaml.safe_load(path.read_text(encoding="utf-8")).get("role")
+            == engineer_task.role
+            and yaml.safe_load(path.read_text(encoding="utf-8")).get("ticket_id")
+            == task.ticket_id
+        )
+    engineer_mapping = yaml.safe_load(
+        (
+            project.runner_directory / "sessions" / engineer_alias / "mapping.yml"
+        ).read_text(encoding="utf-8")
+    )
+    engineer_alias, _ = _run_agent(
+        project, engineer_task, engineer_task.role, worktree, evidence, traces,
+        engineer_alias, engineer_mapping["session"], None, leader_alias,
+        engineer_batch,
+        "Report the stopped implementation, unfinished work, and current commit. "
+        "Commit only authorized changes already made before stopping.",
+        capacity_fd=capacity_fd,
+        reports_only=True,
+    )
+    leader_alias, leader_session = _run_agent(
+        project, task, "team-leader", worktree, evidence, traces, leader_alias,
+        leader_session, registration, None, retained_batch,
+        "Execution has stopped. Freeze the current scene and report the current "
+        "result and remaining work. Do not dispatch or decide acceptance.",
+        capacity_fd=capacity_fd,
+        reports_only=True,
+    )
+    return {
+        "ticket_id": requested.ticket_id,
+        "ticket_name": requested.ticket_name,
+        "role": "team-leader",
+        "launch_status": "stopped",
+        "worktree_path": str(worktree),
+        "alias": leader_alias,
+        "session": leader_session,
+    }
 
 
 def _execute_agent(
@@ -1814,6 +1989,8 @@ def _execute_agent(
     retained_batch: Path,
     prompt: str | None,
     capacity_fd: int,
+    reports_only: bool = False,
+    input_delivered: threading.Event | None = None,
 ) -> tuple[str, str]:
     generation = int(traces.parent.name) if traces.parent.name.isdigit() else 1
     if alias is None:
@@ -1831,7 +2008,11 @@ def _execute_agent(
             raise RunnerError("RUNTIME_WORKER_FAILED", "The mapped Session is unavailable.")
 
     policy_role = _task_policy(task, role)
-    monitor = execution_budget_monitor(evidence, task.ticket_id, task.ticket_name)
+    monitor = (
+        None
+        if reports_only
+        else execution_budget_monitor(evidence, task.ticket_id, task.ticket_name)
+    )
     budget_stage = execution_budget_stage(role)
     team_file = traces.parent / "team.yml"
     ordinal = yaml.safe_load(team_file.read_text())["current_round"] if team_file.exists() else 1
@@ -1882,14 +2063,21 @@ def _execute_agent(
         runtime_environment = context.runtime_environment()
     else:
         job_file, runtime_environment = _resume_job(
-            session_directory, expected_session, worktree, evidence, report_files
+            session_directory, expected_session, worktree, evidence, report_files,
+            reports_only=reports_only,
         )
 
     task_prompt = prompt or task.ticket_content
     if task.instruction:
         task_prompt += "\n## Additional instruction\n\n" + task.instruction + "\n"
     round_directory = traces.parent / "rounds" / str(ordinal)
-    if policy_role in _ENGINEER_ROLES and round_directory.stat().st_mode & 0o200:
+    if reports_only:
+        task_prompt += (
+            "\nThis continuation has read-only Worktree access. New implementation "
+            "and dispatch are prohibited. Use only the exact report paths and Git "
+            "metadata already authorized by Runner.\n"
+        )
+    elif policy_role in _ENGINEER_ROLES and round_directory.stat().st_mode & 0o200:
         task_prompt += (
             "\nWrite the fixed candidate and self-review to "
             f".state/teams/{generation}/rounds/{ordinal}/engineer.md and its test results to "
@@ -1982,7 +2170,58 @@ def _execute_agent(
         environment["GRAPHTRAJ_PARENT_ALIAS"] = alias
     previous = {name: os.environ.get(name) for name in environment}
     os.environ.update(environment)
+    notice_threads: list[threading.Thread] = []
+    notice_failures: list[BaseException] = []
     try:
+        def deliver_budget_notices() -> None:
+            if monitor is None or parent_alias is None:
+                return
+            def deliver(messages: list[str]) -> None:
+                for prior in notice_threads:
+                    prior.join()
+                if notice_failures:
+                    raise notice_failures[0]
+                notice_threads.clear()
+                leader_directory = project.runner_directory / "sessions" / parent_alias
+                try:
+                    leader_mapping = yaml.safe_load(
+                        (leader_directory / "mapping.yml").read_text(encoding="utf-8")
+                    )
+                    leader_session = leader_mapping["session"]
+                except (KeyError, OSError, TypeError, yaml.YAMLError) as error:
+                    raise RunnerError(
+                        "RUNTIME_WORKER_FAILED",
+                        "The Team Leader Session could not receive an execution budget notice.",
+                    ) from error
+                delivered = threading.Event()
+
+                def resume_leader() -> None:
+                    try:
+                        _execute_agent(
+                            project, task, "team-leader", worktree, evidence, traces,
+                            parent_alias, leader_session,
+                            leader_directory / "child-registration.yml", None,
+                            retained_batch,
+                            "\n".join(messages)
+                            + "\nReceive these system notices. Do not dispatch work or make a Team decision.",
+                            capacity_fd,
+                            reports_only=True,
+                            input_delivered=delivered,
+                        )
+                        delivered.set()
+                    except BaseException as error:
+                        notice_failures.append(error)
+
+                thread = threading.Thread(target=resume_leader)
+                thread.start()
+                notice_threads.append(thread)
+                while not delivered.wait(0.05):
+                    if not thread.is_alive():
+                        thread.join()
+                        raise notice_failures[-1]
+
+            monitor.deliver_leader_notices(deliver)
+
         session_id, outcome = _run_session_worker(
             session_directory,
             job_file,
@@ -1994,7 +2233,50 @@ def _execute_agent(
             role,
             budget_stage,
             expected_session is None,
+            deliver_budget_notices,
+            input_delivered,
         )
+        for thread in notice_threads:
+            thread.join()
+        if notice_failures:
+            raise notice_failures[0]
+        if (
+            outcome == "completed"
+            and role == "team-leader"
+            and parent_alias is None
+            and monitor is not None
+        ):
+            notices = monitor.pending_leader_notices()
+            if notices:
+                delivered = threading.Event()
+                failure: list[BaseException] = []
+
+                def finish_leader() -> None:
+                    try:
+                        _execute_agent(
+                            project, task, role, worktree, evidence, traces, alias,
+                            session_id, registration, None, retained_batch,
+                            "\n".join(notice["message"] for notice in notices)
+                            + "\nReceive these system notices, then finish the "
+                            "current Leader work.",
+                            capacity_fd,
+                            input_delivered=delivered,
+                        )
+                    except BaseException as error:
+                        failure.append(error)
+
+                thread = threading.Thread(target=finish_leader)
+                thread.start()
+                while not delivered.wait(0.05):
+                    if not thread.is_alive():
+                        thread.join()
+                        raise failure[-1]
+                monitor.mark_leader_notices_delivered(
+                    [notice["key"] for notice in notices]
+                )
+                thread.join()
+                if failure:
+                    raise failure[0]
     finally:
         for name, value in previous.items():
             if value is None:
@@ -2004,6 +2286,25 @@ def _execute_agent(
     diagnostic = _current_runtime_diagnostic(
         session_directory, stderr_offset, event_offset
     )
+    if outcome == "budget-stopped":
+        if role == "team-leader" and monitor is not None:
+            def report_stop(messages: list[str]) -> None:
+                _execute_agent(
+                    project, task, role, worktree, evidence, traces, alias,
+                    session_id, registration, None, retained_batch,
+                    "\n".join(messages)
+                    + "\nExecution has stopped. Freeze the current scene and report "
+                    "the current result and remaining work. Do not dispatch or decide "
+                    "acceptance.",
+                    capacity_fd,
+                    reports_only=True,
+                )
+
+            monitor.deliver_leader_notices(report_stop)
+        raise RunnerError(
+            "EXECUTION_BUDGET_STOPPED",
+            "Runner selected stopping for the Ticket execution budget.",
+        )
     if outcome != "completed":
         if _runtime_access_failure(diagnostic, tuple(reports)):
             raise RunnerError(
@@ -2061,6 +2362,8 @@ def _resume_job(
     worktree: Path,
     evidence: Path,
     report_files: tuple[Path, ...],
+    *,
+    reports_only: bool = False,
 ) -> tuple[Path, dict[str, str]]:
     launch_file = session_directory / "launch.yml"
     mapping_file = session_directory / "mapping.yml"
@@ -2092,6 +2395,7 @@ def _resume_job(
             worktree=worktree,
             evidence=evidence,
             report_files=report_files,
+            reports_only=reports_only,
         )
     except RuntimeAdapterError as error:
         raise RunnerError(error.code, error.message) from error
@@ -2128,6 +2432,8 @@ def _run_session_worker(
     role: str,
     stage: str,
     new_session: bool,
+    deliver_budget_notices: Callable[[], None],
+    input_delivered: threading.Event | None,
 ) -> tuple[str, str]:
     if not isinstance(runtime_environment, dict):
         raise RunnerError("RUNTIME_WORKER_FAILED", "The Runtime Session could not be started.")
@@ -2163,12 +2469,33 @@ def _run_session_worker(
             worker.stdin.close()
             try:
                 session_recorded = not new_session
+                budget_stopped = False
                 while worker.poll() is None:
+                    if input_delivered is not None and not input_delivered.is_set():
+                        try:
+                            current_mapping = yaml.safe_load(
+                                (session_directory / "mapping.yml").read_text(
+                                    encoding="utf-8"
+                                )
+                            )
+                        except (OSError, UnicodeError, yaml.YAMLError):
+                            current_mapping = None
+                        if (
+                            isinstance(current_mapping, dict)
+                            and current_mapping.get("worker_pid") == worker.pid
+                        ):
+                            input_delivered.set()
                     if monitor is not None:
                         if not session_recorded and (session_directory / "mapping.yml").is_file():
                             monitor.record_session(role, stage)
                             session_recorded = True
-                        monitor.check(role, stage)
+                        stopped = monitor.check(role, stage)
+                        deliver_budget_notices()
+                        if stopped and (
+                            role in _ENGINEER_ROLES or role == "team-leader"
+                        ):
+                            budget_stopped = True
+                            worker.terminate()
                     try:
                         worker.wait(timeout=0.05)
                     except subprocess.TimeoutExpired:
@@ -2176,7 +2503,26 @@ def _run_session_worker(
                 if monitor is not None:
                     if not session_recorded and (session_directory / "mapping.yml").is_file():
                         monitor.record_session(role, stage)
-                    monitor.check(role, stage)
+                    stopped = monitor.check(role, stage)
+                    deliver_budget_notices()
+                    budget_stopped = budget_stopped or (
+                        stopped
+                        and (role in _ENGINEER_ROLES or role == "team-leader")
+                    )
+                if input_delivered is not None and not input_delivered.is_set():
+                    try:
+                        final_mapping = yaml.safe_load(
+                            (session_directory / "mapping.yml").read_text(
+                                encoding="utf-8"
+                            )
+                        )
+                    except (OSError, UnicodeError, yaml.YAMLError):
+                        final_mapping = None
+                    if (
+                        isinstance(final_mapping, dict)
+                        and final_mapping.get("worker_pid") == worker.pid
+                    ):
+                        input_delivered.set()
                 exit_code = worker.returncode
             except BaseException:
                 worker.terminate()
@@ -2198,7 +2544,9 @@ def _run_session_worker(
         or terminal.get("outcome") not in {"completed", "interrupted", "runtime-error"}
     ):
         raise RunnerError("RUNTIME_WORKER_FAILED", "The Runtime Session could not be started.")
-    return mapping["session"], terminal["outcome"]
+    return mapping["session"], (
+        "budget-stopped" if budget_stopped else terminal["outcome"]
+    )
 
 
 def _agent_alias(project: Any, task: Task, role: str, generation: int = 1) -> str:
@@ -2430,7 +2778,29 @@ def _worker_main() -> None:
             )
             result = {"role": task.role, "alias": alias, "session": session, "launch_status": "completed"}
     except (RunnerError, RuntimeAdapterError) as error:
-        result = _failed_task(task, RunnerError(error.code, error.message))
+        if error.code == "EXECUTION_BUDGET_STOPPED" and task.role == "team-leader":
+            mappings = [
+                yaml.safe_load(path.read_text(encoding="utf-8"))
+                for path in project.runner_directory.glob("sessions/*/mapping.yml")
+                if yaml.safe_load(path.read_text(encoding="utf-8")).get("ticket_id")
+                == task.ticket_id
+                and yaml.safe_load(path.read_text(encoding="utf-8")).get("role")
+                == "team-leader"
+            ]
+            mapping = max(
+                mappings, key=lambda value: value.get("team_generation", 0)
+            )
+            result = {
+                "ticket_id": task.ticket_id,
+                "ticket_name": task.ticket_name,
+                "role": "team-leader",
+                "launch_status": "stopped",
+                "worktree_path": mapping["worktree_path"],
+                "alias": mapping["alias"],
+                "session": mapping["session"],
+            }
+        else:
+            result = _failed_task(task, RunnerError(error.code, error.message))
     print(yaml.safe_dump(result, sort_keys=False), end="")
 
 

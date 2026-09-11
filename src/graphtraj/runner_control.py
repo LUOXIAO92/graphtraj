@@ -100,6 +100,10 @@ def _send_session(
     mapping: Dict[str, Any],
     caused_by_event_ids: tuple[str, ...],
     cwd: Path,
+    *,
+    budget_notice: bool = False,
+    leader_notice_keys: tuple[str, ...] = (),
+    capacity_fd: int | None = None,
 ) -> Dict[str, str]:
     execution_file = session_directory / "execution.yml"
     if not os.path.lexists(str(execution_file)):
@@ -113,9 +117,6 @@ def _send_session(
     request, connection = _read_session_resume_request(session_directory, mapping)
     _attest_runtime_session(session_directory, mapping)
     team_environment = _team_runtime_environment(mapping, cwd)
-    request = _refresh_current_team_report_request(
-        request, mapping, worktree, team_environment
-    )
     evidence = team_environment.get("GRAPHTRAJ_EVIDENCE")
     ticket_name = team_environment.get("GRAPHTRAJ_TICKET_NAME")
     monitor = (
@@ -123,6 +124,40 @@ def _send_session(
         if isinstance(evidence, str) and isinstance(ticket_name, str)
         else None
     )
+    stopped = budget_notice or (monitor is not None and monitor.is_stopped())
+    pending_notices = (
+        monitor.pending_leader_notices()
+        if stopped
+        and not budget_notice
+        and mapping["role"] == "team-leader"
+        and monitor is not None
+        else []
+    )
+    notice_monitor = monitor
+    if stopped and mapping["role"] not in {
+        "engineer-junior", "engineer-senior", "engineer-expert", "team-leader",
+    }:
+        raise RunnerError(
+            "EXECUTION_BUDGET_STOPPED",
+            "Runner selected stopping; this Session cannot start new work.",
+        )
+    request = _refresh_current_team_report_request(
+        request, mapping, worktree, team_environment, reports_only=stopped
+    )
+    if stopped:
+        instruction = (
+            (
+                "This continuation has read-only Worktree access and can only "
+                "receive the system notices below.\n"
+                if budget_notice
+                else "Execution was stopped by Runner. Ordinary implementation and "
+                "new dispatch are prohibited. Report only the existing result and "
+                "commit only already-made authorized changes.\n"
+            )
+            + "".join(notice["message"] + "\n" for notice in pending_notices)
+            + instruction
+        )
+        monitor = None
     resume_file = session_directory / "resume.yml"
     error_file = session_directory / "resume-error.yml"
     error_file.unlink(missing_ok=True)
@@ -143,6 +178,10 @@ def _send_session(
         }
         if monitor is not None:
             resume["monitor_execution_budget"] = True
+            if mapping["role"] == "team-leader":
+                resume["deliver_parentless_leader_notices"] = True
+            if leader_notice_keys:
+                resume["leader_notice_keys"] = list(leader_notice_keys)
         write_yaml_durably(
             resume_file,
             resume,
@@ -159,7 +198,12 @@ def _send_session(
                 GRAPHTRAJ_PARENT_ALIAS=alias,
                 GRAPHTRAJ_PARENT_REGISTRATION=str(session_directory / "child-registration.yml"),
             )
-        with capacity_positions(load_project_configuration(cwd), 1) as positions:
+        with capacity_positions(
+            load_project_configuration(cwd), 1, capacity_fd
+        ) as positions:
+            worker_environment["GRAPHTRAJ_CAPACITY_FD"] = str(
+                positions[0].fileno()
+            )
             with (session_directory / "worker-stderr.log").open(
                 "w", encoding="utf-8"
             ) as diagnostics:
@@ -185,6 +229,10 @@ def _send_session(
                 worker.stdin.write(instruction)
                 worker.stdin.close()
         _await_session_resume(worker, session_directory, error_file, mapping["session"])
+        if pending_notices and notice_monitor is not None:
+            notice_monitor.mark_leader_notices_delivered(
+                [notice["key"] for notice in pending_notices]
+            )
     except RunnerError:
         if "worker" in locals():
             stop_worker(worker.pid)
@@ -428,6 +476,8 @@ def _refresh_current_team_report_request(
     mapping: Dict[str, Any],
     worktree: Path,
     environment: Dict[str, str],
+    *,
+    reports_only: bool = False,
 ) -> Dict[str, Any]:
     role = mapping["role"]
     if role in {
@@ -462,6 +512,7 @@ def _refresh_current_team_report_request(
             worktree=worktree,
             evidence=Path(evidence),
             report_files=report_files,
+            reports_only=reports_only,
         )
     except RuntimeAdapterError as error:
         raise RunnerError(error.code, error.message) from error

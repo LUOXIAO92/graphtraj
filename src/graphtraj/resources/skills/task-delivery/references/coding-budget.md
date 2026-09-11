@@ -46,12 +46,11 @@ missing or stale, update the ticket through the configured authorized workflow,
 retaining its previous definition and the reason. This does not invoke the
 explicit-only to-tickets skill or redo task decomposition.
 
-On a Runner overrun notice, inspect the reported threshold, actual consumption,
-current stage and evidence. Decide whether to continue, correct the failed step,
-replace a member Session, or revise the budget with reasons. A continuation
-decision names the remaining work, estimates its remaining minutes, and sets
-the next time or observable milestone for inspection. Reassess when another
-confirmed defect invalidates that estimate; recording an overrun alone does
-not justify continuing. Preserve the original start and consumed budget.
-Elapsed time alone is neither a failed acceptance criterion nor authority to
-restart or escalate.
+Runner sends the Leader notices when the elapsed estimate and sampled
+additional allowance are reached. If Runner later selects stopping, freeze the
+scene and collect limited Engineer and Leader reports while already-running
+Reviewers finish. Preserve files, commits, Worktree, Sessions and Traces. Use a
+relevant diagnosis Skill before choosing subsequent work; stopping alone does
+not authorize new implementation, Review, correction, replacement, retirement
+or escalation. A revised budget still preserves the original start and consumed
+schedule.

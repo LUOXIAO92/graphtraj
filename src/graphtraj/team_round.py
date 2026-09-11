@@ -38,6 +38,7 @@ from .runner_io import write_yaml_durably
 from .runner_models import Batch, LaunchResponse, RunnerError, Task, role_alias_marker
 from .runner_project import discover_project, git_succeeds, preflight_worktree, provision_worktree, run_git, runtime_executable
 from .runner_status import read_alias_mapping
+from .runner_transport import record_runtime_identity
 from .runtime_adapter import RuntimeAdapterError
 
 
@@ -1648,13 +1649,15 @@ def _runtime_event_errors(events: bytes) -> list[str]:
             error = _runtime_error_text(event)
         else:
             item = event.get("item")
+            if event_type == "event_msg" and isinstance(event.get("payload"), dict):
+                item = event["payload"].get("item")
             error = (
                 _runtime_error_text(item)
                 if isinstance(item, dict)
                 and (
-                    item.get("type") in {"error", "tool_error"}
+                    item.get("type") in {"error", "tool_error", "Error", "ToolError"}
                     or (
-                        item.get("type") == "command_execution"
+                        item.get("type") in {"command_execution", "CommandExecution", "FileChange"}
                         and (
                             item.get("status") in {"failed", "error"}
                             or isinstance(item.get("error"), (dict, str))
@@ -1674,7 +1677,7 @@ def _runtime_event_errors(events: bytes) -> list[str]:
 
 def _runtime_error_text(event: dict[str, Any]) -> str:
     values = []
-    for key in ("aggregated_output", "message", "detail"):
+    for key in ("aggregated_output", "stderr", "stdout", "message", "detail"):
         value = event.get(key)
         if isinstance(value, str) and value:
             values.append(value)
@@ -1948,6 +1951,8 @@ def _execute_agent(
         [round_directory / "leader.md"] if role == "team-leader" else []
     )
     events_file = session_directory / "events.jsonl"
+    if expected_session is None:
+        record_runtime_identity(events_file, context.runtime)
     try:
         stderr_offset = (session_directory / "stderr.log").stat().st_size
     except OSError:

@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+import os
+from pathlib import Path
 from typing import Any, Dict
 
 
@@ -11,6 +14,7 @@ RUNTIME_DIAGNOSTIC_FILES = frozenset(
         "launch-error.yml",
         "launch.yml",
         "mapping.yml",
+        "native-session.yml",
         "resume-error.yml",
         "resume.yml",
         "stderr.log",
@@ -27,6 +31,23 @@ def runtime_turn_outcome(runtime_exit_code: int) -> Dict[str, Any]:
         "outcome": "completed" if runtime_exit_code == 0 else "runtime-error",
         "runtime_exit_code": runtime_exit_code,
     }
+
+
+def record_runtime_identity(events_file: Path, runtime: str) -> None:
+    """Identify the Runtime before writing a new retained Trace."""
+
+    if events_file.exists() and events_file.stat().st_size:
+        return
+    with events_file.open("a", encoding="utf-8") as events:
+        events.write(
+            json.dumps(
+                {"type": "runtime", "runtime": runtime},
+                separators=(",", ":"),
+            )
+            + "\n"
+        )
+        events.flush()
+        os.fsync(events.fileno())
 
 
 def valid_runtime_turn_outcome(document: Any) -> bool:

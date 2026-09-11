@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import json
 import os
 from dataclasses import replace
 from pathlib import Path
 
 from .delivery_worldline import read_worldline
+from .codex_adapter import read_codex_last_agent_message
 from .runner_batch import retain_batch
 from .runner_models import Batch, LaunchResponse, RunnerError
 from .runner_project import discover_project, run_git
@@ -68,10 +68,8 @@ def launch_merge_resolver(batch: Batch, cwd: Path) -> LaunchResponse:
     try:
         _run_agent(project, task, task.role, project.integration_worktree, directory, traces,
                    alias, None, None, None, retained, prompt)
-        messages = [event["item"]["text"] for line in trace.read_text().splitlines()
-                    if (event := json.loads(line)).get("type") == "item.completed"
-                    and event.get("item", {}).get("type") == "agent_message"]
-        decisions = [line for line in (messages[-1].splitlines() if messages else [])
+        message = read_codex_last_agent_message(trace)
+        decisions = [line for line in (message.splitlines() if message else [])
                      if line in {"Decision: RESOLVED", "Decision: ESCALATE"}]
         result["launch_status"] = "resolved" if decisions == ["Decision: RESOLVED"] else "escalated"
     except (RunnerError, RuntimeAdapterError) as error:

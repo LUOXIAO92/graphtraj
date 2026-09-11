@@ -39,7 +39,7 @@ def test_installed_team_and_member_replacement(
                                  '--instruction', 'Start more work', '--caused-by-event-id', cause],
                                 cwd=root, capture_output=True, text=True)
         assert denied.returncode == 1 and 'team-not-active' in denied.stdout
-        print(json.dumps({'type': 'item.completed', 'item': {'type': 'agent_message', 'text': 'Handoff: preserve TEAM_ROUND_DELIVERED.txt and continue the Ticket.'}}), flush=True)
+        emit({'type': 'item.completed', 'item': {'type': 'agent_message', 'text': 'Handoff: preserve TEAM_ROUND_DELIVERED.txt and continue the Ticket.'}})
     elif role == 'team-leader':
         if os.environ.get('GRAPHTRAJ_TEAM_GENERATION') == '2' and 'resume' not in sys.argv:
             prompt = sys.stdin.read()
@@ -50,7 +50,7 @@ def test_installed_team_and_member_replacement(
                 assert 'Handoff: preserve' in trace.read_text()
 """)
     script = script.replace("elif role.startswith('engineer-'):", """elif role.startswith('engineer-') and 'Continue this Team seat' in sys.stdin.read():
-        print(json.dumps({'type': 'item.completed', 'item': {'type': 'agent_message', 'text': 'Engineer replacement ready to continue.'}}), flush=True)
+        emit({'type': 'item.completed', 'item': {'type': 'agent_message', 'text': 'Engineer replacement ready to continue.'}})
     elif role.startswith('engineer-'):""")
     if during_implementation is True:
         script = script.replace("elif role.startswith('engineer-'):", """elif role.startswith('engineer-'):

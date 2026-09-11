@@ -369,6 +369,11 @@ def test_installed_runner_obeys_the_explicit_leader_decision_for_a_run_free_team
     assert all((path.stat().st_mode & 0o222 == 0) is round_closed for path in round_directory.iterdir())
     traces = list((ticket_directory / "teams" / "1" / "traces").glob("*/events.jsonl"))
     assert len(traces) == 5
+    assert all(
+        json.loads(trace.read_text().splitlines()[0])
+        == {"type": "runtime", "runtime": "codex"}
+        for trace in traces
+    )
     mappings = [
         yaml.safe_load(path.read_text())
         for path in (harness_root / ".graphtraj" / "runner" / "sessions").glob("*/mapping.yml")
@@ -436,7 +441,7 @@ def test_installed_runner_obeys_the_explicit_leader_decision_for_a_run_free_team
             )
         for seat in team["members"].values():
             trace = ticket_directory / "teams" / "1" / "traces" / seat["session_ref"] / "events.jsonl"
-            assert trace.read_text().count('"type": "turn.completed"') >= 2
+            assert trace.read_text().count('"type": "runner-execution-start"') >= 2
     else:
         assert not (round_directory.parent / "2").exists()
 

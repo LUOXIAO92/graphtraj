@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import json
 import os
+import queue
 import re
 import shlex
 import signal
@@ -12,10 +13,13 @@ import subprocess
 import sys
 import time
 import tomllib
+import threading
 from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Tuple
+
+import yaml
 
 from .runtime_adapter import (
     RuntimeAdapterError,
@@ -23,7 +27,8 @@ from .runtime_adapter import (
     RuntimeContextPreflight,
     SessionStarted,
 )
-from .runner_transport import runtime_turn_outcome
+from .runner_transport import record_runtime_identity, runtime_turn_outcome
+from .runner_io import write_yaml_durably
 from .role_definitions import ResolvedChildRole
 from .git_repository import GitRepositoryError, SourceRepository
 from .skill_check import (
@@ -346,8 +351,19 @@ class CodexTurn:
         if self._expected_session is not None:
             arguments = _resume_arguments(arguments, self._expected_session)
         events_file = self._session_directory / "events.jsonl"
+        record_runtime_identity(events_file, "codex")
         stderr_file = self._session_directory / "stderr.log"
         session: Optional[str] = None
+        rollout: Optional[Path] = None
+        position = 0
+        if self._expected_session is not None:
+            rollout, position = _native_session_state(
+                self._session_directory, self._expected_session
+            )
+            if rollout is None:
+                rollout = _find_native_session(self._expected_session)
+                if rollout is not None:
+                    position = rollout.stat().st_size
         try:
             with stderr_file.open("a", encoding="utf-8") as runtime_stderr:
                 self._process = subprocess.Popen(
@@ -364,27 +380,64 @@ class CodexTurn:
                 self._process.stdin.write(self._prompt)
                 self._process.stdin.close()
 
-                with events_file.open("a", encoding="utf-8") as events:
+                output: queue.Queue[Optional[str]] = queue.Queue()
+
+                def read_output() -> None:
+                    assert self._process is not None
+                    assert self._process.stdout is not None
                     for line in self._process.stdout:
-                        events.write(line)
-                        events.flush()
-                        os.fsync(events.fileno())
-                        if session is None:
-                            session = _session_from_event(line)
-                            if session is not None:
-                                if (
-                                    self._expected_session is not None
-                                    and session != self._expected_session
-                                ):
-                                    raise CodexAdapterError(
-                                        "RUNTIME_SESSION_NOT_RESUMABLE",
-                                        "Codex did not resume the mapped Runtime session.",
-                                    )
-                                self._session_started(
-                                    session, self._process.pid
+                        output.put(line)
+                    output.put(None)
+
+                reader = threading.Thread(target=read_output, daemon=True)
+                reader.start()
+                finished = False
+                while not finished:
+                    try:
+                        line = output.get(timeout=0.02)
+                    except queue.Empty:
+                        line = ""
+                    if line is None:
+                        finished = True
+                    elif line:
+                        reported_session = _session_from_event(line)
+                        if session is None and reported_session is not None:
+                            session = reported_session
+                            if (
+                                self._expected_session is not None
+                                and session != self._expected_session
+                            ):
+                                raise CodexAdapterError(
+                                    "RUNTIME_SESSION_NOT_RESUMABLE",
+                                    "Codex did not resume the mapped Runtime session.",
                                 )
+                            if rollout is None:
+                                rollout, position = _native_session_state(
+                                    self._session_directory, session
+                                )
+                            _append_transport_event(events_file, line)
+                            self._session_started(session, self._process.pid)
+                        else:
+                            _append_transport_event(events_file, line)
+                    if session is not None:
+                        if rollout is None:
+                            rollout = _find_native_session(session)
+                        if rollout is not None:
+                            position = _append_native_records(
+                                rollout, position, events_file,
+                                self._session_directory,
+                            )
+                reader.join()
 
                 return_code = self._process.wait()
+                if session is not None:
+                    if rollout is None:
+                        rollout = _find_native_session(session)
+                    if rollout is not None:
+                        _append_native_records(
+                            rollout, position, events_file,
+                            self._session_directory,
+                        )
         except CodexAdapterError as error:
             terminal = _stop_process(self._process)
             if terminal or not error.terminal_confirmed:
@@ -483,6 +536,104 @@ def read_codex_session_identity(session_directory: Path) -> str:
             "The mapped Codex Runtime session cannot be attested.",
         )
     return identity
+
+
+def read_codex_last_agent_message(events_file: Path) -> Optional[str]:
+    """Read the final Codex answer from native or retained historical records."""
+
+    result: Optional[str] = None
+    for line in events_file.read_text(encoding="utf-8").splitlines():
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(event, dict):
+            continue
+        if event.get("type") == "item.completed":
+            item = event.get("item")
+            if isinstance(item, dict) and item.get("type") == "agent_message":
+                text = item.get("text")
+                if isinstance(text, str):
+                    result = text
+        elif event.get("type") == "event_msg":
+            payload = event.get("payload")
+            if isinstance(payload, dict) and payload.get("type") == "task_complete":
+                text = payload.get("last_agent_message")
+                if isinstance(text, str):
+                    result = text
+    return result
+
+
+def _append_transport_event(events_file: Path, line: str) -> None:
+    try:
+        event = json.loads(line)
+    except json.JSONDecodeError:
+        return
+    if not isinstance(event, dict) or event.get("type") not in {
+        "thread.started", "error", "turn.failed",
+    }:
+        return
+    with events_file.open("a", encoding="utf-8") as events:
+        events.write(line if line.endswith("\n") else line + "\n")
+        events.flush()
+        os.fsync(events.fileno())
+
+
+def _native_session_state(
+    session_directory: Path, session: str
+) -> Tuple[Optional[Path], int]:
+    state = session_directory / "native-session.yml"
+    try:
+        retained = yaml.safe_load(state.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return None, 0
+    path = retained.get("path") if isinstance(retained, dict) else None
+    position = retained.get("position") if isinstance(retained, dict) else None
+    if (
+        not isinstance(path, str)
+        or not Path(path).name.endswith(session + ".jsonl")
+        or not isinstance(position, int)
+        or isinstance(position, bool)
+        or position < 0
+    ):
+        raise OSError("retained native Codex Session state is invalid")
+    return Path(path), position
+
+
+def _find_native_session(session: str) -> Optional[Path]:
+    sessions = Path(os.environ.get("CODEX_HOME", Path.home() / ".codex")) / "sessions"
+    try:
+        return next(sessions.rglob("*{0}.jsonl".format(session)), None)
+    except OSError:
+        return None
+
+
+def _append_native_records(
+    rollout: Path,
+    position: int,
+    events_file: Path,
+    session_directory: Path,
+) -> int:
+    try:
+        with rollout.open("rb") as native:
+            native.seek(position)
+            available = native.read()
+    except OSError:
+        return position
+    complete = available.rfind(b"\n") + 1
+    if complete == 0:
+        return position
+    records = available[:complete]
+    with events_file.open("ab") as events:
+        events.write(records)
+        events.flush()
+        os.fsync(events.fileno())
+    position += complete
+    write_yaml_durably(
+        session_directory / "native-session.yml",
+        {"path": str(rollout), "position": position},
+    )
+    return position
 
 
 def _validate_launch_request(

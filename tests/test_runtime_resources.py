@@ -2,13 +2,17 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 import shlex
 import sys
+import threading
+import time
 import tomllib
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
+import yaml
 
 from conftest import InstalledCommands, PROJECT_ROOT
 from test_existing_repository_setup import run_setup
@@ -78,7 +82,7 @@ def test_runtime_executes_the_resolved_responsibility_and_required_skill(
     )
     executable = tmp_path / "controlled-runtime"
     executable.write_text("#!" + sys.executable + "\n" + r'''
-import json, shlex, subprocess, sys, tomllib
+import json, os, shlex, subprocess, sys, tomllib
 from pathlib import Path
 if sys.argv[1:] == ['exec', '--help']:
     print('--sandbox --dangerously-bypass-hook-trust')
@@ -98,6 +102,13 @@ checked = subprocess.run(hook, input=json.dumps({
 }), text=True, capture_output=True, check=True)
 assert not checked.stdout, checked.stdout
 print(json.dumps({'type': 'thread.started', 'thread_id': 'resolved-role'}), flush=True)
+rollout = Path(os.environ.get('CODEX_HOME', Path.home() / '.codex')) / 'sessions/test/rollout-resolved-role.jsonl'
+rollout.parent.mkdir(parents=True, exist_ok=True)
+rollout.write_text(json.dumps({'timestamp': 'native', 'type': 'response_item', 'payload': {
+    'type': 'message', 'role': 'assistant', 'text': reference.read_text(),
+    'model': sys.argv[sys.argv.index('--model') + 1],
+    'filesystem': settings['permissions'][settings['default_permissions']]['filesystem'][':workspace_roots'],
+}}) + '\n')
 print(json.dumps({'type': 'item.completed', 'item': {
     'type': 'agent_message', 'text': reference.read_text(),
     'model': sys.argv[sys.argv.index('--model') + 1],
@@ -119,7 +130,7 @@ print(json.dumps({'type': 'turn.completed'}), flush=True)
     ).run()
     assert started == ["resolved-role"]
     events = [json.loads(line) for line in (session / "events.jsonl").read_text().splitlines()]
-    result = next(event["item"] for event in events if event["type"] == "item.completed")
+    result = next(event["payload"] for event in events if event["type"] == "response_item")
     assert result["text"] == (harness / ".agents/skills/research/references/coding.md").read_text()
     assert result["model"] == "operator-model"
     assert result["filesystem"]["."] == "write"
@@ -157,6 +168,135 @@ def test_codex_turn_appends_stderr_for_later_diagnostic_boundaries(
     assert (session / "stderr.log").read_text(encoding="utf-8") == (
         "first diagnostic\nsecond diagnostic\n"
     )
+
+
+def test_codex_turn_retains_native_session_while_quiet_and_resumes_once(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.syspath_prepend(str(PROJECT_ROOT / "src"))
+    from graphtraj.codex_adapter import create_codex_resume_turn, create_codex_turn
+
+    codex_home = tmp_path / "custom-codex-home"
+    release = tmp_path / "release-runtime"
+    ready = tmp_path / "native-partial-ready"
+    monkeypatch.setenv("CODEX_HOME", str(codex_home))
+    monkeypatch.setenv("CONTROLLED_RELEASE", str(release))
+    monkeypatch.setenv("CONTROLLED_READY", str(ready))
+    executable = tmp_path / "controlled-runtime"
+    executable.write_text(
+        "#!{0}\n".format(sys.executable)
+        + r'''
+import json, os, sys, time
+from pathlib import Path
+
+session = "native-controlled"
+rollout = Path(os.environ["CODEX_HOME"]) / "sessions/2026/09/12/rollout-native-controlled.jsonl"
+print(json.dumps({"type": "thread.started", "thread_id": session}), flush=True)
+if "resume" not in sys.argv:
+    time.sleep(0.1)
+    rollout.parent.mkdir(parents=True)
+    complete = [
+        '{"timestamp":"native-1","type":"session_meta","payload":{"base_instructions":{"text":"original"}}}',
+        '{"timestamp":"native-2","type":"response_item","payload":{"type":"reasoning","encrypted_content":"opaque"}}',
+    ]
+    trailing = '{"timestamp":"native-3","type":"turn_context","payload":{"cwd":"kept"}}'
+    split = len(trailing) // 2
+    with rollout.open("wb") as stream:
+        stream.write(("\n".join(complete) + "\n" + trailing[:split]).encode())
+        stream.flush()
+        os.fsync(stream.fileno())
+    Path(os.environ["CONTROLLED_READY"]).touch()
+    while not Path(os.environ["CONTROLLED_RELEASE"]).exists():
+        time.sleep(0.01)
+    with rollout.open("ab") as stream:
+        stream.write((trailing[split:] + "\n" +
+            '{"timestamp":"native-4","type":"event_msg","payload":{"type":"task_complete","last_agent_message":"first result"}}\n').encode())
+        stream.flush()
+        os.fsync(stream.fileno())
+else:
+    with rollout.open("ab") as stream:
+        stream.write(b'{"timestamp":"native-5","type":"event_msg","payload":{"type":"task_complete","last_agent_message":"resumed result"}}\n')
+        stream.flush()
+        os.fsync(stream.fileno())
+print(json.dumps({"type": "turn.completed"}), flush=True)
+''',
+        encoding="utf-8",
+    )
+    executable.chmod(0o755)
+    session_directory = tmp_path / "session"
+    session_directory.mkdir()
+    request = {
+        "arguments": [str(executable), "exec", "--json", "-"],
+        "worktree_path": str(tmp_path),
+    }
+    started: list[str] = []
+    turn = create_codex_turn(
+        request, "first", session_directory,
+        lambda identity, _pid: started.append(identity),
+    )
+    outcome: list[dict[str, object]] = []
+    running = threading.Thread(target=lambda: outcome.append(turn.run()))
+    running.start()
+    try:
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            if ready.exists() and '"encrypted_content":"opaque"' in (
+                session_directory / "events.jsonl"
+            ).read_text(encoding="utf-8"):
+                break
+            time.sleep(0.01)
+        else:
+            raise AssertionError("native records were not retained while stdout was quiet")
+
+        before_release = (session_directory / "events.jsonl").read_text(encoding="utf-8")
+        assert running.is_alive()
+        assert before_release.splitlines()[0] == '{"type":"runtime","runtime":"codex"}'
+        assert '"timestamp":"native-1"' in before_release
+        assert '"timestamp":"native-2"' in before_release
+        assert '"timestamp":"native-3"' not in before_release
+        assert '"type": "turn.completed"' not in before_release
+    finally:
+        release.touch()
+        running.join(timeout=5)
+    assert not running.is_alive()
+    assert outcome == [{"outcome": "completed", "runtime_exit_code": 0}]
+    assert started == ["native-controlled"]
+    trace = session_directory / "events.jsonl"
+    first_trace = trace.read_bytes()
+    assert b'"timestamp":"native-4"' in first_trace
+
+    resumed = []
+    create_codex_resume_turn(
+        request, "resume", "native-controlled", session_directory,
+        lambda identity, _pid: resumed.append(identity),
+    ).run()
+    final_trace = trace.read_bytes()
+    assert resumed == ["native-controlled"]
+    assert final_trace.startswith(first_trace)
+    assert final_trace.count(b'"timestamp":"native-1"') == 1
+    assert final_trace.count(b'"timestamp":"native-5"') == 1
+    retained = yaml.safe_load((session_directory / "native-session.yml").read_text())
+    assert retained == {"path": str(codex_home / "sessions/2026/09/12/rollout-native-controlled.jsonl"),
+                        "position": (codex_home / "sessions/2026/09/12/rollout-native-controlled.jsonl").stat().st_size}
+
+    historical = tmp_path / "historical-session"
+    historical.mkdir()
+    historical_events = historical / "events.jsonl"
+    historical_events.write_text(
+        '{"type":"thread.started","thread_id":"native-controlled"}\n'
+        '{"type":"item.completed","item":{"type":"agent_message","text":"historical result"}}\n',
+        encoding="utf-8",
+    )
+    historical_prefix = historical_events.read_bytes()
+    create_codex_resume_turn(
+        request, "historical resume", "native-controlled", historical,
+        lambda *_: None,
+    ).run()
+    historical_trace = historical_events.read_bytes()
+    assert historical_trace.startswith(historical_prefix)
+    assert historical_trace.count(b'"timestamp":"native-1"') == 0
+    assert historical_trace.count(b'"timestamp":"native-5"') == 1
 
 
 def test_current_runtime_diagnostic_uses_only_current_error_events(
@@ -221,12 +361,16 @@ def test_current_runtime_diagnostic_uses_only_current_error_events(
         stream.write(
             json.dumps(
                 {
-                    "type": "item.completed",
-                    "item": {
-                        "type": "command_execution",
-                        "aggregated_output": "Cannot verify option: --glob",
-                        "exit_code": 1,
-                        "status": "failed",
+                    "timestamp": "native-error-time",
+                    "type": "event_msg",
+                    "payload": {
+                        "type": "item_completed",
+                        "item": {
+                            "type": "CommandExecution",
+                            "aggregated_output": "Cannot verify option: --glob",
+                            "exit_code": 1,
+                            "status": "failed",
+                        },
                     },
                 }
             )

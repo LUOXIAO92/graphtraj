@@ -30,6 +30,19 @@ round_dir = evidence / 'teams/1/rounds' / os.environ['GRAPHTRAJ_TEAM_ROUND']
 round_dir.mkdir(parents=True, exist_ok=True)
 print(json.dumps({'type': 'thread.started', 'thread_id': 'recovery-' + role}), flush=True)
 
+def native_command_failure(output):
+    session = 'recovery-' + role
+    rollout = Path(os.environ.get('CODEX_HOME', Path.home() / '.codex')) / 'sessions/fake' / ('rollout-' + session + '.jsonl')
+    rollout.parent.mkdir(parents=True, exist_ok=True)
+    with rollout.open('a') as stream:
+        if rollout.stat().st_size == 0:
+            stream.write(json.dumps({'timestamp': 'fake-native-start', 'type': 'session_meta', 'payload': {'id': session}}) + '\n')
+        stream.write(json.dumps({'timestamp': 'fake-native-failure', 'type': 'event_msg', 'payload': {
+            'type': 'item_completed',
+            'item': {'type': 'CommandExecution', 'aggregated_output': output,
+                     'exit_code': 1, 'status': 'failed'},
+        }}) + '\n')
+
 def git(*arguments):
     return subprocess.run(['git', *arguments], check=True, text=True, capture_output=True).stdout.strip()
 
@@ -183,6 +196,11 @@ else:
     ):
         raise SystemExit(1)
     if target == 'completed-access' and role == 'spec-reviewer':
+        native_command_failure(
+            'Blocked path target: requested=.state/reviews/spec.md; '
+            'resolved=' + os.environ['GRAPHTRAJ_REVIEW_REPORT'] + '; '
+            'condition=the report target is not authorized for this role'
+        )
         print(json.dumps({'type': 'item.completed', 'item': {
             'type': 'command_execution',
             'aggregated_output': (
@@ -202,6 +220,7 @@ else:
         and role == 'spec-reviewer'
         and not resumed
     ):
+        native_command_failure('Cannot verify option: --glob')
         print(json.dumps({'type': 'item.completed', 'item': {
             'type': 'command_execution',
             'aggregated_output': 'Cannot verify option: --glob',

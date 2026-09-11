@@ -207,6 +207,8 @@ Run public commands from the Harness Project Root:
 ```text
 agent-runner --batch-input batch.yml
 agent-runner status <alias> [<alias>...]
+agent-runner status --operation-total <alias> [<alias>...]
+agent-runner status --baseline <commit-or-ref> --candidate <commit-or-ref> <alias> [<alias>...]
 agent-runner send <alias> --instruction <text> --caused-by-event-id <event-id>
 agent-runner interrupt <alias>
 agent-runner replace <leader-alias> --actor main --caused-by-event-id <event-id>
@@ -224,6 +226,23 @@ Only a compliant implementation rejection confirmed by the Leader opens the
 next Round. Main or the user can retire a Team; replacement retains the
 Ticket branch and Worktree, and reads handoff from the prior Leader's Trace.
 Replacing another member changes only that seat.
+
+Status diagnostics are on demand and do not affect delivery decisions. For a Codex
+Session, `--operation-total` counts each native `response_item` tool request once
+by its native identifier in that Session. `function_call` and `custom_tool_call`
+use `call_id`; `local_shell_call` and `tool_search_call` use `call_id` or their
+legacy `id`; `web_search_call` and `image_generation_call` use `id`, as defined by
+the [Codex 0.153.0 protocol](https://github.com/openai/codex/blob/rust-v0.153.0/codex-rs/protocol/src/models.rs#L959-L1122).
+This counts one `exec` request even when it runs a compound command, includes
+failed requests, and excludes messages, tool outputs, and `event_msg` execution
+views.
+An inspected Codex 0.153.0 Session had 54 native `exec` wrappers alongside 135
+`CommandExecution` and 11 `FileChange` execution views; those views are not added
+to the native request total.
+The `--baseline` and `--candidate` pair resolves both references to commits in the
+selected Session's Worktree and reports Git `--numstat` records for their resulting
+change. Binary additions and deletions are shown as `null`, matching Git's `-`
+fields rather than inventing line counts.
 
 Main corrects Ticket boundaries or dependencies when delivery evidence
 disproves them, using `graphtraj ticket revise --revision-file <revision.yml>`.

@@ -301,3 +301,98 @@ def test_installed_alias_control_resumes_and_interrupts_one_team_session(
     assert "run_id" not in resumed_mapping
     assert "turn" not in resumed_mapping
     assert not list((ticket_directory / "teams" / "1" / "traces" / alias).glob("turn-*"))
+
+
+def test_installed_status_reports_native_requests_and_commit_diff(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    harness_root, _, integration, environment = configure_harness(
+        installed_commands, temporary_git_repository, fake_codex, tmp_path,
+    )
+    baseline = run_process(["git", "rev-parse", "HEAD"], cwd=integration).stdout.strip()
+    (integration / "README.md").write_text("# Changed target project\n", encoding="utf-8")
+    (integration / "added.txt").write_text("added\n", encoding="utf-8")
+    (integration / "binary.bin").write_bytes(b"\0")
+    run_process(["git", "add", "."], cwd=integration).check_returncode()
+    run_process(
+        ["git", "commit", "-m", "Known diagnostic change"], cwd=integration,
+    ).check_returncode()
+    candidate = run_process(["git", "rev-parse", "HEAD"], cwd=integration).stdout.strip()
+
+    alias = "diagnostics@e1"
+    session_directory = harness_root / ".graphtraj" / "runner" / "sessions" / alias
+    session_directory.mkdir(parents=True)
+    trace = session_directory / "events.jsonl"
+    trace.write_text(
+        "{\"type\":\"runtime\",\"runtime\":\"codex\"}\n"
+        "{\"type\":\"response_item\",\"payload\":{\"type\":\"message\",\"role\":\"assistant\"}}\n"
+        "{\"type\":\"response_item\",\"payload\":{\"type\":\"custom_tool_call\",\"call_id\":\"call-exec\",\"name\":\"functions.exec\",\"input\":\"{\\\"cmd\\\":\\\"first && second\\\"}\"}}\n"
+        "{\"type\":\"response_item\",\"payload\":{\"type\":\"custom_tool_call\",\"call_id\":\"call-exec\",\"name\":\"functions.exec\",\"input\":\"{\\\"cmd\\\":\\\"first && second\\\"}\"}}\n"
+        "{\"type\":\"response_item\",\"payload\":{\"type\":\"custom_tool_call_output\",\"call_id\":\"call-exec\"}}\n"
+        "{\"type\":\"response_item\",\"payload\":{\"type\":\"function_call\",\"call_id\":\"call-mcp\",\"name\":\"mcp__server__lookup\",\"arguments\":\"{}\"}}\n"
+        "{\"type\":\"response_item\",\"payload\":{\"type\":\"custom_tool_call\",\"call_id\":\"call-edit\",\"name\":\"apply_patch\",\"input\":\"*** Begin Patch\"}}\n"
+        "{\"type\":\"response_item\",\"payload\":{\"type\":\"custom_tool_call\",\"call_id\":\"call-failed\",\"name\":\"functions.exec\",\"input\":\"{\\\"cmd\\\":\\\"false\\\"}\"}}\n"
+        "{\"type\":\"response_item\",\"payload\":{\"type\":\"custom_tool_call_output\",\"call_id\":\"call-failed\",\"output\":\"failed\"}}\n"
+        "{\"type\":\"response_item\",\"payload\":{\"type\":\"local_shell_call\",\"id\":\"legacy-shell\",\"status\":\"completed\",\"action\":{\"type\":\"exec\",\"command\":[\"pwd\"]}}}\n"
+        "{\"type\":\"response_item\",\"payload\":{\"type\":\"tool_search_call\",\"call_id\":\"call-tool-search\",\"execution\":\"completed\",\"arguments\":\"status\"}}\n"
+        "{\"type\":\"response_item\",\"payload\":{\"type\":\"web_search_call\",\"id\":\"web-search\",\"status\":\"completed\",\"action\":{\"type\":\"search\",\"query\":\"Codex protocol\"}}}\n"
+        "{\"type\":\"response_item\",\"payload\":{\"type\":\"image_generation_call\",\"id\":\"image-generation\",\"status\":\"completed\",\"result\":\"generated\"}}\n"
+        "{\"type\":\"event_msg\",\"payload\":{\"type\":\"item_started\",\"item\":{\"type\":\"CommandExecution\",\"command\":\"first && second\"}}}\n"
+        "{\"type\":\"event_msg\",\"payload\":{\"type\":\"item_completed\",\"item\":{\"type\":\"CommandExecution\",\"command\":\"first && second\",\"exit_code\":1}}}\n"
+        "{\"type\":\"event_msg\",\"payload\":{\"type\":\"item_completed\",\"item\":{\"type\":\"FileChange\",\"path\":\"added.txt\"}}}\n",
+        encoding="utf-8",
+    )
+    (session_directory / "execution.yml").write_text("outcome: completed\n", encoding="utf-8")
+    (session_directory / "mapping.yml").write_text(
+        yaml.safe_dump(
+            {
+                "alias": alias,
+                "runtime": "codex",
+                "session": "native-session",
+                "ticket_id": "96",
+                "team_generation": 1,
+                "role": "engineer-senior",
+                "parent": None,
+                "retained_batch_file": "batch.yml",
+                "worktree_path": str(integration),
+                "trace_file": str(trace),
+                "worker_pid": 1,
+                "runtime_pid": 1,
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_process(
+        [
+            str(installed_commands.runner), "status", "--operation-total",
+            "--baseline", baseline, "--candidate", candidate, alias,
+        ],
+        cwd=harness_root,
+        env=environment,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert yaml.safe_load(result.stdout) == {
+        "aliases": [
+            {
+                "alias": alias,
+                "activity": "idle",
+                "last_outcome": "completed",
+                "operation_total": 8,
+                "diff": {
+                    "baseline": baseline,
+                    "candidate": candidate,
+                    "files": [
+                        {"path": "README.md", "additions": 1, "deletions": 1},
+                        {"path": "added.txt", "additions": 1, "deletions": 0},
+                        {"path": "binary.bin", "additions": None, "deletions": None},
+                    ],
+                },
+            }
+        ]
+    }

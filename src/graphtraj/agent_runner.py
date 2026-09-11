@@ -60,10 +60,23 @@ def _emit_result(document):
 
 @main.command()
 @click.argument("aliases", nargs=-1, required=True)
-def status(aliases):
+@click.option(
+    "--operation-total",
+    is_flag=True,
+    help="Report native tool requests once by native identifier.",
+)
+@click.option("--baseline")
+@click.option("--candidate")
+def status(aliases, operation_total, baseline, candidate):
     """Inspect the explicitly supplied Session aliases."""
     try:
-        response = status_aliases(aliases, Path.cwd().resolve())
+        response = status_aliases(
+            aliases,
+            Path.cwd().resolve(),
+            operation_total=operation_total,
+            baseline=baseline,
+            candidate=candidate,
+        )
     except RunnerError as error:
         _emit_result({"error": error.as_document()})
         click.echo(error.message, err=True)

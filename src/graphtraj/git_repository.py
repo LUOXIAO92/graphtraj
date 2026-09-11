@@ -136,6 +136,30 @@ class SourceRepository:
     def revision(self, ref: str) -> str:
         return _git(self.primary_worktree, "rev-parse", ref)
 
+    def resolved_commit(self, ref: str) -> str:
+        """Resolve one caller-supplied reference to its commit identity."""
+
+        return _git(
+            self.primary_worktree,
+            "rev-parse",
+            "--verify",
+            "--end-of-options",
+            "{0}^{{commit}}".format(ref),
+        )
+
+    def diff_numstat(self, baseline: str, candidate: str) -> bytes:
+        """Return Git's raw per-file line counts for two resolved commits."""
+
+        return _git_bytes(
+            self.primary_worktree,
+            "diff",
+            "--numstat",
+            "-z",
+            "--no-renames",
+            baseline,
+            candidate,
+        )
+
     def branch_exists(self, branch: str) -> bool:
         return _git_succeeds(
             self.primary_worktree,

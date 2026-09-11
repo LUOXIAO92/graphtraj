@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
 from pathlib import Path
@@ -9,6 +10,7 @@ from typing import Any, Dict, Mapping, Sequence, Tuple
 
 import yaml
 
+from .git_repository import GitRepositoryError, SourceRepository
 from .runner_models import RunnerError, StatusResponse
 from .runner_process import process_is_alive
 from .runner_project import discover_runner_directory
@@ -34,15 +36,35 @@ SESSION_MAPPING_FIELDS = frozenset(
 )
 
 
-def status_aliases(aliases: Sequence[str], cwd: Path) -> StatusResponse:
+def status_aliases(
+    aliases: Sequence[str],
+    cwd: Path,
+    *,
+    operation_total: bool = False,
+    baseline: str | None = None,
+    candidate: str | None = None,
+) -> StatusResponse:
     """Read exactly the supplied durable aliases; never discover a Run."""
 
+    if (baseline is None) != (candidate is None):
+        raise RunnerError(
+            "invalid-input",
+            "Git diagnostics require both --baseline and --candidate.",
+        )
     runner_directory = discover_runner_directory(cwd)
     results = []
     errors = []
     for alias in aliases:
         try:
-            results.append(_status_alias(runner_directory, alias))
+            results.append(
+                _status_alias(
+                    runner_directory,
+                    alias,
+                    operation_total=operation_total,
+                    baseline=baseline,
+                    candidate=candidate,
+                )
+            )
         except RunnerError as error:
             results.append({"alias": alias, "error": error.as_document()})
             errors.append(error)
@@ -53,9 +75,25 @@ def status_aliases(aliases: Sequence[str], cwd: Path) -> StatusResponse:
     )
 
 
-def _status_alias(runner_directory: Path, alias: str) -> Dict[str, str]:
+def _status_alias(
+    runner_directory: Path,
+    alias: str,
+    *,
+    operation_total: bool,
+    baseline: str | None,
+    candidate: str | None,
+) -> Dict[str, Any]:
     mapping, session_directory = read_alias_mapping(runner_directory, alias)
-    return _status_session(mapping, session_directory, alias)
+    status = _status_session(mapping, session_directory, alias)
+    if operation_total:
+        status["operation_total"] = _operation_total(
+            Path(mapping["trace_file"]), mapping["session"]
+        )
+    if baseline is not None and candidate is not None:
+        status["diff"] = _commit_diff(
+            Path(mapping["worktree_path"]), baseline, candidate
+        )
+    return status
 
 
 def _status_session(
@@ -74,6 +112,65 @@ def _status_session(
             status["last_outcome"] = mapping["last_outcome"]
         return status
     raise _invalid_activity()
+
+
+def _operation_total(trace_file: Path, session: str) -> int:
+    """Count one native Codex tool request for each call ID in one Session."""
+
+    try:
+        records = trace_file.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeError) as error:
+        raise _diagnostic_failure() from error
+    calls = set()
+    try:
+        for record in records:
+            item = json.loads(record)
+            if item.get("type") != "response_item":
+                continue
+            payload = item.get("payload")
+            if not isinstance(payload, dict):
+                continue
+            item_type = payload.get("type")
+            if item_type in {"function_call", "custom_tool_call"}:
+                request_id = payload.get("call_id")
+            elif item_type in {"local_shell_call", "tool_search_call"}:
+                request_id = payload.get("call_id") or payload.get("id")
+            elif item_type in {"web_search_call", "image_generation_call"}:
+                request_id = payload.get("id")
+            else:
+                continue
+            if isinstance(request_id, str) and request_id:
+                calls.add((session, request_id))
+    except (TypeError, json.JSONDecodeError) as error:
+        raise _diagnostic_failure() from error
+    return len(calls)
+
+
+def _commit_diff(worktree: Path, baseline: str, candidate: str) -> Dict[str, Any]:
+    """Read one resulting Git change without recording a diagnostic."""
+
+    try:
+        repository = SourceRepository.from_root(worktree)
+        resolved_baseline = repository.resolved_commit(baseline)
+        resolved_candidate = repository.resolved_commit(candidate)
+        entries = repository.diff_numstat(resolved_baseline, resolved_candidate)
+        files = [_numstat_file(entry) for entry in entries.split(b"\0") if entry]
+    except (GitRepositoryError, UnicodeError, ValueError) as error:
+        raise _diagnostic_failure() from error
+    return {
+        "baseline": resolved_baseline,
+        "candidate": resolved_candidate,
+        "files": files,
+    }
+
+
+def _numstat_file(entry: bytes) -> Dict[str, Any]:
+    additions, deletions, path = entry.split(b"\t", maxsplit=2)
+    return {
+        "path": path.decode(errors="replace"),
+        "additions": None if additions == b"-" else int(additions),
+        "deletions": None if deletions == b"-" else int(deletions),
+    }
 
 
 def read_alias_mapping(
@@ -172,4 +269,10 @@ def _invalid_activity() -> RunnerError:
     return RunnerError(
         "operation-failed",
         "The requested Engineer alias has no valid Runtime execution or terminal outcome.",
+    )
+
+
+def _diagnostic_failure() -> RunnerError:
+    return RunnerError(
+        "operation-failed", "The requested Session diagnostics could not be read."
     )

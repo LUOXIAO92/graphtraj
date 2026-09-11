@@ -48,6 +48,8 @@ def run(job_file: Path) -> int:
     budget_monitor: ExecutionBudgetMonitor | None = None
     monitor_stop: threading.Event | None = None
     monitor_thread: threading.Thread | None = None
+    deliver_parentless_leader_notices = False
+    leader_notice_keys: list[str] = []
 
     def request_termination(signum: int, frame: object) -> None:
         nonlocal interrupted
@@ -70,6 +72,21 @@ def run(job_file: Path) -> int:
             monitor_execution_budget = job.get("monitor_execution_budget", False)
             if not isinstance(monitor_execution_budget, bool):
                 raise ValueError("budget monitor request is invalid")
+            deliver_parentless_leader_notices = job.get(
+                "deliver_parentless_leader_notices", False
+            )
+            if not isinstance(deliver_parentless_leader_notices, bool):
+                raise ValueError("Leader budget notice request is invalid")
+            leader_notice_keys = job.get("leader_notice_keys", [])
+            if (
+                not isinstance(leader_notice_keys, list)
+                or len(leader_notice_keys) != len(set(leader_notice_keys))
+                or any(
+                    not isinstance(key, str) or not key
+                    for key in leader_notice_keys
+                )
+            ):
+                raise ValueError("Leader budget notice keys are invalid")
             if monitor_execution_budget:
                 budget_monitor = execution_budget_monitor_from_environment(
                     base_mapping
@@ -121,6 +138,10 @@ def run(job_file: Path) -> int:
                 (session_directory / "execution.yml").unlink(missing_ok=True)
                 write_yaml_durably(session_directory / "mapping.yml", mapping)
                 mapping_recorded = True
+                if budget_monitor is not None and leader_notice_keys:
+                    budget_monitor.mark_leader_notices_delivered(
+                        leader_notice_keys
+                    )
                 if (
                     budget_monitor is not None
                     and monitor_stop is not None
@@ -128,7 +149,12 @@ def run(job_file: Path) -> int:
                 ):
                     monitor_thread = threading.Thread(
                         target=_monitor_execution_budget,
-                        args=(budget_monitor, mapping, monitor_stop),
+                        args=(
+                            budget_monitor,
+                            mapping,
+                            monitor_stop,
+                            deliver_parentless_leader_notices,
+                        ),
                         daemon=True,
                     )
                     monitor_thread.start()
@@ -182,6 +208,46 @@ def run(job_file: Path) -> int:
                 )
         if terminal is not None:
             write_yaml_durably(session_directory / "execution.yml", terminal)
+            if (
+                budget_monitor is not None
+                and deliver_parentless_leader_notices
+                and base_mapping.get("role") == "team-leader"
+                and base_mapping.get("parent") is None
+            ):
+                notices = budget_monitor.pending_leader_notices()
+                if notices:
+                    from .runner_control import _send_session
+
+                    mapping = yaml.safe_load(
+                        (session_directory / "mapping.yml").read_text(
+                            encoding="utf-8"
+                        )
+                    )
+                    stopped = budget_monitor.is_stopped()
+                    _send_session(
+                        mapping["alias"],
+                        (
+                            "Execution has stopped. Freeze the current scene and "
+                            "report the current result and remaining work. Do not "
+                            "dispatch or decide acceptance."
+                            if stopped
+                            else "\n".join(
+                                notice["message"] for notice in notices
+                            )
+                            + "\nReceive these system notices, then continue the "
+                            "interrupted instruction below.\n"
+                            + prompt
+                        ),
+                        session_directory,
+                        mapping,
+                        (),
+                        Path(os.environ["GRAPHTRAJ_HARNESS_ROOT"]),
+                        leader_notice_keys=(
+                            ()
+                            if stopped
+                            else tuple(notice["key"] for notice in notices)
+                        ),
+                    )
             return 0
     finally:
         if previous_sigterm is not None:
@@ -203,7 +269,10 @@ def _append_follow_up(events_file: Path, causes: list[str]) -> None:
 
 
 def _monitor_execution_budget(
-    monitor: ExecutionBudgetMonitor, mapping: dict[str, object], stop: threading.Event
+    monitor: ExecutionBudgetMonitor,
+    mapping: dict[str, object],
+    stop: threading.Event,
+    deliver_parentless_leader_notices: bool,
 ) -> None:
     role = mapping["role"]
     assert isinstance(role, str)
@@ -239,6 +308,13 @@ def _monitor_execution_budget(
         stopped = monitor.check(role, execution_budget_stage(role))
         if isinstance(mapping.get("parent"), str):
             monitor.deliver_leader_notices(deliver)
+        elif (
+            deliver_parentless_leader_notices
+            and role == "team-leader"
+            and monitor.pending_leader_notices()
+        ):
+            os.kill(os.getpid(), signal.SIGTERM)
+            return
         if stopped and (role.startswith("engineer-") or role == "team-leader"):
             os.kill(os.getpid(), signal.SIGTERM)
             return

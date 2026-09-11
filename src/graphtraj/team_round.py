@@ -2235,6 +2235,43 @@ def _execute_agent(
             thread.join()
         if notice_failures:
             raise notice_failures[0]
+        if (
+            outcome == "completed"
+            and role == "team-leader"
+            and parent_alias is None
+            and monitor is not None
+        ):
+            notices = monitor.pending_leader_notices()
+            if notices:
+                delivered = threading.Event()
+                failure: list[BaseException] = []
+
+                def finish_leader() -> None:
+                    try:
+                        _execute_agent(
+                            project, task, role, worktree, evidence, traces, alias,
+                            session_id, registration, None, retained_batch,
+                            "\n".join(notice["message"] for notice in notices)
+                            + "\nReceive these system notices, then finish the "
+                            "current Leader work.",
+                            capacity_fd,
+                            input_delivered=delivered,
+                        )
+                    except BaseException as error:
+                        failure.append(error)
+
+                thread = threading.Thread(target=finish_leader)
+                thread.start()
+                while not delivered.wait(0.05):
+                    if not thread.is_alive():
+                        thread.join()
+                        raise failure[-1]
+                monitor.mark_leader_notices_delivered(
+                    [notice["key"] for notice in notices]
+                )
+                thread.join()
+                if failure:
+                    raise failure[0]
     finally:
         for name, value in previous.items():
             if value is None:

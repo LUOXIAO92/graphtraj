@@ -513,6 +513,80 @@ def test_installed_runner_stops_final_leader_before_acceptance(
     assert len(leader_mappings) == 1
 
 
+def test_installed_runner_delivers_elapsed_notices_to_final_leader(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    harness, _, _, environment = configure_harness(
+        installed_commands, temporary_git_repository, fake_codex, tmp_path
+    )
+    _register_ready_ticket(
+        installed_commands, harness, body=_budget_body(total=2.5)
+    )
+    clock = tmp_path / "final-leader-notice-clock"
+    clock.write_text(str(time.time()), encoding="utf-8")
+    controls = tmp_path / "final-leader-notice-controls"
+    controls.mkdir()
+    (controls / "sitecustomize.py").write_text(
+        "import os\n"
+        "from pathlib import Path\n"
+        "try:\n"
+        "    import graphtraj.execution_budget as budget\n"
+        "except ModuleNotFoundError:\n"
+        "    pass\n"
+        "else:\n"
+        "    budget.time.time = lambda: float(Path(os.environ['BUDGET_CLOCK']).read_text())\n"
+        "    budget.random.uniform = lambda lower, upper: lower\n"
+        "    budget.random.random = lambda: 0.99\n",
+        encoding="utf-8",
+    )
+    batch = harness / "final-leader-notice-batch.yml"
+    batch.write_text(
+        "tasks:\n"
+        "  - ticket_id: \"76\"\n"
+        "    ticket_name: session-alias-control\n"
+        "    role: coding-team.team-leader\n",
+        encoding="utf-8",
+    )
+    result = run_process(
+        [str(installed_commands.runner), "--batch-input", str(batch)],
+        cwd=harness,
+        env={
+            **environment,
+            "BUDGET_CLOCK": str(clock),
+            "FAKE_CODEX_APPEND_LOG": "1",
+            "FAKE_CODEX_CAPTURE_STDIN": "1",
+            "FAKE_CODEX_CAPTURE_ROLE": "1",
+            "FAKE_CODEX_FINAL_LEADER_CLOCK": str(clock),
+            "FAKE_CODEX_LIFECYCLE_ACTION": "complete-team-round",
+            "GRAPHTRAJ_AGENT_RUNNER": str(installed_commands.runner),
+            "PYTHONPATH": str(controls),
+        },
+        timeout=30,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert yaml.safe_load(result.stdout)["tasks"][0]["launch_status"] == "accepted"
+    ticket = harness / ".graphtraj/state/tickets/76-session-alias-control"
+    state = yaml.safe_load((ticket / "ticket.yml").read_text(encoding="utf-8"))
+    assert state["status"] == "awaiting-integration"
+    usage = yaml.safe_load((ticket / "execution-budget.yml").read_text())
+    assert usage["stopped"] is False
+    assert len(usage["leader_notices"]) == 2
+    assert all(notice["delivered"] for notice in usage["leader_notices"])
+    leader_inputs = [
+        json.loads(line)["stdin"]
+        for line in fake_codex.log_file.read_text(encoding="utf-8").splitlines()
+        if json.loads(line).get("role") == "team-leader"
+        and "stdin" in json.loads(line)
+    ]
+    assert "The planned budget of 00:02:30 has been reached" in leader_inputs[-1]
+    assert "additional allowance of 00:00:15" in leader_inputs[-1]
+    assert "read-only Worktree access" not in leader_inputs[-1]
+
+
 def test_installed_runner_uses_a_revised_budget_while_its_worker_is_running(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
@@ -847,6 +921,9 @@ def test_installed_send_notifies_its_caller_while_a_budgeted_resume_runs(
             ]
         ),
         "FAKE_CODEX_LIFECYCLE_ACTION": "complete-team-round",
+        "FAKE_CODEX_APPEND_LOG": "1",
+        "FAKE_CODEX_CAPTURE_STDIN": "1",
+        "FAKE_CODEX_CAPTURE_ROLE": "1",
         "FAKE_CODEX_RELEASE_FILE": str(release),
         "GRAPHTRAJ_AGENT_RUNNER": str(installed_commands.runner),
     }
@@ -886,11 +963,20 @@ def test_installed_send_notifies_its_caller_while_a_budgeted_resume_runs(
                 "kind": "elapsed_minutes",
                 "limit": 0.01,
             }
-            running = run_process(
-                [str(installed_commands.runner), "status", mapping["alias"]],
-                cwd=harness,
-                env=environment,
-            )
+            deadline = time.monotonic() + 5
+            while True:
+                running = run_process(
+                    [str(installed_commands.runner), "status", mapping["alias"]],
+                    cwd=harness,
+                    env=environment,
+                )
+                if (
+                    yaml.safe_load(running.stdout)["aliases"][0]["activity"]
+                    == "running"
+                    or time.monotonic() >= deadline
+                ):
+                    break
+                time.sleep(0.02)
             assert yaml.safe_load(running.stdout)["aliases"][0]["activity"] == "running"
             assert yaml.safe_load(mapping_file.read_text(encoding="utf-8"))["session"] == mapping["session"]
             assert (mapping_file.parent / "resume.yml").is_file()
@@ -925,14 +1011,12 @@ def test_installed_send_notifies_its_caller_while_a_budgeted_resume_runs(
         "    budget.random.random = lambda: 0.99\n",
         encoding="utf-8",
     )
-    leader_release = tmp_path / "release-detached-leader"
     stopped_environment = {
         **environment,
         "BUDGET_CLOCK": str(clock),
         "FAKE_CODEX_APPEND_LOG": "1",
         "FAKE_CODEX_CAPTURE_STDIN": "1",
         "FAKE_CODEX_CAPTURE_ROLE": "1",
-        "FAKE_CODEX_RELEASE_FILE": str(leader_release),
         "FAKE_CODEX_LIFECYCLE_ACTION": "complete-team-round",
         "GRAPHTRAJ_AGENT_RUNNER": str(installed_commands.runner),
         "PYTHONPATH": str(controls),
@@ -962,33 +1046,13 @@ def test_installed_send_notifies_its_caller_while_a_budgeted_resume_runs(
             and yaml.safe_load(execution_file.read_text(encoding="utf-8"))[
                 "outcome"
             ]
-            == "interrupted"
+            == "completed"
         ):
             break
         time.sleep(0.02)
-    leader_release.touch()
     assert yaml.safe_load(execution_file.read_text(encoding="utf-8"))[
         "outcome"
-    ] == "interrupted"
-    assert any(
-        not notice["delivered"] for notice in usage["leader_notices"]
-    )
-
-    reported = run_process(
-        [
-            str(installed_commands.runner),
-            "send",
-            mapping["alias"],
-            "--instruction",
-            "Report the retained result.",
-            "--caused-by-event-id",
-            cause,
-        ],
-        cwd=harness,
-        env=stopped_environment,
-    )
-    assert reported.returncode == 0, reported.stderr
-    wait_for_file(execution_file)
+    ] == "completed"
     leader_inputs = [
         json.loads(line)["stdin"]
         for line in fake_codex.log_file.read_text(encoding="utf-8").splitlines()
@@ -999,6 +1063,128 @@ def test_installed_send_notifies_its_caller_while_a_budgeted_resume_runs(
     assert "must stop" in leader_inputs[-1]
     usage = yaml.safe_load(usage_file.read_text(encoding="utf-8"))
     assert all(notice["delivered"] for notice in usage["leader_notices"])
+    assert (ticket / "teams/1/rounds/2/leader.md").is_file()
+
+
+def test_installed_send_delivers_elapsed_notices_to_the_resumed_leader(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    harness, _, _, environment = configure_harness(
+        installed_commands, temporary_git_repository, fake_codex, tmp_path
+    )
+    _register_ready_ticket(
+        installed_commands, harness, body=_budget_body(total=1)
+    )
+    clock = tmp_path / "detached-leader-clock"
+    clock.write_text(str(time.time()), encoding="utf-8")
+    started = float(clock.read_text(encoding="utf-8"))
+    controls = tmp_path / "detached-leader-controls"
+    controls.mkdir()
+    (controls / "sitecustomize.py").write_text(
+        "import os\n"
+        "from pathlib import Path\n"
+        "try:\n"
+        "    import graphtraj.execution_budget as budget\n"
+        "except ModuleNotFoundError:\n"
+        "    pass\n"
+        "else:\n"
+        "    budget.time.time = lambda: float(Path(os.environ['BUDGET_CLOCK']).read_text())\n"
+        "    budget.random.uniform = lambda lower, upper: lower\n"
+        "    budget.random.random = lambda: 0.99\n",
+        encoding="utf-8",
+    )
+    batch = harness / "detached-leader-notices-batch.yml"
+    batch.write_text(
+        "tasks:\n"
+        "  - ticket_id: \"76\"\n"
+        "    ticket_name: session-alias-control\n"
+        "    role: coding-team.team-leader\n",
+        encoding="utf-8",
+    )
+    run_environment = {
+        **environment,
+        "BUDGET_CLOCK": str(clock),
+        "FAKE_CODEX_APPEND_LOG": "1",
+        "FAKE_CODEX_CAPTURE_STDIN": "1",
+        "FAKE_CODEX_CAPTURE_ROLE": "1",
+        "FAKE_CODEX_LIFECYCLE_ACTION": "complete-team-round",
+        "GRAPHTRAJ_AGENT_RUNNER": str(installed_commands.runner),
+        "PYTHONPATH": str(controls),
+    }
+    completed = run_process(
+        [str(installed_commands.runner), "--batch-input", str(batch)],
+        cwd=harness,
+        env=run_environment,
+        timeout=30,
+    )
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    alias = yaml.safe_load(completed.stdout)["tasks"][0]["alias"]
+    cause = [
+        json.loads(line)["event_id"]
+        for path in (harness / ".graphtraj/state/worldline").glob("*.jsonl")
+        for line in path.read_text(encoding="utf-8").splitlines()
+    ][-1]
+    release = tmp_path / "release-detached-leader-notices"
+    run_environment.pop("FAKE_CODEX_LIFECYCLE_ACTION")
+    run_environment["FAKE_CODEX_RELEASE_FILE"] = str(release)
+    usage_file = (
+        harness
+        / ".graphtraj/state/tickets/76-session-alias-control/execution-budget.yml"
+    )
+    stdout = tmp_path / "detached-leader-notices.stdout"
+    stderr = tmp_path / "detached-leader-notices.stderr"
+    with stdout.open("w", encoding="utf-8") as out, stderr.open(
+        "w", encoding="utf-8"
+    ) as err:
+        sent = subprocess.Popen(
+            [
+                str(installed_commands.runner),
+                "send",
+                alias,
+                "--instruction",
+                "Inspect the retained result.",
+                "--caused-by-event-id",
+                cause,
+            ],
+            cwd=harness,
+            env=run_environment,
+            text=True,
+            stdout=out,
+            stderr=err,
+        )
+        assert sent.wait(timeout=10) == 0
+    clock.write_text(str(started + 67), encoding="utf-8")
+    try:
+        deadline = time.monotonic() + 10
+        leader_inputs = []
+        while time.monotonic() < deadline:
+            usage = yaml.safe_load(usage_file.read_text(encoding="utf-8"))
+            leader_inputs = [
+                json.loads(line)["stdin"]
+                for line in fake_codex.log_file.read_text(encoding="utf-8").splitlines()
+                if json.loads(line).get("role") == "team-leader"
+                and "stdin" in json.loads(line)
+            ]
+            if (
+                len(usage["leader_notices"]) == 2
+                and all(notice["delivered"] for notice in usage["leader_notices"])
+                and leader_inputs
+                and "additional allowance of 00:00:06" in leader_inputs[-1]
+            ):
+                break
+            time.sleep(0.02)
+        assert not release.exists()
+        assert len(usage["leader_notices"]) == 2
+        assert all(notice["delivered"] for notice in usage["leader_notices"])
+        assert "The planned budget of 00:01:00 has been reached" in leader_inputs[-1]
+        assert "additional allowance of 00:00:06" in leader_inputs[-1]
+        assert "Inspect the retained result." in leader_inputs[-1]
+        assert "read-only Worktree access" not in leader_inputs[-1]
+    finally:
+        release.touch()
 
 
 def test_installed_runner_counts_implementation_rework_as_correction(

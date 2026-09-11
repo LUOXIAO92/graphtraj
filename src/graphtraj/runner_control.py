@@ -102,6 +102,7 @@ def _send_session(
     cwd: Path,
     *,
     budget_notice: bool = False,
+    leader_notice_keys: tuple[str, ...] = (),
 ) -> Dict[str, str]:
     execution_file = session_directory / "execution.yml"
     if not os.path.lexists(str(execution_file)):
@@ -176,6 +177,10 @@ def _send_session(
         }
         if monitor is not None:
             resume["monitor_execution_budget"] = True
+            if mapping["role"] == "team-leader":
+                resume["deliver_parentless_leader_notices"] = True
+            if leader_notice_keys:
+                resume["leader_notice_keys"] = list(leader_notice_keys)
         write_yaml_durably(
             resume_file,
             resume,

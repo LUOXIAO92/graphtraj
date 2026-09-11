@@ -7,6 +7,7 @@ import os
 import signal
 import sys
 import threading
+import time
 from pathlib import Path
 from typing import Mapping
 
@@ -127,7 +128,7 @@ def run(job_file: Path) -> int:
                 ):
                     monitor_thread = threading.Thread(
                         target=_monitor_execution_budget,
-                        args=(budget_monitor, mapping["role"], monitor_stop),
+                        args=(budget_monitor, mapping, monitor_stop),
                         daemon=True,
                     )
                     monitor_thread.start()
@@ -202,10 +203,43 @@ def _append_follow_up(events_file: Path, causes: list[str]) -> None:
 
 
 def _monitor_execution_budget(
-    monitor: ExecutionBudgetMonitor, role: str, stop: threading.Event
+    monitor: ExecutionBudgetMonitor, mapping: dict[str, object], stop: threading.Event
 ) -> None:
+    role = mapping["role"]
+    assert isinstance(role, str)
+
+    def deliver(messages: list[str]) -> None:
+        parent = mapping.get("parent")
+        harness_root = os.environ.get("GRAPHTRAJ_HARNESS_ROOT")
+        if not isinstance(parent, str) or not isinstance(harness_root, str):
+            return
+        from .runner_control import _send_session
+
+        trace_file = mapping.get("trace_file")
+        if not isinstance(trace_file, str):
+            return
+        parent_directory = Path(trace_file).parent.parent / parent
+        parent_mapping = yaml.safe_load(
+            (parent_directory / "mapping.yml").read_text(encoding="utf-8")
+        )
+        while not (parent_directory / "execution.yml").is_file():
+            time.sleep(0.05)
+        _send_session(
+            parent,
+            "\n".join(messages)
+            + "\nReceive these system notices. Do not dispatch work or make a Team decision.",
+            parent_directory,
+            parent_mapping,
+            (),
+            Path(harness_root),
+        )
+
     while not stop.is_set():
-        monitor.check(role, execution_budget_stage(role))
+        stopped = monitor.check(role, execution_budget_stage(role))
+        monitor.deliver_leader_notices(deliver)
+        if stopped and role.startswith("engineer-"):
+            os.kill(os.getpid(), signal.SIGTERM)
+            return
         stop.wait(0.05)
 
 

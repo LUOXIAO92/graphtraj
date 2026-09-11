@@ -113,9 +113,6 @@ def _send_session(
     request, connection = _read_session_resume_request(session_directory, mapping)
     _attest_runtime_session(session_directory, mapping)
     team_environment = _team_runtime_environment(mapping, cwd)
-    request = _refresh_current_team_report_request(
-        request, mapping, worktree, team_environment
-    )
     evidence = team_environment.get("GRAPHTRAJ_EVIDENCE")
     ticket_name = team_environment.get("GRAPHTRAJ_TICKET_NAME")
     monitor = (
@@ -123,6 +120,24 @@ def _send_session(
         if isinstance(evidence, str) and isinstance(ticket_name, str)
         else None
     )
+    stopped = monitor is not None and monitor.is_stopped()
+    if stopped and mapping["role"] not in {
+        "engineer-junior", "engineer-senior", "engineer-expert", "team-leader",
+    }:
+        raise RunnerError(
+            "EXECUTION_BUDGET_STOPPED",
+            "Runner selected stopping; this Session cannot start new work.",
+        )
+    request = _refresh_current_team_report_request(
+        request, mapping, worktree, team_environment, reports_only=stopped
+    )
+    if stopped:
+        instruction = (
+            "Execution was stopped by Runner. Ordinary implementation and new "
+            "dispatch are prohibited. Report only the existing result and commit "
+            "only already-made authorized changes.\n" + instruction
+        )
+        monitor = None
     resume_file = session_directory / "resume.yml"
     error_file = session_directory / "resume-error.yml"
     error_file.unlink(missing_ok=True)
@@ -428,6 +443,8 @@ def _refresh_current_team_report_request(
     mapping: Dict[str, Any],
     worktree: Path,
     environment: Dict[str, str],
+    *,
+    reports_only: bool = False,
 ) -> Dict[str, Any]:
     role = mapping["role"]
     if role in {
@@ -462,6 +479,7 @@ def _refresh_current_team_report_request(
             worktree=worktree,
             evidence=Path(evidence),
             report_files=report_files,
+            reports_only=reports_only,
         )
     except RuntimeAdapterError as error:
         raise RunnerError(error.code, error.message) from error

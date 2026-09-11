@@ -890,6 +890,7 @@ def refresh_codex_report_paths(
     worktree: Path,
     evidence: Path,
     report_files: Tuple[Path, ...],
+    reports_only: bool = False,
 ) -> Dict[str, Any]:
     """Refresh only exact report permissions in one durable resume request."""
     arguments, request_worktree = _validate_launch_request(request)
@@ -899,9 +900,6 @@ def refresh_codex_report_paths(
             "The durable Codex launch request targets another Worktree.",
         )
     refreshed = list(arguments)
-    if not report_files:
-        return {"arguments": refreshed, "worktree_path": str(request_worktree)}
-
     native_report_paths = _canonical_report_write_paths(
         evidence, report_files
     )
@@ -927,6 +925,14 @@ def refresh_codex_report_paths(
             "The durable Codex launch request has invalid report permissions.",
         )
     filesystem = profile["filesystem"]
+    if reports_only:
+        workspace_roots = filesystem.get(":workspace_roots")
+        if not isinstance(workspace_roots, dict) or "." not in workspace_roots:
+            raise CodexAdapterError(
+                "RUNTIME_REQUEST_INVALID",
+                "The durable Codex launch request has invalid Worktree permissions.",
+            )
+        workspace_roots["."] = "read"
     for path, access in tuple(filesystem.items()):
         if access == "write" and _is_prior_report_path(
             path, evidence, report_files

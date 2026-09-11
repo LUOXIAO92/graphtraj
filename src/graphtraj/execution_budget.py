@@ -6,17 +6,25 @@ import fcntl
 import json
 import math
 import os
+import random
 import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 import yaml
 
 from .runner_io import write_yaml_durably
 from .runner_models import RunnerError
 
+
+ADDITIONAL_ALLOWANCE_CAP_MINUTES = 20
+ESTIMATED_TIME_MULTIPLIER = 0.2
+ALLOWANCE_UNIFORM_LOWER_BOUND = -0.5
+ALLOWANCE_UNIFORM_UPPER_BOUND = 0.5
+STOPPING_LAMBDA_PER_MINUTE = 0.25
+STOPPING_INTERVAL_MINUTES = 2
 
 _MINUTE_FIELDS = frozenset({"implementation", "validation", "review", "total"})
 _SESSION_FIELDS = frozenset(
@@ -177,8 +185,51 @@ class ExecutionBudgetMonitor:
     def record_correction(self, role: str) -> None:
         self._observe(role, "correction", correction=True)
 
-    def check(self, role: str, stage: str) -> None:
-        self._observe(role, stage)
+    def check(self, role: str, stage: str) -> bool:
+        return self._observe(role, stage)
+
+    def is_stopped(self) -> bool:
+        lock_path = self.ticket_directory / ".execution-budget.lock"
+        with lock_path.open("a+", encoding="utf-8") as lock:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+            try:
+                budget = _current_budget(self.ticket_directory)
+                if budget is None:
+                    return False
+                state, changed = _read_usage(self.ticket_directory, budget)
+                if changed:
+                    write_yaml_durably(
+                        self.ticket_directory / "execution-budget.yml", state
+                    )
+                return state["stopped"]
+            finally:
+                fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+
+    def deliver_leader_notices(
+        self, deliver: Callable[[list[str]], None]
+    ) -> None:
+        lock_path = self.ticket_directory / ".execution-budget.lock"
+        with lock_path.open("a+", encoding="utf-8") as lock:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+            try:
+                budget = _current_budget(self.ticket_directory)
+                if budget is None:
+                    return
+                state, _ = _read_usage(self.ticket_directory, budget)
+                pending = [
+                    notice for notice in state["leader_notices"]
+                    if not notice["delivered"]
+                ]
+                if not pending:
+                    return
+                deliver([notice["message"] for notice in pending])
+                for notice in pending:
+                    notice["delivered"] = True
+                write_yaml_durably(
+                    self.ticket_directory / "execution-budget.yml", state
+                )
+            finally:
+                fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
 
     def _observe(
         self,
@@ -187,7 +238,7 @@ class ExecutionBudgetMonitor:
         *,
         session: bool = False,
         correction: bool = False,
-    ) -> None:
+    ) -> bool:
         notices = []
         lock_path = self.ticket_directory / ".execution-budget.lock"
         with lock_path.open("a+", encoding="utf-8") as lock:
@@ -201,7 +252,7 @@ class ExecutionBudgetMonitor:
                         "The selected Ticket execution budget is invalid.",
                     ) from error
                 if budget is None:
-                    return
+                    return False
                 state, created = _read_usage(self.ticket_directory, budget)
                 changed = created or state["budget"] != budget.definition
                 if changed:
@@ -213,12 +264,27 @@ class ExecutionBudgetMonitor:
                 if correction:
                     state["corrections"] += 1
                     changed = True
+                stochastic_before = (
+                    state["stopping_checks"], state["stopped"]
+                )
                 notices = _new_notices(
                     state, budget, self.ticket_id, self.ticket_name, role, stage
+                )
+                changed = changed or stochastic_before != (
+                    state["stopping_checks"], state["stopped"]
                 )
                 if notices:
                     state["notifications"].extend(
                         notice["notification_key"] for notice in notices
+                    )
+                    state["leader_notices"].extend(
+                        {
+                            "key": notice["notification_key"],
+                            "message": notice["message"],
+                            "delivered": False,
+                        }
+                        for notice in notices
+                        if "message" in notice
                     )
                     changed = True
                 if changed:
@@ -230,6 +296,7 @@ class ExecutionBudgetMonitor:
         for notice in notices:
             notice.pop("notification_key")
             _emit_notice(json.dumps(notice, sort_keys=True) + "\n")
+        return state["stopped"]
 
 
 def _current_budget(ticket_directory: Path) -> ExecutionBudget | None:
@@ -263,6 +330,11 @@ def _read_usage(
 ) -> tuple[dict[str, Any], bool]:
     path = ticket_directory / "execution-budget.yml"
     if not path.exists():
+        definition = budget.definition["execution_budget"]
+        base_allowance = min(
+            ADDITIONAL_ALLOWANCE_CAP_MINUTES,
+            ESTIMATED_TIME_MULTIPLIER * definition["estimated_minutes"]["total"],
+        )
         return (
             {
                 "started_at": time.time(),
@@ -270,6 +342,17 @@ def _read_usage(
                 "sessions": {role: 0 for role in _SESSION_FIELDS},
                 "corrections": 0,
                 "notifications": [],
+                "allowance_minutes": base_allowance
+                * (
+                    1
+                    + random.uniform(
+                        ALLOWANCE_UNIFORM_LOWER_BOUND,
+                        ALLOWANCE_UNIFORM_UPPER_BOUND,
+                    )
+                ),
+                "stopping_checks": 0,
+                "stopped": False,
+                "leader_notices": [],
             },
             True,
         )
@@ -279,9 +362,34 @@ def _read_usage(
         raise RunnerError(
             "TICKET_FILE_INVALID", "The Ticket execution budget accounting is invalid."
         ) from error
+    legacy = set(state) == {
+        "started_at", "budget", "sessions", "corrections", "notifications"
+    }
+    if legacy:
+        definition = budget.definition["execution_budget"]
+        base_allowance = min(
+            ADDITIONAL_ALLOWANCE_CAP_MINUTES,
+            ESTIMATED_TIME_MULTIPLIER * definition["estimated_minutes"]["total"],
+        )
+        state.update(
+            allowance_minutes=base_allowance
+            * (
+                1
+                + random.uniform(
+                    ALLOWANCE_UNIFORM_LOWER_BOUND,
+                    ALLOWANCE_UNIFORM_UPPER_BOUND,
+                )
+            ),
+            stopping_checks=0,
+            stopped=False,
+            leader_notices=[],
+        )
     if (
         not isinstance(state, dict)
-        or set(state) != {"started_at", "budget", "sessions", "corrections", "notifications"}
+        or set(state) != {
+            "started_at", "budget", "sessions", "corrections", "notifications",
+            "allowance_minutes", "stopping_checks", "stopped", "leader_notices",
+        }
         or not _nonnegative_number(state["started_at"])
         or not isinstance(state["budget"], dict)
         or not isinstance(state["sessions"], dict)
@@ -291,11 +399,24 @@ def _read_usage(
         or state["corrections"] < 0
         or not isinstance(state["notifications"], list)
         or any(not isinstance(value, str) for value in state["notifications"])
+        or not _nonnegative_number(state["allowance_minutes"])
+        or type(state["stopping_checks"]) is not int
+        or state["stopping_checks"] < 0
+        or type(state["stopped"]) is not bool
+        or not isinstance(state["leader_notices"], list)
+        or any(
+            not isinstance(value, dict)
+            or set(value) != {"key", "message", "delivered"}
+            or not _text(value["key"])
+            or not _text(value["message"])
+            or type(value["delivered"]) is not bool
+            for value in state["leader_notices"]
+        )
     ):
         raise RunnerError(
             "TICKET_FILE_INVALID", "The Ticket execution budget accounting is invalid."
         )
-    return state, False
+    return state, legacy
 
 
 def _new_notices(
@@ -315,20 +436,54 @@ def _new_notices(
         "corrections": state["corrections"],
     }
     exceeded = []
-    if elapsed >= definition["estimated_minutes"]["total"]:
-        exceeded.append(("elapsed_minutes", definition["estimated_minutes"]["total"]))
+    estimated = definition["estimated_minutes"]["total"]
+    allowance = state["allowance_minutes"]
+    seen = set(state["notifications"])
+    if elapsed >= estimated:
+        exceeded.append(
+            (
+                "elapsed_minutes",
+                estimated,
+                "System notice: Elapsed time: {0}. The planned budget of {1} has been reached.".format(
+                    _duration(elapsed), _duration(estimated)
+                ),
+            )
+        )
+    if elapsed >= estimated + allowance:
+        exceeded.append(
+            (
+                "additional_allowance",
+                allowance,
+                "System reminder: Elapsed time: {0}. The planned budget and additional allowance of {1} have been exceeded. Review progress and remaining work now.".format(
+                    _duration(elapsed), _duration(allowance)
+                ),
+            )
+        )
+        due = int((elapsed - estimated - allowance) // STOPPING_INTERVAL_MINUTES)
+        while not state["stopped"] and state["stopping_checks"] < due:
+            state["stopping_checks"] += 1
+            checked_at = state["stopping_checks"] * STOPPING_INTERVAL_MINUTES
+            if random.random() >= math.exp(-STOPPING_LAMBDA_PER_MINUTE * checked_at):
+                state["stopped"] = True
+                exceeded.append(
+                    (
+                        "stochastic_stop",
+                        checked_at,
+                        "System notice: Elapsed time: {0}. Execution has taken too long and must stop.".format(
+                            _duration(elapsed)
+                        ),
+                    )
+                )
     for session_role, limit in definition["planned_sessions"].items():
         if state["sessions"][session_role] > limit:
-            exceeded.append(("planned_sessions." + session_role, limit))
+            exceeded.append(("planned_sessions." + session_role, limit, None))
     if state["corrections"] > definition["correction_rounds"]:
-        exceeded.append(("correction_rounds", definition["correction_rounds"]))
-    seen = set(state["notifications"])
+        exceeded.append(("correction_rounds", definition["correction_rounds"], None))
     notices = []
-    for kind, limit in exceeded:
+    for kind, limit, message in exceeded:
         key = kind + ":" + json.dumps(limit, sort_keys=True)
         if key not in seen:
-            notices.append(
-                {
+            notice = {
                     "type": "execution-budget-exceeded",
                     "ticket": {"ticket_id": ticket_id, "ticket_name": ticket_name},
                     "threshold": {"kind": kind, "limit": limit},
@@ -337,8 +492,17 @@ def _new_notices(
                     "responsible_role": role,
                     "notification_key": key,
                 }
-            )
+            if message is not None:
+                notice["message"] = message
+            notices.append(notice)
     return notices
+
+
+def _duration(minutes: float) -> str:
+    seconds = int(minutes * 60)
+    hours, seconds = divmod(seconds, 3600)
+    minutes_value, seconds = divmod(seconds, 60)
+    return "{0:02d}:{1:02d}:{2:02d}".format(hours, minutes_value, seconds)
 
 
 def _validate_budget(value: Any) -> None:

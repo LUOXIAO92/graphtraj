@@ -237,8 +237,9 @@ def _monitor_execution_budget(
 
     while not stop.is_set():
         stopped = monitor.check(role, execution_budget_stage(role))
-        monitor.deliver_leader_notices(deliver)
-        if stopped and role.startswith("engineer-"):
+        if isinstance(mapping.get("parent"), str):
+            monitor.deliver_leader_notices(deliver)
+        if stopped and (role.startswith("engineer-") or role == "team-leader"):
             os.kill(os.getpid(), signal.SIGTERM)
             return
         stop.wait(0.05)

@@ -123,6 +123,15 @@ def _send_session(
         else None
     )
     stopped = budget_notice or (monitor is not None and monitor.is_stopped())
+    pending_notices = (
+        monitor.pending_leader_notices()
+        if stopped
+        and not budget_notice
+        and mapping["role"] == "team-leader"
+        and monitor is not None
+        else []
+    )
+    notice_monitor = monitor
     if stopped and mapping["role"] not in {
         "engineer-junior", "engineer-senior", "engineer-expert", "team-leader",
     }:
@@ -143,6 +152,7 @@ def _send_session(
                 "new dispatch are prohibited. Report only the existing result and "
                 "commit only already-made authorized changes.\n"
             )
+            + "".join(notice["message"] + "\n" for notice in pending_notices)
             + instruction
         )
         monitor = None
@@ -208,6 +218,10 @@ def _send_session(
                 worker.stdin.write(instruction)
                 worker.stdin.close()
         _await_session_resume(worker, session_directory, error_file, mapping["session"])
+        if pending_notices and notice_monitor is not None:
+            notice_monitor.mark_leader_notices_delivered(
+                [notice["key"] for notice in pending_notices]
+            )
     except RunnerError:
         if "worker" in locals():
             stop_worker(worker.pid)

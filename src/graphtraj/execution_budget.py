@@ -231,6 +231,41 @@ class ExecutionBudgetMonitor:
             finally:
                 fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
 
+    def pending_leader_notices(self) -> list[dict[str, str]]:
+        lock_path = self.ticket_directory / ".execution-budget.lock"
+        with lock_path.open("a+", encoding="utf-8") as lock:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+            try:
+                budget = _current_budget(self.ticket_directory)
+                if budget is None:
+                    return []
+                state, _ = _read_usage(self.ticket_directory, budget)
+                return [
+                    {"key": notice["key"], "message": notice["message"]}
+                    for notice in state["leader_notices"]
+                    if not notice["delivered"]
+                ]
+            finally:
+                fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+
+    def mark_leader_notices_delivered(self, keys: list[str]) -> None:
+        lock_path = self.ticket_directory / ".execution-budget.lock"
+        with lock_path.open("a+", encoding="utf-8") as lock:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+            try:
+                budget = _current_budget(self.ticket_directory)
+                if budget is None:
+                    return
+                state, _ = _read_usage(self.ticket_directory, budget)
+                for notice in state["leader_notices"]:
+                    if notice["key"] in keys:
+                        notice["delivered"] = True
+                write_yaml_durably(
+                    self.ticket_directory / "execution-budget.yml", state
+                )
+            finally:
+                fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+
     def _observe(
         self,
         role: str,

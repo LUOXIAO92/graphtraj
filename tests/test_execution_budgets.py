@@ -434,6 +434,85 @@ def test_installed_runner_collects_reviews_already_running_at_sampled_stop(
     assert "selected stopping" in blocked.stderr
 
 
+def test_installed_runner_stops_final_leader_before_acceptance(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    harness, _, _, environment = configure_harness(
+        installed_commands, temporary_git_repository, fake_codex, tmp_path
+    )
+    _register_ready_ticket(
+        installed_commands, harness, body=_budget_body(total=1)
+    )
+    clock = tmp_path / "final-leader-clock"
+    clock.write_text(str(time.time()), encoding="utf-8")
+    controls = tmp_path / "final-leader-controls"
+    controls.mkdir()
+    (controls / "sitecustomize.py").write_text(
+        "import os\n"
+        "from pathlib import Path\n"
+        "try:\n"
+        "    import graphtraj.execution_budget as budget\n"
+        "except ModuleNotFoundError:\n"
+        "    pass\n"
+        "else:\n"
+        "    budget.time.time = lambda: float(Path(os.environ['BUDGET_CLOCK']).read_text())\n"
+        "    budget.random.uniform = lambda lower, upper: lower\n"
+        "    budget.random.random = lambda: 0.99\n",
+        encoding="utf-8",
+    )
+    batch = harness / "final-leader-stop-batch.yml"
+    batch.write_text(
+        "tasks:\n"
+        "  - ticket_id: \"76\"\n"
+        "    ticket_name: session-alias-control\n"
+        "    role: coding-team.team-leader\n",
+        encoding="utf-8",
+    )
+    result = run_process(
+        [str(installed_commands.runner), "--batch-input", str(batch)],
+        cwd=harness,
+        env={
+            **environment,
+            "BUDGET_CLOCK": str(clock),
+            "FAKE_CODEX_APPEND_LOG": "1",
+            "FAKE_CODEX_CAPTURE_STDIN": "1",
+            "FAKE_CODEX_CAPTURE_ROLE": "1",
+            "FAKE_CODEX_FINAL_LEADER_CLOCK": str(clock),
+            "FAKE_CODEX_LIFECYCLE_ACTION": "complete-team-round",
+            "GRAPHTRAJ_AGENT_RUNNER": str(installed_commands.runner),
+            "PYTHONPATH": str(controls),
+        },
+        timeout=30,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert yaml.safe_load(result.stdout)["tasks"][0]["launch_status"] == "stopped"
+    ticket = harness / ".graphtraj/state/tickets/76-session-alias-control"
+    state = yaml.safe_load((ticket / "ticket.yml").read_text(encoding="utf-8"))
+    assert state["status"] == "reviewing"
+    assert state["current_candidate"] is not None
+    usage = yaml.safe_load((ticket / "execution-budget.yml").read_text())
+    assert usage["stopped"] is True
+    assert all(notice["delivered"] for notice in usage["leader_notices"])
+    leader_inputs = [
+        json.loads(line)["stdin"]
+        for line in fake_codex.log_file.read_text(encoding="utf-8").splitlines()
+        if json.loads(line).get("role") == "team-leader"
+        and "stdin" in json.loads(line)
+    ]
+    assert "Execution has taken too long and must stop" in leader_inputs[-1]
+    assert "read-only Worktree access" in leader_inputs[-1]
+    leader_mappings = [
+        yaml.safe_load(path.read_text(encoding="utf-8"))
+        for path in (harness / ".graphtraj/runner/sessions").glob("*/mapping.yml")
+        if yaml.safe_load(path.read_text(encoding="utf-8"))["role"] == "team-leader"
+    ]
+    assert len(leader_mappings) == 1
+
+
 def test_installed_runner_uses_a_revised_budget_while_its_worker_is_running(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
@@ -822,15 +901,6 @@ def test_installed_send_notifies_its_caller_while_a_budgeted_resume_runs(
     assert cause in trace.read_text(encoding="utf-8")
     assert (mapping_file.parent / "worker-stderr.log").is_file()
 
-    engineer_mapping_file = next(
-        path
-        for path in (harness / ".graphtraj/runner/sessions").glob("*/mapping.yml")
-        if yaml.safe_load(path.read_text(encoding="utf-8"))["role"]
-        == "engineer-junior"
-    )
-    engineer_mapping = yaml.safe_load(
-        engineer_mapping_file.read_text(encoding="utf-8")
-    )
     usage_file = ticket / "execution-budget.yml"
     usage = yaml.safe_load(usage_file.read_text(encoding="utf-8"))
     clock = tmp_path / "send-stop-clock"
@@ -855,14 +925,14 @@ def test_installed_send_notifies_its_caller_while_a_budgeted_resume_runs(
         "    budget.random.random = lambda: 0.99\n",
         encoding="utf-8",
     )
-    engineer_release = tmp_path / "release-detached-engineer"
+    leader_release = tmp_path / "release-detached-leader"
     stopped_environment = {
         **environment,
         "BUDGET_CLOCK": str(clock),
         "FAKE_CODEX_APPEND_LOG": "1",
         "FAKE_CODEX_CAPTURE_STDIN": "1",
         "FAKE_CODEX_CAPTURE_ROLE": "1",
-        "FAKE_CODEX_ENGINEER_RELEASE_FILE": str(engineer_release),
+        "FAKE_CODEX_RELEASE_FILE": str(leader_release),
         "FAKE_CODEX_LIFECYCLE_ACTION": "complete-team-round",
         "GRAPHTRAJ_AGENT_RUNNER": str(installed_commands.runner),
         "PYTHONPATH": str(controls),
@@ -871,9 +941,9 @@ def test_installed_send_notifies_its_caller_while_a_budgeted_resume_runs(
         [
             str(installed_commands.runner),
             "send",
-            engineer_mapping["alias"],
+            mapping["alias"],
             "--instruction",
-            "Continue the retained implementation.",
+            "Continue the retained Leader work.",
             "--caused-by-event-id",
             cause,
         ],
@@ -884,7 +954,7 @@ def test_installed_send_notifies_its_caller_while_a_budgeted_resume_runs(
     deadline = time.monotonic() + 10
     while time.monotonic() < deadline:
         usage = yaml.safe_load(usage_file.read_text(encoding="utf-8"))
-        execution_file = engineer_mapping_file.parent / "execution.yml"
+        execution_file = mapping_file.parent / "execution.yml"
         if (
             usage["stopped"]
             and all(notice["delivered"] for notice in usage["leader_notices"])
@@ -896,23 +966,19 @@ def test_installed_send_notifies_its_caller_while_a_budgeted_resume_runs(
         ):
             break
         time.sleep(0.02)
-    engineer_release.touch()
+    leader_release.touch()
     assert yaml.safe_load(execution_file.read_text(encoding="utf-8"))[
         "outcome"
     ] == "interrupted"
-    leader_inputs = [
-        json.loads(line)["stdin"]
-        for line in fake_codex.log_file.read_text(encoding="utf-8").splitlines()
-        if json.loads(line).get("role") == "team-leader"
-        and "stdin" in json.loads(line)
-    ]
-    assert any("must stop" in prompt for prompt in leader_inputs)
+    assert any(
+        not notice["delivered"] for notice in usage["leader_notices"]
+    )
 
     reported = run_process(
         [
             str(installed_commands.runner),
             "send",
-            engineer_mapping["alias"],
+            mapping["alias"],
             "--instruction",
             "Report the retained result.",
             "--caused-by-event-id",
@@ -923,13 +989,16 @@ def test_installed_send_notifies_its_caller_while_a_budgeted_resume_runs(
     )
     assert reported.returncode == 0, reported.stderr
     wait_for_file(execution_file)
-    engineer_inputs = [
+    leader_inputs = [
         json.loads(line)["stdin"]
         for line in fake_codex.log_file.read_text(encoding="utf-8").splitlines()
-        if json.loads(line).get("role", "").startswith("engineer-")
+        if json.loads(line).get("role") == "team-leader"
         and "stdin" in json.loads(line)
     ]
-    assert "Execution was stopped by Runner" in engineer_inputs[-1]
+    assert "Execution was stopped by Runner" in leader_inputs[-1]
+    assert "must stop" in leader_inputs[-1]
+    usage = yaml.safe_load(usage_file.read_text(encoding="utf-8"))
+    assert all(notice["delivered"] for notice in usage["leader_notices"])
 
 
 def test_installed_runner_counts_implementation_rework_as_correction(

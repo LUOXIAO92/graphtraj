@@ -2245,6 +2245,20 @@ def _execute_agent(
         session_directory, stderr_offset, event_offset
     )
     if outcome == "budget-stopped":
+        if role == "team-leader" and monitor is not None:
+            def report_stop(messages: list[str]) -> None:
+                _execute_agent(
+                    project, task, role, worktree, evidence, traces, alias,
+                    session_id, registration, None, retained_batch,
+                    "\n".join(messages)
+                    + "\nExecution has stopped. Freeze the current scene and report "
+                    "the current result and remaining work. Do not dispatch or decide "
+                    "acceptance.",
+                    capacity_fd,
+                    reports_only=True,
+                )
+
+            monitor.deliver_leader_notices(report_stop)
         raise RunnerError(
             "EXECUTION_BUDGET_STOPPED",
             "Runner selected stopping for the Ticket execution budget.",
@@ -2435,7 +2449,9 @@ def _run_session_worker(
                             session_recorded = True
                         stopped = monitor.check(role, stage)
                         deliver_budget_notices()
-                        if stopped and role in _ENGINEER_ROLES:
+                        if stopped and (
+                            role in _ENGINEER_ROLES or role == "team-leader"
+                        ):
                             budget_stopped = True
                             worker.terminate()
                     try:
@@ -2448,7 +2464,8 @@ def _run_session_worker(
                     stopped = monitor.check(role, stage)
                     deliver_budget_notices()
                     budget_stopped = budget_stopped or (
-                        stopped and role in _ENGINEER_ROLES
+                        stopped
+                        and (role in _ENGINEER_ROLES or role == "team-leader")
                     )
                 if input_delivered is not None and not input_delivered.is_set():
                     try:
@@ -2719,7 +2736,29 @@ def _worker_main() -> None:
             )
             result = {"role": task.role, "alias": alias, "session": session, "launch_status": "completed"}
     except (RunnerError, RuntimeAdapterError) as error:
-        result = _failed_task(task, RunnerError(error.code, error.message))
+        if error.code == "EXECUTION_BUDGET_STOPPED" and task.role == "team-leader":
+            mappings = [
+                yaml.safe_load(path.read_text(encoding="utf-8"))
+                for path in project.runner_directory.glob("sessions/*/mapping.yml")
+                if yaml.safe_load(path.read_text(encoding="utf-8")).get("ticket_id")
+                == task.ticket_id
+                and yaml.safe_load(path.read_text(encoding="utf-8")).get("role")
+                == "team-leader"
+            ]
+            mapping = max(
+                mappings, key=lambda value: value.get("team_generation", 0)
+            )
+            result = {
+                "ticket_id": task.ticket_id,
+                "ticket_name": task.ticket_name,
+                "role": "team-leader",
+                "launch_status": "stopped",
+                "worktree_path": mapping["worktree_path"],
+                "alias": mapping["alias"],
+                "session": mapping["session"],
+            }
+        else:
+            result = _failed_task(task, RunnerError(error.code, error.message))
     print(yaml.safe_dump(result, sort_keys=False), end="")
 
 

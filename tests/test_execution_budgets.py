@@ -1122,6 +1122,10 @@ def test_installed_send_delivers_elapsed_notices_to_the_resumed_leader(
     )
     assert completed.returncode == 0, completed.stdout + completed.stderr
     alias = yaml.safe_load(completed.stdout)["tasks"][0]["alias"]
+    config_file = harness / ".graphtraj/config.yml"
+    config = yaml.safe_load(config_file.read_text(encoding="utf-8"))
+    config["agent_runner"]["max_concurrency"] = 1
+    config_file.write_text(yaml.safe_dump(config), encoding="utf-8")
     cause = [
         json.loads(line)["event_id"]
         for path in (harness / ".graphtraj/state/worldline").glob("*.jsonl")

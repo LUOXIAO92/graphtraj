@@ -247,6 +247,7 @@ def run(job_file: Path) -> int:
                             if stopped
                             else tuple(notice["key"] for notice in notices)
                         ),
+                        capacity_fd=int(os.environ["GRAPHTRAJ_CAPACITY_FD"]),
                     )
             return 0
     finally:

@@ -103,6 +103,7 @@ def _send_session(
     *,
     budget_notice: bool = False,
     leader_notice_keys: tuple[str, ...] = (),
+    capacity_fd: int | None = None,
 ) -> Dict[str, str]:
     execution_file = session_directory / "execution.yml"
     if not os.path.lexists(str(execution_file)):
@@ -197,7 +198,12 @@ def _send_session(
                 GRAPHTRAJ_PARENT_ALIAS=alias,
                 GRAPHTRAJ_PARENT_REGISTRATION=str(session_directory / "child-registration.yml"),
             )
-        with capacity_positions(load_project_configuration(cwd), 1) as positions:
+        with capacity_positions(
+            load_project_configuration(cwd), 1, capacity_fd
+        ) as positions:
+            worker_environment["GRAPHTRAJ_CAPACITY_FD"] = str(
+                positions[0].fileno()
+            )
             with (session_directory / "worker-stderr.log").open(
                 "w", encoding="utf-8"
             ) as diagnostics:

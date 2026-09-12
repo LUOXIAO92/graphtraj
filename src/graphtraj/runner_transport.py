@@ -50,28 +50,6 @@ def record_runtime_identity(events_file: Path, runtime: str) -> None:
         os.fsync(events.fileno())
 
 
-def valid_runtime_turn_outcome(document: Any) -> bool:
-    """Return whether a document is one internally consistent terminal turn."""
-
-    if not isinstance(document, dict):
-        return False
-    if document.get("outcome") == "interrupted":
-        if "runtime_exit_code" not in document:
-            return True
-        interrupted_exit_code = document["runtime_exit_code"]
-        return isinstance(interrupted_exit_code, int) and not isinstance(
-            interrupted_exit_code, bool
-        )
-    runtime_exit_code = document.get("runtime_exit_code")
-    if not isinstance(runtime_exit_code, int) or isinstance(runtime_exit_code, bool):
-        return False
-    return (
-        document.get("outcome") == "completed" and runtime_exit_code == 0
-    ) or (
-        document.get("outcome") == "runtime-error" and runtime_exit_code != 0
-    )
-
-
 def runtime_launch_failure(
     code: str,
     message: str,

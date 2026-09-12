@@ -118,13 +118,10 @@ class RunnerError(Exception):
         self,
         code: str,
         message: str,
-        *,
-        release_reservation: bool = True,
     ) -> None:
         super().__init__(message)
         self.code = code
         self.message = message
-        self.release_reservation = release_reservation
 
     def as_document(self) -> Dict[str, str]:
         public_code = (
@@ -170,7 +167,6 @@ class Project:
     dev_commit: str
     role_bindings: Mapping[str, RolePreset]
     max_concurrency: int = 18
-    repository_skill_allowlist: Tuple[str, ...] = ()
 
     @property
     def runtime_store(self) -> Path:

@@ -15,6 +15,7 @@ from .project_roles import (
     ROLE_REFERENCES,
     ProjectRolesError,
     RolePreset,
+    _UniqueKeyLoader,
     parse_inline_role,
 )
 from .runner_models import Batch, RunnerError, Task
@@ -22,34 +23,6 @@ from .runner_models import Batch, RunnerError, Task
 
 TICKET_ID = re.compile(r"^[A-Za-z0-9._-]{1,32}$")
 TICKET_NAME = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
-
-
-class _UniqueKeyLoader(yaml.SafeLoader):
-    """Safe YAML loader that treats repeated mapping keys as malformed."""
-
-    def construct_mapping(self, node: yaml.Node, deep: bool = False) -> object:
-        self.flatten_mapping(node)
-        mapping = {}
-        for key_node, value_node in node.value:
-            key = self.construct_object(key_node, deep=deep)
-            try:
-                duplicate = key in mapping
-            except TypeError as error:
-                raise yaml.constructor.ConstructorError(
-                    "while constructing a mapping",
-                    node.start_mark,
-                    "found unhashable key",
-                    key_node.start_mark,
-                ) from error
-            if duplicate:
-                raise yaml.constructor.ConstructorError(
-                    "while constructing a mapping",
-                    node.start_mark,
-                    "found duplicate key",
-                    key_node.start_mark,
-                )
-            mapping[key] = self.construct_object(value_node, deep=deep)
-        return mapping
 
 
 def valid_ticket_id(value: object) -> bool:
@@ -117,22 +90,6 @@ def read_batch(
         tasks=validated_tasks,
         source_bytes=source_bytes,
     )
-
-
-def validate_batch_roles(
-    batch: Batch,
-    role_bindings: Mapping[str, object],
-) -> None:
-    """Require every logical task role to have a selected-Runtime binding."""
-
-    if any(
-        task.inline_preset is None and task.role not in role_bindings
-        for task in batch.tasks
-    ):
-        raise RunnerError(
-            "ROLE_NOT_CONFIGURED",
-            "The selected logical Engineer role is not configured.",
-        )
 
 
 def resolved_role_preset(

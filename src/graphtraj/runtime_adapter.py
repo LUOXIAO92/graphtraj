@@ -55,21 +55,10 @@ class RuntimeContext(Protocol):
         """Return non-persistent environment overrides for one Runtime turn."""
 
 
-class EngineerRuntimeContext(RuntimeContext, Protocol):
-    """One immutable Context for an Engineer session."""
-
-
 class RuntimeContextPreflight(Protocol):
     """A side-effect-free preparation awaiting Ticket Worktree facts."""
 
     def finalize(self) -> RuntimeContext:
-        """Resolve Worktree-local facts and freeze the effective Context."""
-
-
-class EngineerRuntimeContextPreflight(RuntimeContextPreflight, Protocol):
-    """A side-effect-free Engineer preparation."""
-
-    def finalize(self) -> EngineerRuntimeContext:
         """Resolve Worktree-local facts and freeze the effective Context."""
 
 

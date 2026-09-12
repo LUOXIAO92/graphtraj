@@ -24,7 +24,6 @@ When assigned to a GraphTraj Team, self-review the work and return the candidate
 and validation evidence to the Team Leader, who schedules both Reviewers.
 Before handoff, compare the report with the complete fixed candidate, including
 changes supplied by others. Correct stale claims in the report locally.
-For standalone implementation, use /code-review once done.
 
 Commit authorized tracked project changes before ending the modifying turn or
 handing off, including unfinished work with its status stated honestly. A commit

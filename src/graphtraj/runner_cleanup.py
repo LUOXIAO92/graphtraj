@@ -14,6 +14,7 @@ import yaml
 from .runner_batch import valid_ticket_id
 from .runner_models import CleanupResponse, Project, RunnerError
 from .runner_project import discover_project, git_succeeds, registered_worktrees, run_git
+from .runner_transport import valid_terminal_launch_failure
 from .ticket_graph import _load_states
 
 
@@ -307,16 +308,39 @@ def _unstarted_session_directory(
         / "events.jsonl"
     )
     try:
+        if (
+            events.is_symlink()
+            or not events.is_file()
+            or trace.is_symlink()
+            or not trace.is_file()
+            or not os.path.samefile(events, trace)
+        ):
+            return False
+        launch_file = directory / "launch.yml"
+        if not os.path.lexists(str(launch_file)):
+            return True
+        error_file = directory / "launch-error.yml"
+        if (
+            launch_file.is_symlink()
+            or not launch_file.is_file()
+            or error_file.is_symlink()
+            or not error_file.is_file()
+        ):
+            return False
+        launch = yaml.safe_load(launch_file.read_text(encoding="utf-8"))
+        failure = yaml.safe_load(error_file.read_text(encoding="utf-8"))
+        mapping = launch.get("mapping") if isinstance(launch, dict) else None
         return (
-            {path.name for path in directory.iterdir()} == {"events.jsonl"}
-            and not events.is_symlink()
-            and events.is_file()
-            and events.stat().st_size == 0
-            and not trace.is_symlink()
-            and trace.is_file()
-            and os.path.samefile(events, trace)
+            launch.get("operation") == "launch"
+            and isinstance(mapping, dict)
+            and mapping.get("alias") == directory.name
+            and mapping.get("ticket_id") == target.ticket_id
+            and mapping.get("team_generation") == int(generation)
+            and isinstance(mapping.get("retained_batch_file"), str)
+            and bool(mapping["retained_batch_file"])
+            and valid_terminal_launch_failure(failure)
         )
-    except OSError:
+    except (OSError, TypeError, ValueError, yaml.YAMLError):
         return False
 
 

@@ -480,6 +480,8 @@ def _refresh_current_team_report_request(
     reports_only: bool = False,
 ) -> Dict[str, Any]:
     role = mapping["role"]
+    if role == "team-leader" and not environment.get("GRAPHTRAJ_EVIDENCE"):
+        return request
     if role in {
         "engineer-junior", "engineer-senior", "engineer-expert",
     }:

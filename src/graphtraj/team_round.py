@@ -2172,7 +2172,12 @@ def _execute_agent(
             repository_skill_source=worktree,
             requested_skills=task.requested_skills if policy_role in _ENGINEER_ROLES else (),
             report_files=report_files,
-            child_batch_write_paths=(registration, project.state_directory / "batches")
+            child_batch_write_paths=(
+                registration,
+                project.state_directory / "batches",
+                evidence / ".execution-budget.lock",
+                evidence / "execution-budget.yml",
+            )
             if policy_role == "team-leader" and registration is not None else (),
         ).finalize()
         launch_file = session_directory / "launch.yml"

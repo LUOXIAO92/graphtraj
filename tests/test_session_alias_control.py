@@ -286,6 +286,158 @@ def test_installed_alias_control_resumes_and_interrupts_one_team_session(
     assert not list((ticket_directory / "teams" / "1" / "traces" / alias).glob("turn-*"))
 
 
+def test_installed_send_resumes_an_unregistered_leader_session(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    harness_root, _, _, environment = configure_harness(
+        installed_commands,
+        temporary_git_repository,
+        fake_codex,
+        tmp_path,
+    )
+    _register_ready_ticket(installed_commands, harness_root)
+    batch = harness_root / "batch.yml"
+    batch.write_text(
+        "tasks:\n"
+        "  - ticket_id: \"76\"\n"
+        "    ticket_name: session-alias-control\n"
+        "    role: team-leader\n",
+        encoding="utf-8",
+    )
+    launched = run_process(
+        [str(installed_commands.runner), "--batch-input", str(batch)],
+        cwd=harness_root,
+        env=environment,
+        timeout=15,
+    )
+
+    assert launched.returncode == 1
+    mapping_file = next(
+        path
+        for path in (harness_root / ".graphtraj" / "runner" / "sessions").glob(
+            "*/mapping.yml"
+        )
+        if yaml.safe_load(path.read_text(encoding="utf-8"))["role"] == "team-leader"
+    )
+    mapping = yaml.safe_load(mapping_file.read_text(encoding="utf-8"))
+    ticket = harness_root / ".graphtraj" / "state" / "tickets" / "76-session-alias-control"
+    assert not (ticket / "teams" / "1" / "team.yml").exists()
+    launch_before = (mapping_file.parent / "launch.yml").read_bytes()
+    cause = [
+        json.loads(line)["event_id"]
+        for shard in (harness_root / ".graphtraj" / "state" / "worldline").glob(
+            "*.jsonl"
+        )
+        for line in shard.read_text(encoding="utf-8").splitlines()
+    ][-1]
+
+    resumed = run_process(
+        [
+            str(installed_commands.runner),
+            "send",
+            mapping["alias"],
+            "--instruction",
+            "Register the first Engineer child Batch.",
+            "--caused-by-event-id",
+            cause,
+        ],
+        cwd=harness_root,
+        env=environment,
+        timeout=15,
+    )
+
+    assert resumed.returncode == 0, resumed.stdout + resumed.stderr
+    wait_for_file(mapping_file.parent / "execution.yml")
+    assert yaml.safe_load(mapping_file.read_text(encoding="utf-8"))["session"] == mapping[
+        "session"
+    ]
+    assert (mapping_file.parent / "launch.yml").read_bytes() == launch_before
+    assert not (ticket / "teams" / "1" / "team.yml").exists()
+
+
+def test_installed_leader_registration_projects_budget_files_on_launch_and_resume(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    harness_root, _, _, environment = configure_harness(
+        installed_commands,
+        temporary_git_repository,
+        fake_codex,
+        tmp_path,
+    )
+    _register_ready_ticket(
+        installed_commands,
+        harness_root,
+        body="""---
+difficulty: medium
+difficulty_reason: Nested registration checks the Ticket budget
+execution_budget:
+  engineer_tier: senior
+  tier_reason: The Runner resumes one Team Leader
+  estimated_minutes:
+    implementation: 10
+    validation: 10
+    review: 10
+    total: 30
+  planned_sessions:
+    team_leader: 3
+    engineer: 1
+    standards_reviewer: 1
+    spec_reviewer: 1
+    delivery_state: 1
+  correction_rounds: 1
+  estimation_note: The controlled Runtime completes one Team
+  on_exceed: Preserve the current Session
+---
+
+Deliver the accepted Session transport behavior.
+""",
+    )
+    batch = harness_root / "batch.yml"
+    batch.write_text(
+        "tasks:\n"
+        "  - ticket_id: \"76\"\n"
+        "    ticket_name: session-alias-control\n"
+        "    role: team-leader\n",
+        encoding="utf-8",
+    )
+    policy_log = tmp_path / "leader-policy.jsonl"
+
+    result = run_process(
+        [str(installed_commands.runner), "--batch-input", str(batch)],
+        cwd=harness_root,
+        env={
+            **environment,
+            "FAKE_CODEX_LIFECYCLE_ACTION": "complete-team-round",
+            "FAKE_CODEX_POLICY_LOG": str(policy_log),
+            "GRAPHTRAJ_AGENT_RUNNER": str(installed_commands.runner),
+        },
+        timeout=45,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    ticket = harness_root / ".graphtraj" / "state" / "tickets" / "76-session-alias-control"
+    assert (ticket / "execution-budget.yml").is_file()
+    leaders = [
+        json.loads(line)
+        for line in policy_log.read_text(encoding="utf-8").splitlines()
+        if json.loads(line)["role"] == "team-leader"
+    ]
+    assert len(leaders) >= 2
+    for leader in leaders:
+        filesystem = leader["settings"]["permissions"][
+            leader["settings"]["default_permissions"]
+        ]["filesystem"]
+        assert filesystem[str(ticket / ".execution-budget.lock")] == "write"
+        assert filesystem[str(ticket / "execution-budget.yml")] == "write"
+        assert filesystem.get(str(ticket)) != "write"
+
+
 def test_installed_status_reports_native_requests_and_commit_diff(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,

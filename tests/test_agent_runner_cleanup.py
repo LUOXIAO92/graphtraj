@@ -38,6 +38,7 @@ def _deliver_ticket(
     *,
     integrate: bool,
     failed_start: bool = False,
+    terminal_failed_start: bool = False,
 ) -> DeliveredTicket:
     root, worktrees, _, environment = configure_harness(
         commands, repository, fake_codex, tmp_path
@@ -63,8 +64,11 @@ def _deliver_ticket(
         encoding="utf-8",
     )
     failed_start_aliases: tuple[str, ...] = ()
-    if failed_start:
-        environment["FAKE_CODEX_UNSUPPORTED"] = "1"
+    if failed_start or terminal_failed_start:
+        if failed_start:
+            environment["FAKE_CODEX_UNSUPPORTED"] = "1"
+        else:
+            environment.update(FAKE_CODEX_EVENTS="[]", FAKE_CODEX_EXIT_CODE="1")
         failed = run_process(
             [str(commands.runner), "--batch-input", str(batch)],
             cwd=root,
@@ -78,7 +82,11 @@ def _deliver_ticket(
             if directory.is_dir()
         )
         assert failed_start_aliases
-        environment.pop("FAKE_CODEX_UNSUPPORTED")
+        if failed_start:
+            environment.pop("FAKE_CODEX_UNSUPPORTED")
+        else:
+            environment.pop("FAKE_CODEX_EVENTS")
+            environment.pop("FAKE_CODEX_EXIT_CODE")
     environment.update(
         FAKE_CODEX_LIFECYCLE_ACTION="complete-team-round",
         GRAPHTRAJ_AGENT_RUNNER=str(commands.runner),
@@ -319,8 +327,8 @@ def test_installed_cleanup_removes_a_preflight_failed_team_session_after_integra
         / failed_session.name
         / "events.jsonl"
     )
-    assert {path.name for path in failed_session.iterdir()} == {"events.jsonl"}
-    assert events.read_bytes() == b""
+    assert not (failed_session / "mapping.yml").exists()
+    assert events.is_file()
     assert os.path.samefile(events, trace)
     durable_before = _durable_contents(ticket)
     mappings = _ticket_mappings(ticket)
@@ -345,6 +353,57 @@ def test_installed_cleanup_removes_a_preflight_failed_team_session_after_integra
 
     assert repeated.returncode == 0, repeated.stderr
     assert yaml.safe_load(repeated.stdout)["cleanup_status"] == "already-cleaned"
+
+
+def test_installed_cleanup_removes_a_terminal_unmapped_startup_failure_after_integration(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    ticket = _deliver_ticket(
+        installed_commands,
+        temporary_git_repository,
+        fake_codex,
+        tmp_path,
+        integrate=True,
+        terminal_failed_start=True,
+    )
+    sessions = ticket.root / ".graphtraj" / "runner" / "sessions"
+    failed_sessions = [sessions / alias for alias in ticket.failed_start_aliases]
+    assert len(failed_sessions) == 1
+    failed_session = failed_sessions[0]
+    trace = (
+        ticket.ticket_directory
+        / "teams"
+        / "1"
+        / "traces"
+        / failed_session.name
+        / "events.jsonl"
+    )
+    launch = yaml.safe_load((failed_session / "launch.yml").read_text(encoding="utf-8"))
+    failure = yaml.safe_load(
+        (failed_session / "launch-error.yml").read_text(encoding="utf-8")
+    )
+    assert not (failed_session / "mapping.yml").exists()
+    assert launch["mapping"]["alias"] == failed_session.name
+    assert launch["mapping"]["ticket_id"] == ticket.ticket_id
+    assert Path(launch["mapping"]["retained_batch_file"]).is_file()
+    assert failure["terminal_confirmed"] is True
+    assert (failed_session / "worker-stderr.log").is_file()
+    assert os.path.samefile(failed_session / "events.jsonl", trace)
+    assert '"type":"runtime"' in trace.read_text(encoding="utf-8")
+    assert '"type": "runner-execution-start"' in trace.read_text(encoding="utf-8")
+    durable_before = _durable_contents(ticket)
+
+    cleaned = _cleanup(ticket)
+
+    assert cleaned.returncode == 0, cleaned.stderr
+    document = yaml.safe_load(cleaned.stdout)
+    assert document["cleanup_status"] == "cleaned"
+    assert set(ticket.failed_start_aliases) <= set(document["aliases_removed"])
+    assert all(not session.exists() for session in failed_sessions)
+    assert _durable_contents(ticket) == durable_before
 
 
 def test_installed_cleanup_refuses_an_unattributed_session_record_without_partial_cleanup(

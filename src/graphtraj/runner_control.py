@@ -512,6 +512,7 @@ def _refresh_current_team_report_request(
             worktree=worktree,
             evidence=Path(evidence),
             report_files=report_files,
+            role=role,
             reports_only=reports_only,
         )
     except RuntimeAdapterError as error:

@@ -505,3 +505,86 @@ def test_reviewer_send_refreshes_exact_replacement_report_permissions(
     assert str(view) not in filesystem
     assert not any(argument.startswith("hooks=") for argument in arguments)
     assert "--dangerously-bypass-hook-trust" not in arguments
+
+
+@pytest.mark.parametrize(
+    "role", ("engineer-junior", "engineer-senior", "engineer-expert")
+)
+@pytest.mark.parametrize("reports_only", (False, True))
+def test_engineer_resume_drops_only_the_predecessor_readme_override(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    role: str,
+    reports_only: bool,
+) -> None:
+    monkeypatch.syspath_prepend(str(PROJECT_ROOT / "src"))
+    from graphtraj.runner_control import _refresh_current_team_report_request
+
+    worktree = tmp_path / "worktree"
+    evidence = tmp_path / "evidence"
+    worktree.mkdir()
+    evidence.mkdir()
+    request = {
+        "arguments": [
+            "/tmp/codex",
+            "exec",
+            "--model",
+            "engineer-model",
+            "--dangerously-bypass-hook-trust",
+            "-c",
+            'default_permissions="project-documents-read-only"',
+            "-c",
+            'permissions={ project-documents-read-only = { extends = ":workspace", filesystem = { ":workspace_roots" = { "." = "write", ".agents" = "read", "AGENTS.md" = "read", "CONTEXT.md" = "read", "README.md" = "read", docs = "read" }, "/saved-setting" = "read" } } }',
+            "-c",
+            'hooks={ PreToolUse = [{ hooks = [{ type = "command", command = "python /tmp/worktree_guard.py" }] }], SubagentStart = [{ hooks = [{ type = "command", command = "python /tmp/worktree_guard.py" }] }] }',
+            "--json",
+            "-",
+        ],
+        "worktree_path": str(worktree),
+    }
+    original = copy.deepcopy(request)
+
+    refreshed = _refresh_current_team_report_request(
+        request,
+        {"role": role},
+        worktree,
+        {
+            "GRAPHTRAJ_EVIDENCE": str(evidence),
+            "GRAPHTRAJ_TEAM_GENERATION": "3",
+            "GRAPHTRAJ_TEAM_ROUND": "7",
+        },
+        reports_only=reports_only,
+    )
+
+    assert request == original
+    arguments = refreshed["arguments"]
+    permissions = tomllib.loads(
+        next(argument for argument in arguments if argument.startswith("permissions="))
+    )["permissions"]
+    profile = permissions["project-documents-read-only"]
+    filesystem = profile["filesystem"]
+    workspace_roots = filesystem[":workspace_roots"]
+    assert profile["extends"] == ":workspace"
+    assert workspace_roots["."] == ("read" if reports_only else "write")
+    assert "README.md" not in workspace_roots
+    assert {
+        name: workspace_roots[name]
+        for name in (".agents", "AGENTS.md", "CONTEXT.md", "docs")
+    } == {
+        ".agents": "read",
+        "AGENTS.md": "read",
+        "CONTEXT.md": "read",
+        "docs": "read",
+    }
+    assert filesystem["/saved-setting"] == "read"
+    report_directory = evidence / "teams" / "3" / "rounds" / "7"
+    assert {
+        path
+        for path, access in filesystem.items()
+        if access == "write"
+    } == {
+        str(report_directory / "engineer.md"),
+        str(report_directory / "validation.md"),
+    }
+    assert not any(argument.startswith("hooks=") for argument in arguments)
+    assert "--dangerously-bypass-hook-trust" not in arguments

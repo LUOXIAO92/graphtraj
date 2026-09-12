@@ -997,6 +997,7 @@ def refresh_codex_report_paths(
     worktree: Path,
     evidence: Path,
     report_files: Tuple[Path, ...],
+    role: str,
     reports_only: bool = False,
 ) -> Dict[str, Any]:
     """Refresh only exact report permissions in one durable resume request."""
@@ -1042,8 +1043,15 @@ def refresh_codex_report_paths(
             "The durable Codex launch request has invalid report permissions.",
         )
     filesystem = profile["filesystem"]
+    workspace_roots = filesystem.get(":workspace_roots")
+    if (
+        role in ("engineer-junior", "engineer-senior", "engineer-expert")
+        and isinstance(workspace_roots, dict)
+        and workspace_roots.get(".") == "write"
+        and workspace_roots.get("README.md") == "read"
+    ):
+        del workspace_roots["README.md"]
     if reports_only:
-        workspace_roots = filesystem.get(":workspace_roots")
         if not isinstance(workspace_roots, dict) or "." not in workspace_roots:
             raise CodexAdapterError(
                 "RUNTIME_REQUEST_INVALID",

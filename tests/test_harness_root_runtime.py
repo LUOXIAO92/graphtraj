@@ -768,7 +768,9 @@ def test_real_codex_uses_native_permissions_and_explicit_skill_configuration(
         "`.harness-skill-proof` containing `implement`, and replace README.md "
         "with `# Native README`. Finally, separately attempt to replace "
         "`.agents/skills/repository-selected/SKILL.md`; continue if native "
-        "permissions deny that write.\n".format(reference),
+        "permissions deny that write. Only after both the README change and "
+        "that separate attempt, use apply_patch to create "
+        "`.native-permissions-complete-proof` containing `complete`.\n".format(reference),
         encoding="utf-8",
     )
     for name in ("ponytail", "tdd", "code-review"):
@@ -791,7 +793,7 @@ def test_real_codex_uses_native_permissions_and_explicit_skill_configuration(
     ticket_file.write_text(
         "# Real Codex native permissions\n\n"
         "This is only the Harness Skill acceptance probe. Read enabled Skill "
-        "files with Bash cat using their supplied paths; do not use sed. "
+        "files with Bash cat using their supplied paths. "
         "Do not explore the repository, run implementation or Review workflows, "
         "commit, or delegate. The test Skills stub those workflows. "
         "Perform the Harness Skill acceptance probe. Follow every enabled Skill "
@@ -814,6 +816,7 @@ def test_real_codex_uses_native_permissions_and_explicit_skill_configuration(
                 ticket_worktree / '.harness-skill-proof',
                 ticket_worktree / '.external-reference-proof',
                 ticket_worktree / '.repository-selected-skill-proof',
+                ticket_worktree / '.native-permissions-complete-proof',
             ],
         )
     assert (ticket_worktree / ".harness-skill-proof").read_text(
@@ -823,6 +826,9 @@ def test_real_codex_uses_native_permissions_and_explicit_skill_configuration(
         encoding="utf-8"
     ).strip() == "native reference"
     assert (ticket_worktree / ".repository-selected-skill-proof").read_text().strip() == "repository-selected"
+    assert (ticket_worktree / ".native-permissions-complete-proof").read_text(
+        encoding="utf-8"
+    ).strip() == "complete"
     assert not (ticket_worktree / ".repository-disabled-skill-proof").exists()
     assert (ticket_worktree / "README.md").read_text(encoding="utf-8") == (
         "# Native README\n"

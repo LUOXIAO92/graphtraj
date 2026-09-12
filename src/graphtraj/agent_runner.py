@@ -140,6 +140,24 @@ def replace(alias, actor, caused_by_event_id):
     _emit_result(response)
 
 
+@main.command("continue")
+@click.option("--ticket-id", required=True)
+@click.option("--caused-by-event-id", multiple=True, required=True)
+def continue_ticket(ticket_id, caused_by_event_id):
+    """Continue a stopped Team after Main records a causal decision."""
+    from .team_round import continue_stopped_ticket
+
+    try:
+        response = continue_stopped_ticket(
+            ticket_id, caused_by_event_id, Path.cwd().resolve()
+        )
+    except RunnerError as error:
+        _emit_result({"ticket_id": ticket_id, "error": error.as_document()})
+        click.echo(error.message, err=True)
+        raise click.exceptions.Exit(1)
+    _emit_result(response)
+
+
 @main.command()
 @click.option("--ticket-id")
 def cleanup(ticket_id):

@@ -32,5 +32,5 @@ def test_fresh_install_exposes_graphtraj_and_separate_agent_runner_interfaces(
         "you-are-a-product-architect"
     ).exists()
     assert runner_help.returncode == 0, runner_help.stderr
-    for command in ("status", "send", "interrupt", "replace", "cleanup"):
+    for command in ("status", "send", "interrupt", "replace", "continue", "cleanup"):
         assert command in runner_help.stdout

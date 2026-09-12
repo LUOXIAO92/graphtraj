@@ -14,8 +14,8 @@ dependencies = [
 ]
 
 [project.scripts]
-graphtraj = "graphtraj.cli:main"
-agent-runner = "graphtraj.agent_runner:main"
+graphtraj = "graphtraj.interfaces.cli.graphtraj:main"
+agent-runner = "graphtraj.interfaces.cli.agent_runner:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

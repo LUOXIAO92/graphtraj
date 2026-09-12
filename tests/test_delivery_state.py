@@ -7,7 +7,7 @@ import pytest
 import yaml
 
 from conftest import InstalledCommands, run_process
-from graphtraj.delivery_state import _validate_implementation_rejection
+from graphtraj.graph.delivery_state import _validate_implementation_rejection
 from test_ticket_graph import _configure, _register, _ticket, _change_status
 
 

@@ -134,8 +134,8 @@ def test_installed_runtime_projects_enabled_external_skill_directories(
 def _engineer_role(
     model: str = "gpt-5.6-sol", reasoning_effort: str | None = None
 ):
-    from graphtraj.project_roles import RolePreset
-    from graphtraj.role_definitions import resolve_child_role
+    from graphtraj.configuration.project_roles import RolePreset
+    from graphtraj.configuration.role_definitions import resolve_child_role
 
     return resolve_child_role(
         "engineer-expert",
@@ -144,8 +144,8 @@ def _engineer_role(
 
 
 def _role_with_required_skill(name: str):
-    from graphtraj.project_roles import RolePreset
-    from graphtraj.role_definitions import ResolvedChildRole
+    from graphtraj.configuration.project_roles import RolePreset
+    from graphtraj.configuration.role_definitions import ResolvedChildRole
 
     return ResolvedChildRole(
         name="standards-reviewer",
@@ -171,7 +171,7 @@ def test_preflight_selects_the_first_duplicate_harness_skill(
     tmp_path: Path,
 ) -> None:
     monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1] / "src"))
-    from graphtraj.codex_adapter import preflight_runtime_context
+    from graphtraj.runtimes.codex.codex_adapter import preflight_runtime_context
 
     harness_root = tmp_path / "harness-project"
     skill_root = harness_root / ".agents" / "skills"
@@ -220,7 +220,7 @@ def test_preflight_projects_a_linked_harness_skill_at_its_canonical_path(
     link_kind: str,
 ) -> None:
     monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1] / "src"))
-    from graphtraj.codex_adapter import preflight_runtime_context
+    from graphtraj.runtimes.codex.codex_adapter import preflight_runtime_context
 
     harness_root = tmp_path / "harness-project"
     skill_root = harness_root / ".agents" / "skills"
@@ -292,9 +292,9 @@ def test_setup_creates_a_root_owned_runtime_and_runner_discovers_it(
     monkeypatch.syspath_prepend(
         str(Path(__file__).resolve().parents[1] / "src")
     )
-    from graphtraj.project_initialization import plan_project_setup
-    from graphtraj.runner_models import RunnerError
-    from graphtraj.runner_project import discover_project
+    from graphtraj.workspace.project_initialization import plan_project_setup
+    from graphtraj.execution.runner_models import RunnerError
+    from graphtraj.workspace.runner_project import discover_project
 
     harness_root = temporary_git_repository.parent
     primary = temporary_git_repository
@@ -345,10 +345,10 @@ def test_setup_installs_project_core_skills_even_with_user_copies(
     monkeypatch.syspath_prepend(
         str(Path(__file__).resolve().parents[1] / "src")
     )
-    from graphtraj.codex_adapter import (
+    from graphtraj.runtimes.codex.codex_adapter import (
         preflight_runtime_context,
     )
-    from graphtraj.project_initialization import plan_project_setup
+    from graphtraj.workspace.project_initialization import plan_project_setup
 
     harness_root = temporary_git_repository.parent
     user_home = tmp_path / "runtime-user"
@@ -386,11 +386,11 @@ def test_engineer_runtime_context_preflight_validates_without_launch_artifacts(
     monkeypatch.syspath_prepend(
         str(Path(__file__).resolve().parents[1] / "src")
     )
-    from graphtraj.codex_adapter import (
+    from graphtraj.runtimes.codex.codex_adapter import (
         CodexAdapterError,
         preflight_runtime_context,
     )
-    from graphtraj.project_initialization import plan_project_setup
+    from graphtraj.workspace.project_initialization import plan_project_setup
 
     harness_root = temporary_git_repository.parent
     user_home = tmp_path / "runtime-user"
@@ -472,8 +472,8 @@ def test_runtime_preflight_uses_fixed_policy_and_selected_model(
     monkeypatch.syspath_prepend(
         str(Path(__file__).resolve().parents[1] / "src")
     )
-    from graphtraj.codex_adapter import preflight_runtime_context
-    from graphtraj.project_initialization import plan_project_setup
+    from graphtraj.runtimes.codex.codex_adapter import preflight_runtime_context
+    from graphtraj.workspace.project_initialization import plan_project_setup
 
     harness_root = temporary_git_repository.parent
     user_home = tmp_path / "runtime-user"
@@ -533,11 +533,11 @@ def test_engineer_runtime_context_preflight_rejects_unresolved_repository_skills
     monkeypatch.syspath_prepend(
         str(Path(__file__).resolve().parents[1] / "src")
     )
-    from graphtraj.codex_adapter import (
+    from graphtraj.runtimes.codex.codex_adapter import (
         CodexAdapterError,
         preflight_runtime_context,
     )
-    from graphtraj.project_initialization import plan_project_setup
+    from graphtraj.workspace.project_initialization import plan_project_setup
 
     harness_root = temporary_git_repository.parent
     user_home = tmp_path / "runtime-user"
@@ -589,10 +589,10 @@ def test_engineer_runtime_context_finalizes_worktree_facts_once(
     monkeypatch.syspath_prepend(
         str(Path(__file__).resolve().parents[1] / "src")
     )
-    from graphtraj.codex_adapter import (
+    from graphtraj.runtimes.codex.codex_adapter import (
         preflight_runtime_context,
     )
-    from graphtraj.project_initialization import plan_project_setup
+    from graphtraj.workspace.project_initialization import plan_project_setup
 
     harness_root = temporary_git_repository.parent
     user_home = tmp_path / "runtime-user"

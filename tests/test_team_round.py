@@ -673,7 +673,7 @@ def test_installed_leader_registers_children_inside_the_codex_sandbox(
 import os, subprocess, sys, tomllib
 from pathlib import Path
 import yaml
-from graphtraj.codex_adapter import _toml_value
+from graphtraj.runtimes.codex.codex_adapter import _toml_value
 
 registration = Path(os.environ['GRAPHTRAJ_PARENT_REGISTRATION'])
 launch = yaml.safe_load((registration.parent / 'launch.yml').read_text())

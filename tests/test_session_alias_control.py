@@ -453,7 +453,7 @@ def test_installed_stopped_preteam_send_is_read_only(
         "import os\n"
         "from pathlib import Path\n"
         "try:\n"
-        "    import graphtraj.execution_budget as budget\n"
+        "    import graphtraj.execution.execution_budget as budget\n"
         "except ModuleNotFoundError:\n"
         "    pass\n"
         "else:\n"

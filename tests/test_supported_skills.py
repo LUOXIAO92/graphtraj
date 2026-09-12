@@ -31,7 +31,7 @@ def test_supported_skills_loads_from_one_child_traversable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.syspath_prepend(str(PROJECT_ROOT / "src"))
-    from graphtraj import supported_skills
+    from graphtraj.configuration import supported_skills
 
     class SingleChildTraversable:
         def joinpath(self, child: str) -> "SingleChildTraversable":

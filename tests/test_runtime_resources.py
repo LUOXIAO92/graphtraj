@@ -61,10 +61,10 @@ def test_runtime_executes_the_resolved_responsibility_and_required_skill(
     role_name: str,
 ) -> None:
     monkeypatch.syspath_prepend(str(PROJECT_ROOT / "src"))
-    from graphtraj.codex_adapter import create_codex_turn, preflight_runtime_context
-    from graphtraj.project_initialization import plan_project_setup
-    from graphtraj.project_roles import RolePreset
-    from graphtraj.role_definitions import resolve_child_role
+    from graphtraj.runtimes.codex.codex_adapter import create_codex_turn, preflight_runtime_context
+    from graphtraj.workspace.project_initialization import plan_project_setup
+    from graphtraj.configuration.project_roles import RolePreset
+    from graphtraj.configuration.role_definitions import resolve_child_role
 
     harness = temporary_git_repository.parent
     monkeypatch.setenv("HOME", str(tmp_path / "operator-home"))
@@ -157,7 +157,7 @@ def test_codex_turn_appends_stderr_for_later_diagnostic_boundaries(
 ) -> None:
     monkeypatch.syspath_prepend(str(PROJECT_ROOT / "src"))
     monkeypatch.setenv("CODEX_HOME", str(tmp_path / "empty-codex-home"))
-    from graphtraj.codex_adapter import create_codex_turn
+    from graphtraj.runtimes.codex.codex_adapter import create_codex_turn
 
     executable = tmp_path / "runtime"
     executable.write_text(
@@ -189,7 +189,7 @@ def test_codex_turn_retains_native_session_while_quiet_and_resumes_once(
     tmp_path: Path,
 ) -> None:
     monkeypatch.syspath_prepend(str(PROJECT_ROOT / "src"))
-    from graphtraj.codex_adapter import create_codex_resume_turn, create_codex_turn
+    from graphtraj.runtimes.codex.codex_adapter import create_codex_resume_turn, create_codex_turn
 
     codex_home = tmp_path / "custom-codex-home"
     release = tmp_path / "release-runtime"
@@ -318,7 +318,7 @@ def test_current_runtime_diagnostic_uses_only_current_error_events(
     tmp_path: Path,
 ) -> None:
     monkeypatch.syspath_prepend(str(PROJECT_ROOT / "src"))
-    from graphtraj.team_round import (
+    from graphtraj.teams.coding.team_round import (
         _current_runtime_diagnostic,
         _runtime_access_failure,
         _runtime_command_parse_error,
@@ -454,7 +454,7 @@ def test_reviewer_send_refreshes_exact_replacement_report_permissions(
     tmp_path: Path,
 ) -> None:
     monkeypatch.syspath_prepend(str(PROJECT_ROOT / "src"))
-    from graphtraj.runner_control import _refresh_current_team_report_request
+    from graphtraj.execution.runner_control import _refresh_current_team_report_request
 
     worktree = tmp_path / "worktree"
     evidence = tmp_path / "evidence"
@@ -518,7 +518,7 @@ def test_engineer_resume_drops_only_the_predecessor_readme_override(
     reports_only: bool,
 ) -> None:
     monkeypatch.syspath_prepend(str(PROJECT_ROOT / "src"))
-    from graphtraj.runner_control import _refresh_current_team_report_request
+    from graphtraj.execution.runner_control import _refresh_current_team_report_request
 
     worktree = tmp_path / "worktree"
     evidence = tmp_path / "evidence"

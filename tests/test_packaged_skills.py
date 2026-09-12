@@ -61,7 +61,7 @@ import json
 import sys
 from pathlib import Path
 
-from graphtraj.supported_skills import SupportedSkills
+from graphtraj.configuration.supported_skills import SupportedSkills
 
 runtime_store = Path(sys.argv[1]) / ".codex"
 SupportedSkills.load().install_missing(runtime_store, ("task-delivery", "tdd", "setup-project", "ponytail-review"))

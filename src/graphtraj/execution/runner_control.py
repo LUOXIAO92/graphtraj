@@ -1,0 +1,615 @@
+"""Alias-addressed follow-up operations for recoverable Engineer sessions."""
+
+from __future__ import annotations
+
+import os
+import signal
+import subprocess
+import sys
+import time
+from pathlib import Path
+from typing import Any, Dict, Tuple
+
+import yaml
+
+from graphtraj.runtimes.codex.codex_adapter import (
+    codex_connection_environment,
+    read_codex_session_identity,
+    refresh_codex_report_paths,
+)
+from graphtraj.graph.delivery_worldline import read_worldline
+from graphtraj.execution.execution_budget import caller_notice_fd, execution_budget_monitor
+from graphtraj.configuration.project_configuration import (
+    ProjectConfigurationError,
+    load_project_configuration,
+)
+from graphtraj.execution.runner_io import confirm_alias_mapping_durable, write_yaml_durably
+from graphtraj.execution.runner_capacity import capacity_positions
+from graphtraj.execution.runner_models import RunnerError
+from graphtraj.execution.runner_process import (
+    OPERATION_TIMEOUT_SECONDS,
+    process_is_alive,
+    stop_worker,
+)
+from graphtraj.workspace.runner_project import discover_project, discover_runner_directory
+from graphtraj.execution.runner_status import (
+    is_session_mapping,
+    read_alias_mapping,
+    read_terminal_outcome,
+)
+from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
+
+
+LIVE_INPUT_GUIDANCE = (
+    "This Runtime cannot accept input during a running Runtime execution. To intervene "
+    "immediately, explicitly interrupt the alias and then send the instruction."
+)
+SESSION_IDENTITY_READERS = {"codex": read_codex_session_identity}
+SESSION_IMMUTABLE_MAPPING_FIELDS = (
+    "alias",
+    "runtime",
+    "ticket_id",
+    "team_generation",
+    "role",
+    "parent",
+    "retained_batch_file",
+    "worktree_path",
+    "trace_file",
+)
+
+
+def send_instruction(
+    alias: str,
+    instruction: str,
+    cwd: Path,
+    caused_by_event_ids: tuple[str, ...],
+) -> Dict[str, str]:
+    """Resume one idle mapped Runtime Session without changing its alias."""
+
+    if not instruction.strip():
+        raise RunnerError(
+            "invalid-input", "instruction must be non-empty plain text."
+        )
+    if (
+        not caused_by_event_ids
+        or len(caused_by_event_ids) != len(set(caused_by_event_ids))
+        or any(not event_id for event_id in caused_by_event_ids)
+    ):
+        raise RunnerError(
+            "invalid-input", "causal Project Worldline event IDs must be unique."
+        )
+    runner_directory = discover_runner_directory(cwd)
+    mapping, session_directory = read_alias_mapping(runner_directory, alias)
+    if is_session_mapping(mapping):
+        _require_project_events(cwd, caused_by_event_ids)
+        from graphtraj.teams.coding.team_replacement import require_active_session
+
+        require_active_session(
+            discover_project(cwd, require_clean_integration=False), alias
+        )
+        return _send_session(
+            alias,
+            instruction,
+            session_directory,
+            mapping,
+            caused_by_event_ids,
+            cwd,
+        )
+    raise _not_resumable()
+
+
+def _send_session(
+    alias: str,
+    instruction: str,
+    session_directory: Path,
+    mapping: Dict[str, Any],
+    caused_by_event_ids: tuple[str, ...],
+    cwd: Path,
+    *,
+    budget_notice: bool = False,
+    leader_notice_keys: tuple[str, ...] = (),
+    capacity_fd: int | None = None,
+) -> Dict[str, str]:
+    execution_file = session_directory / "execution.yml"
+    if not os.path.lexists(str(execution_file)):
+        if process_is_alive(mapping["worker_pid"]):
+            raise RunnerError("live-input-unsupported", LIVE_INPUT_GUIDANCE)
+        raise _not_resumable()
+    read_terminal_outcome(execution_file)
+    worktree = Path(mapping["worktree_path"])
+    if not worktree.is_absolute() or worktree.is_symlink() or not worktree.is_dir():
+        raise _invalid_mapping()
+    request, connection = _read_session_resume_request(session_directory, mapping)
+    _attest_runtime_session(session_directory, mapping)
+    team_environment = _team_runtime_environment(mapping, cwd)
+    evidence = team_environment.get("GRAPHTRAJ_EVIDENCE")
+    ticket_name = team_environment.get("GRAPHTRAJ_TICKET_NAME")
+    monitor = (
+        execution_budget_monitor(Path(evidence), mapping["ticket_id"], ticket_name)
+        if isinstance(evidence, str) and isinstance(ticket_name, str)
+        else None
+    )
+    stopped = budget_notice or (monitor is not None and monitor.is_stopped())
+    pending_notices = (
+        monitor.pending_leader_notices()
+        if stopped
+        and not budget_notice
+        and mapping["role"] == "team-leader"
+        and monitor is not None
+        else []
+    )
+    notice_monitor = monitor
+    if stopped and mapping["role"] not in {
+        "engineer-junior", "engineer-senior", "engineer-expert", "team-leader",
+    }:
+        raise RunnerError(
+            "EXECUTION_BUDGET_STOPPED",
+            "Runner selected stopping; this Session cannot start new work.",
+        )
+    request = _refresh_current_team_report_request(
+        request, mapping, worktree, team_environment, reports_only=stopped
+    )
+    if stopped:
+        instruction = (
+            (
+                "This continuation has read-only Worktree access and can only "
+                "receive the system notices below.\n"
+                if budget_notice
+                else "Execution was stopped by Runner. Ordinary implementation and "
+                "new dispatch are prohibited. Report only the existing result and "
+                "commit only already-made authorized changes.\n"
+            )
+            + "".join(notice["message"] + "\n" for notice in pending_notices)
+            + instruction
+        )
+        monitor = None
+    resume_file = session_directory / "resume.yml"
+    error_file = session_directory / "resume-error.yml"
+    error_file.unlink(missing_ok=True)
+    notice_fd = None
+    close_notice_fd = False
+    try:
+        resume = {
+            "operation": "resume",
+            "runtime": mapping["runtime"],
+            "adapter_request": request,
+            "expected_session": mapping["session"],
+            "caused_by_event_ids": list(caused_by_event_ids),
+            "mapping": {
+                key: value
+                for key, value in mapping.items()
+                if key not in {"worker_pid", "runtime_pid"}
+            },
+        }
+        if monitor is not None:
+            resume["monitor_execution_budget"] = True
+            if mapping["role"] == "team-leader":
+                resume["deliver_parentless_leader_notices"] = True
+            if leader_notice_keys:
+                resume["leader_notice_keys"] = list(leader_notice_keys)
+        write_yaml_durably(
+            resume_file,
+            resume,
+        )
+        worker_environment = dict(os.environ)
+        worker_environment.update(_resume_environment(mapping, connection))
+        worker_environment.update(team_environment)
+        if monitor is not None:
+            notice_fd, close_notice_fd = caller_notice_fd()
+            if notice_fd is not None:
+                worker_environment["GRAPHTRAJ_BUDGET_NOTICE_FD"] = str(notice_fd)
+        if mapping["role"] == "team-leader":
+            worker_environment.update(
+                GRAPHTRAJ_PARENT_ALIAS=alias,
+                GRAPHTRAJ_PARENT_REGISTRATION=str(session_directory / "child-registration.yml"),
+            )
+        with capacity_positions(
+            load_project_configuration(cwd), 1, capacity_fd
+        ) as positions:
+            worker_environment["GRAPHTRAJ_CAPACITY_FD"] = str(
+                positions[0].fileno()
+            )
+            with (session_directory / "worker-stderr.log").open(
+                "w", encoding="utf-8"
+            ) as diagnostics:
+                worker = subprocess.Popen(
+                    [
+                        sys.executable,
+                        "-m",
+                        "graphtraj.execution.runner_worker",
+                        str(resume_file),
+                    ],
+                    cwd=worktree,
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.DEVNULL,
+                    stderr=diagnostics,
+                    text=True,
+                    start_new_session=True,
+                    env=worker_environment,
+                    pass_fds=(positions[0].fileno(),) if notice_fd is None else (
+                        positions[0].fileno(), notice_fd,
+                    ),
+                )
+                assert worker.stdin is not None
+                worker.stdin.write(instruction)
+                worker.stdin.close()
+        _await_session_resume(worker, session_directory, error_file, mapping["session"])
+        if pending_notices and notice_monitor is not None:
+            notice_monitor.mark_leader_notices_delivered(
+                [notice["key"] for notice in pending_notices]
+            )
+    except RunnerError:
+        if "worker" in locals():
+            stop_worker(worker.pid)
+        raise
+    except (OSError, BrokenPipeError, yaml.YAMLError) as error:
+        if "worker" in locals():
+            stop_worker(worker.pid)
+        raise RunnerError(
+            "operation-failed", "The mapped Runtime session could not be resumed."
+        ) from error
+    finally:
+        if close_notice_fd and notice_fd is not None:
+            os.close(notice_fd)
+    return {"alias": alias, "send_status": "sent"}
+
+
+def interrupt_session(alias: str, cwd: Path) -> Dict[str, str]:
+    """Interrupt one exact running Runtime Session by alias."""
+
+    runner_directory = discover_runner_directory(cwd)
+    mapping, session_directory = read_alias_mapping(runner_directory, alias)
+    return _interrupt_session(alias, session_directory, mapping)
+
+
+def _interrupt_session(
+    alias: str, session_directory: Path, mapping: Dict[str, Any]
+) -> Dict[str, str]:
+    execution_file = session_directory / "execution.yml"
+    if os.path.lexists(str(execution_file)):
+        read_terminal_outcome(execution_file)
+        raise RunnerError(
+            "operation-failed",
+            "The requested Session has no active Runtime execution to interrupt.",
+        )
+    if not process_is_alive(mapping["worker_pid"]):
+        raise _not_resumable()
+    try:
+        os.kill(mapping["worker_pid"], signal.SIGTERM)
+    except ProcessLookupError:
+        raise _not_resumable() from None
+    except OSError as error:
+        raise RunnerError(
+            "operation-failed",
+            "The active Runtime execution could not be interrupted.",
+        ) from error
+    deadline = time.monotonic() + OPERATION_TIMEOUT_SECONDS
+    while time.monotonic() < deadline:
+        if execution_file.is_file():
+            outcome = read_terminal_outcome(execution_file)
+            if outcome == "interrupted" and not process_is_alive(mapping["worker_pid"]):
+                return {"alias": alias, "interrupt_status": "interrupted"}
+            if outcome != "interrupted":
+                break
+        time.sleep(0.01)
+    raise RunnerError(
+        "operation-failed",
+        "The active Runtime execution could not be confirmed interrupted.",
+    )
+
+
+def _require_project_events(cwd: Path, event_ids: tuple[str, ...]) -> None:
+    try:
+        configuration = load_project_configuration(cwd)
+        known_ids = {
+            event["event_id"]
+            for event in read_worldline(
+                configuration.state, configuration.harness_root
+            )
+        }
+    except (OSError, ValueError, ProjectConfigurationError) as error:
+        raise RunnerError(
+            "operation-failed", "The Project Worldline could not be read."
+        ) from error
+    if any(event_id not in known_ids for event_id in event_ids):
+        raise RunnerError(
+            "invalid-input",
+            "causal Project Worldline event IDs must identify retained events.",
+        )
+
+
+def _read_session_resume_request(
+    session_directory: Path, mapping: Dict[str, Any]
+) -> Tuple[Dict[str, Any], Dict[str, str]]:
+    launch_file = session_directory / "launch.yml"
+    if launch_file.is_symlink() or not launch_file.is_file():
+        raise _not_resumable()
+    try:
+        launch = yaml.safe_load(launch_file.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, yaml.YAMLError) as error:
+        raise _not_resumable() from error
+    if (
+        not isinstance(launch, dict)
+        or launch.get("runtime") != mapping["runtime"]
+        or not isinstance(launch.get("adapter_request"), dict)
+        or not isinstance(launch.get("connection"), dict)
+        or not isinstance(launch.get("mapping"), dict)
+        or any(
+            launch["mapping"].get(field) != mapping[field]
+            for field in SESSION_IMMUTABLE_MAPPING_FIELDS
+        )
+        or launch["adapter_request"].get("worktree_path")
+        != mapping["worktree_path"]
+    ):
+        raise _invalid_mapping()
+    connection = launch["connection"]
+    if any(
+        key not in {"base_url", "api_key_env"}
+        or not isinstance(value, str)
+        or not value
+        for key, value in connection.items()
+    ):
+        raise _invalid_mapping()
+    return launch["adapter_request"], connection
+
+
+def _await_session_resume(
+    worker: subprocess.Popen[str],
+    session_directory: Path,
+    error_file: Path,
+    expected_session: str,
+) -> None:
+    mapping_file = session_directory / "mapping.yml"
+    deadline = time.monotonic() + OPERATION_TIMEOUT_SECONDS
+    while time.monotonic() < deadline:
+        if error_file.is_file():
+            raise _read_resume_error(error_file)
+        try:
+            mapping = yaml.safe_load(mapping_file.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, yaml.YAMLError):
+            mapping = None
+        if (
+            isinstance(mapping, dict)
+            and is_session_mapping(mapping)
+            and mapping.get("worker_pid") == worker.pid
+            and mapping.get("session") == expected_session
+        ):
+            try:
+                confirm_alias_mapping_durable(mapping_file)
+            except OSError as error:
+                raise RunnerError(
+                    "operation-failed",
+                    "The resumed Session mapping could not be persisted.",
+                ) from error
+            return
+        if worker.poll() is not None:
+            raise _not_resumable()
+        time.sleep(0.01)
+    raise _not_resumable()
+
+
+def _resume_environment(
+    mapping: Dict[str, Any],
+    connection: Dict[str, str],
+) -> Dict[str, str]:
+    """Resolve one resume environment from the immutable launch Context."""
+    if mapping.get("runtime") == "codex":
+        return dict(
+            codex_connection_environment(
+                connection.get("base_url"), connection.get("api_key_env")
+            )
+        )
+    raise _not_resumable()
+
+
+def _team_runtime_environment(mapping: Dict[str, Any], cwd: Path) -> Dict[str, str]:
+    """Restore the immutable Team context needed by a resumed member Session."""
+    try:
+        configuration = load_project_configuration(cwd)
+        matches = []
+        for evidence in (configuration.state / "tickets").iterdir():
+            if (
+                evidence.is_symlink()
+                or not evidence.is_dir()
+                or not evidence.name.startswith(mapping["ticket_id"] + "-")
+            ):
+                continue
+            ticket = yaml.safe_load((evidence / "ticket.yml").read_text(encoding="utf-8"))
+            if isinstance(ticket, dict) and ticket.get("ticket_id") == mapping["ticket_id"]:
+                matches.append((evidence, ticket))
+        if len(matches) != 1:
+            raise ValueError("missing Ticket context")
+        evidence, ticket = matches[0]
+        ticket_name = ticket.get("ticket_name")
+        if (
+            not isinstance(ticket, dict)
+            or not isinstance(ticket_name, str)
+            or not ticket_name
+        ):
+            raise ValueError("invalid Ticket context")
+        environment = {
+            "GRAPHTRAJ_ROLE": mapping["role"],
+            "GRAPHTRAJ_EVIDENCE": str(evidence),
+            "GRAPHTRAJ_TICKET_ID": mapping["ticket_id"],
+            "GRAPHTRAJ_TICKET_NAME": ticket_name,
+            "GRAPHTRAJ_HARNESS_ROOT": str(configuration.harness_root),
+            "GRAPHTRAJ_TEAM_GENERATION": str(mapping["team_generation"]),
+        }
+        team_file = evidence / "teams" / str(mapping["team_generation"]) / "team.yml"
+        if not team_file.is_file():
+            return environment
+        project = discover_project(cwd, require_clean_integration=False)
+        team = yaml.safe_load(team_file.read_text(encoding="utf-8"))
+        round_ordinal = team["current_round"]
+        if (
+            not isinstance(team, dict)
+            or type(round_ordinal) is not int
+            or round_ordinal < 1
+        ):
+            raise ValueError("invalid Team context")
+    except (OSError, TypeError, ValueError, yaml.YAMLError, ProjectConfigurationError) as error:
+        raise RunnerError("session-not-resumable", "Cannot restore the Team Runtime context: {0}".format(error)) from error
+    environment["GRAPHTRAJ_TEAM_ROUND"] = str(round_ordinal)
+    if mapping["role"] in {"standards-reviewer", "spec-reviewer"}:
+        candidate = ticket.get("current_candidate")
+        if not isinstance(candidate, str) or not candidate:
+            raise _not_resumable()
+        axis = "Standards" if mapping["role"] == "standards-reviewer" else "Spec"
+        try:
+            report_path = _reviewer_report_file(mapping)
+        except ValueError:
+            raise _not_resumable() from None
+        report = evidence.joinpath(*report_path.parts[1:])
+        try:
+            if report.parent.is_symlink():
+                raise OSError("review report directory is a symlink")
+            report.parent.mkdir(exist_ok=True)
+        except OSError as error:
+            raise _not_resumable() from error
+        environment.update(
+            GRAPHTRAJ_REVIEW_CANDIDATE=candidate,
+            GRAPHTRAJ_REVIEW_COMPARISON=project.dev_commit,
+            GRAPHTRAJ_REVIEW_BRIEF=(
+                "Review only for Repository Guidance and established project standards."
+                if axis == "Standards"
+                else "Review only against the accepted Ticket and its acceptance criteria."
+            ),
+            GRAPHTRAJ_REVIEW_REPORT=str(report),
+        )
+    return environment
+
+
+def _refresh_current_team_report_request(
+    request: Dict[str, Any],
+    mapping: Dict[str, Any],
+    worktree: Path,
+    environment: Dict[str, str],
+    *,
+    reports_only: bool = False,
+) -> Dict[str, Any]:
+    role = mapping["role"]
+    if role == "team-leader" and "GRAPHTRAJ_TEAM_ROUND" not in environment:
+        if not reports_only:
+            return request
+        evidence = environment.get("GRAPHTRAJ_EVIDENCE")
+        if not isinstance(evidence, str) or not evidence:
+            raise _not_resumable()
+        try:
+            return refresh_codex_report_paths(
+                request,
+                worktree=worktree,
+                evidence=Path(evidence),
+                report_files=(),
+                role=role,
+                reports_only=True,
+            )
+        except RuntimeAdapterError as error:
+            raise RunnerError(error.code, error.message) from error
+    if role in {
+        "engineer-junior", "engineer-senior", "engineer-expert",
+    }:
+        names = ("engineer.md", "validation.md")
+    elif role == "team-leader":
+        names = ("leader.md",)
+    elif role in {"standards-reviewer", "spec-reviewer"}:
+        try:
+            report_files = (_reviewer_report_file(mapping),)
+        except ValueError:
+            raise _not_resumable() from None
+    else:
+        return request
+    evidence = environment.get("GRAPHTRAJ_EVIDENCE")
+    generation = environment.get("GRAPHTRAJ_TEAM_GENERATION")
+    ordinal = environment.get("GRAPHTRAJ_TEAM_ROUND")
+    if not isinstance(evidence, str) or not evidence:
+        raise _not_resumable()
+    if role not in {"standards-reviewer", "spec-reviewer"}:
+        if not all(
+            isinstance(value, str) and value
+            for value in (generation, ordinal)
+        ):
+            raise _not_resumable()
+        directory = Path(".state") / "teams" / generation / "rounds" / ordinal
+        report_files = tuple(directory / name for name in names)
+    try:
+        return refresh_codex_report_paths(
+            request,
+            worktree=worktree,
+            evidence=Path(evidence),
+            report_files=report_files,
+            role=role,
+            reports_only=reports_only,
+        )
+    except RuntimeAdapterError as error:
+        raise RunnerError(error.code, error.message) from error
+
+
+def _reviewer_report_file(mapping: Dict[str, Any]) -> Path:
+    names = {
+        "standards-reviewer": "standards.md",
+        "spec-reviewer": "spec.md",
+    }
+    default_name = names.get(mapping.get("role"))
+    if default_name is None:
+        raise ValueError("invalid Reviewer role")
+    value = mapping.get("report_file")
+    if value is None:
+        return Path(".state") / "reviews" / default_name
+    report = Path(value) if isinstance(value, str) else None
+    if (
+        report is None
+        or report.is_absolute()
+        or len(report.parts) != 3
+        or report.parts[:2] != (".state", "reviews")
+        or ".." in report.parts
+        or report.suffix != ".md"
+    ):
+        raise ValueError("invalid Reviewer report")
+    return report
+
+
+def _attest_runtime_session(
+    session_directory: Path, mapping: Dict[str, Any]
+) -> None:
+    reader = SESSION_IDENTITY_READERS.get(mapping["runtime"])
+    if reader is None:
+        raise _not_resumable()
+    try:
+        identity = reader(session_directory)
+    except RuntimeAdapterError as error:
+        raise _not_resumable() from error
+    if identity != mapping["session"]:
+        raise _invalid_mapping()
+
+
+def _not_resumable() -> RunnerError:
+    return RunnerError(
+        "session-not-resumable",
+        "The mapped Runtime session is unavailable or cannot be resumed.",
+    )
+
+
+def _read_resume_error(error_file: Path) -> RunnerError:
+    try:
+        failure = yaml.safe_load(error_file.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, yaml.YAMLError):
+        failure = None
+    if isinstance(failure, dict) and failure.get("code") in {
+        "PROJECT_CONFIG_MISMATCH",
+        "ROLE_GUARD_MISMATCH",
+        "RUNTIME_REQUEST_INVALID",
+        "RUNTIME_SESSION_MISSING",
+        "RUNTIME_SESSION_NOT_RESUMABLE",
+        "RUNTIME_START_FAILED",
+    }:
+        return _not_resumable()
+    return RunnerError(
+        "operation-failed",
+        "The mapped Engineer session could not be resumed.",
+    )
+
+
+def _invalid_mapping() -> RunnerError:
+    return RunnerError(
+        "operation-failed", "The requested Engineer alias mapping is invalid."
+    )

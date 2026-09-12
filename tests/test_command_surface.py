@@ -34,3 +34,22 @@ def test_fresh_install_exposes_graphtraj_and_separate_agent_runner_interfaces(
     assert runner_help.returncode == 0, runner_help.stderr
     for command in ("status", "send", "interrupt", "replace", "continue", "cleanup"):
         assert command in runner_help.stdout
+
+
+def test_installed_commands_load_the_cli_package(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+) -> None:
+    result = run_process(
+        [
+            str(installed_commands.product.parent / "python"),
+            "-c",
+            (
+                "from graphtraj.interfaces.cli.agent_runner import main as agent_runner_main\n"
+                "from graphtraj.interfaces.cli.graphtraj import main as graphtraj_main\n"
+            ),
+        ],
+        cwd=temporary_git_repository,
+    )
+
+    assert result.returncode == 0, result.stderr

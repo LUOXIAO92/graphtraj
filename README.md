@@ -137,7 +137,7 @@ remains independent.
 All bundled Skill bodies and references live in `resources/skills` and install
 through the same path. GraphTraj child definitions in `resources/roles` hold
 responsibilities and required Skills independently of Codex configuration
-syntax. `role_definitions.py` resolves these definitions and their logical
+syntax. `configuration/role_definitions.py` resolves these definitions and their logical
 dispatch constraints with the Runtime, model and connection settings selected
 in `.graphtraj/roles.yml`.
 

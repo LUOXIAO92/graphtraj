@@ -205,6 +205,33 @@ class ExecutionBudgetMonitor:
             finally:
                 fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
 
+    def continue_after_stop(self) -> None:
+        """Clear one sampled stop while retaining the Ticket's accounting."""
+
+        lock_path = self.ticket_directory / ".execution-budget.lock"
+        with lock_path.open("a+", encoding="utf-8") as lock:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+            try:
+                budget = _current_budget(self.ticket_directory)
+                if budget is None:
+                    raise RunnerError(
+                        "invalid-input",
+                        "Explicit continuation requires a Ticket execution budget.",
+                    )
+                state, _ = _read_usage(self.ticket_directory, budget)
+                if not state["stopped"]:
+                    raise RunnerError(
+                        "invalid-input",
+                        "Explicit continuation requires a sampled stopped Ticket.",
+                    )
+                state["budget"] = budget.definition
+                state["stopped"] = False
+                write_yaml_durably(
+                    self.ticket_directory / "execution-budget.yml", state
+                )
+            finally:
+                fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+
     def deliver_leader_notices(
         self, deliver: Callable[[list[str]], None]
     ) -> None:

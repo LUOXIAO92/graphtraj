@@ -31,16 +31,17 @@ from .execution_budget import (
 )
 from .role_definitions import resolve_child_role
 from .delivery_state import apply_delivery_state_request, confirmed_rework
-from .delivery_worldline import read_worldline
+from .delivery_worldline import append_project_worldline_event, read_worldline
 from .project_roles import ROLE_REFERENCES
-from .runner_batch import read_batch, resolved_role_preset, retain_batch
+from .runner_batch import read_batch, resolved_role_preset, retain_batch, valid_ticket_id
 from .runner_capacity import capacity_positions
 from .runner_io import write_yaml_durably
 from .runner_models import Batch, LaunchResponse, RunnerError, Task, role_alias_marker
 from .runner_project import discover_project, git_succeeds, preflight_worktree, provision_worktree, run_git, runtime_executable
-from .runner_status import read_alias_mapping
+from .runner_status import read_alias_mapping, read_terminal_outcome
 from .runner_transport import record_runtime_identity
 from .runtime_adapter import RuntimeAdapterError
+from .ticket_graph import _load_states
 
 
 _COMMIT = re.compile(r"[0-9a-f]{40}")
@@ -167,6 +168,144 @@ def launch_team_batch(batch: Batch, cwd: Path) -> LaunchResponse:
             document={"retained_batch_file": str(retained), "tasks": results},
             succeeded=True,
         )
+
+
+def continue_stopped_ticket(
+    ticket_id: str,
+    caused_by_event_ids: tuple[str, ...],
+    cwd: Path,
+) -> dict[str, Any]:
+    """Continue one stopped current Team from its retained Batch and Sessions."""
+
+    if os.environ.get("GRAPHTRAJ_ROLE") or os.environ.get("GRAPHTRAJ_PARENT_ALIAS"):
+        raise RunnerError(
+            "authority-denied",
+            "Only Main or the user may continue a stopped Team.",
+        )
+    if not valid_ticket_id(ticket_id):
+        raise RunnerError("invalid-input", "Ticket identity is invalid.")
+    if (
+        not caused_by_event_ids
+        or len(caused_by_event_ids) != len(set(caused_by_event_ids))
+        or any(not event_id for event_id in caused_by_event_ids)
+    ):
+        raise RunnerError(
+            "invalid-input",
+            "Continuation requires unique causal Project Worldline event IDs.",
+        )
+    project = discover_project(cwd)
+    try:
+        ticket_directory, state = _load_states(project.state_directory / "tickets")[
+            ticket_id
+        ]
+    except KeyError:
+        raise RunnerError("invalid-input", "The supplied Ticket is not registered.") from None
+    except (OSError, UnicodeError, ValueError, yaml.YAMLError) as error:
+        raise RunnerError(
+            "TICKET_FILE_INVALID", "The selected registered Ticket is invalid."
+        ) from error
+    generation = state["active_team_ordinal"]
+    if (
+        not state["active"]
+        or state["status"] not in {"implementing", "reviewing", "reworking"}
+        or not isinstance(generation, int)
+    ):
+        raise RunnerError(
+            "invalid-input", "Explicit continuation requires the current active Team."
+        )
+    try:
+        team = yaml.safe_load(
+            (ticket_directory / "teams" / str(generation) / "team.yml").read_text(
+                encoding="utf-8"
+            )
+        )
+        leader_alias = team["members"]["team_leader"]["session_ref"]
+        if team["status"] != "active" or not isinstance(leader_alias, str):
+            raise ValueError("Team is not active")
+        leader_mapping, _ = read_alias_mapping(
+            project.runner_directory, leader_alias
+        )
+        if (
+            leader_mapping["ticket_id"] != ticket_id
+            or leader_mapping["team_generation"] != generation
+            or leader_mapping["role"] != "team-leader"
+        ):
+            raise ValueError("Leader mapping does not match the current Team")
+        for member in team["members"].values():
+            alias = member.get("session_ref")
+            if isinstance(alias, str):
+                _, session_directory = read_alias_mapping(project.runner_directory, alias)
+                read_terminal_outcome(session_directory / "execution.yml")
+        retained_batch = Path(leader_mapping["retained_batch_file"])
+        retained_tasks = [
+            task
+            for task in read_batch(retained_batch, cwd).tasks
+            if task.ticket_id == ticket_id
+            and task.ticket_name == state["ticket_name"]
+            and task.role == "team-leader"
+        ]
+        if len(retained_tasks) != 1:
+            raise ValueError("Retained Team Batch is invalid")
+    except (OSError, TypeError, ValueError, yaml.YAMLError, RunnerError) as error:
+        if isinstance(error, RunnerError):
+            raise
+        raise RunnerError(
+            "operation-failed", "The stopped Team cannot resume its retained lifecycle."
+        ) from error
+    monitor = execution_budget_monitor(ticket_directory, ticket_id, state["ticket_name"])
+    if monitor is None or not monitor.is_stopped():
+        raise RunnerError(
+            "invalid-input", "Explicit continuation requires a sampled stopped Ticket."
+        )
+    try:
+        events = read_worldline(project.state_directory, project.harness_root)
+    except (OSError, ValueError) as error:
+        raise RunnerError(
+            "operation-failed", "The Project Worldline could not be read."
+        ) from error
+    decisions = [
+        event for event in events if event["event_id"] in caused_by_event_ids
+    ]
+    if len(decisions) != len(caused_by_event_ids):
+        raise RunnerError(
+            "invalid-input",
+            "causal Project Worldline event IDs must identify retained events.",
+        )
+    try:
+        continuation = append_project_worldline_event(
+            project.state_directory,
+            project.harness_root,
+            {
+                "kind": "team-continuation-started",
+                "caused_by_event_ids": list(caused_by_event_ids),
+                "evidence_refs": list(
+                    dict.fromkeys(
+                        reference
+                        for event in decisions
+                        for reference in event["evidence_refs"]
+                    )
+                ),
+                "ticket_id": ticket_id,
+                "team_ordinal": generation,
+                "team_round": team["current_round"],
+            },
+        )
+    except (OSError, ValueError) as error:
+        raise RunnerError(
+            "operation-failed", "The continuation could not be recorded in the Project Worldline."
+        ) from error
+    monitor.continue_after_stop()
+    try:
+        with capacity_positions(project, 1) as positions:
+            result = _deliver_ticket(
+                project,
+                retained_tasks[0],
+                retained_batch,
+                positions[0].fileno(),
+            )
+    except RuntimeAdapterError as error:
+        raise RunnerError(error.code, error.message) from error
+    return {**result, "continuation_event_id": continuation["event_id"]}
 
 
 def _run_batch_workers(

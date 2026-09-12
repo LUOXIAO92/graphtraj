@@ -494,20 +494,21 @@ def test_installed_runner_stops_final_leader_before_acceptance(
         "    role: coding-team.team-leader\n",
         encoding="utf-8",
     )
+    run_environment = {
+        **environment,
+        "BUDGET_CLOCK": str(clock),
+        "FAKE_CODEX_APPEND_LOG": "1",
+        "FAKE_CODEX_CAPTURE_STDIN": "1",
+        "FAKE_CODEX_CAPTURE_ROLE": "1",
+        "FAKE_CODEX_FINAL_LEADER_CLOCK": str(clock),
+        "FAKE_CODEX_LIFECYCLE_ACTION": "complete-team-round",
+        "GRAPHTRAJ_AGENT_RUNNER": str(installed_commands.runner),
+        "PYTHONPATH": str(controls),
+    }
     result = run_process(
         [str(installed_commands.runner), "--batch-input", str(batch)],
         cwd=harness,
-        env={
-            **environment,
-            "BUDGET_CLOCK": str(clock),
-            "FAKE_CODEX_APPEND_LOG": "1",
-            "FAKE_CODEX_CAPTURE_STDIN": "1",
-            "FAKE_CODEX_CAPTURE_ROLE": "1",
-            "FAKE_CODEX_FINAL_LEADER_CLOCK": str(clock),
-            "FAKE_CODEX_LIFECYCLE_ACTION": "complete-team-round",
-            "GRAPHTRAJ_AGENT_RUNNER": str(installed_commands.runner),
-            "PYTHONPATH": str(controls),
-        },
+        env=run_environment,
         timeout=30,
     )
 
@@ -534,6 +535,139 @@ def test_installed_runner_stops_final_leader_before_acceptance(
         if yaml.safe_load(path.read_text(encoding="utf-8"))["role"] == "team-leader"
     ]
     assert len(leader_mappings) == 1
+    candidate = state["current_candidate"]
+    round_directory = ticket / "teams/1/rounds/1"
+    preserved_reports = {
+        name: (round_directory / name).read_bytes()
+        for name in ("engineer.md", "validation.md", "standards.md", "spec.md")
+    }
+    usage_before = yaml.safe_load((ticket / "execution-budget.yml").read_text())
+    stop_event = [
+        json.loads(line)["event_id"]
+        for path in (harness / ".graphtraj/state/worldline").glob("*.jsonl")
+        for line in path.read_text(encoding="utf-8").splitlines()
+    ][-1]
+    diagnosis = harness / "stopped-team-diagnosis.md"
+    diagnosis.write_text("Main diagnosed the sampled stop and chose continuation.\n")
+    decision_file = harness / "continuation-decision.yml"
+    decision_file.write_text(
+        yaml.safe_dump(
+            {
+                "kind": "ticket-continuation-decided",
+                "caused_by_event_ids": [stop_event],
+                "evidence_refs": ["stopped-team-diagnosis.md"],
+                "decision": "continue",
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    decision = run_process(
+        [
+            str(installed_commands.product),
+            "worldline",
+            "append",
+            "--event-file",
+            str(decision_file),
+        ],
+        cwd=harness,
+    )
+    assert decision.returncode == 0, decision.stderr
+    decision_id = yaml.safe_load(decision.stdout)["event_id"]
+    revision_file = harness / "continuation-budget-revision.yml"
+    revision_file.write_text(
+        yaml.safe_dump(
+            {
+                "product_preserving": True,
+                "caused_by_event_ids": [decision_id],
+                "evidence_refs": ["stopped-team-diagnosis.md"],
+                "tickets": [
+                    {
+                        "ticket_id": "76",
+                        "ticket_name": "session-alias-control",
+                        "source": "https://github.com/example/project/issues/76",
+                        "title": "Session Alias Control",
+                        "body": _budget_body(
+                            total=10,
+                            revision_reason="Main accepted the retained stop diagnosis.",
+                        ),
+                        "dependencies": [],
+                        "active": True,
+                        "replaced_by": [],
+                    }
+                ],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    revised = run_process(
+        [
+            str(installed_commands.product),
+            "ticket",
+            "revise",
+            "--revision-file",
+            str(revision_file),
+        ],
+        cwd=harness,
+    )
+    assert revised.returncode == 0, revised.stderr
+    ordinary_dispatch = run_process(
+        [str(installed_commands.runner), "--batch-input", str(batch)],
+        cwd=harness,
+        env=run_environment,
+        timeout=30,
+    )
+    assert ordinary_dispatch.returncode == 0, ordinary_dispatch.stderr
+    assert yaml.safe_load(ordinary_dispatch.stdout)["tasks"][0]["launch_status"] == "stopped"
+
+    continued = run_process(
+        [
+            str(installed_commands.runner),
+            "continue",
+            "--ticket-id",
+            "76",
+            "--caused-by-event-id",
+            decision_id,
+        ],
+        cwd=harness,
+        env=run_environment,
+        timeout=30,
+    )
+
+    assert continued.returncode == 0, continued.stdout + continued.stderr
+    continuation = yaml.safe_load(continued.stdout)
+    assert continuation["launch_status"] == "accepted"
+    state = yaml.safe_load((ticket / "ticket.yml").read_text(encoding="utf-8"))
+    assert state["status"] == "awaiting-integration"
+    assert state["active_team_ordinal"] == 1
+    assert state["current_candidate"] == candidate
+    assert {
+        name: (round_directory / name).read_bytes()
+        for name in preserved_reports
+    } == preserved_reports
+    usage = yaml.safe_load((ticket / "execution-budget.yml").read_text())
+    assert usage["stopped"] is False
+    for field in (
+        "started_at",
+        "sessions",
+        "corrections",
+        "allowance_minutes",
+        "stopping_checks",
+        "notifications",
+        "leader_notices",
+    ):
+        assert usage[field] == usage_before[field]
+    assert usage["budget"]["execution_budget"]["estimated_minutes"]["total"] == 10
+    events = [
+        json.loads(line)
+        for path in (harness / ".graphtraj/state/worldline").glob("*.jsonl")
+        for line in path.read_text(encoding="utf-8").splitlines()
+    ]
+    continued_event = next(
+        event for event in events if event["event_id"] == continuation["continuation_event_id"]
+    )
+    assert continued_event["caused_by_event_ids"] == [decision_id]
 
 
 def test_installed_runner_delivers_elapsed_notices_to_final_leader(

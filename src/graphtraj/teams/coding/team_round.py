@@ -10,6 +10,7 @@ import signal
 import subprocess
 import sys
 import threading
+from contextvars import copy_context
 from dataclasses import replace
 from functools import partial
 from pathlib import Path
@@ -68,10 +69,9 @@ _CHILD_ROLES = _ENGINEER_ROLES | _REVIEWER_ROLES
 _AGENT_EVIDENCE_ERROR = "AGENT_EVIDENCE_INVALID"
 
 
-def register_child_batch(batch_file: Path, cwd: Path, registration: Path) -> LaunchResponse:
+def register_child_batch(batch: Batch, cwd: Path, registration: Path) -> LaunchResponse:
     """Retain and register the Team Leader's one direct child Batch."""
 
-    batch = read_batch(batch_file, cwd)
     parent_ticket = os.environ.get("GRAPHTRAJ_TICKET_ID")
     if any(
         task.ticket_id != parent_ticket
@@ -2362,7 +2362,7 @@ def _execute_agent(
                     except BaseException as error:
                         notice_failures.append(error)
 
-                thread = threading.Thread(target=resume_leader)
+                thread = threading.Thread(target=copy_context().run, args=(resume_leader,))
                 thread.start()
                 notice_threads.append(thread)
                 while not delivered.wait(0.05):
@@ -2415,7 +2415,7 @@ def _execute_agent(
                     except BaseException as error:
                         failure.append(error)
 
-                thread = threading.Thread(target=finish_leader)
+                thread = threading.Thread(target=copy_context().run, args=(finish_leader,))
                 thread.start()
                 while not delivered.wait(0.05):
                     if not thread.is_alive():

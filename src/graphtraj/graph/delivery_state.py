@@ -7,11 +7,9 @@ import shutil
 from pathlib import Path
 from typing import Any, Mapping
 
-import click
 import yaml
 
 from graphtraj.graph.delivery_worldline import append_project_worldline_event, read_worldline
-from graphtraj.configuration.project_configuration import load_project_configuration
 from graphtraj.execution.runner_io import write_yaml_durably
 from graphtraj.graph.ticket_graph import _TRANSITIONS, _load_states
 
@@ -24,37 +22,6 @@ _MEMBER_KEYS = {
 }
 _ENGINEERS = {"engineer-junior", "engineer-senior", "engineer-expert"}
 _COMMON = {"phase", "ticket_id", "caused_by_event_ids", "evidence_refs"}
-
-
-@click.group("delivery-state")
-def delivery_state() -> None:
-    """Apply strict requests produced by the Delivery State Agent."""
-
-
-@delivery_state.command("apply")
-@click.option(
-    "--request-file",
-    required=True,
-    type=click.Path(path_type=Path, exists=True, dir_okay=False),
-)
-@click.option(
-    "--facts-file",
-    required=True,
-    type=click.Path(path_type=Path, exists=True, dir_okay=False),
-)
-def apply_command(request_file: Path, facts_file: Path) -> None:
-    """Validate and atomically apply one semantic state request."""
-
-    try:
-        request = yaml.safe_load(request_file.read_text(encoding="utf-8"))
-        facts = yaml.safe_load(facts_file.read_text(encoding="utf-8"))
-        configuration = load_project_configuration(Path.cwd())
-        recorded = apply_delivery_state_request(
-            configuration.state, configuration.harness_root, request, facts
-        )
-    except (OSError, UnicodeError, ValueError, yaml.YAMLError) as error:
-        raise click.ClickException(str(error)) from error
-    click.echo(yaml.safe_dump(recorded, sort_keys=False), nl=False)
 
 
 def apply_delivery_state_request(

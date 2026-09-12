@@ -8,14 +8,18 @@ from pathlib import Path
 import click
 
 from graphtraj.workspace.project_initialization import ProjectSetupError, plan_project_setup
+from graphtraj.configuration.skill_check import DoctorError, diagnose_project
+from graphtraj.configuration.project_roles import ProjectRolesError
 from graphtraj.configuration.project_configuration import configuration_exists
 
 
 def _has_git_entry(directory: Path) -> bool:
+    """Identify a local Git entry for the interactive repository choice."""
     return os.path.lexists(str(directory / ".git"))
 
 
 def _select_source_repository(harness_root: Path) -> Path:
+    """Select the existing repository, asking when the default is ambiguous."""
     if _has_git_entry(harness_root):
         return harness_root
     try:
@@ -50,6 +54,7 @@ def _select_source_repository(harness_root: Path) -> Path:
 
 
 def _confirm_missing_skill_installation(missing_skills: tuple[str, ...]) -> bool:
+    """Ask the operator whether to install the listed missing Skills."""
     click.echo(
         "Missing required core Skills: {0}".format(", ".join(missing_skills))
     )
@@ -89,7 +94,9 @@ def setup() -> None:
         preview = plan.preflight(install_missing_skills=install_missing_skills)
     except ProjectSetupError as error:
         raise click.ClickException(str(error)) from error
-    click.echo(preview.render())
+    click.echo("Setup plan:")
+    for action in preview.actions:
+        click.echo("- {0}: {1}".format(action.disposition, action.description))
 
     if plan.proposed_base is not None:
         click.echo("Proposed dev base: {0}".format(plan.proposed_base))
@@ -106,5 +113,26 @@ def setup() -> None:
 
     if install_missing_skills:
         click.echo("Core Skills: OK")
-    click.echo(result)
+    click.echo({
+        "created": "Created Integration Worktree on dev.",
+        "registered": "Registered Integration Worktree on existing dev.",
+        "reused": "Using registered Integration Worktree on dev.",
+    }[result.integration_action])
     click.echo("GraphTraj project setup complete.")
+
+
+@click.command()
+def doctor() -> None:
+    """Report required core Skills from the active Harness Project context."""
+    try:
+        result = diagnose_project(Path.cwd(), Path.home() / ".agents" / "skills")
+    except DoctorError as error:
+        raise click.UsageError(str(error)) from error
+    for status in result.skills:
+        click.echo("{0}: {1}".format(status.name, "OK" if status.discovered else "MISSING"))
+    if result.role_diagnostics:
+        click.echo(str(ProjectRolesError(result.role_diagnostics)))
+    elif result.roles_checked:
+        click.echo("roles: OK")
+    if not result.succeeded:
+        raise click.exceptions.Exit(1)

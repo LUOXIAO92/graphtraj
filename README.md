@@ -82,6 +82,71 @@ current rules in the Worktree-local copy, refreshed when setup or Worktree
 preparation runs. Setup migrates the old installer's complete shared ignore
 rule group; standalone user rules remain unchanged.
 
+## Python operations
+
+The CLI calls the Python operations below. Import them from their owning
+modules; inputs and results do not require a Click context or terminal.
+Use `configuration.project_configuration.load_project_configuration(root)`
+with the Harness Project Root to obtain configured paths.
+
+All module names in this table are beneath `graphtraj`.
+
+| Module | Operation and input | Result |
+| --- | --- | --- |
+| `workspace.project_initialization` | `plan_project_setup(root, source_repository)`; then `plan.preflight()` and `plan.apply()` | Existing plan and preview objects; apply returns `ProjectSetupResult` with `integration_worktree`, `integration_action` (`created`, `registered`, `reused`) and `completed_actions`. |
+| `configuration.skill_check` | `diagnose_project(root, user_skill_root)` | `ProjectDiagnosis`: Skill statuses, whether roles were checked, role diagnostics and `succeeded`. |
+| `graph.ticket_graph` | `register_ticket(state, root, issue)` | Registered Ticket directory as a `Path`. |
+| `graph.ticket_graph` | `revise_tickets(state, root, revision)`; `update_ticket_state(state, root, change)` | Recorded causal event as a dictionary. |
+| `graph.ticket_graph` | `read_graph(state)` | Dictionary containing current Tickets and dependency readiness. |
+| `graph.delivery_state` | `apply_delivery_state_request(state, root, request, authoritative_facts)` | Recorded Ticket/Team event; request must match the supplied authoritative facts. |
+| `graph.delivery_worldline` | `append_project_worldline_event(state, root, event)`; `read_worldline(state, root)` | Recorded event, or chronological event dictionaries. |
+| `execution.runner_batch` | `parse_batch(document)`; `read_batch(path, cwd)` | Existing validated `Batch`. File input retains its exact bytes; a Python dictionary retains equivalent YAML. |
+| `execution.runner_launch` | `launch_batch(batch, cwd)` | Existing `LaunchResponse` with `document` and `succeeded`, including per-task failures. |
+| `execution.runner_status` | `status_aliases(aliases, cwd, operation_total=False, baseline=None, candidate=None)` | Existing `StatusResponse` with `document`, `succeeded` and `errors`. |
+| `execution.runner_control` | `send_instruction(alias, instruction, cwd, caused_by_event_ids)`; `interrupt_session(alias, cwd)` | Session operation result dictionary. |
+| `execution.runner_cleanup` | `cleanup_ticket(cwd, ticket_id)` | Existing `CleanupResponse` with `document` and `succeeded`. |
+| `teams.coding.team_round` | `continue_stopped_ticket(ticket_id, caused_by_event_ids, cwd)` | Continuation result and its causal event ID. |
+| `teams.coding.team_replacement` | `replace_session(alias, actor, caused_by_event_ids, cwd)` | Replacement result dictionary. |
+| `teams.coding.ticket_integration` | `integrate_ticket(configuration, ticket_id, validation_command, diagnosis=None)` | Candidate, integration status, event ID, evidence path and unlocked Ticket IDs. Validation argv is a tuple; failure retains evidence and a non-integrated status. |
+
+Issue, revision, state request and event dictionaries use the same fields as
+the corresponding CLI YAML inputs. Paths are `pathlib.Path` objects; causal
+event IDs in Runner control calls are tuples of strings. For example, read a
+configured project's current graph directly:
+
+```python
+from pathlib import Path
+from graphtraj.configuration.project_configuration import load_project_configuration
+from graphtraj.graph.ticket_graph import read_graph
+
+configuration = load_project_configuration(Path("/path/to/harness"))
+graph = read_graph(configuration.state)
+ready = [ticket for ticket in graph["tickets"] if ticket["ready"]]
+```
+
+Setup's `apply()` is the explicit mutation step. Pass
+`install_missing_skills=True` to both preflight and apply when authorizing
+missing Skill installation. The CLI supplies the repository-selection and
+confirmation prompts and renders the same plan and result.
+
+Graph and semantic-state validation raise `ValueError`; Setup raises
+`ProjectSetupError`. Doctor returns missing-Skill and invalid-role diagnostics,
+and raises `DoctorError` for a known child Worktree. Configuration, filesystem
+and stored-document errors retain their existing exception types. Runner
+operations use `RunnerError`; `error.as_document()` supplies the CLI's public
+error code and message. Check response `succeeded` or integration `status`
+as well: a retained failed outcome is a result, not necessarily an exception.
+Only the CLI translates these into usage errors, terminal messages and exits.
+
+Execution keeps the current Runtime backend and inherited Runner authority
+and Session context. Python calls follow the same parent-child registration,
+capacity, recovery, candidate and integration rules. Live budget JSONL can be
+routed to an open descriptor with
+`execution.execution_budget.budget_notice_output(descriptor)` around an
+operation. Without a selected or inherited channel, budget accounting and
+Leader notices remain retained and Python produces no terminal output; the
+CLI selects stderr. Conflict integration retains notices in its evidence log.
+
 ## Core Skills and their sources
 
 After `graphtraj setup` installs the core Skills, invoke `$setup-project` to

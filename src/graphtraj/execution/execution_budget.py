@@ -7,11 +7,12 @@ import json
 import math
 import os
 import random
-import sys
 import time
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Mapping
+from typing import Any, Callable, Iterator, Mapping
 
 import yaml
 
@@ -145,20 +146,39 @@ def execution_budget_monitor_from_environment(
     return execution_budget_monitor(Path(evidence), ticket_id, ticket_name)
 
 
+_NOTICE_OUTPUT: ContextVar[int | None] = ContextVar("budget_notice_output", default=None)
+
+
+@contextmanager
+def budget_notice_output(descriptor: int) -> Iterator[None]:
+    """Route live budget JSONL to a caller-owned descriptor for this operation.
+
+    The caller keeps the descriptor open for the operation's lifetime. Without
+    a selected or inherited channel, accounting and Leader notices are still
+    retained, but no terminal output is produced. CLI callers select stderr.
+    """
+    os.fstat(descriptor)
+    token = _NOTICE_OUTPUT.set(descriptor)
+    try:
+        yield
+    finally:
+        _NOTICE_OUTPUT.reset(token)
+
+
 def caller_notice_fd() -> tuple[int | None, bool]:
-    """Return a caller stderr descriptor suitable for a detached Session."""
+    """Return the selected or inherited notice channel and its close ownership."""
 
     try:
+        selected = _NOTICE_OUTPUT.get()
+        if selected is not None:
+            return os.dup(selected), True
         descriptor = int(os.environ.get("GRAPHTRAJ_BUDGET_NOTICE_FD", ""))
         if descriptor < 3:
             raise ValueError("budget notice descriptor is not inherited")
         os.fstat(descriptor)
         return descriptor, False
     except (OSError, ValueError):
-        try:
-            return os.dup(sys.stderr.fileno()), True
-        except OSError:
-            return None, False
+        return None, False
 
 
 def execution_budget_stage(role: str) -> str:
@@ -372,19 +392,17 @@ def _current_budget(ticket_directory: Path) -> ExecutionBudget | None:
 
 
 def _emit_notice(output: str) -> None:
-    try:
-        descriptor = int(os.environ.get("GRAPHTRAJ_BUDGET_NOTICE_FD", ""))
-        if descriptor < 3:
-            raise ValueError("budget notice descriptor is not inherited")
-        os.write(descriptor, output.encode())
+    """Send an already retained notice over the selected execution channel."""
+    descriptor, owned = caller_notice_fd()
+    if descriptor is None:
         return
-    except (OSError, ValueError):
-        pass
     try:
-        sys.stderr.write(output)
-        sys.stderr.flush()
+        os.write(descriptor, output.encode())
     except OSError:
         pass
+    finally:
+        if owned:
+            os.close(descriptor)
 
 
 def _read_usage(

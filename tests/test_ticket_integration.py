@@ -5,11 +5,12 @@ import os
 import subprocess
 import sys
 import tomllib
+from pathlib import Path
 
 import pytest
 import yaml
 
-from conftest import run_process, wait_for_file
+from conftest import InstalledCommands, run_process, wait_for_file
 from test_existing_repository_setup import run_setup
 from runner_fixtures import configure_harness
 from test_ticket_graph import _change_status, _register, _ticket
@@ -400,3 +401,57 @@ def test_main_integration_is_serialized_until_validation_finishes(installed_comm
         stdout, stderr = first.communicate(timeout=10)
     assert first.returncode == 0, stderr
     assert yaml.safe_load(stdout)["status"] == "integrated"
+
+
+@pytest.mark.parametrize("entrypoint", ["python", "cli"])
+@pytest.mark.parametrize("validation_exit", [0, 1])
+def test_shared_integration_enforces_main_and_returns_retained_outcome(
+    installed_commands: InstalledCommands,
+    accepted_ticket: tuple[Path, Path, Path, str],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture,
+    entrypoint: str,
+    validation_exit: int,
+) -> None:
+    """Python integration includes the CLI's authority and serialization guards."""
+    from click.testing import CliRunner
+    from graphtraj.configuration.project_configuration import load_project_configuration
+    from graphtraj.graph.delivery_worldline import read_worldline
+    from graphtraj.graph.ticket_graph import read_graph
+    from graphtraj.interfaces.cli.graphtraj import main
+    from graphtraj.teams.coding.ticket_integration import integrate_ticket
+
+    root, worktrees, state, candidate = accepted_ticket
+    configuration = load_project_configuration(root)
+    command = (sys.executable, "-c", "assert open('TEAM_ROUND_DELIVERED.txt').read() == 'complete team round\\n'")
+    command = (*command[:2], command[2] + f"; raise SystemExit({validation_exit})")
+    monkeypatch.chdir(root)
+    monkeypatch.setenv("GRAPHTRAJ_ROLE", "engineer-expert")
+    before = read_worldline(state, root)
+    with pytest.raises(ValueError) as error:
+        integrate_ticket(configuration, "83", command)
+    denied = CliRunner().invoke(main, ["ticket", "integrate", "--ticket-id", "83", "--", *command])
+    assert denied.exit_code == 1
+    assert yaml.safe_load(denied.stdout) == {"error": str(error.value)}
+    assert read_worldline(state, root) == before
+    monkeypatch.delenv("GRAPHTRAJ_ROLE")
+    with pytest.raises(ValueError):
+        integrate_ticket(configuration, "83", ())
+    assert read_worldline(state, root) == before
+
+    if entrypoint == "python":
+        result = integrate_ticket(configuration, "83", command)
+        assert capsys.readouterr() == ("", "")
+    else:
+        completed = CliRunner().invoke(main, ["ticket", "integrate", "--ticket-id", "83", "--", *command])
+        assert completed.exit_code == validation_exit, completed.output
+        result = yaml.safe_load(completed.stdout)
+    assert result["status"] == ("integrated" if validation_exit == 0 else "integrating")
+    assert result["candidate"] == candidate
+    assert set(result["unlocked_ticket_ids"]) == ({"84", "85"} if validation_exit == 0 else set())
+    event = next(item for item in read_worldline(state, root) if item["event_id"] == result["event_id"])
+    assert event["kind"] == ("ticket-integrated" if validation_exit == 0 else "ticket-integration-failed")
+    assert event["validation_command"] == list(command)
+    assert result["evidence"] in event["evidence_refs"]
+    assert (root / result["evidence"]).is_file()
+    assert read_graph(state)["tickets"][0]["status"] == result["status"]

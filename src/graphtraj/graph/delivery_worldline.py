@@ -10,15 +10,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
-import click
-import yaml
-
-from graphtraj.configuration.project_configuration import (
-    ProjectConfiguration,
-    ProjectConfigurationError,
-    load_project_configuration,
-)
-
 
 _SHARD_SIZE = 200
 _ASSIGNED_FIELDS = frozenset({"event_id", "captured_at", "run_id", "worldline_seq"})
@@ -42,91 +33,6 @@ _NON_FACT_KINDS = frozenset(
         "repeated-read",
     }
 )
-
-
-@click.group()
-def worldline() -> None:
-    """Append, read, and render the configured project's Worldline."""
-
-
-@worldline.command("append")
-@click.option(
-    "--event-file",
-    required=True,
-    type=click.Path(path_type=Path, exists=True, dir_okay=False),
-)
-def append_command(
-    event_file: Path,
-) -> None:
-    """Append one explicit durable fact from a YAML file."""
-
-    try:
-        event = yaml.safe_load(event_file.read_text(encoding="utf-8"))
-        if not isinstance(event, dict):
-            raise ValueError("event file must contain one mapping")
-        recorded = _append_configured_event(event)
-    except (
-        OSError,
-        UnicodeError,
-        ValueError,
-        yaml.YAMLError,
-        ProjectConfigurationError,
-    ) as error:
-        raise click.ClickException(str(error)) from error
-    click.echo(yaml.safe_dump(recorded, sort_keys=False), nl=False)
-
-
-@worldline.command("read")
-def read_command() -> None:
-    """Read the complete Worldline as chronological JSONL."""
-
-    try:
-        events = _read_configured_worldline()
-    except (
-        OSError,
-        UnicodeError,
-        ValueError,
-        json.JSONDecodeError,
-        ProjectConfigurationError,
-    ) as error:
-        raise click.ClickException(str(error)) from error
-    for event in events:
-        click.echo(json.dumps(event, ensure_ascii=False, separators=(",", ":")))
-
-
-@worldline.command("render")
-def render_command() -> None:
-    """Render a ledger-shaped YAML view without persisting it."""
-
-    try:
-        events = _read_configured_worldline()
-    except (
-        OSError,
-        UnicodeError,
-        ValueError,
-        json.JSONDecodeError,
-        ProjectConfigurationError,
-    ) as error:
-        raise click.ClickException(str(error)) from error
-    click.echo(yaml.safe_dump({"trajectory": events}, sort_keys=False), nl=False)
-
-
-def _configured_project() -> ProjectConfiguration:
-    return load_project_configuration(Path.cwd())
-
-
-def _append_configured_event(event: Mapping[str, Any]) -> dict[str, Any]:
-    configuration = _configured_project()
-    return append_project_worldline_event(
-        configuration.state,
-        configuration.harness_root,
-        event,
-    )
-
-
-def _read_configured_worldline() -> list[dict[str, Any]]:
-    configuration = _configured_project()
-    return read_worldline(configuration.state, configuration.harness_root)
 
 
 def append_project_worldline_event(

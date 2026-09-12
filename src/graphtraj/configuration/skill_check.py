@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 
-import click
 import yaml
 
 from graphtraj.workspace.git_repository import GitRepositoryError, SourceRepository
@@ -192,7 +191,7 @@ def _doctor_runtime_store(cwd: Path) -> Path:
         return cwd / ".codex"
     for ancestor in cwd.parents:
         if configuration_exists(ancestor):
-            raise click.UsageError("Run doctor from the Harness Project Root.")
+            raise DoctorError("Run doctor from the Harness Project Root.")
     return cwd / ".codex"
 
 
@@ -213,32 +212,41 @@ def _doctor_source_history_paths(runtime_store: Path) -> frozenset[str]:
         return frozenset()
 
 
-@click.command()
-def doctor() -> None:
-    """Report required core Skills from the active Harness Project context."""
+class DoctorError(ValueError):
+    """The requested directory is not a supported diagnostic context."""
 
-    runtime_store = _doctor_runtime_store(Path.cwd())
+
+@dataclass(frozen=True)
+class ProjectDiagnosis:
+    """Skill discovery and reusable-role diagnostics without terminal output."""
+
+    skills: Tuple[SkillStatus, ...]
+    roles_checked: bool
+    role_diagnostics: Tuple[str, ...]
+
+    @property
+    def succeeded(self) -> bool:
+        """Return whether all required Skills and any checked roles are valid."""
+        return all(status.discovered for status in self.skills) and not self.role_diagnostics
+
+
+def diagnose_project(cwd: Path, user_skill_root: Path) -> ProjectDiagnosis:
+    """Check one Harness root without mutation; reject known child Worktrees.
+
+    Missing Skills and invalid roles are returned as diagnostics. A wrong
+    Harness context raises DoctorError. The caller selects the user Skill scope.
+    """
+    runtime_store = _doctor_runtime_store(cwd.resolve())
     statuses = check_core_skills(
         runtime_store,
-        Path.home() / ".agents" / "skills",
+        user_skill_root,
         source_history_paths=_doctor_source_history_paths(runtime_store),
     )
-    for status in statuses:
-        click.echo(
-            "{0}: {1}".format(
-                status.name,
-                "OK" if status.discovered else "MISSING",
-            )
-        )
-
-    roles_ok = True
-    if configuration_exists(runtime_store.parent) or roles_exist(runtime_store.parent):
+    roles_checked = configuration_exists(runtime_store.parent) or roles_exist(runtime_store.parent)
+    diagnostics = ()
+    if roles_checked:
         try:
             load_project_roles(runtime_store.parent)
         except ProjectRolesError as error:
-            roles_ok = False
-            click.echo(str(error))
-        else:
-            click.echo("roles: OK")
-    if not all(status.discovered for status in statuses) or not roles_ok:
-        raise click.exceptions.Exit(1)
+            diagnostics = error.diagnostics
+    return ProjectDiagnosis(statuses, roles_checked, diagnostics)

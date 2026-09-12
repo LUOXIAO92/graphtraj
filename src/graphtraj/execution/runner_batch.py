@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import re
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 from typing import Mapping
@@ -65,6 +66,16 @@ def read_batch(
         raise RunnerError(
             "BATCH_YAML_INVALID", "Batch input is not valid YAML."
         ) from error
+    return replace(parse_batch(document), source_bytes=source_bytes)
+
+
+def parse_batch(document: object) -> Batch:
+    """Validate a structured Batch document and retain its YAML representation.
+
+    Uses the same schema and RunnerError codes as read_batch. File input keeps
+    its original bytes; Python mappings retain an equivalent YAML document.
+    Neither path provisions resources or launches a Runtime.
+    """
     if not isinstance(document, dict) or set(document) != {"tasks"}:
         raise RunnerError(
             "BATCH_SCHEMA_INVALID",
@@ -88,7 +99,7 @@ def read_batch(
         )
     return Batch(
         tasks=validated_tasks,
-        source_bytes=source_bytes,
+        source_bytes=yaml.safe_dump(document, sort_keys=False).encode("utf-8"),
     )
 
 

@@ -6,7 +6,7 @@ import os
 import stat
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Literal, Optional, Tuple
 
 from graphtraj.runtimes.codex.codex_project import (
     CodexProjectError,
@@ -61,13 +61,14 @@ class ProjectSetupPreview:
 
     actions: Tuple[PlannedSetupAction, ...]
 
-    def render(self) -> str:
-        lines = ["Setup plan:"]
-        lines.extend(
-            "- {0}: {1}".format(action.disposition, action.description)
-            for action in self.actions
-        )
-        return "\n".join(lines)
+
+@dataclass(frozen=True)
+class ProjectSetupResult:
+    """Completed setup actions and the configured Integration Worktree."""
+
+    integration_worktree: Path
+    integration_action: Literal["created", "registered", "reused"]
+    completed_actions: Tuple[str, ...]
 
 
 def _filesystem_entry(path: Path) -> Optional[GitTreeEntry]:
@@ -533,8 +534,13 @@ class ProjectSetupPlan:
                 )
                 actions.append(PlannedSetupAction(disposition, description))
 
-    def apply(self, *, install_missing_skills: bool = False) -> str:
-        """Create the preflighted configuration, directories, branch, and Worktree."""
+    def apply(self, *, install_missing_skills: bool = False) -> ProjectSetupResult:
+        """Apply setup and return completed actions, without prompting.
+
+        Calling apply authorizes the planned branch and Worktree creation.
+        Missing Skill installation requires install_missing_skills=True.
+        ProjectSetupError reports preflight conflicts or partial execution.
+        """
 
         preview = self.preflight(install_missing_skills=install_missing_skills)
         skill_names = self._skill_names_to_install(install_missing_skills)
@@ -588,7 +594,7 @@ class ProjectSetupPlan:
                 mark_completed(
                     _integration_worktree_action(self.configuration.integration_worktree)
                 )
-                result = "Created Integration Worktree on dev."
+                integration_action = "created"
             elif self.repository.worktree_for_branch(INTEGRATION_BRANCH) is None:
                 self.repository.add_existing_branch_worktree(
                     INTEGRATION_BRANCH, self.configuration.integration_worktree
@@ -596,9 +602,9 @@ class ProjectSetupPlan:
                 mark_completed(
                     _integration_worktree_action(self.configuration.integration_worktree)
                 )
-                result = "Registered Integration Worktree on existing dev."
+                integration_action = "registered"
             else:
-                result = "Using registered Integration Worktree on dev."
+                integration_action = "reused"
             self.codex_files.install_setup_resources(
                 harness_root=self.harness_root,
                 integration_worktree=self.configuration.integration_worktree,
@@ -633,7 +639,9 @@ class ProjectSetupPlan:
                     "\n".join("- {0}".format(action) for action in incomplete or ("none",)),
                 )
             ) from error
-        return result
+        return ProjectSetupResult(
+            self.configuration.integration_worktree, integration_action, tuple(completed)
+        )
 
 
 def plan_project_setup(

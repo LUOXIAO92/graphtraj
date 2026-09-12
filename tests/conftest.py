@@ -413,7 +413,22 @@ def fake_codex(tmp_path: Path) -> FakeCodex:
 
 
 def _install_commands(environment: Path) -> InstalledCommands:
-    """Install the local candidate before exercising its public CLIs."""
+    """Install a clean export of the current source, including pending edits."""
+
+    exported = environment.parent / "source"
+    exported.mkdir()
+    files = run_process(
+        ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+        cwd=PROJECT_ROOT,
+    )
+    files.check_returncode()
+    for name in filter(None, files.stdout.split("\0")):
+        source = PROJECT_ROOT / name
+        if not source.exists() and not source.is_symlink():
+            continue
+        target = exported / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target, follow_symlinks=False)
 
     subprocess.run(
         [
@@ -436,9 +451,9 @@ def _install_commands(environment: Path) -> InstalledCommands:
             "--disable-pip-version-check",
             "--no-build-isolation",
             "--no-deps",
-            str(PROJECT_ROOT),
+            str(exported),
         ],
-        cwd=PROJECT_ROOT,
+        cwd=exported,
     )
     result.check_returncode()
     bin_directory = environment / "bin"

@@ -9,7 +9,6 @@ import shutil
 from pathlib import Path
 from typing import Any
 
-import click
 import yaml
 
 from graphtraj.graph.delivery_worldline import append_project_worldline_event
@@ -17,10 +16,6 @@ from graphtraj.execution.execution_budget import (
     ExecutionBudgetError,
     read_execution_budget,
     split_execution_budget_front_matter,
-)
-from graphtraj.configuration.project_configuration import (
-    ProjectConfigurationError,
-    load_project_configuration,
 )
 
 
@@ -93,108 +88,6 @@ _TRANSITIONS = {
     "blocked": {"pending", "ready", "escalated"},
     "escalated": {"pending", "ready", "blocked"},
 }
-
-
-@click.group()
-def ticket() -> None:
-    """Register Tickets and inspect their current Task Graph."""
-
-
-@ticket.command("register")
-@click.option(
-    "--ticket-file",
-    required=True,
-    type=click.Path(path_type=Path, exists=True, dir_okay=False),
-)
-def register_command(ticket_file: Path) -> None:
-    """Register one accepted GitHub Issue from a YAML file."""
-
-    try:
-        issue = yaml.safe_load(ticket_file.read_text(encoding="utf-8"))
-        _validate_issue(issue)
-        configuration = load_project_configuration(Path.cwd())
-        directory = _register(configuration.state, configuration.harness_root, issue)
-    except (
-        OSError,
-        UnicodeError,
-        ValueError,
-        yaml.YAMLError,
-        ProjectConfigurationError,
-    ) as error:
-        raise click.ClickException(str(error)) from error
-    click.echo(str(directory))
-
-
-@ticket.command("revise")
-@click.option(
-    "--revision-file",
-    required=True,
-    type=click.Path(path_type=Path, exists=True, dir_okay=False),
-)
-def revise_command(revision_file: Path) -> None:
-    """Apply one validated product-preserving Task Graph revision."""
-
-    try:
-        revision = yaml.safe_load(revision_file.read_text(encoding="utf-8"))
-        _validate_revision(revision)
-        configuration = load_project_configuration(Path.cwd())
-        recorded = _revise(
-            configuration.state, configuration.harness_root, revision
-        )
-    except (
-        OSError,
-        UnicodeError,
-        ValueError,
-        yaml.YAMLError,
-        ProjectConfigurationError,
-    ) as error:
-        raise click.ClickException(str(error)) from error
-    click.echo(yaml.safe_dump(recorded, sort_keys=False), nl=False)
-
-
-@ticket.command("graph")
-def graph_command() -> None:
-    """Generate the current Ticket DAG and readiness view as YAML."""
-
-    try:
-        configuration = load_project_configuration(Path.cwd())
-        view = _graph(configuration.state)
-    except (
-        OSError,
-        UnicodeError,
-        ValueError,
-        yaml.YAMLError,
-        ProjectConfigurationError,
-    ) as error:
-        raise click.ClickException(str(error)) from error
-    click.echo(yaml.safe_dump(view, sort_keys=False), nl=False)
-
-
-@ticket.command("update")
-@click.option(
-    "--state-file",
-    required=True,
-    type=click.Path(path_type=Path, exists=True, dir_okay=False),
-)
-def update_command(state_file: Path) -> None:
-    """Apply one evidence-backed current Ticket state transition."""
-
-    try:
-        change = yaml.safe_load(state_file.read_text(encoding="utf-8"))
-        _validate_state_change(change)
-        configuration = load_project_configuration(Path.cwd())
-        recorded = _update_state(
-            configuration.state, configuration.harness_root, change
-        )
-    except (
-        OSError,
-        UnicodeError,
-        ValueError,
-        yaml.YAMLError,
-        ProjectConfigurationError,
-    ) as error:
-        raise click.ClickException(str(error)) from error
-    click.echo(yaml.safe_dump(recorded, sort_keys=False), nl=False)
 
 
 def _validate_issue(issue: Any) -> None:
@@ -312,7 +205,13 @@ def _validate_state_change(change: Any) -> None:
         raise ValueError("Ticket state change is invalid")
 
 
-def _register(state: Path, harness_root: Path, issue: dict[str, Any]) -> Path:
+def register_ticket(state: Path, harness_root: Path, issue: dict[str, Any]) -> Path:
+    """Validate an accepted definition and return its durable Ticket directory.
+
+    Invalid definitions or graph changes raise ValueError before registration.
+    The snapshot, current state and causal Worldline event are committed together.
+    """
+    _validate_issue(issue)
     tickets = state / "tickets"
     directory = tickets / "{0}-{1}".format(issue["ticket_id"], issue["ticket_name"])
     if directory.exists():
@@ -377,9 +276,12 @@ def _register(state: Path, harness_root: Path, issue: dict[str, Any]) -> Path:
     return directory
 
 
-def _revise(
+def revise_tickets(
     state: Path, harness_root: Path, revision: dict[str, Any]
 ) -> dict[str, Any]:
+    """Validate and commit a product-preserving revision with its causal event."""
+
+    _validate_revision(revision)
     tickets = state / "tickets"
     if not tickets.is_dir():
         raise ValueError("no Tickets are registered")
@@ -519,7 +421,9 @@ def _revise(
         _unlock(lock)
 
 
-def _graph(state: Path) -> dict[str, Any]:
+def read_graph(state: Path) -> dict[str, Any]:
+    """Return current Tickets and dependency readiness; reject invalid state."""
+
     tickets = state / "tickets"
     if not tickets.is_dir():
         return {"tickets": []}
@@ -555,9 +459,15 @@ def _graph(state: Path) -> dict[str, Any]:
         _unlock(lock)
 
 
-def _update_state(
+def update_ticket_state(
     state: Path, harness_root: Path, change: dict[str, Any]
 ) -> dict[str, Any]:
+    """Validate an evidence-backed state transition and return its causal event.
+
+    Integration states require integrate_ticket; invalid transitions raise
+    ValueError without changing the Ticket or its Worldline.
+    """
+    _validate_state_change(change)
     tickets = state / "tickets"
     if not tickets.is_dir():
         raise ValueError("no Tickets are registered")

@@ -5,46 +5,45 @@ from __future__ import annotations
 import fcntl
 import os
 import subprocess
-import sys
-import tempfile
 from pathlib import Path
+from typing import TextIO
 
-import click
 import yaml
 
 from graphtraj.graph.delivery_worldline import append_project_worldline_event, read_worldline
 from graphtraj.workspace.git_repository import GitRepositoryError, SourceRepository, _git
-from graphtraj.configuration.project_configuration import (
-    ProjectConfiguration,
-    ProjectConfigurationError,
-    load_project_configuration,
-)
+from graphtraj.configuration.project_configuration import ProjectConfiguration
 from graphtraj.graph.ticket_graph import _load_states, _lock, _restore, _unlock, _write_yaml
 
 
-@click.command("integrate")
-@click.option("--ticket-id", required=True)
-@click.option("--resolve-conflict", metavar="DIAGNOSIS", help="Main: delegate a retained textual or semantic conflict, then validate it.")
-@click.argument("validation_command", nargs=-1, required=True, type=click.UNPROCESSED)
-def integrate_command(ticket_id: str, resolve_conflict: str | None, validation_command: tuple[str, ...]) -> None:
-    """Main: merge the accepted Ticket, then run COMMAND in dev (after --)."""
+def integrate_ticket(
+    configuration: ProjectConfiguration,
+    ticket_id: str,
+    validation_command: tuple[str, ...],
+    diagnosis: str | None = None,
+) -> dict:
+    """Serialize Main's integration and return the retained candidate outcome.
 
-    try:
-        if os.environ.get("GRAPHTRAJ_ROLE"):
-            raise ValueError("Only Main may integrate a Ticket")
-        configuration = load_project_configuration(Path.cwd())
-        with (configuration.harness_root / ".graphtraj/integration.lock").open("a") as lock:
-            try:
-                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except BlockingIOError as error:
-                raise ValueError("Another Main integration is in progress") from error
-            result = _integrate(configuration, ticket_id, validation_command, resolve_conflict)
-    except (OSError, ValueError, GitRepositoryError, ProjectConfigurationError, yaml.YAMLError) as error:
-        click.echo(yaml.safe_dump({"error": str(error)}, sort_keys=False), nl=False)
-        raise click.ClickException(str(error)) from error
-    click.echo(yaml.safe_dump(result, sort_keys=False), nl=False)
-    if result["status"] != "integrated":
-        raise click.ClickException("Integration failed; see retained evidence")
+    Run validation_command as argv in dev after merging the Team-accepted
+    candidate. A failed merge or validation returns a non-integrated status and
+    retained evidence. Authority, lock and readiness failures raise ValueError;
+    configuration and filesystem errors retain their existing exception types.
+    """
+    if os.environ.get("GRAPHTRAJ_ROLE"):
+        raise ValueError("Only Main may integrate a Ticket")
+    if (
+        not isinstance(validation_command, tuple)
+        or not validation_command
+        or not validation_command[0]
+        or any(not isinstance(arg, str) for arg in validation_command)
+    ):
+        raise ValueError("Integration requires a non-empty validation command argv")
+    with (configuration.harness_root / ".graphtraj/integration.lock").open("a") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as error:
+            raise ValueError("Another Main integration is in progress") from error
+        return _integrate(configuration, ticket_id, validation_command, diagnosis)
 
 
 def _integrate(configuration: ProjectConfiguration, ticket_id: str, validation_command: tuple[str, ...], diagnosis: str | None = None) -> dict:
@@ -176,18 +175,30 @@ def _integrate(configuration: ProjectConfiguration, ticket_id: str, validation_c
     return {"ticket_id": ticket_id, "candidate": candidate, "status": status, "event_id": integrated["event_id"], "evidence": evidence.relative_to(root).as_posix(), "unlocked_ticket_ids": unlocked}
 
 
-def _resolve(configuration: ProjectConfiguration, record: dict, log) -> dict:
-    batch = {"tasks": [{"ticket_id": record["ticket_id"], "ticket_name": record["ticket_name"], "role": "coding-team.merge-resolver"}]}
-    with tempfile.TemporaryDirectory(dir=configuration.harness_root / ".graphtraj") as temporary:
-        path = Path(temporary) / "batch.yml"
-        path.write_text(yaml.safe_dump(batch))
-        completed = subprocess.run(
-            [str(Path(sys.executable).parent / "agent-runner"), "--batch-input", str(path)],
-            cwd=configuration.harness_root, capture_output=True, text=True, check=False,
-        )
-    log.write(completed.stdout + completed.stderr)
-    output = yaml.safe_load(completed.stdout)
-    return output["tasks"][0] if isinstance(output, dict) and output.get("tasks") else {"launch_status": "failed"}
+def _resolve(configuration: ProjectConfiguration, record: dict, log: TextIO) -> dict:
+    """Run the selected conflict through the same structured Runner entry point."""
+    from graphtraj.execution.execution_budget import budget_notice_output
+    from graphtraj.execution.runner_batch import parse_batch
+    from graphtraj.execution.runner_launch import launch_batch
+    from graphtraj.execution.runner_models import RunnerError
+
+    batch = parse_batch({"tasks": [{
+        "ticket_id": record["ticket_id"], "ticket_name": record["ticket_name"],
+        "role": "coding-team.merge-resolver",
+    }]})
+    log.flush()
+    try:
+        with budget_notice_output(log.fileno()):
+            response = launch_batch(batch, configuration.harness_root)
+    except RunnerError as error:
+        log.write(yaml.safe_dump({"error": error.as_document()}, sort_keys=False))
+        log.write(error.message + "\n")
+        return {"launch_status": "failed"}
+    log.write(yaml.safe_dump(response.document, sort_keys=False))
+    for task in response.document["tasks"]:
+        if task.get("error"):
+            log.write(task["error"]["message"] + "\n")
+    return response.document["tasks"][0]
 
 
 def _record(configuration: ProjectConfiguration, directory: Path, record: dict, status: str, event: dict) -> dict:

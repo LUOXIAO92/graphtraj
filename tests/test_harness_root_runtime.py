@@ -141,11 +141,16 @@ def test_installed_hook_allows_only_reads_of_enabled_external_skills(
                 assert read.stdout.strip()
 
 
-def _engineer_role(model: str = "gpt-5.6-sol"):
+def _engineer_role(
+    model: str = "gpt-5.6-sol", reasoning_effort: str | None = None
+):
     from graphtraj.project_roles import RolePreset
     from graphtraj.role_definitions import resolve_child_role
 
-    return resolve_child_role("engineer-expert", RolePreset("codex", model, None, None))
+    return resolve_child_role(
+        "engineer-expert",
+        RolePreset("codex", model, None, None, reasoning_effort=reasoning_effort),
+    )
 
 
 def _runtime_executable(tmp_path: Path) -> Path:
@@ -449,10 +454,16 @@ def test_engineer_runtime_context_preflight_rejects_unresolved_repository_skills
     assert not fake_codex.log_file.exists()
 
 
+@pytest.mark.parametrize(
+    ("reasoning_effort", "expected_effort"),
+    ((None, "max"), ("high", "high")),
+)
 def test_engineer_runtime_context_finalizes_worktree_facts_once(
     monkeypatch,
     temporary_git_repository: Path,
     tmp_path: Path,
+    reasoning_effort: str | None,
+    expected_effort: str,
 ) -> None:
     monkeypatch.syspath_prepend(
         str(Path(__file__).resolve().parents[1] / "src")
@@ -495,7 +506,7 @@ def test_engineer_runtime_context_finalizes_worktree_facts_once(
         worktree=ticket,
         evidence=evidence,
         git_common_directory=git_common,
-        role=_engineer_role(),
+        role=_engineer_role(reasoning_effort=reasoning_effort),
         repository_skill_source=source,
         requested_skills=("repo-selected",),
     )
@@ -509,7 +520,10 @@ def test_engineer_runtime_context_finalizes_worktree_facts_once(
     assert evidence_document["runtime"] == "codex"
     assert evidence_document["effective_role"] == "engineer-expert"
     assert evidence_document["model"] == "gpt-5.6-sol"
-    assert evidence_document["model_reasoning_effort"] == "max"
+    assert evidence_document["model_reasoning_effort"] == expected_effort
+    assert 'model_reasoning_effort="{0}"'.format(expected_effort) in launch[
+        "adapter_request"
+    ]["arguments"]
     assert {
         skill["name"]
         for skill in evidence_document["effective_skills"]

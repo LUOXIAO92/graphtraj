@@ -796,10 +796,20 @@ def _resolve_codex_role(role: ResolvedChildRole) -> _CodexRole:
 
     document = _packaged_role(role.name)
     _validate_role_schema(document)
+    reasoning_effort = (
+        document["model_reasoning_effort"]
+        if role.settings.reasoning_effort is None
+        else role.settings.reasoning_effort
+    )
+    if (
+        not isinstance(reasoning_effort, str)
+        or reasoning_effort not in REASONING_EFFORTS
+    ):
+        raise _invalid_role_value("reasoning_effort")
 
     return _CodexRole(
         name=role.name,
-        reasoning_effort=document["model_reasoning_effort"],
+        reasoning_effort=reasoning_effort,
         developer_instructions=role.instructions,
         required_skills=role.required_skills,
         default_permissions=document["default_permissions"],

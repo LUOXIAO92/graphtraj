@@ -189,7 +189,9 @@ def _read_task(
         except ProjectRolesError as error:
             raise RunnerError(
                 "ROLE_NOT_CONFIGURED",
-                "The selected inline role is invalid.",
+                "The selected inline role is invalid: {0}".format(
+                    " ".join(error.diagnostics)
+                ),
             ) from error
         policy_role = role if role in ROLE_NAMES else "temporary-role"
     else:

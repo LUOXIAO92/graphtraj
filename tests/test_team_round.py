@@ -84,6 +84,7 @@ def test_installed_runner_applies_inline_settings_to_an_existing_preset(
         "      coding-team.team-leader:\n"
         "        runtime: codex\n"
         "        model: gpt-5.6-luna\n"
+        "        reasoning_effort: high\n"
         "        allow_runtime_swarm: false\n"
     )
     environment.update(
@@ -115,7 +116,73 @@ def test_installed_runner_applies_inline_settings_to_an_existing_preset(
             for argument in record["argv"])
         for record in leader_records
     )
+    assert "resume" not in leader_records[0]["argv"]
+    assert all("resume" in record["argv"] for record in leader_records[1:])
+    assert all(
+        any(
+            argument == "-c"
+            and record["argv"][index + 1] == 'model_reasoning_effort="high"'
+            for index, argument in enumerate(record["argv"][:-1])
+        )
+        for record in leader_records
+    )
     assert roles_file.read_bytes() == roles_before
+
+
+@pytest.mark.parametrize(
+    ("reasoning_effort", "expected_code"),
+    (("unsupported", "invalid-config"), (True, "invalid-input")),
+)
+def test_installed_runner_rejects_invalid_inline_reasoning_effort(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+    reasoning_effort: object,
+    expected_code: str,
+) -> None:
+    harness_root, _, _, environment = configure_harness(
+        installed_commands,
+        temporary_git_repository,
+        fake_codex,
+        tmp_path,
+    )
+    _register_ready_inline_ticket(harness_root, installed_commands.product)
+    batch = harness_root / "invalid-reasoning-effort.yml"
+    batch.write_text(
+        yaml.safe_dump(
+            {
+                "tasks": [
+                    {
+                        "ticket_id": "75",
+                        "ticket_name": "inline-specialist",
+                        "role": {
+                            "coding-team.team-leader": {
+                                "runtime": "codex",
+                                "model": "gpt-5.6-luna",
+                                "reasoning_effort": reasoning_effort,
+                            }
+                        },
+                    }
+                ]
+            },
+            sort_keys=False,
+        )
+    )
+
+    result = run_process(
+        [str(installed_commands.runner), "--batch-input", str(batch)],
+        cwd=harness_root,
+        env=environment,
+        timeout=10,
+    )
+
+    assert result.returncode == 1
+    response = yaml.safe_load(result.stdout)
+    error = response.get("error") or response["tasks"][0]["error"]
+    assert error["code"] == expected_code
+    assert "reasoning_effort" in error["message"]
+    assert not fake_codex.log_file.exists()
 
 
 @pytest.mark.parametrize(

@@ -97,7 +97,11 @@ def test_grouped_presets_apply_operator_settings_and_preserve_existing_history(
     document = yaml.safe_load(roles_file.read_text())
     presets = document["roles"]["coding-team"]
     for name, preset in presets.items():
-        preset.update(model="operator-" + name, base_url="https://runtime.example.invalid/" + name)
+        preset.update(
+            model="operator-" + name,
+            base_url="https://runtime.example.invalid/" + name,
+            reasoning_effort="high",
+        )
     if flat_roles:
         document["roles"] = {**presets, "delivery-state": document["roles"]["delivery-state"]}
     roles_file.write_text(yaml.safe_dump(document))
@@ -139,6 +143,16 @@ def test_grouped_presets_apply_operator_settings_and_preserve_existing_history(
         selected = presets[record["role"]]
         assert record["argv"][record["argv"].index("--model") + 1] == selected["model"]
         assert record["connection"]["base_url"] == selected["base_url"]
+        settings = {
+            key: value
+            for index, argument in enumerate(record["argv"][:-1])
+            if argument == "-c"
+            for key, value in tomllib.loads(record["argv"][index + 1]).items()
+        }
+        assert settings["model_reasoning_effort"] == selected["reasoning_effort"]
+    leader_records = [record for record in records if record["role"] == "team-leader"]
+    assert "resume" not in leader_records[0]["argv"]
+    assert all("resume" in record["argv"] for record in leader_records[1:])
     assert roles_file.read_bytes() == roles_before
     for path, content in retained.items():
         if path.parent == state / "worldline":

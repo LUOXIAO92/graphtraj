@@ -76,7 +76,13 @@ def test_runtime_executes_the_resolved_responsibility_and_required_skill(
     # Replace model reasoning with a deterministic responsibility at the Runtime
     # boundary. Its output requires both the supplied instruction and Skill.
     role = replace(
-        resolve_child_role(role_name, RolePreset("codex", "operator-model", None, None)),
+        resolve_child_role(
+            role_name,
+            RolePreset(
+                "codex", "operator-model", None, None,
+                reasoning_effort="high",
+            ),
+        ),
         instructions=json.dumps({"skill": "research", "reference": "references/coding.md"}),
         required_skills=("research",),
     )
@@ -104,11 +110,16 @@ assert not checked.stdout, checked.stdout
 print(json.dumps({'type': 'thread.started', 'thread_id': 'resolved-role'}), flush=True)
 rollout = Path(os.environ.get('CODEX_HOME', Path.home() / '.codex')) / 'sessions/test/rollout-resolved-role.jsonl'
 rollout.parent.mkdir(parents=True, exist_ok=True)
-rollout.write_text(json.dumps({'timestamp': 'native', 'type': 'response_item', 'payload': {
-    'type': 'message', 'role': 'assistant', 'text': reference.read_text(),
-    'model': sys.argv[sys.argv.index('--model') + 1],
-    'filesystem': settings['permissions'][settings['default_permissions']]['filesystem'][':workspace_roots'],
-}}) + '\n')
+rollout.write_text(
+    json.dumps({'timestamp': 'native-context', 'type': 'turn_context', 'payload': {
+        'model_reasoning_effort': settings['model_reasoning_effort'],
+    }}) + '\n' +
+    json.dumps({'timestamp': 'native', 'type': 'response_item', 'payload': {
+        'type': 'message', 'role': 'assistant', 'text': reference.read_text(),
+        'model': sys.argv[sys.argv.index('--model') + 1],
+        'filesystem': settings['permissions'][settings['default_permissions']]['filesystem'][':workspace_roots'],
+    }}) + '\n'
+)
 print(json.dumps({'type': 'item.completed', 'item': {
     'type': 'agent_message', 'text': reference.read_text(),
     'model': sys.argv[sys.argv.index('--model') + 1],
@@ -135,6 +146,11 @@ print(json.dumps({'type': 'turn.completed'}), flush=True)
     assert result["model"] == "operator-model"
     assert result["filesystem"]["."] == "write"
     assert result["filesystem"]["CONTEXT.md"] == "read"
+    assert {
+        event["payload"]["model_reasoning_effort"]
+        for event in events
+        if event.get("type") == "turn_context"
+    } == {"high"}
 
 
 def test_codex_turn_appends_stderr_for_later_diagnostic_boundaries(

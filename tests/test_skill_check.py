@@ -108,6 +108,7 @@ agent_runner:
         "  team-leader:\n"
         "    runtime: ''\n"
         "    model: 3\n"
+        "    reasoning_effort: true\n"
         "    allow_runtime_swarm: sometimes\n"
         "  engineer-junior:\n"
         "    runtime: codex\n"
@@ -131,6 +132,7 @@ agent_runner:
     assert "GraphTraj Roles is invalid." in result.stdout
     assert "team-leader.runtime" in result.stdout
     assert "team-leader.model" in result.stdout
+    assert "team-leader.reasoning_effort" in result.stdout
     assert "team-leader.allow_runtime_swarm" in result.stdout
     assert "engineer-junior.permissions" in result.stdout
     assert "unknown-role" in result.stdout

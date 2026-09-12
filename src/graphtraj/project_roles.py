@@ -69,6 +69,7 @@ class RolePreset:
     base_url: str | None
     api_key_env: str | None
     allow_runtime_swarm: bool = False
+    reasoning_effort: str | None = None
 
 
 @dataclass(frozen=True)
@@ -241,7 +242,7 @@ def _role_preset(
         diagnostics.append("{0} must be a mapping.".format(name))
         return None
     initial_count = len(diagnostics)
-    allowed = _REQUIRED_FIELDS | _CONNECTION_FIELDS
+    allowed = _REQUIRED_FIELDS | _CONNECTION_FIELDS | {"reasoning_effort"}
     if name == "team-leader":
         allowed = allowed | {"allow_runtime_swarm"}
     for field in entry:
@@ -267,6 +268,15 @@ def _role_preset(
             diagnostics.append(
                 "{0}.api_key_env must name an environment variable.".format(name)
             )
+    if "reasoning_effort" in entry and (
+        not isinstance(entry["reasoning_effort"], str)
+        or not entry["reasoning_effort"].strip()
+    ):
+        diagnostics.append(
+            "{0}.reasoning_effort must be a non-empty string when supplied.".format(
+                name
+            )
+        )
     if name == "team-leader" and "allow_runtime_swarm" in entry and not isinstance(
         entry["allow_runtime_swarm"], bool
     ):
@@ -284,5 +294,10 @@ def _role_preset(
             bool(entry.get("allow_runtime_swarm", True))
             if name == "team-leader"
             else False
+        ),
+        reasoning_effort=(
+            str(entry["reasoning_effort"])
+            if "reasoning_effort" in entry
+            else None
         ),
     )

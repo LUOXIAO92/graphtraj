@@ -48,7 +48,7 @@ The default layout is:
 ├── CONTEXT.md                          shared vocabulary
 ├── docs/                               Project Documents
 ├── .agents/skills/                     Harness Skills
-├── .codex/                             Runner Hooks and user Runtime configuration
+├── .codex/                             user Runtime configuration
 └── .graphtraj/
     ├── config.yml                      paths and Runner limits
     ├── roles.yml                       child-role Runtime settings
@@ -69,7 +69,11 @@ Project Documents remain at the Harness Project Root. Linked Worktrees expose
 and Runner preserve their contents and Git tracking; they create links to the
 shared project documents only where those paths are absent. Existing documents
 are the basis for later updates. Delegated Agents retain read-only document
-access, and Main owns Project Document changes.
+access, and Main owns Project Document changes. Source Repository README
+remains ordinary repository content within the assigned implementation scope.
+Runtime-native permissions govern file access; GraphTraj installs no Worktree
+Guard or command-parsing Hook. Selected Skills and their references remain
+readable through their projected paths.
 
 Generated document links use Worktree-specific Git ignore rules. Existing
 repository documents and new files beneath them remain visible to Git unless
@@ -260,6 +264,11 @@ The `--baseline` and `--candidate` pair resolves both references to commits in t
 selected Session's Worktree and reports Git `--numstat` records for their resulting
 change. Binary additions and deletions are shown as `null`, matching Git's `-`
 fields rather than inventing line counts.
+
+The project graph keeps required predecessor relationships across delivery
+stages, including completed predecessors. Completion removes waiting, not the
+edge. Source-node descriptions record other origins without creating artificial
+blocking dependencies.
 
 Main corrects Ticket boundaries or dependencies when delivery evidence
 disproves them, using `graphtraj ticket revise --revision-file <revision.yml>`.

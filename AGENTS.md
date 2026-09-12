@@ -8,7 +8,7 @@ Harness Project Documents.
 ## Project structure
 
 - `src/graphtraj/` contains the Python package and packaged
-  Runtime, role, Hook, and Skill resources.
+  Runtime, role, and Skill resources.
 - `tests/` contains behavior-focused pytest coverage.
 - `README.md` is the product-facing installation and operation guide.
 - `pyproject.toml` defines the GraphTraj distribution and the `graphtraj` /
@@ -40,7 +40,7 @@ Harness Project Documents.
 - Prefer the smallest direct implementation that satisfies the accepted
   requirement. Do not add speculative abstractions, compatibility layers,
   configuration switches, fallback paths, or defense-in-depth work.
-- Test observable behavior through public Setup, Runner, Runtime, or Hook
+- Test observable behavior through public Setup, Runner, or Runtime
   seams. Do not freeze prose tokens, source text, private helper structure,
   absent code, or unsupported corruption scenarios.
 - Preserve existing user changes and keep unrelated cleanup outside the active

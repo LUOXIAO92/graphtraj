@@ -23,6 +23,7 @@ CORE_SKILL_NAMES = (
     "retro",
     "wayfinder",
     "prototype",
+    "ponytail-review",
 )
 
 

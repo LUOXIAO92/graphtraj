@@ -4,6 +4,8 @@ import os
 from pathlib import Path
 from typing import Optional
 
+import pytest
+
 from conftest import InstalledCommands, run_process
 
 
@@ -25,6 +27,7 @@ CORE_SKILL_NAMES = (
     "retro",
     "wayfinder",
     "prototype",
+    "ponytail-review",
 )
 
 
@@ -416,4 +419,42 @@ def test_doctor_uses_only_valid_top_level_yaml_names(
             "MISSING" if name in {"task-delivery", "grilling"} else "OK",
         )
         for name in CORE_SKILL_NAMES
+    ]
+
+
+@pytest.mark.parametrize("link_kind", ("directory", "skill-file"))
+def test_doctor_finds_a_linked_harness_core_skill(
+    installed_commands: InstalledCommands,
+    tmp_path: Path,
+    link_kind: str,
+) -> None:
+    harness_root = tmp_path / "harness-project"
+    harness_skills = harness_root / ".agents" / "skills"
+    user_home = tmp_path / "operator-home"
+    target = tmp_path / "external-implement"
+    harness_root.mkdir()
+    install_skill(tmp_path, "implement", directory_name=target.name)
+    for name in CORE_SKILL_NAMES:
+        if name != "implement":
+            install_skill(user_home / ".agents" / "skills", name)
+
+    if link_kind == "directory":
+        harness_skills.mkdir(parents=True)
+        (harness_skills / "linked-implement").symlink_to(
+            target, target_is_directory=True
+        )
+    else:
+        linked_skill = harness_skills / "linked-implement" / "SKILL.md"
+        linked_skill.parent.mkdir(parents=True)
+        linked_skill.symlink_to(target / "SKILL.md")
+
+    result = run_process(
+        [str(installed_commands.product), "doctor"],
+        cwd=harness_root,
+        env=doctor_environment(user_home),
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.splitlines() == [
+        "{0}: OK".format(name) for name in CORE_SKILL_NAMES
     ]

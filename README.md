@@ -93,7 +93,7 @@ that also has engineering tasks.
 `setup-matt-pocock-skills`. `graphtraj setup` prepares the Harness; the Skill
 guides the project-document configuration.
 
-The release bundles these 17 core Skills. The table describes the bundled
+The release bundles these 18 core Skills. The table describes the bundled
 workflows and their GraphTraj adaptations; user-installed Skills outside this
 set are managed separately. Matt Pocock sources are from
 [mattpocock/skills](https://github.com/mattpocock/skills).
@@ -111,6 +111,7 @@ set are managed separately. Matt Pocock sources are from
 | `resolving-merge-conflicts` | Matt Pocock: same name | A dispatched Resolver stages the result for Main to commit and validate; incompatible accepted requirements return to Main. |
 | `tdd` | Matt Pocock: same name | Retains the upstream test-driven development workflow. |
 | `ponytail` | [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail) | Bundled minimal-implementation guidance, with no GraphTraj-specific changes to its instructions. |
+| `ponytail-review` | [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail) | Bundled over-engineering review guidance, with no GraphTraj-specific changes to its instructions. |
 | `task-delivery` | GraphTraj | General readiness, executor selection, dispatch, acceptance and integration; coding dispatch is conditional and the coding Leader owns its specialist workflow. |
 | `task-breakdown` | GraphTraj | General goal-to-task decomposition with observable results, completion criteria and genuine blocking dependencies. |
 | `research` | Matt Pocock: same name | Primary-source investigation; software source checks are a conditional reference. |

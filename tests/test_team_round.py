@@ -323,7 +323,9 @@ def test_installed_runner_obeys_the_explicit_leader_decision_for_a_run_free_team
         required_skills = {
             'team-leader': set(),
             'engineer-junior': {'implement', 'ponytail', 'tdd'},
-            'standards-reviewer': set(), 'spec-reviewer': set(), 'delivery-state': set(),
+            'standards-reviewer': {'ponytail-review'},
+            'spec-reviewer': set(),
+            'delivery-state': set(),
         }
         assert {
             Path(skill['path']).parent.name

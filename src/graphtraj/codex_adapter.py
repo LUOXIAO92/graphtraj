@@ -31,7 +31,7 @@ from .role_definitions import ResolvedChildRole
 from .git_repository import GitRepositoryError, SourceRepository
 from .skill_check import (
     declared_skill_name,
-    harness_skill_root,
+    required_skill_paths,
     source_history_skill_paths,
 )
 
@@ -876,22 +876,27 @@ def _resolve_harness_skills(
 
     if not required_skills:
         return ()
-    runtime_skills = _discover_skill_files(
-        harness_skill_root(runtime_store),
-        source_history_paths=_runtime_source_history_paths(
-            runtime_store,
-            repository_skill_source,
-        ),
+    source_history_paths = _runtime_source_history_paths(
+        runtime_store,
+        repository_skill_source,
     )
-    user_skills = _discover_skill_files(Path.home() / ".agents" / "skills")
+    skills = required_skill_paths(
+        runtime_store,
+        Path.home() / ".agents" / "skills",
+        required_skills,
+        source_history_paths=source_history_paths,
+    )
+    harness_skills = required_skill_paths(
+        runtime_store,
+        Path.home() / ".agents" / "skills",
+        required_skills,
+        source_history_paths=source_history_paths,
+        include_user_skills=False,
+    )
     effective: List[_EffectiveSkill] = []
     for name in required_skills:
-        matches = runtime_skills.get(name, ())
-        source = "harness"
-        if not matches:
-            matches = user_skills.get(name, ())
-            source = "runtime-user"
-        if len(matches) != 1:
+        path = skills.get(name)
+        if path is None:
             raise CodexAdapterError(
                 "HARNESS_SKILL_NOT_FOUND",
                 "The required Harness Skill {0} is not uniquely available.".format(
@@ -901,9 +906,9 @@ def _resolve_harness_skills(
         effective.append(
             _EffectiveSkill(
                 name=name,
-                path=matches[0],
+                path=path,
                 enabled=True,
-                source=source,
+                source="harness" if name in harness_skills else "runtime-user",
             )
         )
     return tuple(effective)

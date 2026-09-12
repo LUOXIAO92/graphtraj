@@ -36,6 +36,7 @@ CORE_SKILL_NAMES = (
     "retro",
     "wayfinder",
     "prototype",
+    "ponytail-review",
 )
 
 
@@ -94,14 +95,15 @@ def _declared_skill_name(skill_file: Path) -> Optional[str]:
     return declared_skill_name(content)
 
 
-def core_skill_paths(
+def required_skill_paths(
     runtime_store: Path,
     user_skill_root: Path,
+    required_names: Tuple[str, ...],
     *,
     source_history_paths: frozenset[str] = frozenset(),
     include_user_skills: bool = True,
 ) -> Dict[str, Path]:
-    """Resolve each core Skill to its Harness-root or Runtime-user file path."""
+    """Resolve each required Skill to its Harness-root or Runtime-user path."""
 
     resolved: Dict[str, Path] = {}
     for skill_root, ignore_source_history in (
@@ -122,13 +124,31 @@ def core_skill_paths(
             ):
                 continue
             name = _declared_skill_name(skill_file)
-            if name not in CORE_SKILL_NAMES or name in resolved:
+            if name not in required_names or name in resolved:
                 continue
             try:
                 resolved[name] = skill_file.resolve(strict=True)
             except OSError:
                 continue
     return resolved
+
+
+def core_skill_paths(
+    runtime_store: Path,
+    user_skill_root: Path,
+    *,
+    source_history_paths: frozenset[str] = frozenset(),
+    include_user_skills: bool = True,
+) -> Dict[str, Path]:
+    """Resolve each core Skill to its Harness-root or Runtime-user file path."""
+
+    return required_skill_paths(
+        runtime_store,
+        user_skill_root,
+        CORE_SKILL_NAMES,
+        source_history_paths=source_history_paths,
+        include_user_skills=include_user_skills,
+    )
 
 
 def check_core_skills(

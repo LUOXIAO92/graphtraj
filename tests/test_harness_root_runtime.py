@@ -143,6 +143,18 @@ def _engineer_role(
     )
 
 
+def _role_with_required_skill(name: str):
+    from graphtraj.project_roles import RolePreset
+    from graphtraj.role_definitions import ResolvedChildRole
+
+    return ResolvedChildRole(
+        name="standards-reviewer",
+        instructions="Use ${0}.".format(name),
+        required_skills=(name,),
+        settings=RolePreset("codex", "gpt-5.6-sol", None, None),
+    )
+
+
 def _runtime_executable(tmp_path: Path) -> Path:
     executable = tmp_path / "codex"
     executable.write_text(
@@ -151,6 +163,125 @@ def _runtime_executable(tmp_path: Path) -> Path:
     )
     executable.chmod(0o755)
     return executable
+
+
+def test_preflight_selects_the_first_duplicate_harness_skill(
+    monkeypatch: pytest.MonkeyPatch,
+    temporary_git_repository: Path,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1] / "src"))
+    from graphtraj.codex_adapter import preflight_runtime_context
+
+    harness_root = tmp_path / "harness-project"
+    skill_root = harness_root / ".agents" / "skills"
+    first = skill_root / "a-first" / "SKILL.md"
+    second = skill_root / "z-second" / "SKILL.md"
+    for skill in (first, second):
+        skill.parent.mkdir(parents=True)
+        skill.write_text(
+            "---\nname: role-only\ndescription: Test Skill.\n---\n",
+            encoding="utf-8",
+        )
+    user_home = tmp_path / "runtime-user"
+    user_home.mkdir()
+    monkeypatch.setenv("HOME", str(user_home))
+    worktree = tmp_path / "ticket-worktree"
+    evidence = tmp_path / "evidence"
+    worktree.mkdir()
+    evidence.mkdir()
+
+    context = preflight_runtime_context(
+        runtime_store=harness_root / ".codex",
+        executable=_runtime_executable(tmp_path),
+        git_common_directory=temporary_git_repository / ".git",
+        role=_role_with_required_skill("role-only"),
+        worktree=worktree,
+        evidence=evidence,
+        repository_skill_source=temporary_git_repository,
+        requested_skills=(),
+    ).finalize()
+
+    assert context.evidence_document()["effective_skills"] == [
+        {
+            "name": "role-only",
+            "path": str(first.resolve()),
+            "enabled": True,
+            "source": "harness",
+        }
+    ]
+
+
+@pytest.mark.parametrize("link_kind", ("directory", "skill-file"))
+def test_preflight_projects_a_linked_harness_skill_at_its_canonical_path(
+    monkeypatch: pytest.MonkeyPatch,
+    temporary_git_repository: Path,
+    tmp_path: Path,
+    link_kind: str,
+) -> None:
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1] / "src"))
+    from graphtraj.codex_adapter import preflight_runtime_context
+
+    harness_root = tmp_path / "harness-project"
+    skill_root = harness_root / ".agents" / "skills"
+    target = tmp_path / "external-skill"
+    target.mkdir()
+    target_skill = target / "SKILL.md"
+    target_skill.write_text(
+        "---\nname: role-only\ndescription: Test Skill.\n---\n",
+        encoding="utf-8",
+    )
+    reference = target / "references" / "native.md"
+    reference.parent.mkdir()
+    reference.write_text("reference\n", encoding="utf-8")
+    if link_kind == "directory":
+        skill_root.mkdir(parents=True)
+        (skill_root / "linked-skill").symlink_to(target, target_is_directory=True)
+    else:
+        linked_skill = skill_root / "linked-skill" / "SKILL.md"
+        linked_skill.parent.mkdir(parents=True)
+        linked_skill.symlink_to(target_skill)
+    user_home = tmp_path / "runtime-user"
+    user_home.mkdir()
+    monkeypatch.setenv("HOME", str(user_home))
+    worktree = tmp_path / "ticket-worktree"
+    evidence = tmp_path / "evidence"
+    worktree.mkdir()
+    evidence.mkdir()
+
+    context = preflight_runtime_context(
+        runtime_store=harness_root / ".codex",
+        executable=_runtime_executable(tmp_path),
+        git_common_directory=temporary_git_repository / ".git",
+        role=_role_with_required_skill("role-only"),
+        worktree=worktree,
+        evidence=evidence,
+        repository_skill_source=temporary_git_repository,
+        requested_skills=(),
+    ).finalize()
+
+    expected_skill = target_skill.resolve()
+    arguments = context.launch_document()["adapter_request"]["arguments"]
+    settings = {}
+    for index, argument in enumerate(arguments[:-1]):
+        if argument == "-c":
+            settings.update(tomllib.loads(arguments[index + 1]))
+    filesystem = settings["permissions"][settings["default_permissions"]][
+        "filesystem"
+    ]
+    assert settings["skills"]["config"] == [
+        {"path": str(expected_skill), "enabled": True}
+    ]
+    assert filesystem[str(expected_skill.parent)] == "read"
+    assert reference.is_relative_to(expected_skill.parent)
+    assert context.evidence_document()["effective_skills"] == [
+        {
+            "name": "role-only",
+            "path": str(expected_skill),
+            "enabled": True,
+            "source": "harness",
+        }
+    ]
 
 
 def test_setup_creates_a_root_owned_runtime_and_runner_discovers_it(

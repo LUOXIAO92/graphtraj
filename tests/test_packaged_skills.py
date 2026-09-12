@@ -25,6 +25,7 @@ def test_setup_installs_all_core_skills_and_their_readable_references(
         "to-spec", "to-tickets", "task-delivery", "implement",
         "ponytail", "tdd", "code-review", "resolving-merge-conflicts",
         "task-breakdown", "research", "retro", "wayfinder", "prototype",
+        "ponytail-review",
     }
     for skill in skills.iterdir():
         assert tree_contents(skill) == supported_skill_contents(skill.name)
@@ -37,7 +38,7 @@ def test_setup_installs_all_core_skills_and_their_readable_references(
 
     doctor = run_process([str(installed_commands.product), "doctor"], cwd=root)
     assert doctor.returncode == 0, doctor.stdout + doctor.stderr
-    assert len(doctor.stdout.splitlines()) == 18  # 17 Skills and reusable roles.
+    assert len(doctor.stdout.splitlines()) == 19  # 18 Skills and reusable roles.
 
 
 def installed_python(installed_commands: InstalledCommands) -> Path:
@@ -63,11 +64,11 @@ from pathlib import Path
 from graphtraj.supported_skills import SupportedSkills
 
 runtime_store = Path(sys.argv[1]) / ".codex"
-SupportedSkills.load().install_missing(runtime_store, ("task-delivery", "tdd", "setup-project"))
+SupportedSkills.load().install_missing(runtime_store, ("task-delivery", "tdd", "setup-project", "ponytail-review"))
 skill_root = runtime_store.parent / ".agents" / "skills"
 print(json.dumps({
     name: (skill_root / name / "SKILL.md").read_text(encoding="utf-8")
-    for name in ("task-delivery", "tdd", "setup-project")
+    for name in ("task-delivery", "tdd", "setup-project", "ponytail-review")
 }))
 
 """
@@ -87,3 +88,4 @@ print(json.dumps({
     assert resources["task-delivery"].startswith("---\nname: task-delivery\n")
     assert resources["tdd"].startswith("---\nname: tdd\n")
     assert resources["setup-project"].startswith("---\nname: setup-project\n")
+    assert resources["ponytail-review"].startswith("---\nname: ponytail-review\n")

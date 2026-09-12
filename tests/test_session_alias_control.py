@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import os
+import sys
+import time
 from pathlib import Path
 
 import yaml
@@ -375,6 +377,159 @@ def test_installed_send_resumes_an_unregistered_leader_session(
             "launch_status": "registered",
         }
     ]
+    assert not (ticket / "teams" / "1" / "team.yml").exists()
+
+
+def test_installed_stopped_preteam_send_is_read_only(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    harness_root, _, _, environment = configure_harness(
+        installed_commands,
+        temporary_git_repository,
+        fake_codex,
+        tmp_path,
+    )
+    clock = tmp_path / "stopped-preteam-clock"
+    clock.write_text(str(time.time()), encoding="utf-8")
+    controls = tmp_path / "stopped-preteam-controls"
+    controls.mkdir()
+    (controls / "sitecustomize.py").write_text(
+        "import os\n"
+        "from pathlib import Path\n"
+        "try:\n"
+        "    import graphtraj.execution_budget as budget\n"
+        "except ModuleNotFoundError:\n"
+        "    pass\n"
+        "else:\n"
+        "    budget.time.time = lambda: float(Path(os.environ['BUDGET_CLOCK']).read_text())\n"
+        "    budget.random.random = lambda: 0.99\n",
+        encoding="utf-8",
+    )
+    run_environment = {
+        **environment,
+        "BUDGET_CLOCK": str(clock),
+        "PYTHONPATH": str(controls),
+    }
+    _register_ready_ticket(
+        installed_commands,
+        harness_root,
+        body="""---
+difficulty: medium
+difficulty_reason: The stopped Leader resumes before Team registration
+execution_budget:
+  engineer_tier: senior
+  tier_reason: The Runner checks one stopped Leader continuation
+  estimated_minutes:
+    implementation: 1
+    validation: 1
+    review: 1
+    total: 0.01
+  planned_sessions:
+    team_leader: 1
+    engineer: 1
+    standards_reviewer: 1
+    spec_reviewer: 1
+    delivery_state: 1
+  correction_rounds: 1
+  estimation_note: The controlled clock samples one stopped continuation
+  on_exceed: Preserve the current Session
+---
+
+Deliver the accepted Session transport behavior.
+""",
+    )
+    batch = harness_root / "batch.yml"
+    batch.write_text(
+        "tasks:\n"
+        "  - ticket_id: \"76\"\n"
+        "    ticket_name: session-alias-control\n"
+        "    role: team-leader\n",
+        encoding="utf-8",
+    )
+    launched = run_process(
+        [str(installed_commands.runner), "--batch-input", str(batch)],
+        cwd=harness_root,
+        env=run_environment,
+        timeout=15,
+    )
+
+    assert launched.returncode == 1
+    mapping_file = next(
+        path
+        for path in (harness_root / ".graphtraj" / "runner" / "sessions").glob(
+            "*/mapping.yml"
+        )
+        if yaml.safe_load(path.read_text(encoding="utf-8"))["role"] == "team-leader"
+    )
+    mapping = yaml.safe_load(mapping_file.read_text(encoding="utf-8"))
+    ticket = harness_root / ".graphtraj" / "state" / "tickets" / "76-session-alias-control"
+    assert not (ticket / "teams" / "1" / "team.yml").exists()
+    usage_file = ticket / "execution-budget.yml"
+    usage = yaml.safe_load(usage_file.read_text(encoding="utf-8"))
+    clock.write_text(
+        str(
+            usage["started_at"]
+            + (0.01 + usage["allowance_minutes"] + 2.1) * 60
+        ),
+        encoding="utf-8",
+    )
+    policy = tmp_path / "stopped-preteam-policy.json"
+    fake_codex.executable.write_text(
+        "#!" + sys.executable + "\n" + """
+import json
+import os
+import sys
+import tomllib
+from pathlib import Path
+
+settings = {}
+for index, argument in enumerate(sys.argv[:-1]):
+    if argument == "-c":
+        settings.update(tomllib.loads(sys.argv[index + 1]))
+filesystem = settings["permissions"][settings["default_permissions"]]["filesystem"]
+Path(os.environ["STOPPED_POLICY_LOG"]).write_text(json.dumps({
+    "worktree_access": filesystem[":workspace_roots"]["."],
+    "team_round": os.environ.get("GRAPHTRAJ_TEAM_ROUND"),
+}), encoding="utf-8")
+print(json.dumps({"type": "thread.started", "thread_id": "fake-thread"}), flush=True)
+print(json.dumps({"type": "turn.completed"}), flush=True)
+""",
+        encoding="utf-8",
+    )
+    fake_codex.executable.chmod(0o755)
+    cause = [
+        json.loads(line)["event_id"]
+        for shard in (harness_root / ".graphtraj" / "state" / "worldline").glob(
+            "*.jsonl"
+        )
+        for line in shard.read_text(encoding="utf-8").splitlines()
+    ][-1]
+
+    stopped = run_process(
+        [
+            str(installed_commands.runner),
+            "send",
+            mapping["alias"],
+            "--instruction",
+            "Report the stopped result.",
+            "--caused-by-event-id",
+            cause,
+        ],
+        cwd=harness_root,
+        env={**run_environment, "STOPPED_POLICY_LOG": str(policy)},
+        timeout=15,
+    )
+
+    assert stopped.returncode == 0, stopped.stdout + stopped.stderr
+    wait_for_file(policy)
+    assert json.loads(policy.read_text(encoding="utf-8")) == {
+        "worktree_access": "read",
+        "team_round": None,
+    }
+    assert yaml.safe_load(usage_file.read_text(encoding="utf-8"))["stopped"] is True
     assert not (ticket / "teams" / "1" / "team.yml").exists()
 
 

@@ -484,7 +484,22 @@ def _refresh_current_team_report_request(
 ) -> Dict[str, Any]:
     role = mapping["role"]
     if role == "team-leader" and "GRAPHTRAJ_TEAM_ROUND" not in environment:
-        return request
+        if not reports_only:
+            return request
+        evidence = environment.get("GRAPHTRAJ_EVIDENCE")
+        if not isinstance(evidence, str) or not evidence:
+            raise _not_resumable()
+        try:
+            return refresh_codex_report_paths(
+                request,
+                worktree=worktree,
+                evidence=Path(evidence),
+                report_files=(),
+                role=role,
+                reports_only=True,
+            )
+        except RuntimeAdapterError as error:
+            raise RunnerError(error.code, error.message) from error
     if role in {
         "engineer-junior", "engineer-senior", "engineer-expert",
     }:

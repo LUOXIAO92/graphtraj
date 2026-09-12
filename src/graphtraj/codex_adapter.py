@@ -7,10 +7,8 @@ import json
 import os
 import queue
 import re
-import shlex
 import signal
 import subprocess
-import sys
 import time
 import tomllib
 import threading
@@ -42,7 +40,6 @@ ADAPTER_ROLE_KEYS = frozenset(
     {
         "model_reasoning_effort",
         "default_permissions",
-        "hooks",
     }
 )
 REASONING_EFFORTS = frozenset(
@@ -85,7 +82,6 @@ class _CodexRole:
     developer_instructions: str
     required_skills: Tuple[str, ...]
     default_permissions: str
-    hooks: Mapping[str, Any]
     agents: Mapping[str, Any]
     native_settings: Mapping[str, Any]
 
@@ -96,7 +92,6 @@ class _CodexRole:
         worktree: Path,
         evidence: Path,
         git_common_directory: Path,
-        runtime_store: Path,
         effective_skills: Tuple[_EffectiveSkill, ...],
         report_files: Tuple[Path, ...],
         model: str,
@@ -109,13 +104,8 @@ class _CodexRole:
             "exec",
             "-C",
             str(worktree),
-            "--add-dir",
-            str(evidence),
-            "--add-dir",
-            str(git_common_directory),
             "--model",
             model,
-            "--dangerously-bypass-hook-trust",
         ]
         developer_instructions = self.developer_instructions
         for skill in effective_skills:
@@ -129,35 +119,36 @@ class _CodexRole:
                     "[${0}]({1})".format(skill.name, skill.path),
                 )
         native_settings = copy.deepcopy(dict(self.native_settings))
+        filesystem = native_settings["permissions"][self.default_permissions][
+            "filesystem"
+        ]
         if self.name == "team-leader":
             # Runner retains and registers a child Batch before returning to the
-            # Leader. The Guard still rejects direct writes to these paths.
+            # Leader. The native profile permits only these exact paths.
             for path in child_batch_write_paths:
-                native_settings["permissions"][self.default_permissions]["filesystem"][str(path)] = "write"
+                filesystem[str(path)] = "write"
         if self.name == "merge-resolver":
-            native_settings["permissions"][self.default_permissions]["filesystem"][str(evidence)] = "read"
+            filesystem[str(evidence)] = "read"
+        if self.name in {
+            "engineer-junior",
+            "engineer-senior",
+            "engineer-expert",
+            "merge-resolver",
+        }:
+            filesystem[str(git_common_directory)] = "write"
         native_report_paths = _canonical_report_write_paths(
             evidence, report_files
         )
         for path in native_report_paths:
-            native_settings["permissions"][self.default_permissions]["filesystem"][
-                str(path)
-            ] = "write"
-        hook_report_paths = _report_write_paths(
-            worktree, evidence, report_files
-        )
+            filesystem[str(path)] = "write"
+        for skill in effective_skills:
+            if skill.enabled:
+                filesystem[str(skill.path.parent)] = "read"
         overrides = (
             *native_settings.items(),
             ("default_permissions", self.default_permissions),
             ("model_reasoning_effort", self.reasoning_effort),
             ("developer_instructions", developer_instructions),
-            (
-                "hooks",
-                _root_owned_hooks(
-                    self.hooks, runtime_store, self.name, effective_skills,
-                    hook_report_paths,
-                ),
-            ),
             ("agents", self.agents),
             (
                 "projects",
@@ -176,7 +167,6 @@ class _CodexRole:
 
 @dataclass(frozen=True)
 class _CodexRuntimePreflight:
-    _runtime_store: Path
     _executable: Path
     _git_common_directory: Path
     _role: _CodexRole
@@ -202,7 +192,6 @@ class _CodexRuntimePreflight:
             worktree=self._worktree,
             evidence=self._evidence,
             git_common_directory=self._git_common_directory,
-            runtime_store=self._runtime_store,
             effective_skills=effective_skills,
             report_files=self._report_files,
             model=self._model,
@@ -297,7 +286,6 @@ def preflight_runtime_context(
         repository_skill_source, requested_skills
     )
     resolved_role._launch_request(
-        runtime_store=runtime_store,
         executable=executable,
         git_common_directory=git_common_directory,
         worktree=worktree,
@@ -308,7 +296,6 @@ def preflight_runtime_context(
         child_batch_write_paths=child_batch_write_paths,
     )
     return _CodexRuntimePreflight(
-        _runtime_store=runtime_store,
         _executable=executable,
         _git_common_directory=git_common_directory,
         _role=resolved_role,
@@ -669,7 +656,7 @@ def _validate_launch_request(
 
 
 def _require_codex_permissions(executable: Path) -> None:
-    """Refuse Codex releases without the invocation-local hard controls."""
+    """Refuse Codex releases without filesystem sandboxing."""
     try:
         result = subprocess.run(
             [str(executable), "exec", "--help"],
@@ -679,11 +666,11 @@ def _require_codex_permissions(executable: Path) -> None:
         raise CodexAdapterError(
             "ROLE_CONFIG_UNSUPPORTED", "Cannot verify Codex permission controls.",
         ) from error
-    required = ("--sandbox", "--dangerously-bypass-hook-trust")
+    required = ("--sandbox",)
     if result.returncode or any(flag not in result.stdout for flag in required):
         raise CodexAdapterError(
             "ROLE_CONFIG_UNSUPPORTED",
-            "Codex must support filesystem sandboxing and invocation-local Hooks.",
+            "Codex must support filesystem sandboxing.",
         )
 
 
@@ -792,7 +779,7 @@ def _process_group_is_alive(process_group: int) -> bool:
 
 
 def _resolve_codex_role(role: ResolvedChildRole) -> _CodexRole:
-    """Translate a resolved child role using its fixed native permissions and Hooks."""
+    """Translate a resolved child role using its fixed native permissions."""
 
     document = _packaged_role(role.name)
     _validate_role_schema(document)
@@ -813,7 +800,6 @@ def _resolve_codex_role(role: ResolvedChildRole) -> _CodexRole:
         developer_instructions=role.instructions,
         required_skills=role.required_skills,
         default_permissions=document["default_permissions"],
-        hooks=document["hooks"],
         agents={"enabled": role.allow_runtime_swarm},
         native_settings={
             key: value
@@ -834,10 +820,6 @@ def _validate_role_schema(document: Mapping[str, Any]) -> None:
         raise _invalid_role_value("model_reasoning_effort")
     if not _nonempty_string(document["default_permissions"]):
         raise _invalid_role_value("default_permissions")
-    if not isinstance(document["hooks"], dict):
-        raise _invalid_role_value("hooks")
-
-
 def _invalid_role_value(field: str) -> CodexAdapterError:
     return CodexAdapterError(
         "ROLE_CONFIG_INVALID",
@@ -883,28 +865,6 @@ def _packaged_role(binding: str) -> Dict[str, Any]:
             "PACKAGED_ROLE_INVALID",
             "The installed Codex role resource is invalid.",
         ) from error
-
-
-def _verify_packaged_guard(runtime_store: Path) -> None:
-    resource = resources.files("graphtraj.resources").joinpath(
-        "codex", "hooks", "worktree_guard.py"
-    )
-    guard = runtime_store / "hooks" / "worktree_guard.py"
-    try:
-        if guard.is_symlink() or not guard.is_file():
-            raise OSError("guard is not a regular file")
-        installed = resource.read_bytes()
-        project = guard.read_bytes()
-    except OSError as error:
-        raise CodexAdapterError(
-            "ROLE_GUARD_MISMATCH",
-            "The Harness Worktree Guard does not match the installed resource.",
-        ) from error
-    if project != installed:
-        raise CodexAdapterError(
-            "ROLE_GUARD_MISMATCH",
-            "The Harness Worktree Guard does not match the installed resource.",
-        )
 
 
 def _resolve_harness_skills(
@@ -1011,20 +971,6 @@ def _resolve_repository_skills(
     return tuple(effective)
 
 
-def _report_write_paths(
-    worktree: Path,
-    evidence: Path,
-    report_files: Tuple[Path, ...],
-) -> Tuple[Path, ...]:
-    """Return both supported spellings of each exact ticket report target."""
-    canonical_paths = _canonical_report_write_paths(evidence, report_files)
-    return tuple(
-        path
-        for report, canonical in zip(report_files, canonical_paths)
-        for path in (worktree / report, canonical)
-    )
-
-
 def _canonical_report_write_paths(
     evidence: Path,
     report_files: Tuple[Path, ...],
@@ -1061,10 +1007,20 @@ def refresh_codex_report_paths(
             "The durable Codex launch request targets another Worktree.",
         )
     refreshed = list(arguments)
+    for index in range(len(refreshed) - 2, -1, -1):
+        if (
+            refreshed[index] == "-c"
+            and refreshed[index + 1].startswith("hooks=")
+        ):
+            del refreshed[index:index + 2]
+    refreshed = [
+        argument
+        for argument in refreshed
+        if argument != "--dangerously-bypass-hook-trust"
+    ]
     native_report_paths = _canonical_report_write_paths(
         evidence, report_files
     )
-    hook_report_paths = _report_write_paths(worktree, evidence, report_files)
     _, default_permissions = _resume_request_setting(
         refreshed, "default_permissions"
     )
@@ -1105,34 +1061,6 @@ def refresh_codex_report_paths(
         _toml_value(permissions)
     )
 
-    hooks_index, hooks = _resume_request_setting(refreshed, "hooks")
-    if not isinstance(hooks, dict):
-        raise CodexAdapterError(
-            "RUNTIME_REQUEST_INVALID",
-            "The durable Codex launch request has invalid report Hooks.",
-        )
-    hooks = copy.deepcopy(hooks)
-    try:
-        for event in ("PreToolUse", "SubagentStart"):
-            entries = hooks[event]
-            if not isinstance(entries, list):
-                raise ValueError("Hook entries must be a list")
-            for entry in entries:
-                commands = entry["hooks"]
-                if not isinstance(commands, list):
-                    raise ValueError("Nested Hook entries must be a list")
-                for hook in commands:
-                    if not isinstance(hook, dict) or hook.get("type") != "command":
-                        raise ValueError("Hook must be a command")
-                    hook["command"] = _refresh_guard_write_paths(
-                        hook["command"], hook_report_paths
-                    )
-    except (KeyError, TypeError, ValueError) as error:
-        raise CodexAdapterError(
-            "RUNTIME_REQUEST_INVALID",
-            "The durable Codex launch request has invalid report Hooks.",
-        ) from error
-    refreshed[hooks_index + 1] = "hooks={0}".format(_toml_value(hooks))
     return {"arguments": refreshed, "worktree_path": str(request_worktree)}
 
 
@@ -1197,34 +1125,6 @@ def _is_prior_report_path(
     return False
 
 
-def _refresh_guard_write_paths(
-    command: Any, report_paths: Tuple[Path, ...]
-) -> str:
-    if not isinstance(command, str):
-        raise ValueError("Hook command must be text")
-    try:
-        tokens = shlex.split(command)
-    except ValueError as error:
-        raise ValueError("Hook command cannot be parsed") from error
-    if not any(Path(token).name == "worktree_guard.py" for token in tokens):
-        raise ValueError("Hook command is not the Worktree Guard")
-    refreshed: list[str] = []
-    index = 0
-    while index < len(tokens):
-        if tokens[index] == "--write-path":
-            if index + 1 == len(tokens):
-                raise ValueError("Hook write path is missing")
-            index += 2
-            continue
-        if tokens[index].startswith("--write-path="):
-            raise ValueError("Hook write path is unsupported")
-        refreshed.append(tokens[index])
-        index += 1
-    for path in report_paths:
-        refreshed.extend(("--write-path", str(path)))
-    return shlex.join(refreshed)
-
-
 def _discover_skill_files(
     root: Path,
     *,
@@ -1257,53 +1157,6 @@ def _discover_skill_files(
         if name is not None:
             discovered.setdefault(name, []).append(resolved)
     return {name: tuple(paths) for name, paths in discovered.items()}
-
-
-def _root_owned_hooks(
-    packaged_hooks: Mapping[str, Any],
-    runtime_store: Path,
-    role: str,
-    effective_skills: Tuple[_EffectiveSkill, ...],
-    write_paths: Tuple[Path, ...],
-) -> Mapping[str, Any]:
-    """Translate canonical Hooks to the root-owned Worktree Guard."""
-    _verify_packaged_guard(runtime_store)
-    hooks = copy.deepcopy(dict(packaged_hooks))
-    command = "{0} {1}".format(
-        shlex.quote(sys.executable),
-        shlex.quote(str(runtime_store / "hooks" / "worktree_guard.py")),
-    )
-    if role == "team-leader":
-        command += " --team-leader"
-    for path in write_paths:
-        command += " --write-path " + shlex.quote(str(path))
-    for skill in effective_skills:
-        if skill.enabled:
-            for path in sorted(skill.path.parent.rglob("*")):
-                if (
-                    path.is_file() and not path.is_symlink()
-                    and path.resolve().is_relative_to(skill.path.parent)
-                ):
-                    command += " --read-skill " + shlex.quote(str(path))
-    try:
-        for event in ("PreToolUse", "SubagentStart"):
-            entries = hooks[event]
-            if not isinstance(entries, list):
-                raise ValueError("Hook entries must be a list")
-            for entry in entries:
-                commands = entry["hooks"]
-                if not isinstance(commands, list):
-                    raise ValueError("Nested Hook entries must be a list")
-                for hook in commands:
-                    if not isinstance(hook, dict) or hook.get("type") != "command":
-                        raise ValueError("Hook must be a command")
-                    hook["command"] = command
-    except (KeyError, TypeError, ValueError) as error:
-        raise CodexAdapterError(
-            "ROLE_HOOK_MISMATCH",
-            "The configured Codex role does not contain the packaged Worktree Guard hooks.",
-        ) from error
-    return hooks
 
 
 def _toml_value(value: Any) -> str:

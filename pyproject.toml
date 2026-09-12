@@ -26,7 +26,6 @@ where = ["src"]
 [tool.setuptools.package-data]
 graphtraj = [
     "resources/codex/agents/*.toml",
-    "resources/codex/hooks/*.py",
     "resources/roles/*.yml",
     "resources/skills/**/*",
 ]

@@ -3,7 +3,6 @@ from __future__ import annotations
 import copy
 import json
 import os
-import shlex
 import sys
 import threading
 import time
@@ -51,7 +50,7 @@ def test_installed_setup_leaves_main_configuration_to_the_user(
         assert config.read_bytes() == user_config.encode()
     assert not (harness / "AGENTS.md").exists()
     assert not (temporary_git_repository / "AGENTS.md").exists()
-    assert (harness / ".codex" / "hooks" / "worktree_guard.py").is_file()
+    assert not (harness / ".codex" / "hooks" / "worktree_guard.py").exists()
 
 
 @pytest.mark.parametrize("role_name", ("engineer-junior", "engineer-senior", "engineer-expert"))
@@ -88,10 +87,10 @@ def test_runtime_executes_the_resolved_responsibility_and_required_skill(
     )
     executable = tmp_path / "controlled-runtime"
     executable.write_text("#!" + sys.executable + "\n" + r'''
-import json, os, shlex, subprocess, sys, tomllib
+import json, os, sys, tomllib
 from pathlib import Path
 if sys.argv[1:] == ['exec', '--help']:
-    print('--sandbox --dangerously-bypass-hook-trust')
+    print('--sandbox')
     raise SystemExit(0)
 settings = {}
 for index, argument in enumerate(sys.argv[:-1]):
@@ -101,12 +100,8 @@ duty = json.loads(settings['developer_instructions'])
 selected = [Path(entry['path']) for entry in settings['skills']['config'] if entry['enabled']]
 skill = next(path for path in selected if path.parent.name == duty['skill'])
 reference = skill.parent / duty['reference']
-hook = shlex.split(settings['hooks']['PreToolUse'][0]['hooks'][0]['command'])
-checked = subprocess.run(hook, input=json.dumps({
-    'hook_event_name': 'PreToolUse', 'tool_name': 'Bash',
-    'tool_input': {'command': 'cat ' + shlex.quote(str(reference))},
-}), text=True, capture_output=True, check=True)
-assert not checked.stdout, checked.stdout
+filesystem = settings['permissions'][settings['default_permissions']]['filesystem']
+assert filesystem[str(skill.parent)] == 'read'
 print(json.dumps({'type': 'thread.started', 'thread_id': 'resolved-role'}), flush=True)
 rollout = Path(os.environ.get('CODEX_HOME', Path.home() / '.codex')) / 'sessions/test/rollout-resolved-role.jsonl'
 rollout.parent.mkdir(parents=True, exist_ok=True)
@@ -117,13 +112,15 @@ rollout.write_text(
     json.dumps({'timestamp': 'native', 'type': 'response_item', 'payload': {
         'type': 'message', 'role': 'assistant', 'text': reference.read_text(),
         'model': sys.argv[sys.argv.index('--model') + 1],
-        'filesystem': settings['permissions'][settings['default_permissions']]['filesystem'][':workspace_roots'],
+        'filesystem': filesystem[':workspace_roots'],
+        'skill_directory': filesystem[str(skill.parent)],
     }}) + '\n'
 )
 print(json.dumps({'type': 'item.completed', 'item': {
     'type': 'agent_message', 'text': reference.read_text(),
     'model': sys.argv[sys.argv.index('--model') + 1],
-    'filesystem': settings['permissions'][settings['default_permissions']]['filesystem'][':workspace_roots'],
+    'filesystem': filesystem[':workspace_roots'],
+    'skill_directory': filesystem[str(skill.parent)],
 }}), flush=True)
 print(json.dumps({'type': 'turn.completed'}), flush=True)
 ''')
@@ -146,6 +143,7 @@ print(json.dumps({'type': 'turn.completed'}), flush=True)
     assert result["model"] == "operator-model"
     assert result["filesystem"]["."] == "write"
     assert result["filesystem"]["CONTEXT.md"] == "read"
+    assert result["skill_directory"] == "read"
     assert {
         event["payload"]["model_reasoning_effort"]
         for event in events
@@ -456,29 +454,25 @@ def test_reviewer_send_refreshes_exact_replacement_report_permissions(
     tmp_path: Path,
 ) -> None:
     monkeypatch.syspath_prepend(str(PROJECT_ROOT / "src"))
-    from graphtraj.codex_adapter import _toml_value
     from graphtraj.runner_control import _refresh_current_team_report_request
 
     worktree = tmp_path / "worktree"
     evidence = tmp_path / "evidence"
     worktree.mkdir()
     evidence.mkdir()
-    hooks = {
-        event: [{"hooks": [{"type": "command", "command": "python /tmp/worktree_guard.py"}]}]
-        for event in ("PreToolUse", "SubagentStart")
-    }
     request = {
         "arguments": [
             "/tmp/codex",
             "exec",
             "--model",
             "reviewer-model",
+            "--dangerously-bypass-hook-trust",
             "-c",
             'default_permissions="restricted"',
             "-c",
             'permissions={ restricted = { filesystem = { "." = "write" } } }',
             "-c",
-            "hooks={0}".format(_toml_value(hooks)),
+            'hooks={ PreToolUse = [{ hooks = [{ type = "command", command = "python /tmp/worktree_guard.py" }] }], SubagentStart = [{ hooks = [{ type = "command", command = "python /tmp/worktree_guard.py" }] }] }',
             "--json",
             "-",
         ],
@@ -509,14 +503,5 @@ def test_reviewer_send_refreshes_exact_replacement_report_permissions(
     view = worktree / report
     assert filesystem[str(canonical)] == "write"
     assert str(view) not in filesystem
-    hooks = tomllib.loads(
-        next(argument for argument in arguments if argument.startswith("hooks="))
-    )["hooks"]
-    for event in ("PreToolUse", "SubagentStart"):
-        hook = shlex.split(hooks[event][0]["hooks"][0]["command"])
-        write_paths = {
-            hook[index + 1]
-            for index, value in enumerate(hook[:-1])
-            if value == "--write-path"
-        }
-        assert write_paths == {str(canonical), str(view)}
+    assert not any(argument.startswith("hooks=") for argument in arguments)
+    assert "--dangerously-bypass-hook-trust" not in arguments

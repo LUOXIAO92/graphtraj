@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import os
 import shutil
-import shlex
 import subprocess
 import time
 import tomllib
@@ -90,7 +89,7 @@ def test_probe_artifact_boundary_interrupts_running_runtime(
 
 
 @pytest.mark.parametrize('same_root', (False, True))
-def test_installed_hook_allows_only_reads_of_enabled_external_skills(
+def test_installed_runtime_projects_enabled_external_skill_directories(
     installed_commands, temporary_git_repository, fake_codex, tmp_path, same_root,
 ):
     harness = temporary_git_repository if same_root else temporary_git_repository.parent
@@ -110,35 +109,26 @@ def test_installed_hook_allows_only_reads_of_enabled_external_skills(
     unselected.parent.mkdir()
     unselected.write_text('---\nname: unselected\ndescription: Unselected.\n---\n')
     reference = harness_skill.parent.parent / 'tdd' / 'tests.md'
-    redirected = harness_skill.parent / 'redirected.md'
-    redirected.symlink_to(unselected)
-    with engineer_probe(installed_commands, harness, fake_codex, environment) as (alias, worktree, _):
+    with engineer_probe(installed_commands, harness, fake_codex, environment):
         records = [json.loads(line) for line in fake_codex.log_file.read_text().splitlines()]
         arguments = next(record['argv'] for record in records if record['role'].startswith('engineer-'))
-    task = {'worktree_path': str(worktree), 'alias': alias}
-    hooks = tomllib.loads(next(arg for arg in arguments if arg.startswith('hooks=')))['hooks']
-    hook = shlex.split(hooks['PreToolUse'][0]['hooks'][0]['command'])
-    for path, allowed in (
-        (harness_skill, True),
-        (harness_skill.parent.parent / 'ponytail/SKILL.md', True),
-        (reference, True),
-        (harness_skill.parent.parent / 'research/references/coding.md', False),
-        (user_skills / 'ponytail/SKILL.md', False),
-        (unselected, False),
-        (redirected, False),
-    ):
-        for verb in ('cat', 'touch'):
-            checked = subprocess.run(
-                hook, cwd=task['worktree_path'], env=environment,
-                input=json.dumps({'hook_event_name': 'PreToolUse', 'tool_name': 'Bash',
-                                  'tool_input': {'command': verb + ' ' + shlex.quote(str(path))}}),
-                text=True, capture_output=True, check=True,
-            )
-            assert (not checked.stdout) is (allowed and verb == 'cat'), checked.stdout
-            if allowed and verb == 'cat':
-                read = run_process(['cat', str(path)], cwd=worktree, env=environment)
-                assert read.returncode == 0, read.stderr
-                assert read.stdout.strip()
+    settings = {}
+    for index, argument in enumerate(arguments[:-1]):
+        if argument == '-c':
+            settings.update(tomllib.loads(arguments[index + 1]))
+    filesystem = settings['permissions'][settings['default_permissions']]['filesystem']
+    selected_directories = {
+        str(Path(skill['path']).parent)
+        for skill in settings['skills']['config']
+        if skill['enabled']
+    }
+    assert str(harness_skill.parent) in selected_directories
+    assert str(reference.parent) in selected_directories
+    assert all(filesystem[directory] == 'read' for directory in selected_directories)
+    assert str(unselected.parent) not in filesystem
+    assert str(user_skills / 'ponytail') not in filesystem
+    assert '--dangerously-bypass-hook-trust' not in arguments
+    assert not any(argument.startswith('hooks=') for argument in arguments)
 
 
 def _engineer_role(
@@ -156,7 +146,7 @@ def _engineer_role(
 def _runtime_executable(tmp_path: Path) -> Path:
     executable = tmp_path / "codex"
     executable.write_text(
-        "#!/bin/sh\necho --sandbox --dangerously-bypass-hook-trust\n",
+        "#!/bin/sh\necho --sandbox\n",
         encoding="utf-8",
     )
     executable.chmod(0o755)
@@ -539,6 +529,25 @@ def test_engineer_runtime_context_finalizes_worktree_facts_once(
     assert Path(repository_skills["repo-selected"]["path"]) == (
         ticket / ".agents" / "skills" / "repo-selected" / "SKILL.md"
     )
+    settings = {}
+    arguments = launch["adapter_request"]["arguments"]
+    for index, argument in enumerate(arguments[:-1]):
+        if argument == "-c":
+            settings.update(tomllib.loads(arguments[index + 1]))
+    filesystem = settings["permissions"][settings["default_permissions"]][
+        "filesystem"
+    ]
+    workspace_roots = filesystem[":workspace_roots"]
+    assert workspace_roots["."] == "write"
+    assert workspace_roots["CONTEXT.md"] == "read"
+    assert workspace_roots["docs"] == "read"
+    assert "README.md" not in workspace_roots
+    assert all(
+        filesystem[str(Path(skill["path"]).parent)] == "read"
+        for skill in settings["skills"]["config"]
+        if skill["enabled"]
+    )
+    assert str(ticket / ".agents" / "skills" / "repo-disabled") not in filesystem
     launch["adapter_request"].clear()
     assert context.launch_document()["adapter_request"]["worktree_path"] == str(
         ticket
@@ -683,37 +692,16 @@ def test_installed_runner_uses_runtime_user_skill_from_newer_primary_history(
     or shutil.which("codex") is None,
     reason="set CODEX_REAL_ACCEPTANCE=1 with an authenticated codex executable",
 )
-def test_real_codex_uses_harness_hook_and_explicit_skill_configuration(
+def test_real_codex_uses_native_permissions_and_explicit_skill_configuration(
     mutable_installed_commands: InstalledCommands,
     temporary_git_repository: Path,
     fake_codex: FakeCodex,
     tmp_path: Path,
 ) -> None:
-    """Exercise source Runtime isolation against a real installed Codex process."""
+    """Exercise native Runtime permissions against a real Codex process."""
 
     harness_root = temporary_git_repository.parent
     primary = temporary_git_repository
-    source_hook_marker = tmp_path / "source-hook-ran"
-    harness_hook_marker = tmp_path / "harness-hook-ran"
-    source_hook = primary / ".codex" / "source_hook.py"
-    source_hook.parent.mkdir()
-    source_hook.write_text(
-        "from pathlib import Path\n"
-        + "Path({0!r}).touch()\n".format(str(source_hook_marker)),
-        encoding="utf-8",
-    )
-    source_config = primary / ".codex" / "config.toml"
-    source_config.write_text(
-        "[[hooks.PreToolUse]]\n"
-        + 'matcher = "Bash"\n\n'
-        + "[[hooks.PreToolUse.hooks]]\n"
-        + 'type = "command"\n'
-        + "command = {0}\n".format(
-            json.dumps("python3 {0}".format(source_hook))
-        )
-        + "timeout = 5\n",
-        encoding="utf-8",
-    )
     for name, proof_file in (
         ("repository-selected", ".repository-selected-skill-proof"),
         ("repository-disabled", ".repository-disabled-skill-proof"),
@@ -732,7 +720,7 @@ def test_real_codex_uses_harness_hook_and_explicit_skill_configuration(
             encoding="utf-8",
         )
     run_process(
-        ["git", "add", ".codex", ".agents"], cwd=primary
+        ["git", "add", ".agents"], cwd=primary
     ).check_returncode()
     run_process(
         ["git", "commit", "-m", "Add isolated Runtime fixtures"],
@@ -766,19 +754,21 @@ def test_real_codex_uses_harness_hook_and_explicit_skill_configuration(
     harness_skill = (
         harness_root / ".agents" / "skills" / "implement" / "SKILL.md"
     )
+    reference = harness_skill.parent / "references" / "native.md"
+    reference.parent.mkdir()
+    reference.write_text("native reference\n", encoding="utf-8")
     harness_skill.write_text(
         "---\n"
         "name: implement\n"
         "description: Creates its proof file for the Harness Skill acceptance probe.\n"
         "---\n\n"
-        "When asked to perform the Harness Skill acceptance probe, use "
-        "apply_patch to create `.harness-skill-proof` containing "
-        "`implement`. Then use Bash to attempt these commands separately, "
-        "continuing after the first two are denied: "
-        "`echo forbidden > README.md`; "
-        "`echo forbidden > .agents/skills/repository-selected/SKILL.md`; "
-        "`touch .native-code-write-proof`; "
-        "`touch .state/native-evidence-write-proof`.\n",
+        "When asked to perform the Harness Skill acceptance probe, first use "
+        "Bash cat to read `{0}`. Then use apply_patch to create "
+        "`.external-reference-proof` containing `native reference`, create "
+        "`.harness-skill-proof` containing `implement`, and replace README.md "
+        "with `# Native README`. Finally, separately attempt to replace "
+        "`.agents/skills/repository-selected/SKILL.md`; continue if native "
+        "permissions deny that write.\n".format(reference),
         encoding="utf-8",
     )
     for name in ("ponytail", "tdd", "code-review"):
@@ -796,33 +786,10 @@ def test_real_codex_uses_harness_hook_and_explicit_skill_configuration(
             encoding="utf-8",
         )
 
-    package_hook = subprocess.run(
-        [
-            str(mutable_installed_commands.product.parent / "python"),
-            "-c",
-            (
-                "from importlib.resources import files; "
-                "print(files('graphtraj.resources')."
-                "joinpath('codex', 'hooks', 'worktree_guard.py'))"
-            ),
-        ],
-        check=True,
-        text=True,
-        capture_output=True,
-    )
-    installed_guard = Path(package_hook.stdout.strip())
-    harness_guard = harness_root / ".codex" / "hooks" / "worktree_guard.py"
-    instrumented_guard = installed_guard.read_text().replace(
-        "def main() -> int:\n",
-        "def main() -> int:\n    Path({0!r}).touch()\n".format(str(harness_hook_marker)),
-    )
-    installed_guard.write_text(instrumented_guard, encoding="utf-8")
-    harness_guard.write_text(instrumented_guard, encoding="utf-8")
-
     ticket_file = harness_root / "tickets" / "real-codex.md"
     ticket_file.parent.mkdir()
     ticket_file.write_text(
-        "# Real Codex Runtime isolation\n\n"
+        "# Real Codex native permissions\n\n"
         "This is only the Harness Skill acceptance probe. Read enabled Skill "
         "files with Bash cat using their supplied paths; do not use sed. "
         "Do not explore the repository, run implementation or Review workflows, "
@@ -845,19 +812,20 @@ def test_real_codex_uses_harness_hook_and_explicit_skill_configuration(
             mutable_installed_commands, alias, harness_root, probe_environment,
             [
                 ticket_worktree / '.harness-skill-proof',
+                ticket_worktree / '.external-reference-proof',
                 ticket_worktree / '.repository-selected-skill-proof',
-                ticket_worktree / '.native-code-write-proof',
-                ticket_worktree / '.state' / 'native-evidence-write-proof',
-                harness_hook_marker,
             ],
         )
     assert (ticket_worktree / ".harness-skill-proof").read_text(
         encoding="utf-8"
     ).strip() == "implement"
+    assert (ticket_worktree / ".external-reference-proof").read_text(
+        encoding="utf-8"
+    ).strip() == "native reference"
     assert (ticket_worktree / ".repository-selected-skill-proof").read_text().strip() == "repository-selected"
     assert not (ticket_worktree / ".repository-disabled-skill-proof").exists()
     assert (ticket_worktree / "README.md").read_text(encoding="utf-8") == (
-        "# Target project\n"
+        "# Native README\n"
     )
     assert (
         ticket_worktree
@@ -866,9 +834,4 @@ def test_real_codex_uses_harness_hook_and_explicit_skill_configuration(
         / "repository-selected"
         / "SKILL.md"
     ).read_bytes() == project_skill_before
-    assert (ticket_worktree / ".native-code-write-proof").is_file()
-    assert (
-        ticket_worktree / ".state" / "native-evidence-write-proof"
-    ).is_file()
-    assert harness_hook_marker.is_file()
-    assert not source_hook_marker.exists()
+    assert not (harness_root / ".codex" / "hooks" / "worktree_guard.py").exists()

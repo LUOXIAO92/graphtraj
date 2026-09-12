@@ -10,20 +10,4 @@ extends = ":workspace"
 ".agents" = "read"
 "AGENTS.md" = "read"
 "CONTEXT.md" = "read"
-"README.md" = "read"
 docs = "read"
-
-[[hooks.PreToolUse]]
-matcher = "^(Bash|apply_patch)$"
-
-[[hooks.PreToolUse.hooks]]
-type = "command"
-command = 'python3 "$(git rev-parse --show-toplevel)/.codex/hooks/worktree_guard.py"'
-timeout = 5
-
-[[hooks.SubagentStart]]
-
-[[hooks.SubagentStart.hooks]]
-type = "command"
-command = 'python3 "$(git rev-parse --show-toplevel)/.codex/hooks/worktree_guard.py"'
-timeout = 5

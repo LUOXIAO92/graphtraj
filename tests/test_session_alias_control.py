@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import shlex
 from pathlib import Path
 
 import yaml
@@ -280,23 +279,7 @@ def test_installed_alias_control_resumes_and_interrupts_one_team_session(
     }
     report = ticket_directory / "teams" / "1" / "rounds" / "2" / "leader.md"
     assert report_writes == {str(report)}
-    hook = shlex.split(
-        policy["settings"]["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
-    )
-    assert {
-        hook[index + 1]
-        for index, value in enumerate(hook[:-1])
-        if value == "--write-path"
-    } == {
-        str(report),
-        str(worktree_root / "76-session-alias-control" / ".state" / "teams" / "1" / "rounds" / "2" / "leader.md"),
-    }
-    assert not policy["decisions"]["agent-runner --help"]
-    assert not policy["decisions"]["pwd"]
-    assert not policy["decisions"]["touch .state/teams/1/rounds/2/leader.md"]
-    assert not policy["decisions"]["touch " + str(report)]
-    assert policy["decisions"]["codex exec hello"]
-    assert policy["helper_decisions"]["agent-runner --help"]
+    assert "hooks" not in policy["settings"]
     assert (worktree_root / "76-session-alias-control").is_dir()
     assert "run_id" not in resumed_mapping
     assert "turn" not in resumed_mapping

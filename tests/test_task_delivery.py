@@ -23,7 +23,7 @@ from pathlib import Path
 import yaml
 
 if sys.argv[1:] == ['exec', '--help']:
-    print('--config --json --sandbox --dangerously-bypass-hook-trust')
+    print('--config --json --sandbox')
     raise SystemExit(0)
 
 assert Path('CONTEXT.md').read_text() == 'Existing project context.\n'

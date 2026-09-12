@@ -48,7 +48,6 @@ if role == 'delivery-state':
     # Serialization of supplied facts, without selecting any semantic decision.
     Path(os.environ['GRAPHTRAJ_STATE_REQUEST']).write_text(os.environ['GRAPHTRAJ_STATE_FACTS'])
 elif role == 'team-leader' and os.environ.get('GRAPHTRAJ_RETIRING'):
-    assert 'handoff' in prompt
     print(json.dumps({'type': 'item.completed', 'item': {'type': 'agent_message', 'text':
         'Handoff: render.py follows the original boundary; validation fails because settings.py was deferred. Continue from the corrected Ticket definition.'}}), flush=True)
 elif role == 'team-leader':

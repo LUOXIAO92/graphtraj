@@ -73,7 +73,10 @@ def register_child_batch(batch_file: Path, cwd: Path, registration: Path) -> Lau
         or len(batch.tasks) == 1 and _is_inline_specialist(batch.tasks[0])
     ):
         raise RunnerError("BATCH_SCHEMA_INVALID", "A direct child Batch must contain one Engineer, one or both Reviewers, or one temporary specialist.")
-    project = discover_project(Path(os.environ.get("GRAPHTRAJ_HARNESS_ROOT", cwd)))
+    project = discover_project(
+        Path(os.environ.get("GRAPHTRAJ_HARNESS_ROOT", cwd)),
+        require_clean_integration=False,
+    )
     from .team_replacement import require_active_session
 
     team = require_active_session(project, os.environ["GRAPHTRAJ_PARENT_ALIAS"])
@@ -116,7 +119,9 @@ def launch_team_batch(batch: Batch, cwd: Path) -> LaunchResponse:
     """Deliver each Main-selected registered Ticket through generation 1."""
 
     if all(task.role == "team-leader" for task in batch.tasks):
-        return _run_batch_workers(discover_project(cwd), batch)
+        return _run_batch_workers(
+            discover_project(cwd, require_clean_integration=False), batch
+        )
     if any(task.policy_role != "temporary-role" for task in batch.tasks):
         raise RunnerError("ROLE_NOT_CONFIGURED", "A Main Batch must select the team-leader preset.")
     project = discover_project(cwd)
@@ -182,7 +187,7 @@ def continue_stopped_ticket(
             "invalid-input",
             "Continuation requires unique causal Project Worldline event IDs.",
         )
-    project = discover_project(cwd)
+    project = discover_project(cwd, require_clean_integration=False)
     try:
         ticket_directory, state = _load_states(project.state_directory / "tickets")[
             ticket_id
@@ -441,6 +446,7 @@ def _deliver_ticket(project: Any, requested: Task, retained_batch: Path, capacit
         worktree = project.harness_root / state["worktree"]
         branch = state["branch"]
     else:
+        discover_project(project.harness_root)
         preflight_worktree(project, task, branch, worktree)
         provision_worktree(project, task, branch, worktree)
     _link_worktree(project, worktree, ticket_directory)
@@ -2779,7 +2785,6 @@ def _validate_round(round_directory: Path, worktree: Path) -> str:
         )
     candidate = _candidate(round_directory, worktree)
     try:
-        engineer = (round_directory / "engineer.md").read_text(encoding="utf-8")
         inspected = [
             (round_directory / name).read_text(encoding="utf-8")
             for name in required
@@ -2793,11 +2798,6 @@ def _validate_round(round_directory: Path, worktree: Path) -> str:
         raise RunnerError(
             _AGENT_EVIDENCE_ERROR,
             "All Team evidence must inspect the same fixed candidate.",
-        )
-    if "self-review" not in engineer.lower():
-        raise RunnerError(
-            _AGENT_EVIDENCE_ERROR,
-            "The Team Round is missing Engineer self-review.",
         )
     return candidate
 
@@ -2878,7 +2878,7 @@ def _worker_main() -> None:
     retained = Path(sys.argv[1])
     task = read_batch(retained, Path.cwd()).tasks[int(sys.argv[2])]
     try:
-        project = discover_project(Path.cwd())
+        project = discover_project(Path.cwd(), require_clean_integration=False)
         capacity_fd = int(sys.argv[3])
         if task.role == "team-leader":
             result = _deliver_ticket(project, task, retained, capacity_fd)

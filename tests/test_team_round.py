@@ -128,6 +128,53 @@ def test_installed_runner_applies_inline_settings_to_an_existing_preset(
     assert roles_file.read_bytes() == roles_before
 
 
+def test_installed_runner_accepts_non_english_engineer_self_review(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    harness_root, _, _, environment = configure_harness(
+        installed_commands,
+        temporary_git_repository,
+        fake_codex,
+        tmp_path,
+    )
+    _register_ready_inline_ticket(harness_root, installed_commands.product)
+    fake_codex.executable.write_text(
+        fake_codex.executable.read_text().replace(
+            "Self-review: passed.", "自审：已完成。"
+        ),
+        encoding="utf-8",
+    )
+    batch = harness_root / "team-batch.yml"
+    batch.write_text(
+        "tasks:\n"
+        "  - ticket_id: \"75\"\n"
+        "    ticket_name: inline-specialist\n"
+        "    role: team-leader\n",
+        encoding="utf-8",
+    )
+
+    launched = run_process(
+        [str(installed_commands.runner), "--batch-input", str(batch)],
+        cwd=harness_root,
+        env={
+            **environment,
+            "FAKE_CODEX_LIFECYCLE_ACTION": "complete-team-round",
+            "GRAPHTRAJ_AGENT_RUNNER": str(installed_commands.runner),
+        },
+        timeout=45,
+    )
+
+    assert launched.returncode == 0, launched.stdout + launched.stderr
+    ticket = harness_root / ".graphtraj/state/tickets/75-inline-specialist"
+    assert yaml.safe_load((ticket / "ticket.yml").read_text())["status"] == "awaiting-integration"
+    assert "自审：已完成。" in (
+        ticket / "teams/1/rounds/1/engineer.md"
+    ).read_text()
+
+
 @pytest.mark.parametrize(
     ("reasoning_effort", "expected_code"),
     (("unsupported", "invalid-config"), (True, "invalid-input")),
@@ -323,7 +370,7 @@ def test_installed_runner_obeys_the_explicit_leader_decision_for_a_run_free_team
         required_skills = {
             'team-leader': set(),
             'engineer-junior': {'implement', 'ponytail', 'tdd'},
-            'standards-reviewer': set(), 'spec-reviewer': set(), 'delivery-state': set(),
+            'standards-reviewer': {'ponytail-review'}, 'spec-reviewer': set(), 'delivery-state': set(),
         }
         assert {
             Path(skill['path']).parent.name

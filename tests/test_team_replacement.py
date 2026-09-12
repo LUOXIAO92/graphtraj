@@ -19,7 +19,7 @@ from test_session_alias_control import _register_ready_ticket
 def test_installed_team_and_member_replacement(
     installed_commands, temporary_git_repository, fake_codex, tmp_path, during_implementation, delivery, request,
 ):
-    root, _, _, environment = configure_harness(
+    root, _, integration, environment = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path,
     )
     _register_ready_ticket(installed_commands, root)
@@ -157,6 +157,9 @@ configured_events =""", 1)
         return [json.loads(line) for shard in sorted((root / ".graphtraj/state/worldline").glob("*.jsonl")) for line in shard.read_text().splitlines()]
 
     cause = events()[-1]["event_id"]
+    (integration / "other-ticket-in-progress.txt").write_text(
+        "temporary work from another Ticket\n"
+    )
     denied = command("replace", leader, "--actor", "main", "--caused-by-event-id", cause,
                      env={**environment, "GRAPHTRAJ_ROLE": "team-leader"})
     assert denied.returncode == 1

@@ -35,14 +35,22 @@ For each node state:
 An edge records a required predecessor result, including one already delivered.
 Its completion removes the wait, not the relationship. Record other origins in
 the node description; chronology alone does not create a blocking edge. This is
-a result dependency, not a preferred work order. Shared files and possible merge conflicts do not create
-dependencies. Check cycles and keep independent work available concurrently.
+a result dependency, not a preferred work order. Shared artifacts and likely
+conflicts are clues to inspect the underlying relationship: a common prerequisite,
+a changing agreement, or decisions that need to be made together. Resolve that
+relationship rather than ignoring it or adding an edge solely for a shared file.
+Check cycles and keep independent work available concurrently.
 
 ## Check the graph
 
 Trace each goal requirement to a node's completion criteria. Look for missing
-outcomes, duplicated work and steps that produce nothing useful alone. Merge,
-remove or split those nodes while preserving the intended result.
+outcomes, duplicated work and steps that produce nothing useful alone. Check the
+proposed parallel nodes together: are their required inputs settled, do they rely
+on compatible assumptions about shared results, and will their outputs still
+satisfy the goal when combined? Separate completion criteria alone do not establish
+independence. Assign a common prerequisite once and connect its consumers to that
+result. Keep tightly coupled changes or joint decisions in one node. Merge, remove
+or split nodes accordingly while preserving the intended result.
 
 Task types can differ across an edge. Make the handoff concrete enough that
 the consumer can use the result and judge its limitations. A node may already

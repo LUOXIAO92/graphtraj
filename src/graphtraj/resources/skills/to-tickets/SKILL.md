@@ -1,6 +1,6 @@
 ---
 name: to-tickets
-description: Turn software task nodes into deliverable code tickets, preserving their goals, completion criteria and dependencies, and publish them to the configured tracker.
+description: Turn software task nodes produced by task-breakdown into deliverable code tickets and publish them to the configured tracker, preserving goals, completion criteria and dependencies. Depends on task-breakdown for task decomposition; this skill handles ticketing.
 disable-model-invocation: true
 ---
 
@@ -8,8 +8,11 @@ disable-model-invocation: true
 
 Issue code tickets from the accepted task nodes. Each ticket delivers a complete
 software behavior and retains its source node's goal, constraints, completion
-criteria and blocking dependencies. General task breakdown belongs to
-`task-breakdown`; a tracker Issue can represent a node of any domain.
+criteria and blocking dependencies. Task decomposition depends on
+`task-breakdown`. Reuse its available guidance and valid results; use it to fill
+missing decomposition or revise task boundaries when needed. Ticketing an existing
+breakdown does not require rereading the skill or repeating that work. A tracker
+Issue can represent a node of any domain.
 
 The issue tracker and triage label vocabulary should have been provided to you — run `/setup-project` if not.
 
@@ -27,9 +30,7 @@ Map the supplied task nodes before slicing. A fine enough code node becomes one
 ticket directly. A coarse code node may need several tickets with internal
 dependencies; connect its prerequisites and consumers to the tickets that
 actually supply or require those results. Record the source node in each ticket.
-A general node remains general even when tracked by an Issue. If no task
-breakdown exists, use `task-breakdown` to establish it without redefining an
-already accepted goal.
+A general node remains general even when tracked by an Issue.
 
 ### 2. Explore the codebase (optional)
 
@@ -51,7 +52,15 @@ Break the work into **tracer bullet** tickets.
 
 </vertical-slice-rules>
 
-Give each ticket its **blocking edges** — the other tickets that must complete before it can start. A ticket with no blockers can start immediately.
+Check the proposed tickets together against the accepted breakdown. Inspect
+changes to shared behavior, interfaces, installation configuration and test setup.
+Assign each common prerequisite once; consumers start from its integrated result
+instead of independently patching the same missing foundation. Keep changes that
+must be coordinated within one behavior in the same ticket. Preserve genuinely
+independent work rather than splitting by file or cleanup category alone.
+
+Give each ticket its **blocking edges**, naming the result each predecessor
+supplies. A ticket with no blockers can start immediately.
 
 **Wide refactors are the exception to vertical slicing.** A **wide refactor** is one mechanical change — rename a column, retype a shared symbol — whose **blast radius** fans across the whole codebase, so a single edit breaks thousands of call sites at once and no vertical slice can land green. Don't force it into a tracer bullet; sequence it as **expand–contract**. First expand: add the new form beside the old so nothing breaks. Then migrate the call sites over in batches sized by blast radius (per package, per directory), each batch its own ticket blocked by the expand, keeping CI green batch to batch because the old form still exists. Finally contract: delete the old form once no caller remains, in a ticket blocked by every migrate batch. Explain why independent vertical changes cannot stay green before choosing this exception. Keep non-deliverable intermediate steps within one ticket.
 

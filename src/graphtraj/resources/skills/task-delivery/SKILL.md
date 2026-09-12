@@ -57,14 +57,25 @@ definition, branch, Worktree and predecessor's handoff.
 
 ## Revise the graph when evidence requires it
 
-When implementation, validation or integration disproves a boundary or edge,
-pause affected dispatch and make the smallest product-preserving correction
-under Harness Guidance. Use `graphtraj ticket revise` and the command
-reference, retaining prior definitions and the evidence for the change.
+When a task's scope changes, a shared input changes, or a missing common
+prerequisite is discovered, Main rechecks affected pending and active tasks:
+boundaries, dependencies and the starting results each executor relies on.
+Pause affected dispatch or obsolete work while making the smallest
+product-preserving correction under Harness Guidance; independent work can
+continue. Use `task-breakdown` for boundary changes, reusing guidance and results
+already available. Record changed definitions with `graphtraj ticket revise`
+and the command reference, retaining the original dispatch inputs.
 
-Give affected executors the current definitions and revision evidence before
-continuing. Changes to the product goal or acceptance require user direction.
-A graph revision alone does not accept a candidate or manufacture Team evidence.
+Give affected executors the corrected assignment, prerequisite results and
+reusable evidence before continuing. Each shared prerequisite has one owner;
+consumers continue from its result instead of separately adapting an obsolete
+starting point. Main owns this cross-task check; a Team's internal review does
+not establish that parallel assignments are compatible.
+
+When validation or integration exposes incompatible assumptions or duplicated
+work, correct the affected task arrangement as well as the immediate conflict.
+Changes to the product goal or acceptance require user direction. A graph
+revision alone does not accept a candidate or manufacture Team evidence.
 
 ## Integrate and continue
 

@@ -20,6 +20,21 @@ Harness Project Documents.
   contents and Git tracking. Missing paths may link to shared Project Documents.
   Delegated Agents retain read-only access; Main owns document updates.
 
+## Python readability
+
+- Give functions and methods docstrings explaining their purpose and relevant
+  input/output semantics. A short summary suffices for simple functions. For
+  more involved interfaces, use NumPy-style `Parameters`, `Returns` or `Yields`,
+  and `Examples` sections as useful; explain shapes, units, conventions and side
+  effects where they matter. Include formulas or small diagrams when they make
+  an algorithm easier to understand.
+- Separate distinct processing blocks with blank lines so the sequence of work
+  is visible. Keep closely related statements together, and wrap long signatures
+  and expressions across lines for readability.
+- Add `#` comments where a processing step, algorithmic choice or constraint
+  needs explanation. Describe the intent, reasoning or relevant convention;
+  keep the detail proportional to what the reader needs to understand the code.
+
 ## Standard checks
 
 - Run focused tests with `pytest -p no:cacheprovider -q <paths>`.

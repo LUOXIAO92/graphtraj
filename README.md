@@ -109,7 +109,7 @@ set are managed separately. Matt Pocock sources are from
 | `implement` | Matt Pocock: same name | Team Engineers self-review and return evidence to their Leader, who schedules Reviewers; standalone work retains the code-review step. |
 | `code-review` | Matt Pocock: same name | Distinguishes Leader-owned Team Review from standalone review orchestration; assigned Reviewers perform only their supplied axis. |
 | `resolving-merge-conflicts` | Matt Pocock: same name | A dispatched Resolver stages the result for Main to commit and validate; incompatible accepted requirements return to Main. |
-| `handoff` | Matt Pocock: same name | Project-specific Team continuation instructions covering scope, candidate, evidence and unfinished work in the final Session response. |
+| `handoff` | [Matt Pocock: same name](https://github.com/mattpocock/skills/blob/3cca18b368ae95cdbdebbff572ccafa662551015/skills/productivity/handoff/SKILL.md) | Unmodified upstream Skill; writes a conversation handoff to the operating system temporary directory. |
 | `tdd` | Matt Pocock: same name | Retains the upstream test-driven development workflow. |
 | `ponytail` | [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail) | Bundled minimal-implementation guidance, with no GraphTraj-specific changes to its instructions. |
 | `task-delivery` | GraphTraj | General readiness, executor selection, dispatch, acceptance and integration; coding dispatch is conditional and the coding Leader owns its specialist workflow. |

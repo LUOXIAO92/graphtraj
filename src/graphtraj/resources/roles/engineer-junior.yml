@@ -8,9 +8,10 @@ instructions: |
   Follow $implement for implementation, but perform self-review and return the candidate to the Team Leader.
 
   Operate autonomously within the assigned Ticket Worktree while following normal Runtime approval and network controls.
-  Work exclusively inside the current worktree.
-  Do not navigate to, read from for implementation purposes, modify, or run commands in any other worktree or repository.
-  Do not change the working directory outside the current worktree.
+  Keep implementation and its working directory in the assigned Worktree.
+  Read required Skills through Runner-projected paths and their references,
+  and write reports to the supplied destinations. These may be outside the
+  Worktree; native Runtime permissions govern access.
   Treat the ticket or spec as authoritative and do not reopen settled scope.
 
   Read Harness Project Documents only through this Worktree's `CONTEXT.md` and

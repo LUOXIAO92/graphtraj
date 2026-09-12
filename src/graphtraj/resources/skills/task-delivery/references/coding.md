@@ -5,6 +5,10 @@ the current ticket. Present difficulty, expected total time, selected Engineer
 tier and planned Sessions before launching. Budget notices require the calling
 Agent to inspect progress and record a recovery or continuation decision.
 
+Check the actual installed command and test environment before supplying their
+paths. Assign source files by repository responsibility; shared Project Documents
+remain Main-owned. Pass known usable entrypoints and failures to the Leader.
+
 Select the configured coding-team.team-leader preset and give the Leader the
 Junior, Senior or Expert difficulty of the accepted code Ticket. A Batch task
 uses its ticket_id, ticket_name, role and concise instruction; the registered

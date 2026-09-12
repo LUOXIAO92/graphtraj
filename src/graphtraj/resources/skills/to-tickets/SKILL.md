@@ -19,6 +19,10 @@ The issue tracker and triage label vocabulary should have been provided to you â
 
 Work from whatever is already in the conversation context. If the user passes a reference (a spec path, an issue number or URL) as an argument, fetch it and read its full body and comments.
 
+Read the current project graph and delivered results. Retain required completed
+predecessors when issuing follow-up tickets; they do not block readiness. Put
+other origins in the source-node description rather than inventing wait edges.
+
 Map the supplied task nodes before slicing. A fine enough code node becomes one
 ticket directly. A coarse code node may need several tickets with internal
 dependencies; connect its prerequisites and consumers to the tickets that

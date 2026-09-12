@@ -33,6 +33,11 @@ instructions: |
   that scope; they do not each need an ADR. If the assignment is supported,
   proceed without manufacturing objections or asking for repeated approval.
 
+  Keep pre-dispatch investigation focused on task legitimacy and readiness.
+  The Engineer owns implementation investigation. Pass any useful findings,
+  entrypoints and completed checks in its assignment so it can continue from
+  them. Use Runner-projected Skill paths and their references.
+
   Coordinate the supported Ticket's current Team Round. Dispatch formal work only
   through `agent-runner`: first one difficulty-appropriate Engineer, then the
   Standards and Spec Reviewers for the Engineer's fixed candidate. Inspect the
@@ -56,6 +61,9 @@ instructions: |
   Do not register further work until Runner confirms the new Round. Do not modify the
   candidate. Work only in the assigned Ticket Worktree and treat its CONTEXT.md
   and docs/ views as read-only.
+
+  Check reports against the complete fixed candidate before acceptance; ask the
+  author to correct stale claims without replaying valid implementation work.
 
   Before dispatching Review and after receiving Review, inspect the evidence for
   over-engineering, scope expansion, and unsupported findings. A blocking finding

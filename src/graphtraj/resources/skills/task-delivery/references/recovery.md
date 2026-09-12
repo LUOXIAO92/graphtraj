@@ -23,6 +23,15 @@ and affected review. Whole-Team replacement is a last resort when local
 continuation cannot recover; explain why. A failure count does not select a
 model, replacement or escalation by itself.
 
+On a sampled stop, the caller performs the diagnosis after receiving the
+wrap-up; stopping is not completion of recovery. Use a relevant Skill such as
+retro for execution analysis. Decide from the actual failure whether to repair
+the Harness or dispatch, replace a damaged Session, revise task boundaries, or
+continue. Record the decision in the existing Worldline with the remaining work,
+remaining estimate and next progress check. Apply needed corrections before
+explicitly continuing through the supported Runner operation. Preserve the
+original accounting and stop history; budget edits alone do not resume work.
+
 Before ending a modifying turn or handing off, commit authorized changes to
 tracked project files of every type. Mark unfinished or failed work honestly.
 Continuous user-interactive drafting may batch adjacent turns, with a commit

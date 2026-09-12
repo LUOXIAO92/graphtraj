@@ -13,7 +13,9 @@ commands from the Harness Project Root.
 
 Select active nodes whose required predecessor results have been accepted
 and integrated. Read the existing current definition before registering or
-changing a Ticket; use [command inputs](references/command-inputs.md) for
+changing a Ticket. Preserve completed predecessor edges and register missing
+accepted nodes before dispatch; readiness is determined by predecessor status.
+Use [command inputs](references/command-inputs.md) for
 registration, readiness and graph revisions.
 
 Choose the executor from the task's needed expertise and accepted completion
@@ -44,7 +46,7 @@ interruption is intended.
 
 Receive the result, validation, required review evidence and acceptance
 decision. Runtime success alone does not establish acceptance. For an execution
-failure or repeated unproductive correction, read
+failure, sampled budget stop or repeated unproductive correction, read
 [recovery decisions](references/recovery.md). Correct Main's scope or dispatch
 errors as Main; the responsible Agent and its superior judge internal recovery.
 
@@ -85,3 +87,6 @@ need no separate persisted ledger.
 
 Finish when the accepted scope is integrated or no authorized progress remains.
 Report delivered results, validation, graph changes and concrete blockers.
+For tracker publication, summarize the delivered behavior, commit and relevant
+checks. Select information for the external reader; temporary probes, private
+paths and raw diagnostic payloads stay in their existing local records.

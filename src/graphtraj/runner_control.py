@@ -416,32 +416,35 @@ def _team_runtime_environment(mapping: Dict[str, Any], cwd: Path) -> Dict[str, s
             raise ValueError("missing Ticket context")
         evidence, ticket = matches[0]
         ticket_name = ticket.get("ticket_name")
-        team_file = evidence / "teams" / str(mapping["team_generation"]) / "team.yml"
-        if not team_file.is_file():
-            return {"GRAPHTRAJ_ROLE": mapping["role"]}
-        project = discover_project(cwd)
-        team = yaml.safe_load(team_file.read_text(encoding="utf-8"))
-        round_ordinal = team["current_round"]
         if (
             not isinstance(ticket, dict)
             or not isinstance(ticket_name, str)
             or not ticket_name
-            or not isinstance(team, dict)
+        ):
+            raise ValueError("invalid Ticket context")
+        environment = {
+            "GRAPHTRAJ_ROLE": mapping["role"],
+            "GRAPHTRAJ_EVIDENCE": str(evidence),
+            "GRAPHTRAJ_TICKET_ID": mapping["ticket_id"],
+            "GRAPHTRAJ_TICKET_NAME": ticket_name,
+            "GRAPHTRAJ_HARNESS_ROOT": str(configuration.harness_root),
+            "GRAPHTRAJ_TEAM_GENERATION": str(mapping["team_generation"]),
+        }
+        team_file = evidence / "teams" / str(mapping["team_generation"]) / "team.yml"
+        if not team_file.is_file():
+            return environment
+        project = discover_project(cwd)
+        team = yaml.safe_load(team_file.read_text(encoding="utf-8"))
+        round_ordinal = team["current_round"]
+        if (
+            not isinstance(team, dict)
             or type(round_ordinal) is not int
             or round_ordinal < 1
         ):
             raise ValueError("invalid Team context")
     except (OSError, TypeError, ValueError, yaml.YAMLError, ProjectConfigurationError) as error:
         raise RunnerError("session-not-resumable", "Cannot restore the Team Runtime context: {0}".format(error)) from error
-    environment = {
-        "GRAPHTRAJ_ROLE": mapping["role"],
-        "GRAPHTRAJ_EVIDENCE": str(evidence),
-        "GRAPHTRAJ_TICKET_ID": mapping["ticket_id"],
-        "GRAPHTRAJ_TICKET_NAME": ticket_name,
-        "GRAPHTRAJ_HARNESS_ROOT": str(configuration.harness_root),
-        "GRAPHTRAJ_TEAM_GENERATION": str(mapping["team_generation"]),
-        "GRAPHTRAJ_TEAM_ROUND": str(round_ordinal),
-    }
+    environment["GRAPHTRAJ_TEAM_ROUND"] = str(round_ordinal)
     if mapping["role"] in {"standards-reviewer", "spec-reviewer"}:
         candidate = ticket.get("current_candidate")
         if not isinstance(candidate, str) or not candidate:
@@ -480,7 +483,7 @@ def _refresh_current_team_report_request(
     reports_only: bool = False,
 ) -> Dict[str, Any]:
     role = mapping["role"]
-    if role == "team-leader" and not environment.get("GRAPHTRAJ_EVIDENCE"):
+    if role == "team-leader" and "GRAPHTRAJ_TEAM_ROUND" not in environment:
         return request
     if role in {
         "engineer-junior", "engineer-senior", "engineer-expert",

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import yaml
@@ -326,6 +327,7 @@ def test_installed_send_resumes_an_unregistered_leader_session(
     ticket = harness_root / ".graphtraj" / "state" / "tickets" / "76-session-alias-control"
     assert not (ticket / "teams" / "1" / "team.yml").exists()
     launch_before = (mapping_file.parent / "launch.yml").read_bytes()
+    execution = mapping_file.parent / "execution.yml"
     cause = [
         json.loads(line)["event_id"]
         for shard in (harness_root / ".graphtraj" / "state" / "worldline").glob(
@@ -345,20 +347,38 @@ def test_installed_send_resumes_an_unregistered_leader_session(
             cause,
         ],
         cwd=harness_root,
-        env=environment,
+        env={
+            **environment,
+            "FAKE_CODEX_LIFECYCLE_ACTION": "complete-team-round",
+            "FAKE_CODEX_RELEASE_FILE": str(tmp_path / "resume-release"),
+            "GRAPHTRAJ_AGENT_RUNNER": str(installed_commands.runner),
+        },
         timeout=15,
     )
 
     assert resumed.returncode == 0, resumed.stdout + resumed.stderr
-    wait_for_file(mapping_file.parent / "execution.yml")
+    assert not os.path.lexists(str(execution))
+    (tmp_path / "resume-release").touch()
+    wait_for_file(execution)
     assert yaml.safe_load(mapping_file.read_text(encoding="utf-8"))["session"] == mapping[
         "session"
     ]
     assert (mapping_file.parent / "launch.yml").read_bytes() == launch_before
+    registration = yaml.safe_load(
+        (mapping_file.parent / "child-registration.yml").read_text(encoding="utf-8")
+    )
+    assert registration["tasks"] == [
+        {
+            "ticket_id": "76",
+            "role": "engineer-junior",
+            "alias": "76-session-alias-control@j1",
+            "launch_status": "registered",
+        }
+    ]
     assert not (ticket / "teams" / "1" / "team.yml").exists()
 
 
-def test_installed_leader_registration_projects_budget_files_on_launch_and_resume(
+def test_installed_leader_registration_does_not_grant_budget_write_paths(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
     fake_codex: FakeCodex,
@@ -433,8 +453,8 @@ Deliver the accepted Session transport behavior.
         filesystem = leader["settings"]["permissions"][
             leader["settings"]["default_permissions"]
         ]["filesystem"]
-        assert filesystem[str(ticket / ".execution-budget.lock")] == "write"
-        assert filesystem[str(ticket / "execution-budget.yml")] == "write"
+        assert str(ticket / ".execution-budget.lock") not in filesystem
+        assert str(ticket / "execution-budget.yml") not in filesystem
         assert filesystem.get(str(ticket)) != "write"
 
 

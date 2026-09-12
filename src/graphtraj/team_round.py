@@ -77,17 +77,6 @@ def register_child_batch(batch_file: Path, cwd: Path, registration: Path) -> Lau
     from .team_replacement import require_active_session
 
     team = require_active_session(project, os.environ["GRAPHTRAJ_PARENT_ALIAS"])
-    ticket = project.state_directory / "tickets" / (
-        batch.tasks[0].ticket_id + "-" + batch.tasks[0].ticket_name
-    )
-    budget_monitor = execution_budget_monitor(
-        ticket, batch.tasks[0].ticket_id, batch.tasks[0].ticket_name
-    )
-    if budget_monitor is not None and budget_monitor.is_stopped():
-        raise RunnerError(
-            "EXECUTION_BUDGET_STOPPED",
-            "Runner selected stopping; the Team Leader cannot dispatch new work.",
-        )
     members = {seat["role"]: seat["session_ref"] for seat in team["members"].values()} if team else {}
     children = [
         {"ticket_id": task.ticket_id, "role": task.role,
@@ -2172,12 +2161,7 @@ def _execute_agent(
             repository_skill_source=worktree,
             requested_skills=task.requested_skills if policy_role in _ENGINEER_ROLES else (),
             report_files=report_files,
-            child_batch_write_paths=(
-                registration,
-                project.state_directory / "batches",
-                evidence / ".execution-budget.lock",
-                evidence / "execution-budget.yml",
-            )
+            child_batch_write_paths=(registration, project.state_directory / "batches")
             if policy_role == "team-leader" and registration is not None else (),
         ).finalize()
         launch_file = session_directory / "launch.yml"

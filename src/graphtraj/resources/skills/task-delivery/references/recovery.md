@@ -29,7 +29,8 @@ retro for execution analysis. Decide from the actual failure whether to repair
 the Harness or dispatch, replace a damaged Session, revise task boundaries, or
 continue. Record the decision in the existing Worldline with the remaining work,
 remaining estimate and next progress check. Apply needed corrections before
-explicitly continuing through the supported Runner operation. Preserve the
+explicitly continuing with `agent-runner continue --ticket-id <id>
+--caused-by-event-id <decision-event-id>`. Preserve the
 original accounting and stop history; budget edits alone do not resume work.
 
 Before ending a modifying turn or handing off, commit authorized changes to

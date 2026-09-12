@@ -232,6 +232,7 @@ agent-runner status --operation-total <alias> [<alias>...]
 agent-runner status --baseline <commit-or-ref> --candidate <commit-or-ref> <alias> [<alias>...]
 agent-runner send <alias> --instruction <text> --caused-by-event-id <event-id>
 agent-runner interrupt <alias>
+agent-runner continue --ticket-id <id> --caused-by-event-id <event-id>
 agent-runner replace <leader-alias> --actor main --caused-by-event-id <event-id>
 graphtraj ticket graph
 graphtraj worldline read
@@ -247,6 +248,13 @@ Only a compliant implementation rejection confirmed by the Leader opens the
 next Round. Main or the user can retire a Team; replacement retains the
 Ticket branch and Worktree, and reads handoff from the prior Leader's Trace.
 Replacing another member changes only that seat.
+
+After a sampled budget stop, Main analyzes the cause and records its chosen
+action in the existing Worldline. Apply any required corrections or accepted
+budget revision, then explicitly use `agent-runner continue` with that decision
+to resume unfinished Team work. A budget edit alone does not resume execution.
+Original elapsed time, consumption, sampling history and valid results remain;
+continuation does not replace the Team or bypass acceptance.
 
 Status diagnostics are on demand and do not affect delivery decisions. For a Codex
 Session, `--operation-total` counts each native `response_item` tool request once

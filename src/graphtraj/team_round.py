@@ -2202,7 +2202,7 @@ def _execute_agent(
         runtime_environment = context.runtime_environment()
     else:
         job_file, runtime_environment = _resume_job(
-            session_directory, expected_session, worktree, evidence, report_files,
+            session_directory, expected_session, role, worktree, evidence, report_files,
             reports_only=reports_only,
         )
 
@@ -2498,6 +2498,7 @@ def _execute_agent(
 def _resume_job(
     session_directory: Path,
     expected_session: str,
+    role: str,
     worktree: Path,
     evidence: Path,
     report_files: tuple[Path, ...],
@@ -2534,6 +2535,7 @@ def _resume_job(
             worktree=worktree,
             evidence=evidence,
             report_files=report_files,
+            role=role,
             reports_only=reports_only,
         )
     except RuntimeAdapterError as error:

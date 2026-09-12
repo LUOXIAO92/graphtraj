@@ -4,33 +4,16 @@ from __future__ import annotations
 
 import os
 import subprocess
-from dataclasses import dataclass
-from importlib import resources
 from pathlib import Path
-from typing import Callable, Dict, Optional
-
-RESOURCE_PATHS = (
-    "hooks/worktree_guard.py",
-)
+from typing import Callable, Optional
 
 
 class CodexProjectError(Exception):
     """Accepted Codex Runtime files could not be installed."""
 
 
-@dataclass(frozen=True)
 class CodexProjectFiles:
-    """A preloaded release resource set that configures one Harness Project."""
-
-    resources_by_path: Dict[str, bytes]
-
-    @staticmethod
-    def resource_action(runtime_store: Path, relative_path: str) -> str:
-        """Describe one exact Codex Runtime file mutation."""
-
-        return "Harness Runtime resource: {0}".format(
-            runtime_store / relative_path
-        )
+    """Install and clean up root-owned Codex project support files."""
 
     @staticmethod
     def link_action(
@@ -56,17 +39,7 @@ class CodexProjectFiles:
 
     @classmethod
     def load(cls) -> "CodexProjectFiles":
-        root = resources.files("graphtraj.resources").joinpath(
-            "codex"
-        )
-        return cls(
-            resources_by_path={
-                relative_path: root.joinpath(
-                    *relative_path.split("/")
-                ).read_bytes()
-                for relative_path in RESOURCE_PATHS
-            }
-        )
+        return cls()
 
     def install_setup_resources(
         self,
@@ -78,10 +51,10 @@ class CodexProjectFiles:
         common_git_directory: Path,
         on_action_complete: Optional[Callable[[str], None]] = None,
     ) -> None:
-        """Install Runtime resources without creating a Runner configuration."""
+        """Configure project support without creating a Runner configuration."""
 
         runtime_store = harness_root / ".codex"
-        self._write_resources(runtime_store, on_action_complete)
+        self._remove_obsolete_guard(runtime_store, on_action_complete)
         self._ensure_link(
             integration_worktree,
             ".state",
@@ -117,30 +90,35 @@ class CodexProjectFiles:
 
         return os.path.relpath(target, integration_worktree)
 
-    def runtime_resources(self, runtime_store: Path) -> Dict[str, bytes]:
-        """Return the root-owned resources rendered for this Runtime Store."""
-        return dict(self.resources_by_path)
+    @staticmethod
+    def obsolete_guard(runtime_store: Path) -> Path:
+        """Return the former GraphTraj-owned Guard installation path."""
 
-    def _write_resources(
+        return runtime_store / "hooks" / "worktree_guard.py"
+
+    @staticmethod
+    def obsolete_guard_action(runtime_store: Path) -> str:
+        """Describe removal of the former GraphTraj-owned Guard."""
+
+        return "Remove obsolete Harness Runtime resource: {0}".format(
+            CodexProjectFiles.obsolete_guard(runtime_store)
+        )
+
+    @classmethod
+    def has_obsolete_guard(cls, runtime_store: Path) -> bool:
+        guard = cls.obsolete_guard(runtime_store)
+        return guard.is_file() and not guard.is_symlink()
+
+    def _remove_obsolete_guard(
         self,
         runtime_store: Path,
         on_action_complete: Optional[Callable[[str], None]],
     ) -> None:
-        for relative_path, content in self.runtime_resources(runtime_store).items():
-            target = runtime_store / relative_path
-            if target.exists():
-                if target.is_file() and target.read_bytes() == content:
-                    continue
-                raise CodexProjectError(
-                    "Runtime resource already exists with different content: "
-                    "{0}".format(target)
-                )
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(content)
-            if on_action_complete is not None:
-                on_action_complete(
-                    self.resource_action(runtime_store, relative_path)
-                )
+        if not self.has_obsolete_guard(runtime_store):
+            return
+        self.obsolete_guard(runtime_store).unlink()
+        if on_action_complete is not None:
+            on_action_complete(self.obsolete_guard_action(runtime_store))
 
     @staticmethod
     def _ensure_link(

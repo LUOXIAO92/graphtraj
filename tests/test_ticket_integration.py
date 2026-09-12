@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-import shlex
 import subprocess
 import sys
 import tomllib
@@ -265,17 +264,7 @@ def test_main_resolves_observed_textual_conflict_then_validates_dev(
     permissions = settings["permissions"][settings["default_permissions"]]["filesystem"]
     assert permissions[str(state / "tickets/83-integration")] == "read"
     assert permissions[":workspace_roots"]["docs"] == "read"
-    hook = shlex.split(settings["hooks"]["PreToolUse"][0]["hooks"][0]["command"])
-    for tool_command in (
-        "cat " + str(worktrees / "83-integration/TEAM_ROUND_DELIVERED.txt"),
-        "touch " + str(worktrees / "83-integration/unrelated.txt"),
-        "agent-runner --help", "codex exec -",
-    ):
-        checked = subprocess.run([sys.executable, *hook[1:]], cwd=dev, input=json.dumps({
-            "hook_event_name": "PreToolUse", "tool_name": "Bash",
-            "tool_input": {"command": tool_command},
-        }), text=True, capture_output=True, check=True)
-        assert json.loads(checked.stdout)["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "hooks" not in settings
     assert run_process(["git", "rev-parse", "HEAD^1"], cwd=dev).stdout.strip() == before
     assert run_process(["git", "rev-parse", "HEAD^2"], cwd=dev).stdout.strip() == candidate
     events = [json.loads(line) for shard in (state / "worldline").glob("*.jsonl") for line in shard.read_text().splitlines()]

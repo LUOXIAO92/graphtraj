@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-import shlex
 import shutil
 import tomllib
 from pathlib import Path
@@ -369,31 +368,10 @@ def test_installed_runner_obeys_the_explicit_leader_decision_for_a_run_free_team
                     Path("teams") / "1" / "rounds" / call["round"] / name
                     for name in report_names
                 }
-        hook = shlex.split(
-            call['settings']['hooks']['PreToolUse'][0]['hooks'][0]['command']
-        )
-        write_paths = {
-            hook[index + 1]
-            for index, value in enumerate(hook[:-1])
-            if value == '--write-path'
-        }
-        assert write_paths == report_writes | {
-            str(worktree / ".state" / Path(path).relative_to(ticket_directory))
-            for path in report_writes
-        }
+        assert "hooks" not in call["settings"]
         assert call['settings']['agents']['enabled'] is (leader and swarm is not False)
         assert 'max_concurrent_threads_per_session' not in call['settings']['agents']
         assert 'max_depth' not in call['settings']['agents']
-        for command, decision in call['decisions'].items():
-            permitted = (
-                command == 'pwd'
-                or command.startswith('touch .state/teams/')
-                or command.startswith('touch ' + str(ticket_directory / 'teams'))
-                or (leader and command == 'agent-runner --help')
-            )
-            assert (not decision) is permitted, (call['role'], command, decision)
-        for command, decision in call['helper_decisions'].items():
-            assert (not decision) is (command in {'pwd', 'cat README.md'})
     retained_directory = harness_root / ".graphtraj" / "state" / "batches"
     retained_batches = list(retained_directory.glob("*.yml"))
     assert len(retained_batches) == (5 if leader_decision == "rework" else 3)
@@ -643,7 +621,7 @@ def test_installed_leader_registers_children_inside_the_codex_sandbox(
     }]}))
     wrapper = tmp_path / 'sandbox-child-runner'
     wrapper.write_text('#!' + str(installed_commands.runner.parent / 'python') + '\n' + '''
-import json, os, shlex, subprocess, sys, tomllib
+import os, subprocess, sys, tomllib
 from pathlib import Path
 import yaml
 from graphtraj.codex_adapter import _toml_value
@@ -661,27 +639,10 @@ targets = [Path(path) for path, access in filesystem.items() if access == 'write
 assert registration in targets
 assert len(targets) == 2
 assert registration.parent not in targets
-hook = shlex.split(settings['hooks']['PreToolUse'][0]['hooks'][0]['command'])
-mapping = yaml.safe_load((registration.parent / 'mapping.yml').read_text())
-for session in (mapping['session'], 'native-helper'):
-    for target in targets:
-        target = target / 'forbidden.yml' if target.is_dir() else target
-        for tool, command in (
-            ('Bash', 'touch ' + shlex.quote(str(target))),
-            ('apply_patch', '*** Begin Patch\\n*** Add File: ' + str(target) + '\\n+forbidden\\n*** End Patch'),
-        ):
-            event = {'hook_event_name': 'PreToolUse', 'session_id': session,
-                     'tool_name': tool, 'tool_input': {'command': command}}
-            checked = subprocess.run(hook, input=json.dumps(event), text=True, capture_output=True, check=True)
-            assert json.loads(checked.stdout)['hookSpecificOutput']['permissionDecision'] == 'deny'
-
 command = [os.environ['TEST_CODEX_SANDBOX'], 'sandbox', '-C', str(Path.cwd()), '-P', profile]
 # The test Harness is below the OS temp directory, which :workspace normally
 # permits. Match a real separated Harness by making its root read-only first.
 filesystem[os.environ['GRAPHTRAJ_HARNESS_ROOT']] = 'read'
-for index, argument in enumerate(arguments[:-1]):
-    if argument == '--add-dir':
-        filesystem[arguments[index + 1]] = 'write'
 allowed_permissions = 'permissions=' + _toml_value(settings['permissions'])
 for target in targets:
     filesystem[str(target)] = 'read'
@@ -878,9 +839,7 @@ def test_installed_runner_keeps_new_inline_role_names_outside_formal_team_policy
 
     policy = json.loads(policy_log.read_text().splitlines()[0])
     assert policy["settings"]["agents"]["enabled"] is False
-    assert policy["decisions"]["agent-runner --help"]
-    assert policy["decisions"]["codex exec hello"]
-    assert not policy["decisions"]["pwd"]
+    assert "hooks" not in policy["settings"]
 
 
 @pytest.mark.parametrize(

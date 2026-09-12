@@ -549,7 +549,7 @@ def test_setup_preflights_a_dev_checkout_owned_elsewhere(
     assert git_output(temporary_git_repository, "worktree", "list", "--porcelain") == before
 
 
-def test_setup_preflights_runtime_conflicts_before_creating_dev(
+def test_setup_removes_the_obsolete_guard_and_preserves_user_runtime_files(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
     fake_codex: FakeCodex,
@@ -560,22 +560,28 @@ def test_setup_preflights_runtime_conflicts_before_creating_dev(
     install_user_skills(user_home)
     runtime_store = harness_root / ".codex"
     (runtime_store / "hooks").mkdir(parents=True)
-    (runtime_store / "hooks" / "worktree_guard.py").write_text("unmanaged = True\n", encoding="utf-8")
-    before = git_output(temporary_git_repository, "worktree", "list", "--porcelain")
+    guard = runtime_store / "hooks" / "worktree_guard.py"
+    guard.write_text("obsolete GraphTraj Guard\n", encoding="utf-8")
+    user_hook = runtime_store / "hooks" / "operator.py"
+    user_hook.write_text("operator hook\n", encoding="utf-8")
+    config = runtime_store / "config.toml"
+    config.write_text('model = "operator-model"\n', encoding="utf-8")
+    user_hook_before = user_hook.read_bytes()
+    config_before = config.read_bytes()
 
     result = run_setup(
         installed_commands,
         harness_root=harness_root,
         user_home=user_home,
         fake_codex=fake_codex,
-        answers="",
+        answers="y\n",
     )
 
-    assert result.returncode == 1
-    assert "Harness Runtime resource conflicts" in result.stderr
-    assert not (harness_root / ".graphtraj").exists()
-    assert not (harness_root / ".graphtraj" / "runner").exists()
-    assert git_output(temporary_git_repository, "worktree", "list", "--porcelain") == before
+    assert result.returncode == 0, result.stderr
+    assert not guard.exists()
+    assert user_hook.read_bytes() == user_hook_before
+    assert config.read_bytes() == config_before
+    assert (harness_root / ".graphtraj" / ".agent-worktrees" / "dev").is_dir()
 
 
 def test_setup_reports_partial_execution_and_rerun_recovers(

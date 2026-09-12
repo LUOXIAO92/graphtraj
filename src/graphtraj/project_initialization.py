@@ -13,7 +13,6 @@ from .codex_project import (
     CodexProjectFiles,
 )
 from .git_repository import GitRepositoryError, GitTreeEntry, SourceRepository
-from .path_safety import relative_parent_paths
 from .project_configuration import (
     ProjectConfiguration,
     ProjectConfigurationError,
@@ -306,7 +305,7 @@ class ProjectSetupPlan:
             actions,
             conflicts,
         )
-        self._preflight_runtime_resources(actions, conflicts)
+        self._preflight_runtime_resources(actions)
 
         dev_exists = self.repository.branch_exists(INTEGRATION_BRANCH)
         registered = self.repository.worktree_for_branch(INTEGRATION_BRANCH)
@@ -445,40 +444,16 @@ class ProjectSetupPlan:
     def _preflight_runtime_resources(
         self,
         actions: List[PlannedSetupAction],
-        conflicts: List[str],
     ) -> None:
         if _entry_kind(self.runtime_store) not in {None, "directory"}:
             return
-        for relative_path, content in self.codex_files.runtime_resources(
-            self.runtime_store
-        ).items():
-            target = self.runtime_store / relative_path
-            for relative_parent in relative_parent_paths(relative_path):
-                parent = self.runtime_store / relative_parent
-                entry = _filesystem_entry(parent)
-                if entry is not None and entry.kind != "directory":
-                    _append_conflict(
-                        conflicts,
-                        "Harness Runtime resource is blocked by a non-directory "
-                        "path: {0}".format(parent),
-                    )
-                    break
-            else:
-                entry = _filesystem_entry(target)
-                description = CodexProjectFiles.resource_action(
-                    self.runtime_store, relative_path
+        if self.codex_files.has_obsolete_guard(self.runtime_store):
+            actions.append(
+                PlannedSetupAction(
+                    "REMOVE",
+                    self.codex_files.obsolete_guard_action(self.runtime_store),
                 )
-                if entry is None:
-                    actions.append(PlannedSetupAction("CREATE", description))
-                elif entry.kind == "file" and entry.content == content:
-                    actions.append(
-                        PlannedSetupAction("ALREADY CONFIGURED", description)
-                    )
-                else:
-                    _append_conflict(
-                        conflicts,
-                        "Harness Runtime resource conflicts at {0}.".format(target),
-                    )
+            )
 
     def _preflight_integration_links(
         self,

@@ -17,7 +17,7 @@ import json, os, subprocess, sys, yaml
 from pathlib import Path
 
 if sys.argv[1:] == ['exec', '--help']:
-    print('--sandbox --dangerously-bypass-hook-trust')
+    print('--sandbox')
     raise SystemExit(0)
 
 role = os.environ['GRAPHTRAJ_ROLE']

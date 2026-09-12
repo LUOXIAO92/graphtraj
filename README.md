@@ -93,7 +93,7 @@ that also has engineering tasks.
 `setup-matt-pocock-skills`. `graphtraj setup` prepares the Harness; the Skill
 guides the project-document configuration.
 
-The release bundles these 18 core Skills. The table describes the bundled
+The release bundles these 17 core Skills. The table describes the bundled
 workflows and their GraphTraj adaptations; user-installed Skills outside this
 set are managed separately. Matt Pocock sources are from
 [mattpocock/skills](https://github.com/mattpocock/skills).
@@ -109,7 +109,6 @@ set are managed separately. Matt Pocock sources are from
 | `implement` | Matt Pocock: same name | Team Engineers self-review and return evidence to their Leader, who schedules Reviewers; standalone work retains the code-review step. |
 | `code-review` | Matt Pocock: same name | Distinguishes Leader-owned Team Review from standalone review orchestration; assigned Reviewers perform only their supplied axis. |
 | `resolving-merge-conflicts` | Matt Pocock: same name | A dispatched Resolver stages the result for Main to commit and validate; incompatible accepted requirements return to Main. |
-| `handoff` | Matt Pocock: same name | Project-specific Team continuation instructions covering scope, candidate, evidence and unfinished work in the final Session response. |
 | `tdd` | Matt Pocock: same name | Retains the upstream test-driven development workflow. |
 | `ponytail` | [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail) | Bundled minimal-implementation guidance, with no GraphTraj-specific changes to its instructions. |
 | `task-delivery` | GraphTraj | General readiness, executor selection, dispatch, acceptance and integration; coding dispatch is conditional and the coding Leader owns its specialist workflow. |
@@ -124,6 +123,13 @@ reference when the current task calls for it; they do not load all references
 before choosing. Software-specific Skills remain independent and are selected
 for the coding role's work. Existing explicit-only invocation policies are
 preserved; a returned Skill name is not assumed to activate another Skill.
+
+When Main or the user retires a Team, Runner reads the packaged retirement
+instructions as an ordinary Team Leader role resource and injects them only
+into that Leader's final Session request. Normal Team completion and other
+roles do not receive them. The final response remains in the Leader's Session
+Trace for the successor, while a user-installed Matt Pocock `handoff` Skill
+remains independent.
 
 ## Configuration and roles
 
@@ -245,8 +251,8 @@ Each coding Team Leader schedules its Engineer and both Reviewers through the sa
 Runner, against a fixed candidate and comparison point, then makes the final
 adversarial decision. Process corrections stay in the current Team Round.
 Only a compliant implementation rejection confirmed by the Leader opens the
-next Round. Main or the user can retire a Team; replacement retains the
-Ticket branch and Worktree, and reads handoff from the prior Leader's Trace.
+next Round. Main or the user can retire a Team; replacement retains the Ticket
+branch and Worktree, and reads the prior Leader's final response from its Trace.
 Replacing another member changes only that seat.
 
 After a sampled budget stop, Main analyzes the cause and records its chosen

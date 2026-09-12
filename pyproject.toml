@@ -27,6 +27,7 @@ where = ["src"]
 graphtraj = [
     "resources/codex/agents/*.toml",
     "resources/roles/*.yml",
+    "resources/roles/*.md",
     "resources/skills/**/*",
 ]
 

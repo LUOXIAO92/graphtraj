@@ -321,7 +321,7 @@ def test_installed_runner_obeys_the_explicit_leader_decision_for_a_run_free_team
         assert filesystem[':workspace_roots']['CONTEXT.md'] == 'read'
         assert filesystem[':workspace_roots']['docs'] == 'read'
         required_skills = {
-            'team-leader': {'handoff'},
+            'team-leader': set(),
             'engineer-junior': {'implement', 'ponytail', 'tdd'},
             'standards-reviewer': set(), 'spec-reviewer': set(), 'delivery-state': set(),
         }

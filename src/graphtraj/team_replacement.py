@@ -6,6 +6,7 @@ import os
 import time
 from contextlib import ExitStack
 from dataclasses import replace
+from importlib import resources
 from pathlib import Path
 
 import yaml
@@ -122,12 +123,15 @@ def replace_session(alias, actor, caused_by_event_ids, cwd):
                 record("retiring", [_trace_ref(project, traces, alias)], actor=actor)
             os.environ["GRAPHTRAJ_RETIRING"] = "1"
             try:
+                retirement_instructions = resources.files(
+                    "graphtraj.resources"
+                ).joinpath(
+                    "roles", "retirement-instructions.md"
+                ).read_text(encoding="utf-8")
                 _run_agent(
                     project, task, "team-leader", worktree, directory, traces, alias,
                     mapping["session"], None, None, retained,
-                    "Main or the user has retired this Team. Stop all new work and freeze the current state. "
-                    "Use $handoff in your final Session response. Keep the handoff only in that response "
-                    "and its append-only Trace; do not write a separate handoff artifact.",
+                    retirement_instructions,
                     capacity_fd=capacity_fd, retiring=True,
                 )
             finally:

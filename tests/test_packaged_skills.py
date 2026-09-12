@@ -22,7 +22,7 @@ def test_setup_installs_all_core_skills_and_their_readable_references(
     skills = root / ".agents" / "skills"
     assert {path.name for path in skills.iterdir()} == {
         "setup-project", "grill-with-docs", "grilling", "domain-modeling",
-        "to-spec", "to-tickets", "task-delivery", "implement", "handoff",
+        "to-spec", "to-tickets", "task-delivery", "implement",
         "ponytail", "tdd", "code-review", "resolving-merge-conflicts",
         "task-breakdown", "research", "retro", "wayfinder", "prototype",
     }
@@ -37,7 +37,7 @@ def test_setup_installs_all_core_skills_and_their_readable_references(
 
     doctor = run_process([str(installed_commands.product), "doctor"], cwd=root)
     assert doctor.returncode == 0, doctor.stdout + doctor.stderr
-    assert len(doctor.stdout.splitlines()) == 19  # 18 Skills and reusable roles.
+    assert len(doctor.stdout.splitlines()) == 18  # 17 Skills and reusable roles.
 
 
 def installed_python(installed_commands: InstalledCommands) -> Path:

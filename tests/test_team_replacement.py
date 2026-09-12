@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+from importlib import resources
 
 import pytest
 import yaml
@@ -22,6 +23,10 @@ def test_installed_team_and_member_replacement(
         installed_commands, temporary_git_repository, fake_codex, tmp_path,
     )
     _register_ready_ticket(installed_commands, root)
+    retirement_instructions = resources.files("graphtraj.resources").joinpath(
+        "roles", "retirement-instructions.md"
+    ).read_text(encoding="utf-8")
+    environment["GRAPHTRAJ_RETIREMENT_INSTRUCTIONS"] = retirement_instructions
     # Exercise the same Runtime protocol with a final handoff and successive Teams.
     script = fake_codex.executable.read_text()
     script = script.replace("evidence / 'teams' / '1'", "evidence / 'teams' / os.environ.get('GRAPHTRAJ_TEAM_GENERATION', '1')")
@@ -29,8 +34,8 @@ def test_installed_team_and_member_replacement(
     script = script.replace("delivered.write_text('complete team round' + ('' if ordinal == '1' else ' ' + ordinal) + '\\n')", "delivered.write_text('team ' + os.environ.get('GRAPHTRAJ_TEAM_GENERATION', '1') + ' round ' + ordinal)")
     script = script.replace("elif role == 'team-leader':", """elif role == 'team-leader' and os.environ.get('GRAPHTRAJ_RETIRING'):
         prompt = sys.stdin.read()
-        assert 'handoff' in prompt
-        assert 'handoff/SKILL.md' in ' '.join(sys.argv)
+        assert os.environ['GRAPHTRAJ_RETIREMENT_INSTRUCTIONS'] in prompt
+        assert 'handoff/SKILL.md' not in ' '.join(sys.argv)
         root = Path(os.environ['GRAPHTRAJ_HARNESS_ROOT'])
         shard = sorted((root / '.graphtraj/state/worldline').glob('*.jsonl'))[-1]
         cause = json.loads(shard.read_text().splitlines()[-1])['event_id']

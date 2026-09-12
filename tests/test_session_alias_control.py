@@ -83,7 +83,7 @@ def test_installed_alias_control_resumes_and_interrupts_one_team_session(
     fake_codex: FakeCodex,
     tmp_path: Path,
 ) -> None:
-    harness_root, worktree_root, _, environment = configure_harness(
+    harness_root, worktree_root, integration, environment = configure_harness(
         installed_commands,
         temporary_git_repository,
         fake_codex,
@@ -152,6 +152,9 @@ def test_installed_alias_control_resumes_and_interrupts_one_team_session(
         if yaml.safe_load(path.read_text())["role"].startswith("engineer-")
     )
     peer_alias = yaml.safe_load(peer_mapping_file.read_text())["alias"]
+    (integration / "other-ticket-in-progress.txt").write_text(
+        "temporary work from another Ticket\n", encoding="utf-8"
+    )
 
     policy_log = tmp_path / "resumed-policy.jsonl"
     resumed = run_process(
@@ -289,13 +292,60 @@ def test_installed_alias_control_resumes_and_interrupts_one_team_session(
     assert not list((ticket_directory / "teams" / "1" / "traces" / alias).glob("turn-*"))
 
 
+def test_installed_runner_keeps_clean_dev_requirement_for_new_ticket_worktree(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    harness_root, worktree_root, integration, environment = configure_harness(
+        installed_commands,
+        temporary_git_repository,
+        fake_codex,
+        tmp_path,
+    )
+    _register_ready_ticket(installed_commands, harness_root)
+    (integration / "other-ticket-in-progress.txt").write_text(
+        "temporary work from another Ticket\n", encoding="utf-8"
+    )
+    batch = harness_root / "batch.yml"
+    batch.write_text(
+        "tasks:\n"
+        "  - ticket_id: \"76\"\n"
+        "    ticket_name: session-alias-control\n"
+        "    role: team-leader\n",
+        encoding="utf-8",
+    )
+
+    launched = run_process(
+        [str(installed_commands.runner), "--batch-input", str(batch)],
+        cwd=harness_root,
+        env=environment,
+        timeout=15,
+    )
+
+    assert launched.returncode == 1
+    response = yaml.safe_load(launched.stdout)
+    error = response.get("error") or response["tasks"][0]["error"]
+    assert error["code"] == "integration-not-ready"
+    state = yaml.safe_load(
+        (
+            harness_root
+            / ".graphtraj/state/tickets/76-session-alias-control/ticket.yml"
+        ).read_text(encoding="utf-8")
+    )
+    assert state["status"] == "ready"
+    assert state["worktree"] is None
+    assert not (worktree_root / "76-session-alias-control").exists()
+
+
 def test_installed_send_resumes_an_unregistered_leader_session(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
     fake_codex: FakeCodex,
     tmp_path: Path,
 ) -> None:
-    harness_root, _, _, environment = configure_harness(
+    harness_root, _, integration, environment = configure_harness(
         installed_commands,
         temporary_git_repository,
         fake_codex,
@@ -337,6 +387,9 @@ def test_installed_send_resumes_an_unregistered_leader_session(
         )
         for line in shard.read_text(encoding="utf-8").splitlines()
     ][-1]
+    (integration / "other-ticket-in-progress.txt").write_text(
+        "temporary work from another Ticket\n", encoding="utf-8"
+    )
 
     resumed = run_process(
         [

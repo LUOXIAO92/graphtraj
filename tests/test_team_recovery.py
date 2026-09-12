@@ -356,7 +356,7 @@ def test_provider_failure_returns_to_the_caller_for_an_explicit_same_session_ret
     installed_commands, temporary_git_repository, fake_codex, tmp_path,
     target, round_ordinal,
 ):
-    harness, _, _, environment = configure_harness(
+    harness, _, integration, environment = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path,
     )
     _register_ready_ticket(installed_commands, harness)
@@ -408,6 +408,9 @@ def test_provider_failure_returns_to_the_caller_for_an_explicit_same_session_ret
         for path in (harness / '.graphtraj/state/worldline').glob('*.jsonl')
         for line in path.read_text().splitlines()
     ]
+    (integration / 'other-ticket-in-progress.txt').write_text(
+        'temporary work from another Ticket\n'
+    )
     retried = run_process(
         [
             str(installed_commands.runner), 'send', mapping['alias'],

@@ -87,6 +87,39 @@ def test_main_integrates_an_accepted_candidate_and_unlocks_only_satisfied_depend
     assert not any(path.name in {"task-map.yml", "dag.md", "ledger.yml"} for path in state.rglob("*"))
 
 
+def test_main_integration_refuses_dirty_dev(
+    installed_commands, accepted_ticket,
+):
+    root, worktrees, state, candidate = accepted_ticket
+    dev = worktrees / "dev"
+    before = run_process(["git", "rev-parse", "HEAD"], cwd=dev).stdout
+    (dev / "other-ticket-in-progress.txt").write_text(
+        "temporary work from another Ticket\n", encoding="utf-8"
+    )
+
+    result = run_process(
+        [
+            str(installed_commands.product),
+            "ticket",
+            "integrate",
+            "--ticket-id",
+            "83",
+            "--",
+            sys.executable,
+            "-c",
+            "pass",
+        ],
+        cwd=root,
+    )
+
+    assert result.returncode == 1
+    assert "must be clean" in yaml.safe_load(result.stdout)["error"]
+    assert run_process(["git", "rev-parse", "HEAD"], cwd=dev).stdout == before
+    record = yaml.safe_load((state / "tickets/83-integration/ticket.yml").read_text())
+    assert record["status"] == "awaiting-integration"
+    assert record["current_candidate"] == candidate
+
+
 @pytest.mark.parametrize("flat_roles", (False, True))
 def test_grouped_presets_apply_operator_settings_and_preserve_existing_history(
     installed_commands, accepted_ticket, fake_codex, flat_roles,

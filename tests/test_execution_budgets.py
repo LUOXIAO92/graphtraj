@@ -463,7 +463,7 @@ def test_installed_runner_stops_final_leader_before_acceptance(
     fake_codex: FakeCodex,
     tmp_path: Path,
 ) -> None:
-    harness, _, _, environment = configure_harness(
+    harness, _, integration, environment = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path
     )
     _register_ready_ticket(
@@ -620,6 +620,9 @@ def test_installed_runner_stops_final_leader_before_acceptance(
     )
     assert ordinary_dispatch.returncode == 0, ordinary_dispatch.stderr
     assert yaml.safe_load(ordinary_dispatch.stdout)["tasks"][0]["launch_status"] == "stopped"
+    (integration / "other-ticket-in-progress.txt").write_text(
+        "temporary work from another Ticket\n", encoding="utf-8"
+    )
 
     continued = run_process(
         [

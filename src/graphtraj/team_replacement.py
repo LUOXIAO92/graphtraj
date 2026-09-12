@@ -43,7 +43,7 @@ def replace_session(alias, actor, caused_by_event_ids, cwd):
         raise RunnerError("authority-denied", "Only Main or the user may initiate Team replacement.")
     if not caused_by_event_ids or len(caused_by_event_ids) != len(set(caused_by_event_ids)):
         raise RunnerError("invalid-input", "Replacement requires unique causal Project Worldline event IDs.")
-    project = discover_project(cwd)
+    project = discover_project(cwd, require_clean_integration=False)
     _require_project_events(cwd, caused_by_event_ids)
     mapping, session_directory = read_alias_mapping(project.runner_directory, alias)
     directory, ticket = _load_states(project.state_directory / "tickets")[mapping["ticket_id"]]

@@ -13,7 +13,7 @@ import pytest
 import yaml
 
 from conftest import FakeCodex, InstalledCommands, run_process, wait_for_file
-from test_project_setup import install_user_skills, run_ready_setup as run_setup
+from test_project_setup import install_skills, install_user_skills, run_ready_setup as run_setup
 
 
 def configure_harness(
@@ -35,6 +35,7 @@ def configure_harness(
         answers="y\n",
     )
     assert setup_result.returncode == 0, setup_result.stderr
+    install_skills(user_home / ".agents" / "skills", ("ponytail-review",))
     environment = os.environ.copy()
     environment.update(
         {

@@ -81,7 +81,9 @@ def send_instruction(
         _require_project_events(cwd, caused_by_event_ids)
         from .team_replacement import require_active_session
 
-        require_active_session(discover_project(cwd), alias)
+        require_active_session(
+            discover_project(cwd, require_clean_integration=False), alias
+        )
         return _send_session(
             alias,
             instruction,
@@ -433,7 +435,7 @@ def _team_runtime_environment(mapping: Dict[str, Any], cwd: Path) -> Dict[str, s
         team_file = evidence / "teams" / str(mapping["team_generation"]) / "team.yml"
         if not team_file.is_file():
             return environment
-        project = discover_project(cwd)
+        project = discover_project(cwd, require_clean_integration=False)
         team = yaml.safe_load(team_file.read_text(encoding="utf-8"))
         round_ordinal = team["current_round"]
         if (

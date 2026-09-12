@@ -31,6 +31,14 @@ Harness Project Documents.
 - Separate distinct processing blocks with blank lines so the sequence of work
   is visible. Keep closely related statements together, and wrap long signatures
   and expressions across lines for readability.
+- Align related assignments and similar adjacent statements into readable
+  columns where practical. Use spaces around `=` and binary operators such as
+  `+`, `-`, `*`, and `/`, including when alignment is impractical. In parameter
+  and variable lists, separate items with commas followed by a space when the
+  next item stays on the same line.
+- Annotate function input parameters with their types. When a function
+  definition has more than four parameters, put each parameter on its own line
+  inside the parentheses; shorter signatures may also wrap for readability.
 - Add `#` comments where a processing step, algorithmic choice or constraint
   needs explanation. Describe the intent, reasoning or relevant convention;
   keep the detail proportional to what the reader needs to understand the code.

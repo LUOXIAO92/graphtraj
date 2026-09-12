@@ -161,12 +161,29 @@ the two Reviewers running sequentially in the same Round.
 `.graphtraj/roles.yml` groups coding presets under `roles.coding-team`; shared
 `delivery-state` remains directly under `roles`. Batch references use names such
 as `coding-team.team-leader` or `coding-team.spec-reviewer`. Each preset selects `runtime`
-and `model`, with optional `base_url` and `api_key_env`. The latter names an
+and `model`, with optional `reasoning_effort`, `base_url` and `api_key_env`. The latter names an
 environment variable, never stores the credential. Omitted settings use the
 Runtime's defaults. Team Leader additionally supports `allow_runtime_swarm`,
 which defaults to true. Presets include Team Leader, Engineer tiers, both
 Reviewer axes, Delivery State and Merge Resolver. Main's already selected
 Runtime is outside these presets.
+
+Set `reasoning_effort` on a role when its model needs a different reasoning
+level. For example, this entry inside the existing `roles` mapping selects
+`high` for the Senior Engineer:
+
+```yaml
+coding-team:
+  engineer-senior:
+    runtime: codex
+    model: gpt-5.6-terra
+    reasoning_effort: high
+```
+
+The Runtime Adapter interprets this setting. Codex maps it to
+`model_reasoning_effort`; omission keeps the bundled role default. Invalid
+values produce a configuration error. The effective setting is preserved on
+Session continuation. Batch inline roles accept the same optional field.
 
 A task can use a preset name or a one-entry inline role with the same Runtime
 settings. Inline roles stay in their Batch and never become presets

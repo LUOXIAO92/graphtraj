@@ -43,6 +43,29 @@ Harness Project Documents.
   needs explanation. Describe the intent, reasoning or relevant convention;
   keep the detail proportional to what the reader needs to understand the code.
 
+Example:
+
+```python
+def calculate_total(
+    unit_price: float,
+    quantity: int,
+    discount_rate: float,
+    tax_rate: float,
+    shipping: float = 0.0,
+) -> float:
+    """Return the discounted total with tax and shipping.
+
+    Rates are fractions: 0.1 means 10 percent.
+    """
+    subtotal   = unit_price * quantity
+    discounted = subtotal * (1 - discount_rate)
+
+    # Shipping is excluded from the taxable amount.
+    tax = discounted * tax_rate
+
+    return discounted + tax + shipping
+```
+
 ## Standard checks
 
 - Run focused tests with `pytest -p no:cacheprovider -q <paths>`.

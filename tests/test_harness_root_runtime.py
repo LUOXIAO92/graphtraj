@@ -318,7 +318,7 @@ def test_setup_creates_a_root_owned_runtime_and_runner_discovers_it(
     )
     install_skills(user_home / ".agents" / "skills", ("implement", "ponytail", "tdd"))
     plan = plan_project_setup(harness_root, primary)
-    assert plan.apply() == "Created Integration Worktree on dev."
+    assert plan.apply().integration_action == "created"
 
     project = discover_project(harness_root)
     assert project.harness_root == harness_root.resolve()
@@ -356,7 +356,7 @@ def test_setup_installs_project_core_skills_even_with_user_copies(
     monkeypatch.setenv("HOME", str(user_home))
 
     plan = plan_project_setup(harness_root, temporary_git_repository)
-    assert plan.apply(install_missing_skills=True) == "Created Integration Worktree on dev."
+    assert plan.apply(install_missing_skills=True).integration_action == "created"
 
     runtime_store = harness_root / ".codex"
     assert not (runtime_store / "config.toml").exists()

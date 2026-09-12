@@ -37,7 +37,7 @@ from .runner_batch import read_batch, resolved_role_preset, retain_batch, valid_
 from .runner_capacity import capacity_positions
 from .runner_io import write_yaml_durably
 from .runner_models import Batch, LaunchResponse, RunnerError, Task, role_alias_marker
-from .runner_project import discover_project, git_succeeds, preflight_worktree, provision_worktree, run_git, runtime_executable
+from .runner_project import discover_project, git_succeeds, provision_worktree, run_git, runtime_executable
 from .runner_status import read_alias_mapping, read_terminal_outcome
 from .runner_transport import record_runtime_identity
 from .runtime_adapter import RuntimeAdapterError
@@ -441,7 +441,6 @@ def _deliver_ticket(project: Any, requested: Task, retained_batch: Path, capacit
         worktree = project.harness_root / state["worktree"]
         branch = state["branch"]
     else:
-        preflight_worktree(project, task, branch, worktree)
         provision_worktree(project, task, branch, worktree)
     _link_worktree(project, worktree, ticket_directory)
 

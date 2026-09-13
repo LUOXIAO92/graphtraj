@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import errno
 import json
 from dataclasses import replace
 import sys
 from pathlib import Path
 
 import pytest
+import yaml
 
 from graphtraj.configuration.project_roles import RolePreset
 from graphtraj.configuration.role_definitions import ResolvedChildRole
@@ -123,6 +125,106 @@ def test_native_trace_retains_one_app_server_session_incrementally_and_on_resume
         assert trace.count(b'"timestamp":"native-1"') == 1
         assert trace.count(b'"timestamp":"native-5"') == 1
         assert read_codex_last_agent_message(trace_file) == 'resumed native result'
+
+    asyncio.run(exercise())
+
+
+def test_terminal_trace_failure_keeps_confirmed_execution_status(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    peer: Path,
+) -> None:
+    """A post-terminal Trace failure keeps the native execution confirmation."""
+
+    from graphtraj.runtimes.codex import codex_adapter
+
+    original_append = codex_adapter._append_native_records
+    failing = False
+
+    def append_or_fail(*args: object, **kwargs: object) -> int:
+        if failing:
+            raise OSError(errno.ENOSPC, 'No space left on device')
+        return original_append(*args, **kwargs)
+
+    monkeypatch.setattr(codex_adapter, '_append_native_records', append_or_fail)
+
+    async def exercise() -> None:
+        nonlocal failing
+
+        environment = {'PEER_NATIVE_ROLLOUT': str(tmp_path / 'native-rollouts')}
+        trace_directory = tmp_path / 'trace'
+        async with CodexAppServer(command=[str(peer)], cwd=tmp_path, environment=environment) as adapter:
+            session = await adapter.create_session(context(tmp_path / 'worktree', peer))
+            adapter.retain_native_trace(session, trace_directory)
+            execution = await adapter.start_execution(session, 'hold')
+            await adapter.interrupt(execution)
+            assert session.rollout_path is not None
+            session.rollout_path.parent.mkdir(parents=True, exist_ok=True)
+            session.rollout_path.write_text(
+                json.dumps({'timestamp': 'terminal-tail', 'type': 'event_msg'}) + '\n',
+                encoding='utf-8',
+            )
+            failing = True
+            try:
+                with pytest.raises(RuntimeAdapterError) as caught:
+                    await adapter.wait(execution, timeout=2)
+            finally:
+                failing = False
+
+            assert caught.value.code == 'RUNTIME_TRACE_FAILED'
+            assert caught.value.terminal_confirmed is True
+            assert isinstance(caught.value.__cause__, RuntimeAdapterError)
+            assert caught.value.__cause__.terminal_confirmed is False
+            assert isinstance(caught.value.__cause__.__cause__, OSError)
+
+    asyncio.run(exercise())
+
+
+def test_position_storage_failure_never_replays_native_records(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    peer: Path,
+) -> None:
+    """A failed position checkpoint is retried before any later native append."""
+
+    from graphtraj.runtimes.codex import codex_adapter
+
+    original_write = codex_adapter.write_yaml_durably
+    failed = False
+
+    def write_position_once(path: Path, document: object) -> None:
+        nonlocal failed
+
+        if path.name == 'native-session.yml' and not failed:
+            failed = True
+            raise OSError(errno.ENOSPC, 'No space left on device')
+        original_write(path, document)
+
+    monkeypatch.setattr(codex_adapter, 'write_yaml_durably', write_position_once)
+
+    async def exercise() -> None:
+        environment = {'PEER_NATIVE_ROLLOUT': str(tmp_path / 'native-rollouts')}
+        trace_directory = tmp_path / 'trace'
+        trace_file = trace_directory / 'events.jsonl'
+        async with CodexAppServer(command=[str(peer)], cwd=tmp_path, environment=environment) as adapter:
+            session = await adapter.create_session(context(tmp_path / 'worktree', peer))
+            adapter.retain_native_trace(session, trace_directory)
+            execution = await adapter.start_execution(session, 'hold')
+            assert session.rollout_path is not None
+            session.rollout_path.parent.mkdir(parents=True, exist_ok=True)
+            session.rollout_path.write_text(
+                json.dumps({'timestamp': 'position-tail', 'type': 'event_msg'}) + '\n',
+                encoding='utf-8',
+            )
+            with pytest.raises(RuntimeAdapterError) as caught:
+                await adapter.wait(execution, timeout=2)
+
+            assert caught.value.code == 'RUNTIME_TRACE_FAILED'
+            assert trace_file.read_bytes().count(b'"timestamp": "position-tail"') == 1
+            retained = yaml.safe_load((trace_directory / 'native-session.yml').read_text())
+            assert retained['position'] == session.rollout_path.stat().st_size
+
+        assert trace_file.read_bytes().count(b'"timestamp": "position-tail"') == 1
 
     asyncio.run(exercise())
 

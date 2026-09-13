@@ -437,7 +437,10 @@ class CodexAppServer:
                 'RUNTIME_TIMEOUT', f'Waiting for {execution} timed out; it remains owned.',
                 terminal_confirmed=False,
             ) from error
-        self._collect_native_trace_once(execution.thread_id)
+        try:
+            self._collect_native_trace_once(execution.thread_id)
+        except CodexAdapterError as error:
+            result = error
         if isinstance(result, CodexAdapterError):
             if state.terminal and not result.terminal_confirmed:
                 raise CodexAdapterError(result.code, result.message) from result

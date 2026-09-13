@@ -487,6 +487,14 @@ class CodexTurn:
             time.sleep(0.01)
 
 
+class _NativePositionStorageError(OSError):
+    """A raw append succeeded but its durable native position did not."""
+
+    def __init__(self, position: int) -> None:
+        super().__init__("The native Codex Session position could not be retained.")
+        self.position = position
+
+
 class CodexNativeTrace:
     """Incrementally retain one raw Codex rollout in its Session Trace.
 
@@ -512,6 +520,7 @@ class CodexNativeTrace:
         session_directory.mkdir(parents=True, exist_ok=True)
         existing_trace = self._events_file.exists() and self._events_file.stat().st_size > 0
         self._rollout, self._position = _native_session_state(session_directory, session)
+        self._pending_position: Tuple[Path, int] | None = None
         self._skip_existing = resumed and existing_trace and self._rollout is None
         if self._rollout is None:
             self._rollout = rollout_path
@@ -521,18 +530,36 @@ class CodexNativeTrace:
     def collect(self) -> None:
         """Append every newly complete native record available at this instant."""
 
+        self._settle_pending_position()
         if self._rollout is None or not self._rollout.exists():
             discovered = _find_native_session(self._session, self._codex_home)
             if discovered is not None:
                 self._rollout = discovered
                 self._skip_existing_rollout()
         if self._rollout is not None:
-            self._position = _append_native_records(
-                self._rollout,
-                self._position,
-                self._events_file,
-                self._session_directory,
-            )
+            try:
+                self._position = _append_native_records(
+                    self._rollout,
+                    self._position,
+                    self._events_file,
+                    self._session_directory,
+                )
+            except _NativePositionStorageError as error:
+                self._position = error.position
+                self._pending_position = (self._rollout, error.position)
+                raise
+
+    def _settle_pending_position(self) -> None:
+        """Persist consumed native bytes before reading any additional source records."""
+
+        if self._pending_position is None:
+            return
+        rollout, position = self._pending_position
+        write_yaml_durably(
+            self._session_directory / "native-session.yml",
+            {"path": str(rollout), "position": position},
+        )
+        self._pending_position = None
 
     def _skip_existing_rollout(self) -> None:
         """Avoid copying historical records into a resumed Trace without position state."""
@@ -701,10 +728,13 @@ def _append_native_records(
         events.flush()
         os.fsync(events.fileno())
     position += complete
-    write_yaml_durably(
-        session_directory / "native-session.yml",
-        {"path": str(rollout), "position": position},
-    )
+    try:
+        write_yaml_durably(
+            session_directory / "native-session.yml",
+            {"path": str(rollout), "position": position},
+        )
+    except OSError as error:
+        raise _NativePositionStorageError(position) from error
     return position
 
 

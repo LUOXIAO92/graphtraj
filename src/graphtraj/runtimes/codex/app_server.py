@@ -454,8 +454,9 @@ class CodexAppServer:
         future = asyncio.get_running_loop().create_future()
         self._pending[request_id] = future
         try:
-            await self._send({'id': request_id, 'method': method, 'params': params})
-            response = await asyncio.wait_for(asyncio.shield(future), self._timeout)
+            async with asyncio.timeout(self._timeout):
+                await self._send({'id': request_id, 'method': method, 'params': params})
+                response = await asyncio.shield(future)
         except TimeoutError as error:
             failure = CodexAdapterError(
                 'RUNTIME_TIMEOUT',

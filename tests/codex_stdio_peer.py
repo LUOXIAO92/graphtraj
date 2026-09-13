@@ -152,6 +152,8 @@ for line in sys.stdin:
     else:
         raise AssertionError(message)
     emit({'id': message['id'], 'result': result})
+    if method == 'thread/start' and os.environ.get('PEER_PAUSE_INPUT'):
+        time.sleep(5)
 
 if os.environ.get('PEER_STALL_CLOSE'):
     time.sleep(10)

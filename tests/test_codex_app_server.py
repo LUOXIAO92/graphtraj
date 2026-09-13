@@ -410,6 +410,38 @@ def test_explicit_close_wakes_pending_owners_and_bounds_a_stalled_service(
     asyncio.run(exercise())
 
 
+def test_rpc_timeout_includes_backpressure_and_allows_explicit_close(
+    tmp_path: Path, peer: Path,
+) -> None:
+    """A peer that stops reading cannot leave a valid large request pending."""
+
+    async def exercise() -> None:
+        resolved = context(tmp_path / 'worktree', peer)
+        async with CodexAppServer(
+            command=[str(peer)], cwd=tmp_path, request_timeout=1,
+            environment={'PEER_PAUSE_INPUT': '1', 'PEER_STALL_CLOSE': '1'},
+        ) as adapter:
+            session = await adapter.create_session(resolved)
+            start = asyncio.create_task(adapter.start_execution(session, 'x' * 1_000_000))
+            try:
+                done, _ = await asyncio.wait([start], timeout=2)
+                assert start in done, 'Backpressure exceeded the RPC timeout'
+                with pytest.raises(RuntimeAdapterError) as caught:
+                    await start
+                assert caught.value.code == 'RUNTIME_TIMEOUT'
+                assert not caught.value.terminal_confirmed
+                with pytest.raises(RuntimeAdapterError) as invalidated:
+                    await adapter.start_execution(session, 'after timeout')
+                assert invalidated.value.code == 'RUNTIME_TIMEOUT'
+            finally:
+                start.cancel()
+                await asyncio.gather(start, return_exceptions=True)
+                await asyncio.wait_for(adapter.close(), timeout=3)
+            assert 'close acknowledged' in adapter.stderr_tail
+
+    asyncio.run(exercise())
+
+
 def test_native_request_resolution_cancels_the_pending_caller_handler(
     tmp_path: Path, peer: Path,
 ) -> None:

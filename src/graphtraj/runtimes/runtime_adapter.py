@@ -1,12 +1,21 @@
-"""Runtime-neutral contracts for one background Agent turn."""
+"""Shared Runtime Context, invocation and native execution result contracts."""
 
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Callable, Dict, Mapping, Protocol
+from typing import Any, Callable, Dict, Literal, Mapping, Protocol, TypedDict
 
 
 SessionStarted = Callable[[str, int], None]
+
+
+class RuntimeExecutionResult(TypedDict):
+    """One terminal native result; failures use RuntimeAdapterError."""
+
+    outcome: Literal["completed", "interrupted"]
+    session_id: str
+    execution_id: str
+    last_agent_message: str | None
 
 
 class RuntimeAdapterError(Exception):
@@ -51,8 +60,11 @@ class RuntimeContext(Protocol):
     def evidence_document(self) -> Dict[str, Any]:
         """Return a fresh document of the effective Context facts."""
 
+    def session_document(self) -> Dict[str, Any]:
+        """Return fresh Adapter-owned configuration for native Session operations."""
+
     def runtime_environment(self) -> Mapping[str, str]:
-        """Return non-persistent environment overrides for one Runtime turn."""
+        """Return non-persistent environment overrides for the Runtime connection."""
 
 
 class RuntimeContextPreflight(Protocol):

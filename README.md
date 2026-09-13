@@ -364,6 +364,82 @@ a Merge Resolver. Successful Team Review alone does not merge a candidate.
 Cleanup verifies integration and a clean disposable Worktree, removes safe
 live mappings and the Ticket Worktree/branch, and preserves durable evidence.
 
+## Codex Session interface in Python
+
+`graphtraj.runtimes.codex.app_server.CodexAppServer` provides native Session
+control using Codex 0.153.0's stdio app-server. Runner workers still use the
+existing execution transport; their migration is a separate integration.
+
+Pass the immutable `RuntimeContext` returned by the existing
+`preflight_runtime_context(...).finalize()`. Its `session_document()` projects
+the resolved role instructions, model, effort, selected Skills, Worktree and
+native task/report permissions. It does not change persistent Codex configuration.
+
+```python
+from pathlib import Path
+from graphtraj.runtimes.codex.app_server import CodexAppServer
+from graphtraj.runtimes.runtime_adapter import RuntimeContext
+
+async def execute(context: RuntimeContext, worktree: Path, prompt: str):
+    async with CodexAppServer(
+        cwd=worktree,
+        environment=context.runtime_environment(),
+    ) as adapter:
+        session = await adapter.create_session(context)
+        execution = await adapter.start_execution(session, prompt)
+        result = await adapter.wait(execution, timeout=600)
+        return session.thread_id, session.rollout_path, result
+```
+
+Within the same connection, use `start_execution(session, text)` again for idle
+continuation, `send_input(execution, text)` for active input, and
+`interrupt(execution)` followed by `wait(execution)` to confirm interruption.
+On a new connection, `resume_session(context, thread_id)` loads the same native
+conversation with the supplied Context. Handles belong to the connection that
+returned them. The result contains `outcome` (`completed` or `interrupted`),
+`session_id`, `execution_id`, and `last_agent_message`. Native execution failures
+raise `RuntimeAdapterError`; no service PID or process exit code substitutes for
+an execution identity or result.
+
+One connection can own independent Sessions with different roles, models,
+efforts and permissions. Sessions with different endpoint or credential settings
+need separate connections with their respective `runtime_environment()` overrides.
+Use one asyncio event loop and close the Adapter explicitly or with `async with`.
+Turn completion leaves the service usable. Explicit close affects every Session
+on that connection and reaps its service process.
+
+For interaction, pass an async `on_request(request)` callback to the constructor.
+It receives `CodexServerRequest(request_id, method, params)` and returns the
+native response mapping, such as `{"decision": "decline"}` for a command approval.
+Requests are answered using their original IDs while other Sessions continue.
+Return `None` for an unsupported method. Missing, failed or timed-out handlers
+receive a native error response and surface `RuntimeAdapterError` to the owner;
+connection requests without an execution identity invalidate the connection.
+Handlers must yield to the event loop and cooperate with cancellation. Native
+`serverRequest/resolved` cancels a withdrawn request's handler.
+
+`create_session` and `resume_session` accept an optional native `approval_policy`,
+including `"untrusted"` or `"never"`; approval review is routed to the client.
+This is a thread parameter. Codex 0.153.0 rejects `approval_policy = "untrusted"`
+in its configuration file. The callback routes native approvals, tool/input,
+MCP elicitation, authentication and attestation requests without translating
+their response schemas. Command approval has prior live evidence; the other
+request types have controlled protocol checks, not equivalent live coverage.
+
+An observer should drain `next_notification()` for raw native control events.
+They retain native IDs and include retry/error notifications. They do not replace
+the rollout at `session.rollout_path`; complete native collection remains separate.
+The Adapter buffers notifications for that observer, accepts JSON lines up to
+16 MiB, and retains the last 16 KiB of stderr in `stderr_tail` for diagnostics.
+
+`request_timeout` bounds RPCs, request handlers and each shutdown grace period.
+A timeout or cancellation while waiting for an execution leaves it owned and
+allows another wait or targeted interrupt. An abandoned control RPC has an
+uncertain native outcome: its connection becomes unusable and must be closed.
+Native startup/completion races can return `CodexRPCError`, which retains
+`method`, `request_id` and `native_error`. A newly accepted turn can still be
+initializing; use native activity notifications when timing active control.
+
 ## Evidence and limits
 
 Each Ticket retains its initial definition, accepted revisions, current state,

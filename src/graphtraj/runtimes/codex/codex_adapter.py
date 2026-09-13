@@ -162,7 +162,19 @@ class _CodexRole:
         for key, value in overrides:
             arguments.extend(("-c", "{0}={1}".format(key, _toml_value(value))))
         arguments.extend(("--json", "-"))
-        return {"arguments": arguments, "worktree_path": str(worktree)}
+        return {
+            "arguments": arguments,
+            "worktree_path": str(worktree),
+            "session_parameters": {
+                "cwd": str(worktree),
+                "model": model,
+                "developerInstructions": developer_instructions,
+                "config": {
+                    key: value for key, value in overrides
+                    if key != "developer_instructions"
+                },
+            },
+        }
 
 
 @dataclass(frozen=True)
@@ -202,6 +214,7 @@ class _CodexRuntimePreflight:
             _model=self._model,
             _reasoning_effort=self._role.reasoning_effort,
             _arguments=tuple(request["arguments"]),
+            _session_parameters=json.dumps(request["session_parameters"]),
             _worktree=self._worktree,
             _effective_skills=effective_skills,
             _base_url=self._base_url,
@@ -216,6 +229,7 @@ class _CodexRuntimeContext:
     _model: str
     _reasoning_effort: str
     _arguments: Tuple[str, ...]
+    _session_parameters: str
     _worktree: Path
     _effective_skills: Tuple[_EffectiveSkill, ...]
     _base_url: str | None
@@ -253,6 +267,13 @@ class _CodexRuntimeContext:
             "effective_skills": [
                 skill.evidence_entry() for skill in self._effective_skills
             ],
+        }
+
+    def session_document(self) -> Dict[str, Any]:
+        """Return the same resolved role and access as native thread parameters."""
+        return {
+            "runtime": self.runtime,
+            "adapter_request": json.loads(self._session_parameters),
         }
 
     def runtime_environment(self) -> Mapping[str, str]:
@@ -674,8 +695,10 @@ def _require_codex_permissions(executable: Path) -> None:
         )
 
 
-def _reject_legacy_user_sandbox_config() -> None:
-    codex_home = Path(os.environ.get("CODEX_HOME", Path.home() / ".codex"))
+def _reject_legacy_user_sandbox_config(codex_home: Path | None = None) -> None:
+    """Reject legacy sandbox settings in the selected service's configuration."""
+    if codex_home is None:
+        codex_home = Path(os.environ.get("CODEX_HOME", Path.home() / ".codex"))
     config = codex_home / "config.toml"
     try:
         document = tomllib.loads(config.read_text(encoding="utf-8"))

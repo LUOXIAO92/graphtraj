@@ -1859,13 +1859,8 @@ def _process_corrections(
         monitor = execution_budget_monitor(evidence, task.ticket_id, task.ticket_name)
         if monitor is not None:
             monitor.record_correction(role)
+        previous_candidate = run_git(worktree, "rev-parse", "HEAD")
         affected = [role]
-        if _task_policy(child, role) in _ENGINEER_ROLES:
-            affected += [
-                current
-                for current, (member, _, _, _) in sessions.items()
-                if _task_policy(member, current) in _REVIEWER_ROLES
-            ]
         leader_report.unlink()
         for affected_role in affected:
             member, _, _, _ = sessions[affected_role]
@@ -1899,7 +1894,32 @@ def _process_corrections(
             )
             sessions[affected_role] = (member, alias, session, child_batch)
             if _task_policy(member, affected_role) in _ENGINEER_ROLES:
-                candidate = _candidate(round_directory, worktree)
+                try:
+                    candidate = _candidate(round_directory, worktree)
+                except RunnerError as error:
+                    if error.code != _AGENT_EVIDENCE_ERROR:
+                        raise
+                    alias, session = _run_agent(
+                        project, member, affected_role, worktree, evidence, traces,
+                        alias, session, None, leader_alias, child_batch,
+                        _evidence_recovery_prompt(
+                            project, member, traces, alias, worktree, error,
+                            "commit tracked project changes and write both current Round Engineer reports "
+                            "with the fixed candidate commit",
+                        ),
+                        capacity_fd=capacity_fd,
+                    )
+                    sessions[affected_role] = (member, alias, session, child_batch)
+                    candidate = _candidate(round_directory, worktree)
+
+                # Keep valid Review copies until the corrected candidate is known.
+                # Only a changed candidate adds affected Reviews to this loop.
+                if candidate != previous_candidate:
+                    for review_role, (reviewer, _, _, _) in sessions.items():
+                        if _task_policy(reviewer, review_role) in _REVIEWER_ROLES:
+                            (round_directory / _review_report_name(review_role)).unlink(missing_ok=True)
+                            affected.append(review_role)
+
                 state_alias, state_session, event = _request_state(
                     project, task, worktree, evidence, traces,
                     state_alias, state_session, leader_alias, child_batch,

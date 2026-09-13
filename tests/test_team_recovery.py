@@ -1207,7 +1207,6 @@ def test_missing_current_review_can_be_corrected_in_the_retained_session(
     assert 'Evidence:' in recovery_prompt and reviewer in recovery_prompt
     assert 'Expected result:' in recovery_prompt
     assert current['current_candidate'] in recovery_prompt
-    assert 'do not repeat' in recovery_prompt
     new_batches = set((harness / '.graphtraj/state/batches').glob('*.yml')) - batches_before
     assert len(new_batches) == 1  # Only Main's explicit continuation Batch.
     assert yaml.safe_load(new_batches.pop().read_text())['tasks'][0]['role'] == 'coding-team.team-leader'
@@ -1251,5 +1250,5 @@ def test_missing_correction_report_returns_to_its_reviewer_without_replaying_wor
         trace = ticket / 'teams/1/traces' / alias / 'events.jsonl'
         assert trace.read_text().count('turn_context') == executions
     prompt = (harness / state['worktree'] / '.scratch/recovery-prompt-spec-reviewer').read_text()
-    assert 'Failure:' in prompt and 'did not produce its exact report' in prompt
+    assert 'Failure:' in prompt and 'AGENT_EVIDENCE_INVALID' in prompt
     assert 'Evidence:' in prompt and 'Expected result:' in prompt

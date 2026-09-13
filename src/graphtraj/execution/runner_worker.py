@@ -30,6 +30,7 @@ def run(job_file: Path) -> int:
     session_directory = job_file.parent
     turn_handle: CodexManagedExecution | None = None
     mapping_recorded = False
+    terminal_published = False
     terminal: dict[str, object] | None = None
     operation = "launch"
     previous_sigterm = None
@@ -163,6 +164,7 @@ def run(job_file: Path) -> int:
                     result = turn_handle.run()
                     terminal = _terminal_turn(result)
                     write_yaml_durably(session_directory / "execution.yml", terminal)
+                    terminal_published = True
             finally:
                 if monitor_stop is not None:
                     monitor_stop.set()
@@ -192,7 +194,9 @@ def run(job_file: Path) -> int:
                     terminal_confirmed=turn_handle is None or turn_handle.terminate(),
                 )
         if terminal is not None:
-            write_yaml_durably(session_directory / "execution.yml", terminal)
+            # Reply cleanup may have allowed a successor to take ownership.
+            if not terminal_published:
+                write_yaml_durably(session_directory / "execution.yml", terminal)
             if (
                 budget_monitor is not None
                 and deliver_parentless_leader_notices

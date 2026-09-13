@@ -365,3 +365,67 @@ def test_fast_completion_keeps_the_control_reply_available(
             'sent' if operation == 'send' else 'interrupted',
     }
     observe(call, alias, 'idle', 'completed' if operation == 'send' else 'interrupted')
+
+
+def test_idle_continuation_survives_predecessor_status_reply_cleanup(
+    managed_project: ManagedProject, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A delayed status acknowledgement cannot restore an older execution's result."""
+    import tempfile
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    from graphtraj.execution.runner_process import process_is_alive
+    from graphtraj.execution.runner_status import read_alias_mapping, status_aliases
+
+    root, cause, call, _ = managed_project
+    launched = call('launch', launch_document())['tasks'][0]
+    alias = launched['alias']
+    predecessor, _ = read_alias_mapping(root / '.graphtraj/runner', alias)
+    acknowledged = threading.Event()
+    release = threading.Event()
+    status_caller = None
+    cleanup = tempfile.TemporaryDirectory.cleanup
+
+    def delayed_cleanup(directory: tempfile.TemporaryDirectory) -> None:
+        """Deschedule only the status caller before it removes its acknowledged reply."""
+        if threading.current_thread() is status_caller:
+            acknowledged.set()
+            assert release.wait(8), 'Delayed status exceeded the control timeout'
+        cleanup(directory)
+
+    def delayed_status() -> dict:
+        """Use the public status operation with a controlled filesystem scheduling pause."""
+        nonlocal status_caller
+        status_caller = threading.current_thread()
+        return status_aliases([alias], root).document
+
+    with ThreadPoolExecutor(1) as callers, monkeypatch.context() as scheduling:
+        scheduling.setattr(tempfile.TemporaryDirectory, 'cleanup', delayed_cleanup)
+        pending_status = callers.submit(delayed_status)
+        try:
+            assert acknowledged.wait(3), 'The native status response was not acknowledged'
+            call('send', [alias, 'complete the predecessor', [cause]])
+            observe(call, alias, 'idle', 'completed')
+            # Continuation must return while the earlier status caller is still paused.
+            call('send', [alias, 'hold', [cause]], timeout=3)
+            successor = observe(call, alias, 'running')
+            assert successor['session'] == launched['session']
+            assert successor['execution_id'] != predecessor['execution_id']
+
+            release.set()
+            earlier = pending_status.result(timeout=3)['aliases'][0]
+            assert earlier['execution_id'] == predecessor['execution_id']
+            # PID liveness only sequences owner cleanup; execution assertions use Runner.
+            deadline = time.monotonic() + 3
+            while process_is_alive(predecessor['worker_pid']) and time.monotonic() < deadline:
+                time.sleep(0.01)
+            assert not process_is_alive(predecessor['worker_pid']), 'Predecessor cleanup did not finish'
+            current = call('status', [alias])['aliases'][0]
+            assert current['execution_id'] == successor['execution_id']
+            assert current['session'] == successor['session']
+            assert current['activity'] == 'running'
+            assert call('interrupt', [alias]) == {'alias': alias, 'interrupt_status': 'interrupted'}
+            observe(call, alias, 'idle', 'interrupted')
+        finally:
+            release.set()

@@ -29,6 +29,14 @@ def _budget_notices() -> Iterator[None]:
     """Select CLI stderr only when no inherited caller channel is available."""
     descriptor, owned = caller_notice_fd()
     if descriptor is None:
+        from graphtraj.runtimes.codex.app_server import CodexMainRecovery
+
+        recovery = CodexMainRecovery.from_environment(Path.cwd().resolve())
+        if recovery is not None:
+            with recovery:
+                with budget_notice_output(recovery.notice_fd):
+                    yield
+            return
         try:
             descriptor, owned = os.dup(sys.stderr.fileno()), True
         except OSError:

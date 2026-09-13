@@ -102,6 +102,7 @@ requests = {}
 exchange = json.loads(os.environ.get('PEER_REQUEST_EXCHANGE', 'null'))
 held_reply = None
 sequence = 0
+queued = 0
 if os.environ.get('PEER_STALL_CLOSE'):
     def acknowledge_close(signum: int, frame: FrameType | None) -> None:
         """Make the external service's exit observable through its diagnostics."""
@@ -147,6 +148,20 @@ for line in sys.stdin:
             'cwd': params['cwd'],
         }
         emit({'method': 'thread/started', 'params': {'thread': result['thread']}})
+    elif method == 'thread/queue/add':
+        assert initialized
+        assert message['params']['threadId']
+        assert message['params']['clientUserMessageId']
+        assert len(message['params']['input']) == 2
+        if os.environ.get('PEER_REJECT_QUEUE'):
+            emit({'id': message['id'], 'error': {
+                'code': -32001, 'message': 'queue rejected',
+            }})
+            continue
+        if os.environ.get('PEER_PAUSE_QUEUE'):
+            time.sleep(float(os.environ['PEER_PAUSE_QUEUE']))
+        queued += 1
+        result = {'queuedSubmission': {'id': f'queued-{queued}'}}
     elif method == 'turn/start':
         sequence += 1
         thread_id = params['threadId']

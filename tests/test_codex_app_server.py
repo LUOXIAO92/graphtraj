@@ -321,12 +321,12 @@ def test_active_input_and_interrupt_target_only_the_expected_execution(
     asyncio.run(exercise())
 
 
-def test_budget_stop_submits_one_explicit_retro_on_the_owning_main_connection(
+def test_budget_stop_queues_one_explicit_retro_without_waiting_for_active_main(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     peer: Path,
 ) -> None:
-    """A sampled stop reaches only the original Main after its active turn."""
+    """A sampled stop reaches Main's native queue while its turn stays active."""
 
     from graphtraj.execution import execution_budget
     from graphtraj.execution.execution_budget import (
@@ -375,26 +375,24 @@ def test_budget_stop_submits_one_explicit_retro_on_the_owning_main_connection(
             "responsible_role": "engineer-senior",
         }
 
-        def turn_starts() -> list[dict]:
+        def queued_messages() -> list[dict]:
             if not protocol.exists():
                 return []
             return [
-                item
-                for item in (
-                    json.loads(line)
-                    for line in protocol.read_text(encoding="utf-8").splitlines()
-                )
-                if item.get("method") == "turn/start"
+                json.loads(line)
+                for line in protocol.read_text(encoding="utf-8").splitlines()
             ]
 
-        async with CodexAppServer(
-            command=[str(peer)],
-            cwd=tmp_path,
-            environment={"PEER_PROTOCOL_LOG": str(protocol)},
-        ) as adapter:
+        async with CodexAppServer(command=[str(peer)], cwd=tmp_path) as adapter:
             session = await adapter.create_session(context(tmp_path / "worktree", peer))
             active = await adapter.start_execution(session, "hold")
-            async with CodexMainRecovery(adapter, session, skill) as recovery:
+            with CodexMainRecovery(
+                session.thread_id,
+                skill,
+                cwd=tmp_path,
+                command=[str(peer)],
+                environment={"PEER_PROTOCOL_LOG": str(protocol)},
+            ) as recovery:
                 with budget_notice_output(recovery.notice_fd):
                     assert monitor.check("engineer-senior", "implementation") is False
                     now[0] += 0.7
@@ -403,21 +401,18 @@ def test_budget_stop_submits_one_explicit_retro_on_the_owning_main_connection(
                     assert monitor.check("engineer-senior", "implementation") is True
                     os.write(recovery.notice_fd, (json.dumps(duplicate) + "\n").encode())
 
-                await asyncio.sleep(0.05)
-                assert len(turn_starts()) == 1
-                await adapter.interrupt(active)
-                assert (await adapter.wait(active, timeout=2))["outcome"] == "interrupted"
-                deadline = asyncio.get_running_loop().time() + 2
-                while not recovery.retro_executions:
-                    assert asyncio.get_running_loop().time() < deadline
-                    await asyncio.sleep(0.01)
-                assert (await adapter.wait(recovery.retro_executions[0], timeout=2))["outcome"] == "completed"
-                assert await recovery.deliver_budget_notice(duplicate) == "duplicate"
+                with pytest.raises(RuntimeAdapterError, match="active"):
+                    await adapter.start_execution(session, "must still reject")
 
-            starts = turn_starts()
-            assert len(starts) == 2
-            assert starts[-1]["params"] == {
+            queued = queued_messages()
+            initialized = next(item for item in queued if item.get("method") == "initialize")
+            assert initialized["params"]["capabilities"] == {"experimentalApi": True}
+            queue = [item for item in queued if item.get("method") == "thread/queue/add"]
+            assert len(queue) == 1
+            assert not any(item.get("method") == "turn/start" for item in queued)
+            assert queue[0]["params"] == {
                 "threadId": session.thread_id,
+                "clientUserMessageId": "fd403ef4-1047-54e3-9eb3-ec71c26912eb",
                 "input": [
                     {
                         "type": "text",
@@ -431,6 +426,9 @@ def test_budget_stop_submits_one_explicit_retro_on_the_owning_main_connection(
                     {"type": "skill", "name": "retro", "path": str(skill.resolve())},
                 ],
             }
+            assert recovery.queue_submissions == ("queued-1",)
+            await adapter.interrupt(active)
+            assert (await adapter.wait(active, timeout=2))["outcome"] == "interrupted"
 
     asyncio.run(exercise())
 
@@ -440,48 +438,144 @@ def test_main_recovery_surfaces_caller_notice_errors(
     peer: Path,
 ) -> None:
     """Malformed caller-channel input remains visible to the owning host."""
+    skill = tmp_path / "harness/.agents/skills/retro/SKILL.md"
+    skill.parent.mkdir(parents=True)
+    skill.write_text("name: retro\n", encoding="utf-8")
+    recovery = CodexMainRecovery("thread-main", skill, cwd=tmp_path, command=[str(peer)])
 
-    async def exercise() -> None:
-        skill = tmp_path / "harness/.agents/skills/retro/SKILL.md"
-        skill.parent.mkdir(parents=True)
-        skill.write_text("name: retro\n", encoding="utf-8")
-        async with CodexAppServer(command=[str(peer)], cwd=tmp_path) as adapter:
-            session = await adapter.create_session(context(tmp_path / "worktree", peer))
-            with pytest.raises(RuntimeAdapterError) as caught:
-                async with CodexMainRecovery(adapter, session, skill) as recovery:
-                    os.write(recovery.notice_fd, b"not-json\n")
-            assert caught.value.code == "RUNTIME_REQUEST_INVALID"
-
-    asyncio.run(exercise())
+    with pytest.raises(RuntimeAdapterError) as caught:
+        with recovery:
+            os.write(recovery.notice_fd, b"not-json\n")
+    assert caught.value.code == "RUNTIME_REQUEST_INVALID"
+    with pytest.raises(RuntimeAdapterError) as repeated:
+        recovery.close()
+    assert repeated.value.code == "RUNTIME_REQUEST_INVALID"
 
 
-def test_main_recovery_surfaces_native_retro_delivery_errors(
+def test_main_recovery_keeps_queue_error_visible_when_runner_fails(
     tmp_path: Path,
     peer: Path,
 ) -> None:
-    """A rejected native retro turn is returned to the owning host."""
+    """A queue rejection remains observable beside the Runner failure."""
+    from graphtraj.execution.execution_budget import budget_notice_output
+
+    skill = tmp_path / "harness/.agents/skills/retro/SKILL.md"
+    skill.parent.mkdir(parents=True)
+    skill.write_text("name: retro\n", encoding="utf-8")
+    stop = {
+        "type": "execution-budget-exceeded",
+        "ticket": {"ticket_id": "116", "ticket_name": "session-budget-control"},
+        "threshold": {"kind": "stochastic_stop", "limit": 2},
+    }
+
+    with pytest.raises(RuntimeAdapterError) as caught:
+        with CodexMainRecovery(
+            "thread-main",
+            skill,
+            cwd=tmp_path,
+            command=[str(peer)],
+            environment={"PEER_REJECT_QUEUE": "1"},
+        ) as recovery:
+            with budget_notice_output(recovery.notice_fd):
+                os.write(recovery.notice_fd, (json.dumps(stop) + "\n").encode())
+            raise RuntimeError("Runner operation failed")
+    assert caught.value.code == "RUNTIME_RPC_ERROR"
+    assert isinstance(caught.value.__context__, RuntimeError)
+
+
+def test_main_recovery_close_keeps_cleanup_owned_after_waiter_cancellation(
+    tmp_path: Path,
+    peer: Path,
+) -> None:
+    """A cancelled close waiter cannot abandon the queue reader or its descriptor."""
+
+    from graphtraj.execution.execution_budget import budget_notice_output, caller_notice_fd
 
     async def exercise() -> None:
         skill = tmp_path / "harness/.agents/skills/retro/SKILL.md"
         skill.parent.mkdir(parents=True)
         skill.write_text("name: retro\n", encoding="utf-8")
-        stop = {
-            "type": "execution-budget-exceeded",
-            "ticket": {"ticket_id": "116", "ticket_name": "session-budget-control"},
-            "threshold": {"kind": "stochastic_stop", "limit": 2},
-        }
-        async with CodexAppServer(
-            command=[str(peer)],
+        recovery = CodexMainRecovery(
+            "thread-main",
+            skill,
             cwd=tmp_path,
-            environment={"PEER_REJECT_RETRO": "1"},
-        ) as adapter:
-            session = await adapter.create_session(context(tmp_path / "worktree", peer))
-            recovery = CodexMainRecovery(adapter, session, skill)
-            with pytest.raises(RuntimeAdapterError) as caught:
-                await recovery.deliver_budget_notice(stop)
-            assert caught.value.code == "RUNTIME_RPC_ERROR"
+            command=[str(peer)],
+            environment={"PEER_PAUSE_QUEUE": "1"},
+        )
+        duplicate = None
+        recovery.__enter__()
+        try:
+            with budget_notice_output(recovery.notice_fd):
+                duplicate, owned = caller_notice_fd()
+                assert owned
+                os.write(recovery.notice_fd, (
+                    json.dumps({
+                        "type": "execution-budget-exceeded",
+                        "ticket": {"ticket_id": "116", "ticket_name": "session-budget-control"},
+                        "threshold": {"kind": "stochastic_stop", "limit": 2},
+                    }) + "\n"
+                ).encode())
+            closing = asyncio.create_task(asyncio.to_thread(recovery.close))
+            await asyncio.sleep(0.05)
+            closing.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await closing
+            await asyncio.to_thread(recovery.close)
+            assert recovery.queue_submissions == ("queued-1",)
+            with pytest.raises(RuntimeAdapterError):
+                _ = recovery.notice_fd
+        finally:
+            if duplicate is not None:
+                os.close(duplicate)
+            await asyncio.to_thread(recovery.close)
 
     asyncio.run(exercise())
+
+
+def test_agent_runner_uses_native_queue_for_a_codex_main_caller(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    peer: Path,
+) -> None:
+    """The ordinary Runner caller channel queues a stop without host plumbing."""
+
+    from graphtraj.execution.execution_budget import caller_notice_fd
+    from graphtraj.interfaces.cli.agent_runner import _budget_notices
+
+    skill = tmp_path / ".agents/skills/retro/SKILL.md"
+    skill.parent.mkdir(parents=True)
+    skill.write_text("name: retro\n", encoding="utf-8")
+    bin_directory = tmp_path / "bin"
+    bin_directory.mkdir()
+    (bin_directory / "codex").symlink_to(peer)
+    protocol = tmp_path / "protocol.jsonl"
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("CODEX_THREAD_ID", "thread-main")
+    monkeypatch.setenv("PATH", str(bin_directory))
+    monkeypatch.setenv("PEER_PROTOCOL_LOG", str(protocol))
+    monkeypatch.delenv("GRAPHTRAJ_BUDGET_NOTICE_FD", raising=False)
+    monkeypatch.delenv("GRAPHTRAJ_ROLE", raising=False)
+
+    stop = {
+        "type": "execution-budget-exceeded",
+        "ticket": {"ticket_id": "116", "ticket_name": "session-budget-control"},
+        "threshold": {"kind": "stochastic_stop", "limit": 2},
+    }
+    with _budget_notices():
+        descriptor, owned = caller_notice_fd()
+        assert descriptor is not None and owned
+        try:
+            os.write(descriptor, (json.dumps(stop) + "\n").encode())
+        finally:
+            os.close(descriptor)
+
+    requests = [
+        json.loads(line)
+        for line in protocol.read_text(encoding="utf-8").splitlines()
+        if json.loads(line).get("method") == "thread/queue/add"
+    ]
+    assert len(requests) == 1
+    assert requests[0]["params"]["threadId"] == "thread-main"
 
 
 def test_server_request_keeps_native_id_and_does_not_block_other_sessions(

@@ -147,42 +147,45 @@ operation. Without a selected or inherited channel, budget accounting and
 Leader notices remain retained and Python produces no terminal output; the
 CLI selects stderr. Conflict integration retains notices in its evidence log.
 
-For a Codex Main, its owning host can bind that same caller channel to the
-already-open app-server connection and original `CodexSession` with
-`CodexMainRecovery`. The binding ignores ordinary estimate/allowance notices,
-waits for an active Main turn to settle, then sends one explicit `$retro` turn
-with the host's actual absolute `retro/SKILL.md` path. It never continues the
-Ticket automatically; a caller still records its decision and uses
-`agent-runner continue` explicitly.
+For a Codex Main, `agent-runner` automatically binds that same caller channel
+when its caller provides `CODEX_THREAD_ID`. `CodexMainRecovery` ignores ordinary
+estimate/allowance notices and sends only a sampled stop through an experimental
+`thread/queue/add` request with a stable native `clientUserMessageId` and the
+actual absolute `retro/SKILL.md` path. The short-lived sender never resumes or
+drives Main; its owning Codex client consumes the queued input after any active
+turn. It never continues the Ticket or clears budget accounting automatically.
+
+Queue acceptance is distinct from Main consumption and Skill completion. Queue
+or connection errors are raised by the recovery binding (and remain chained to
+a wrapped Runner error); confirm host consumption with the actual host evidence.
+Without `CODEX_THREAD_ID`, Runner retains its ordinary inherited-channel or
+stderr behavior.
 
 ```python
-import asyncio
 from pathlib import Path
 
 from graphtraj.execution.execution_budget import budget_notice_output
 from graphtraj.execution.runner_launch import launch_batch
-from graphtraj.runtimes.codex.app_server import CodexAppServer, CodexMainRecovery, CodexSession
+from graphtraj.runtimes.codex.app_server import CodexMainRecovery
 
 
-async def launch_from_owned_codex_main(
-    app_server: CodexAppServer,
-    main_session: CodexSession,
+def launch_from_codex_main(
     batch,
     harness: Path,
-    retro_skill: Path,
 ):
-    async with CodexMainRecovery(app_server, main_session, retro_skill) as recovery:
+    recovery = CodexMainRecovery.from_environment(harness)
+    if recovery is None:
+        return launch_batch(batch, harness)
+    with recovery:
         with budget_notice_output(recovery.notice_fd):
-            return await asyncio.to_thread(launch_batch, batch, harness)
+            return launch_batch(batch, harness)
 ```
 
-`app_server` and `main_session` must be the host's existing connection and
-original Main thread; an environment `CODEX_THREAD_ID`, a CLI message, or a
-new `thread/resume` process is not a binding. The current VSCode-owned Main
-does not expose that connection, so it cannot use this path until its host
-keeps and passes those two objects. Run the Runner call without blocking the
-connection loop, and observe the context-manager error if native delivery is
-rejected. The exact Codex input shape is in the Codex-only recovery reference.
+The environment thread ID is used only for native queue delivery. A CLI message,
+`thread/resume`, or a second Main driver is not used. Preserve the host's
+existing configuration and permissions; the queue sender adds no role or Skill
+discovery configuration. The exact Codex input shape and the consumption
+boundary are in the Codex-only recovery reference.
 
 ## Core Skills and their sources
 

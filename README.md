@@ -380,12 +380,18 @@ from pathlib import Path
 from graphtraj.runtimes.codex.app_server import CodexAppServer
 from graphtraj.runtimes.runtime_adapter import RuntimeContext
 
-async def execute(context: RuntimeContext, worktree: Path, prompt: str):
+async def execute(
+    context: RuntimeContext,
+    worktree: Path,
+    trace_directory: Path,
+    prompt: str,
+):
     async with CodexAppServer(
         cwd=worktree,
         environment=context.runtime_environment(),
     ) as adapter:
         session = await adapter.create_session(context)
+        adapter.retain_native_trace(session, trace_directory)
         execution = await adapter.start_execution(session, prompt)
         result = await adapter.wait(execution, timeout=600)
         return session.thread_id, session.rollout_path, result
@@ -418,6 +424,14 @@ connection requests without an execution identity invalidate the connection.
 Handlers must yield to the event loop and cooperate with cancellation. Native
 `serverRequest/resolved` cancels a withdrawn request's handler.
 
+Call `retain_native_trace(session, trace_directory)` once after `create_session`
+or `resume_session` when the complete native Session record is required. It
+writes the Runtime identity and copies complete rollout JSONL records unchanged
+to `trace_directory/events.jsonl` while the Session runs. Reuse the same Trace
+directory after continuation; its retained native position prevents duplicate
+history, waits for delayed rollout creation and incomplete trailing records,
+and performs a final drain at terminal result or connection close.
+
 `create_session` and `resume_session` accept an optional native `approval_policy`,
 including `"untrusted"` or `"never"`; approval review is routed to the client.
 This is a thread parameter. Codex 0.153.0 rejects `approval_policy = "untrusted"`
@@ -428,7 +442,8 @@ request types have controlled protocol checks, not equivalent live coverage.
 
 An observer should drain `next_notification()` for raw native control events.
 They retain native IDs and include retry/error notifications. They do not replace
-the rollout at `session.rollout_path`; complete native collection remains separate.
+the rollout at `session.rollout_path`; `retain_native_trace` preserves that
+complete native record separately.
 The Adapter buffers notifications for that observer, accepts JSON lines up to
 16 MiB, and retains the last 16 KiB of stderr in `stderr_tail` for diagnostics.
 

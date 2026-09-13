@@ -487,6 +487,65 @@ class CodexTurn:
             time.sleep(0.01)
 
 
+class CodexNativeTrace:
+    """Incrementally retain one raw Codex rollout in its Session Trace.
+
+    The collector copies complete JSONL records as bytes. It deliberately does
+    not inspect or rewrite native record fields.
+    """
+
+    def __init__(
+        self,
+        session_directory: Path,
+        session: str,
+        rollout_path: Path | None,
+        codex_home: Path,
+        *,
+        resumed: bool,
+    ) -> None:
+        """Prepare durable position tracking for one known native Session."""
+
+        self._session_directory = session_directory
+        self._session = session
+        self._codex_home = codex_home
+        self._events_file = session_directory / "events.jsonl"
+        session_directory.mkdir(parents=True, exist_ok=True)
+        existing_trace = self._events_file.exists() and self._events_file.stat().st_size > 0
+        self._rollout, self._position = _native_session_state(session_directory, session)
+        self._skip_existing = resumed and existing_trace and self._rollout is None
+        if self._rollout is None:
+            self._rollout = rollout_path
+            self._skip_existing_rollout()
+        record_runtime_identity(self._events_file, "codex")
+
+    def collect(self) -> None:
+        """Append every newly complete native record available at this instant."""
+
+        if self._rollout is None or not self._rollout.exists():
+            discovered = _find_native_session(self._session, self._codex_home)
+            if discovered is not None:
+                self._rollout = discovered
+                self._skip_existing_rollout()
+        if self._rollout is not None:
+            self._position = _append_native_records(
+                self._rollout,
+                self._position,
+                self._events_file,
+                self._session_directory,
+            )
+
+    def _skip_existing_rollout(self) -> None:
+        """Avoid copying historical records into a resumed Trace without position state."""
+
+        if not self._skip_existing or self._rollout is None:
+            return
+        try:
+            self._position = self._rollout.stat().st_size
+        except OSError:
+            return
+        self._skip_existing = False
+
+
 def create_codex_turn(
     request: Mapping[str, Any],
     prompt: str,
@@ -608,8 +667,13 @@ def _native_session_state(
     return Path(path), position
 
 
-def _find_native_session(session: str) -> Optional[Path]:
-    sessions = Path(os.environ.get("CODEX_HOME", Path.home() / ".codex")) / "sessions"
+def _find_native_session(
+    session: str,
+    codex_home: Path | None = None,
+) -> Optional[Path]:
+    if codex_home is None:
+        codex_home = Path(os.environ.get("CODEX_HOME", Path.home() / ".codex"))
+    sessions = codex_home / "sessions"
     try:
         return next(sessions.rglob("*{0}.jsonl".format(session)), None)
     except OSError:

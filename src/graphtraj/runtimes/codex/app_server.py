@@ -13,6 +13,7 @@ from typing import Any, Awaitable, Callable, Mapping, Sequence
 
 from graphtraj.runtimes.codex.codex_adapter import (
     CodexAdapterError,
+    CodexNativeTrace,
     _reject_legacy_user_sandbox_config,
 )
 from graphtraj.runtimes.runtime_adapter import RuntimeContext, RuntimeExecutionResult
@@ -147,9 +148,12 @@ class CodexAppServer:
         self._pending: dict[int, asyncio.Future[dict[str, Any] | CodexAdapterError]] = {}
         self._sequence = 0
         self._sessions: dict[str, CodexSession] = {}
+        self._resumed_sessions: set[str] = set()
         self._resuming: set[str] = set()
         self._turns: dict[tuple[str, str], _ExecutionState] = {}
         self._active: dict[str, str | None] = {}
+        self._traces: dict[str, CodexNativeTrace] = {}
+        self._trace_tasks: dict[str, asyncio.Task[None]] = {}
         self._failure: CodexAdapterError | None = None
         self._closed = False
         self._opened = False
@@ -208,32 +212,32 @@ class CodexAppServer:
         for task in self._handlers.values():
             task.cancel()
         await asyncio.gather(*self._handlers.values(), return_exceptions=True)
-        if self._process is None:
-            return
-        assert self._process.stdin is not None
-        self._process.stdin.close()
-        try:
-            await asyncio.wait_for(self._process.wait(), self._timeout)
-        except TimeoutError:
-            for sig in (signal.SIGTERM, signal.SIGKILL):
-                try:
-                    os.killpg(self._process.pid, sig)
-                except ProcessLookupError:
-                    pass
-                try:
-                    await asyncio.wait_for(self._process.wait(), self._timeout)
-                    break
-                except TimeoutError:
-                    continue
-            else:
-                raise CodexAdapterError(
-                    'RUNTIME_SHUTDOWN_FAILED', 'Codex service did not exit after explicit close.',
-                    terminal_confirmed=False,
-                )
-        if self._reader is not None:
-            await self._reader
-        if self._stderr_reader is not None:
-            await self._stderr_reader
+        if self._process is not None:
+            assert self._process.stdin is not None
+            self._process.stdin.close()
+            try:
+                await asyncio.wait_for(self._process.wait(), self._timeout)
+            except TimeoutError:
+                for sig in (signal.SIGTERM, signal.SIGKILL):
+                    try:
+                        os.killpg(self._process.pid, sig)
+                    except ProcessLookupError:
+                        pass
+                    try:
+                        await asyncio.wait_for(self._process.wait(), self._timeout)
+                        break
+                    except TimeoutError:
+                        continue
+                else:
+                    raise CodexAdapterError(
+                        'RUNTIME_SHUTDOWN_FAILED', 'Codex service did not exit after explicit close.',
+                        terminal_confirmed=False,
+                    )
+            if self._reader is not None:
+                await self._reader
+            if self._stderr_reader is not None:
+                await self._stderr_reader
+        await self._finish_native_traces()
 
     @property
     def stderr_tail(self) -> str:
@@ -314,7 +318,49 @@ class CodexAppServer:
         except (KeyError, TypeError, ValueError, AttributeError) as error:
             raise self._protocol_failure(f'{method}: {error}') from error
         self._sessions[session.thread_id] = session
+        if thread_id is not None:
+            self._resumed_sessions.add(session.thread_id)
         return session
+
+    def retain_native_trace(self, session: CodexSession, trace_directory: Path) -> None:
+        """Retain raw native rollout records for one owned Session in the given Trace.
+
+        Collection starts immediately and continues independently of a caller
+        waiting for a particular execution. Calling this once per connection
+        Session preserves C.1's Session and execution handles unchanged.
+        """
+
+        self._require_session(session)
+        if not isinstance(trace_directory, Path):
+            raise CodexAdapterError(
+                'RUNTIME_REQUEST_INVALID', 'A Trace directory path is required.',
+            )
+        if session.thread_id in self._traces:
+            raise CodexAdapterError(
+                'RUNTIME_LIFECYCLE_INVALID', 'The Session already retains a native Trace.',
+            )
+        try:
+            trace = CodexNativeTrace(
+                trace_directory,
+                session.thread_id,
+                session.rollout_path,
+                Path(
+                    self._environment.get(
+                        'CODEX_HOME', Path.home() / '.codex',
+                    )
+                ),
+                resumed=session.thread_id in self._resumed_sessions,
+            )
+            trace.collect()
+        except OSError as error:
+            raise CodexAdapterError(
+                'RUNTIME_TRACE_FAILED', 'The native Codex Session Trace could not be retained.',
+                terminal_confirmed=False,
+            ) from error
+        self._traces[session.thread_id] = trace
+        self._trace_tasks[session.thread_id] = asyncio.create_task(
+            self._collect_native_trace(trace)
+        )
 
     async def start_execution(self, session: CodexSession, prompt: str) -> CodexExecution:
         """Start an idle Session's next native turn."""
@@ -391,11 +437,52 @@ class CodexAppServer:
                 'RUNTIME_TIMEOUT', f'Waiting for {execution} timed out; it remains owned.',
                 terminal_confirmed=False,
             ) from error
+        self._collect_native_trace_once(execution.thread_id)
         if isinstance(result, CodexAdapterError):
             if state.terminal and not result.terminal_confirmed:
                 raise CodexAdapterError(result.code, result.message) from result
             raise result
         return result.copy()
+
+    async def _collect_native_trace(self, trace: CodexNativeTrace) -> None:
+        """Poll one native rollout without blocking control-message processing."""
+
+        try:
+            while not self._closed:
+                trace.collect()
+                await asyncio.sleep(0.02)
+        except asyncio.CancelledError:
+            raise
+        except OSError:
+            self._fail(CodexAdapterError(
+                'RUNTIME_TRACE_FAILED', 'The native Codex Session Trace could not be retained.',
+                terminal_confirmed=False,
+            ))
+
+    def _collect_native_trace_once(self, thread_id: str) -> None:
+        """Drain a terminal Session's rollout once before returning its result."""
+
+        trace = self._traces.get(thread_id)
+        if trace is None:
+            return
+        try:
+            trace.collect()
+        except OSError as error:
+            failure = CodexAdapterError(
+                'RUNTIME_TRACE_FAILED', 'The native Codex Session Trace could not be retained.',
+                terminal_confirmed=False,
+            )
+            self._fail(failure)
+            raise failure from error
+
+    async def _finish_native_traces(self) -> None:
+        """Stop background collection and make one final native-record drain."""
+
+        for task in self._trace_tasks.values():
+            task.cancel()
+        await asyncio.gather(*self._trace_tasks.values(), return_exceptions=True)
+        for thread_id in self._traces:
+            self._collect_native_trace_once(thread_id)
 
     def _execution_state(self, execution: CodexExecution) -> _ExecutionState:
         """Resolve only a handle returned by this connection, even if IDs collide."""

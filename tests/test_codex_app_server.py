@@ -12,7 +12,10 @@ import pytest
 
 from graphtraj.configuration.project_roles import RolePreset
 from graphtraj.configuration.role_definitions import ResolvedChildRole
-from graphtraj.runtimes.codex.codex_adapter import preflight_runtime_context
+from graphtraj.runtimes.codex.codex_adapter import (
+    preflight_runtime_context,
+    read_codex_last_agent_message,
+)
 from graphtraj.runtimes.codex.app_server import CodexAppServer, CodexServerRequest
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError, RuntimeContext
 
@@ -73,6 +76,53 @@ def test_session_execution_result_and_resume_survive_turn_completion(
             assert resumed.thread_id == session.thread_id
             execution = await adapter.start_execution(resumed, 'resumed output')
             assert (await adapter.wait(execution, timeout=2))['last_agent_message'] == 'resumed output'
+
+    asyncio.run(exercise())
+
+
+def test_native_trace_retains_one_app_server_session_incrementally_and_on_resume(
+    tmp_path: Path, peer: Path,
+) -> None:
+    """Raw rollout records remain complete, readable, and unique across continuation."""
+
+    async def exercise() -> None:
+        trace_directory = tmp_path / 'trace'
+        trace_file = trace_directory / 'events.jsonl'
+        rollout_root = tmp_path / 'native-rollouts'
+        environment = {'PEER_NATIVE_ROLLOUT': str(rollout_root)}
+        resolved = context(tmp_path / 'worktree', peer)
+
+        async with CodexAppServer(command=[str(peer)], cwd=tmp_path, environment=environment) as adapter:
+            session = await adapter.create_session(resolved)
+            adapter.retain_native_trace(session, trace_directory)
+            starting = asyncio.create_task(adapter.start_execution(session, 'first native result'))
+            while b'"encrypted_content":"opaque"' not in trace_file.read_bytes():
+                await asyncio.sleep(0.01)
+            assert not starting.done()
+            assert b'"timestamp":"native-3"' not in trace_file.read_bytes()
+
+            execution = await starting
+            result = await adapter.wait(execution, timeout=2)
+            assert result['last_agent_message'] == 'first native result'
+            first_trace = trace_file.read_bytes()
+            assert first_trace == (
+                b'{"type":"runtime","runtime":"codex"}\n'
+                + session.rollout_path.read_bytes()
+            )
+            assert b'"encrypted_content":"opaque"' in first_trace
+
+        async with CodexAppServer(command=[str(peer)], cwd=tmp_path, environment=environment) as adapter:
+            resumed = await adapter.resume_session(resolved, session.thread_id)
+            adapter.retain_native_trace(resumed, trace_directory)
+            execution = await adapter.start_execution(resumed, 'resumed native result')
+            result = await adapter.wait(execution, timeout=2)
+            assert result['last_agent_message'] == 'resumed native result'
+
+        trace = trace_file.read_bytes()
+        assert trace.startswith(first_trace)
+        assert trace.count(b'"timestamp":"native-1"') == 1
+        assert trace.count(b'"timestamp":"native-5"') == 1
+        assert read_codex_last_agent_message(trace_file) == 'resumed native result'
 
     asyncio.run(exercise())
 

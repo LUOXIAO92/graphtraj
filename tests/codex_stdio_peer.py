@@ -5,6 +5,7 @@ import os
 import signal
 import sys
 import time
+from pathlib import Path
 from types import FrameType
 
 
@@ -23,6 +24,63 @@ def complete(thread_id: str, turn_id: str, text: str, status: str = 'completed')
         'threadId': thread_id,
         'turn': {'id': turn_id, 'status': status, 'items': [], 'error': None},
     }})
+
+
+def native_rollout(thread_id: str) -> Path | None:
+    """Return the controlled native rollout only for the trace retention check."""
+    root = os.environ.get('PEER_NATIVE_ROLLOUT')
+    return Path(root) / ('rollout-' + thread_id + '.jsonl') if root else None
+
+
+def write_native_prefix(rollout: Path) -> None:
+    """Create delayed complete records and one incomplete native trailing record."""
+    if rollout.exists():
+        return
+    time.sleep(0.05)
+    rollout.parent.mkdir(parents=True, exist_ok=True)
+    trailing = json.dumps({
+        'timestamp': 'native-3', 'type': 'turn_context', 'payload': {'cwd': 'kept'},
+    }, separators=(',', ':'))
+    records = [
+        json.dumps({
+            'timestamp': 'native-1', 'type': 'session_meta',
+            'payload': {'base_instructions': {'text': 'original'}},
+        }, separators=(',', ':')),
+        json.dumps({
+            'timestamp': 'native-2', 'type': 'response_item',
+            'payload': {'type': 'reasoning', 'encrypted_content': 'opaque'},
+        }, separators=(',', ':')),
+        json.dumps({
+            'timestamp': 'native-call', 'type': 'response_item',
+            'payload': {'type': 'custom_tool_call', 'call_id': 'native-call'},
+        }, separators=(',', ':')),
+    ]
+    split = len(trailing) // 2
+    with rollout.open('wb') as stream:
+        stream.write(('\n'.join(records) + '\n' + trailing[:split]).encode())
+        stream.flush()
+        os.fsync(stream.fileno())
+    time.sleep(0.1)
+    with rollout.open('ab') as stream:
+        stream.write((trailing[split:] + '\n').encode())
+        stream.flush()
+        os.fsync(stream.fileno())
+
+
+def write_native_result(rollout: Path, text: str) -> None:
+    """Append the native terminal record after its control notification."""
+    timestamp = (
+        'native-4'
+        if not rollout.read_bytes().count(b'"type":"task_complete"')
+        else 'native-5'
+    )
+    with rollout.open('ab') as stream:
+        stream.write((json.dumps({
+            'timestamp': timestamp, 'type': 'event_msg',
+            'payload': {'type': 'task_complete', 'last_agent_message': text},
+        }, separators=(',', ':')) + '\n').encode())
+        stream.flush()
+        os.fsync(stream.fileno())
 
 
 if sys.argv[1:] == ['exec', '--help']:
@@ -69,8 +127,16 @@ for line in sys.stdin:
         assert initialized
         thread_id = params.get('threadId', f'thread-{len(sessions) + 1}')
         sessions[thread_id] = params
-        result = {'thread': {'id': thread_id, 'path': '/native/' + thread_id + '.jsonl', 'turns': []},
-                  'model': params['model'], 'cwd': params['cwd']}
+        rollout = native_rollout(thread_id)
+        result = {
+            'thread': {
+                'id': thread_id,
+                'path': str(rollout) if rollout else '/native/' + thread_id + '.jsonl',
+                'turns': [],
+            },
+            'model': params['model'],
+            'cwd': params['cwd'],
+        }
         emit({'method': 'thread/started', 'params': {'thread': result['thread']}})
     elif method == 'turn/start':
         sequence += 1
@@ -127,7 +193,12 @@ for line in sys.stdin:
         elif prompt == 'configuration':
             complete(thread_id, turn_id, json.dumps(sessions[thread_id]))
         elif prompt != 'hold':
+            rollout = native_rollout(thread_id)
+            if rollout is not None:
+                write_native_prefix(rollout)
             complete(thread_id, turn_id, prompt)
+            if rollout is not None:
+                write_native_result(rollout, prompt)
         if prompt == 'reverse-first':
             held_reply = {'id': message['id'], 'result': result}
             continue

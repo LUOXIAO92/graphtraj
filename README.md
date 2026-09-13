@@ -367,8 +367,46 @@ live mappings and the Ticket Worktree/branch, and preserves durable evidence.
 ## Codex Session interface in Python
 
 `graphtraj.runtimes.codex.app_server.CodexAppServer` provides native Session
-control using Codex 0.153.0's stdio app-server. Runner workers still use the
-existing execution transport; their migration is a separate integration.
+control using Codex 0.153.0's stdio app-server. Runner Session workers use this
+Adapter and retain the connection and native Trace after a launch or send caller
+returns. The existing registered-task inline-role launch returns `launched` with
+an alias and native `session`; coding Team scheduling still follows its existing
+workflow.
+
+Query `status_aliases([alias], root)` to get `session`, `execution_id`, and
+`activity`. An idle execution has `last_outcome`: `completed`, `runtime-error`,
+or `interrupted`. These describe native execution, independently of the service
+PID. The native result, final answer and error details are retained in the
+Session's `execution.yml`; `stderr.log` retains Runtime diagnostics.
+
+`send_instruction(alias, text, root, (event_id,))` uses native active input when
+running. For an idle Session it starts a Worker that restores the same native
+conversation and its resolved Context. A continuation gets a new execution ID
+and preserves the alias and Session ID. Each send must cite an existing Project
+Worldline event. `interrupt_session(alias, root)` targets the mapped execution
+and waits for native confirmation; other Sessions keep running. A race with
+native completion returns an operation error and does not silently queue input.
+
+The Worker closes its connection after the terminal result and final Trace
+drain. A send made during that close waits for the prior owner to finish. The
+private file control endpoint is shared by Runner callers; it needs no global
+service or listening socket. Runtime permissions and the existing capacity and
+budget checks still apply. Native requests without a response handler fail
+visibly through the Adapter; they are never accepted automatically.
+
+A real registered-task probe, including input consumption, continuation,
+interruption and native Trace comparison, is available in the source checkout:
+
+```sh
+CODEX_MANAGED_REAL=1 python -m pytest -p no:cacheprovider -q \
+  tests/test_managed_sessions.py -k real_registered
+```
+
+It uses an isolated project, installation and native store with the operator's
+Codex connection settings. `CODEX_MANAGED_MODEL` can select the model;
+`CODEX_MANAGED_WAIT` sets the observation timeout in seconds (default 120).
+Model/network failures fail this check and retain the actual operations and
+native diagnostics in the pytest temporary project.
 
 Pass the immutable `RuntimeContext` returned by the existing
 `preflight_runtime_context(...).finalize()`. Its `session_document()` projects

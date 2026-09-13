@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from conftest import run_process, wait_for_file
+from conftest import app_server_peer, run_process, wait_for_file
 from runner_fixtures import configure_harness
 from test_session_alias_control import _register_ready_ticket
 
@@ -266,6 +266,8 @@ else:
 print(json.dumps({'type': 'item.completed', 'item': {'type': 'agent_message', 'text': message}}), flush=True)
 print(json.dumps({'type': 'turn.completed'}), flush=True)
 '''
+RUNTIME = app_server_peer(RUNTIME, "'recovery-' + os.environ['GRAPHTRAJ_ROLE']")
+
 
 
 @pytest.mark.parametrize('target', ('engineer-junior', 'spec-reviewer', 'team-leader', 'uncommitted', 'delivery-state', 'dispatch', 'completed-wrong-target'))
@@ -313,7 +315,7 @@ def test_installed_team_corrects_missing_member_evidence_in_its_existing_session
         }[target]
         trace = ticket / 'teams/1/traces' / team['members'][seat]['session_ref'] / 'events.jsonl'
     recovered = trace.read_text()
-    assert recovered.count('thread.started') >= 2
+    assert recovered.count('turn_context') >= 2
     recovery_role = {
         'uncommitted': 'engineer-junior',
         'dispatch': 'team-leader',
@@ -398,9 +400,9 @@ def test_provider_failure_returns_to_the_caller_for_an_explicit_same_session_ret
     assert trace.is_file()
     assert 'Recovery required:' not in trace.read_text()
     identities = [
-        json.loads(line)['thread_id']
+        json.loads(line)['payload']['id']
         for line in trace.read_text().splitlines()
-        if json.loads(line).get('type') == 'thread.started'
+        if json.loads(line).get('type') == 'session_meta'
     ]
     assert identities == [mapping['session']]
     events = [
@@ -428,7 +430,7 @@ def test_provider_failure_returns_to_the_caller_for_an_explicit_same_session_ret
         diagnostics += error_file.read_text()
     assert retried.returncode == 0, diagnostics
     wait_for_file(mapping_file.parent / 'execution.yml')
-    assert trace.read_text().count('thread.started') == 2
+    assert trace.read_text().count('turn_context') == 2
     reports = ticket / 'teams/1/rounds/1'
     assert (reports / 'engineer.md').is_file()
     assert (reports / 'validation.md').is_file()
@@ -451,9 +453,9 @@ def test_provider_failure_returns_to_the_caller_for_an_explicit_same_session_ret
         ]
         assert any(event['kind'] == 'team-process-correction' for event in events)
     if target == 'provider-before-review-correct':
-        assert trace.read_text().count('thread.started') == 3
+        assert trace.read_text().count('turn_context') == 3
     if target == 'provider-rework-evidence':
-        assert trace.read_text().count('thread.started') == 4
+        assert trace.read_text().count('turn_context') == 4
         prompt = (
             harness / current['worktree']
             / '.scratch/recovery-prompt-engineer-junior'
@@ -462,7 +464,7 @@ def test_provider_failure_returns_to_the_caller_for_an_explicit_same_session_ret
         assert 'Engineer evidence is missing or unreadable' in prompt
     if target == 'provider-rework':
         state_trace = next((ticket / 'teams/1/traces').glob('*@d*/events.jsonl'))
-        assert state_trace.read_text().count('thread.started') == 9
+        assert state_trace.read_text().count('turn_context') == 9
 
 
 def test_preflight_failed_engineer_starts_once_from_the_leader_correction(
@@ -555,7 +557,7 @@ def test_preflight_failed_engineer_starts_once_from_the_leader_correction(
     )
     engineer = yaml.safe_load(engineer_mapping.read_text())
     trace = ticket / 'teams/1/traces' / engineer['alias'] / 'events.jsonl'
-    assert trace.read_text().count('thread.started') == 1
+    assert trace.read_text().count('turn_context') == 1
     retained = [
         yaml.safe_load(path.read_text())
         for path in (harness / '.graphtraj/state/batches').glob('*.yml')
@@ -608,7 +610,7 @@ def test_invalid_review_report_stops_the_matching_state_request_without_retry(
     state = yaml.safe_load((ticket / 'ticket.yml').read_text())
     assert state['status'] == 'reviewing'
     state_trace = next((ticket / 'teams/1/traces').glob('*@d*/events.jsonl'))
-    assert state_trace.read_text().count('thread.started') == 6
+    assert state_trace.read_text().count('turn_context') == 6
 
 
 def test_access_failure_returns_to_the_responsible_operator_without_agent_reflection(

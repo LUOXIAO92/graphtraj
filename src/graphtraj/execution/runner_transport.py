@@ -15,6 +15,7 @@ RUNTIME_DIAGNOSTIC_FILES = frozenset(
         "launch.yml",
         "mapping.yml",
         "native-session.yml",
+        "session.yml",
         "resume-error.yml",
         "resume.yml",
         "stderr.log",

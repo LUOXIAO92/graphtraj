@@ -300,7 +300,7 @@ def test_python_and_cli_launch_the_same_structured_batch_and_errors(
     assert result.exit_code == 0, result.output
     rendered = yaml.safe_load(result.stdout)
     for response in (direct.document, rendered):
-        assert response["tasks"][0]["launch_status"] == "completed"
+        assert response["tasks"][0]["launch_status"] == "launched"
         assert response["tasks"][0]["role"] == "investigation-specialist"
         assert yaml.safe_load(Path(response["retained_batch_file"]).read_bytes()) == document
     assert Path(rendered["retained_batch_file"]).read_text() == original

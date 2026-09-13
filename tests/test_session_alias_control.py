@@ -8,7 +8,7 @@ from pathlib import Path
 
 import yaml
 
-from conftest import FakeCodex, InstalledCommands, run_process, wait_for_file
+from conftest import app_server_peer, FakeCodex, InstalledCommands, run_process, wait_for_file
 from runner_fixtures import configure_harness
 
 
@@ -187,7 +187,11 @@ def test_installed_alias_control_resumes_and_interrupts_one_team_session(
         env=environment,
     )
     assert running.returncode == 0, running.stderr
-    assert yaml.safe_load(running.stdout) == {
+    running_status = yaml.safe_load(running.stdout)
+    assert running_status["aliases"][0].pop("session") == session
+    native_execution = running_status["aliases"][0].pop("execution_id")
+    assert native_execution
+    assert running_status == {
         "aliases": [
             {
                 "alias": alias,
@@ -210,8 +214,8 @@ def test_installed_alias_control_resumes_and_interrupts_one_team_session(
         cwd=harness_root,
         env=environment,
     )
-    assert unsupported.returncode == 1
-    assert yaml.safe_load(unsupported.stdout)["error"]["code"] == "live-input-unsupported"
+    assert unsupported.returncode == 0, unsupported.stdout + unsupported.stderr
+    assert yaml.safe_load(unsupported.stdout) == {"alias": alias, "send_status": "sent"}
 
     wait_for_file(policy_log)
     peer_before = peer_mapping_file.read_text()
@@ -254,7 +258,10 @@ def test_installed_alias_control_resumes_and_interrupts_one_team_session(
         env=environment,
     )
     assert idle.returncode == 0, idle.stderr
-    assert yaml.safe_load(idle.stdout) == {
+    idle_status = yaml.safe_load(idle.stdout)
+    assert idle_status["aliases"][0].pop("session") == session
+    assert idle_status["aliases"][0].pop("execution_id") == native_execution
+    assert idle_status == {
         "aliases": [
             {
                 "alias": alias,
@@ -531,7 +538,7 @@ Deliver the accepted Session transport behavior.
     )
     policy = tmp_path / "stopped-preteam-policy.json"
     fake_codex.executable.write_text(
-        "#!" + sys.executable + "\n" + """
+        app_server_peer("#!" + sys.executable + "\n" + """
 import json
 import os
 import sys
@@ -549,7 +556,7 @@ Path(os.environ["STOPPED_POLICY_LOG"]).write_text(json.dumps({
 }), encoding="utf-8")
 print(json.dumps({"type": "thread.started", "thread_id": "fake-thread"}), flush=True)
 print(json.dumps({"type": "turn.completed"}), flush=True)
-""",
+"""),
         encoding="utf-8",
     )
     fake_codex.executable.chmod(0o755)

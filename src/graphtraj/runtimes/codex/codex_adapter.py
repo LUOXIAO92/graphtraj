@@ -210,75 +210,72 @@ class _CodexRuntimePreflight:
             child_batch_write_paths=self._child_batch_write_paths,
         )
         return _CodexRuntimeContext(
-            _role=self._role.name,
-            _model=self._model,
-            _reasoning_effort=self._role.reasoning_effort,
-            _arguments=tuple(request["arguments"]),
-            _session_parameters=json.dumps(request["session_parameters"]),
-            _worktree=self._worktree,
-            _effective_skills=effective_skills,
-            _base_url=self._base_url,
-            _api_key_env=self._api_key_env,
+            _launch=json.dumps({
+                "runtime": "codex",
+                "adapter_request": request,
+                "connection": {
+                    key: value for key, value in (
+                        ("base_url", self._base_url), ("api_key_env", self._api_key_env),
+                    ) if value is not None
+                },
+            }),
+            _evidence=json.dumps({
+                "runtime": "codex", "effective_role": self._role.name,
+                "model": self._model,
+                "model_reasoning_effort": self._role.reasoning_effort,
+                "effective_skills": [skill.evidence_entry() for skill in effective_skills],
+            }),
             _environment=self._environment,
         )
 
 
 @dataclass(frozen=True)
 class _CodexRuntimeContext:
-    _role: str
-    _model: str
-    _reasoning_effort: str
-    _arguments: Tuple[str, ...]
-    _session_parameters: str
-    _worktree: Path
-    _effective_skills: Tuple[_EffectiveSkill, ...]
-    _base_url: str | None
-    _api_key_env: str | None
+    """Immutable native configuration, safe to retain and restore in a Worker."""
+
+    _launch: str
+    _evidence: str
     _environment: Mapping[str, str]
     runtime: str = "codex"
 
     def launch_document(self) -> Dict[str, Any]:
         """Return the durable Adapter input for launch and resume."""
-
-        return {
-            "runtime": self.runtime,
-            "adapter_request": {
-                "arguments": list(self._arguments),
-                "worktree_path": str(self._worktree),
-            },
-            "connection": {
-                key: value
-                for key, value in (
-                    ("base_url", self._base_url),
-                    ("api_key_env", self._api_key_env),
-                )
-                if value is not None
-            },
-        }
+        return json.loads(self._launch)
 
     def evidence_document(self) -> Dict[str, Any]:
         """Return the effective Context facts for mechanical evidence."""
-
-        return {
-            "runtime": self.runtime,
-            "effective_role": self._role,
-            "model": self._model,
-            "model_reasoning_effort": self._reasoning_effort,
-            "effective_skills": [
-                skill.evidence_entry() for skill in self._effective_skills
-            ],
-        }
+        return json.loads(self._evidence)
 
     def session_document(self) -> Dict[str, Any]:
-        """Return the same resolved role and access as native thread parameters."""
+        """Return the resolved role and access as native thread parameters."""
         return {
             "runtime": self.runtime,
-            "adapter_request": json.loads(self._session_parameters),
+            "adapter_request": self.launch_document()["adapter_request"]["session_parameters"],
         }
 
     def runtime_environment(self) -> Mapping[str, str]:
-        """Return the ephemeral connection settings for the Runtime process."""
+        """Return ephemeral connection settings for the Runtime process."""
         return dict(self._environment)
+
+
+def restore_codex_context(
+    request: Mapping[str, Any], evidence: Mapping[str, Any],
+) -> RuntimeContext:
+    """Restore a Worker's resolved Context without consulting current role defaults."""
+    _validate_launch_request(request)
+    params = request.get("session_parameters")
+    if (
+        not isinstance(params, dict)
+        or params.get("cwd") != request["worktree_path"]
+        or not isinstance(params.get("config"), dict)
+        or not isinstance(params.get("model"), str)
+        or not isinstance(params.get("developerInstructions"), str)
+    ):
+        raise CodexAdapterError("RUNTIME_REQUEST_INVALID", "The native Session Context is invalid.")
+    return _CodexRuntimeContext(
+        json.dumps({"runtime": "codex", "adapter_request": request}),
+        json.dumps(evidence), {},
+    )
 
 
 def preflight_runtime_context(
@@ -603,33 +600,20 @@ def create_codex_resume_turn(
 
 
 def read_codex_session_identity(session_directory: Path) -> str:
-    """Attest one durable Codex session identity from Adapter-owned events."""
-
-    events_file = session_directory / "events.jsonl"
-    identity: Optional[str] = None
+    """Read the identity retained from the app-server Session handle."""
+    source = session_directory / "session.yml"
     try:
-        if events_file.is_symlink() or not events_file.is_file():
-            raise OSError("Codex events are not a regular file")
-        with events_file.open("r", encoding="utf-8") as events:
-            for line in events:
-                session = _session_from_event(line)
-                if session is None:
-                    continue
-                if identity is None:
-                    identity = session
-                elif session != identity:
-                    raise ValueError("Codex events contain multiple sessions")
-    except (OSError, UnicodeError, ValueError) as error:
+        if source.is_symlink() or not source.is_file():
+            raise ValueError("Session metadata is not a regular file")
+        document = yaml.safe_load(source.read_text(encoding="utf-8"))
+        if not isinstance(document, dict) or not _nonempty_string(document.get("session")):
+            raise ValueError("Session metadata has no native identity")
+        return document["session"]
+    except (OSError, UnicodeError, ValueError, yaml.YAMLError) as error:
         raise CodexAdapterError(
             "RUNTIME_SESSION_NOT_RESUMABLE",
-            "The mapped Codex Runtime session cannot be attested.",
+            "The mapped native Codex Session cannot be attested.",
         ) from error
-    if identity is None:
-        raise CodexAdapterError(
-            "RUNTIME_SESSION_NOT_RESUMABLE",
-            "The mapped Codex Runtime session cannot be attested.",
-        )
-    return identity
 
 
 def read_codex_last_agent_message(events_file: Path) -> Optional[str]:
@@ -741,10 +725,11 @@ def _append_native_records(
 def _validate_launch_request(
     request: Mapping[str, Any],
 ) -> Tuple[List[str], Path]:
-    if not isinstance(request, dict) or set(request) != {
-        "arguments",
-        "worktree_path",
-    }:
+    if (
+        not isinstance(request, dict)
+        or not {"arguments", "worktree_path"}.issubset(request)
+        or not set(request).issubset({"arguments", "worktree_path", "session_parameters"})
+    ):
         raise CodexAdapterError(
             "RUNTIME_REQUEST_INVALID",
             "The durable Codex launch request is invalid.",
@@ -1191,7 +1176,11 @@ def refresh_codex_report_paths(
         _toml_value(permissions)
     )
 
-    return {"arguments": refreshed, "worktree_path": str(request_worktree)}
+    result = {**copy.deepcopy(request), "arguments": refreshed}
+    params = result.get("session_parameters")
+    if params is not None:
+        params["config"]["permissions"] = permissions
+    return result
 
 
 def _resume_request_setting(

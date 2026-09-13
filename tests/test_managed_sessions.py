@@ -1,0 +1,367 @@
+"""Registered task Sessions through installed public Runner operations."""
+
+import json
+import os
+import shutil
+import sys
+import time
+import tomllib
+from pathlib import Path
+from typing import Callable, Iterator
+
+import pytest
+import yaml
+
+from conftest import FakeCodex, InstalledCommands, run_process
+from runner_fixtures import configure_harness
+from test_ticket_graph import _ticket
+
+
+ManagedProject = tuple[Path, str, Callable[..., dict], Path]
+
+
+CALL = """
+import json, sys
+from pathlib import Path
+from typing import Callable, Iterator
+from graphtraj.execution.runner_batch import parse_batch
+from graphtraj.execution.runner_launch import launch_batch
+from graphtraj.execution.runner_status import status_aliases
+from graphtraj.execution.runner_control import send_instruction, interrupt_session
+from graphtraj.execution.runner_models import RunnerError
+root = Path(sys.argv[1])
+operation, arguments = json.loads(sys.argv[2])
+try:
+    if operation == 'launch':
+        result = launch_batch(parse_batch(arguments), root).document
+    elif operation == 'status':
+        result = status_aliases(arguments, root, operation_total=True).document
+    elif operation == 'send':
+        result = send_instruction(arguments[0], arguments[1], root, tuple(arguments[2]))
+    else:
+        result = interrupt_session(arguments[0], root)
+    print(json.dumps(result))
+except RunnerError as error:
+    print(json.dumps({'error': error.as_document()}))
+    sys.exit(1)
+"""
+
+
+@pytest.fixture
+def managed_project(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> Iterator[ManagedProject]:
+    """Set up a project and register a bounded task without starting a Team."""
+    from graphtraj.graph.ticket_graph import register_ticket
+    from graphtraj.graph.delivery_worldline import append_project_worldline_event
+
+    root, _, _, environment = configure_harness(
+        installed_commands, temporary_git_repository, fake_codex, tmp_path,
+    )
+    state = root / '.graphtraj/state'
+    register_ticket(state, root, _ticket('113', 'managed-probe'))
+    (root / 'instruction.md').write_text('Exercise the registered Session.\n')
+    cause = append_project_worldline_event(state, root, {
+        'kind': 'main-decision', 'decision': 'Exercise the registered Session.',
+        'caused_by_event_ids': [], 'evidence_refs': ['instruction.md'],
+    })['event_id']
+    executable = fake_codex.executable
+    executable.write_text('#!' + sys.executable + '\n' +
+                          Path(__file__).with_name('managed_codex_peer.py').read_text())
+    executable.chmod(0o755)
+    environment['MANAGED_NATIVE_ROOT'] = str(tmp_path / 'native')
+    environment['CODEX_HOME'] = str(tmp_path / 'codex-home')
+    environment.pop('PYTHONPATH', None)
+    python = installed_commands.runner.with_name('python')
+
+    def call(operation: str, arguments: dict | list, timeout: float = 12) -> dict:
+        """Each invocation is a separate caller process that must return."""
+        completed = run_process(
+            [str(python), '-c', CALL, str(root), json.dumps([operation, arguments])],
+            cwd=root, env=environment, timeout=timeout,
+        )
+        with (root / 'public-operations.jsonl').open('a') as evidence:
+            evidence.write(json.dumps({
+                'operation': operation, 'arguments': arguments,
+                'returncode': completed.returncode, 'stdout': completed.stdout,
+                'stderr': completed.stderr,
+            }) + '\n')
+        assert completed.returncode == 0, completed.stdout + completed.stderr
+        return json.loads(completed.stdout)
+
+    yield root, cause, call, executable
+    for path in (root / '.graphtraj/runner/sessions').glob('*/mapping.yml'):
+        try:
+            call('interrupt', [path.parent.name])
+        except AssertionError:
+            pass
+
+
+def launch_document(instruction: str = 'hold', role: str = 'managed-probe') -> dict:
+    """Use the existing inline role on a registered task."""
+    return {'tasks': [{
+        'ticket_id': '113', 'ticket_name': 'managed-probe',
+        'role': {role: {'runtime': 'codex', 'model': 'gpt-5.6', 'reasoning_effort': 'low'}},
+        'instruction': instruction,
+    }]}
+
+
+def observe(
+    call: Callable[..., dict],
+    alias: str,
+    activity: str,
+    outcome: str | None = None,
+    timeout: float = 10,
+) -> dict:
+    """Wait for an observable execution state, bounded independently of a PID."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        status = call('status', [alias])['aliases'][0]
+        if status.get('activity') == activity and (
+            outcome is None or status.get('last_outcome') == outcome
+        ):
+            return status
+        time.sleep(0.02)
+    raise AssertionError(status)
+
+
+def test_returned_launch_keeps_execution_owned(managed_project: ManagedProject) -> None:
+    """The launch caller exits while its registered native execution remains owned."""
+    root, _, call, _ = managed_project
+    launched = call('launch', launch_document())['tasks'][0]
+    assert launched['launch_status'] == 'launched'
+    status = observe(call, launched['alias'], 'running')
+    assert status['session'] == launched['session']
+    assert status['execution_id']
+
+
+@pytest.mark.skipif(os.environ.get('CODEX_MANAGED_REAL') != '1', reason='explicit real Codex acceptance probe')
+def test_real_registered_session(managed_project: ManagedProject) -> None:
+    """Exercise public Runner ownership against the installed real Codex Adapter."""
+    root, cause, call, executable = managed_project
+    real = shutil.which('codex')
+    assert real
+    executable.unlink()
+    executable.symlink_to(real)
+    # Use an isolated native store while preserving the operator's connection settings.
+    native_home = root / 'codex-home'
+    native_home.mkdir()
+    operator = Path(os.environ.get('CODEX_HOME', Path.home() / '.codex'))
+    for name in ('config.toml', 'auth.json'):
+        if (operator / name).is_file():
+            shutil.copy2(operator / name, native_home / name)
+    document = launch_document('Remember MANAGED_MEMORY_113 for this conversation. Reply exactly MANAGED_SESSION_READY. Do not use tools in this turn.')
+    config = tomllib.loads((native_home / 'config.toml').read_text()) if (native_home / 'config.toml').exists() else {}
+    document['tasks'][0]['role']['managed-probe']['model'] = os.environ.get(
+        'CODEX_MANAGED_MODEL', config.get('model', 'gpt-5.6'),
+    )
+    launched = call('launch', document, timeout=30)['tasks'][0]
+    assert launched['launch_status'] == 'launched'
+    alias = launched['alias']
+    timeout = float(os.environ.get('CODEX_MANAGED_WAIT', '120'))
+    first = observe(call, alias, 'idle', 'completed', timeout=timeout)
+    from graphtraj.execution.runner_status import read_alias_mapping
+    from graphtraj.runtimes.codex.codex_adapter import read_codex_last_agent_message
+    mapping, directory = read_alias_mapping(root / '.graphtraj/runner', alias)
+
+    def answer_contains(*words: str) -> None:
+        """Check consumed input using the Adapter's retained native final answer."""
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            answer = read_codex_last_agent_message(Path(mapping['trace_file'])) or ''
+            if all(word in answer for word in words):
+                return
+            time.sleep(0.02)
+        raise AssertionError(answer)
+
+    def wait_for_tool(target: str, previous_total: int) -> dict:
+        """Wait for a real native tool request before active control."""
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            status = call('status', [target])['aliases'][0]
+            if status.get('operation_total', 0) > previous_total:
+                assert status['activity'] == 'running', status
+                return status
+            time.sleep(0.05)
+        raise AssertionError(status)
+
+    answer_contains('MANAGED_SESSION_READY')
+    call('send', [alias, 'Run a shell sleep for 15 seconds, then reply with the word you remembered and any later instruction.', [cause]])
+    active = wait_for_tool(alias, first['operation_total'])
+    assert active['session'] == launched['session']
+    assert active['execution_id'] != first['execution_id']
+    call('send', [alias, 'Include MANAGED_STEER_113 in your final reply.', [cause]])
+    steered = observe(call, alias, 'idle', 'completed', timeout=timeout)
+    assert steered['execution_id'] == active['execution_id']
+    answer_contains('MANAGED_MEMORY_113', 'MANAGED_STEER_113')
+
+    peer_document = json.loads(json.dumps(document))
+    task = peer_document['tasks'][0]
+    task['role']['peer-probe'] = task['role'].pop('managed-probe')
+    task['instruction'] = 'Run a shell sleep for 30 seconds before replying.'
+    peer = call('launch', peer_document)['tasks'][0]
+    wait_for_tool(peer['alias'], 0)
+    call('send', [alias, 'Run a shell sleep for 30 seconds before replying.', [cause]])
+    wait_for_tool(alias, steered['operation_total'])
+    call('interrupt', [alias])
+    observe(call, alias, 'idle', 'interrupted')
+    observe(call, peer['alias'], 'running')
+    call('interrupt', [peer['alias']])
+    call('send', [alias, 'Reply with the word remembered at the start. Use no tools.', [cause]])
+    final = observe(call, alias, 'idle', 'completed', timeout=timeout)
+    assert final['session'] == launched['session']
+    answer_contains('MANAGED_MEMORY_113')
+    metadata = yaml.safe_load((directory / 'session.yml').read_text())
+    native = Path(metadata['rollout_path'])
+    native_records = [json.loads(line) for line in native.read_text().splitlines()]
+    assert native_records[0]['payload']['id'] == launched['session']
+    retained = Path(mapping['trace_file']).read_bytes().splitlines(keepends=True)
+    raw = b''.join(
+        line for line in retained
+        if json.loads(line)['type'] not in {'runtime', 'runner-execution-start', 'runner-follow-up'}
+    )
+    assert raw == native.read_bytes()
+
+
+def test_active_input_reaches_the_same_native_execution(managed_project: ManagedProject) -> None:
+    """Input steers the active turn instead of starting a queued continuation."""
+    root, cause, call, _ = managed_project
+    launched = call('launch', launch_document())['tasks'][0]
+    alias = launched['alias']
+    before = observe(call, alias, 'running')
+    assert call('send', [alias, 'complete after active input', [cause]]) == {
+        'alias': alias, 'send_status': 'sent',
+    }
+    after = observe(call, alias, 'idle', 'completed')
+    assert after['session'] == before['session'] == launched['session']
+    assert after['execution_id'] == before['execution_id']
+
+
+def test_idle_continuation_preserves_alias_and_native_history(managed_project: ManagedProject) -> None:
+    """A later caller restores the same conversation with a new execution ID."""
+    root, cause, call, _ = managed_project
+    launched = call('launch', launch_document())['tasks'][0]
+    alias = launched['alias']
+    call('send', [alias, 'complete first execution', [cause]])
+    first = observe(call, alias, 'idle', 'completed')
+    # Allow explicit connection cleanup before testing a separate owner.
+    time.sleep(0.2)
+    call('send', [alias, 'hold', [cause]])
+    second = observe(call, alias, 'running')
+    assert second['session'] == first['session'] == launched['session']
+    assert second['execution_id'] != first['execution_id']
+    assert second['last_outcome'] == 'completed'
+    call('send', [alias, 'complete second execution', [cause]])
+    observe(call, alias, 'idle', 'completed')
+    from graphtraj.execution.runner_status import read_alias_mapping
+    from graphtraj.runtimes.codex.codex_adapter import read_codex_last_agent_message
+    mapping, directory = read_alias_mapping(root / '.graphtraj/runner', alias)
+    assert read_codex_last_agent_message(Path(mapping['trace_file'])) == 'complete second execution'
+    records = [json.loads(line) for line in Path(mapping['trace_file']).read_text().splitlines()]
+    assert [r['payload']['id'] for r in records if r['type'] == 'session_meta'] == [launched['session']]
+
+
+def test_interrupt_is_targeted_and_terminal_before_service_exit(managed_project: ManagedProject) -> None:
+    """Native cancellation leaves a peer running and confirms only the target turn."""
+    root, cause, call, _ = managed_project
+    first = call('launch', launch_document(role='first-probe'))['tasks'][0]
+    second = call('launch', launch_document(role='second-probe'))['tasks'][0]
+    before = observe(call, first['alias'], 'running')
+    assert call('interrupt', [first['alias']]) == {
+        'alias': first['alias'], 'interrupt_status': 'interrupted',
+    }
+    status = observe(call, first['alias'], 'idle', 'interrupted')
+    assert status['execution_id'] == before['execution_id']
+    assert not (root / 'native' / (first['session'] + '.closed')).exists()
+    observe(call, second['alias'], 'running')
+    call('send', [second['alias'], 'complete unaffected peer', [cause]])
+    observe(call, second['alias'], 'idle', 'completed')
+
+
+def test_native_failure_is_distinct_from_interruption(managed_project: ManagedProject) -> None:
+    """A failed native turn remains a runtime error while its service is alive."""
+    root, cause, call, _ = managed_project
+    launched = call('launch', launch_document())['tasks'][0]
+    call('send', [launched['alias'], 'fail execution', [cause]])
+    failed = observe(call, launched['alias'], 'idle', 'runtime-error')
+    assert failed['session'] == launched['session']
+    assert not (root / 'native' / (launched['session'] + '.closed')).exists()
+
+
+def test_concurrent_idle_sends_keep_one_native_owner(managed_project: ManagedProject) -> None:
+    """Competing callers cannot resume the alias into two concurrent native turns."""
+    from concurrent.futures import ThreadPoolExecutor
+    from graphtraj.execution.runner_status import read_alias_mapping
+
+    root, cause, call, _ = managed_project
+    launched = call('launch', launch_document())['tasks'][0]
+    alias = launched['alias']
+    call('send', [alias, 'complete initial work', [cause]])
+    observe(call, alias, 'idle', 'completed')
+    with ThreadPoolExecutor(2) as callers:
+        results = list(callers.map(lambda text: call('send', [alias, text, [cause]]), ('hold', 'hold')))
+    assert results == [{'alias': alias, 'send_status': 'sent'}] * 2
+    observe(call, alias, 'idle', 'completed')
+    mapping, _ = read_alias_mapping(root / '.graphtraj/runner', alias)
+    native = root / 'native' / ('rollout-' + launched['session'] + '.jsonl')
+    contexts = [json.loads(line)['payload'] for line in native.read_text().splitlines()
+                if json.loads(line)['type'] == 'turn_context']
+    assert len(contexts) == 2
+    assert contexts[-1]['execution_id'] == mapping['execution_id']
+
+
+def test_each_registered_task_keeps_its_role_context(managed_project: ManagedProject) -> None:
+    """The shared launch operation passes independent native task/model/effort contexts."""
+    from graphtraj.graph.ticket_graph import register_ticket
+
+    root, cause, call, _ = managed_project
+    register_ticket(root / '.graphtraj/state', root, _ticket('114', 'other-probe'))
+    first = launch_document(role='first-probe')['tasks'][0]
+    second = {
+        **first, 'ticket_id': '114', 'ticket_name': 'other-probe',
+        'role': {'second-probe': {'runtime': 'codex', 'model': 'different-model', 'reasoning_effort': 'high'}},
+    }
+    launched = call('launch', {'tasks': [first, second]})['tasks']
+    observed = []
+    for task in launched:
+        observe(call, task['alias'], 'running')
+        native = root / 'native' / ('rollout-' + task['session'] + '.jsonl')
+        context = [json.loads(line)['payload'] for line in native.read_text().splitlines()
+                   if json.loads(line)['type'] == 'turn_context'][0]
+        observed.append((context['ticket_id'], context['role'], context['model'], context['effort']))
+        call('send', [task['alias'], 'complete task', [cause]])
+    assert observed == [('113', 'first-probe', 'gpt-5.6', 'low'),
+                        ('114', 'second-probe', 'different-model', 'high')]
+    assert len({task['session'] for task in launched}) == 2
+
+
+def test_unconfirmed_request_failure_keeps_execution_owned_until_close(managed_project: ManagedProject) -> None:
+    """An unhandled native request is not itself proof that Agent work ended."""
+    root, cause, call, _ = managed_project
+    launched = call('launch', launch_document())['tasks'][0]
+    call('send', [launched['alias'], 'unhandled request', [cause]])
+    status = call('status', [launched['alias']])['aliases'][0]
+    assert status['activity'] == 'running'
+    assert not (root / 'native' / (launched['session'] + '.closed')).exists()
+    observe(call, launched['alias'], 'idle', 'runtime-error')
+
+
+@pytest.mark.parametrize('operation', ['send', 'interrupt'])
+def test_fast_completion_keeps_the_control_reply_available(
+    managed_project: ManagedProject, operation: str,
+) -> None:
+    """Immediate service exit must not delete an acknowledged caller's response."""
+    _, cause, call, executable = managed_project
+    executable.write_text(executable.read_text().replace('time.sleep(1)', 'time.sleep(0)'))
+    launched = call('launch', launch_document())['tasks'][0]
+    alias = launched['alias']
+    arguments = [alias, 'complete immediately', [cause]] if operation == 'send' else [alias]
+    assert call(operation, arguments) == {
+        'alias': alias,
+        'send_status' if operation == 'send' else 'interrupt_status':
+            'sent' if operation == 'send' else 'interrupted',
+    }
+    observe(call, alias, 'idle', 'completed' if operation == 'send' else 'interrupted')

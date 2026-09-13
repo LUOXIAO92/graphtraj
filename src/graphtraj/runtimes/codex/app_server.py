@@ -240,6 +240,13 @@ class CodexAppServer:
         await self._finish_native_traces()
 
     @property
+    def service_pid(self) -> int:
+        """Identify the owned service for process cleanup, never execution status."""
+        self._require_connection()
+        assert self._process is not None
+        return self._process.pid
+
+    @property
     def stderr_tail(self) -> str:
         """Return the last 16 KiB of service diagnostics, including startup errors."""
         return self._stderr.decode('utf-8', errors='replace')

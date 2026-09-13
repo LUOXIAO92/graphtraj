@@ -164,13 +164,14 @@ def launch_team_batch(batch: Batch, cwd: Path) -> LaunchResponse:
                 None,
                 retained,
                 capacity_fd=position.fileno(),
+                wait_for_completion=False,
             )
             results.append(
                 {
                     "ticket_id": task.ticket_id,
                     "ticket_name": task.ticket_name,
                     "role": task.role,
-                    "launch_status": "completed",
+                    "launch_status": "launched",
                     "alias": alias,
                     "session": session,
                 }
@@ -1604,23 +1605,15 @@ def _request_state(
         "GRAPHTRAJ_STATE_FACTS": json.dumps(facts, separators=(",", ":")),
         "GRAPHTRAJ_STATE_REQUEST": str(runtime_request),
     }
-    previous = {name: os.environ.get(name) for name in environment}
-    os.environ.update(environment)
-    try:
-        alias, session = _run_agent(
-            project, task, "delivery-state", worktree, evidence, traces,
-            alias, session, None, parent_alias, retained_batch,
-            "Request the strict Delivery State change for these supplied facts:\n"
-            + yaml.safe_dump(facts, sort_keys=False)
-            + "\nWrite only that request to {0}.\n".format(runtime_request),
-            capacity_fd=capacity_fd,
-        )
-    finally:
-        for name, value in previous.items():
-            if value is None:
-                os.environ.pop(name, None)
-            else:
-                os.environ[name] = value
+    alias, session = _run_agent(
+        project, task, "delivery-state", worktree, evidence, traces,
+        alias, session, None, parent_alias, retained_batch,
+        "Request the strict Delivery State change for these supplied facts:\n"
+        + yaml.safe_dump(facts, sort_keys=False)
+        + "\nWrite only that request to {0}.\n".format(runtime_request),
+        capacity_fd=capacity_fd,
+        task_environment=environment,
+    )
     requests = project.runner_directory / "sessions" / alias / "requests"
     requests.mkdir(exist_ok=True)
     for attempt in range(2):
@@ -1665,38 +1658,30 @@ def _request_state(
         assert failure is not None
         if attempt:
             raise failure
-        previous = {name: os.environ.get(name) for name in environment}
-        os.environ.update(environment)
-        try:
-            alias, session = _run_agent(
+        alias, session = _run_agent(
+            project,
+            task,
+            "delivery-state",
+            worktree,
+            evidence,
+            traces,
+            alias,
+            session,
+            None,
+            parent_alias,
+            retained_batch,
+            _evidence_recovery_prompt(
                 project,
                 task,
-                "delivery-state",
-                worktree,
-                evidence,
                 traces,
                 alias,
-                session,
-                None,
-                parent_alias,
-                retained_batch,
-                _evidence_recovery_prompt(
-                    project,
-                    task,
-                    traces,
-                    alias,
-                    worktree,
-                    failure,
-                    "write exactly the supplied Delivery State request",
-                ),
-                capacity_fd=capacity_fd,
-            )
-        finally:
-            for name, value in previous.items():
-                if value is None:
-                    os.environ.pop(name, None)
-                else:
-                    os.environ[name] = value
+                worktree,
+                failure,
+                "write exactly the supplied Delivery State request",
+            ),
+            capacity_fd=capacity_fd,
+            task_environment=environment,
+        )
     raise AssertionError("Delivery State recovery did not return")
 
 
@@ -2053,6 +2038,8 @@ def _run_agent(
     capacity_fd: int | None = None,
     retiring: bool = False,
     reports_only: bool = False,
+    wait_for_completion: bool = True,
+    task_environment: dict[str, str] | None = None,
 ) -> tuple[str, str]:
     team_file = traces.parent / "team.yml"
     if role != "delivery-state" and team_file.exists():
@@ -2064,6 +2051,8 @@ def _run_agent(
             project, task, role, worktree, evidence, traces, alias,
             expected_session, registration, parent_alias, retained_batch, prompt,
             positions[0].fileno(), reports_only,
+            wait_for_completion=wait_for_completion,
+            task_environment=task_environment,
         )
 
 
@@ -2141,6 +2130,8 @@ def _execute_agent(
     capacity_fd: int,
     reports_only: bool = False,
     input_delivered: threading.Event | None = None,
+    wait_for_completion: bool = True,
+    task_environment: dict[str, str] | None = None,
 ) -> tuple[str, str]:
     generation = int(traces.parent.name) if traces.parent.name.isdigit() else 1
     if alias is None:
@@ -2191,6 +2182,7 @@ def _execute_agent(
             launch_file,
             {
                 **context.launch_document(),
+                "context_evidence": context.evidence_document(),
                 "operation": "launch",
                 "mapping": {
                     "alias": alias,
@@ -2300,6 +2292,7 @@ def _execute_agent(
     event_offset = events_file.stat().st_size
     environment = {
         **runtime_environment,
+        **(task_environment or {}),
         "GRAPHTRAJ_TEAM_ROUND": str(ordinal),
         "GRAPHTRAJ_ROLE": role,
         "GRAPHTRAJ_EVIDENCE": str(evidence),
@@ -2318,8 +2311,6 @@ def _execute_agent(
     if registration is not None:
         environment["GRAPHTRAJ_PARENT_REGISTRATION"] = str(registration)
         environment["GRAPHTRAJ_PARENT_ALIAS"] = alias
-    previous = {name: os.environ.get(name) for name in environment}
-    os.environ.update(environment)
     notice_threads: list[threading.Thread] = []
     notice_failures: list[BaseException] = []
     try:
@@ -2377,7 +2368,7 @@ def _execute_agent(
             job_file,
             worktree,
             task_prompt,
-            runtime_environment,
+            environment,
             capacity_fd,
             monitor,
             role,
@@ -2385,6 +2376,7 @@ def _execute_agent(
             expected_session is None,
             deliver_budget_notices,
             input_delivered,
+            wait_for_completion,
         )
         for thread in notice_threads:
             thread.join()
@@ -2428,11 +2420,10 @@ def _execute_agent(
                 if failure:
                     raise failure[0]
     finally:
-        for name, value in previous.items():
-            if value is None:
-                os.environ.pop(name, None)
-            else:
-                os.environ[name] = value
+        for thread in notice_threads:
+            thread.join()
+    if not wait_for_completion:
+        return alias, session_id
     diagnostic = _current_runtime_diagnostic(
         session_directory, stderr_offset, event_offset
     )
@@ -2558,6 +2549,7 @@ def _resume_job(
             "operation": "resume",
             "runtime": mapping["runtime"],
             "adapter_request": adapter_request,
+            "context_evidence": launch.get("context_evidence", {}),
             "expected_session": expected_session,
             "mapping": {
                 key: value
@@ -2586,6 +2578,7 @@ def _run_session_worker(
     new_session: bool,
     deliver_budget_notices: Callable[[], None],
     input_delivered: threading.Event | None,
+    wait_for_completion: bool = True,
 ) -> tuple[str, str]:
     if not isinstance(runtime_environment, dict):
         raise RunnerError("RUNTIME_WORKER_FAILED", "The Runtime Session could not be started.")
@@ -2619,6 +2612,12 @@ def _run_session_worker(
             assert worker.stdin is not None
             worker.stdin.write(prompt)
             worker.stdin.close()
+            if not wait_for_completion:
+                from graphtraj.execution.runner_control import _await_session_resume
+
+                _await_session_resume(worker, session_directory, error, None)
+                mapping, _ = read_alias_mapping(session_directory.parent.parent, session_directory.name)
+                return mapping["session"], "running"
             try:
                 session_recorded = not new_session
                 budget_stopped = False

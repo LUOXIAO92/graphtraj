@@ -66,6 +66,22 @@ def find_uv() -> Optional[Path]:
     return None
 
 
+
+def app_server_peer(script: str, identity: str = "'fake-thread'") -> str:
+    """Run a controlled Team scenario behind the native stdio test peer."""
+    peer = Path(__file__).with_name("runner_codex_peer.py")
+    header = (
+        "import sys, os\n"
+        "if sys.argv[1:2] == ['app-server']:\n"
+        "    import runpy\n"
+        f"    runpy.run_path({str(peer)!r}, init_globals={{'scenario': __file__, 'session_name': {identity}}})\n"
+        "    raise SystemExit(0)\n"
+    )
+    if script.startswith("#!"):
+        first, script = script.split("\n", 1)
+        return first + "\n" + header + script
+    return header + script
+
 @pytest.fixture(autouse=True)
 def isolated_runner_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test Harnesses must not inherit the invoking Agent's role or Session."""
@@ -407,7 +423,7 @@ def fake_codex(tmp_path: Path) -> FakeCodex:
         "\n"
         "raise SystemExit(int(os.environ.get('FAKE_CODEX_EXIT_CODE', '0')))\n"
     )
-    executable.write_text(script, encoding="utf-8")
+    executable.write_text(app_server_peer(script), encoding="utf-8")
     executable.chmod(0o755)
     return FakeCodex(executable=executable, log_file=log_file)
 

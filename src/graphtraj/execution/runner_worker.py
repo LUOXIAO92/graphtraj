@@ -9,11 +9,11 @@ import sys
 import threading
 import time
 from pathlib import Path
-from typing import Mapping
 
 import yaml
 
-from graphtraj.runtimes.codex.codex_adapter import create_codex_resume_turn, create_codex_turn
+from graphtraj.runtimes.codex.managed_session import CodexManagedExecution
+from graphtraj.execution.runner_connection import worker_connection
 from graphtraj.execution.execution_budget import (
     ExecutionBudgetMonitor,
     execution_budget_monitor_from_environment,
@@ -21,28 +21,16 @@ from graphtraj.execution.execution_budget import (
 )
 from graphtraj.execution.runner_io import write_yaml_durably
 from graphtraj.execution.runner_transport import runtime_launch_failure
-from graphtraj.runtimes.runtime_adapter import (
-    ResumeRuntimeAdapter,
-    RuntimeAdapter,
-    RuntimeAdapterError,
-    RuntimeTurn,
-)
-
-
-ADAPTERS: Mapping[str, RuntimeAdapter] = {"codex": create_codex_turn}
-RESUME_ADAPTERS: Mapping[str, ResumeRuntimeAdapter] = {
-    "codex": create_codex_resume_turn
-}
+from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 
 
 def run(job_file: Path) -> int:
     """Own one current Session execution without creating a Turn record."""
 
     session_directory = job_file.parent
-    turn_handle: RuntimeTurn | None = None
+    turn_handle: CodexManagedExecution | None = None
     mapping_recorded = False
     terminal: dict[str, object] | None = None
-    interrupted = False
     operation = "launch"
     previous_sigterm = None
     budget_monitor: ExecutionBudgetMonitor | None = None
@@ -52,9 +40,9 @@ def run(job_file: Path) -> int:
     leader_notice_keys: list[str] = []
 
     def request_termination(signum: int, frame: object) -> None:
-        nonlocal interrupted
-        if turn_handle is not None and turn_handle.terminate():
-            interrupted = True
+        """Pass Worker/budget termination to the owned native execution."""
+        if turn_handle is not None:
+            turn_handle.terminate()
 
     try:
         try:
@@ -109,9 +97,11 @@ def run(job_file: Path) -> int:
                 or len(causes) != len(set(causes))
             ):
                 raise ValueError("follow-up causes are invalid")
-            adapter = ADAPTERS[runtime]
+            if runtime != "codex":
+                raise ValueError("unsupported Runtime")
 
             def record_session(session: str, runtime_pid: int) -> None:
+                """Persist native execution identity before acknowledging its caller."""
                 nonlocal mapping_recorded, monitor_thread
                 if operation == "resume" and session != expected_session:
                     raise RuntimeAdapterError(
@@ -121,6 +111,7 @@ def run(job_file: Path) -> int:
                 previous_outcome = _previous_outcome(
                     session_directory / "execution.yml"
                 )
+                assert turn_handle is not None and turn_handle.execution is not None
                 mapping = {
                     **{
                         key: value
@@ -130,6 +121,8 @@ def run(job_file: Path) -> int:
                     "session": session,
                     "worker_pid": os.getpid(),
                     "runtime_pid": runtime_pid,
+                    "execution_id": turn_handle.execution.turn_id,
+                    "control_directory": control_directory,
                 }
                 if previous_outcome is not None:
                     mapping["last_outcome"] = previous_outcome
@@ -159,33 +152,25 @@ def run(job_file: Path) -> int:
                     )
                     monitor_thread.start()
 
-            if operation == "resume":
-                turn_handle = RESUME_ADAPTERS[runtime](
-                    request,
-                    prompt,
-                    expected_session,
-                    session_directory,
-                    record_session,
-                )
-            else:
-                turn_handle = adapter(
-                    request,
-                    prompt,
-                    session_directory,
-                    record_session,
-                )
+            turn_handle = CodexManagedExecution(
+                request, prompt, session_directory, record_session,
+                job.get("context_evidence", {}),
+                expected_session=expected_session if operation == "resume" else None,
+            )
             previous_sigterm = signal.signal(signal.SIGTERM, request_termination)
             try:
-                result = turn_handle.run()
+                with worker_connection(session_directory, turn_handle.operate) as control_directory:
+                    result = turn_handle.run()
+                    terminal = _terminal_turn(result)
+                    write_yaml_durably(session_directory / "execution.yml", terminal)
             finally:
                 if monitor_stop is not None:
                     monitor_stop.set()
                 if monitor_thread is not None:
                     monitor_thread.join()
-            terminal = _terminal_turn(result, interrupted)
         except RuntimeAdapterError as error:
             if mapping_recorded:
-                terminal = {"outcome": "interrupted" if interrupted else "runtime-error"}
+                terminal = {"outcome": "runtime-error", "error": {"code": error.code, "message": error.message}}
             else:
                 _write_worker_error(
                     session_directory,
@@ -337,17 +322,13 @@ def _previous_outcome(execution_file: Path) -> str | None:
     return outcome["outcome"]
 
 
-def _terminal_turn(turn: object, interrupted: bool) -> dict[str, object]:
+def _terminal_turn(turn: object) -> dict[str, object]:
     if not isinstance(turn, dict):
         raise ValueError("Runtime turn result is not a mapping")
     outcome = turn.get("outcome")
-    if outcome not in {"completed", "runtime-error"}:
+    if outcome not in {"completed", "runtime-error", "interrupted"}:
         raise ValueError("Runtime turn result has an invalid outcome")
-    terminal = {"outcome": "interrupted" if interrupted else outcome}
-    exit_code = turn.get("runtime_exit_code")
-    if isinstance(exit_code, int) and not isinstance(exit_code, bool):
-        terminal["runtime_exit_code"] = exit_code
-    return terminal
+    return dict(turn)
 
 
 def _write_worker_error(

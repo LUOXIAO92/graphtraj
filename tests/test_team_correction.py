@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from conftest import run_process
+from conftest import app_server_peer, run_process
 from runner_fixtures import configure_harness
 from test_session_alias_control import _register_ready_ticket
 
@@ -91,6 +91,8 @@ else:
     report.write_text('Candidate commit: ' + candidate + '\n' + text + '\n')
 print(json.dumps({'type': 'turn.completed'}), flush=True)
 '''
+RUNTIME = app_server_peer(RUNTIME, "'session-' + os.environ['GRAPHTRAJ_ROLE']")
+
 
 
 @pytest.mark.parametrize(('timing', 'serial'), [('before-review', False), ('after-review', False), ('after-review', True)])

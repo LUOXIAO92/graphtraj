@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from conftest import run_process
+from conftest import app_server_peer, run_process
 from test_project_setup import run_setup, setup_environment
 from test_ticket_graph import _change_status, _register, _ticket
 
@@ -97,6 +97,8 @@ else:
         ('Finding: accepted Ticket boundary omits required settings.py\n' + result.stderr if result.returncode else 'Finding: none\n'))
 print(json.dumps({'type': 'turn.completed'}), flush=True)
 '''
+RUNTIME = app_server_peer(RUNTIME, "'fake-' + os.environ['GRAPHTRAJ_TICKET_ID'] + '-' + os.environ['GRAPHTRAJ_TEAM_GENERATION'] + '-' + os.environ['GRAPHTRAJ_ROLE']")
+
 
 
 @pytest.mark.parametrize("layout", ["same", "separated"])

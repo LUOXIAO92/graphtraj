@@ -9,7 +9,7 @@ from pathlib import Path
 import yaml
 import pytest
 
-from conftest import FakeCodex, InstalledCommands, run_process, wait_for_file
+from conftest import wait_for_file, FakeCodex, InstalledCommands, run_process, wait_for_file
 from runner_fixtures import configure_harness
 
 
@@ -111,8 +111,8 @@ def test_installed_runner_applies_inline_settings_to_an_existing_preset(
         for record in leader_records
     )
     assert all(
-        any(argument.startswith("agents=") and "enabled = false" in argument
-            for argument in record["argv"])
+        any(tomllib.loads(argument)["agents"]["enabled"] is False
+            for argument in record["argv"] if argument.startswith("agents="))
         for record in leader_records
     )
     assert "resume" not in leader_records[0]["argv"]
@@ -777,11 +777,12 @@ def test_installed_runner_runs_a_main_inline_specialist_without_creating_a_prese
     output = yaml.safe_load(launched.stdout)
     task = output["tasks"][0]
     assert task["role"] == "investigation-specialist"
-    assert task["launch_status"] == "completed"
+    assert task["launch_status"] == "launched"
     retained = Path(output["retained_batch_file"])
     assert retained.read_bytes() == batch_bytes
     assert retained.stat().st_mode & 0o222 == 0
     assert roles_file.read_bytes() == roles_before
+    wait_for_file(fake_codex.log_file)
     runtime = json.loads(fake_codex.log_file.read_text())
     assert runtime["cwd"] == str(integration)
     permissions = tomllib.loads(next(
@@ -797,8 +798,8 @@ def test_installed_runner_runs_a_main_inline_specialist_without_creating_a_prese
     assert "Inspect the Ticket without joining its Team." in runtime["stdin"]
     assert runtime["connection"]["base_url"] is None
     assert any(
-        argument.startswith("agents=") and "enabled = false" in argument
-        for argument in runtime["argv"]
+        tomllib.loads(argument)["agents"]["enabled"] is False
+        for argument in runtime["argv"] if argument.startswith("agents=")
     )
     session = yaml.safe_load(
         (
@@ -880,12 +881,14 @@ def test_installed_runner_keeps_new_inline_role_names_outside_formal_team_policy
     )
 
     assert launched.returncode == 0, launched.stderr
+    wait_for_file(fake_codex.log_file)
     runtime = json.loads(fake_codex.log_file.read_text())
     assert runtime["role"] == role_name
     assert "Write the fixed candidate" not in runtime["stdin"]
     assert "Review brief:" not in runtime["stdin"]
     assert not any(runtime["environment"].values())
 
+    wait_for_file(policy_log)
     policy = json.loads(policy_log.read_text().splitlines()[0])
     assert policy["settings"]["agents"]["enabled"] is False
     assert "hooks" not in policy["settings"]

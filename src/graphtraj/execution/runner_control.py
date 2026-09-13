@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+import fcntl
 import os
-import signal
 import subprocess
 import sys
 import time
@@ -23,12 +23,12 @@ from graphtraj.configuration.project_configuration import (
     ProjectConfigurationError,
     load_project_configuration,
 )
+from graphtraj.execution.runner_connection import session_operation
 from graphtraj.execution.runner_io import confirm_alias_mapping_durable, write_yaml_durably
 from graphtraj.execution.runner_capacity import capacity_positions
 from graphtraj.execution.runner_models import RunnerError
 from graphtraj.execution.runner_process import (
     OPERATION_TIMEOUT_SECONDS,
-    process_is_alive,
     stop_worker,
 )
 from graphtraj.workspace.runner_project import discover_project, discover_runner_directory
@@ -40,10 +40,6 @@ from graphtraj.execution.runner_status import (
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 
 
-LIVE_INPUT_GUIDANCE = (
-    "This Runtime cannot accept input during a running Runtime execution. To intervene "
-    "immediately, explicitly interrupt the alias and then send the instruction."
-)
 SESSION_IDENTITY_READERS = {"codex": read_codex_session_identity}
 SESSION_IMMUTABLE_MAPPING_FIELDS = (
     "alias",
@@ -64,7 +60,7 @@ def send_instruction(
     cwd: Path,
     caused_by_event_ids: tuple[str, ...],
 ) -> Dict[str, str]:
-    """Resume one idle mapped Runtime Session without changing its alias."""
+    """Steer an active execution or continue an idle mapped Session."""
 
     if not instruction.strip():
         raise RunnerError(
@@ -110,16 +106,54 @@ def _send_session(
     leader_notice_keys: tuple[str, ...] = (),
     capacity_fd: int | None = None,
 ) -> Dict[str, str]:
+    """Serialize alias changes so two idle sends cannot create competing owners."""
+    launch_file = session_directory / "launch.yml"
+    if launch_file.is_symlink() or not launch_file.is_file():
+        raise _not_resumable()
+    with launch_file.open("rb") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        mapping, _ = read_alias_mapping(session_directory.parent.parent, alias)
+        return _send_session_locked(
+            alias, instruction, session_directory, mapping, caused_by_event_ids, cwd,
+            budget_notice=budget_notice, leader_notice_keys=leader_notice_keys,
+            capacity_fd=capacity_fd,
+        )
+
+
+def _send_session_locked(
+    alias: str,
+    instruction: str,
+    session_directory: Path,
+    mapping: Dict[str, Any],
+    caused_by_event_ids: tuple[str, ...],
+    cwd: Path,
+    *,
+    budget_notice: bool = False,
+    leader_notice_keys: tuple[str, ...] = (),
+    capacity_fd: int | None = None,
+) -> Dict[str, str]:
+    """Deliver input or restore the retained Context under the alias lock."""
     execution_file = session_directory / "execution.yml"
     if not os.path.lexists(str(execution_file)):
-        if process_is_alive(mapping["worker_pid"]):
-            raise RunnerError("live-input-unsupported", LIVE_INPUT_GUIDANCE)
-        raise _not_resumable()
+        status = session_operation(mapping, "status")
+        if status["activity"] == "running":
+            session_operation(mapping, "send", instruction=instruction)
+            from graphtraj.execution.runner_worker import _append_follow_up
+
+            if caused_by_event_ids:
+                _append_follow_up(session_directory / "events.jsonl", list(caused_by_event_ids))
+            return {"alias": alias, "send_status": "sent"}
+        # Native completion can precede the owner's final Trace drain and close.
+        deadline = time.monotonic() + OPERATION_TIMEOUT_SECONDS
+        while not execution_file.is_file():
+            if time.monotonic() >= deadline:
+                raise RunnerError("operation-failed", "The previous execution is still closing.")
+            time.sleep(0.01)
     read_terminal_outcome(execution_file)
     worktree = Path(mapping["worktree_path"])
     if not worktree.is_absolute() or worktree.is_symlink() or not worktree.is_dir():
         raise _invalid_mapping()
-    request, connection = _read_session_resume_request(session_directory, mapping)
+    request, connection, context_evidence = _read_session_resume_request(session_directory, mapping)
     _attest_runtime_session(session_directory, mapping)
     team_environment = _team_runtime_environment(mapping, cwd)
     evidence = team_environment.get("GRAPHTRAJ_EVIDENCE")
@@ -173,6 +207,7 @@ def _send_session(
             "operation": "resume",
             "runtime": mapping["runtime"],
             "adapter_request": request,
+            "context_evidence": context_evidence,
             "expected_session": mapping["session"],
             "caused_by_event_ids": list(caused_by_event_ids),
             "mapping": {
@@ -272,30 +307,8 @@ def _interrupt_session(
             "operation-failed",
             "The requested Session has no active Runtime execution to interrupt.",
         )
-    if not process_is_alive(mapping["worker_pid"]):
-        raise _not_resumable()
-    try:
-        os.kill(mapping["worker_pid"], signal.SIGTERM)
-    except ProcessLookupError:
-        raise _not_resumable() from None
-    except OSError as error:
-        raise RunnerError(
-            "operation-failed",
-            "The active Runtime execution could not be interrupted.",
-        ) from error
-    deadline = time.monotonic() + OPERATION_TIMEOUT_SECONDS
-    while time.monotonic() < deadline:
-        if execution_file.is_file():
-            outcome = read_terminal_outcome(execution_file)
-            if outcome == "interrupted" and not process_is_alive(mapping["worker_pid"]):
-                return {"alias": alias, "interrupt_status": "interrupted"}
-            if outcome != "interrupted":
-                break
-        time.sleep(0.01)
-    raise RunnerError(
-        "operation-failed",
-        "The active Runtime execution could not be confirmed interrupted.",
-    )
+    session_operation(mapping, "interrupt")
+    return {"alias": alias, "interrupt_status": "interrupted"}
 
 
 def _require_project_events(cwd: Path, event_ids: tuple[str, ...]) -> None:
@@ -320,7 +333,7 @@ def _require_project_events(cwd: Path, event_ids: tuple[str, ...]) -> None:
 
 def _read_session_resume_request(
     session_directory: Path, mapping: Dict[str, Any]
-) -> Tuple[Dict[str, Any], Dict[str, str]]:
+) -> Tuple[Dict[str, Any], Dict[str, str], Dict[str, Any]]:
     launch_file = session_directory / "launch.yml"
     if launch_file.is_symlink() or not launch_file.is_file():
         raise _not_resumable()
@@ -350,19 +363,23 @@ def _read_session_resume_request(
         for key, value in connection.items()
     ):
         raise _invalid_mapping()
-    return launch["adapter_request"], connection
+    return launch["adapter_request"], connection, launch.get("context_evidence", {})
 
 
 def _await_session_resume(
     worker: subprocess.Popen[str],
     session_directory: Path,
     error_file: Path,
-    expected_session: str,
+    expected_session: str | None,
 ) -> None:
+    """Wait only for durable ownership; execution continues after this returns."""
     mapping_file = session_directory / "mapping.yml"
     deadline = time.monotonic() + OPERATION_TIMEOUT_SECONDS
     while time.monotonic() < deadline:
         if error_file.is_file():
+            if expected_session is None:
+                failure = yaml.safe_load(error_file.read_text(encoding="utf-8"))
+                raise RunnerError(failure["code"], failure["message"])
             raise _read_resume_error(error_file)
         try:
             mapping = yaml.safe_load(mapping_file.read_text(encoding="utf-8"))
@@ -372,7 +389,7 @@ def _await_session_resume(
             isinstance(mapping, dict)
             and is_session_mapping(mapping)
             and mapping.get("worker_pid") == worker.pid
-            and mapping.get("session") == expected_session
+            and (expected_session is None or mapping.get("session") == expected_session)
         ):
             try:
                 confirm_alias_mapping_durable(mapping_file)

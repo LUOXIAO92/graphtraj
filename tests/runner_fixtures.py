@@ -98,6 +98,17 @@ def engineer_probe(commands, harness, fake_codex, environment, *, body="Probe th
                     raise AssertionError(output.read())
                 time.sleep(0.02)
             assert alias, "The installed Team did not launch its Engineer"
+            if executable is None:
+                # Native turn/start acknowledges ownership before model work begins.
+                deadline = time.monotonic() + 5
+                while time.monotonic() < deadline:
+                    if fake_codex.log_file.exists():
+                        records = [json.loads(line) for line in fake_codex.log_file.read_text().splitlines()]
+                        if any(record.get("role", "").startswith("engineer-") for record in records):
+                            break
+                    time.sleep(0.01)
+                else:
+                    raise AssertionError("The controlled Engineer did not receive its input")
             yield alias, Path(mapping["worktree_path"]), env
         finally:
             if alias:

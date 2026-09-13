@@ -12,11 +12,11 @@ import yaml
 
 from graphtraj.workspace.git_repository import GitRepositoryError, SourceRepository
 from graphtraj.execution.runner_models import RunnerError, StatusResponse
-from graphtraj.execution.runner_process import process_is_alive
+from graphtraj.execution.runner_connection import session_operation
 from graphtraj.workspace.runner_project import discover_runner_directory
 
 
-ALIAS = re.compile(r"^[A-Za-z0-9._%-]+@[ldjser][1-9][0-9]*$")
+ALIAS = re.compile(r"^[A-Za-z0-9._%-]+@[ldmjserx][1-9][0-9]*$")
 TERMINAL_OUTCOMES = frozenset({"completed", "interrupted", "runtime-error"})
 SESSION_MAPPING_FIELDS = frozenset(
     {
@@ -99,19 +99,26 @@ def _status_alias(
 def _status_session(
     mapping: Dict[str, Any], session_directory: Path, alias: str
 ) -> Dict[str, str]:
+    identity = {"alias": alias}
+    if "execution_id" in mapping:
+        identity.update(session=mapping["session"], execution_id=mapping["execution_id"])
     execution_file = session_directory / "execution.yml"
     if os.path.lexists(str(execution_file)):
         return {
-            "alias": alias,
-            "activity": "idle",
+            **identity, "activity": "idle",
             "last_outcome": read_terminal_outcome(execution_file),
         }
-    if process_is_alive(mapping["worker_pid"]):
-        status = {"alias": alias, "activity": "running"}
-        if "last_outcome" in mapping:
-            status["last_outcome"] = mapping["last_outcome"]
-        return status
-    raise _invalid_activity()
+    try:
+        status = session_operation(mapping, "status")
+    except RunnerError:
+        # Completion can close the socket between the file read and the request.
+        if execution_file.is_file():
+            return {**identity, "activity": "idle",
+                    "last_outcome": read_terminal_outcome(execution_file)}
+        raise
+    if "last_outcome" in mapping and "last_outcome" not in status:
+        status["last_outcome"] = mapping["last_outcome"]
+    return {**identity, **status}
 
 
 def _operation_total(trace_file: Path, session: str) -> int:

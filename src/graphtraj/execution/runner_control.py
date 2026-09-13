@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import fcntl
+import json
 import os
 import subprocess
 import sys
@@ -52,6 +53,60 @@ SESSION_IMMUTABLE_MAPPING_FIELDS = (
     "worktree_path",
     "trace_file",
 )
+
+
+def pending_requests(
+    alias: str, cwd: Path, *, execution_id: str | None = None,
+) -> dict:
+    """Query the mapped execution's native requests without consuming them.
+
+    Supply ``execution_id`` to reject a mapping that has moved to a successor.
+    Each returned request carries the identity required by ``reply_to_request``.
+    """
+    mapping, directory = read_alias_mapping(discover_runner_directory(cwd), alias)
+    if execution_id is not None and execution_id != mapping.get('execution_id'):
+        raise RunnerError('operation-failed', 'The requested execution is no longer mapped.')
+    identity = {'alias': alias, 'session': mapping['session'],
+                'execution_id': mapping['execution_id']}
+    terminal = directory / 'execution.yml'
+    if terminal.is_file():
+        read_terminal_outcome(terminal)
+        return {**identity, 'requests': []}
+    try:
+        return {**identity, **session_operation(mapping, 'requests')}
+    except RunnerError:
+        if terminal.is_file():
+            read_terminal_outcome(terminal)
+            return {**identity, 'requests': []}
+        raise
+
+
+def reply_to_request(alias: str, request: dict, response: dict, cwd: Path) -> dict:
+    """Submit a JSON response to one request returned by ``pending_requests``.
+
+    Session, execution and request token must still match the current owner.
+    Submission acknowledges the callback reply; observe status for the native
+    execution's eventual result. No response decision is inferred or defaulted.
+    """
+    if not isinstance(request, dict) or any(
+        not isinstance(request.get(key), str) or not request[key]
+        for key in ('session', 'execution_id', 'request_token')
+    ) or not isinstance(response, dict):
+        raise RunnerError('invalid-input', 'Supply a pending request and a native JSON response object.')
+    try:
+        json.dumps(response, allow_nan=False)
+    except (ValueError, TypeError) as error:
+        raise RunnerError('invalid-input', 'The native response must be a JSON object.') from error
+    mapping, directory = read_alias_mapping(discover_runner_directory(cwd), alias)
+    if any(request[key] != mapping.get(key) for key in ('session', 'execution_id')):
+        raise RunnerError('operation-failed', 'The requested native execution is no longer mapped.')
+    if (directory / 'execution.yml').exists():
+        raise RunnerError('operation-failed', 'The native request is no longer pending.')
+    result = session_operation(
+        mapping, 'reply', request_token=request['request_token'], response=response,
+    )
+    return {'alias': alias, 'session': mapping['session'],
+            'execution_id': mapping['execution_id'], **result}
 
 
 def send_instruction(

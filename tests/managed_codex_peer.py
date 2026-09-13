@@ -12,6 +12,23 @@ def emit(value: dict) -> None:
     print(json.dumps(value), flush=True)
 
 
+pending = {}
+
+
+def ask(kind: str = 'approval') -> None:
+    """Reuse native IDs deliberately to exercise caller identity and expiry."""
+    request_id = 'approval' if kind == 'approval' else 7
+    pending[request_id] = kind
+    emit({'id': request_id, 'method': (
+        'item/commandExecution/requestApproval' if kind == 'approval'
+        else 'item/tool/requestUserInput'
+    ), 'params': {
+        'threadId': session, 'turnId': execution,
+        **({'command': 'printf APPROVAL_121', 'cwd': parameters['cwd']}
+           if kind == 'approval' else {'questions': [{'id': 'color', 'question': 'Choose a color.'}]}),
+    }})
+
+
 if sys.argv[1:] == ['exec', '--help']:
     print('--sandbox')
     sys.exit(0)
@@ -21,7 +38,27 @@ for line in sys.stdin:
     method = request.get('method')
     params = request.get('params', {})
     if method is None:
-        assert request['id'] == 'approval' and 'error' in request
+        kind = pending.pop(request['id'])
+        if 'error' in request:
+            continue
+        with native.with_suffix('.replies.jsonl').open('a') as stream:
+            stream.write(json.dumps(request) + '\n')
+        if kind == 'approval':
+            decision = request['result']['decision']
+            assert decision in ('accept', 'decline')
+            text = 'approval:' + decision
+        else:
+            text = json.dumps(request['result'], sort_keys=True)
+        if pending:
+            continue
+        with native.open('a') as stream:
+            stream.write(json.dumps({'type': 'event_msg', 'payload': {
+                'type': 'task_complete', 'last_agent_message': text,
+            }}) + '\n')
+        emit({'method': 'turn/completed', 'params': {
+            'threadId': session, 'turn': {'id': execution, 'status': 'completed',
+                'items': [{'type': 'agentMessage', 'text': text}]},
+        }})
         continue
     if method == 'initialize':
         result = {}
@@ -49,8 +86,14 @@ for line in sys.stdin:
         assert params['threadId'] == session and params['expectedTurnId'] == execution
         text = params['input'][0]['text']
         if text == 'unhandled request':
-            emit({'id': 'approval', 'method': 'item/commandExecution/requestApproval',
-                  'params': {'threadId': session, 'turnId': execution}})
+            ask()
+            emit({'id': request['id'], 'result': {'turnId': execution}})
+            continue
+        if text == 'withdraw and reissue':
+            for request_id in list(pending):
+                emit({'method': 'serverRequest/resolved', 'params': {'requestId': request_id}})
+            pending.clear()
+            ask()
             emit({'id': request['id'], 'result': {'turnId': execution}})
             continue
 
@@ -66,6 +109,9 @@ for line in sys.stdin:
         result = {'turnId': execution}
     elif method == 'turn/interrupt':
         assert params == {'threadId': session, 'turnId': execution}
+        for request_id in list(pending):
+            emit({'method': 'serverRequest/resolved', 'params': {'requestId': request_id}})
+        pending.clear()
         emit({'method': 'turn/completed', 'params': {
             'threadId': session, 'turn': {'id': execution, 'status': 'interrupted', 'items': []},
         }})
@@ -73,6 +119,10 @@ for line in sys.stdin:
     else:
         raise AssertionError(request)
     emit({'id': request['id'], 'result': result})
+    if method == 'turn/start' and 'request:' in params['input'][0]['text']:
+        ask()
+        if 'request:multiple' in params['input'][0]['text']:
+            ask('input')
 
 time.sleep(1)
 Path(os.environ['MANAGED_NATIVE_ROOT'], session + '.closed').touch()

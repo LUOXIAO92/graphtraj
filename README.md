@@ -147,6 +147,43 @@ operation. Without a selected or inherited channel, budget accounting and
 Leader notices remain retained and Python produces no terminal output; the
 CLI selects stderr. Conflict integration retains notices in its evidence log.
 
+For a Codex Main, its owning host can bind that same caller channel to the
+already-open app-server connection and original `CodexSession` with
+`CodexMainRecovery`. The binding ignores ordinary estimate/allowance notices,
+waits for an active Main turn to settle, then sends one explicit `$retro` turn
+with the host's actual absolute `retro/SKILL.md` path. It never continues the
+Ticket automatically; a caller still records its decision and uses
+`agent-runner continue` explicitly.
+
+```python
+import asyncio
+from pathlib import Path
+
+from graphtraj.execution.execution_budget import budget_notice_output
+from graphtraj.execution.runner_launch import launch_batch
+from graphtraj.runtimes.codex.app_server import CodexAppServer, CodexMainRecovery, CodexSession
+
+
+async def launch_from_owned_codex_main(
+    app_server: CodexAppServer,
+    main_session: CodexSession,
+    batch,
+    harness: Path,
+    retro_skill: Path,
+):
+    async with CodexMainRecovery(app_server, main_session, retro_skill) as recovery:
+        with budget_notice_output(recovery.notice_fd):
+            return await asyncio.to_thread(launch_batch, batch, harness)
+```
+
+`app_server` and `main_session` must be the host's existing connection and
+original Main thread; an environment `CODEX_THREAD_ID`, a CLI message, or a
+new `thread/resume` process is not a binding. The current VSCode-owned Main
+does not expose that connection, so it cannot use this path until its host
+keeps and passes those two objects. Run the Runner call without blocking the
+connection loop, and observe the context-manager error if native delivery is
+rejected. The exact Codex input shape is in the Codex-only recovery reference.
+
 ## Core Skills and their sources
 
 After `graphtraj setup` installs the core Skills, invoke `$setup-project` to

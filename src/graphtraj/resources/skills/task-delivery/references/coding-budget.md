@@ -26,7 +26,7 @@ execution_budget:
     delivery_state: 1
   correction_rounds: 1
   estimation_note: Existing integration checks may dominate elapsed time
-  on_exceed: Inspect progress and failures; reuse evidence and record the decision
+  on_exceed: On the timer notice, assess supplied progress and failures; reuse evidence and record the decision
 ---
 ```
 
@@ -46,11 +46,25 @@ missing or stale, update the ticket through the configured authorized workflow,
 retaining its previous definition and the reason. This does not invoke the
 explicit-only to-tickets skill or redo task decomposition.
 
-Runner sends the Leader notices when the elapsed estimate and sampled
-additional allowance are reached. If Runner later selects stopping, freeze the
-scene and collect limited Engineer and Leader reports while already-running
-Reviewers finish. Preserve files, commits, Worktree, Sessions and Traces. Use a
-relevant diagnosis Skill before choosing subsequent work; stopping alone does
-not authorize new implementation, Review, correction, replacement, retirement
-or escalation. A revised budget still preserves the original start and consumed
-schedule.
+Runner's timer sends notices when the elapsed estimate and sampled additional
+allowance are reached, and when it selects stopping. Preserve both delivery
+paths: the Leader Session and the calling Main's live notice channel. CLI uses
+stderr unless an inherited `GRAPHTRAJ_BUDGET_NOTICE_FD` selects that channel;
+keep it connected to the waiting execution tool rather than only a log file.
+On each notice, inspect the supplied state and any missing decision evidence
+once, then record the decision. Estimate and allowance notices are not enforced
+stops. No notice calls for another monitoring loop; waiting for one requires no
+Agent polling. Runner's internal timer checks are separate.
+
+Being unfinished or approaching a threshold alone does not justify increasing
+the budget. For a justified revision, distinguish changed work from dispatch
+errors and waiting, estimate what remains, and assess the effect on the stop
+threshold. Preserve original accounting under the accepted budget policy.
+
+If Runner selects stopping, freeze the scene and collect limited Engineer and
+Leader reports while already-running Reviewers finish. Preserve files, commits,
+Worktree, Sessions and Traces. The timer notification and returned wrap-up
+trigger [recovery decisions](recovery.md), including the caller host's explicit
+Skill invocation. Stopping alone
+does not authorize new implementation, Review, correction, replacement,
+retirement or escalation.

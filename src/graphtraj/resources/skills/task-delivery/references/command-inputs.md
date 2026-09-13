@@ -1,6 +1,6 @@
-# Ticket command inputs
+# Delivery command inputs
 
-Use block-style YAML for these command inputs. Read current Ticket state before
+Use block-style YAML for Ticket command inputs. Read current Ticket state before
 updating it; commands validate and persist the supplied decisions.
 
 ## Register a missing Ticket

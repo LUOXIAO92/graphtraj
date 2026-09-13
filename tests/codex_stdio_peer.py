@@ -14,6 +14,14 @@ def emit(message: dict) -> None:
     print(json.dumps(message), flush=True)
 
 
+def record(message: dict) -> None:
+    """Retain received client wire messages when a controlled test requests it."""
+    path = os.environ.get('PEER_PROTOCOL_LOG')
+    if path:
+        with Path(path).open('a', encoding='utf-8') as stream:
+            stream.write(json.dumps(message) + '\n')
+
+
 def complete(thread_id: str, turn_id: str, text: str, status: str = 'completed') -> None:
     """Deliver final output before the control reply to exercise interleaving."""
     emit({'method': 'item/completed', 'params': {
@@ -102,6 +110,7 @@ if os.environ.get('PEER_STALL_CLOSE'):
     signal.signal(signal.SIGTERM, acknowledge_close)
 for line in sys.stdin:
     message = json.loads(line)
+    record(message)
     method = message.get('method')
     params = message.get('params', {})
     if method is None:
@@ -145,6 +154,16 @@ for line in sys.stdin:
         result = {'turn': {'id': turn_id, 'status': 'inProgress', 'items': [], 'error': None}}
         active[thread_id] = turn_id
         prompt = params['input'][0]['text']
+        if (
+            os.environ.get('PEER_REJECT_RETRO')
+            and len(params['input']) == 2
+            and params['input'][1].get('type') == 'skill'
+            and params['input'][1].get('name') == 'retro'
+        ):
+            emit({'id': message['id'], 'error': {
+                'code': -32001, 'message': 'retro rejected',
+            }})
+            continue
         if prompt == 'rpc-error':
             emit({'id': message['id'], 'error': {
                 'code': -32001, 'message': 'native rejection', 'data': {'retry': False},

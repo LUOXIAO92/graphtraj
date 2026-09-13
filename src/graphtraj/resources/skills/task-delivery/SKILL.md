@@ -1,6 +1,6 @@
 ---
 name: task-delivery
-description: Coordinate an accepted task graph through readiness, team selection, dispatch, acceptance and validated integration.
+description: Coordinate accepted tasks through dispatch, event-driven follow-up, recovery after failures or budget stops, and validated integration.
 ---
 
 # Task Delivery
@@ -12,8 +12,10 @@ commands from the Harness Project Root.
 ## Select the work and its executor
 
 Select active nodes whose required predecessor results have been accepted
-and integrated. Read the existing current definition before registering or
-changing a Ticket. Preserve completed predecessor edges and register missing
+and integrated. Apply known blocker reports to dependencies before dispatching
+affected work; do not wait for another execution to hit the same gap. Read the
+existing current definition before registering or changing a Ticket. Preserve
+completed predecessor edges and register missing
 accepted nodes before dispatch; readiness is determined by predecessor status.
 Use [command inputs](references/command-inputs.md) for
 registration, readiness and graph revisions.
@@ -28,7 +30,10 @@ For another task type, use its actually available role or agreed direct work
 arrangement; a team protocol must exist before it can be dispatched.
 
 Give the executor the authoritative task, required inputs, acceptance mapping
-and relevant predecessor evidence. Keep dispatch details concise. Main owns
+and relevant predecessor evidence, including who owns shared validation and
+how its result returns. Confirm sources are reachable from the assigned role's
+permitted view. Reuse unchanged setup and evidence rather than reconstructing
+them for every dispatch. Keep dispatch details concise. Main owns
 cross-task decisions and integration; a selected team's Leader owns its
 internal specialist workflow and acceptance decision.
 
@@ -38,11 +43,27 @@ Formal team work uses `agent-runner --batch-input <batch.yml>`.
 Respect configured depth and concurrency. A Batch starts all selected tasks
 or none; reduce it or wait when there is insufficient capacity.
 
-Use `agent-runner status <alias>` for execution status and
-`graphtraj worldline read` for retained evidence. Send relevant new evidence
-with `agent-runner send <alias> --instruction <text>
---caused-by-event-id <event-id>`. Use `agent-runner interrupt <alias>` when
-interruption is intended.
+Wait for existing completion, failure and budget notifications. Keep one
+active driver per Session; Main waits for the team's handoff while its Leader
+owns member execution. For Main-owned external validation, deliver the outcome
+through the existing handoff instead of having Leader watch temporary files.
+Keep the Runner's caller notice channel connected to Main's waiting execution
+tool as well as the Leader notification path; retaining a notice only in a log
+does not deliver it to Main. Let the timer return information automatically,
+rather than scheduling Agent queries to discover an elapsed threshold.
+
+On a received event, read only the evidence needed for the next decision.
+When a proactive check is necessary, apply Harness Guidance's shared polling
+limit across Main, Leader, delegates, scripts and tools. Use
+`agent-runner status <alias>` for status and `graphtraj worldline read` for
+retained evidence; do not query both merely to confirm nothing changed.
+Progress messages use known state and do not trigger another check.
+
+Send relevant new evidence with `agent-runner send <alias> --instruction <text>
+--caused-by-event-id <event-id>` under its active-execution semantics; do not
+start a second driver to deliver it. Use `agent-runner interrupt <alias>` when
+interruption is intended. Reuse valid reports and validation for unchanged
+paths; rerun affected checks and explicitly required fresh validation.
 
 Receive the result, validation, required review evidence and acceptance
 decision. Runtime success alone does not establish acceptance. For an execution
@@ -93,8 +114,10 @@ required domain expertise; Main adjudicates the result and validation.
 
 After formal Ticket integration use `agent-runner cleanup --ticket-id <id>`.
 Regenerate the current graph with `graphtraj ticket graph` and continue ready
-independent work. Keep original Batch and Session evidence; generated views
-need no separate persisted ledger.
+independent work within the user's current continuation or pause instruction.
+Keep original Batch and Session evidence; generated views
+need no separate persisted ledger. Treat integration as one completed handoff;
+do not regenerate the graph or repeat cleanup on an unchanged status check.
 
 Finish when the accepted scope is integrated or no authorized progress remains.
 Report delivered results, validation, graph changes and concrete blockers.

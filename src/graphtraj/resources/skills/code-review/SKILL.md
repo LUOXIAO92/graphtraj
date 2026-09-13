@@ -5,6 +5,9 @@ description: "Review the changes since a fixed point (commit, branch, tag, or me
 
 Within a GraphTraj Team, the Team Leader schedules the Standards and Spec
 Reviewers through agent-runner against the same candidate and comparison.
+Use [task-delivery](../task-delivery/SKILL.md) for dispatch, notification-based
+waiting and recovery, including the shared Harness polling limit. Main receives
+the Team result without starting another review or monitoring its members.
 An assigned Reviewer performs only its supplied axis and returns its report;
 it does not run this orchestration workflow or create further Reviewers.
 The standalone workflow below applies when Main or the user requests a separate review.
@@ -24,7 +27,9 @@ The issue tracker should have been provided to you. If `docs/agents/issue-tracke
 
 Whatever the user said is the fixed point (a commit SHA, branch name, tag, `main`, `HEAD~5`, etc.). If they didn't specify one, ask for it.
 
-Capture the diff command once: `git diff <fixed-point>...HEAD` (three-dot, so the comparison is against the merge-base). Also note the list of commits via `git log <fixed-point>..HEAD --oneline`.
+Resolve the fixed point and candidate `HEAD` to commit IDs once. Use those IDs
+in `git diff <base-id>...<candidate-id>` and
+`git log <base-id>..<candidate-id> --oneline` so both axes inspect the same input.
 
 Before going further, confirm the fixed point resolves (`git rev-parse <fixed-point>`) and the diff is non-empty. A bad ref or empty diff should fail here, not inside two parallel sub-agents.
 
@@ -34,7 +39,9 @@ Look for the originating spec, in this order:
 
 1. Issue references in the commit messages (`#123`, `Closes #45`, GitLab `!67`, etc.), fetched via the workflow in `docs/agents/issue-tracker.md`.
 2. A path the user passed as an argument.
-3. A spec file under `docs/`, `specs/`, or `.scratch/` matching the branch name or feature.
+3. A spec in the project's configured document or draft location matching the
+   branch name or feature. Make the original source readable from the Reviewer
+   view before dispatch.
 4. If nothing is found, ask the user where the spec is. If they say there isn't one, the **Spec** sub-agent will skip and report "no spec available".
 
 ### 3. Identify the standards sources
@@ -63,6 +70,10 @@ Each smell reads *what it is* → *how to fix*; match it against the diff:
 
 ### 4. Spawn both sub-agents in parallel
 
+Reuse valid axis reports for the same candidate, comparison and requirements,
+unless the user requests a fresh review. Dispatch only unfinished or affected
+axes. A missing report copy calls for report recovery, not repeating the review.
+
 **Standards sub-agent prompt** should include:
 
 - The full diff command and commit list.
@@ -78,6 +89,10 @@ Each smell reads *what it is* → *how to fix*; match it against the diff:
 If the spec is missing, skip the Spec sub-agent and note this in the final report.
 
 ### 5. Aggregate
+
+Wait for completion or failure notifications; any necessary fallback query
+follows the shared Harness polling limit. Aggregate delivered reports once;
+unchanged status is not a reason to reread the diff or relaunch an axis.
 
 Present the two reports under `## Standards` and `## Spec` headings, verbatim or lightly cleaned. Do **not** merge or rerank findings, because the two axes are deliberately separate (see _Why two axes_).
 

@@ -8,8 +8,9 @@ description: Break a goal into independently verifiable task nodes with delivera
 Start from the agreed goal, constraints and evidence of completion. Read the
 existing decisions, task graph and delivered results before splitting anything.
 Extend that project history: identify the results or observed problems each new
-node builds on. Resolve a missing
-fact from available evidence; ask only when it changes the intended result.
+node builds on. For a revision, start from the reported gap and its affected
+consumers; preserve valid nodes, identities and results elsewhere. Resolve a
+missing fact from available evidence; ask only when it changes the intended result.
 
 ## Find the useful boundaries
 
@@ -40,6 +41,9 @@ conflicts are clues to inspect the underlying relationship: a common prerequisit
 a changing agreement, or decisions that need to be made together. Resolve that
 relationship rather than ignoring it or adding an edge solely for a shared file.
 Check cycles and keep independent work available concurrently.
+If a known missing result prevents a consumer from starting correctly, give it
+an owner and connect the dependency before dispatch. Repair inaccessible sources
+or dispatch mistakes at their origin; they do not create new product requirements.
 
 ## Check the graph
 

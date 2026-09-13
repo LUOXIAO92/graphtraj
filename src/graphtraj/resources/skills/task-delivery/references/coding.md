@@ -2,12 +2,15 @@
 
 Before dispatch, read [the ticket budget](coding-budget.md) and check it against
 the current ticket. Present difficulty, expected total time, selected Engineer
-tier and planned Sessions before launching. Budget notices require the calling
-Agent to inspect progress and record a recovery or continuation decision.
+tier and planned Sessions before launching. Handle budget notices through
+[the ticket budget](coding-budget.md); waiting for them does not require
+proactive progress queries.
 
-Check the actual installed command and test environment before supplying their
-paths. Assign source files by repository responsibility; shared Project Documents
-remain Main-owned. Pass known usable entrypoints and failures to the Leader.
+Use the actual installed command and test environment when supplying paths.
+Reuse a verified installation identity until the installation or relevant
+configuration changes; distinguish bootstrap from candidate validation. Assign
+source files by repository responsibility; shared Project Documents remain
+Main-owned. Pass known usable entrypoints and failures to the Leader.
 
 Select the configured coding-team.team-leader preset and give the Leader the
 Junior, Senior or Expert difficulty of the accepted code Ticket. A Batch task

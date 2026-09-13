@@ -13,6 +13,8 @@ criteria and blocking dependencies. Task decomposition depends on
 missing decomposition or revise task boundaries when needed. Ticketing an existing
 breakdown does not require rereading the skill or repeating that work. A tracker
 Issue can represent a node of any domain.
+For a delivery-driven revision, change only affected nodes and dependencies;
+reuse existing Issue identities rather than republishing the graph.
 
 The issue tracker and triage label vocabulary should have been provided to you — run `/setup-project` if not.
 
@@ -20,7 +22,9 @@ The issue tracker and triage label vocabulary should have been provided to you �
 
 ### 1. Gather context
 
-Work from whatever is already in the conversation context. If the user passes a reference (a spec path, an issue number or URL) as an argument, fetch it and read its full body and comments.
+Work from the available conversation and accepted sources. Fetch referenced
+specs or Issues when their contents are missing or changed; reuse material
+already read, fetching only relevant new comments or revisions.
 
 Read the current project graph and delivered results. Retain required completed
 predecessors when issuing follow-up tickets; they do not block readiness. Put
@@ -71,7 +75,7 @@ YAML front matter at the very start of the ticket. Resolve unknown scope before
 claiming a usable budget; retain uncertainty as explanation. Keep the existing
 source node and real dependencies.
 
-### 4. Quiz the user
+### 4. Resolve remaining choices
 
 Present the proposed breakdown as a numbered list. For each ticket, show:
 
@@ -79,15 +83,9 @@ Present the proposed breakdown as a numbered list. For each ticket, show:
 - **Blocked by**: which other tickets (if any) must complete first
 - **What it delivers**: the end-to-end behaviour this ticket makes work
 
-Ask the user:
-
-- Does the granularity feel right? (too coarse / too fine)
-- Are the blocking edges correct — does each ticket only depend on tickets that genuinely gate it?
-- Should any tickets be merged or split further?
-
-Resolve unsettled product choices with the user. Apply already accepted node
-boundaries and the project's authority for product-preserving graph corrections
-without requesting the same decision again.
+Ask only about unsettled product choices or boundaries the current authority
+does not resolve. Apply accepted granularity, real dependencies and authorized
+product-preserving corrections without requesting the same decision again.
 
 ### 5. Publish the tickets to the configured tracker
 
@@ -96,7 +94,10 @@ Publish the accepted tickets when tracker writes are authorized. **How** depends
 - **Local files** → write one file per ticket under `docs/agents/issues/<feature-slug>/issues/<NN>-<slug>.md`, numbered from `01` in dependency order (blockers first). Each file's "Blocked by" lists the numbers/titles it depends on. Use the per-ticket file template below — one ticket per file, never a single combined file.
 - **A real issue tracker (GitHub, Linear, …)** → publish one issue per ticket in dependency order (blockers first) so each ticket's blocking edges can reference real identifiers. Use the platform's native blocking / sub-issue relationship where it has one; otherwise set each ticket's "Blocked by" to the blocking issues. Apply the `ready-for-agent` triage label unless instructed otherwise — the tickets are agent-grabbable by construction.
 
-Work the **frontier**: any ticket whose blockers are all done. For a purely linear chain that means top to bottom.
+When execution is authorized, hand the accepted graph and publication results
+to [task-delivery](../task-delivery/SKILL.md), reusing its current context.
+It owns readiness, dispatch, event handling and recovery; ticketing does not
+start another monitoring loop. Apply any user pause or stop-after instruction.
 
 Do NOT close or modify any parent issue.
 

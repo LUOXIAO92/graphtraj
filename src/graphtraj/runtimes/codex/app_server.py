@@ -171,6 +171,7 @@ class CodexAppServer:
         self._resuming: set[str] = set()
         self._turns: dict[tuple[str, str], _ExecutionState] = {}
         self._active: dict[str, str | None] = {}
+        self._turn_gates: dict[str, asyncio.Lock] = {}
         self._traces: dict[str, CodexNativeTrace] = {}
         self._trace_tasks: dict[str, asyncio.Task[None]] = {}
         self._failure: CodexAdapterError | None = None
@@ -344,6 +345,7 @@ class CodexAppServer:
         except (KeyError, TypeError, ValueError, AttributeError) as error:
             raise self._protocol_failure(f'{method}: {error}') from error
         self._sessions[session.thread_id] = session
+        self._turn_gates[session.thread_id] = asyncio.Lock()
         if thread_id is not None:
             self._resumed_sessions.add(session.thread_id)
         return session
@@ -397,7 +399,16 @@ class CodexAppServer:
     async def start_execution(self, session: CodexSession, prompt: str) -> CodexExecution:
         """Start an idle Session's next native turn."""
         self._require_session(session)
-        inputs = _text_input(prompt)
+        async with self._turn_gate(session):
+            return await self._start_execution(session, _text_input(prompt))
+
+    async def _start_execution(
+        self,
+        session: CodexSession,
+        inputs: list[dict[str, Any]],
+    ) -> CodexExecution:
+        """Start one turn while this Session's caller-held gate is reserved."""
+        self._require_session(session)
         if session.thread_id in self._active:
             raise CodexAdapterError(
                 'RUNTIME_LIFECYCLE_INVALID', 'The Session already has an active execution.',
@@ -426,6 +437,31 @@ class CodexAppServer:
         else:
             self._active.pop(session.thread_id, None)
         return execution
+
+    async def _start_after_active_turn(
+        self,
+        session: CodexSession,
+        inputs: list[dict[str, Any]],
+    ) -> CodexExecution:
+        """Start input only after this connection's current turn has settled."""
+        self._require_session(session)
+        async with self._turn_gate(session):
+            active = self._active.get(session.thread_id)
+            if active is not None:
+                state = self._turns.get((session.thread_id, active))
+                if state is None or state.handle is None:
+                    raise self._protocol_failure('Active Codex turn has no owned handle')
+                try:
+                    await self.wait(state.handle)
+                except CodexAdapterError:
+                    if not state.terminal:
+                        raise
+            return await self._start_execution(session, inputs)
+
+    def _turn_gate(self, session: CodexSession) -> asyncio.Lock:
+        """Return the one native-turn handoff gate for an owned Session."""
+        self._require_session(session)
+        return self._turn_gates[session.thread_id]
 
     async def send_input(self, execution: CodexExecution, prompt: str) -> None:
         """Steer exactly the expected active native execution."""
@@ -757,3 +793,187 @@ class CodexAppServer:
                     self._fail(failure)
         except CodexAdapterError as error:
             self._fail(error)
+
+
+class CodexMainRecovery:
+    """Bind caller budget notices to explicit retro input on one owning Main connection.
+
+    The caller supplies the already-open ``CodexAppServer`` and the exact
+    ``CodexSession`` it owns. A thread ID alone cannot create this binding, so
+    this helper never opens, resumes, interrupts, or otherwise takes over a
+    separate Main connection.
+    """
+
+    def __init__(
+        self,
+        app_server: CodexAppServer,
+        main_session: CodexSession,
+        retro_skill_path: Path,
+    ) -> None:
+        """Retain the explicit host-owned connection, Session, and Skill path."""
+        if (
+            not isinstance(retro_skill_path, Path)
+            or not retro_skill_path.is_absolute()
+            or retro_skill_path.name != "SKILL.md"
+            or not retro_skill_path.is_file()
+        ):
+            raise CodexAdapterError(
+                "RUNTIME_REQUEST_INVALID",
+                "retro requires its existing absolute SKILL.md path.",
+            )
+        self._app_server = app_server
+        self._main_session = main_session
+        self._retro_skill_path = retro_skill_path.resolve()
+        self._delivery_lock = asyncio.Lock()
+        self._stops: set[str] = set()
+        self._retro_executions: list[CodexExecution] = []
+        self._notice_fd: int | None = None
+        self._reader_task: asyncio.Task[None] | None = None
+        self._reader_transport: asyncio.Transport | None = None
+        self._errors: list[CodexAdapterError] = []
+        self._closed = False
+
+    async def __aenter__(self) -> "CodexMainRecovery":
+        """Open a caller-notice pipe without opening another Codex connection."""
+        if self._notice_fd is not None or self._closed:
+            raise CodexAdapterError(
+                "RUNTIME_LIFECYCLE_INVALID",
+                "The Codex Main recovery binding cannot be opened twice.",
+            )
+        self._app_server._require_session(self._main_session)
+        read_fd, self._notice_fd = os.pipe()
+        pipe = os.fdopen(read_fd, "rb", buffering=0)
+        reader = asyncio.StreamReader()
+        try:
+            self._reader_transport, _ = await asyncio.get_running_loop().connect_read_pipe(
+                lambda: asyncio.StreamReaderProtocol(reader), pipe
+            )
+        except BaseException:
+            pipe.close()
+            os.close(self._notice_fd)
+            self._notice_fd = None
+            raise
+        self._reader_task = asyncio.create_task(self._read_notices(reader))
+        return self
+
+    async def __aexit__(self, *exc: object) -> None:
+        """Finish the caller-notice stream before releasing this host binding."""
+        try:
+            await self.close()
+        except CodexAdapterError:
+            if exc[0] is None:
+                raise
+
+    @property
+    def notice_fd(self) -> int:
+        """Return the existing budget caller channel while this binding is open."""
+        if self._notice_fd is None:
+            raise CodexAdapterError(
+                "RUNTIME_LIFECYCLE_INVALID",
+                "Open the Codex Main recovery binding before selecting its notice channel.",
+            )
+        return self._notice_fd
+
+    @property
+    def retro_executions(self) -> tuple[CodexExecution, ...]:
+        """Return the explicit retro turns submitted by this binding."""
+        return tuple(self._retro_executions)
+
+    async def close(self) -> None:
+        """Close the notice channel and surface any rejected delivery."""
+        if self._closed:
+            return
+        self._closed = True
+        if self._notice_fd is not None:
+            os.close(self._notice_fd)
+            self._notice_fd = None
+        if self._reader_task is not None:
+            await self._reader_task
+        if self._reader_transport is not None:
+            self._reader_transport.close()
+        if self._errors:
+            raise self._errors[0]
+
+    async def deliver_budget_notice(self, notice: Mapping[str, Any]) -> str:
+        """Submit one retro only for an enforced stochastic-stop notice.
+
+        Returns ``ignored`` for ordinary notices, ``duplicate`` for a stop
+        already submitted on this binding, and ``submitted`` after native
+        ``turn/start`` accepts the explicit Skill input.
+        """
+        stop = self._stop_key(notice)
+        if stop is None:
+            return "ignored"
+        async with self._delivery_lock:
+            if stop in self._stops:
+                return "duplicate"
+            ticket_id, _, _ = json.loads(stop)
+            execution = await self._app_server._start_after_active_turn(
+                self._main_session,
+                [
+                    {
+                        "type": "text",
+                        "text": (
+                            "$retro Analyze the enforced stochastic stop for Ticket {0} "
+                            "using the supplied wrap-up and retained evidence. Identify "
+                            "scheduling corrections before deciding continuation. Reuse "
+                            "existing findings; do not restart work."
+                        ).format(ticket_id),
+                    },
+                    {
+                        "type": "skill",
+                        "name": "retro",
+                        "path": str(self._retro_skill_path),
+                    },
+                ],
+            )
+            self._stops.add(stop)
+            self._retro_executions.append(execution)
+            return "submitted"
+
+    async def _read_notices(self, reader: asyncio.StreamReader) -> None:
+        """Convert the existing JSONL caller channel into serialized delivery."""
+        while line := await reader.readline():
+            try:
+                notice = json.loads(line)
+                if not isinstance(notice, dict):
+                    raise ValueError("Budget notice is not an object")
+                await self.deliver_budget_notice(notice)
+            except CodexAdapterError as error:
+                self._errors.append(error)
+            except (TypeError, ValueError, json.JSONDecodeError) as error:
+                self._errors.append(
+                    CodexAdapterError(
+                        "RUNTIME_REQUEST_INVALID",
+                        "The Codex Main budget notice is invalid: {0}".format(error),
+                    )
+                )
+
+    @staticmethod
+    def _stop_key(notice: Mapping[str, Any]) -> str | None:
+        """Return a stable stop identity without adding Codex fields to budget state."""
+        if not isinstance(notice, Mapping) or notice.get("type") != "execution-budget-exceeded":
+            return None
+        threshold = notice.get("threshold")
+        if not isinstance(threshold, Mapping) or not isinstance(threshold.get("kind"), str):
+            raise CodexAdapterError("RUNTIME_REQUEST_INVALID", "The budget notice threshold is invalid.")
+        if threshold["kind"] != "stochastic_stop":
+            return None
+        ticket = notice.get("ticket")
+        limit = threshold.get("limit")
+        if (
+            not isinstance(ticket, Mapping)
+            or not isinstance(ticket.get("ticket_id"), str)
+            or not ticket["ticket_id"]
+            or not isinstance(ticket.get("ticket_name"), str)
+            or not ticket["ticket_name"]
+            or isinstance(limit, bool)
+            or not isinstance(limit, (int, float))
+            or not math.isfinite(limit)
+        ):
+            raise CodexAdapterError("RUNTIME_REQUEST_INVALID", "The stochastic-stop notice is invalid.")
+        return json.dumps(
+            (ticket["ticket_id"], ticket["ticket_name"], limit),
+            allow_nan=False,
+            separators=(",", ":"),
+        )

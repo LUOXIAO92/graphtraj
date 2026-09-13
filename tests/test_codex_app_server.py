@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import errno
 import json
+import os
 from dataclasses import replace
 import sys
 from pathlib import Path
@@ -18,7 +19,11 @@ from graphtraj.runtimes.codex.codex_adapter import (
     preflight_runtime_context,
     read_codex_last_agent_message,
 )
-from graphtraj.runtimes.codex.app_server import CodexAppServer, CodexServerRequest
+from graphtraj.runtimes.codex.app_server import (
+    CodexAppServer,
+    CodexMainRecovery,
+    CodexServerRequest,
+)
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError, RuntimeContext
 
 
@@ -312,6 +317,169 @@ def test_active_input_and_interrupt_target_only_the_expected_execution(
                 await adapter.send_input(target, 'stale input')
             continued = await adapter.start_execution(first, 'after interrupt')
             assert (await adapter.wait(continued, timeout=2))['outcome'] == 'completed'
+
+    asyncio.run(exercise())
+
+
+def test_budget_stop_submits_one_explicit_retro_on_the_owning_main_connection(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    peer: Path,
+) -> None:
+    """A sampled stop reaches only the original Main after its active turn."""
+
+    from graphtraj.execution import execution_budget
+    from graphtraj.execution.execution_budget import (
+        budget_notice_output,
+        execution_budget_monitor,
+    )
+
+    ticket = tmp_path / "ticket"
+    ticket.mkdir()
+    (ticket / "ticket.yml").write_text(
+        "current_definition: ticket.md\n", encoding="utf-8"
+    )
+    (ticket / "ticket.md").write_text(
+        "---\n"
+        "difficulty: high\n"
+        "difficulty_reason: controlled host recovery\n"
+        "execution_budget:\n"
+        "  engineer_tier: senior\n"
+        "  tier_reason: controlled host recovery\n"
+        "  estimated_minutes: {implementation: 0.01, validation: 0.01, review: 0.01, total: 0.01}\n"
+        "  planned_sessions: {team_leader: 1, engineer: 1, standards_reviewer: 1, spec_reviewer: 1, delivery_state: 1}\n"
+        "  correction_rounds: 1\n"
+        "  estimation_note: controlled host recovery\n"
+        "  on_exceed: stop\n"
+        "---\n",
+        encoding="utf-8",
+    )
+    now = [1000.0]
+    monkeypatch.setattr(execution_budget.time, "time", lambda: now[0])
+    monkeypatch.setattr(execution_budget.random, "uniform", lambda lower, upper: lower)
+    monkeypatch.setattr(execution_budget.random, "random", lambda: 0.99)
+    monitor = execution_budget_monitor(ticket, "116", "session-budget-control")
+    assert monitor is not None
+
+    async def exercise() -> None:
+        protocol = tmp_path / "protocol.jsonl"
+        skill = tmp_path / "harness/.agents/skills/retro/SKILL.md"
+        skill.parent.mkdir(parents=True)
+        skill.write_text("name: retro\n", encoding="utf-8")
+        duplicate = {
+            "type": "execution-budget-exceeded",
+            "ticket": {"ticket_id": "116", "ticket_name": "session-budget-control"},
+            "threshold": {"kind": "stochastic_stop", "limit": 2},
+            "actual": {"elapsed_minutes": 2.011},
+            "stage": "implementation",
+            "responsible_role": "engineer-senior",
+        }
+
+        def turn_starts() -> list[dict]:
+            if not protocol.exists():
+                return []
+            return [
+                item
+                for item in (
+                    json.loads(line)
+                    for line in protocol.read_text(encoding="utf-8").splitlines()
+                )
+                if item.get("method") == "turn/start"
+            ]
+
+        async with CodexAppServer(
+            command=[str(peer)],
+            cwd=tmp_path,
+            environment={"PEER_PROTOCOL_LOG": str(protocol)},
+        ) as adapter:
+            session = await adapter.create_session(context(tmp_path / "worktree", peer))
+            active = await adapter.start_execution(session, "hold")
+            async with CodexMainRecovery(adapter, session, skill) as recovery:
+                with budget_notice_output(recovery.notice_fd):
+                    assert monitor.check("engineer-senior", "implementation") is False
+                    now[0] += 0.7
+                    assert monitor.check("engineer-senior", "implementation") is False
+                    now[0] += 120
+                    assert monitor.check("engineer-senior", "implementation") is True
+                    os.write(recovery.notice_fd, (json.dumps(duplicate) + "\n").encode())
+
+                await asyncio.sleep(0.05)
+                assert len(turn_starts()) == 1
+                await adapter.interrupt(active)
+                assert (await adapter.wait(active, timeout=2))["outcome"] == "interrupted"
+                deadline = asyncio.get_running_loop().time() + 2
+                while not recovery.retro_executions:
+                    assert asyncio.get_running_loop().time() < deadline
+                    await asyncio.sleep(0.01)
+                assert (await adapter.wait(recovery.retro_executions[0], timeout=2))["outcome"] == "completed"
+                assert await recovery.deliver_budget_notice(duplicate) == "duplicate"
+
+            starts = turn_starts()
+            assert len(starts) == 2
+            assert starts[-1]["params"] == {
+                "threadId": session.thread_id,
+                "input": [
+                    {
+                        "type": "text",
+                        "text": (
+                            "$retro Analyze the enforced stochastic stop for Ticket 116 "
+                            "using the supplied wrap-up and retained evidence. Identify "
+                            "scheduling corrections before deciding continuation. Reuse "
+                            "existing findings; do not restart work."
+                        ),
+                    },
+                    {"type": "skill", "name": "retro", "path": str(skill.resolve())},
+                ],
+            }
+
+    asyncio.run(exercise())
+
+
+def test_main_recovery_surfaces_caller_notice_errors(
+    tmp_path: Path,
+    peer: Path,
+) -> None:
+    """Malformed caller-channel input remains visible to the owning host."""
+
+    async def exercise() -> None:
+        skill = tmp_path / "harness/.agents/skills/retro/SKILL.md"
+        skill.parent.mkdir(parents=True)
+        skill.write_text("name: retro\n", encoding="utf-8")
+        async with CodexAppServer(command=[str(peer)], cwd=tmp_path) as adapter:
+            session = await adapter.create_session(context(tmp_path / "worktree", peer))
+            with pytest.raises(RuntimeAdapterError) as caught:
+                async with CodexMainRecovery(adapter, session, skill) as recovery:
+                    os.write(recovery.notice_fd, b"not-json\n")
+            assert caught.value.code == "RUNTIME_REQUEST_INVALID"
+
+    asyncio.run(exercise())
+
+
+def test_main_recovery_surfaces_native_retro_delivery_errors(
+    tmp_path: Path,
+    peer: Path,
+) -> None:
+    """A rejected native retro turn is returned to the owning host."""
+
+    async def exercise() -> None:
+        skill = tmp_path / "harness/.agents/skills/retro/SKILL.md"
+        skill.parent.mkdir(parents=True)
+        skill.write_text("name: retro\n", encoding="utf-8")
+        stop = {
+            "type": "execution-budget-exceeded",
+            "ticket": {"ticket_id": "116", "ticket_name": "session-budget-control"},
+            "threshold": {"kind": "stochastic_stop", "limit": 2},
+        }
+        async with CodexAppServer(
+            command=[str(peer)],
+            cwd=tmp_path,
+            environment={"PEER_REJECT_RETRO": "1"},
+        ) as adapter:
+            session = await adapter.create_session(context(tmp_path / "worktree", peer))
+            recovery = CodexMainRecovery(adapter, session, skill)
+            with pytest.raises(RuntimeAdapterError) as caught:
+                await recovery.deliver_budget_notice(stop)
+            assert caught.value.code == "RUNTIME_RPC_ERROR"
 
     asyncio.run(exercise())
 

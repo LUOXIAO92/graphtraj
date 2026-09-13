@@ -305,6 +305,8 @@ agent-runner --batch-input batch.yml
 agent-runner status <alias> [<alias>...]
 agent-runner status --operation-total <alias> [<alias>...]
 agent-runner status --baseline <commit-or-ref> --candidate <commit-or-ref> <alias> [<alias>...]
+agent-runner requests <alias> [--execution-id <native-execution-id>]
+agent-runner reply <alias> --request-file request.yml --response '{"decision":"decline"}'
 agent-runner send <alias> --instruction <text> --caused-by-event-id <event-id>
 agent-runner interrupt <alias>
 agent-runner continue --ticket-id <id> --caused-by-event-id <event-id>
@@ -409,7 +411,45 @@ drain. A send made during that close waits for the prior owner to finish. The
 private file control endpoint is shared by Runner callers; it needs no global
 service or listening socket. Runtime permissions and the existing capacity and
 budget checks still apply. Native requests without a response handler fail
-visibly through the Adapter; they are never accepted automatically.
+visibly through the direct Adapter; managed Workers route them to public callers.
+
+For a managed execution, `pending_requests(alias, root)` queries pending native
+interactions after the launch caller has exited. The result contains `alias`,
+`session`, `execution_id` and `requests`. Each request contains its native
+`request_id` (integer or string), `method`, unmodified `params`, `session`,
+`execution_id` and a `request_token`. Queries do not consume requests. Pass
+`execution_id=...` to query only a previously observed execution; a successor
+mapping is rejected. A completed execution returns an empty request list.
+
+```python
+from graphtraj.execution.runner_control import pending_requests, reply_to_request
+
+pending = pending_requests(alias, root)
+request = pending["requests"][0]  # Explicitly select and inspect the request.
+print(request["method"], request["params"])
+# After deciding to decline this command approval:
+reply_to_request(alias, request, {"decision": "decline"}, root)
+```
+
+The installed CLI calls these same operations. `agent-runner requests <alias>`
+emits YAML; save the selected entry from its `requests` list as `request.yml`.
+Then use `agent-runner reply <alias> --request-file request.yml --response
+'{"decision":"decline"}'`. Supply the native response for the reported method:
+command approval accepts an explicit `{"decision":"accept"}` or
+`{"decision":"decline"}`; user input uses its native `answers` object. GraphTraj
+does not infer a decision or translate response schemas.
+
+While waiting, status remains `activity: running` with
+`waiting_for: runtime-request`. The Worker retains the execution and its capacity;
+`interrupt` still targets that execution. Human replies have no RPC deadline.
+Withdrawal, interruption or connection close ends the wait. Replies must match
+the Session, execution and one-time request token; duplicate or stale replies
+cannot answer another request, even if Codex reuses a native ID. `reply_status:
+submitted` acknowledges delivery to the owner's callback; query status and the
+native Trace for the eventual Runtime result. Requests live only in the Worker
+and its existing temporary control channel, with no permanent interaction ledger.
+Permissions, native response decisions and user Runtime configuration remain in
+effect.
 
 A real registered-task probe, including input consumption, continuation,
 interruption and native Trace comparison, is available in the source checkout:
@@ -519,6 +559,9 @@ The Adapter buffers notifications for that observer, accepts JSON lines up to
 16 MiB, and retains the last 16 KiB of stderr in `stderr_tail` for diagnostics.
 
 `request_timeout` bounds RPCs, request handlers and each shutdown grace period.
+A separate `request_handler_timeout` overrides only the callback deadline;
+`None` lets a caller wait for human input until native cancellation or close.
+Managed Workers use this override while keeping RPC and shutdown timeouts bounded.
 A timeout or cancellation while waiting for an execution leaves it owned and
 allows another wait or targeted interrupt. An abandoned control RPC has an
 uncertain native outcome: its connection becomes unusable and must be closed.

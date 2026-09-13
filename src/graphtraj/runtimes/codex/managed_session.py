@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import asyncio
 import json
+import uuid
 from concurrent.futures import CancelledError
 from pathlib import Path
 from typing import Callable
 
 from graphtraj.execution.runner_io import write_yaml_durably
-from graphtraj.runtimes.codex.app_server import CodexAppServer, CodexExecution
+from graphtraj.runtimes.codex.app_server import CodexAppServer, CodexExecution, CodexServerRequest
 from graphtraj.runtimes.codex.codex_adapter import restore_codex_context
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 
@@ -39,6 +40,7 @@ class CodexManagedExecution:
         self.result: asyncio.Task | None = None
         self.operations: set[asyncio.Task] = set()
         self.outcome: dict | None = None
+        self.requests: dict[str, tuple[CodexServerRequest, asyncio.Future[dict]]] = {}
 
     def run(self) -> dict:
         """Run native control on one loop while the Worker accepts local calls."""
@@ -48,7 +50,8 @@ class CodexManagedExecution:
         """Retain identity from the Session handle and outcomes from native turns."""
         self.loop = asyncio.get_running_loop()
         adapter = CodexAppServer(cwd=Path(self.context.session_document()['adapter_request']['cwd']),
-                                 command=self.command, request_timeout=5)
+                                 command=self.command, request_timeout=5,
+                                 on_request=self._request, request_handler_timeout=None)
         self.adapter = adapter
         observer = None
         try:
@@ -116,11 +119,10 @@ class CodexManagedExecution:
             request.get('session'), request.get('execution_id')
         ) != (execution.thread_id, execution.turn_id):
             raise RuntimeAdapterError('operation-failed', 'The requested native execution is not owned.')
-        if request.get('operation') == 'status':
-            return (
-                {'activity': 'idle', 'last_outcome': self.outcome['outcome']}
-                if self.outcome is not None else {'activity': 'running'}
-            )
+        if request.get('operation') == 'status' and self.outcome is not None:
+            return {'activity': 'idle', 'last_outcome': self.outcome['outcome']}
+        if request.get('operation') == 'requests' and self.outcome is not None:
+            return {'requests': []}
         if self.outcome is not None or self.loop is None or self.loop.is_closed():
             raise RuntimeAdapterError('operation-failed', 'The execution is no longer active.')
         try:
@@ -145,6 +147,21 @@ class CodexManagedExecution:
         ) != (execution.thread_id, execution.turn_id):
             raise RuntimeAdapterError('operation-failed', 'The requested native execution is not owned.')
         assert self.adapter is not None and self.result is not None
+        if request['operation'] == 'status':
+            if self.outcome is not None:
+                return {'activity': 'idle', 'last_outcome': self.outcome['outcome']}
+            return {'activity': 'running', **(
+                {'waiting_for': 'runtime-request'} if self._pending_requests() else {}
+            )}
+        if request['operation'] == 'requests':
+            return {'requests': self._pending_requests() if not self.result.done() else []}
+        if request['operation'] == 'reply':
+            pending = self.requests.get(request['request_token'])
+            if pending is None or pending[1].done() or self.result.done():
+                raise RuntimeAdapterError('operation-failed', 'The native request is no longer pending.')
+            native, response = pending
+            response.set_result(request['response'])
+            return {'request_id': native.request_id, 'reply_status': 'submitted'}
         if request['operation'] == 'send':
             await self.adapter.send_input(execution, request['instruction'])
         elif request['operation'] == 'interrupt':
@@ -155,6 +172,28 @@ class CodexManagedExecution:
         else:
             raise RuntimeAdapterError('invalid-input', 'Unknown Session operation.')
         return {}
+
+    async def _request(self, request: CodexServerRequest) -> dict:
+        """Hold one native callback until an explicit reply or native cancellation."""
+        token = uuid.uuid4().hex
+        response = asyncio.get_running_loop().create_future()
+        self.requests[token] = (request, response)
+        try:
+            return await response
+        finally:
+            self.requests.pop(token, None)
+
+    def _pending_requests(self) -> list[dict]:
+        """Snapshot native contents with the identity of this execution's owner."""
+        assert self.execution is not None
+        return [
+            {
+                'session': self.execution.thread_id, 'execution_id': self.execution.turn_id,
+                'request_token': token, 'request_id': native.request_id,
+                'method': native.method, 'params': native.params,
+            }
+            for token, (native, response) in self.requests.items() if not response.done()
+        ]
 
     def terminate(self) -> bool:
         """Schedule native interruption for a Worker termination/budget signal."""

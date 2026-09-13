@@ -38,6 +38,12 @@ try:
         result = status_aliases(arguments, root, operation_total=True).document
     elif operation == 'send':
         result = send_instruction(arguments[0], arguments[1], root, tuple(arguments[2]))
+    elif operation == 'requests':
+        from graphtraj.execution.runner_control import pending_requests
+        result = pending_requests(arguments[0], root, execution_id=arguments[1] if len(arguments) > 1 else None)
+    elif operation == 'reply':
+        from graphtraj.execution.runner_control import reply_to_request
+        result = reply_to_request(arguments[0], arguments[1], arguments[2], root)
     else:
         result = interrupt_session(arguments[0], root)
     print(json.dumps(result))
@@ -77,11 +83,19 @@ def managed_project(
     environment.pop('PYTHONPATH', None)
     python = installed_commands.runner.with_name('python')
 
-    def call(operation: str, arguments: dict | list, timeout: float = 12) -> dict:
+    def call(
+        operation: str,
+        arguments: dict | list,
+        timeout: float = 12,
+        returncode: int = 0,
+    ) -> dict:
         """Each invocation is a separate caller process that must return."""
+        command = (
+            [str(installed_commands.runner), *arguments] if operation == 'cli' else
+            [str(python), '-c', CALL, str(root), json.dumps([operation, arguments])]
+        )
         completed = run_process(
-            [str(python), '-c', CALL, str(root), json.dumps([operation, arguments])],
-            cwd=root, env=environment, timeout=timeout,
+            command, cwd=root, env=environment, timeout=timeout,
         )
         with (root / 'public-operations.jsonl').open('a') as evidence:
             evidence.write(json.dumps({
@@ -89,8 +103,8 @@ def managed_project(
                 'returncode': completed.returncode, 'stdout': completed.stdout,
                 'stderr': completed.stderr,
             }) + '\n')
-        assert completed.returncode == 0, completed.stdout + completed.stderr
-        return json.loads(completed.stdout)
+        assert completed.returncode == returncode, completed.stdout + completed.stderr
+        return yaml.safe_load(completed.stdout)
 
     yield root, cause, call, executable
     for path in (root / '.graphtraj/runner/sessions').glob('*/mapping.yml'):
@@ -338,15 +352,151 @@ def test_each_registered_task_keeps_its_role_context(managed_project: ManagedPro
     assert len({task['session'] for task in launched}) == 2
 
 
-def test_unconfirmed_request_failure_keeps_execution_owned_until_close(managed_project: ManagedProject) -> None:
-    """An unhandled native request is not itself proof that Agent work ended."""
+def test_later_caller_can_answer_native_approval(managed_project: ManagedProject) -> None:
+    """Human approval survives the RPC deadline and returns to the owned turn."""
     root, cause, call, _ = managed_project
     launched = call('launch', launch_document())['tasks'][0]
     call('send', [launched['alias'], 'unhandled request', [cause]])
+    pending = call('requests', [launched['alias']])
+    request, = pending['requests']
+    assert request['request_id'] == 'approval'
+    assert request['method'] == 'item/commandExecution/requestApproval'
+    assert request['params'] == {
+        'threadId': launched['session'], 'turnId': request['execution_id'],
+        'command': 'printf APPROVAL_121', 'cwd': str(root / '.graphtraj/.agent-worktrees/dev'),
+    }
+    assert request['session'] == pending['session'] == launched['session']
+    assert request['execution_id'] == pending['execution_id']
+    # A human takes longer than the Worker's five-second RPC deadline.
+    time.sleep(5.2)
     status = call('status', [launched['alias']])['aliases'][0]
     assert status['activity'] == 'running'
+    assert status['waiting_for'] == 'runtime-request'
+    assert status['execution_id'] == request['execution_id']
     assert not (root / 'native' / (launched['session'] + '.closed')).exists()
-    observe(call, launched['alias'], 'idle', 'runtime-error')
+    reply = call('reply', [launched['alias'], request, {'decision': 'accept'}])
+    assert reply['reply_status'] == 'submitted'
+    assert reply['request_id'] == 'approval'
+    completed = observe(call, launched['alias'], 'idle', 'completed')
+    assert completed['execution_id'] == request['execution_id']
+    assert call('requests', [launched['alias']])['requests'] == []
+    native = root / 'native' / ('rollout-' + launched['session'] + '.jsonl')
+    records = [json.loads(line) for line in native.read_text().splitlines()]
+    assert records[-1]['payload']['last_agent_message'] == 'approval:accept'
+
+
+def test_installed_cli_declines_the_same_request_as_python(managed_project: ManagedProject) -> None:
+    """Both interfaces expose identical requests and preserve an explicit decline."""
+    root, cause, call, _ = managed_project
+    launched = call('launch', launch_document())['tasks'][0]
+    alias = launched['alias']
+    call('send', [alias, 'unhandled request', [cause]])
+    queried = call('requests', [alias])
+    assert call('cli', ['requests', alias, '--execution-id', queried['execution_id']]) == queried
+    request, = queried['requests']
+    request_file = root / 'request.yml'
+    request_file.write_text(yaml.safe_dump(request))
+    reply = call('cli', ['reply', alias, '--request-file', str(request_file),
+                         '--response', '{"decision":"decline"}'])
+    assert reply == {
+        'alias': alias, 'session': request['session'], 'execution_id': request['execution_id'],
+        'request_id': 'approval', 'reply_status': 'submitted',
+    }
+    completed = observe(call, alias, 'idle', 'completed')
+    assert completed['execution_id'] == request['execution_id']
+    from graphtraj.execution.runner_status import read_alias_mapping
+    from graphtraj.runtimes.codex.codex_adapter import read_codex_last_agent_message
+    mapping, _ = read_alias_mapping(root / '.graphtraj/runner', alias)
+    assert read_codex_last_agent_message(Path(mapping['trace_file'])) == 'approval:decline'
+
+
+def test_waiting_requests_are_isolated_and_interruptible(managed_project: ManagedProject) -> None:
+    """Colliding native request IDs cannot route a reply or interrupt to a peer."""
+    root, _, call, _ = managed_project
+    first = call('launch', launch_document('request:approval', 'first-probe'))['tasks'][0]
+    second = call('launch', launch_document('request:approval', 'second-probe'))['tasks'][0]
+    left, = call('requests', [first['alias']])['requests']
+    right, = call('requests', [second['alias']])['requests']
+    assert left['request_id'] == right['request_id'] == 'approval'
+    assert left['session'] != right['session']
+    assert left['request_token'] != right['request_token']
+    rejected = call('reply', [second['alias'], left, {'decision': 'accept'}], returncode=1)
+    assert rejected['error']['code'] == 'operation-failed'
+    assert call('requests', [second['alias']])['requests'] == [right]
+    assert call('status', [first['alias']])['aliases'][0]['waiting_for'] == 'runtime-request'
+    assert call('interrupt', [first['alias']])['interrupt_status'] == 'interrupted'
+    ended = observe(call, first['alias'], 'idle', 'interrupted')
+    assert ended['execution_id'] == left['execution_id']
+    assert call('requests', [first['alias']])['requests'] == []
+    assert call('reply', [first['alias'], left, {'decision': 'accept'}], returncode=1)['error']
+    assert call('requests', [second['alias']])['requests'] == [right]
+    assert call('status', [second['alias']])['aliases'][0]['activity'] == 'running'
+    call('reply', [second['alias'], right, {'decision': 'decline'}])
+    observe(call, second['alias'], 'idle', 'completed')
+
+
+def test_expired_reply_cannot_answer_a_reused_native_id(managed_project: ManagedProject) -> None:
+    """Withdrawal, duplicate replies and successor turns cannot revive an old request."""
+    _, cause, call, _ = managed_project
+    launched = call('launch', launch_document('request:approval'))['tasks'][0]
+    alias = launched['alias']
+    old, = call('requests', [alias])['requests']
+    call('send', [alias, 'withdraw and reissue', [cause]])
+    current, = call('requests', [alias])['requests']
+    assert current['request_id'] == old['request_id']
+    assert current['execution_id'] == old['execution_id']
+    assert current['request_token'] != old['request_token']
+    assert call('reply', [alias, old, {'decision': 'accept'}], returncode=1)['error']
+    assert call('requests', [alias])['requests'] == [current]
+    call('reply', [alias, current, {'decision': 'decline'}])
+    observe(call, alias, 'idle', 'completed')
+    assert call('reply', [alias, current, {'decision': 'accept'}], returncode=1)['error']
+    call('send', [alias, 'request:approval', [cause]])
+    successor, = call('requests', [alias])['requests']
+    assert successor['session'] == current['session']
+    assert successor['execution_id'] != current['execution_id']
+    assert successor['request_id'] == current['request_id']
+    assert call('requests', [alias, current['execution_id']], returncode=1)['error']
+    assert call('reply', [alias, current, {'decision': 'accept'}], returncode=1)['error']
+    assert call('requests', [alias])['requests'] == [successor]
+    call('reply', [alias, successor, {'decision': 'decline'}])
+    observe(call, alias, 'idle', 'completed')
+
+
+def test_multiple_native_requests_keep_input_and_trace_contents(managed_project: ManagedProject) -> None:
+    """User input and command replies retain their native schemas and ID types."""
+    root, _, call, _ = managed_project
+    launched = call('launch', launch_document('request:multiple'))['tasks'][0]
+    alias = launched['alias']
+    approval, user_input = call('requests', [alias])['requests']
+    assert user_input['request_id'] == 7
+    assert user_input['method'] == 'item/tool/requestUserInput'
+    assert user_input['params']['questions'] == [{'id': 'color', 'question': 'Choose a color.'}]
+    # Invalid caller values must leave both requests answerable.
+    for invalid in (None, [], 'accept', {'value': float('nan')}):
+        rejected = call('reply', [alias, approval, invalid], returncode=1)
+        assert rejected['error']['code'] == 'invalid-input'
+    assert call('requests', [alias])['requests'] == [approval, user_input]
+    call('reply', [alias, approval, {'decision': 'accept'}])
+    assert call('status', [alias])['aliases'][0]['waiting_for'] == 'runtime-request'
+    assert call('requests', [alias])['requests'] == [user_input]
+    answer = {'answers': {'color': {'answers': ['蓝色']}}}
+    request_file = root / 'input-request.json'
+    request_file.write_text(json.dumps(user_input))
+    call('cli', ['reply', alias, '--request-file', str(request_file), '--response', json.dumps(answer)])
+    observe(call, alias, 'idle', 'completed')
+    native = root / 'native' / ('rollout-' + launched['session'] + '.jsonl')
+    assert [json.loads(line) for line in native.with_suffix('.replies.jsonl').read_text().splitlines()] == [
+        {'id': 'approval', 'result': {'decision': 'accept'}}, {'id': 7, 'result': answer},
+    ]
+    from graphtraj.execution.runner_status import read_alias_mapping
+    from graphtraj.runtimes.codex.codex_adapter import read_codex_last_agent_message
+    mapping, _ = read_alias_mapping(root / '.graphtraj/runner', alias)
+    trace = Path(mapping['trace_file'])
+    assert json.loads(read_codex_last_agent_message(trace)) == answer
+    raw = b''.join(line for line in trace.read_bytes().splitlines(keepends=True)
+                   if json.loads(line)['type'] not in {'runtime', 'runner-execution-start', 'runner-follow-up'})
+    assert raw == native.read_bytes()
 
 
 @pytest.mark.parametrize('operation', ['send', 'interrupt'])

@@ -19,6 +19,9 @@ from graphtraj.runtimes.codex.codex_adapter import (
 from graphtraj.runtimes.runtime_adapter import RuntimeContext, RuntimeExecutionResult
 
 
+_DEFAULT_TIMEOUT = object()
+
+
 def _native_id(value: Any) -> str:
     """Validate a nonempty native Session or execution identifier."""
     if not isinstance(value, str) or not value:
@@ -118,6 +121,7 @@ class CodexAppServer:
         environment: Mapping[str, str] | None = None,
         request_timeout: float = 30,
         on_request: Callable[[CodexServerRequest], Awaitable[Mapping[str, Any] | None]] | None = None,
+        request_handler_timeout: float | None | object = _DEFAULT_TIMEOUT,
     ) -> None:
         """Configure an unopened service with immutable environment overrides."""
         if (
@@ -139,6 +143,21 @@ class CodexAppServer:
             name: os.environ.get(name) for name in ('OPENAI_BASE_URL', 'OPENAI_API_KEY')
         }
         self._timeout = request_timeout
+        # Existing callers retain the RPC deadline; managed human replies can wait
+        # indefinitely without extending RPC or service-shutdown deadlines.
+        self._handler_timeout = (
+            request_timeout if request_handler_timeout is _DEFAULT_TIMEOUT
+            else request_handler_timeout
+        )
+        if self._handler_timeout is not None and (
+            isinstance(self._handler_timeout, bool)
+            or not isinstance(self._handler_timeout, (int, float))
+            or not math.isfinite(self._handler_timeout) or self._handler_timeout <= 0
+        ):
+            raise CodexAdapterError(
+                'RUNTIME_REQUEST_INVALID',
+                'The request handler timeout must be finite and positive, or None.',
+            )
         self._on_request = on_request
         self._handlers: dict[int | str, asyncio.Task[None]] = {}
         self._process: asyncio.subprocess.Process | None = None
@@ -692,7 +711,7 @@ class CodexAppServer:
         result = None
         try:
             if self._on_request is not None:
-                result = await asyncio.wait_for(self._on_request(request), self._timeout)
+                result = await asyncio.wait_for(self._on_request(request), self._handler_timeout)
             if result is None:
                 failure = CodexAdapterError(
                     'RUNTIME_REQUEST_UNHANDLED',
@@ -706,7 +725,8 @@ class CodexAppServer:
                 json.dumps(result, allow_nan=False)
         except (Exception, asyncio.CancelledError) as error:
             if isinstance(error, asyncio.CancelledError) and (
-                self._closed or self._failure is not None or request.request_id not in self._handlers
+                self._closed or self._failure is not None
+                or self._handlers.get(request.request_id) is not asyncio.current_task()
             ):
                 return
             failure = CodexAdapterError(
@@ -716,6 +736,12 @@ class CodexAppServer:
             )
         try:
             if failure is None:
+                state = self._turns.get(key)
+                if (
+                    self._handlers.get(request.request_id) is not asyncio.current_task()
+                    or (state and state.terminal)
+                ):
+                    return  # Withdrawal or completion won the race with the reply.
                 await self._send({'id': request.request_id, 'result': result})
             else:
                 scoped = all(isinstance(value, str) and value for value in key)

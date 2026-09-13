@@ -1,5 +1,6 @@
 """The Agent Runner command surface."""
 
+import json
 import os
 import sys
 from contextlib import contextmanager
@@ -12,7 +13,12 @@ import yaml
 from graphtraj.execution.execution_budget import budget_notice_output, caller_notice_fd
 from graphtraj.execution.runner_batch import read_batch
 from graphtraj.execution.runner_cleanup import cleanup_ticket
-from graphtraj.execution.runner_control import interrupt_session, send_instruction
+from graphtraj.execution.runner_control import (
+    interrupt_session,
+    pending_requests,
+    reply_to_request,
+    send_instruction,
+)
 from graphtraj.execution.runner_launch import launch_batch
 from graphtraj.execution.runner_models import RunnerError
 from graphtraj.execution.runner_status import status_aliases
@@ -110,6 +116,37 @@ def status(
         for error in response.errors:
             click.echo(error.message, err=True)
         raise click.exceptions.Exit(1)
+
+
+@main.command()
+@click.argument("alias")
+@click.option("--execution-id", help="Reject a mapping that has moved to another execution.")
+def requests(alias: str, execution_id: str | None) -> None:
+    """Query pending native requests without consuming them."""
+    try:
+        response = pending_requests(alias, Path.cwd().resolve(), execution_id=execution_id)
+    except RunnerError as error:
+        _fail(error, alias=alias)
+    _emit_result(response)
+
+
+@main.command()
+@click.argument("alias")
+@click.option("--request-file", required=True, type=click.Path(path_type=Path),
+              help="YAML/JSON file containing one request returned by requests.")
+@click.option("--response", required=True, help="Explicit native response as a JSON object.")
+def reply(alias: str, request_file: Path, response: str) -> None:
+    """Return an explicit reply to the original native request."""
+    try:
+        request = yaml.safe_load(request_file.read_text(encoding="utf-8"))
+        native_response = json.loads(response)
+    except (OSError, ValueError, yaml.YAMLError) as error:
+        _fail(RunnerError("invalid-input", str(error)), alias=alias)
+    try:
+        result = reply_to_request(alias, request, native_response, Path.cwd().resolve())
+    except RunnerError as error:
+        _fail(error, alias=alias)
+    _emit_result(result)
 
 
 @main.command()

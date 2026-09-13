@@ -4,6 +4,7 @@ import json
 import os
 import shutil
 import subprocess
+import time
 import tomllib
 from pathlib import Path
 
@@ -266,12 +267,66 @@ def test_real_small_team(
         "instruction": instruction,
     }]}
     (root / "real-team-input.json").write_text(json.dumps(document, indent=2))
-    try:
-        result = run_process(
-            [str(python), "-c", CALL, str(root), json.dumps(["launch", document])],
-            cwd=root, env=environment,
-            timeout=float(os.environ.get("CODEX_TEAM_WAIT", "900")),
+    control = {"root": str(root), "python": str(python), "runner": str(installed_commands.runner)}
+    (root / "real-team-control.json").write_text(json.dumps(control, indent=2))
+    print("Real Team control: " + json.dumps(control), flush=True)
+
+    def call(operation: str, arguments: list) -> dict:
+        """Use #121's installed public controls and retain each actual response."""
+        completed = run_process(
+            [str(python), "-c", CALL, str(root), json.dumps([operation, arguments])],
+            cwd=root, env=environment, timeout=12,
         )
+        with (root / "real-team-operations.jsonl").open("a") as stream:
+            stream.write(json.dumps({
+                "operation": operation, "arguments": arguments,
+                "returncode": completed.returncode,
+                "stdout": completed.stdout, "stderr": completed.stderr,
+            }) + "\n")
+        assert completed.returncode == 0, completed.stdout + completed.stderr
+        return json.loads(completed.stdout)
+
+    observed_requests = set()
+
+    def observe_requests() -> None:
+        """Expose native requests for explicit operator replies; never choose a response."""
+        for path in (root / ".graphtraj/runner/sessions").glob("*/mapping.yml"):
+            pending = call("requests", [path.parent.name])
+            for request in pending["requests"]:
+                if request["request_token"] in observed_requests:
+                    continue
+                record = {"alias": pending["alias"], **request}
+                with (root / "real-team-requests.jsonl").open("a") as stream:
+                    stream.write(json.dumps(record) + "\n")
+                observed_requests.add(request["request_token"])
+                print("Inspect native request and reply through Runner: " + json.dumps(record), flush=True)
+
+    timeout = float(os.environ.get("CODEX_TEAM_WAIT", "900"))
+    process = None
+    try:
+        # File output lets the short-lived caller finish even while we inspect requests.
+        with (
+            (root / "real-team-stdout.log").open("w+") as stdout,
+            (root / "real-team-stderr.log").open("w+") as stderr,
+        ):
+            process = subprocess.Popen(
+                [str(python), "-c", CALL, str(root), json.dumps(["launch", document])],
+                cwd=root, env=environment, text=True, stdout=stdout, stderr=stderr,
+            )
+            deadline = time.monotonic() + timeout
+            while process.poll() is None:
+                observe_requests()
+                if time.monotonic() >= deadline:
+                    raise subprocess.TimeoutExpired(process.args, timeout)
+                try:
+                    process.wait(timeout=0.5)
+                except subprocess.TimeoutExpired:
+                    pass
+            stdout.seek(0)
+            stderr.seek(0)
+            result = subprocess.CompletedProcess(
+                process.args, process.returncode, stdout.read(), stderr.read(),
+            )
         (root / "real-team-result.json").write_text(json.dumps({
             "returncode": result.returncode, "stdout": result.stdout, "stderr": result.stderr,
             "model": model, "max_concurrency": configuration["agent_runner"]["max_concurrency"],
@@ -310,19 +365,18 @@ def test_real_small_team(
         }, indent=2))
         raise
     finally:
-        from graphtraj.execution.runner_control import interrupt_session
-        from graphtraj.execution.runner_models import RunnerError
-        from graphtraj.execution.runner_status import status_aliases
-
         cleanup = []
-        for path in (root / ".graphtraj/runner/sessions").glob("*/mapping.yml"):
-            alias = path.parent.name
-            observed = status_aliases([alias], root).document["aliases"][0]
-            cleanup.append(observed)
-            if observed.get("activity") == "running":
-                try:
-                    cleanup.append(interrupt_session(alias, root))
-                except RunnerError as error:
-                    cleanup.append({"alias": alias, "error": error.as_document()})
-        (root / "real-team-cleanup.json").write_text(json.dumps(cleanup, indent=2))
-        assert all(path.read_bytes() == content for path, content in originals.items())
+        try:
+            observe_requests()  # Preserve outstanding native contents before interruption.
+            for path in (root / ".graphtraj/runner/sessions").glob("*/mapping.yml"):
+                alias = path.parent.name
+                observed = call("status", [alias])["aliases"][0]
+                cleanup.append(observed)
+                if observed.get("activity") == "running":
+                    cleanup.append(call("interrupt", [alias]))
+            (root / "real-team-cleanup.json").write_text(json.dumps(cleanup, indent=2))
+        finally:
+            if process is not None and process.poll() is None:
+                process.terminate()
+                process.wait(timeout=15)
+            assert all(path.read_bytes() == content for path, content in originals.items())

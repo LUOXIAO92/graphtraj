@@ -469,7 +469,7 @@ The normal coding-Team probe uses real Agents for a tiny greeting implementation
 its validation, both Review axes and the Leader decision:
 
 ```sh
-CODEX_TEAM_REAL=1 python -m pytest -p no:cacheprovider -q \
+CODEX_TEAM_REAL=1 python -m pytest -p no:cacheprovider -q -s \
   tests/test_team_session_delivery.py -k real_small_team
 ```
 
@@ -477,9 +477,27 @@ It installs a clean candidate export in an isolated project and copies the
 operator's native connection settings into a temporary store. It preserves the
 operator's configuration. `CODEX_TEAM_MODEL` selects the model,
 `CODEX_TEAM_CAPACITY` sets project capacity (default 1), and `CODEX_TEAM_WAIT`
-bounds the check in seconds (default 900). The temporary project retains inputs,
-results, cleanup observations and native diagnostics. Network or unhandled
-Runtime-request failures leave the real-Team check incomplete.
+bounds the check in seconds (default 900), including time for explicit approval
+decisions. The probe prints its isolated root and installed Python/Runner paths
+and saves them in `real-team-control.json`. Keep the probe running while handling
+requests from another caller using that installation; no bootstrap tool upgrade
+is needed.
+
+The probe queries the existing `pending_requests` operation and prints each new
+native request, retaining its full identity and contents in
+`real-team-requests.jsonl`. Inspect each request's method, command or file changes,
+cwd, and requested access against the isolated Ticket. Then query that alias's
+current requests and explicitly submit the chosen native response using
+`reply_to_request` or the installed `requests` / `reply` CLI described above. The
+decision and reply result should be retained with the probe evidence. The
+probe never chooses or sends an approval response, and it leaves native
+permissions and the operator's Runtime configuration in effect.
+
+The temporary project retains inputs, results, its control-operation results,
+cleanup observations and native diagnostics. Before interrupting on timeout, it
+also retains unresolved native requests for diagnosis; those observations are not
+replies and their tokens expire with the execution. A network failure or an
+unanswered request leaves the genuine Team check incomplete.
 
 Pass the immutable `RuntimeContext` returned by the existing
 `preflight_runtime_context(...).finalize()`. Its `session_document()` projects

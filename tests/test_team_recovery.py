@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import json
+import os
+import shutil
 import sys
+import tomllib
 from pathlib import Path
 
 import pytest
 import yaml
 
-from conftest import app_server_peer, run_process, wait_for_file
+from conftest import FakeCodex, InstalledCommands, app_server_peer, run_process, wait_for_file
 from runner_fixtures import configure_harness
 from test_session_alias_control import _register_ready_ticket
 
@@ -84,10 +87,36 @@ if role == 'delivery-state':
         Path(os.environ['GRAPHTRAJ_STATE_REQUEST']).write_text('{}')
     else:
         Path(os.environ['GRAPHTRAJ_STATE_REQUEST']).write_text(os.environ['GRAPHTRAJ_STATE_FACTS'])
+elif (
+    role == 'team-leader'
+    and os.environ.get('RECOVERY_NATIVE') == '1'
+    and (round_dir / 'spec.md').is_file()
+    and not (Path.cwd() / '.scratch/retained-review-failed').exists()
+):
+    # Simulate loss of the current report copy after its real author completed.
+    (round_dir / 'spec.md').unlink()
+    (Path.cwd() / '.scratch/retained-review-failed').touch()
+    raise SystemExit(1)
 elif role == 'team-leader':
     if not (round_dir / 'engineer.md').exists():
         if target != 'dispatch' or 'Recovery required:' in prompt:
             dispatch(['engineer-junior'])
+    elif target == 'retained-review' and (
+        'Recover the missing Spec report.' in prompt
+        or 'Register the remaining Spec Batch.' in prompt
+        or (round_dir / 'spec.md').is_file()
+        or (Path.cwd() / '.scratch/retained-review-failed').exists()
+    ):
+        if 'Register the remaining Spec Batch.' in prompt:
+            dispatch(['spec-reviewer'])
+        elif (Path.cwd() / '.scratch/retained-review-failed').exists() and (round_dir / 'spec.md').is_file():
+            (round_dir / 'leader.md').write_text('Decision: ACCEPT\nCandidate commit: ' + git('rev-parse', 'HEAD') + '\n')
+        else:
+            (round_dir / 'leader.md').write_text(
+                'Decision: CORRECT\nResponsible: coding-team.spec-reviewer\n'
+                'Rule: Review report fields\nReason: Deliver the missing Spec report with its Comparison and Axis.\n'
+                'Candidate commit: ' + git('rev-parse', 'HEAD') + '\n'
+            )
     elif target == 'provider-before-review-correct':
         corrected = Path.cwd() / '.scratch' / 'provider-before-review-correct-written'
         if not corrected.exists():
@@ -127,7 +156,7 @@ elif role == 'team-leader':
         else:
             (round_dir / 'leader.md').write_text('Decision: ACCEPT\nCandidate commit: ' + candidate + '\n')
 elif role.startswith('engineer-'):
-    if target in {'provider', 'provider-before-review-correct', 'provider-correct', 'provider-quoted', 'provider-rework', 'provider-rework-evidence'} and not resumed:
+    if target in {'provider', 'provider-engineer-evidence', 'provider-review-evidence', 'provider-before-review-correct', 'provider-correct', 'provider-quoted', 'provider-rework', 'provider-rework-evidence'} and not resumed:
         if target == 'provider-quoted':
             print(json.dumps({'type': 'item.completed', 'item': {
                 'type': 'command_execution',
@@ -182,11 +211,17 @@ elif role.startswith('engineer-'):
         validation = round_dir / 'validation.md'
         if missing_validation:
             pass
+        elif target == 'provider-engineer-evidence' and 'Recovery required:' not in prompt:
+            validation.write_text('Candidate commit: invalid\n')
         elif target == 'engineer-junior' and not resumed:
             validation.write_text('Candidate commit: invalid\n')
         else:
             validation.write_text('Candidate commit: ' + candidate + '\nTests: passed.\n')
 else:
+    failed_review = Path.cwd() / '.scratch/retained-review-failed'
+    if target == 'retained-review' and role == 'spec-reviewer' and resumed and not failed_review.exists():
+        failed_review.touch()
+        raise SystemExit(0 if os.environ.get('RECOVERY_FAILURE') == 'report' else 1)
     if target == 'provider-review' and role == 'spec-reviewer' and not resumed:
         raise SystemExit(1)
     if (
@@ -227,7 +262,7 @@ else:
             'exit_code': 1,
             'status': 'failed',
         }}), flush=True)
-    elif target == role and not resumed:
+    elif (target == role or target == 'provider-review-evidence' and role == 'spec-reviewer') and not resumed:
         pass
     else:
         candidate = git('rev-parse', 'HEAD')
@@ -347,6 +382,8 @@ def test_installed_team_corrects_missing_member_evidence_in_its_existing_session
     ('target', 'round_ordinal'),
     (
         ('provider', 1),
+        ('provider-engineer-evidence', 1),
+        ('provider-review-evidence', 1),
         ('provider-before-review-correct', 1),
         ('provider-correct', 1),
         ('provider-quoted', 1),
@@ -462,6 +499,18 @@ def test_provider_failure_returns_to_the_caller_for_an_explicit_same_session_ret
         ).read_text()
         assert 'Recovery required:' in prompt
         assert 'Engineer evidence is missing or unreadable' in prompt
+    if target == 'provider-engineer-evidence':
+        assert trace.read_text().count('turn_context') == 3
+        prompt = (
+            harness / current['worktree'] / '.scratch/recovery-prompt-engineer-junior'
+        ).read_text()
+        assert 'Failure:' in prompt and 'Evidence:' in prompt and 'Expected result:' in prompt
+    if target == 'provider-review-evidence':
+        reviewer = team['members']['spec_reviewer']['session_ref']
+        review_trace = ticket / 'teams/1/traces' / reviewer / 'events.jsonl'
+        assert review_trace.read_text().count('turn_context') == 2
+        prompt = (harness / current['worktree'] / '.scratch/recovery-prompt-spec-reviewer').read_text()
+        assert 'Failure:' in prompt and 'Evidence:' in prompt and 'Expected result:' in prompt
     if target == 'provider-rework':
         state_trace = next((ticket / 'teams/1/traces').glob('*@d*/events.jsonl'))
         assert state_trace.read_text().count('turn_context') == 9
@@ -1002,3 +1051,205 @@ def test_retried_reviewer_report_continues_the_same_team_without_repeating_revie
         if yaml.safe_load(path.read_text())['role'] in {'standards-reviewer', 'spec-reviewer'}
     ]
     assert len(sessions) == 2
+
+
+@pytest.mark.parametrize(('registered', 'native'), [
+    pytest.param(None, False, id='leader-corrects'),
+    pytest.param(False, False, id='retained-correction'),
+    pytest.param(True, False, id='registered-batch'),
+    pytest.param(False, True, id='native', marks=pytest.mark.skipif(
+        os.environ.get('CODEX_RECOVERY_REAL') != '1',
+        reason='explicit real Codex report recovery probe',
+    )),
+])
+def test_missing_current_review_can_be_corrected_in_the_retained_session(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+    request: pytest.FixtureRequest,
+    registered: bool | None,
+    native: bool,
+) -> None:
+    """A failed correction keeps its member, candidate and unaffected Review."""
+    harness, _, _, environment = configure_harness(
+        installed_commands, temporary_git_repository, fake_codex, tmp_path,
+    )
+    _register_ready_ticket(
+        installed_commands, harness,
+        body='Preserve README.md containing "# Target project". The fixed candidate needs only a Review report.',
+    )
+    fake_codex.executable.write_text('#!' + sys.executable + '\n' + RUNTIME)
+    environment.update(
+        GRAPHTRAJ_AGENT_RUNNER=str(installed_commands.runner),
+        RECOVERY_TARGET='retained-review',
+    )
+    if native:
+        real = shutil.which('codex')
+        assert real
+        driver = fake_codex.executable.with_name('controlled-codex')
+        shutil.copy2(fake_codex.executable, driver)
+        fake_codex.executable.write_text(
+            '#!' + sys.executable + '\nimport os, sys\n'
+            + 'target = ' + repr(real) + " if os.environ.get('GRAPHTRAJ_ROLE') == 'spec-reviewer' else " + repr(str(driver)) + '\n'
+            + 'os.execv(target, [target, *sys.argv[1:]])\n'
+        )
+        native_home = harness / 'native-home'
+        native_home.mkdir()
+        operator = Path(os.environ.get('CODEX_HOME', Path.home() / '.codex'))
+        for name in ('config.toml', 'auth.json'):
+            if (operator / name).is_file():
+                shutil.copy2(operator / name, native_home / name)
+        config_file = native_home / 'config.toml'
+        config = tomllib.loads(config_file.read_text()) if config_file.exists() else {}
+        roles_file = harness / '.graphtraj/roles.yml'
+        roles = yaml.safe_load(roles_file.read_text())
+        roles['roles']['coding-team']['spec-reviewer'].update(
+            model=os.environ.get('CODEX_RECOVERY_MODEL', config.get('model', 'gpt-5.6')),
+            reasoning_effort='low',
+        )
+        roles_file.write_text(yaml.safe_dump(roles))
+        environment.update(CODEX_HOME=str(native_home), RECOVERY_NATIVE='1')
+        environment.pop('PYTHONPATH', None)
+        print('Recovery probe control: ' + json.dumps({
+            'root': str(harness), 'runner': str(installed_commands.runner),
+            'reviewer': '76-session-alias-control@r2',
+        }), flush=True)
+
+        def stop_native_probe() -> None:
+            """Release only this probe's execution if outer validation stops."""
+            for mapping in (harness / '.graphtraj/runner/sessions').glob('*/mapping.yml'):
+                status = command('status', mapping.parent.name)
+                if yaml.safe_load(status.stdout)['aliases'][0].get('activity') == 'running':
+                    command('interrupt', mapping.parent.name)
+
+        request.addfinalizer(stop_native_probe)
+
+    batch = harness / 'batch.yml'
+    batch.write_text(
+        'tasks:\n  - ticket_id: "76"\n'
+        '    ticket_name: session-alias-control\n'
+        '    role: coding-team.team-leader\n'
+    )
+
+    def command(*arguments: str):
+        """Call the independently installed public Runner."""
+        return run_process(
+            [str(installed_commands.runner), *arguments],
+            cwd=harness, env=environment,
+            timeout=float(os.environ.get('CODEX_RECOVERY_WAIT', '900')) if native else 45,
+        )
+
+    failed = command('--batch-input', str(batch))
+    assert failed.returncode == 1, failed.stdout + failed.stderr
+    assert 'caller or superior' in yaml.safe_load(failed.stdout)['tasks'][0]['error']['message']
+    ticket = harness / '.graphtraj/state/tickets/76-session-alias-control'
+    state = yaml.safe_load((ticket / 'ticket.yml').read_text())
+    team = yaml.safe_load((ticket / 'teams/1/team.yml').read_text())
+    reports = ticket / 'teams/1/rounds/1'
+    assert not (reports / 'spec.md').exists()
+    leader = team['members']['team_leader']['session_ref']
+    reviewer = team['members']['spec_reviewer']['session_ref']
+    status_before = yaml.safe_load(command('status', reviewer).stdout)['aliases'][0]
+    assert status_before['last_outcome'] == ('completed' if native else 'runtime-error')
+    preserved = {
+        path: path.read_bytes()
+        for path in (
+            reports / 'engineer.md', reports / 'validation.md', reports / 'standards.md',
+            ticket / 'teams/1/traces' / team['members']['engineer']['session_ref'] / 'events.jsonl',
+            ticket / 'teams/1/traces' / team['members']['standards_reviewer']['session_ref'] / 'events.jsonl',
+        )
+    }
+    reviewer_trace = ticket / 'teams/1/traces' / reviewer / 'events.jsonl'
+    prior_trace = reviewer_trace.read_bytes()
+    cause = [
+        json.loads(line)['event_id']
+        for path in (harness / '.graphtraj/state/worldline').glob('*.jsonl')
+        for line in path.read_text().splitlines()
+    ][-1]
+    if registered is not None:
+        correction = command(
+            'send', leader, '--instruction', 'Recover the missing Spec report.',
+            '--caused-by-event-id', cause,
+        )
+        assert correction.returncode == 0, correction.stdout + correction.stderr
+        wait_for_file(harness / '.graphtraj/runner/sessions' / leader / 'execution.yml')
+    if registered:
+        registration = command(
+            'send', leader, '--instruction', 'Register the remaining Spec Batch.',
+            '--caused-by-event-id', cause,
+        )
+        assert registration.returncode == 0, registration.stdout + registration.stderr
+        wait_for_file(harness / '.graphtraj/runner/sessions' / leader / 'execution.yml')
+    batches_before = set((harness / '.graphtraj/state/batches').glob('*.yml'))
+
+    continued = command('--batch-input', str(batch))
+
+    assert continued.returncode == 0, continued.stdout + continued.stderr
+    current = yaml.safe_load((ticket / 'ticket.yml').read_text())
+    assert current['status'] == 'awaiting-integration'
+    assert current['current_candidate'] == state['current_candidate']
+    assert current['worktree'] == state['worktree']
+    current_team = yaml.safe_load((ticket / 'teams/1/team.yml').read_text())
+    assert current_team['members'] == team['members']
+    assert current_team['current_round'] == 1
+    status = yaml.safe_load(command('status', reviewer).stdout)['aliases'][0]
+    assert status['last_outcome'] == 'completed'
+    assert status['session'] == status_before['session']
+    assert reviewer_trace.read_bytes().startswith(prior_trace)
+    assert reviewer_trace.read_text().count('turn_context') == (2 if native else 3)
+    assert all(path.read_bytes() == content for path, content in preserved.items())
+    recovery_prompt = reviewer_trace.read_text() if native else (
+        harness / current['worktree'] / '.scratch/recovery-prompt-spec-reviewer'
+    ).read_text()
+    assert 'Recovery required:' in recovery_prompt
+    assert 'Failure:' in recovery_prompt
+    assert 'Evidence:' in recovery_prompt and reviewer in recovery_prompt
+    assert 'Expected result:' in recovery_prompt
+    assert current['current_candidate'] in recovery_prompt
+    assert 'do not repeat' in recovery_prompt
+    new_batches = set((harness / '.graphtraj/state/batches').glob('*.yml')) - batches_before
+    assert len(new_batches) == 1  # Only Main's explicit continuation Batch.
+    assert yaml.safe_load(new_batches.pop().read_text())['tasks'][0]['role'] == 'coding-team.team-leader'
+
+
+def test_missing_correction_report_returns_to_its_reviewer_without_replaying_work(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    """Successful Runtime execution without a report needs local report repair."""
+    harness, _, _, environment = configure_harness(
+        installed_commands, temporary_git_repository, fake_codex, tmp_path,
+    )
+    _register_ready_ticket(installed_commands, harness)
+    fake_codex.executable.write_text('#!' + sys.executable + '\n' + RUNTIME)
+    environment.update(
+        GRAPHTRAJ_AGENT_RUNNER=str(installed_commands.runner),
+        RECOVERY_TARGET='retained-review', RECOVERY_FAILURE='report',
+    )
+    batch = harness / 'batch.yml'
+    batch.write_text(
+        'tasks:\n  - ticket_id: "76"\n'
+        '    ticket_name: session-alias-control\n'
+        '    role: coding-team.team-leader\n'
+    )
+
+    result = run_process(
+        [str(installed_commands.runner), '--batch-input', str(batch)],
+        cwd=harness, env=environment, timeout=45,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    ticket = harness / '.graphtraj/state/tickets/76-session-alias-control'
+    state = yaml.safe_load((ticket / 'ticket.yml').read_text())
+    team = yaml.safe_load((ticket / 'teams/1/team.yml').read_text())
+    assert state['status'] == 'awaiting-integration'
+    for seat, executions in (('engineer', 1), ('standards_reviewer', 1), ('spec_reviewer', 3)):
+        alias = team['members'][seat]['session_ref']
+        trace = ticket / 'teams/1/traces' / alias / 'events.jsonl'
+        assert trace.read_text().count('turn_context') == executions
+    prompt = (harness / state['worktree'] / '.scratch/recovery-prompt-spec-reviewer').read_text()
+    assert 'Failure:' in prompt and 'did not produce its exact report' in prompt
+    assert 'Evidence:' in prompt and 'Expected result:' in prompt

@@ -335,9 +335,15 @@ def continue_stopped_ticket(
 
 
 def _run_batch_workers(
-    project: Any, batch: Batch, retained: Path | None = None, parent_alias: str = "",
+    project: Any,
+    batch: Batch,
+    retained: Path | None = None,
+    parent_alias: str = "",
     capacity_fd: int | None = None,
+    *,
+    recover_reports: bool = False,
 ) -> LaunchResponse:
+    """Dispatch the retained Batch, identifying report recovery to its workers."""
     notice_fd, close_notice_fd = caller_notice_fd()
     try:
         workers = []
@@ -351,7 +357,8 @@ def _run_batch_workers(
                         environment["GRAPHTRAJ_BUDGET_NOTICE_FD"] = str(notice_fd)
                     worker = subprocess.Popen(
                         [sys.executable, "-m", "graphtraj.teams.coding.team_round",
-                         str(retained), str(index), str(position.fileno()), parent_alias],
+                         str(retained), str(index), str(position.fileno()), parent_alias,
+                         "recover-reports" if recover_reports else ""],
                         cwd=project.harness_root, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
                         env=environment,
                         pass_fds=(position.fileno(),) if notice_fd is None else (position.fileno(), notice_fd),
@@ -1164,12 +1171,28 @@ def _resume_active_ticket(
     try:
         candidate = _candidate(round_directory, worktree)
     except RunnerError as error:
-        raise RunnerError(
-            error.code,
-            "{0} Expected result: retry the interrupted {1} Session with its retained Trace.".format(
-                error.message, engineer_role
+        outcome = read_terminal_outcome(
+            project.runner_directory / "sessions" / engineer_alias / "execution.yml"
+        )
+        if error.code != _AGENT_EVIDENCE_ERROR or outcome != "completed":
+            raise RunnerError(
+                error.code,
+                "{0} Expected result: retry the interrupted {1} Session with its retained Trace.".format(
+                    error.message, engineer_role
+                ),
+            ) from error
+        engineer_alias, engineer_session = _run_agent(
+            project, engineer_task, engineer_role, worktree, ticket_directory,
+            traces, engineer_alias, engineer_session, None, leader_alias,
+            engineer_batch_path,
+            _evidence_recovery_prompt(
+                project, engineer_task, traces, engineer_alias, worktree, error,
+                "commit tracked project changes and write both current Round Engineer reports "
+                "with the fixed candidate commit",
             ),
-        ) from error
+            capacity_fd=capacity_fd,
+        )
+        candidate = _candidate(round_directory, worktree)
 
     predecessor = next(
         event["event_id"]
@@ -1230,6 +1253,7 @@ def _resume_active_ticket(
             continue
         report_file = _review_report_file(role, mapping)
         reviewer_task, reviewer_batch_path = session_task(role, mapping)
+        sessions[role] = (reviewer_task, alias, session, reviewer_batch_path)
         source = ticket_directory / "reviews" / report_file.name
         if not target.is_file() and not source.is_file():
             remaining.add(role)
@@ -1242,7 +1266,6 @@ def _resume_active_ticket(
                 report_name,
                 project.runner_directory / "sessions" / alias,
             )
-        sessions[role] = (reviewer_task, alias, session, reviewer_batch_path)
         if team["members"][seat]["session_ref"] is None:
             state_alias, state_session, event = _request_state(
                 project, task, worktree, ticket_directory, traces,
@@ -1267,7 +1290,8 @@ def _resume_active_ticket(
              "trace": _trace_ref(project, traces, alias)}
         )
 
-    def correct_process() -> None:
+    def correct_process() -> bool:
+        """Correct retained members and report whether every Review is present."""
         nonlocal leader_alias, leader_session, state_alias, state_session, predecessor
         (
             leader_alias,
@@ -1292,9 +1316,16 @@ def _resume_active_ticket(
             sessions,
             capacity_fd=capacity_fd,
         )
+        remaining.difference_update(
+            role for role in sessions
+            if role in _REVIEWER_ROLES
+            and (round_directory / _review_report_name(role)).is_file()
+        )
+        return not remaining
 
+    correct_process()
     reviewers_dispatched = bool(remaining)
-    if remaining:
+    if remaining and not registration.exists():
         leader_alias, leader_session = _run_agent(
             project, task, "team-leader", worktree, ticket_directory, traces,
             leader_alias, leader_session, registration, None, team_batch,
@@ -1316,11 +1347,14 @@ def _resume_active_ticket(
             traces, leader_alias, leader_session, registration, team_batch,
             capacity_fd=capacity_fd, correct_process=correct_process,
         )
-        assert reviewer_batch is not None and reviewer_batch_path is not None
+        if reviewer_batch is None:
+            break
+        assert reviewer_batch_path is not None
         if not {child.role for child in reviewer_batch.tasks} <= remaining:
             raise RunnerError("BATCH_SCHEMA_INVALID", "The child Batch must select remaining Review axes for this candidate.")
         reviewed = _run_batch_workers(
             project, reviewer_batch, reviewer_batch_path, leader_alias, capacity_fd,
+            recover_reports=True,
         )
         for child, result in zip(reviewer_batch.tasks, reviewed.document["tasks"]):
             if "error" in result:
@@ -1335,13 +1369,30 @@ def _resume_active_ticket(
                 ticket_content=ticket_content,
                 report_file=report_file,
             )
-            _collect_review_report(
+            collect_report = partial(
+                _collect_review_report,
                 ticket_directory,
                 round_directory,
                 report_file.name,
                 report_name,
                 session_directory=project.runner_directory / "sessions" / alias,
             )
+            try:
+                collect_report()
+            except RunnerError as error:
+                if error.code != _AGENT_EVIDENCE_ERROR:
+                    raise
+                alias, session = _run_agent(
+                    project, reviewer_task, child.role, worktree,
+                    ticket_directory, traces, alias, session, None,
+                    leader_alias, reviewer_batch_path,
+                    _evidence_recovery_prompt(
+                        project, reviewer_task, traces, alias, worktree, error,
+                        "deliver the exact current Round raw Review report from retained work",
+                    ),
+                    capacity_fd=capacity_fd,
+                )
+                collect_report()
             sessions[child.role] = (
                 reviewer_task, alias, session, reviewer_batch_path
             )
@@ -1495,9 +1546,12 @@ def _next_formal_batch(
     *,
     capacity_fd: int,
     allow_no_formal: bool = False,
-    correct_process: Callable[[], None] | None = None,
+    correct_process: Callable[[], bool | None] | None = None,
 ) -> tuple[Batch | None, Path | None, str, str]:
-    """Run temporary child specialists before returning the next formal Batch."""
+    """Return the next Batch unless correction completes all remaining work.
+
+    The correction callback may return True when no formal child is needed.
+    """
 
     run_agent = partial(_run_agent, capacity_fd=capacity_fd)
     recovered_dispatch = False
@@ -1531,10 +1585,9 @@ def _next_formal_batch(
         )
 
     while True:
-        if correct_process is not None:
-            correct_process()
+        corrected_all = correct_process() if correct_process is not None else False
         if not registration.exists():
-            if allow_no_formal:
+            if allow_no_formal or corrected_all:
                 return None, None, leader_alias, leader_session
             recover_dispatch(
                 RunnerError(
@@ -1758,8 +1811,10 @@ def _process_corrections(
 ) -> tuple[str, str, str | None, str | None, str]:
     """Apply supported Leader corrections without leaving the current Team."""
     leader_report = round_directory / "leader.md"
+    # Consume the Leader's retained next action before an older judgment.
     while (
-        leader_report.is_file()
+        not registration.exists()
+        and leader_report.is_file()
         and "Decision: CORRECT" in leader_report.read_text().splitlines()
     ):
         judgment = leader_report.read_text(encoding="utf-8")
@@ -1778,7 +1833,7 @@ def _process_corrections(
                 )
             fields[name] = values[0]
         role = ROLE_REFERENCES.get(fields["Responsible"], fields["Responsible"])
-        if role not in sessions or registration.exists():
+        if role not in sessions:
             raise RunnerError(
                 "BATCH_SCHEMA_INVALID",
                 "Correction must resume an existing member without registering "
@@ -1830,6 +1885,12 @@ def _process_corrections(
                 "Repeat your affected Review against the corrected fixed "
                 "candidate and the accepted review rules.\n"
             )
+            if affected_role == role:
+                followup += "\n" + _evidence_recovery_prompt(
+                    project, member, traces, alias, worktree,
+                    RunnerError(_AGENT_EVIDENCE_ERROR, fields["Reason"]),
+                    "deliver the corrected current Round report and reuse all still-valid work",
+                )
             alias, session = _run_agent(
                 project, member, affected_role, worktree, evidence, traces,
                 alias, session, None, leader_alias, child_batch,
@@ -1854,13 +1915,30 @@ def _process_corrections(
                 predecessor = event["event_id"]
             else:
                 assert member.report_file is not None
-                _collect_review_report(
+                collect_report = partial(
+                    _collect_review_report,
                     evidence,
                     round_directory,
                     member.report_file.name,
                     _review_report_name(affected_role),
                     project.runner_directory / "sessions" / alias,
                 )
+                try:
+                    collect_report()
+                except RunnerError as error:
+                    if error.code != _AGENT_EVIDENCE_ERROR:
+                        raise
+                    alias, session = _run_agent(
+                        project, member, affected_role, worktree, evidence, traces,
+                        alias, session, None, leader_alias, child_batch,
+                        _evidence_recovery_prompt(
+                            project, member, traces, alias, worktree, error,
+                            "deliver the exact current Round raw Review report from retained work",
+                        ),
+                        capacity_fd=capacity_fd,
+                    )
+                    sessions[affected_role] = (member, alias, session, child_batch)
+                    collect_report()
         leader_alias, leader_session = _run_agent(
             project, task, "team-leader", worktree, evidence, traces,
             leader_alias, leader_session, registration, None, retained_batch,
@@ -2930,10 +3008,20 @@ def _worker_main() -> None:
                 task, ticket_file=definition, ticket_content=definition.read_text(),
                 report_file=report_file,
             )
+            traces = evidence / "teams" / str(state["active_team_ordinal"]) / "traces"
+            worktree = project.harness_root / state["worktree"]
+            recovery_prompt = None
+            if session is not None and sys.argv[5:] == ["recover-reports"]:
+                recovery_prompt = _evidence_recovery_prompt(
+                    project, task, traces, member["session_ref"], worktree,
+                    RunnerError(_AGENT_EVIDENCE_ERROR, "The current Round Review report is missing."),
+                    "deliver the exact current Round raw Review report from retained work; "
+                    "finish only work that is not already valid for the current candidate",
+                )
             alias, session = _run_agent(
-                project, task, task.role, project.harness_root / state["worktree"],
-                evidence, evidence / "teams" / str(state["active_team_ordinal"]) / "traces",
-                member["session_ref"], session, None, sys.argv[4], retained, capacity_fd=capacity_fd,
+                project, task, task.role, worktree, evidence, traces,
+                member["session_ref"], session, None, sys.argv[4], retained,
+                recovery_prompt, capacity_fd=capacity_fd,
             )
             result = {"role": task.role, "alias": alias, "session": session, "launch_status": "completed"}
     except (RunnerError, RuntimeAdapterError) as error:

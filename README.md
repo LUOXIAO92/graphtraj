@@ -326,6 +326,17 @@ next Round. Main or the user can retire a Team; replacement retains the Ticket
 branch and Worktree, and reads the prior Leader's final response from its Trace.
 Replacing another member changes only that seat.
 
+Resume an interrupted Team with its original Leader Batch after deciding the
+next action. Runner reuses retained Sessions, the Worktree, candidate, and valid
+reports. A missing or invalid report returns to its author with the failure,
+Trace, and expected report. A Leader can request correction in `leader.md` with
+`Decision: CORRECT`, `Responsible: coding-team.spec-reviewer` (or the responsible
+member), `Rule:`, `Reason:`, and `Candidate commit:`. A retained remaining-axis
+Batch takes precedence over an older correction judgment; it needs no second
+registration. Completing the last missing report needs no additional Review
+Batch. System/provider failures return to the caller for an explicit later
+retry through `send`; `status` reports the existing Session and last outcome.
+
 After a sampled budget stop, Main analyzes the cause and records its chosen
 action in the existing Worldline. Apply any required corrections or accepted
 budget revision, then explicitly use `agent-runner continue` with that decision
@@ -464,6 +475,21 @@ Codex connection settings. `CODEX_MANAGED_MODEL` can select the model;
 `CODEX_MANAGED_WAIT` sets the observation timeout in seconds (default 120).
 Model/network failures fail this check and retain the actual operations and
 native diagnostics in the pytest temporary project.
+
+A focused recovery probe uses one real Spec Session and controlled peers. It
+loses the current report copy, then checks same-Session report delivery while
+preserving the candidate and unaffected evidence:
+
+```sh
+CODEX_RECOVERY_REAL=1 python -m pytest -p no:cacheprovider -q -s \
+  tests/test_team_recovery.py -k 'missing_current_review and native'
+```
+
+`CODEX_RECOVERY_MODEL` selects the model and `CODEX_RECOVERY_WAIT` sets each
+operation's timeout (default 900 seconds). The probe prints its isolated root,
+Runner and Reviewer alias. Use that Runner's `requests` and `reply` commands
+from the printed root for any native approvals; the probe does not choose
+responses or modify the operator's configuration.
 
 The normal coding-Team probe uses real Agents for a tiny greeting implementation,
 its validation, both Review axes and the Leader decision:

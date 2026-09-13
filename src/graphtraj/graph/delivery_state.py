@@ -185,7 +185,7 @@ def apply_delivery_state_request(
             kind = "team-process-correction"
         elif phase == "candidate":
             candidate = _validate_candidate(request["candidate"])
-            if ticket["status"] not in {"implementing", "reviewing"} or ticket["current_candidate"] is not None:
+            if ticket["status"] not in {"implementing", "reviewing"} or ticket["current_candidate"] == candidate:
                 raise ValueError("Ticket cannot enter fixed-candidate Review")
             if team_update["members"]["engineer"]["session_ref"] is None:
                 raise ValueError("Candidate Review requires the Engineer Session")

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -9,11 +10,12 @@ import yaml
 
 from conftest import FakeCodex, InstalledCommands, app_server_peer, run_process
 from runner_fixtures import configure_harness
+from test_managed_sessions import CALL
 from test_session_alias_control import _register_ready_ticket
 
 
 RUNTIME = r'''
-import json, os, subprocess, sys
+import json, os, subprocess, sys, time, yaml
 from pathlib import Path
 
 if sys.argv[1:] == ['exec', '--help']:
@@ -68,6 +70,39 @@ elif role == 'team-leader':
             decision = None
         elif not report_only and expanded and (reviewed or os.environ['CORRECTION_TIMING'] == 'before-review'):
             decision = 'Decision: CORRECT\nResponsible: coding-team.engineer-junior\nRule: Accepted Ticket limits work to Session transport.\nReason: UNREQUESTED.txt adds an unrelated feature.\n'
+            if os.environ.get('CORRECTION_DIRECT_SEND'):
+                team = yaml.safe_load((root / 'teams/1/team.yml').read_text())
+                engineer = team['members']['engineer']['session_ref']
+                harness = Path(os.environ['GRAPHTRAJ_HARNESS_ROOT'])
+                cause = [json.loads(line)['event_id'] for shard in sorted((harness / '.graphtraj/state/worldline').glob('*.jsonl')) for line in shard.read_text().splitlines()][-1]
+                sent = subprocess.run([
+                    os.environ['GRAPHTRAJ_AGENT_RUNNER'], 'send', engineer,
+                    '--instruction', 'Reflect on this correction: UNREQUESTED.txt must be removed.\n' + decision,
+                    '--caused-by-event-id', cause,
+                ], cwd=harness, capture_output=True, text=True)
+                assert sent.returncode == 0, sent.stdout + sent.stderr
+                deadline = time.monotonic() + 15
+                while time.monotonic() < deadline:
+                    status = subprocess.run([os.environ['GRAPHTRAJ_AGENT_RUNNER'], 'status', engineer], cwd=harness, capture_output=True, text=True)
+                    current = yaml.safe_load(status.stdout)['aliases'][0]
+                    if current['activity'] == 'idle':
+                        assert current['last_outcome'] == 'runtime-error'
+                        raise SystemExit(1)
+                    time.sleep(0.01)
+                raise AssertionError('Engineer correction did not finish')
+        elif report_failure == 'provider' and (scratch / 'report-failed').exists():
+            remaining = []
+            for review_role, name in (('standards-reviewer', 'standards.md'), ('spec-reviewer', 'spec.md')):
+                report = round_dir / name
+                delivered = root / 'reviews' / name
+                current = delivered if delivered.is_file() else report
+                if not current.is_file() or current.read_text().splitlines()[0] != 'Candidate commit: ' + git('rev-parse', 'HEAD'):
+                    remaining.append(review_role)
+            if remaining:
+                dispatch(remaining)
+                decision = None
+            else:
+                decision = 'Decision: ACCEPT\n'
         elif not reviewed:
             if os.environ.get('CORRECTION_SERIAL'):
                 dispatch(['spec-reviewer'] if (round_dir / 'standards.md').exists() else ['standards-reviewer'])
@@ -115,8 +150,13 @@ else:
     candidate = git('rev-parse', 'HEAD')
     assert candidate in prompt and os.environ['GRAPHTRAJ_REVIEW_COMPARISON'] in prompt
     corrected = role == 'spec-reviewer' and 'unrequested cache' in prompt
-    text = 'Unsupported finding: add an unrequested cache.' if role == 'spec-reviewer' and not corrected and not report_only and not report_failure else 'Decision: pass.'
-    report.write_text('Candidate commit: ' + candidate + '\n' + text + '\n')
+    text = 'Finding: Unsupported finding: add an unrequested cache.' if role == 'spec-reviewer' and not corrected and not report_only and not report_failure else 'Finding: none'
+    report.write_text(
+        'Candidate commit: ' + candidate + '\n'
+        'Comparison: ' + os.environ['GRAPHTRAJ_REVIEW_COMPARISON'] + '\n'
+        'Axis: ' + ('Standards' if role == 'standards-reviewer' else 'Spec') + '\n'
+        + text + '\n'
+    )
 print(json.dumps({'type': 'turn.completed'}), flush=True)
 '''
 RUNTIME = app_server_peer(RUNTIME, "'session-' + os.environ['GRAPHTRAJ_ROLE']")
@@ -325,3 +365,122 @@ def test_engineer_correction_repairs_only_its_report_delivery_errors(
     assert sorted(call['role'] for call in reviews) == ['spec-reviewer', 'standards-reviewer']
     assert all(state['current_candidate'] in report.read_text() for report in (ticket / 'teams/1/rounds/1').glob('*.md'))
     assert len(list((harness / '.graphtraj/state/batches').glob('*.yml'))) == 3
+
+
+@pytest.mark.parametrize(('direct_send', 'early_review', 'registered'), [
+    pytest.param(False, False, False, id='interrupted-correction'),
+    pytest.param(True, False, False, id='retained-candidate'),
+    pytest.param(False, False, True, id='registered-batch'),
+    pytest.param(True, True, True, id='one-current-review'),
+])
+def test_interrupted_candidate_correction_resumes_only_stale_reviews(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+    direct_send: bool,
+    early_review: bool,
+    registered: bool,
+) -> None:
+    """An explicit Engineer retry reconciles B with retained A state and Reviews."""
+    harness, _, _, environment = configure_harness(
+        installed_commands, temporary_git_repository, fake_codex, tmp_path,
+    )
+    _register_ready_ticket(installed_commands, harness)
+    fake_codex.executable.write_text('#!' + sys.executable + '\n' + RUNTIME)
+    environment.update(
+        GRAPHTRAJ_AGENT_RUNNER=str(installed_commands.runner),
+        CORRECTION_LOG=str(tmp_path / 'corrections.jsonl'),
+        CORRECTION_TIMING='after-review', CORRECTION_REPORT_FAILURE='provider',
+    )
+    if direct_send:
+        environment['CORRECTION_DIRECT_SEND'] = '1'
+    environment.pop('PYTHONPATH', None)
+
+    def call(operation: str, arguments: dict | list) -> dict:
+        """Call installed public operations and retain the exact input/results."""
+        result = run_process(
+            [str(installed_commands.runner.with_name('python')), '-c', CALL,
+             str(harness), json.dumps([operation, arguments])],
+            cwd=harness, env=environment, timeout=45,
+        )
+        with (harness / 'public-operations.jsonl').open('a') as stream:
+            stream.write(json.dumps({
+                'operation': operation, 'arguments': arguments,
+                'returncode': result.returncode, 'stdout': result.stdout, 'stderr': result.stderr,
+            }) + '\n')
+        assert result.returncode == 0, result.stdout + result.stderr
+        return json.loads(result.stdout)
+
+    document = {'tasks': [{
+        'ticket_id': '76', 'ticket_name': 'session-alias-control',
+        'role': 'coding-team.team-leader',
+    }]}
+    failed = call('launch', document)['tasks'][0]
+    assert failed['error']['code'] == 'launch-failed', failed
+    ticket = harness / '.graphtraj/state/tickets/76-session-alias-control'
+    state = yaml.safe_load((ticket / 'ticket.yml').read_text())
+    team = yaml.safe_load((ticket / 'teams/1/team.yml').read_text())
+    reports = ticket / 'teams/1/rounds/1'
+    traces = ticket / 'teams/1/traces'
+    aliases = {seat: member['session_ref'] for seat, member in team['members'].items()}
+    old_reports = {name: (reports / name).read_bytes() for name in ('standards.md', 'spec.md')}
+    candidate_a = old_reports['standards.md'].decode().splitlines()[0].removeprefix('Candidate commit: ')
+    comparison = old_reports['standards.md'].decode().splitlines()[1].removeprefix('Comparison: ')
+    candidate_b = run_process(['git', 'rev-parse', 'HEAD'], cwd=harness / state['worktree']).stdout.strip()
+    assert candidate_a != candidate_b
+    assert all(('Candidate commit: ' + candidate_a).encode() in report for report in old_reports.values())
+    assert state['current_candidate'] == (candidate_a if direct_send else None)
+    assert call('status', [aliases['engineer']])['aliases'][0]['last_outcome'] == 'runtime-error'
+    initial_status = call('status', list(aliases.values()))['aliases']
+    initial_traces = {alias: (traces / alias / 'events.jsonl').read_bytes() for alias in aliases.values()}
+    cause = [json.loads(line)['event_id'] for shard in sorted((harness / '.graphtraj/state/worldline').glob('*.jsonl')) for line in shard.read_text().splitlines()][-1]
+
+    def send(alias: str, instruction: str) -> None:
+        """Explicitly resume a retained Session and observe its completion."""
+        assert call('send', [alias, instruction, [cause]])['send_status'] == 'sent'
+        deadline = time.monotonic() + 15
+        while time.monotonic() < deadline:
+            status = call('status', [alias])['aliases'][0]
+            if status['activity'] == 'idle':
+                assert status['last_outcome'] == 'completed', status
+                return
+            time.sleep(0.05)
+        raise AssertionError('Explicit retry did not complete')
+
+    send(aliases['engineer'], 'Finish the interrupted correction and deliver the current Engineer reports.')
+    if early_review:
+        send(aliases['standards_reviewer'], f'Review candidate {candidate_b} against comparison {comparison}.')
+        valid_report = (ticket / 'reviews/standards.md').read_bytes()
+        valid_trace = (traces / aliases['standards_reviewer'] / 'events.jsonl').read_bytes()
+        valid_status = call('status', [aliases['standards_reviewer']])['aliases'][0]
+    if registered:
+        send(aliases['team_leader'], 'Register the remaining Review axes for the current candidate.')
+    before_resume = set((harness / '.graphtraj/state/batches').glob('*.yml'))
+
+    continued = call('launch', document)['tasks'][0]
+
+    assert continued['launch_status'] == 'accepted', continued
+    current = yaml.safe_load((ticket / 'ticket.yml').read_text())
+    assert current['current_candidate'] == candidate_b
+    assert current['status'] == 'awaiting-integration'
+    assert current['worktree'] == state['worktree']
+    current_team = yaml.safe_load((ticket / 'teams/1/team.yml').read_text())
+    assert current_team['members'] == team['members']
+    assert current_team['current_round'] == team['current_round'] == 1
+    for before, after in zip(initial_status, call('status', list(aliases.values()))['aliases']):
+        assert after['session'] == before['session']
+        trace = (traces / after['alias'] / 'events.jsonl').read_bytes()
+        assert trace.startswith(initial_traces[after['alias']])
+        if after['alias'] != aliases['team_leader']:
+            assert trace.count(b'turn_context') == (3 if after['alias'] == aliases['engineer'] else 2)
+    for name in ('standards.md', 'spec.md', 'engineer.md', 'validation.md'):
+        assert (reports / name).read_text().splitlines()[0] == 'Candidate commit: ' + candidate_b
+    if early_review:
+        assert (reports / 'standards.md').read_bytes() == valid_report
+        assert (traces / aliases['standards_reviewer'] / 'events.jsonl').read_bytes() == valid_trace
+        assert call('status', [aliases['standards_reviewer']])['aliases'][0]['execution_id'] == valid_status['execution_id']
+    added = set((harness / '.graphtraj/state/batches').glob('*.yml')) - before_resume
+    assert len(added) == (1 if registered else 2)
+    reviewer_batches = [yaml.safe_load(path.read_text()) for path in added if yaml.safe_load(path.read_text())['tasks'][0]['role'] != 'coding-team.team-leader']
+    assert len(reviewer_batches) == (0 if registered else 1)

@@ -1217,7 +1217,7 @@ def _resume_active_ticket(
         )
         predecessor = event["event_id"]
         team["members"]["engineer"]["session_ref"] = engineer_alias
-    if state.get("current_candidate") is None:
+    if state.get("current_candidate") != candidate:
         state_alias, state_session, event = _request_state(
             project, task, worktree, ticket_directory, traces,
             state_alias, state_session, leader_alias, team_batch,
@@ -1255,6 +1255,16 @@ def _resume_active_ticket(
         reviewer_task, reviewer_batch_path = session_task(role, mapping)
         sessions[role] = (reviewer_task, alias, session, reviewer_batch_path)
         source = ticket_directory / "reviews" / report_file.name
+        # An interrupted correction can leave old copies beside newly delivered work.
+        for report in (target, source):
+            if report.is_file():
+                declared = [
+                    line.removeprefix("Candidate commit:").strip()
+                    for line in report.read_text(encoding="utf-8").splitlines()
+                    if line.startswith("Candidate commit:")
+                ]
+                if declared != [candidate]:
+                    report.unlink()
         if not target.is_file() and not source.is_file():
             remaining.add(role)
             continue

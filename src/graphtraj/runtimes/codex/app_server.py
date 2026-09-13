@@ -351,13 +351,19 @@ class CodexAppServer:
                 ),
                 resumed=session.thread_id in self._resumed_sessions,
             )
-            trace.collect()
         except OSError as error:
             raise CodexAdapterError(
                 'RUNTIME_TRACE_FAILED', 'The native Codex Session Trace could not be retained.',
                 terminal_confirmed=False,
             ) from error
         self._traces[session.thread_id] = trace
+        try:
+            trace.collect()
+        except OSError as error:
+            raise CodexAdapterError(
+                'RUNTIME_TRACE_FAILED', 'The native Codex Session Trace could not be retained.',
+                terminal_confirmed=False,
+            ) from error
         self._trace_tasks[session.thread_id] = asyncio.create_task(
             self._collect_native_trace(trace)
         )

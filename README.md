@@ -232,7 +232,10 @@ descendants below Main; a Team Leader is depth 1 and its children depth 2.
 `max_concurrency` limits executing Agents across the project. Operating-system
 locks enforce capacity; lock-file presence is not occupancy. A normal Batch
 starts all its tasks or none. Team delivery also works at capacity one, with
-the two Reviewers running sequentially in the same Round.
+the two Reviewers running sequentially in the same Round. A child Batch beyond
+`dispatch_depth` returns `authority-denied` before registration. Runner counts
+the retained parent Session chain; resuming a Leader adds no depth. Delegated
+roles other than the Leader cannot launch Batches through Main's entry point.
 
 `.graphtraj/roles.yml` groups coding presets under `roles.coding-team`; shared
 `delivery-state` remains directly under `roles`. Batch references use names such
@@ -373,6 +376,20 @@ returns. The existing registered-task inline-role launch returns `launched` with
 an alias and native `session`; coding Team scheduling still follows its existing
 workflow.
 
+For a coding Team, `launch_batch(parse_batch(document), root)` runs the selected
+Leader's normal Round through the same Worker and Adapter. The Leader registers
+one Engineer, then both Reviewers for the fixed candidate, and makes the final
+decision after collecting their reports. A two-Reviewer Batch that cannot fit
+starts neither Reviewer and returns `insufficient-capacity` to the same Leader
+Session. The Leader registers the Reviewers separately to proceed at capacity
+one; the stopped parent's position transfers to each child in turn.
+
+`read_graph(state)` exposes the Ticket's `implementing`, `reviewing`, and
+`awaiting-integration` states. `read_worldline(state, root)` supplies the fixed
+candidate and the final `team-round-accepted` event. A Leader can be idle while
+its children execute; Session completion alone is not Team acceptance. Current
+Round reports remain under `tickets/<id>-<name>/teams/<generation>/rounds/<round>/`.
+
 Query `status_aliases([alias], root)` to get `session`, `execution_id`, and
 `activity`. An idle execution has `last_outcome`: `completed`, `runtime-error`,
 or `interrupted`. These describe native execution, independently of the service
@@ -407,6 +424,22 @@ Codex connection settings. `CODEX_MANAGED_MODEL` can select the model;
 `CODEX_MANAGED_WAIT` sets the observation timeout in seconds (default 120).
 Model/network failures fail this check and retain the actual operations and
 native diagnostics in the pytest temporary project.
+
+The normal coding-Team probe uses real Agents for a tiny greeting implementation,
+its validation, both Review axes and the Leader decision:
+
+```sh
+CODEX_TEAM_REAL=1 python -m pytest -p no:cacheprovider -q \
+  tests/test_team_session_delivery.py -k real_small_team
+```
+
+It installs a clean candidate export in an isolated project and copies the
+operator's native connection settings into a temporary store. It preserves the
+operator's configuration. `CODEX_TEAM_MODEL` selects the model,
+`CODEX_TEAM_CAPACITY` sets project capacity (default 1), and `CODEX_TEAM_WAIT`
+bounds the check in seconds (default 900). The temporary project retains inputs,
+results, cleanup observations and native diagnostics. Network or unhandled
+Runtime-request failures leave the real-Team check incomplete.
 
 Pass the immutable `RuntimeContext` returned by the existing
 `preflight_runtime_context(...).finalize()`. Its `session_document()` projects

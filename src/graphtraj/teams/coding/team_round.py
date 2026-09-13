@@ -31,6 +31,7 @@ from graphtraj.execution.execution_budget import (
     execution_budget_stage,
 )
 from graphtraj.configuration.role_definitions import resolve_child_role
+from graphtraj.configuration.project_configuration import load_project_configuration
 from graphtraj.graph.delivery_state import apply_delivery_state_request, confirmed_rework
 from graphtraj.graph.delivery_worldline import append_project_worldline_event, read_worldline
 from graphtraj.configuration.project_roles import ROLE_REFERENCES
@@ -94,6 +95,19 @@ def register_child_batch(batch: Batch, cwd: Path, registration: Path) -> LaunchR
         Path(os.environ.get("GRAPHTRAJ_HARNESS_ROOT", cwd)),
         require_clean_integration=False,
     )
+    limit = load_project_configuration(project.harness_root).dispatch_depth
+    depth = 1
+    parent_alias = os.environ["GRAPHTRAJ_PARENT_ALIAS"]
+    # Count retained Session ancestry, not Batches or resumptions.
+    while parent_alias is not None:
+        depth += 1
+        if depth > limit:
+            raise RunnerError(
+                "authority-denied",
+                f"The child Batch exceeds project dispatch_depth={limit}. No child registered.",
+            )
+        parent, _ = read_alias_mapping(project.runner_directory, parent_alias)
+        parent_alias = parent["parent"]
     from graphtraj.teams.coding.team_replacement import require_active_session
 
     team = require_active_session(project, os.environ["GRAPHTRAJ_PARENT_ALIAS"])

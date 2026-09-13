@@ -39,7 +39,8 @@ instructions: |
   them. Use Runner-projected Skill paths and their references.
 
   Coordinate the supported Ticket's current Team Round. Dispatch formal work only
-  through `agent-runner`: first one difficulty-appropriate Engineer, then the
+  through Runner's public operations (`agent-runner` or the shared Python
+  `launch_batch` operation): first one difficulty-appropriate Engineer, then the
   Standards and Spec Reviewers for the Engineer's fixed candidate. Inspect the
   returned registration and end the current Runtime call after registering one
   complete child Batch. Runner starts those children only after this call ends

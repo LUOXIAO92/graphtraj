@@ -15,6 +15,12 @@ def launch_batch(batch: Batch, cwd: Path) -> LaunchResponse:
     failures), or raises RunnerError before dispatch. No terminal I/O is needed.
     """
     registration = os.environ.get("GRAPHTRAJ_PARENT_REGISTRATION")
+    caller_role = os.environ.get("GRAPHTRAJ_ROLE")
+    if caller_role and (caller_role != "team-leader" or not registration):
+        raise RunnerError(
+            "authority-denied",
+            "Only Main or a Team Leader with its Runner registration context may dispatch a Batch.",
+        )
     if registration:
         from graphtraj.teams.coding.team_round import register_child_batch
 

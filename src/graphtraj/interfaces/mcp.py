@@ -25,6 +25,7 @@ from graphtraj.configuration.project_configuration import (
     ProjectConfigurationError,
     load_project_configuration,
 )
+from graphtraj.execution.runner_models import RunnerError
 from graphtraj.execution.runner_status import status_aliases
 from graphtraj.graph.ticket_graph import (
     read_graph,
@@ -295,9 +296,13 @@ def _tool_call_response(
         ValueError,
         yaml.YAMLError,
         ProjectConfigurationError,
+        RunnerError,
     ) as error:
         # A rejected operation is a tool failure, not a protocol failure, so the
-        # host receives the same message the CLI reports for the same input.
+        # host receives the same message the CLI reports for the same input and
+        # this server keeps answering later calls. RunnerError carries the
+        # shared operations' own rejections, such as a status query outside a
+        # Harness Project Root or incomplete Git diagnostics arguments.
         return _result_response(
             request_id,
             {"content": [{"type": "text", "text": str(error)}], "isError": True},

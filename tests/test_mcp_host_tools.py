@@ -326,6 +326,58 @@ def test_installed_mcp_server_reports_invalid_input_and_unknown_requests(
     assert unknown_method["error"]["code"] == -32601
 
 
+def test_installed_mcp_server_survives_a_rejected_alias_status_call(
+    installed_commands: InstalledCommands, mcp_executable: Path, tmp_path: Path
+) -> None:
+    """An incomplete Git diagnostics pair is a tool failure, not a crash."""
+
+    project = tmp_path / "project"
+    project.mkdir()
+    _configure(project)
+
+    with _started_mcp(mcp_executable, project) as server:
+        rejected = server.call(
+            "alias_status", {"aliases": ["missing@l1"], "baseline": "abc123"}
+        )["result"]
+        # The same process must keep serving the other tools afterwards.
+        after = server.call("ticket_graph", {})["result"]
+
+    cli = _runner(
+        installed_commands,
+        project,
+        "status",
+        "missing@l1",
+        "--baseline",
+        "abc123",
+    )
+    assert cli.returncode == 1
+    assert rejected["isError"] is True
+    assert rejected["content"][0]["text"] == yaml.safe_load(cli.stdout)["error"]["message"]
+    assert after["isError"] is False
+    assert after["structuredContent"] == {"tickets": []}
+
+
+def test_installed_mcp_server_reports_a_missing_project_root_like_the_graph_tools(
+    installed_commands: InstalledCommands, mcp_executable: Path, tmp_path: Path
+) -> None:
+    """A status query outside a Harness Project Root fails like the graph tools."""
+
+    plain = tmp_path / "plain"
+    plain.mkdir()
+
+    with _started_mcp(mcp_executable, plain) as server:
+        status = server.call("alias_status", {"aliases": ["missing@l1"]})["result"]
+        graph = server.call("ticket_graph", {})["result"]
+
+    cli = _cli(installed_commands, plain, "ticket", "graph")
+    assert cli.returncode == 1
+    message = cli.stderr.strip().removeprefix("Error: ")
+    assert status["isError"] is True
+    assert graph["isError"] is True
+    assert status["content"][0]["text"] == message
+    assert graph["content"][0]["text"] == message
+
+
 class CodexHost:
     """Drive the installed Codex app-server as an isolated MCP host."""
 
@@ -443,6 +495,22 @@ def test_real_codex_host_discovers_and_calls_the_mcp_graph_tools_offline(
             },
         )["result"]
         assert registered["isError"] is False
+
+        # A rejected call must not close the host's transport to this server.
+        rejected = host.request(
+            "mcpServer/tool/call",
+            {
+                "server":    "graphtraj",
+                "threadId":  host.thread_id,
+                "tool":      "alias_status",
+                "arguments": {"aliases": ["missing@l1"], "baseline": "abc123"},
+            },
+        )["result"]
+        assert rejected["isError"] is True
+        assert rejected["content"][0]["text"] == (
+            "Git diagnostics require both --baseline and --candidate."
+        )
+
         graph = host.request(
             "mcpServer/tool/call",
             {

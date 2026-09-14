@@ -972,3 +972,32 @@ def test_real_codex_uses_native_permissions_and_explicit_skill_configuration(
         / "SKILL.md"
     ).read_bytes() == project_skill_before
     assert not (harness_root / ".codex" / "hooks" / "worktree_guard.py").exists()
+
+
+def test_role_connection_selects_native_provider_without_persisting_key(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Both CLI and Session requests select the role's endpoint and API-key source."""
+    from graphtraj.configuration.project_roles import RolePreset
+    from graphtraj.configuration.role_definitions import ResolvedChildRole
+    from graphtraj.runtimes.codex.codex_adapter import preflight_runtime_context
+
+    monkeypatch.setenv("ROLE_TEST_API_KEY", "private-test-key")
+    role = ResolvedChildRole("temporary-role", "Run the bounded task.", (), RolePreset(
+        "codex", "deepseek-flash", "https://example.com/v1", "ROLE_TEST_API_KEY",
+        reasoning_effort="high",
+    ))
+    context = preflight_runtime_context(
+        runtime_store=tmp_path / ".codex", executable=_runtime_executable(tmp_path),
+        git_common_directory=tmp_path / "git-common", role=role,
+        worktree=tmp_path, evidence=tmp_path / "evidence",
+        repository_skill_source=tmp_path, requested_skills=(),
+    ).finalize()
+    launch = context.launch_document()
+    config = context.session_document()["adapter_request"]["config"]
+    provider = config["model_providers"][config["model_provider"]]
+    assert provider["base_url"] == "https://example.com/v1"
+    assert provider["env_key"] == "ROLE_TEST_API_KEY"
+    assert provider["wire_api"] == "responses"
+    assert 'model_provider="graphtraj-role"' in launch["adapter_request"]["arguments"]
+    assert "private-test-key" not in str(launch)

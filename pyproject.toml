@@ -15,6 +15,7 @@ dependencies = [
 
 [project.scripts]
 graphtraj = "graphtraj.interfaces.cli.graphtraj:main"
+graphtraj-mcp = "graphtraj.interfaces.mcp:main"
 agent-runner = "graphtraj.interfaces.cli.agent_runner:main"
 
 [tool.setuptools]

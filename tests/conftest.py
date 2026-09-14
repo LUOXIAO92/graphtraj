@@ -479,6 +479,7 @@ def _install_commands(environment: Path) -> InstalledCommands:
         {
         "agent-runner",
         "graphtraj",
+        "graphtraj-mcp",
         }
     )
     assert not (bin_directory / "you-are-a-product-architect").exists()

@@ -667,6 +667,107 @@ Native startup/completion races can return `CodexRPCError`, which retains
 `method`, `request_id` and `native_error`. A newly accepted turn can still be
 initializing; use native activity notifications when timing active control.
 
+## MCP host tools
+
+The installed `graphtraj-mcp` command serves the same Python operations to a
+host Agent over MCP stdio. It is an ordinary console entry point of this wheel
+and speaks newline-delimited JSON-RPC 2.0 (`initialize`, `tools/list`,
+`tools/call`, `ping`) using only the standard library. Python 3.12 or newer plus
+the dependencies already in this distribution are enough; no MCP SDK or other
+dependency is added.
+
+Install it like the other commands:
+
+```text
+uv tool install "git+https://github.com/LUOXIAO92/graphtraj.git@<tag-or-commit>"
+```
+
+Register the server with Codex, either through the CLI:
+
+```text
+codex mcp add graphtraj -- graphtraj-mcp
+```
+
+or directly in the host configuration:
+
+```toml
+[mcp_servers.graphtraj]
+command = "graphtraj-mcp"
+args = []
+cwd = "/absolute/path/to/harness-project-root"
+startup_timeout_sec = 30
+tool_timeout_sec = 30
+```
+
+The server reads the Harness Project Root from its own working directory,
+exactly like the CLI, so set `cwd` to that root or start the host there. Keep
+the host configuration isolated (a separate `CODEX_HOME`) when validating the
+tools against a temporary project.
+
+The available tools are the existing graph and status operations:
+
+| Tool | Structured input | Result |
+| --- | --- | --- |
+| `ticket_graph` | none | Current Tickets, states and dependency readiness; the same document as `graphtraj ticket graph`. |
+| `ticket_register` | One accepted definition: `ticket_id`, `ticket_name`, `source`, `title`, `body`, `dependencies`. | `ticket_directory` of the registered Ticket; the same operation as `graphtraj ticket register`. |
+| `ticket_revise` | One product-preserving revision: `product_preserving`, `caused_by_event_ids`, `evidence_refs`, `tickets`. | Recorded causal event; the same operation as `graphtraj ticket revise`. |
+| `ticket_update` | One evidence-backed state change: `ticket_id`, `status`, `active_team_ordinal`, `worktree`, `branch`, `current_candidate`, `caused_by_event_ids`, `evidence_refs`. | Recorded causal event; the same operation as `graphtraj ticket update`. |
+| `alias_status` | `aliases`, and optionally `operation_total`, `baseline`, `candidate`. | Session status document; the same document as `agent-runner status`. |
+
+Each tool calls the same Python operation as its CLI command, takes structured
+input instead of file paths or terminal text, and returns the shared document as
+`structuredContent`. The text content is the CLI's own YAML rendering of that
+document. A rejected operation returns `isError: true` carrying the message the
+CLI reports for the same input. Dispatch, send, interrupt, replace and continue
+are not exposed; those execution tools belong to the next Ticket. Later tools
+register through `graphtraj.interfaces.mcp.register_tool(name, description,
+input_schema, handler)`.
+
+To watch an isolated host discover and call the tools without a model turn, use
+the Codex app-server MCP client requests:
+
+```python
+import json, os, subprocess
+
+host = subprocess.Popen(
+    ["codex", "app-server", "--listen", "stdio://"], cwd=project_root, text=True,
+    stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+    env={**os.environ, "CODEX_HOME": isolated_codex_home},
+)
+def request(request_id, method, params):
+    host.stdin.write(json.dumps({"jsonrpc": "2.0", "id": request_id, "method": method,
+                                 "params": params}) + "\n")
+    host.stdin.flush()
+    while True:
+        message = json.loads(host.stdout.readline())
+        if message.get("id") == request_id:
+            return message
+
+request(1, "initialize", {"clientInfo": {"name": "probe", "version": "0"}})
+host.stdin.write(json.dumps({"jsonrpc": "2.0", "method": "initialized",
+                             "params": {}}) + "\n")
+thread = request(2, "thread/start", {"cwd": str(project_root)})["result"]["thread"]["id"]
+inventory = request(3, "mcpServerStatus/list",
+                    {"threadId": thread, "detail": "full"})["result"]["data"]
+called = request(4, "mcpServer/tool/call",
+                 {"server": "graphtraj", "threadId": thread,
+                  "tool": "ticket_graph", "arguments": {}})["result"]
+print(inventory[0]["tools"].keys(), called["structuredContent"])
+```
+
+On this checkout the installed entry point and the real host client are
+exercised together with:
+
+```text
+pytest -p no:cacheprovider -q tests/test_mcp_host_tools.py
+CODEX_REAL_MCP_HOST=1 pytest -p no:cacheprovider -q tests/test_mcp_host_tools.py
+```
+
+The first command covers discovery, every tool and CLI equivalence through the
+installed server. The second additionally drives an installed Codex app-server
+with a temporary `CODEX_HOME`, so it needs an installed `codex` executable and
+no model access.
+
 ## Evidence and limits
 
 Each Ticket retains its initial definition, accepted revisions, current state,

@@ -1843,11 +1843,17 @@ def _process_corrections(
                 )
             fields[name] = values[0]
         role = ROLE_REFERENCES.get(fields["Responsible"], fields["Responsible"])
+        if role == "engineer":
+            role = next(
+                (name for name, (member, _, _, _) in sessions.items()
+                 if _task_policy(member, name) in _ENGINEER_ROLES),
+                role,
+            )
         if role not in sessions:
             raise RunnerError(
                 "BATCH_SCHEMA_INVALID",
-                "Correction must resume an existing member without registering "
-                "a new Batch.",
+                f"Correction responsible role {fields['Responsible']!r} is not "
+                "an existing recoverable child role.",
             )
         child, alias, session, child_batch = sessions[role]
         state_alias, state_session, event = _request_state(

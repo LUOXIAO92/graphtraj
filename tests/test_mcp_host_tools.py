@@ -88,10 +88,19 @@ class McpServerProcess:
         )
         self.process.stdin.flush()
 
-    def call(self, name: str, arguments: dict) -> dict:
-        """Call one tool and return its JSON-RPC result or error message."""
+    def call(
+        self, name: str, arguments: dict, thread_id: str | None = None
+    ) -> dict:
+        """Call one tool and return its JSON-RPC result or error message.
 
-        return self.request("tools/call", {"name": name, "arguments": arguments})
+        ``thread_id`` adds the caller identity a real Codex host sends as
+        ``params._meta.threadId`` on its own tool request.
+        """
+
+        params = {"name": name, "arguments": arguments}
+        if thread_id is not None:
+            params["_meta"] = {"threadId": thread_id}
+        return self.request("tools/call", params)
 
     def close(self) -> None:
         self.process.stdin.close()
@@ -1231,3 +1240,435 @@ def test_real_codex_host_dispatches_and_controls_a_managed_child_offline(
     assert cli.returncode == 1, cli.stderr
     assert continued["isError"] is True
     assert continued["content"][0]["text"] == yaml.safe_load(cli.stdout)["error"]["message"]
+
+def _queued_submissions(protocol: Path) -> list[dict]:
+    """Return the Main queue submissions the controlled app-server peer received."""
+
+    if not protocol.is_file():
+        return []
+    messages = [
+        json.loads(line) for line in protocol.read_text(encoding="utf-8").splitlines()
+    ]
+    return [
+        message for message in messages if message.get("method") == "thread/queue/add"
+    ]
+
+
+def _controlled_budget_server(
+    installed_commands: InstalledCommands,
+    fake_codex: FakeCodex,
+    harness: Path,
+    environment: dict[str, str],
+    tmp_path: Path,
+    **control: str,
+) -> tuple[dict[str, str], Path]:
+    """Return a controlled server environment and its Main queue protocol log.
+
+    The budget clock and draw are fixed through a ``sitecustomize`` module the
+    server and its Workers inherit. ``MCP_MAIN_CWD`` makes the controlled
+    ``codex`` on that PATH the Main queue sender only for the server's own
+    working directory; every dispatched Runtime keeps the controlled Runtime
+    executable inside its worktree. ``control`` adds the per-check
+    ``BUDGET_CLOCK``, leader clock and release settings.
+    """
+
+    controls = tmp_path / "mcp-budget-controls"
+    controls.mkdir()
+    (controls / "sitecustomize.py").write_text(
+        "import os\n"
+        "from pathlib import Path\n"
+        "try:\n"
+        "    import graphtraj.execution.execution_budget as budget\n"
+        "except ModuleNotFoundError:\n"
+        "    pass\n"
+        "else:\n"
+        "    budget.time.time = lambda: float(Path(os.environ['BUDGET_CLOCK']).read_text())\n"
+        "    budget.random.uniform = lambda lower, upper: lower\n"
+        "    budget.random.random = lambda: 0.99\n",
+        encoding="utf-8",
+    )
+    bin_directory = tmp_path / "mcp-main-bin"
+    bin_directory.mkdir()
+    peer = Path(__file__).with_name("codex_stdio_peer.py")
+    codex = bin_directory / "codex"
+    codex.write_text(
+        "#!" + sys.executable + "\n"
+        "import os, sys\n"
+        "target = (\n"
+        "    " + repr(str(peer)) + "\n"
+        "    if os.getcwd() == os.environ['MCP_MAIN_CWD']\n"
+        "    else " + repr(str(fake_codex.executable)) + "\n"
+        ")\n"
+        "os.execv(sys.executable, [sys.executable, target, *sys.argv[1:]])\n",
+        encoding="utf-8",
+    )
+    codex.chmod(0o755)
+    protocol = tmp_path / "mcp-main-protocol.jsonl"
+    return {
+        **environment,
+        "FAKE_CODEX_APPEND_LOG":       "1",
+        "FAKE_CODEX_CAPTURE_ROLE":     "1",
+        "FAKE_CODEX_LIFECYCLE_ACTION": "complete-team-round",
+        "GRAPHTRAJ_AGENT_RUNNER":      str(installed_commands.runner),
+        "MCP_MAIN_CWD":                str(harness),
+        "PATH":                        str(bin_directory) + os.pathsep + environment["PATH"],
+        "PEER_PROTOCOL_LOG":           str(protocol),
+        "PYTHONPATH":                  str(controls),
+        **control,
+    }, protocol
+
+
+def test_installed_mcp_server_queues_a_budget_stop_to_the_request_caller(
+    installed_commands: InstalledCommands,
+    mcp_executable: Path,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    """A stop produced by the MCP dispatch reaches the calling Codex thread."""
+
+    from test_execution_budgets import _budget_body
+    from test_session_alias_control import _register_ready_ticket
+
+    harness, _, _, environment = configure_harness(
+        installed_commands, temporary_git_repository, fake_codex, tmp_path,
+    )
+    _register_ready_ticket(installed_commands, harness, body=_budget_body(total=1))
+    clock = tmp_path / "mcp-caller-clock"
+    clock.write_text(str(time.time()), encoding="utf-8")
+    mcp_environment, protocol = _controlled_budget_server(
+        installed_commands,
+        fake_codex,
+        harness,
+        environment,
+        tmp_path,
+        BUDGET_CLOCK=str(clock),
+        FAKE_CODEX_FINAL_LEADER_CLOCK=str(clock),
+        FAKE_CODEX_CAPTURE_STDIN="1",
+    )
+    ticket = harness / ".graphtraj/state/tickets/76-session-alias-control"
+    task = {
+        "ticket_id":   "76",
+        "ticket_name": "session-alias-control",
+        "role":        "coding-team.team-leader",
+    }
+
+    with _started_mcp(mcp_executable, harness, mcp_environment) as server:
+        stopped = server.call(
+            "dispatch", {"tasks": [task]}, thread_id="thread-main"
+        )["result"]
+        assert stopped["isError"] is False, stopped
+        assert stopped["structuredContent"]["tasks"][0]["launch_status"] == "stopped"
+
+        # Accounting and retention keep the existing shapes and thresholds.
+        usage = yaml.safe_load(
+            (ticket / "execution-budget.yml").read_text(encoding="utf-8")
+        )
+        assert usage["stopped"] is True
+        assert len(usage["notifications"]) > 1
+        # Only the enforced stop submits the explicit Skill input; the elapsed
+        # and allowance reminders above stay ordinary caller notices.
+        queued = _queued_submissions(protocol)
+        assert len(queued) == 1, queued
+        assert queued[0]["params"] == {
+            "threadId":            "thread-main",
+            "clientUserMessageId": "71034556-830a-5f40-8ec6-80c65b263a52",
+            "input":               [
+                {
+                    "type": "text",
+                    "text": (
+                        "$retro Analyze the enforced stochastic stop for Ticket 76 "
+                        "using the supplied wrap-up and retained evidence. Identify "
+                        "scheduling corrections before deciding continuation. Reuse "
+                        "existing findings; do not restart work."
+                    ),
+                },
+                {
+                    "type": "skill",
+                    "name": "retro",
+                    "path": str(
+                        (harness / ".agents/skills/retro/SKILL.md").resolve()
+                    ),
+                },
+            ],
+        }
+
+        # A repeated stop keeps the existing dedup, and a request without Codex
+        # caller metadata keeps the generic behaviour without a notice channel.
+        repeated = server.call("dispatch", {"tasks": [task]})["result"]
+        assert repeated["isError"] is False, repeated
+        assert _queued_submissions(protocol) == queued
+
+
+def test_installed_mcp_server_keeps_each_caller_stop_on_its_own_thread(
+    installed_commands: InstalledCommands,
+    mcp_executable: Path,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    """Two request identities served by one server do not cross-deliver."""
+
+    from test_execution_budgets import _budget_body
+    from test_session_alias_control import _register_ready_ticket
+    from test_ticket_graph import _change_status, _register, _ticket
+
+    harness, _, _, environment = configure_harness(
+        installed_commands, temporary_git_repository, fake_codex, tmp_path,
+    )
+    _register_ready_ticket(installed_commands, harness, body=_budget_body(total=1))
+    _register(
+        installed_commands,
+        harness,
+        {**_ticket("77", "mcp-cross-caller"), "body": _budget_body(total=1)},
+    )
+    _change_status(installed_commands, harness, "77", "ready")
+    clock = tmp_path / "mcp-cross-clock"
+    clock.write_text(str(time.time()), encoding="utf-8")
+    mcp_environment, protocol = _controlled_budget_server(
+        installed_commands,
+        fake_codex,
+        harness,
+        environment,
+        tmp_path,
+        BUDGET_CLOCK=str(clock),
+        FAKE_CODEX_FINAL_LEADER_CLOCK=str(clock),
+    )
+    tasks = {
+        "76": {
+            "ticket_id":   "76",
+            "ticket_name": "session-alias-control",
+            "role":        "coding-team.team-leader",
+        },
+        "77": {
+            "ticket_id":   "77",
+            "ticket_name": "mcp-cross-caller",
+            "role":        "coding-team.team-leader",
+        },
+    }
+
+    with _started_mcp(mcp_executable, harness, mcp_environment) as server:
+        for ticket_id, thread_id in (("76", "thread-one"), ("77", "thread-two")):
+            stopped = server.call(
+                "dispatch", {"tasks": [tasks[ticket_id]]}, thread_id=thread_id
+            )["result"]
+            assert stopped["isError"] is False, stopped
+            assert stopped["structuredContent"]["tasks"][0]["launch_status"] == "stopped"
+
+        queued = _queued_submissions(protocol)
+        assert [message["params"]["threadId"] for message in queued] == [
+            "thread-one", "thread-two",
+        ]
+        assert "Ticket 76" in queued[0]["params"]["input"][0]["text"]
+        assert "Ticket 77" in queued[1]["params"]["input"][0]["text"]
+
+
+def test_installed_mcp_server_queues_a_late_stop_after_the_tool_call_returns(
+    installed_commands: InstalledCommands,
+    mcp_executable: Path,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    """A resumed Worker that still owns the caller writer reaches that Main."""
+
+    from test_execution_budgets import _budget_body
+    from test_session_alias_control import _register_ready_ticket
+
+    harness, _, _, environment = configure_harness(
+        installed_commands, temporary_git_repository, fake_codex, tmp_path,
+    )
+    _register_ready_ticket(installed_commands, harness, body=_budget_body(total=0.01))
+    started = time.time()
+    clock = tmp_path / "mcp-late-clock"
+    clock.write_text(str(started), encoding="utf-8")
+    # The controlled Runtime holds the resumed Session open only after the
+    # dispatch, exactly like the CLI late-notice check.
+    release = tmp_path / "mcp-late-release"
+    release.touch()
+    mcp_environment, protocol = _controlled_budget_server(
+        installed_commands,
+        fake_codex,
+        harness,
+        environment,
+        tmp_path,
+        BUDGET_CLOCK=str(clock),
+        FAKE_CODEX_CAPTURE_STDIN="1",
+        FAKE_CODEX_RELEASE_FILE=str(release),
+    )
+    ticket = harness / ".graphtraj/state/tickets/76-session-alias-control"
+    task = {
+        "ticket_id":   "76",
+        "ticket_name": "session-alias-control",
+        "role":        "coding-team.team-leader",
+    }
+
+    with _started_mcp(mcp_executable, harness, mcp_environment) as server:
+        launched = server.call(
+            "dispatch", {"tasks": [task]}, thread_id="thread-main"
+        )["result"]
+        assert launched["isError"] is False, launched
+        alias = launched["structuredContent"]["tasks"][0]["alias"]
+        assert _queued_submissions(protocol) == []
+        cause = [
+            json.loads(line)["event_id"]
+            for path in (harness / ".graphtraj/state/worldline").glob("*.jsonl")
+            for line in path.read_text(encoding="utf-8").splitlines()
+        ][-1]
+
+        release.unlink()
+        try:
+            sent = server.call(
+                "send_instruction",
+                {
+                    "alias":               alias,
+                    "instruction":         "Inspect the retained result.",
+                    "caused_by_event_ids": [cause],
+                },
+                thread_id="thread-main",
+            )["result"]
+            assert sent["isError"] is False, sent
+            assert sent["structuredContent"] == {
+                "alias": alias, "send_status": "sent",
+            }
+            # The acknowledged call returned before the timer fired, so the
+            # stop arrives through the existing late-consumer ownership.
+            assert _queued_submissions(protocol) == []
+            clock.write_text(str(started + 260), encoding="utf-8")
+            deadline = time.monotonic() + 20
+            queued: list[dict] = []
+            while time.monotonic() < deadline:
+                queued = _queued_submissions(protocol)
+                if queued:
+                    break
+                time.sleep(0.02)
+        finally:
+            release.touch()
+
+        assert len(queued) == 1, queued
+        assert queued[0]["params"]["threadId"] == "thread-main"
+        assert queued[0]["params"]["clientUserMessageId"] == (
+            "71034556-830a-5f40-8ec6-80c65b263a52"
+        )
+
+    usage = yaml.safe_load((ticket / "execution-budget.yml").read_text(encoding="utf-8"))
+    assert usage["stopped"] is True
+
+
+def test_installed_mcp_server_keeps_the_continue_path_on_the_request_caller(
+    installed_commands: InstalledCommands,
+    mcp_executable: Path,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    """The D.3 continuation runs on the caller binding it started over."""
+
+    from test_execution_budgets import _budget_body
+    from test_session_alias_control import _register_ready_ticket
+    from test_ticket_graph import _ticket
+
+    harness, _, _, environment = configure_harness(
+        installed_commands, temporary_git_repository, fake_codex, tmp_path,
+    )
+    _register_ready_ticket(installed_commands, harness, body=_budget_body(total=1))
+    clock = tmp_path / "mcp-continue-clock"
+    clock.write_text(str(time.time()), encoding="utf-8")
+    mcp_environment, protocol = _controlled_budget_server(
+        installed_commands,
+        fake_codex,
+        harness,
+        environment,
+        tmp_path,
+        BUDGET_CLOCK=str(clock),
+        FAKE_CODEX_CAPTURE_STDIN="1",
+        FAKE_CODEX_FINAL_LEADER_CLOCK=str(clock),
+    )
+    ticket = harness / ".graphtraj/state/tickets/76-session-alias-control"
+    task = {
+        "ticket_id":   "76",
+        "ticket_name": "session-alias-control",
+        "role":        "coding-team.team-leader",
+    }
+
+    with _started_mcp(mcp_executable, harness, mcp_environment) as server:
+        stopped = server.call(
+            "dispatch", {"tasks": [task]}, thread_id="thread-main"
+        )["result"]
+        assert stopped["isError"] is False, stopped
+        assert stopped["structuredContent"]["tasks"][0]["launch_status"] == "stopped"
+        queued = _queued_submissions(protocol)
+        assert len(queued) == 1, queued
+
+        # Main records the continuation decision and revises the retained budget,
+        # exactly as the accepted D.3 flow requires.
+        diagnosis = harness / "stopped-team-diagnosis.md"
+        diagnosis.write_text(
+            "Main diagnosed the sampled stop and chose continuation.\n",
+            encoding="utf-8",
+        )
+        stop_event = [
+            json.loads(line)["event_id"]
+            for path in (harness / ".graphtraj/state/worldline").glob("*.jsonl")
+            for line in path.read_text(encoding="utf-8").splitlines()
+        ][-1]
+        decision_file = _write(
+            harness / "continuation-decision.yml",
+            {
+                "kind":                "ticket-continuation-decided",
+                "caused_by_event_ids": [stop_event],
+                "evidence_refs":       ["stopped-team-diagnosis.md"],
+                "decision":            "continue",
+            },
+        )
+        decision = _cli(
+            installed_commands, harness, "worldline", "append",
+            "--event-file", str(decision_file),
+        )
+        assert decision.returncode == 0, decision.stderr
+        decision_id = yaml.safe_load(decision.stdout)["event_id"]
+        revision = _write(
+            harness / "continuation-budget-revision.yml",
+            {
+                "product_preserving":  True,
+                "caused_by_event_ids": [decision_id],
+                "evidence_refs":       ["stopped-team-diagnosis.md"],
+                "tickets":             [
+                    {
+                        **_ticket("76", "session-alias-control"),
+                        "body":        _budget_body(
+                            total=10,
+                            revision_reason="Main accepted the retained stop diagnosis.",
+                        ),
+                        "active":      True,
+                        "replaced_by": [],
+                    }
+                ],
+            },
+        )
+        revised = _cli(
+            installed_commands, harness, "ticket", "revise",
+            "--revision-file", str(revision),
+        )
+        assert revised.returncode == 0, revised.stderr
+
+        continued = server.call(
+            "continue",
+            {"ticket_id": "76", "caused_by_event_ids": [decision_id]},
+            thread_id="thread-main",
+        )["result"]
+        assert continued["isError"] is False, continued
+        continuation = continued["structuredContent"]
+        assert continuation["continuation_event_id"]
+        # A continuation that did not stop again submits nothing new, even
+        # though the same binding served it.
+        assert continuation["launch_status"] == "accepted"
+        assert continuation["continuation_event_id"]
+        # The continuation is served by the same request-scoped caller binding
+        # and submits no new stop: only the enforced stop above queues input.
+        assert _queued_submissions(protocol) == queued
+
+    after = yaml.safe_load((ticket / "ticket.yml").read_text(encoding="utf-8"))
+    assert after["status"] == "awaiting-integration"
+    usage = yaml.safe_load((ticket / "execution-budget.yml").read_text(encoding="utf-8"))
+    assert usage["stopped"] is False

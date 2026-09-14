@@ -10,6 +10,11 @@ actual host: queue acceptance alone does not prove Main ran the Skill.
 After `initialize` with `experimentalApi: true` and `initialized`, submit
 `thread/queue/add` with resolved caller identity, stop identity and Skill path:
 
+When the installed `graphtraj-mcp` entry serves the operation, the caller
+identity is the Codex thread on the request itself (`params._meta.threadId`); a
+request without it keeps the generic MCP behaviour and selects no caller
+channel.
+
 ```json
 {
   "threadId": "<caller-thread-id>",

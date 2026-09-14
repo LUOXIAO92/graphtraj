@@ -14,10 +14,12 @@ Harness Project Root from its own working directory, exactly like the CLI.
 from __future__ import annotations
 
 import json
+import os
 import sys
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Mapping, TextIO
+from typing import Any, Callable, Iterator, Mapping, TextIO
 
 import yaml
 
@@ -25,6 +27,7 @@ from graphtraj.configuration.project_configuration import (
     ProjectConfigurationError,
     load_project_configuration,
 )
+from graphtraj.execution.execution_budget import budget_notice_output, caller_notice_fd
 from graphtraj.execution.runner_batch import parse_batch
 from graphtraj.execution.runner_control import (
     interrupt_session,
@@ -41,6 +44,8 @@ from graphtraj.graph.ticket_graph import (
     revise_tickets,
     update_ticket_state,
 )
+from graphtraj.runtimes.codex.app_server import CodexMainRecovery
+from graphtraj.runtimes.codex.codex_adapter import CodexAdapterError
 
 
 JSONRPC_VERSION = "2.0"
@@ -488,6 +493,37 @@ def _initialize_result(params: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+@contextmanager
+def _caller_notices(params: Mapping[str, Any]) -> Iterator[None]:
+    """Route live budget notices to the Codex Main that made this request.
+
+    A worker's inherited channel wins. Otherwise the request's own Codex
+    thread identity selects its Main through the existing recovery binding, so
+    a stop produced by this operation reaches the conversation that called it.
+    A request carrying no Codex caller context keeps the generic behaviour of
+    no notice channel.
+    """
+
+    descriptor, owned = caller_notice_fd()
+    if descriptor is None:
+        recovery = CodexMainRecovery.from_request(
+            Path.cwd().resolve(), params.get("_meta")
+        )
+        if recovery is not None:
+            with recovery:
+                with budget_notice_output(recovery.notice_fd):
+                    yield
+            return
+        yield
+        return
+    try:
+        with budget_notice_output(descriptor):
+            yield
+    finally:
+        if owned:
+            os.close(descriptor)
+
+
 def _tool_call_response(
     request_id: Any, params: Mapping[str, Any]
 ) -> dict[str, Any]:
@@ -505,7 +541,8 @@ def _tool_call_response(
             request_id, INVALID_PARAMS, "Tool arguments must be an object."
         )
     try:
-        result = tool.handler(arguments)
+        with _caller_notices(params):
+            result = tool.handler(arguments)
     except (
         OSError,
         UnicodeError,
@@ -513,6 +550,7 @@ def _tool_call_response(
         yaml.YAMLError,
         ProjectConfigurationError,
         RunnerError,
+        CodexAdapterError,
     ) as error:
         # A rejected operation is a tool failure, not a protocol failure, so the
         # host receives the same message the CLI reports for the same input and

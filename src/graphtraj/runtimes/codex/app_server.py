@@ -867,6 +867,26 @@ class CodexMainRecovery:
             cwd=cwd,
         )
 
+    @classmethod
+    def from_request(
+        cls, cwd: Path, metadata: object
+    ) -> "CodexMainRecovery | None":
+        """Return the caller binding for one request's own Codex metadata.
+
+        The caller sends the identity of the Codex thread that made the request,
+        so a host-serving process selects the right Main without guessing from
+        its own environment. A request without that metadata, or a Harness
+        Project Root without the installed ``retro`` Skill, keeps the generic
+        behaviour of no notice channel instead of failing its operation.
+        """
+        thread_id = (
+            metadata.get("threadId") if isinstance(metadata, Mapping) else None
+        )
+        skill_path = cwd / ".agents/skills/retro/SKILL.md"
+        if not isinstance(thread_id, str) or not thread_id or not skill_path.is_file():
+            return None
+        return cls(thread_id, skill_path, cwd=cwd)
+
     def __enter__(self) -> "CodexMainRecovery":
         """Start the narrow notice reader before the wrapped Runner operation."""
         with self._lock:

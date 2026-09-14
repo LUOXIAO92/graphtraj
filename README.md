@@ -737,6 +737,20 @@ CLI reports for the same input. Later tools register through
 `graphtraj.interfaces.mcp.register_tool(name, description, input_schema,
 handler)`.
 
+A Codex host sends its calling thread on every tool request. When the server
+receives `params._meta.threadId`, it routes live budget notices to that Main
+through the same recovery binding the CLI uses: an enforced stop queues `$retro`
+plus the native `retro` Skill input for that thread with the existing
+`CodexMainRecovery`, retention and deduplication, and it still arrives after the
+tool call has returned because the resumed execution keeps the caller channel
+open. Ordinary elapsed and allowance reminders stay ordinary notices. Without
+that request metadata, or without the installed Skill at
+`.agents/skills/retro/SKILL.md` in the server's working directory, the tools keep
+their generic behaviour and run without a caller notice channel; such a stop is
+only retained in the Ticket's `execution-budget.yml` and reported to the Team
+Leader. Nothing here writes Main developer instructions or user Runtime
+configuration, and queue acceptance does not prove the host consumed the input.
+
 A host can run the whole loop from tools alone: `dispatch` a Batch, read
 identity, activity and outcome with `alias_status`, steer the owned execution
 with `send_instruction`, answer a waiting native request with `pending_requests`

@@ -197,6 +197,14 @@ def _roles_from_document(document: Any) -> ProjectRoles:
         if not isinstance(coding, dict):
             diagnostics.append("roles.coding-team must be a mapping.")
         else:
+            coding = dict(coding)
+            if "engineer" in coding:
+                engineer = coding.pop("engineer")
+                for name in ("engineer-junior", "engineer-senior", "engineer-expert"):
+                    if name in coding:
+                        diagnostics.append("Use engineer or tiered Engineer presets, not both.")
+                    else:
+                        coding[name] = engineer
             for name, value in coding.items():
                 if name not in ROLE_NAMES or name == "delivery-state":
                     diagnostics.append("roles.coding-team.{0} is not a supported preset.".format(name))

@@ -122,7 +122,7 @@ elif role == 'team-leader':
         if not corrected.exists():
             corrected.write_text('corrected\n')
             (round_dir / 'leader.md').write_text(
-                'Decision: CORRECT\nResponsible: coding-team.engineer-junior\n'
+                'Decision: CORRECT\nResponsible: ' + os.environ.get('CORRECTION_ENGINEER_ROLE', 'coding-team.engineer-junior') + '\n' +
                 'Rule: accepted Ticket\nReason: correct the current Engineer work.\n'
                 'Candidate commit: ' + git('rev-parse', 'HEAD') + '\n'
             )
@@ -1252,3 +1252,14 @@ def test_missing_correction_report_returns_to_its_reviewer_without_replaying_wor
     prompt = (harness / state['worktree'] / '.scratch/recovery-prompt-spec-reviewer').read_text()
     assert 'Failure:' in prompt and 'AGENT_EVIDENCE_INVALID' in prompt
     assert 'Evidence:' in prompt and 'Expected result:' in prompt
+
+
+def test_logical_engineer_correction_resumes_the_selected_tier(
+    installed_commands, temporary_git_repository, fake_codex, tmp_path, monkeypatch,
+):
+    """A logical Engineer correction reuses its registered preset and Session."""
+    monkeypatch.setenv("CORRECTION_ENGINEER_ROLE", "engineer")
+    test_provider_failure_returns_to_the_caller_for_an_explicit_same_session_retry(
+        installed_commands, temporary_git_repository, fake_codex, tmp_path,
+        "provider-before-review-correct", 1,
+    )

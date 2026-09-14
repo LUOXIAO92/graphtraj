@@ -885,6 +885,14 @@ def _resolve_codex_role(role: ResolvedChildRole) -> _CodexRole:
 
     document = _packaged_role(role.name)
     _validate_role_schema(document)
+    if role.settings.base_url is not None:
+        document["model_provider"] = "graphtraj-role"
+        document["model_providers"] = {"graphtraj-role": {
+            "name": "GraphTraj role",
+            "base_url": role.settings.base_url,
+            "env_key": role.settings.api_key_env or "OPENAI_API_KEY",
+            "wire_api": "responses",
+        }}
     reasoning_effort = (
         document["model_reasoning_effort"]
         if role.settings.reasoning_effort is None

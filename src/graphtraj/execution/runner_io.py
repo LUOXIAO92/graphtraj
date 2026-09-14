@@ -22,7 +22,7 @@ def write_yaml_durably(path: Path, document: Any) -> None:
     temporary = Path(temporary_name)
     try:
         with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
-            yaml.safe_dump(document, stream, sort_keys=False)
+            yaml.safe_dump(document, stream, sort_keys=False, allow_unicode=True)
             stream.flush()
             os.fsync(stream.fileno())
         os.replace(str(temporary), str(path))

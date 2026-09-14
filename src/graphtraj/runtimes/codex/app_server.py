@@ -847,6 +847,8 @@ class CodexMainRecovery:
         self._reader: threading.Thread | None = None
         self._closing = threading.Event()
         self._lock = threading.Lock()
+        self._pending = b""
+        self._producer_open = False
         self._stops: set[str] = set()
         self._queue_submissions: list[str] = []
         self._error: CodexAdapterError | None = None
@@ -874,6 +876,7 @@ class CodexMainRecovery:
                     "The Codex Main recovery binding cannot be opened twice.",
                 )
             self._read_fd, self._notice_fd = os.pipe()
+            self._producer_open = True
             self._opened = True
             self._reader = threading.Thread(
                 target=self._read_notices,
@@ -918,15 +921,115 @@ class CodexMainRecovery:
             reader = self._reader
         if reader is not None:
             reader.join()
+        self._release_notice_reader()
         with self._lock:
             self._closed = True
             error = self._error
         if error is not None:
             raise error
 
+    def _release_notice_reader(self) -> None:
+        """Own consumption until the resumed producer can no longer emit.
+
+        A resumed Worker keeps its inherited writer after this caller returns,
+        so a producer that is still open when this caller closes is handed to a
+        detached continuation. That continuation ends when every writer closes,
+        which is the only point where the producer can no longer send a stop.
+        """
+        with self._lock:
+            read_fd, self._read_fd = self._read_fd, None
+            producer_open = self._producer_open
+            pending = self._pending
+        if read_fd is None:
+            return
+        if not producer_open or not self._detach_consumer(read_fd, pending):
+            os.close(read_fd)
+
+    def _detach_consumer(self, read_fd: int, pending: bytes) -> bool:
+        """Continue delivery in a detached process; return False when it cannot start.
+
+        Only a single-threaded caller detaches: forking a multi-threaded
+        interpreter is unsafe, so that caller keeps the existing release
+        behavior. The resumed Worker's caller satisfies this condition.
+        """
+        if threading.active_count() != 1:
+            return False
+        try:
+            child = os.fork()
+        except OSError:
+            return False
+        if child:
+            return True
+        self._read_fd = read_fd
+        self._pending = pending
+        self._closing.clear()
+        self._own_consumer_resources(read_fd)
+        known = self._error
+        try:
+            self._read_notices()
+            error = self._error
+        except BaseException as failure:  # Detach cleanly instead of returning.
+            error = CodexAdapterError(
+                "RUNTIME_REQUEST_FAILED",
+                "The Codex Main notice channel failed: {0}".format(failure),
+                terminal_confirmed=False,
+            )
+        os.close(read_fd)
+        if error is not None and error is not known:
+            self._report_late_error(error)
+        os._exit(0)
+
+    def _own_consumer_resources(self, read_fd: int) -> None:
+        """Keep only the caller pipe and private diagnostics in a detached consumer.
+
+        The exited caller's descriptors must be released so its own pipes close,
+        and no inherited writer copy may stay open: consuming until every writer
+        closes is what bounds this continuation to the producer's lifetime.
+        """
+        try:
+            os.setsid()
+        except OSError:
+            pass
+        devnull = os.open(os.devnull, os.O_RDWR)
+        for descriptor in (0, 1, 2):
+            os.dup2(devnull, descriptor)
+        if devnull > 2:
+            os.close(devnull)
+        diagnostics = self._open_consumer_diagnostics()
+        if diagnostics is not None:
+            os.dup2(diagnostics, 2)
+            os.close(diagnostics)
+        # Notice descriptors stay below the select() limit used to read them.
+        os.closerange(3, read_fd)
+        os.closerange(read_fd + 1, 1024)
+
+    def _open_consumer_diagnostics(self) -> int | None:
+        """Open the Runner's recovery log, when that directory is available."""
+        try:
+            directory = self._cwd / ".graphtraj" / "runner"
+            directory.mkdir(parents=True, exist_ok=True)
+            return os.open(
+                str(directory / "codex-main-recovery.log"),
+                os.O_WRONLY | os.O_CREAT | os.O_APPEND,
+                0o644,
+            )
+        except OSError:
+            return None
+
+    @staticmethod
+    def _report_late_error(error: CodexAdapterError) -> None:
+        """Keep a delivery failure visible after its caller has already exited."""
+        try:
+            os.write(
+                2,
+                ("graphtraj: Codex Main recovery: " + error.message + "\n").encode(),
+            )
+        except OSError:
+            pass
+
     def _read_notices(self) -> None:
-        """Read JSONL until closing drains the existing caller pipe."""
-        pending = b""
+        """Read JSONL until this caller closes or every producing writer does."""
+        pending = self._pending
         try:
             while self._read_fd is not None:
                 ready, _, _ = select.select([self._read_fd], [], [], 0.05)
@@ -936,6 +1039,8 @@ class CodexMainRecovery:
                     continue
                 chunk = os.read(self._read_fd, 8192)
                 if not chunk:
+                    with self._lock:
+                        self._producer_open = False
                     return
                 pending += chunk
                 while b"\n" in pending:
@@ -951,9 +1056,7 @@ class CodexMainRecovery:
             )
         finally:
             with self._lock:
-                if self._read_fd is not None:
-                    os.close(self._read_fd)
-                    self._read_fd = None
+                self._pending = pending
 
     def _deliver_notice(self, line: bytes) -> None:
         """Queue one stochastic stop while retaining ordinary caller notices as inert."""

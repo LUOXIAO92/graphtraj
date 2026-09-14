@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import select
 import subprocess
 import sys
 import time
@@ -1347,6 +1349,174 @@ def test_installed_send_delivers_elapsed_notices_to_the_resumed_leader(
         assert "additional allowance of 00:00:06" in leader_inputs[-1]
         assert "Inspect the retained result." in leader_inputs[-1]
         assert "read-only Worktree access" not in leader_inputs[-1]
+    finally:
+        release.touch()
+
+
+def _read_pipe_to_eof(descriptor: int, timeout: float) -> tuple[bytes, bool]:
+    """Read one caller pipe until it closes, reporting whether it closed."""
+
+    deadline = time.monotonic() + timeout
+    data = b""
+    while True:
+        remaining = max(0.0, deadline - time.monotonic())
+        ready, _, _ = select.select([descriptor], [], [], remaining)
+        if not ready:
+            return data, False
+        chunk = os.read(descriptor, 8192)
+        if not chunk:
+            return data, True
+        data += chunk
+
+
+def test_installed_send_queues_a_late_stop_after_the_caller_returns(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    """A Worker that still owns the caller writer reaches the native queue."""
+
+    harness, _, _, environment = configure_harness(
+        installed_commands, temporary_git_repository, fake_codex, tmp_path
+    )
+    _register_ready_ticket(installed_commands, harness, body=_budget_body(total=1))
+    clock = tmp_path / "late-stop-clock"
+    clock.write_text(str(time.time()), encoding="utf-8")
+    started = float(clock.read_text(encoding="utf-8"))
+    controls = tmp_path / "late-stop-controls"
+    controls.mkdir()
+    (controls / "sitecustomize.py").write_text(
+        "import os\n"
+        "from pathlib import Path\n"
+        "try:\n"
+        "    import graphtraj.execution.execution_budget as budget\n"
+        "except ModuleNotFoundError:\n"
+        "    pass\n"
+        "else:\n"
+        "    budget.time.time = lambda: float(Path(os.environ['BUDGET_CLOCK']).read_text())\n"
+        "    budget.random.uniform = lambda lower, upper: lower\n"
+        "    budget.random.random = lambda: 0.99\n",
+        encoding="utf-8",
+    )
+    # Only the Codex Main queue sender is replaced; the resumed Worker keeps its
+    # own recorded Runtime executable.
+    main_bin = tmp_path / "late-stop-main-bin"
+    main_bin.mkdir()
+    queue_sender = main_bin / "codex"
+    queue_sender.write_text(
+        "#!" + sys.executable + "\n"
+        + Path(__file__).with_name("codex_stdio_peer.py").read_text()
+    )
+    queue_sender.chmod(0o755)
+    protocol = tmp_path / "late-stop-main-protocol.jsonl"
+    batch = harness / "late-stop-batch.yml"
+    batch.write_text(
+        "tasks:\n"
+        "  - ticket_id: \"76\"\n"
+        "    ticket_name: session-alias-control\n"
+        "    role: coding-team.team-leader\n",
+        encoding="utf-8",
+    )
+    run_environment = {
+        **environment,
+        "BUDGET_CLOCK": str(clock),
+        "FAKE_CODEX_APPEND_LOG": "1",
+        "FAKE_CODEX_CAPTURE_STDIN": "1",
+        "FAKE_CODEX_CAPTURE_ROLE": "1",
+        "FAKE_CODEX_LIFECYCLE_ACTION": "complete-team-round",
+        "GRAPHTRAJ_AGENT_RUNNER": str(installed_commands.runner),
+        "PYTHONPATH": str(controls),
+    }
+    completed = run_process(
+        [str(installed_commands.runner), "--batch-input", str(batch)],
+        cwd=harness,
+        env=run_environment,
+        timeout=30,
+    )
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    alias = yaml.safe_load(completed.stdout)["tasks"][0]["alias"]
+    cause = [
+        json.loads(line)["event_id"]
+        for path in (harness / ".graphtraj/state/worldline").glob("*.jsonl")
+        for line in path.read_text(encoding="utf-8").splitlines()
+    ][-1]
+    release = tmp_path / "release-late-stop"
+    send_environment = {
+        **run_environment,
+        "CODEX_THREAD_ID": "thread-main",
+        "FAKE_CODEX_RELEASE_FILE": str(release),
+        "PATH": str(main_bin) + os.pathsep + environment["PATH"],
+        "PEER_PROTOCOL_LOG": str(protocol),
+    }
+    send_environment.pop("FAKE_CODEX_LIFECYCLE_ACTION", None)
+    stderr = tmp_path / "late-stop.stderr"
+    with stderr.open("w+", encoding="utf-8") as err:
+        sent = subprocess.Popen(
+            [
+                str(installed_commands.runner),
+                "send",
+                alias,
+                "--instruction",
+                "Inspect the retained result.",
+                "--caused-by-event-id",
+                cause,
+            ],
+            cwd=harness,
+            env=send_environment,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=err,
+        )
+        assert sent.wait(timeout=10) == 0
+        assert sent.stdout is not None
+        # The acknowledged caller neither waits for the Worker nor keeps its
+        # own stdout, even though the continuation is alive with that Worker.
+        document, closed = _read_pipe_to_eof(sent.stdout.fileno(), 5)
+        assert closed, "the caller's stdout stayed open after send returned"
+        assert yaml.safe_load(document) == {
+            "alias": alias,
+            "send_status": "sent",
+        }
+    usage_file = (
+        harness
+        / ".graphtraj/state/tickets/76-session-alias-control/execution-budget.yml"
+    )
+    clock.write_text(str(started + 260), encoding="utf-8")
+    try:
+        deadline = time.monotonic() + 20
+        queued: list[dict] = []
+        while time.monotonic() < deadline:
+            queued = [
+                json.loads(line)
+                for line in protocol.read_text(encoding="utf-8").splitlines()
+                if json.loads(line).get("method") == "thread/queue/add"
+            ] if protocol.is_file() else []
+            if queued:
+                break
+            time.sleep(0.02)
+        assert yaml.safe_load(usage_file.read_text(encoding="utf-8"))["stopped"] is True
+        assert len(queued) == 1
+        assert queued[0]["params"] == {
+            "threadId": "thread-main",
+            "clientUserMessageId": "71034556-830a-5f40-8ec6-80c65b263a52",
+            "input": [
+                {
+                    "type": "text",
+                    "text": (
+                        "$retro Analyze the enforced stochastic stop for Ticket 76 "
+                        "using the supplied wrap-up and retained evidence. Identify "
+                        "scheduling corrections before deciding continuation. Reuse "
+                        "existing findings; do not restart work."
+                    ),
+                },
+                {
+                    "type": "skill",
+                    "name": "retro",
+                    "path": str((harness / ".agents/skills/retro/SKILL.md").resolve()),
+                },
+            ],
+        }
     finally:
         release.touch()
 

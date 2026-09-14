@@ -155,11 +155,25 @@ actual absolute `retro/SKILL.md` path. The short-lived sender never resumes or
 drives Main; its owning Codex client consumes the queued input after any active
 turn. It never continues the Ticket or clears budget accounting automatically.
 
+Consumption is owned for as long as the resumed Worker can still emit. An
+`agent-runner send` returns after the Worker starts, and that Worker keeps the
+caller writer, so the binding hands a still-open channel to a detached
+continuation instead of closing it with the command. The continuation reads
+until every writer closes, so a stop that is written after `send` returned is
+still queued once, with the same stop identity and duplicate suppression. The
+exited caller's descriptors are released, so `send` neither waits for the
+Worker nor holds the caller's stdout/stderr open. A single-threaded caller
+detaches as described; a Python caller that is already multi-threaded keeps the
+previous release behavior rather than forking that interpreter.
+
+Because a detached continuation has no caller left, its delivery failures and
+native sender diagnostics are appended to
+`<harness root>/.graphtraj/runner/codex-main-recovery.log` instead of raising.
 Queue acceptance is distinct from Main consumption and Skill completion. Queue
-or connection errors are raised by the recovery binding (and remain chained to
-a wrapped Runner error); confirm host consumption with the actual host evidence.
-Without `CODEX_THREAD_ID`, Runner retains its ordinary inherited-channel or
-stderr behavior.
+or connection errors inside the caller's lifetime are still raised by the
+recovery binding (and remain chained to a wrapped Runner error); confirm host
+consumption with the actual host evidence. Without `CODEX_THREAD_ID`, Runner
+retains its ordinary inherited-channel or stderr behavior.
 
 ```python
 from pathlib import Path

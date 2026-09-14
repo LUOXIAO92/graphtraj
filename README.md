@@ -704,7 +704,16 @@ exactly like the CLI, so set `cwd` to that root or start the host there. Keep
 the host configuration isolated (a separate `CODEX_HOME`) when validating the
 tools against a temporary project.
 
-The available tools are the existing graph and status operations:
+A host passes an MCP server a filtered environment. When the dispatched Runtime
+needs a setting that the server does not inherit, declare it on the server
+itself, for example:
+
+```toml
+[mcp_servers.graphtraj.env]
+CODEX_HOME = "/absolute/path/to/codex-home"
+```
+
+The tools are the existing graph, execution, control and interaction operations:
 
 | Tool | Structured input | Result |
 | --- | --- | --- |
@@ -713,15 +722,31 @@ The available tools are the existing graph and status operations:
 | `ticket_revise` | One product-preserving revision: `product_preserving`, `caused_by_event_ids`, `evidence_refs`, `tickets`. | Recorded causal event; the same operation as `graphtraj ticket revise`. |
 | `ticket_update` | One evidence-backed state change: `ticket_id`, `status`, `active_team_ordinal`, `worktree`, `branch`, `current_candidate`, `caused_by_event_ids`, `evidence_refs`. | Recorded causal event; the same operation as `graphtraj ticket update`. |
 | `alias_status` | `aliases`, and optionally `operation_total`, `baseline`, `candidate`. | Session status document; the same document as `agent-runner status`. |
+| `dispatch` | One structured Batch document: `tasks` with `ticket_id`, `ticket_name`, `role` (a preset reference or one inline role), and optionally `instruction` and `skills`. | Each dispatched execution's `launch_status`, `alias` and `session`; the same document as `agent-runner --batch-input`. The call returns while those executions stay owned. |
+| `send_instruction` | `alias`, `instruction`, `caused_by_event_ids`. | `send_status`; the same operation as `agent-runner send`. |
+| `interrupt` | `alias`. | `interrupt_status`; the same operation as `agent-runner interrupt`. |
+| `continue` | `ticket_id`, `caused_by_event_ids`. | The continued Team's result and `continuation_event_id`; the same D.3 stop/continue operation as `agent-runner continue`. |
+| `pending_requests` | `alias`, and optionally `execution_id`. | The pending native approval or user-input requests, with the identity `reply_to_request` needs; the same document as `agent-runner requests`. |
+| `reply_to_request` | `alias`, the `request` document returned by `pending_requests`, and an explicit `response` object. | `request_id` and `reply_status`; the same operation as `agent-runner reply`. |
 
 Each tool calls the same Python operation as its CLI command, takes structured
 input instead of file paths or terminal text, and returns the shared document as
 `structuredContent`. The text content is the CLI's own YAML rendering of that
 document. A rejected operation returns `isError: true` carrying the message the
-CLI reports for the same input. Dispatch, send, interrupt, replace and continue
-are not exposed; those execution tools belong to the next Ticket. Later tools
-register through `graphtraj.interfaces.mcp.register_tool(name, description,
-input_schema, handler)`.
+CLI reports for the same input. Later tools register through
+`graphtraj.interfaces.mcp.register_tool(name, description, input_schema,
+handler)`.
+
+A host can run the whole loop from tools alone: `dispatch` a Batch, read
+identity, activity and outcome with `alias_status`, steer the owned execution
+with `send_instruction`, answer a waiting native request with `pending_requests`
+plus `reply_to_request`, interrupt one execution with `interrupt`, and continue a
+stopped Team with `continue`. Every call runs the same Python operation as its
+CLI command against the same Harness Project, so a user can start work from the
+terminal and control it from the host, or the other way round; no CLI text is
+parsed and no second state store exists. `continue` is the existing stop/continue
+path: it resumes the retained Team Batch, keeps the already consumed budget and
+records one continuation event. Replace, retire and cleanup are not exposed.
 
 To watch an isolated host discover and call the tools without a model turn, use
 the Codex app-server MCP client requests:
@@ -764,9 +789,13 @@ CODEX_REAL_MCP_HOST=1 pytest -p no:cacheprovider -q tests/test_mcp_host_tools.py
 ```
 
 The first command covers discovery, every tool and CLI equivalence through the
-installed server. The second additionally drives an installed Codex app-server
-with a temporary `CODEX_HOME`, so it needs an installed `codex` executable and
-no model access.
+installed server, including a dispatched child whose Runtime work is substituted
+by a controlled peer and a stopped-Team continuation. The second additionally
+drives an installed Codex app-server with a temporary `CODEX_HOME` and an
+isolated MCP server configuration: it discovers the tools, dispatches one
+managed child, and then queries, steers, answers, interrupts and continues that
+child through host tool calls. It needs an installed `codex` executable and no
+model access; its exchange is retained under `/tmp/mcp118-host/probe.log`.
 
 ## Evidence and limits
 

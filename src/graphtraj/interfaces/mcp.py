@@ -25,6 +25,14 @@ from graphtraj.configuration.project_configuration import (
     ProjectConfigurationError,
     load_project_configuration,
 )
+from graphtraj.execution.runner_batch import parse_batch
+from graphtraj.execution.runner_control import (
+    interrupt_session,
+    pending_requests,
+    reply_to_request,
+    send_instruction,
+)
+from graphtraj.execution.runner_launch import launch_batch
 from graphtraj.execution.runner_models import RunnerError
 from graphtraj.execution.runner_status import status_aliases
 from graphtraj.graph.ticket_graph import (
@@ -100,6 +108,68 @@ _STATE_CHANGE_SCHEMA = {
     "additionalProperties": False,
 }
 _EMPTY_SCHEMA = {"type": "object", "properties": {}, "additionalProperties": False}
+_ALIAS_SCHEMA = {
+    "type": "object",
+    "properties": {"alias": {"type": "string"}},
+    "required":             ["alias"],
+    "additionalProperties": False,
+}
+_BATCH_TASK_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "ticket_id":   {"type": "string"},
+        "ticket_name": {"type": "string"},
+        "role":        {"type": ["string", "object"]},
+        "instruction": {"type": "string"},
+        "skills":      {"type": "array", "items": {"type": "string"}},
+    },
+    "required":             ["ticket_id", "ticket_name", "role"],
+    "additionalProperties": False,
+}
+_DISPATCH_SCHEMA = {
+    "type": "object",
+    "properties": {"tasks": {"type": "array", "items": _BATCH_TASK_SCHEMA}},
+    "required":             ["tasks"],
+    "additionalProperties": False,
+}
+_SEND_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "alias":               {"type": "string"},
+        "instruction":         {"type": "string"},
+        "caused_by_event_ids": {"type": "array", "items": {"type": "string"}},
+    },
+    "required":             ["alias", "instruction"],
+    "additionalProperties": False,
+}
+_CONTINUE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "ticket_id":           {"type": "string"},
+        "caused_by_event_ids": {"type": "array", "items": {"type": "string"}},
+    },
+    "required":             ["ticket_id", "caused_by_event_ids"],
+    "additionalProperties": False,
+}
+_REQUESTS_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "alias":        {"type": "string"},
+        "execution_id": {"type": ["string", "null"]},
+    },
+    "required":             ["alias"],
+    "additionalProperties": False,
+}
+_REPLY_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "alias":    {"type": "string"},
+        "request":  {"type": "object"},
+        "response": {"type": "object"},
+    },
+    "required":             ["alias", "request", "response"],
+    "additionalProperties": False,
+}
 
 
 @dataclass(frozen=True)
@@ -192,6 +262,107 @@ def read_alias_status(arguments: Mapping[str, Any]) -> ToolResult:
     return ToolResult(response.document, failed=not response.succeeded)
 
 
+def _string_argument(arguments: Mapping[str, Any], name: str) -> str:
+    """Return one required string argument without restating the operation."""
+
+    value = arguments.get(name)
+    if not isinstance(value, str):
+        raise ValueError("{0} must be a string".format(name))
+    return value
+
+
+def _optional_string_argument(
+    arguments: Mapping[str, Any], name: str
+) -> str | None:
+    """Return one optional string argument, or None when it was not supplied."""
+
+    value = arguments.get(name)
+    if value is not None and not isinstance(value, str):
+        raise ValueError("{0} must be a string".format(name))
+    return value
+
+
+def _string_list_argument(
+    arguments: Mapping[str, Any], name: str
+) -> tuple[str, ...]:
+    """Return one optional list of strings; the operation owns its own rules."""
+
+    value = arguments.get(name, [])
+    if not isinstance(value, list) or any(
+        not isinstance(item, str) for item in value
+    ):
+        raise ValueError("{0} must be a list of strings".format(name))
+    return tuple(value)
+
+
+def dispatch_batch(arguments: Mapping[str, Any]) -> ToolResult:
+    """Dispatch one structured Batch; the returned identity stays owned."""
+
+    response = launch_batch(parse_batch(dict(arguments)), Path.cwd())
+    return ToolResult(response.document, failed=not response.succeeded)
+
+
+def send_session_instruction(arguments: Mapping[str, Any]) -> ToolResult:
+    """Steer an active execution or continue an idle mapped Session."""
+
+    return ToolResult(
+        send_instruction(
+            _string_argument(arguments, "alias"),
+            _string_argument(arguments, "instruction"),
+            Path.cwd(),
+            _string_list_argument(arguments, "caused_by_event_ids"),
+        )
+    )
+
+
+def interrupt_session_execution(arguments: Mapping[str, Any]) -> ToolResult:
+    """Interrupt one exact running Runtime Session by alias."""
+
+    return ToolResult(
+        interrupt_session(_string_argument(arguments, "alias"), Path.cwd())
+    )
+
+
+def continue_ticket_execution(arguments: Mapping[str, Any]) -> ToolResult:
+    """Continue one stopped current Team through the D.3 stop/continue path."""
+
+    from graphtraj.teams.coding.team_round import continue_stopped_ticket
+
+    return ToolResult(
+        continue_stopped_ticket(
+            _string_argument(arguments, "ticket_id"),
+            _string_list_argument(arguments, "caused_by_event_ids"),
+            Path.cwd(),
+        )
+    )
+
+
+def read_pending_requests(arguments: Mapping[str, Any]) -> ToolResult:
+    """Query the mapped execution's native requests without consuming them."""
+
+    return ToolResult(
+        pending_requests(
+            _string_argument(arguments, "alias"),
+            Path.cwd(),
+            execution_id=_optional_string_argument(arguments, "execution_id"),
+        )
+    )
+
+
+def answer_pending_request(arguments: Mapping[str, Any]) -> ToolResult:
+    """Submit an explicit reply to one request returned by the query path."""
+
+    request = arguments.get("request")
+    response = arguments.get("response")
+    if not isinstance(request, dict) or not isinstance(response, dict):
+        raise ValueError("request and response must be JSON objects")
+    return ToolResult(
+        reply_to_request(
+            _string_argument(arguments, "alias"), request, response, Path.cwd()
+        )
+    )
+
+
 register_tool(
     "ticket_graph",
     "Read the current Ticket DAG, states and dependency readiness for the project "
@@ -236,6 +407,51 @@ register_tool(
         "additionalProperties": False,
     },
     read_alias_status,
+)
+register_tool(
+    "dispatch",
+    "Dispatch one structured Batch and return the identity of each dispatched "
+    "execution while it stays owned, so later calls can query and control it. "
+    "Equivalent to `agent-runner --batch-input`.",
+    _DISPATCH_SCHEMA,
+    dispatch_batch,
+)
+register_tool(
+    "send_instruction",
+    "Steer an active execution or continue an idle mapped Session using unique "
+    "causal Project Worldline event IDs. Equivalent to `agent-runner send`.",
+    _SEND_SCHEMA,
+    send_session_instruction,
+)
+register_tool(
+    "interrupt",
+    "Interrupt one exact running Runtime execution by alias while preserving its "
+    "Session. Equivalent to `agent-runner interrupt`.",
+    _ALIAS_SCHEMA,
+    interrupt_session_execution,
+)
+register_tool(
+    "continue",
+    "Continue one stopped current Team from its retained Batch and Sessions; the "
+    "existing stop, budget and accounting semantics are unchanged. Equivalent to "
+    "`agent-runner continue`.",
+    _CONTINUE_SCHEMA,
+    continue_ticket_execution,
+)
+register_tool(
+    "pending_requests",
+    "Query the mapped execution's pending native approval or user-input requests, "
+    "including the identity required to reply. Equivalent to `agent-runner "
+    "requests`.",
+    _REQUESTS_SCHEMA,
+    read_pending_requests,
+)
+register_tool(
+    "reply_to_request",
+    "Return the explicit native reply for one request document obtained from "
+    "`pending_requests`. Equivalent to `agent-runner reply`.",
+    _REPLY_SCHEMA,
+    answer_pending_request,
 )
 
 

@@ -34,7 +34,10 @@ Later commands use the recorded paths.
 
 `uv tool install` builds and installs this distribution's wheel, which carries
 the core Skills, role definitions and Codex resources. To check a local
-candidate, build that wheel and install the artifact:
+candidate, build that wheel and install the artifact. The documented flags skip
+pip's build isolation, so the declared build requirement (`setuptools>=61`,
+from `pyproject.toml`) must already be installed in the invoking environment,
+for example with `python -m pip install setuptools`:
 
 ```text
 python -m pip wheel --no-build-isolation --no-deps -w dist .

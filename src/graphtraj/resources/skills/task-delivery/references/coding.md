@@ -12,6 +12,11 @@ configuration changes; distinguish bootstrap from candidate validation. Assign
 source files by repository responsibility; shared Project Documents remain
 Main-owned. Pass known usable entrypoints and failures to the Leader.
 
+Main and Team Leaders do not execute tests, including pre-dispatch baselines
+and validation probes. Assign those checks to an Engineer and supply existing
+candidate/environment evidence for reuse. The Leader assesses the results;
+Main coordinates shared validation and integration without rerunning tests.
+
 Select the configured coding-team.team-leader preset and give the Leader the
 Junior, Senior or Expert difficulty of the accepted code Ticket. A Batch task
 uses its ticket_id, ticket_name, role and concise instruction; the registered
@@ -25,7 +30,8 @@ Use the Runner-supplied team protocol; Main does not schedule its Reviewers.
 For an observed code integration conflict, pass
 --resolve-conflict <evidence-based instruction> before the validation command's
 -- separator to graphtraj ticket integrate. The coding team's Merge Resolver
-handles the conflict; Main accepts, commits and validates the resolution.
+handles the conflict; Main accepts and commits the resolution using the
+returned validation evidence. Any required tests remain Engineer-executed.
 
 For a system/provider failure that ended the Team driver, let the caller judge
 when the external cause is resolved. Resume the failed member's existing alias

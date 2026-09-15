@@ -15,16 +15,20 @@ the Harness Project Root; delegated Worktree views remain read-only.
 
 Unless the current conversation already answers it, explicitly ask:
 
-> Does this project include work that needs software engineering delivery,
-> such as module and interface design, coordination across modules, or
-> implementation that will be maintained over time?
+> Does this project include programming work, whether maintained software or
+> auxiliary scripts?
 
-The presence of a repository or some scripts does not answer this question.
-Small helper scripts stay with the current Agent and receive proportionate
-validation. A project-wide yes still requires choosing the workflow for each
-task. Record the answer in the project guidance's Agent skills section.
+A repository alone does not answer this question.
+Small helper scripts can stay with the current Agent; test execution follows
+the project's responsibility rule below. A project-wide yes still requires
+choosing the workflow for each task. Record the answer in the project guidance's
+Agent skills section.
 
-Only for an affirmative answer, read [coding setup](references/coding.md).
+When the project includes programming work, Main and Team Leaders must not
+execute any tests, during setup or subsequent delivery. Assign test execution
+to an Engineer and record this prohibition explicitly in the project's guidance,
+using [coding setup](references/coding.md). Apply it before any setup baseline
+or validation probe. Read that reference only when the answer is affirmative.
 
 ## Configure shared conventions
 

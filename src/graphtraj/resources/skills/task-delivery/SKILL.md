@@ -22,8 +22,11 @@ registration, readiness and graph revisions.
 
 Choose the executor from the task's needed expertise and accepted completion
 criteria. Direct work stays with the current Agent when it needs no formal
-team. Small auxiliary scripts receive suitable checks without automatically
-creating tickets or triggering a team workflow.
+team. For projects with programming work, Main and Team Leaders must not execute
+any tests, including setup baselines, validation probes and integration tests.
+Assign test execution to an Engineer; Main and Leaders assess the returned
+evidence. This also applies to auxiliary scripts and does not itself require
+creating a Ticket or a Team for each script.
 
 For engineering delivery, read [coding dispatch](references/coding.md).
 For another task type, use its actually available role or agreed direct work
@@ -46,8 +49,8 @@ or none; reduce it or wait when there is insufficient capacity.
 
 Wait for existing completion, failure and budget notifications. Keep one
 active driver per Session; Main waits for the team's handoff while its Leader
-owns member execution. For Main-owned external validation, deliver the outcome
-through the existing handoff instead of having Leader watch temporary files.
+owns member execution. Deliver assigned validation results through the existing
+handoff instead of having Leader watch temporary files.
 Keep the Runner's caller notice channel connected to Main's waiting execution
 tool as well as the Leader notification path; retaining a notice only in a log
 does not deliver it to Main. Let the timer return information automatically,
@@ -64,7 +67,8 @@ Send relevant new evidence with `agent-runner send <alias> --instruction <text>
 --caused-by-event-id <event-id>` under its active-execution semantics; do not
 start a second driver to deliver it. Use `agent-runner interrupt <alias>` when
 interruption is intended. Reuse valid reports and validation for unchanged
-paths; rerun affected checks and explicitly required fresh validation.
+paths; have the assigned executor run affected checks and explicitly required
+fresh validation.
 
 Receive the result, validation, required review evidence and acceptance
 decision. Runtime success alone does not establish acceptance. For an execution
@@ -101,8 +105,10 @@ revision alone does not accept a candidate or manufacture Team evidence.
 
 ## Integrate and continue
 
-Integrate accepted file results into the configured shared branch with the
-validation appropriate to those results. For a registered formal Ticket use:
+Integrate accepted file results into the configured shared branch using the
+appropriate validation evidence. In projects with programming work, Engineers
+execute any required integration tests; Main must not run tests through the
+integration command. For a registered formal Ticket use:
 
 ```text
 graphtraj ticket integrate --ticket-id <id> -- <validation-command> <arguments>

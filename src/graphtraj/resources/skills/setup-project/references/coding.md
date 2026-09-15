@@ -21,6 +21,12 @@ Write the following rule into the project's `AGENTS.md` (or its existing
 > evidence and make delivery decisions without running tests themselves.
 > Existing independent Reviewer responsibilities remain unchanged.
 
+Within a Harness Project, put this rule directly in the Source Repository's
+`AGENTS.md` and the `AGENTS.md` of the Integration and existing Ticket Worktrees
+as well as the Harness-root guidance. Preserve their other instructions. New
+Worktrees inherit the repository file; existing Worktrees need the same update.
+Inspect these local files rather than assuming access to a parent directory.
+
 Inspect the software's existing guidance and package structure. Keep one
 context unless genuinely separate domain vocabularies warrant a context map.
 A monorepo is evidence to inspect, not a requirement for multiple contexts.

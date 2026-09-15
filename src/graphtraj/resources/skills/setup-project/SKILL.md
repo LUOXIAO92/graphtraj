@@ -54,6 +54,9 @@ Present the concrete configuration and resolve missing choices before writing.
 Apply authorized edits; existing authorization needs no second confirmation.
 Within a Harness Project update its root `AGENTS.md`. Else update the existing
 `CLAUDE.md` or `AGENTS.md`; if neither exists, ask which guidance file to create.
+For programming projects, also place the test-execution rule in the Source
+Repository and existing Worktrees as described in the coding reference; do not
+assume a delegated Agent can read guidance above its working directory.
 
 Keep one Agent skills section with brief pointers to the tracker, domain
 documents and, when used, triage labels. Reuse the section if it exists. Include

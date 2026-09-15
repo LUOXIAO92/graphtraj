@@ -68,6 +68,16 @@ def calculate_total(
 
 ## Standard checks
 
+This project includes programming work. Main and Team Leaders must not execute
+any tests, including baseline, regression, smoke, installation and integration
+tests or validation probes. Running them through a script or integration command
+does not provide an exception. Engineers execute tests and report their candidate,
+environment and results. Main coordinates shared validation and evidence reuse;
+Leaders define the needed checks and assess the returned evidence. Independent
+Reviewers retain their assigned validation responsibilities.
+
+The test commands below are for those test executors, not Main or Team Leaders.
+
 - Run focused tests with `pytest -p no:cacheprovider -q <paths>`.
 - Run the complete suite with `pytest -p no:cacheprovider -q` only when the
   change can affect the wider product.

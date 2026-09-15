@@ -73,6 +73,8 @@ Each smell reads *what it is* → *how to fix*; match it against the diff:
 Reuse valid axis reports for the same candidate, comparison and requirements,
 unless the user requests a fresh review. Dispatch only unfinished or affected
 axes. A missing report copy calls for report recovery, not repeating the review.
+For report corrections and inherited guarantees, consult the
+[delivery failure examples](../task-delivery/references/failure-examples.md).
 
 **Standards sub-agent prompt** should include:
 

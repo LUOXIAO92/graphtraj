@@ -12,6 +12,9 @@ node builds on. For a revision, start from the reported gap and its affected
 consumers; preserve valid nodes, identities and results elsewhere. Resolve a
 missing fact from available evidence; ask only when it changes the intended result.
 
+When defining a node's validation scope or inherited guarantees, consult the
+[delivery failure examples](../task-delivery/references/failure-examples.md).
+
 ## Find the useful boundaries
 
 Work backward from the final result: what must exist to demonstrate success,

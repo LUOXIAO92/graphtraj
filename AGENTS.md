@@ -66,6 +66,18 @@ def calculate_total(
     return discounted + tax + shipping
 ```
 
+## Coordination and source investigation
+
+Main and Team Leaders coordinate through accepted requirements, documented
+commands, handoffs and retained evidence. Main owns dispatch and delivery
+decisions; Leaders coordinate their Ticket and assess returned evidence.
+They must not expand setup, scheduling, continuation or status checks into
+source-code investigations or reconstruct internal execution flows themselves.
+Assign concrete implementation failures or unanswered implementation questions
+to an Engineer with the existing evidence, and reuse the returned findings.
+Reading a specific diff needed to assess that evidence remains within scope;
+independent Reviewers retain their assigned code-review responsibilities.
+
 ## Standard checks
 
 This project includes programming work. Main and Team Leaders must not execute
@@ -119,8 +131,8 @@ documentation, or other work in this Source Repository.
   before naming it.
 - Before reporting a problem, creating rework, challenging a decision, or
   asking a question, check the assigned task, Session or handoff, repository
-  guidance, accepted decisions, existing implementation, tests, and available
-  evidence for an answer. Use an existing answer instead of asking someone to
+  guidance, accepted decisions and available evidence for an answer. Engineers
+  and Reviewers inspect implementation and tests within their assigned scope. Use an existing answer instead of asking someone to
   repeat it.
 - A suspicion is not a problem. Identify a concrete conflicting requirement,
   missing fact, or observable failure before raising it or changing work for

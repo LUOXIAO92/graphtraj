@@ -9,10 +9,6 @@ Read Harness Guidance, the current task graph and its accepted requirements.
 Use the configured project paths, roles and execution limits. Run Harness
 commands from the Harness Project Root.
 
-When choosing validation scope, correcting reports or relying on predecessor
-guarantees, use the [failure examples](references/failure-examples.md) to check
-the reasoning behind the next action.
-
 ## Select the work and its executor
 
 Select active nodes whose required predecessor results have been accepted

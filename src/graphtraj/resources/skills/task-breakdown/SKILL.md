@@ -33,6 +33,13 @@ For each node state:
 - Required predecessors, with the input each predecessor supplies.
 - Other source results or observations that explain why the node exists.
 
+Keep each node's requirements, deliverables and validation within its own
+responsibility, including behavior affected by its changes. A dependency
+identifies the predecessor result the node consumes; it does not transfer
+another node's acceptance criteria into this one. Cross-node coordination and
+the allocation of shared validation belong in the overall plan, rather than
+becoming additional acceptance conditions inside individual nodes.
+
 An edge records a required predecessor result, including one already delivered.
 Its completion removes the wait, not the relationship. Record other origins in
 the node description; chronology alone does not create a blocking edge. This is

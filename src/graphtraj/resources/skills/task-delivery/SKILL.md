@@ -30,8 +30,9 @@ For another task type, use its actually available role or agreed direct work
 arrangement; a team protocol must exist before it can be dispatched.
 
 Give the executor the authoritative task, required inputs, acceptance mapping
-and relevant predecessor evidence, including who owns shared validation and
-how its result returns. Confirm sources are reachable from the assigned role's
+and relevant predecessor evidence. Preserve the agreed
+[node boundaries](../task-breakdown/SKILL.md#find-the-useful-boundaries) in the
+dispatch instructions. Confirm sources are reachable from the assigned role's
 permitted view. Reuse unchanged setup and evidence rather than reconstructing
 them for every dispatch. Keep dispatch details concise. Main owns
 cross-task decisions and integration; a selected team's Leader owns its

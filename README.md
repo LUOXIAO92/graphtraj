@@ -32,6 +32,23 @@ becomes both the Harness Project Root and Source Repository. In the separated la
 child, or asks for an explicit choice when there are zero or several candidates.
 Later commands use the recorded paths.
 
+`uv tool install` builds and installs this distribution's wheel, which carries
+the core Skills, role definitions and Codex resources. To check a local
+candidate, build that wheel and install the artifact. The documented flags skip
+pip's build isolation, so the declared build requirement (`setuptools>=61`,
+from `pyproject.toml`) must already be installed in the invoking environment,
+for example with `python -m pip install setuptools`:
+
+```text
+python -m pip wheel --no-build-isolation --no-deps -w dist .
+python -m pip install dist/graphtraj-<version>-py3-none-any.whl
+```
+
+Upgrading the installation does not reset an existing project: running
+`graphtraj setup` again in a configured project keeps its recorded paths, user
+Runtime configuration, role and Skill selections, and Ticket, Team and
+Worldline history.
+
 Setup is interactive and checks conflicts before writing. It preserves
 project-owned content and valid operator configuration, creates or registers
 the `dev` Integration Worktree, and installs every missing core Skill into the Harness Project Root’s

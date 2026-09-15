@@ -428,11 +428,10 @@ def fake_codex(tmp_path: Path) -> FakeCodex:
     return FakeCodex(executable=executable, log_file=log_file)
 
 
-def _install_commands(environment: Path) -> InstalledCommands:
-    """Install a clean export of the current source, including pending edits."""
+def _export_source(destination: Path) -> Path:
+    """Copy the tracked and untracked source, including pending edits."""
 
-    exported = environment.parent / "source"
-    exported.mkdir()
+    destination.mkdir(parents=True)
     files = run_process(
         ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
         cwd=PROJECT_ROOT,
@@ -442,9 +441,40 @@ def _install_commands(environment: Path) -> InstalledCommands:
         source = PROJECT_ROOT / name
         if not source.exists() and not source.is_symlink():
             continue
-        target = exported / name
+        target = destination / name
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, target, follow_symlinks=False)
+    return destination
+
+
+def _build_wheel(build_root: Path) -> Path:
+    """Build the distribution artifact that every installation installs."""
+
+    source = _export_source(build_root / "source")
+    wheelhouse = build_root / "wheelhouse"
+    result = run_process(
+        [
+            sys.executable,
+            "-m",
+            "pip",
+            "wheel",
+            "--disable-pip-version-check",
+            "--no-build-isolation",
+            "--no-deps",
+            "-w",
+            str(wheelhouse),
+            str(source),
+        ],
+        cwd=source,
+    )
+    result.check_returncode()
+    artifacts = sorted(wheelhouse.glob("graphtraj-*.whl"))
+    assert len(artifacts) == 1, artifacts
+    return artifacts[0]
+
+
+def _install_commands(environment: Path, wheel: Path) -> InstalledCommands:
+    """Install one built wheel into a fresh environment."""
 
     subprocess.run(
         [
@@ -465,11 +495,10 @@ def _install_commands(environment: Path) -> InstalledCommands:
             "pip",
             "install",
             "--disable-pip-version-check",
-            "--no-build-isolation",
             "--no-deps",
-            str(exported),
+            str(wheel),
         ],
-        cwd=exported,
+        cwd=wheel.parent,
     )
     result.check_returncode()
     bin_directory = environment / "bin"
@@ -490,11 +519,19 @@ def _install_commands(environment: Path) -> InstalledCommands:
 
 
 @pytest.fixture(scope="session")
+def built_wheel(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """The wheel built from this working tree that installations install."""
+
+    return _build_wheel(tmp_path_factory.mktemp("distribution-wheel"))
+
+
+@pytest.fixture(scope="session")
 def installed_commands(
+    built_wheel: Path,
     tmp_path_factory: pytest.TempPathFactory,
 ) -> InstalledCommands:
     environment = tmp_path_factory.mktemp("installed-environment") / "venv"
-    return _install_commands(environment)
+    return _install_commands(environment, built_wheel)
 
 
 @pytest.fixture(scope="session")
@@ -513,4 +550,5 @@ def installed_worktree_commands(
 
 @pytest.fixture
 def mutable_installed_commands(tmp_path: Path) -> InstalledCommands:
-    return _install_commands(tmp_path / "installed-mutable-environment")
+    build_root = tmp_path / "installed-mutable-environment"
+    return _install_commands(build_root / "venv", _build_wheel(build_root))

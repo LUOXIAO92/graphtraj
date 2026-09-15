@@ -642,7 +642,10 @@ history, waits for delayed rollout creation and incomplete trailing records,
 and performs a final drain at terminal result or connection close.
 
 `create_session` and `resume_session` accept an optional native `approval_policy`,
-including `"untrusted"` or `"never"`; approval review is routed to the client.
+including `"untrusted"` or `"never"`. By default, directory trust, approval policy
+and approval reviewer are resolved by Codex from its native configuration;
+GraphTraj does not impose overrides for them. Native requests that require a
+client response are routed to the callback.
 This is a thread parameter. Codex 0.153.0 rejects `approval_policy = "untrusted"`
 in its configuration file. The callback routes native approvals, tool/input,
 MCP elicitation, authentication and attestation requests without translating

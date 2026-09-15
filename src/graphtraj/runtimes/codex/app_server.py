@@ -331,7 +331,6 @@ class CodexAppServer:
             raise CodexAdapterError('RUNTIME_CONNECTION_MISMATCH',
                                     'Open a separate connection with this Context runtime_environment().')
         params = context.session_document()['adapter_request']
-        params['approvalsReviewer'] = 'user'
         if approval_policy is not None:
             params['approvalPolicy'] = approval_policy
         if thread_id is not None:

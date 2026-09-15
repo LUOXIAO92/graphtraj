@@ -151,10 +151,6 @@ class _CodexRole:
             ("developer_instructions", developer_instructions),
             ("agents", self.agents),
             (
-                "projects",
-                {str(worktree): {"trust_level": "untrusted"}},
-            ),
-            (
                 "skills",
                 {"config": [skill.config_entry() for skill in effective_skills]},
             ),

@@ -23,6 +23,7 @@ from graphtraj.runtimes.codex.app_server import (
     CodexAppServer,
     CodexMainRecovery,
     CodexServerRequest,
+    CodexSession,
 )
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError, RuntimeContext
 
@@ -780,6 +781,33 @@ def test_failed_handshake_retains_service_diagnostics_and_closes_cleanly(
     asyncio.run(exercise())
 
 
+def test_default_and_resumed_sessions_leave_policy_to_the_runtime(
+    tmp_path: Path, peer: Path,
+) -> None:
+    """Start and resume preserve role permissions without imposing trust or approvals."""
+
+    async def check(adapter: CodexAppServer, session: CodexSession) -> None:
+        """Inspect effective invocation settings through the external Runtime peer."""
+        execution = await adapter.start_execution(session, 'configuration')
+        result = json.loads((await adapter.wait(execution, timeout=2))['last_agent_message'])
+        assert result.get('approvalPolicy') is None
+        assert result.get('approvalsReviewer') is None
+        assert result['config'].get('projects') is None
+        permissions = result['config']['permissions'][result['config']['default_permissions']]
+        assert permissions['filesystem'][':workspace_roots']['docs'] == 'read'
+
+    async def exercise() -> None:
+        resolved = context(tmp_path / 'worktree', peer)
+        async with CodexAppServer(command=[str(peer)], cwd=tmp_path) as adapter:
+            session = await adapter.create_session(resolved)
+            await check(adapter, session)
+        async with CodexAppServer(command=[str(peer)], cwd=tmp_path) as adapter:
+            resumed = await adapter.resume_session(resolved, session.thread_id)
+            await check(adapter, resumed)
+
+    asyncio.run(exercise())
+
+
 def test_approval_policy_is_a_native_per_session_override(
     tmp_path: Path, peer: Path,
 ) -> None:
@@ -795,7 +823,7 @@ def test_approval_policy_is_a_native_per_session_override(
                 execution = await adapter.start_execution(session, 'configuration')
                 result = json.loads((await adapter.wait(execution, timeout=2))['last_agent_message'])
                 assert result['approvalPolicy'] == policy
-                assert result['approvalsReviewer'] == 'user'
+                assert result.get('approvalsReviewer') is None
 
     asyncio.run(exercise())
 

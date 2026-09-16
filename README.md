@@ -196,6 +196,13 @@ recovery binding (and remain chained to a wrapped Runner error); confirm host
 consumption with the actual host evidence. Without `CODEX_THREAD_ID`, Runner
 retains its ordinary inherited-channel or stderr behavior.
 
+`agent-runner send --reports-only` collects a report a Session already holds.
+It resumes that Session read-only without attaching the budget monitor, so
+returning existing evidence advances no stopping check, repeats no sampled
+stop and queues no new retro input. Every other `send` and `continue` keeps
+the Ticket under its budget control, and this mode changes no accounting,
+identity or stop history.
+
 ```python
 from pathlib import Path
 
@@ -383,6 +390,7 @@ agent-runner status --baseline <commit-or-ref> --candidate <commit-or-ref> <alia
 agent-runner requests <alias> [--execution-id <native-execution-id>]
 agent-runner reply <alias> --request-file request.yml --response '{"decision":"decline"}'
 agent-runner send <alias> --instruction <text> --caused-by-event-id <event-id>
+agent-runner send <alias> --instruction <text> --caused-by-event-id <event-id> --reports-only
 agent-runner interrupt <alias>
 agent-runner continue --ticket-id <id> --caused-by-event-id <event-id>
 agent-runner replace <leader-alias> --actor main --caused-by-event-id <event-id>
@@ -750,7 +758,7 @@ The tools are the existing graph, execution, control and interaction operations:
 | `ticket_update` | One evidence-backed state change: `ticket_id`, `status`, `active_team_ordinal`, `worktree`, `branch`, `current_candidate`, `caused_by_event_ids`, `evidence_refs`. | Recorded causal event; the same operation as `graphtraj ticket update`. |
 | `alias_status` | `aliases`, and optionally `operation_total`, `baseline`, `candidate`. | Session status document; the same document as `agent-runner status`. |
 | `dispatch` | One structured Batch document: `tasks` with `ticket_id`, `ticket_name`, `role` (a preset reference or one inline role), and optionally `instruction` and `skills`. | Each dispatched execution's `launch_status`, `alias` and `session`; the same document as `agent-runner --batch-input`. The call returns while those executions stay owned. |
-| `send_instruction` | `alias`, `instruction`, `caused_by_event_ids`. | `send_status`; the same operation as `agent-runner send`. |
+| `send_instruction` | `alias`, `instruction`, `caused_by_event_ids`, and optionally `reports_only`. | `send_status`; the same operation as `agent-runner send`. |
 | `interrupt` | `alias`. | `interrupt_status`; the same operation as `agent-runner interrupt`. |
 | `continue` | `ticket_id`, `caused_by_event_ids`. | The continued Team's result and `continuation_event_id`; the same D.3 stop/continue operation as `agent-runner continue`. |
 | `pending_requests` | `alias`, and optionally `execution_id`. | The pending native approval or user-input requests, with the identity `reply_to_request` needs; the same document as `agent-runner requests`. |

@@ -164,11 +164,22 @@ def reply(alias: str, request_file: Path, response: str) -> None:
     "--caused-by-event-id",
     multiple=True,
 )
-def send(alias: str, instruction: str, caused_by_event_id: tuple[str, ...]) -> None:
+@click.option(
+    "--reports-only",
+    is_flag=True,
+    help="Collect existing reports without sampling the Ticket budget.",
+)
+def send(
+    alias: str,
+    instruction: str,
+    caused_by_event_id: tuple[str, ...],
+    reports_only: bool,
+) -> None:
     """Resume one Session using causal Project Worldline event IDs."""
     try:
         response = send_instruction(
             alias, instruction, Path.cwd().resolve(), caused_by_event_id,
+            reports_only=reports_only,
         )
     except RunnerError as error:
         _fail(error, alias=alias)

@@ -1364,6 +1364,145 @@ def test_installed_send_delivers_elapsed_notices_to_the_resumed_leader(
         release.touch()
 
 
+def test_installed_send_collects_reports_without_sampling_the_stop(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    """A report collection returns existing evidence without a stopping sample."""
+
+    harness, _, _, environment = configure_harness(
+        installed_commands, temporary_git_repository, fake_codex, tmp_path
+    )
+    _register_ready_ticket(
+        installed_commands, harness, body=_budget_body(total=1)
+    )
+    clock = tmp_path / "report-collection-clock"
+    clock.write_text(str(time.time()), encoding="utf-8")
+    started = float(clock.read_text(encoding="utf-8"))
+    controls = tmp_path / "report-collection-controls"
+    controls.mkdir()
+    (controls / "sitecustomize.py").write_text(
+        "import os\n"
+        "from pathlib import Path\n"
+        "try:\n"
+        "    import graphtraj.execution.execution_budget as budget\n"
+        "except ModuleNotFoundError:\n"
+        "    pass\n"
+        "else:\n"
+        "    budget.time.time = lambda: float(Path(os.environ['BUDGET_CLOCK']).read_text())\n"
+        "    budget.random.uniform = lambda lower, upper: lower\n"
+        "    budget.random.random = lambda: 0.99\n",
+        encoding="utf-8",
+    )
+    batch = harness / "report-collection-batch.yml"
+    batch.write_text(
+        "tasks:\n"
+        "  - ticket_id: \"76\"\n"
+        "    ticket_name: session-alias-control\n"
+        "    role: coding-team.team-leader\n",
+        encoding="utf-8",
+    )
+    run_environment = {
+        **environment,
+        "BUDGET_CLOCK": str(clock),
+        "FAKE_CODEX_APPEND_LOG": "1",
+        "FAKE_CODEX_CAPTURE_STDIN": "1",
+        "FAKE_CODEX_CAPTURE_ROLE": "1",
+        "FAKE_CODEX_LIFECYCLE_ACTION": "complete-team-round",
+        "GRAPHTRAJ_AGENT_RUNNER": str(installed_commands.runner),
+        "PYTHONPATH": str(controls),
+    }
+    completed = run_process(
+        [str(installed_commands.runner), "--batch-input", str(batch)],
+        cwd=harness,
+        env=run_environment,
+        timeout=30,
+    )
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    alias = yaml.safe_load(completed.stdout)["tasks"][0]["alias"]
+    cause = [
+        json.loads(line)["event_id"]
+        for path in (harness / ".graphtraj/state/worldline").glob("*.jsonl")
+        for line in path.read_text(encoding="utf-8").splitlines()
+    ][-1]
+    usage_file = (
+        harness
+        / ".graphtraj/state/tickets/76-session-alias-control/execution-budget.yml"
+    )
+    retained = yaml.safe_load(usage_file.read_text(encoding="utf-8"))
+    assert retained["stopping_checks"] == 0
+    assert retained["stopped"] is False
+
+    # The Ticket is already past its planned budget, its allowance and the
+    # first stopping interval when Main collects the existing conclusion,
+    # which is the reported failure.
+    clock.write_text(str(started + 190), encoding="utf-8")
+    release = tmp_path / "release-report-collection"
+    instruction = "Return the acceptance conclusion from the retained evidence."
+    send_environment = {
+        **run_environment,
+        "FAKE_CODEX_RELEASE_FILE": str(release),
+    }
+    send_environment.pop("FAKE_CODEX_LIFECYCLE_ACTION", None)
+    try:
+        sent = run_process(
+            [
+                str(installed_commands.runner),
+                "send",
+                alias,
+                "--instruction",
+                instruction,
+                "--caused-by-event-id",
+                cause,
+                "--reports-only",
+            ],
+            cwd=harness,
+            env=send_environment,
+            timeout=30,
+        )
+        assert sent.returncode == 0, sent.stdout + sent.stderr
+        time.sleep(1.0)
+        usage = yaml.safe_load(usage_file.read_text(encoding="utf-8"))
+        assert usage["stopping_checks"] == 0
+        assert usage["stopped"] is False
+        assert usage["notifications"] == []
+        assert usage["sessions"]["team_leader"] == 1
+        leader_inputs = [
+            json.loads(line)["stdin"]
+            for line in fake_codex.log_file.read_text(encoding="utf-8").splitlines()
+            if json.loads(line).get("role") == "team-leader"
+            and "stdin" in json.loads(line)
+        ]
+        assert leader_inputs and instruction in leader_inputs[-1]
+
+        # The same Ticket still samples a stop for ordinary budget control.
+        import graphtraj.execution.execution_budget as budget_module
+
+        real_time = budget_module.time.time
+        real_random = budget_module.random.random
+        budget_module.time.time = lambda: float(clock.read_text(encoding="utf-8"))
+        budget_module.random.random = lambda: 0.99
+        try:
+            monitor = execution_budget_monitor(
+                usage_file.parent, "76", "session-alias-control"
+            )
+            assert monitor is not None
+            assert monitor.check("team-leader", "team-lead") is True
+        finally:
+            budget_module.time.time = real_time
+            budget_module.random.random = real_random
+        sampled = yaml.safe_load(usage_file.read_text(encoding="utf-8"))
+        assert sampled["stopping_checks"] == 1
+        assert any(
+            notice.startswith("stochastic_stop")
+            for notice in sampled["notifications"]
+        )
+    finally:
+        release.touch()
+
+
 def _read_pipe_to_eof(descriptor: int, timeout: float) -> tuple[bytes, bool]:
     """Read one caller pipe until it closes, reporting whether it closed."""
 

@@ -1,5 +1,5 @@
-name: coding-team.engineer-junior
-description: "Coding implementation engineer for simple, well-scoped, repetitive tickets."
+name: coding-team.engineer
+description: "Coding implementation Engineer for the assigned Ticket."
 required_skills: ["implement","ponytail","tdd"]
 instructions: |
   Implement the assigned ticket using $implement.

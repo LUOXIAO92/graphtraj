@@ -20,7 +20,7 @@ def test_installed_commands_reject_delivery_run_inputs(
     ticket.write_text("Historical Ticket\n")
     batch = root / "old-batch.yml"
     batch.write_text(yaml.safe_dump({"run_id": "20260906-obsolete", "tasks": [{
-        "ticket_id": "87", "ticket_name": "contraction", "role": "engineer-junior",
+        "ticket_id": "87", "ticket_name": "contraction", "role": "engineer",
         "ticket_file": str(ticket),
     }]}))
     launch = run_process(
@@ -75,7 +75,7 @@ def test_team_engineer_keeps_explicit_repository_skill_selection(
     records = [json.loads(line) for line in fake_codex.log_file.read_text().splitlines()]
     for record in records:
         skills = tomllib.loads(next(arg for arg in record["argv"] if arg.startswith("skills=")))["skills"]["config"]
-        if record["role"] == "engineer-junior":
+        if record["role"] == "engineer":
             assert {"path": str(worktrees / "75-inline-specialist/.agents/skills/selected/SKILL.md"), "enabled": True} in skills
         assert {"path": str(worktrees / "75-inline-specialist/.agents/skills/disabled/SKILL.md"), "enabled": False} in skills
     batches = [yaml.safe_load(path.read_text()) for path in (root / ".graphtraj/state/batches").glob("*.yml")]

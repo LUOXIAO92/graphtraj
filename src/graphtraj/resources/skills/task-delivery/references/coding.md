@@ -1,8 +1,8 @@
 # Coding dispatch
 
 Before dispatch, read [the ticket budget](coding-budget.md) and check it against
-the current ticket. Present difficulty, expected total time, selected Engineer
-tier and planned Sessions before launching. Handle budget notices through
+the current ticket. Present difficulty, expected total time and planned Sessions
+before launching. Handle budget notices through
 [the ticket budget](coding-budget.md); waiting for them does not require
 proactive progress queries.
 
@@ -18,9 +18,9 @@ candidate/environment evidence for reuse. The Leader assesses the results;
 Main coordinates shared validation and integration without rerunning tests.
 
 Select the configured coding-team.team-leader preset and give the Leader the
-Junior, Senior or Expert difficulty of the accepted code Ticket. A Batch task
-uses its ticket_id, ticket_name, role and concise instruction; the registered
-current definition supplies the complete requirements.
+accepted code Ticket; difficulty stays an estimation property. A Batch task uses
+its ticket_id, ticket_name, role and concise instruction; the registered current
+definition supplies the complete requirements.
 
 The coding Leader owns its Engineer, Standards and Spec Reviewers, fixed
 candidate and comparison point, same-Round corrections and implementation

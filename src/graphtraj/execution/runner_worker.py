@@ -305,7 +305,9 @@ def _monitor_execution_budget(
         ):
             os.kill(os.getpid(), signal.SIGTERM)
             return
-        if stopped and (role.startswith("engineer-") or role == "team-leader"):
+        if stopped and (
+            execution_budget_stage(role) == "implementation" or role == "team-leader"
+        ):
             os.kill(os.getpid(), signal.SIGTERM)
             return
         stop.wait(0.05)

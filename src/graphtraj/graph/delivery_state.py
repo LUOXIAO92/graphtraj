@@ -9,6 +9,7 @@ from typing import Any, Mapping
 
 import yaml
 
+from graphtraj.configuration.project_roles import ROLE_REFERENCES
 from graphtraj.graph.delivery_worldline import append_project_worldline_event, read_worldline
 from graphtraj.execution.runner_io import write_yaml_durably
 from graphtraj.graph.ticket_graph import _TRANSITIONS, _load_states
@@ -20,7 +21,7 @@ _MEMBER_KEYS = {
     "standards_reviewer",
     "spec_reviewer",
 }
-_ENGINEERS = {"engineer-junior", "engineer-senior", "engineer-expert"}
+_ENGINEERS = {"engineer"}
 _COMMON = {"phase", "ticket_id", "caused_by_event_ids", "evidence_refs"}
 
 
@@ -173,14 +174,18 @@ def apply_delivery_state_request(
         elif phase == "correction":
             if ticket["status"] != "reviewing":
                 raise ValueError("Process correction requires an open Team Round")
+            responsible_role = ROLE_REFERENCES.get(
+                request["responsible_role"], request["responsible_role"]
+            )
             responsible = next(
                 (member for seat, member in team_update["members"].items()
-                 if seat != "team_leader" and member["role"] == request["responsible_role"]),
+                 if seat != "team_leader"
+                 and ROLE_REFERENCES.get(member["role"], member["role"]) == responsible_role),
                 None,
             )
             if responsible is None or not request["session_ref"] or responsible["session_ref"] != request["session_ref"]:
                 raise ValueError("Process correction must resume the responsible Team Session")
-            if request["responsible_role"] in _ENGINEERS:
+            if responsible_role in _ENGINEERS:
                 ticket_update["current_candidate"] = None
             kind = "team-process-correction"
         elif phase == "candidate":
@@ -322,10 +327,11 @@ def _validate_members(value: Any) -> dict[str, dict[str, str | None]]:
     }
     members: dict[str, dict[str, str | None]] = {}
     for name, member in value.items():
+        seat_role = member.get("role") if isinstance(member, dict) else None
         if (
             not isinstance(member, dict)
             or set(member) != {"role", "session_ref"}
-            or member.get("role") not in expected[name]
+            or ROLE_REFERENCES.get(seat_role, seat_role) not in expected[name]
             or (
                 member.get("session_ref") is not None
                 and (not isinstance(member["session_ref"], str) or not member["session_ref"])

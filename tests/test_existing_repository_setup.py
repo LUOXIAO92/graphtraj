@@ -107,9 +107,7 @@ def test_setup_creates_grouped_coding_presets_and_shared_delivery_state(
     roles = role_config["roles"]["coding-team"]
     assert set(roles) == {
         "team-leader",
-        "engineer-junior",
-        "engineer-senior",
-        "engineer-expert",
+        "engineer",
         "standards-reviewer",
         "spec-reviewer",
         "merge-resolver",
@@ -173,7 +171,7 @@ def test_setup_rejects_invalid_roles_before_project_mutation(
     roles_path.parent.mkdir()
     roles_path.write_text(
         "roles:\n"
-        "  engineer-junior:\n"
+        "  engineer:\n"
         "    runtime: codex\n"
         "    model: ''\n"
         "    command: codex\n",
@@ -188,8 +186,8 @@ def test_setup_rejects_invalid_roles_before_project_mutation(
 
     assert result.returncode == 1
     assert "GraphTraj Roles is invalid." in result.stderr
-    assert "engineer-junior.model" in result.stderr
-    assert "engineer-junior.command" in result.stderr
+    assert "engineer.model" in result.stderr
+    assert "engineer.command" in result.stderr
     assert roles_path.read_bytes() == before
     assert not (temporary_git_repository / ".codex").exists()
     assert not (temporary_git_repository / ".graphtraj" / "state").exists()
@@ -459,7 +457,7 @@ def test_setup_and_runner_reject_a_nested_configured_source_repository(
 
     setup = run_setup(installed_commands, harness_root, answers="")
     status = run_process(
-        [str(installed_commands.runner), "status", "missing@j1"],
+        [str(installed_commands.runner), "status", "missing@e1"],
         cwd=harness_root,
     )
 
@@ -499,7 +497,7 @@ def test_runner_status_discovers_the_graphtraj_configuration(
     setup = run_setup(installed_commands, repository)
 
     status = run_process(
-        [str(installed_commands.runner), "status", "missing@j1"],
+        [str(installed_commands.runner), "status", "missing@e1"],
         cwd=repository,
     )
 

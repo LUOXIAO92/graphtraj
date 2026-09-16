@@ -64,7 +64,7 @@ from graphtraj.graph.ticket_graph import _load_states
 
 
 _COMMIT = re.compile(r"[0-9a-f]{40}")
-_ENGINEER_ROLES = frozenset({"engineer-junior", "engineer-senior", "engineer-expert"})
+_ENGINEER_ROLES = frozenset({"engineer"})
 _REVIEWER_ROLES = frozenset({"standards-reviewer", "spec-reviewer"})
 _CHILD_ROLES = _ENGINEER_ROLES | _REVIEWER_ROLES
 _AGENT_EVIDENCE_ERROR = "AGENT_EVIDENCE_INVALID"
@@ -143,7 +143,8 @@ def _task_policy(task: Task, role: str | None = None) -> str:
 
     if role is None or task.role == role:
         return task.policy_role or task.role
-    return role
+    # A retained Team seat keeps its original identity; its policy is the unified role.
+    return ROLE_REFERENCES.get(role, role)
 
 
 def launch_team_batch(batch: Batch, cwd: Path) -> LaunchResponse:
@@ -868,14 +869,14 @@ def _deliver_ticket(project: Any, requested: Task, retained_batch: Path, capacit
             project, task, "team-leader", worktree, ticket_directory, traces,
             leader_alias, leader_session, registration, None, retained_batch,
             "The confirmed implementation rejection is closed. Dispatch the same Engineer "
-            "and tier for the small correction in the new Round.\n",
+            "for the small correction in the new Round.\n",
         )
         engineer_batch, engineer_batch_path, leader_alias, leader_session = next_formal_batch(
             project, task, definition, ticket_content, worktree, ticket_directory,
             traces, leader_alias, leader_session, registration, retained_batch,
         )
         if len(engineer_batch.tasks) != 1 or engineer_batch.tasks[0].role != engineer_task.role:
-            raise RunnerError("BATCH_SCHEMA_INVALID", "Rework must retain the Engineer and tier; a changed seat requires a separate evidence-based decision.")
+            raise RunnerError("BATCH_SCHEMA_INVALID", "Rework must retain the Engineer; a changed seat requires a separate evidence-based decision.")
         engineer_task = replace(
             engineer_batch.tasks[0], ticket_file=definition.resolve(), ticket_content=ticket_content,
         )
@@ -960,12 +961,13 @@ def _resume_active_ticket(
     def session_task(
         role: str, mapping: dict[str, Any]
     ) -> tuple[Task, Path]:
+        policy_role = ROLE_REFERENCES.get(role, role)
         retained = Path(mapping["retained_batch_file"])
         try:
             child = next(
                 child
                 for child in read_batch(retained, worktree).tasks
-                if child.ticket_id == task.ticket_id and child.role == role
+                if child.ticket_id == task.ticket_id and child.role == policy_role
             )
         except (RunnerError, StopIteration) as error:
             raise RunnerError(
@@ -1010,7 +1012,8 @@ def _resume_active_ticket(
         assert engineer_batch is not None and engineer_batch_path is not None
         if (
             len(engineer_batch.tasks) != 1
-            or engineer_batch.tasks[0].role != engineer_role
+            or engineer_batch.tasks[0].role
+            != ROLE_REFERENCES.get(engineer_role, engineer_role)
         ):
             raise RunnerError(
                 "BATCH_SCHEMA_INVALID",
@@ -1087,7 +1090,7 @@ def _resume_active_ticket(
             project, task, "team-leader", worktree, ticket_directory, traces,
             leader_alias, leader_session, registration, None, team_batch,
             "The confirmed implementation rejection is closed. Dispatch the same "
-            "Engineer and tier for the small correction in the new Round.\n",
+            "Engineer for the small correction in the new Round.\n",
             capacity_fd=capacity_fd,
         )
         engineer_batch, engineer_batch_path, leader_alias, leader_session = (
@@ -1100,11 +1103,12 @@ def _resume_active_ticket(
         assert engineer_batch is not None and engineer_batch_path is not None
         if (
             len(engineer_batch.tasks) != 1
-            or engineer_batch.tasks[0].role != engineer_role
+            or engineer_batch.tasks[0].role
+            != ROLE_REFERENCES.get(engineer_role, engineer_role)
         ):
             raise RunnerError(
                 "BATCH_SCHEMA_INVALID",
-                "Rework must retain the Engineer and tier; a changed seat requires "
+                "Rework must retain the Engineer; a changed seat requires "
                 "a separate evidence-based decision.",
             )
         engineer_task = replace(
@@ -2290,7 +2294,7 @@ def _execute_agent(
         preset = (
             resolved_role_preset(task, project.role_bindings)
             if task.inline_preset is not None and task.role == role
-            else project.role_bindings[role]
+            else project.role_bindings[policy_role]
         )
         context = preflight_runtime_context(
             runtime_store=project.runtime_store,
@@ -2365,8 +2369,8 @@ def _execute_agent(
             "Decision: REJECT, Diagnosis: implementation, Reviews: compliant, Action: rework "
             "and a nonempty Rationale: explaining the evidence and correction. "
             "Process corrections, Main decomposition/scope errors, and user product/Spec changes "
-            "cannot authorize implementation rework. Keep a small correction with the same Engineer "
-            "and tier; never replace or escalate from a failure count.\n"
+            "cannot authorize implementation rework. Keep a small correction with the same "
+            "Engineer; never replace or escalate from a failure count.\n"
         )
     elif policy_role in _REVIEWER_ROLES:
         if task.report_file is None:
@@ -2771,7 +2775,7 @@ def _run_session_worker(
                         stopped = monitor.check(role, stage)
                         deliver_budget_notices()
                         if stopped and (
-                            role in _ENGINEER_ROLES or role == "team-leader"
+                            stage == "implementation" or role == "team-leader"
                         ):
                             budget_stopped = True
                             worker.terminate()
@@ -2786,7 +2790,7 @@ def _run_session_worker(
                     deliver_budget_notices()
                     budget_stopped = budget_stopped or (
                         stopped
-                        and (role in _ENGINEER_ROLES or role == "team-leader")
+                        and (stage == "implementation" or role == "team-leader")
                     )
                 if input_delivered is not None and not input_delivered.is_set():
                     try:

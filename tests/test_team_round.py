@@ -369,7 +369,7 @@ def test_installed_runner_obeys_the_explicit_leader_decision_for_a_run_free_team
         assert filesystem[':workspace_roots']['docs'] == 'read'
         required_skills = {
             'team-leader': set(),
-            'engineer-junior': {'implement', 'ponytail', 'tdd'},
+            'engineer': {'implement', 'ponytail', 'tdd'},
             'standards-reviewer': {'ponytail-review'},
             'spec-reviewer': set(),
             'delivery-state': set(),
@@ -383,7 +383,7 @@ def test_installed_runner_obeys_the_explicit_leader_decision_for_a_run_free_team
         assert (filesystem.get(str(registration)) == 'write') is leader
         assert (filesystem.get(str(batch_directory)) == 'write') is leader
         report_names = {
-            "engineer-junior": {"engineer.md", "validation.md"},
+            "engineer": {"engineer.md", "validation.md"},
             "standards-reviewer": {"standards.md"},
             "spec-reviewer": {"spec.md"},
             "team-leader": {"leader.md"},
@@ -412,7 +412,7 @@ def test_installed_runner_obeys_the_explicit_leader_decision_for_a_run_free_team
                 if path.startswith(str(worktree / ".state"))
             }
             assert {path.name for path in canonical} == report_names
-            if call["role"] in {"engineer-junior", "team-leader"}:
+            if call["role"] in {"engineer", "team-leader"}:
                 assert canonical == {
                     Path("teams") / "1" / "rounds" / call["round"] / name
                     for name in report_names
@@ -520,7 +520,7 @@ def test_installed_runner_obeys_the_explicit_leader_decision_for_a_run_free_team
         assert all(candidates[0]["candidate"] in path.read_text() for path in round_directory.iterdir())
         assert all(candidates[1]["candidate"] in path.read_text() for path in second.iterdir())
         assert worldline[-1]["team_round"] == 2
-        assert team["members"]["engineer"]["role"] == "engineer-junior"
+        assert team["members"]["engineer"]["role"] == "engineer"
         assert len(mappings) == 5
         observed = [
             json.loads(line)

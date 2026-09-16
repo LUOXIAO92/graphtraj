@@ -27,6 +27,7 @@ from graphtraj.runtimes.runtime_adapter import (
 )
 from graphtraj.execution.runner_transport import record_runtime_identity, runtime_turn_outcome
 from graphtraj.execution.runner_io import write_yaml_durably
+from graphtraj.configuration.project_roles import ROLE_REFERENCES
 from graphtraj.configuration.role_definitions import ResolvedChildRole
 from graphtraj.workspace.git_repository import GitRepositoryError, SourceRepository
 from graphtraj.configuration.skill_check import (
@@ -129,12 +130,7 @@ class _CodexRole:
                 filesystem[str(path)] = "write"
         if self.name == "merge-resolver":
             filesystem[str(evidence)] = "read"
-        if self.name in {
-            "engineer-junior",
-            "engineer-senior",
-            "engineer-expert",
-            "merge-resolver",
-        }:
+        if self.name in {"engineer", "merge-resolver"}:
             filesystem[str(git_common_directory)] = "write"
         native_report_paths = _canonical_report_write_paths(
             evidence, report_files
@@ -1156,7 +1152,7 @@ def refresh_codex_report_paths(
     filesystem = profile["filesystem"]
     workspace_roots = filesystem.get(":workspace_roots")
     if (
-        role in ("engineer-junior", "engineer-senior", "engineer-expert")
+        ROLE_REFERENCES.get(role, role) == "engineer"
         and isinstance(workspace_roots, dict)
         and workspace_roots.get(".") == "write"
         and workspace_roots.get("README.md") == "read"

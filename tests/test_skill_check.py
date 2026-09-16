@@ -112,7 +112,7 @@ agent_runner:
         "    model: 3\n"
         "    reasoning_effort: true\n"
         "    allow_runtime_swarm: sometimes\n"
-        "  engineer-junior:\n"
+        "  engineer:\n"
         "    runtime: codex\n"
         "    model: gpt-5.6-luna\n"
         "    permissions: write\n"
@@ -136,7 +136,7 @@ agent_runner:
     assert "team-leader.model" in result.stdout
     assert "team-leader.reasoning_effort" in result.stdout
     assert "team-leader.allow_runtime_swarm" in result.stdout
-    assert "engineer-junior.permissions" in result.stdout
+    assert "engineer.permissions" in result.stdout
     assert "unknown-role" in result.stdout
     assert roles_path.read_bytes() == before
     assert not (repository / ".codex" / "agents").exists()

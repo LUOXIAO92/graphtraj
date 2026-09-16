@@ -70,7 +70,7 @@ supplies. A ticket with no blockers can start immediately.
 
 Before publishing each concrete code ticket, read
 [the coding-budget reference](../task-delivery/references/coding-budget.md).
-Assess difficulty, Engineer tier and execution budget with reasons, and put the
+Assess difficulty and execution budget with reasons, and put the
 YAML front matter at the very start of the ticket. Resolve unknown scope before
 claiming a usable budget; retain uncertainty as explanation. Keep the existing
 source node and real dependencies.

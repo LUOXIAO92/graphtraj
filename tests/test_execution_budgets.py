@@ -11,6 +11,7 @@ from pathlib import Path
 import yaml
 
 from conftest import FakeCodex, InstalledCommands, run_process, wait_for_file
+from graphtraj.execution.execution_budget import execution_budget_monitor
 from runner_fixtures import configure_harness, engineer_probe
 from test_session_alias_control import _register_ready_ticket
 from test_team_correction import RUNTIME as CORRECTION_RUNTIME
@@ -320,7 +321,7 @@ def test_installed_runner_delivers_sampled_stop_to_leader_before_engineer_stops(
     engineer_inputs = [
         json.loads(line)["stdin"]
         for line in fake_codex.log_file.read_text(encoding="utf-8").splitlines()
-        if json.loads(line).get("role", "").startswith("engineer-")
+        if json.loads(line).get("role") == "engineer"
         and "stdin" in json.loads(line)
     ]
     assert "Execution was stopped by Runner" in engineer_inputs[-1]
@@ -904,7 +905,7 @@ def test_installed_runner_counts_sessions_and_emits_one_correction_overrun(
     assert len(notices) == 1
     assert notices[0]["threshold"] == {"kind": "correction_rounds", "limit": 0}
     assert notices[0]["stage"] == "correction"
-    assert notices[0]["responsible_role"] == "engineer-junior"
+    assert notices[0]["responsible_role"] == "engineer"
 
 
 def test_installed_runner_notifies_once_when_a_replacement_exceeds_session_plan(
@@ -946,7 +947,7 @@ def test_installed_runner_notifies_once_when_a_replacement_exceeds_session_plan(
     mapping = next(
         yaml.safe_load(path.read_text(encoding="utf-8"))
         for path in (harness / ".graphtraj/runner/sessions").glob("*/mapping.yml")
-        if yaml.safe_load(path.read_text(encoding="utf-8"))["role"] == "engineer-junior"
+        if yaml.safe_load(path.read_text(encoding="utf-8"))["role"] == "engineer"
     )
     cause = [
         json.loads(line)["event_id"]
@@ -977,7 +978,7 @@ def test_installed_runner_notifies_once_when_a_replacement_exceeds_session_plan(
     assert notices[0]["threshold"] == {"kind": "planned_sessions.engineer", "limit": 1}
     assert notices[0]["actual"]["sessions"]["engineer"] == 2
     assert notices[0]["stage"] == "implementation"
-    assert notices[0]["responsible_role"] == "engineer-junior"
+    assert notices[0]["responsible_role"] == "engineer"
 
 
 def test_installed_send_notifies_its_caller_while_a_budgeted_resume_runs(
@@ -1560,7 +1561,7 @@ def test_installed_runner_counts_implementation_rework_as_correction(
     mapping_file = next(
         path
         for path in (harness / ".graphtraj/runner/sessions").glob("*/mapping.yml")
-        if yaml.safe_load(path.read_text(encoding="utf-8"))["role"] == "engineer-junior"
+        if yaml.safe_load(path.read_text(encoding="utf-8"))["role"] == "engineer"
     )
     mapping = yaml.safe_load(mapping_file.read_text(encoding="utf-8"))
     cause = [
@@ -1606,4 +1607,25 @@ def test_installed_runner_counts_implementation_rework_as_correction(
     assert len(notices) == 1
     assert notices[0]["threshold"] == {"kind": "correction_rounds", "limit": 0}
     assert notices[0]["stage"] == "correction"
-    assert notices[0]["responsible_role"] == "engineer-junior"
+    assert notices[0]["responsible_role"] == "engineer"
+
+
+def test_retained_engineer_session_identity_keeps_its_planned_session(
+    tmp_path: Path,
+) -> None:
+    """A retained tiered Engineer Session still counts toward its allowance."""
+    ticket = tmp_path / "ticket"
+    ticket.mkdir()
+    (ticket / "ticket.yml").write_text(
+        "current_definition: ticket.md\n", encoding="utf-8"
+    )
+    (ticket / "ticket.md").write_text(_budget_body(total=60), encoding="utf-8")
+    monitor = execution_budget_monitor(ticket, "76", "session-alias-control")
+    assert monitor is not None
+
+    monitor.record_session("engineer-senior", "implementation")
+
+    usage = yaml.safe_load(
+        (ticket / "execution-budget.yml").read_text(encoding="utf-8")
+    )
+    assert usage["sessions"]["engineer"] == 1

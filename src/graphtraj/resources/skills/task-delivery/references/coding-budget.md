@@ -11,8 +11,6 @@ Start the Issue body/local ticket with YAML front matter, before any heading:
 difficulty: medium
 difficulty_reason: Resource loading and setup change across existing modules
 execution_budget:
-  engineer_tier: senior
-  tier_reason: Needs cross-module implementation and behavioral validation
   estimated_minutes:
     implementation: 10
     validation: 10
@@ -30,9 +28,10 @@ execution_budget:
 ---
 ```
 
-Replace example values with task-specific estimates and reasons. Minute and
-Session thresholds are explicit positive numbers; correction rounds may be
-zero. Total is an elapsed-time budget, not summed parallel Agent time. Record
+Replace example values with task-specific estimates and reasons. Difficulty and
+its reason stay estimation properties; they do not select an Engineer role.
+Minute and Session thresholds are explicit positive numbers; correction rounds
+may be zero. Total is an elapsed-time budget, not summed parallel Agent time. Record
 uncertainty in estimation_note, not min/max thresholds. Do not budget tokens.
 Count the roles actually needed, including state maintenance when applicable.
 

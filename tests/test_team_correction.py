@@ -50,7 +50,7 @@ if role == 'delivery-state':
     Path(os.environ['GRAPHTRAJ_STATE_REQUEST']).write_text(os.environ['GRAPHTRAJ_STATE_FACTS'])
 elif role == 'team-leader':
     if not (round_dir / 'engineer.md').exists():
-        dispatch(['engineer-junior'])
+        dispatch(['engineer'])
     else:
         reviewed = (round_dir / 'spec.md').exists()
         expanded = (Path.cwd() / 'UNREQUESTED.txt').exists()
@@ -58,7 +58,7 @@ elif role == 'team-leader':
             (scratch / 'restore-engineer-report').touch()
             (round_dir / 'engineer.md').write_text('Candidate commit: ' + git('rev-parse', 'HEAD') + '\n')
             (round_dir / 'leader.md').write_text(
-                'Decision: CORRECT\nResponsible: coding-team.engineer-junior\n'
+                'Decision: CORRECT\nResponsible: coding-team.engineer\n'
                 'Rule: Engineer self-review report\nReason: Restore the truncated self-review from Trace; preserve the candidate and valid Reviews.\n'
                 'Candidate commit: ' + git('rev-parse', 'HEAD') + '\n'
             )
@@ -69,7 +69,7 @@ elif role == 'team-leader':
             dispatch([{'investigation-specialist': {'runtime': 'codex', 'model': 'gpt-5.6-luna'}}])
             decision = None
         elif not report_only and expanded and (reviewed or os.environ['CORRECTION_TIMING'] == 'before-review'):
-            decision = 'Decision: CORRECT\nResponsible: coding-team.engineer-junior\nRule: Accepted Ticket limits work to Session transport.\nReason: UNREQUESTED.txt adds an unrelated feature.\n'
+            decision = 'Decision: CORRECT\nResponsible: coding-team.engineer\nRule: Accepted Ticket limits work to Session transport.\nReason: UNREQUESTED.txt adds an unrelated feature.\n'
             if os.environ.get('CORRECTION_DIRECT_SEND'):
                 team = yaml.safe_load((root / 'teams/1/team.yml').read_text())
                 engineer = team['members']['engineer']['session_ref']
@@ -117,7 +117,7 @@ elif role == 'team-leader':
             (round_dir / 'leader.md').write_text(decision + 'Candidate commit: ' + git('rev-parse', 'HEAD') + '\n')
 elif role == 'investigation-specialist':
     (scratch / 'specialist-done').touch()
-elif role.startswith('engineer-'):
+elif role == 'engineer':
     extra = Path.cwd() / 'UNREQUESTED.txt'
     if not resumed:
         extra.write_text('Unrequested feature\n')
@@ -192,7 +192,7 @@ def test_installed_team_corrects_engineer_and_reviewer_in_same_round(
     team = yaml.safe_load((ticket / 'teams/1/team.yml').read_text())
     assert state['status'] == 'awaiting-integration'
     assert team['current_round'] == 1
-    assert team['members']['engineer']['role'] == 'engineer-junior'
+    assert team['members']['engineer']['role'] == 'engineer'
     assert [p.name for p in (ticket / 'teams/1/rounds').iterdir()] == ['1']
     reports = list((ticket / 'teams/1/rounds/1').iterdir())
     assert {p.name for p in reports} == {'engineer.md', 'validation.md', 'standards.md', 'spec.md', 'leader.md'}
@@ -201,7 +201,7 @@ def test_installed_team_corrects_engineer_and_reviewer_in_same_round(
     assert all(p.stat().st_mode & 0o222 == 0 for p in reports)
     assert not (worktrees / '76-session-alias-control/UNREQUESTED.txt').exists()
     calls = [json.loads(line) for line in log.read_text().splitlines()]
-    for role in ('team-leader', 'engineer-junior', 'standards-reviewer', 'spec-reviewer'):
+    for role in ('team-leader', 'engineer', 'standards-reviewer', 'spec-reviewer'):
         own = [call for call in calls if call['role'] == role]
         assert not own[0]['resumed']
         assert all(call['resumed'] for call in own[1:])
@@ -209,7 +209,7 @@ def test_installed_team_corrects_engineer_and_reviewer_in_same_round(
         specialists = [c for c in calls if c['role'] == 'investigation-specialist']
         assert len(specialists) == 1
         assert all(member['role'] != 'investigation-specialist' for member in team['members'].values())
-    assert len([c for c in calls if c['role'] == 'engineer-junior']) == 2
+    assert len([c for c in calls if c['role'] == 'engineer']) == 2
     assert len([c for c in calls if c['role'] == 'standards-reviewer']) == (2 if timing == 'after-review' else 1)
     traces = ticket / 'teams/1/traces'
     engineer = traces / team['members']['engineer']['session_ref'] / 'events.jsonl'
@@ -218,7 +218,7 @@ def test_installed_team_corrects_engineer_and_reviewer_in_same_round(
     assert 'Unsupported finding' in reviewer.read_text()
     events = [json.loads(line) for p in (harness / '.graphtraj/state/worldline').glob('*.jsonl') for line in p.read_text().splitlines()]
     corrections = [e for e in events if e['kind'] == 'team-process-correction']
-    assert [e['responsible_role'] for e in corrections] == ['engineer-junior', 'spec-reviewer']
+    assert [e['responsible_role'] for e in corrections] == ['engineer', 'spec-reviewer']
     assert all(e['action'] == 'resume-session-for-correction' and e['team_round'] == 1 for e in corrections)
     assert all(e['caused_by_event_ids'] and e['evidence_refs'] for e in corrections)
     assert all('traces/' in ref for e in corrections for ref in e['evidence_refs'])
@@ -337,7 +337,7 @@ def test_engineer_correction_repairs_only_its_report_delivery_errors(
         cwd=harness, env=environment, timeout=30,
     )
     calls = [json.loads(line) for line in log.read_text().splitlines()]
-    engineers = [call for call in calls if call['role'] == 'engineer-junior']
+    engineers = [call for call in calls if call['role'] == 'engineer']
     reviews = [call for call in calls if call['role'].endswith('-reviewer')]
     if failure in {'provider', 'configuration'}:
         assert result.returncode == 1, result.stdout + result.stderr

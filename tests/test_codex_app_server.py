@@ -373,7 +373,7 @@ def test_budget_stop_queues_one_explicit_retro_without_waiting_for_active_main(
             "threshold": {"kind": "stochastic_stop", "limit": 2},
             "actual": {"elapsed_minutes": 2.011},
             "stage": "implementation",
-            "responsible_role": "engineer-senior",
+            "responsible_role": "engineer",
         }
 
         def queued_messages() -> list[dict]:
@@ -395,11 +395,11 @@ def test_budget_stop_queues_one_explicit_retro_without_waiting_for_active_main(
                 environment={"PEER_PROTOCOL_LOG": str(protocol)},
             ) as recovery:
                 with budget_notice_output(recovery.notice_fd):
-                    assert monitor.check("engineer-senior", "implementation") is False
+                    assert monitor.check("engineer", "implementation") is False
                     now[0] += 0.7
-                    assert monitor.check("engineer-senior", "implementation") is False
+                    assert monitor.check("engineer", "implementation") is False
                     now[0] += 120
-                    assert monitor.check("engineer-senior", "implementation") is True
+                    assert monitor.check("engineer", "implementation") is True
                     os.write(recovery.notice_fd, (json.dumps(duplicate) + "\n").encode())
 
                 with pytest.raises(RuntimeAdapterError, match="active"):
@@ -689,7 +689,7 @@ def test_each_session_projects_resolved_role_skills_and_task_access(
     async def exercise() -> None:
         contexts = []
         for name, role_name, model, effort in [
-            ('first', 'engineer-expert', 'first-model', 'low'),
+            ('first', 'engineer', 'first-model', 'low'),
             ('second', 'standards-reviewer', 'second-model', 'high'),
         ]:
             root = tmp_path / name

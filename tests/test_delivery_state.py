@@ -100,7 +100,7 @@ def test_delivery_state_request_rolls_back_state_when_its_event_is_invalid(
                 "branch": "agent/74-complete-team-round",
                 "members": {
                     "team_leader": {"role": "team-leader", "session_ref": "74-complete-team-round@l1"},
-                    "engineer": {"role": "engineer-junior", "session_ref": None},
+                    "engineer": {"role": "engineer", "session_ref": None},
                     "standards_reviewer": {"role": "standards-reviewer", "session_ref": None},
                     "spec_reviewer": {"role": "spec-reviewer", "session_ref": None},
                 },

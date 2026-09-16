@@ -60,7 +60,7 @@ def dispatch(roles):
             'ticket_id': '76',
             'ticket_name': 'session-alias-control',
             'role': 'coding-team.' + child,
-            **({'skills': ['ponytail']} if bad_skill and child.startswith('engineer-') else {}),
+            **({'skills': ['ponytail']} if bad_skill and child == 'engineer' else {}),
         }
         for child in roles
     ]}, sort_keys=False))
@@ -100,7 +100,7 @@ elif (
 elif role == 'team-leader':
     if not (round_dir / 'engineer.md').exists():
         if target != 'dispatch' or 'Recovery required:' in prompt:
-            dispatch(['engineer-junior'])
+            dispatch(['engineer'])
     elif target == 'retained-review' and (
         'Recover the missing Spec report.' in prompt
         or 'Register the remaining Spec Batch.' in prompt
@@ -122,7 +122,7 @@ elif role == 'team-leader':
         if not corrected.exists():
             corrected.write_text('corrected\n')
             (round_dir / 'leader.md').write_text(
-                'Decision: CORRECT\nResponsible: ' + os.environ.get('CORRECTION_ENGINEER_ROLE', 'coding-team.engineer-junior') + '\n' +
+                'Decision: CORRECT\nResponsible: ' + os.environ.get('CORRECTION_ENGINEER_ROLE', 'coding-team.engineer') + '\n' +
                 'Rule: accepted Ticket\nReason: correct the current Engineer work.\n'
                 'Candidate commit: ' + git('rev-parse', 'HEAD') + '\n'
             )
@@ -155,7 +155,7 @@ elif role == 'team-leader':
             )
         else:
             (round_dir / 'leader.md').write_text('Decision: ACCEPT\nCandidate commit: ' + candidate + '\n')
-elif role.startswith('engineer-'):
+elif role == 'engineer':
     if target in {'provider', 'provider-engineer-evidence', 'provider-review-evidence', 'provider-before-review-correct', 'provider-correct', 'provider-quoted', 'provider-rework', 'provider-rework-evidence'} and not resumed:
         if target == 'provider-quoted':
             print(json.dumps({'type': 'item.completed', 'item': {
@@ -213,7 +213,7 @@ elif role.startswith('engineer-'):
             pass
         elif target == 'provider-engineer-evidence' and 'Recovery required:' not in prompt:
             validation.write_text('Candidate commit: invalid\n')
-        elif target == 'engineer-junior' and not resumed:
+        elif target == 'engineer' and not resumed:
             validation.write_text('Candidate commit: invalid\n')
         else:
             validation.write_text('Candidate commit: ' + candidate + '\nTests: passed.\n')
@@ -305,7 +305,7 @@ RUNTIME = app_server_peer(RUNTIME, "'recovery-' + os.environ['GRAPHTRAJ_ROLE']")
 
 
 
-@pytest.mark.parametrize('target', ('engineer-junior', 'spec-reviewer', 'team-leader', 'uncommitted', 'delivery-state', 'dispatch', 'completed-wrong-target'))
+@pytest.mark.parametrize('target', ('engineer', 'spec-reviewer', 'team-leader', 'uncommitted', 'delivery-state', 'dispatch', 'completed-wrong-target'))
 def test_installed_team_corrects_missing_member_evidence_in_its_existing_session(
     installed_commands, temporary_git_repository, fake_codex, tmp_path, target,
 ):
@@ -341,7 +341,7 @@ def test_installed_team_corrects_missing_member_evidence_in_its_existing_session
         trace = next((ticket / 'teams/1/traces').glob('*@d*/events.jsonl'))
     else:
         seat = {
-            'engineer-junior': 'engineer',
+            'engineer': 'engineer',
             'uncommitted': 'engineer',
             'spec-reviewer': 'spec_reviewer',
             'team-leader': 'team_leader',
@@ -352,9 +352,9 @@ def test_installed_team_corrects_missing_member_evidence_in_its_existing_session
     recovered = trace.read_text()
     assert recovered.count('turn_context') >= 2
     recovery_role = {
-        'uncommitted': 'engineer-junior',
+        'uncommitted': 'engineer',
         'dispatch': 'team-leader',
-        'completed-wrong-target': 'engineer-junior',
+        'completed-wrong-target': 'engineer',
     }.get(target, target)
     prompt = (harness / state['worktree'] / '.scratch' / ('recovery-prompt-' + recovery_role)).read_text()
     assert 'Recovery required:' in prompt
@@ -430,7 +430,7 @@ def test_provider_failure_returns_to_the_caller_for_an_explicit_same_session_ret
     mapping_file = next(
         path
         for path in (harness / '.graphtraj/runner/sessions').glob('*/mapping.yml')
-        if yaml.safe_load(path.read_text())['role'] == 'engineer-junior'
+        if yaml.safe_load(path.read_text())['role'] == 'engineer'
     )
     mapping = yaml.safe_load(mapping_file.read_text())
     trace = ticket / 'teams/1/traces' / mapping['alias'] / 'events.jsonl'
@@ -495,14 +495,14 @@ def test_provider_failure_returns_to_the_caller_for_an_explicit_same_session_ret
         assert trace.read_text().count('turn_context') == 4
         prompt = (
             harness / current['worktree']
-            / '.scratch/recovery-prompt-engineer-junior'
+            / '.scratch/recovery-prompt-engineer'
         ).read_text()
         assert 'Recovery required:' in prompt
         assert 'Engineer evidence is missing or unreadable' in prompt
     if target == 'provider-engineer-evidence':
         assert trace.read_text().count('turn_context') == 3
         prompt = (
-            harness / current['worktree'] / '.scratch/recovery-prompt-engineer-junior'
+            harness / current['worktree'] / '.scratch/recovery-prompt-engineer'
         ).read_text()
         assert 'Failure:' in prompt and 'Evidence:' in prompt and 'Expected result:' in prompt
     if target == 'provider-review-evidence':
@@ -514,6 +514,117 @@ def test_provider_failure_returns_to_the_caller_for_an_explicit_same_session_ret
     if target == 'provider-rework':
         state_trace = next((ticket / 'teams/1/traces').glob('*@d*/events.jsonl'))
         assert state_trace.read_text().count('turn_context') == 9
+
+
+def test_retained_tiered_engineer_records_still_resume_for_recovery(
+    installed_commands, temporary_git_repository, fake_codex, tmp_path,
+):
+    """A Team retained under a tiered Engineer name recovers its own Session."""
+    harness, _, _, environment = configure_harness(
+        installed_commands, temporary_git_repository, fake_codex, tmp_path,
+    )
+    _register_ready_ticket(installed_commands, harness)
+    # The retained tiered identity still runs the Engineer scenario.
+    tiered_identity = (
+        "'recovery-' + {'engineer-senior': 'engineer'}"
+        ".get(os.environ['GRAPHTRAJ_ROLE'], os.environ['GRAPHTRAJ_ROLE'])"
+    )
+    fake_codex.executable.write_text(
+        '#!' + sys.executable + '\n'
+        + RUNTIME.replace(
+            "'session_name': 'recovery-' + os.environ['GRAPHTRAJ_ROLE']",
+            "'session_name': " + tiered_identity,
+        ).replace(
+            "elif role == 'engineer':",
+            "elif role.startswith('engineer'):",
+        )
+    )
+    batch = harness / 'batch.yml'
+    batch.write_text(
+        'tasks:\n'
+        '  - ticket_id: "76"\n'
+        '    ticket_name: session-alias-control\n'
+        '    role: coding-team.team-leader\n'
+    )
+    launch_environment = {
+        **environment,
+        'GRAPHTRAJ_AGENT_RUNNER': str(installed_commands.runner),
+        'RECOVERY_TARGET': 'provider',
+    }
+    failed = run_process(
+        [str(installed_commands.runner), '--batch-input', str(batch)],
+        cwd=harness,
+        env=launch_environment,
+        timeout=45,
+    )
+
+    assert failed.returncode == 1
+    ticket = harness / '.graphtraj/state/tickets/76-session-alias-control'
+    mapping_file = next(
+        path
+        for path in (harness / '.graphtraj/runner/sessions').glob('*/mapping.yml')
+        if yaml.safe_load(path.read_text())['role'] == 'engineer'
+    )
+    mapping = yaml.safe_load(mapping_file.read_text())
+    retained_path = Path(mapping['retained_batch_file'])
+    team_file = ticket / 'teams/1/team.yml'
+
+    def write_retained(path: Path, document: object) -> None:
+        """Replace one read-only retained record with its tiered spelling."""
+        mode = path.stat().st_mode & 0o777
+        path.chmod(0o600)
+        path.write_text(yaml.safe_dump(document, sort_keys=False))
+        path.chmod(mode)
+
+    # Reuse the retained records under the spellings an earlier install wrote.
+    retained = yaml.safe_load(retained_path.read_text())
+    assert retained['tasks'][0]['role'] == 'coding-team.engineer'
+    retained['tasks'][0]['role'] = 'coding-team.engineer-senior'
+    write_retained(retained_path, retained)
+    retained_bytes = retained_path.read_bytes()
+    for path in (mapping_file, mapping_file.parent / 'launch.yml'):
+        document = yaml.safe_load(path.read_text())
+        seat = document['mapping'] if 'mapping' in document else document
+        seat['role'] = 'engineer-senior'
+        write_retained(path, document)
+    team = yaml.safe_load(team_file.read_text())
+    team['members']['engineer']['role'] = 'engineer-senior'
+    write_retained(team_file, team)
+
+    events = [
+        json.loads(line)
+        for path in (harness / '.graphtraj/state/worldline').glob('*.jsonl')
+        for line in path.read_text().splitlines()
+    ]
+    retried = run_process(
+        [
+            str(installed_commands.runner), 'send', mapping['alias'],
+            '--instruction', 'Retry the interrupted current Team step.',
+            '--caused-by-event-id', events[-1]['event_id'],
+        ],
+        cwd=harness,
+        env=launch_environment,
+        timeout=45,
+    )
+
+    diagnostics = retried.stdout + retried.stderr
+    error_file = mapping_file.parent / 'resume-error.yml'
+    if error_file.exists():
+        diagnostics += error_file.read_text()
+    assert retried.returncode == 0, diagnostics
+    wait_for_file(mapping_file.parent / 'execution.yml')
+    trace = ticket / 'teams/1/traces' / mapping['alias'] / 'events.jsonl'
+    assert trace.read_text().count('turn_context') == 2
+    continued = run_process(
+        [str(installed_commands.runner), '--batch-input', str(batch)],
+        cwd=harness,
+        env=launch_environment,
+        timeout=45,
+    )
+    assert continued.returncode == 0, continued.stdout + continued.stderr
+    current = yaml.safe_load((ticket / 'ticket.yml').read_text())
+    assert current['status'] == 'awaiting-integration'
+    assert retained_path.read_bytes() == retained_bytes
 
 
 def test_preflight_failed_engineer_starts_once_from_the_leader_correction(
@@ -553,7 +664,7 @@ def test_preflight_failed_engineer_starts_once_from_the_leader_correction(
     assert team['members']['engineer']['session_ref'] is None
     assert not [
         path for path in (harness / '.graphtraj/runner/sessions').glob('*/mapping.yml')
-        if yaml.safe_load(path.read_text())['role'] == 'engineer-junior'
+        if yaml.safe_load(path.read_text())['role'] == 'engineer'
     ]
     repeated = run_process(
         [str(installed_commands.runner), '--batch-input', str(batch)],
@@ -571,7 +682,7 @@ def test_preflight_failed_engineer_starts_once_from_the_leader_correction(
     assert repeated_team['members']['engineer']['session_ref'] is None
     assert not [
         path for path in (harness / '.graphtraj/runner/sessions').glob('*/mapping.yml')
-        if yaml.safe_load(path.read_text())['role'] == 'engineer-junior'
+        if yaml.safe_load(path.read_text())['role'] == 'engineer'
     ]
     events = [
         json.loads(line)
@@ -602,7 +713,7 @@ def test_preflight_failed_engineer_starts_once_from_the_leader_correction(
     assert team['members']['team_leader']['session_ref'] == leader_alias
     engineer_mapping = next(
         path for path in (harness / '.graphtraj/runner/sessions').glob('*/mapping.yml')
-        if yaml.safe_load(path.read_text())['role'] == 'engineer-junior'
+        if yaml.safe_load(path.read_text())['role'] == 'engineer'
     )
     engineer = yaml.safe_load(engineer_mapping.read_text())
     trace = ticket / 'teams/1/traces' / engineer['alias'] / 'events.jsonl'
@@ -612,15 +723,91 @@ def test_preflight_failed_engineer_starts_once_from_the_leader_correction(
         for path in (harness / '.graphtraj/state/batches').glob('*.yml')
     ]
     assert any(
-        task['role'] == 'coding-team.engineer-junior'
+        task['role'] == 'coding-team.engineer'
         and task.get('skills') == ['ponytail']
         for retained_batch in retained for task in retained_batch['tasks']
     )
     assert any(
-        task['role'] == 'coding-team.engineer-junior'
+        task['role'] == 'coding-team.engineer'
         and 'skills' not in task
         for retained_batch in retained for task in retained_batch['tasks']
     )
+
+
+def test_retained_tiered_seat_starts_its_engineer_from_the_retained_batch(
+    installed_commands, temporary_git_repository, fake_codex, tmp_path,
+):
+    """A Team retained under a tiered Engineer name starts that seat again."""
+    harness, _, _, environment = configure_harness(
+        installed_commands, temporary_git_repository, fake_codex, tmp_path,
+    )
+    _register_ready_ticket(installed_commands, harness)
+    fake_codex.executable.write_text(
+        '#!' + sys.executable + '\n'
+        + RUNTIME.replace(
+            "elif role == 'engineer':",
+            "elif role.startswith('engineer'):",
+        )
+    )
+    batch = harness / 'batch.yml'
+    batch.write_text(
+        'tasks:\n'
+        '  - ticket_id: "76"\n'
+        '    ticket_name: session-alias-control\n'
+        '    role: coding-team.team-leader\n'
+    )
+    runtime_environment = {
+        **environment,
+        'GRAPHTRAJ_AGENT_RUNNER': str(installed_commands.runner),
+        'RECOVERY_TARGET': 'startup-preflight',
+    }
+    failed = run_process(
+        [str(installed_commands.runner), '--batch-input', str(batch)],
+        cwd=harness, env=runtime_environment, timeout=45,
+    )
+
+    assert failed.returncode == 1
+    ticket = harness / '.graphtraj/state/tickets/76-session-alias-control'
+    team_file = ticket / 'teams/1/team.yml'
+    team = yaml.safe_load(team_file.read_text())
+    leader_alias = team['members']['team_leader']['session_ref']
+    assert team['members']['engineer']['session_ref'] is None
+
+    # Reuse the retained Team seat under the spelling an earlier install wrote.
+    mode = team_file.stat().st_mode & 0o777
+    team['members']['engineer']['role'] = 'engineer-senior'
+    team_file.chmod(0o600)
+    team_file.write_text(yaml.safe_dump(team, sort_keys=False))
+    team_file.chmod(mode)
+    events = [
+        json.loads(line)
+        for path in (harness / '.graphtraj/state/worldline').glob('*.jsonl')
+        for line in path.read_text().splitlines()
+    ]
+    corrected = run_process(
+        [
+            str(installed_commands.runner), 'send', leader_alias,
+            '--instruction', 'Register the corrected Engineer child Batch.',
+            '--caused-by-event-id', events[-1]['event_id'],
+        ],
+        cwd=harness, env=runtime_environment, timeout=45,
+    )
+    assert corrected.returncode == 0, corrected.stdout + corrected.stderr
+    continued = run_process(
+        [str(installed_commands.runner), '--batch-input', str(batch)],
+        cwd=harness, env=runtime_environment, timeout=45,
+    )
+    assert continued.returncode == 0, continued.stdout + continued.stderr
+    state = yaml.safe_load((ticket / 'ticket.yml').read_text())
+    assert state['status'] == 'awaiting-integration'
+    engineer_mapping = next(
+        path
+        for path in (harness / '.graphtraj/runner/sessions').glob('*/mapping.yml')
+        if yaml.safe_load(path.read_text())['role'] == 'engineer-senior'
+    )
+    engineer = yaml.safe_load(engineer_mapping.read_text())
+    trace = ticket / 'teams/1/traces' / engineer['alias'] / 'events.jsonl'
+    assert trace.read_text().count('turn_context') == 1
 
 
 def test_invalid_review_report_stops_the_matching_state_request_without_retry(
@@ -693,7 +880,7 @@ def test_access_failure_returns_to_the_responsible_operator_without_agent_reflec
     assert error['code'] == 'invalid-config'
     assert 'responsible operator' in error['message']
     ticket = harness / '.graphtraj/state/tickets/76-session-alias-control'
-    engineer = next((ticket / 'teams/1/traces').glob('*@j*/events.jsonl'))
+    engineer = next((ticket / 'teams/1/traces').glob('*@e*/events.jsonl'))
     assert 'Recovery required:' not in engineer.read_text()
 
 
@@ -781,7 +968,7 @@ def test_main_replaces_an_unregistered_failed_engineer_from_its_durable_alias(
     mapping_file = next(
         path
         for path in (harness / '.graphtraj/runner/sessions').glob('*/mapping.yml')
-        if yaml.safe_load(path.read_text())['role'] == 'engineer-junior'
+        if yaml.safe_load(path.read_text())['role'] == 'engineer'
     )
     mapping = yaml.safe_load(mapping_file.read_text())
     alias = mapping['alias']

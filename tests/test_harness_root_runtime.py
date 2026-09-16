@@ -111,7 +111,7 @@ def test_installed_runtime_projects_enabled_external_skill_directories(
     reference = harness_skill.parent.parent / 'tdd' / 'tests.md'
     with engineer_probe(installed_commands, harness, fake_codex, environment):
         records = [json.loads(line) for line in fake_codex.log_file.read_text().splitlines()]
-        arguments = next(record['argv'] for record in records if record['role'].startswith('engineer-'))
+        arguments = next(record['argv'] for record in records if record['role'] == 'engineer')
     settings = {}
     for index, argument in enumerate(arguments[:-1]):
         if argument == '-c':
@@ -138,7 +138,7 @@ def _engineer_role(
     from graphtraj.configuration.role_definitions import resolve_child_role
 
     return resolve_child_role(
-        "engineer-expert",
+        "engineer",
         RolePreset("codex", model, None, None, reasoning_effort=reasoning_effort),
     )
 
@@ -483,10 +483,10 @@ def test_runtime_preflight_uses_fixed_policy_and_selected_model(
     plan = plan_project_setup(harness_root, temporary_git_repository)
     plan.apply()
     runtime_store = harness_root / ".codex"
-    role_path = runtime_store / "agents" / "engineer-expert.toml"
+    role_path = runtime_store / "agents" / "engineer.toml"
     role_path.parent.mkdir()
     role_path.write_text(
-        "name = 'engineer-expert'\nmodel = 'legacy-projection-model'\n",
+        "name = 'engineer'\nmodel = 'legacy-projection-model'\n",
         encoding="utf-8",
     )
 
@@ -639,7 +639,7 @@ def test_engineer_runtime_context_finalizes_worktree_facts_once(
     assert launch["runtime"] == "codex"
     assert launch["adapter_request"]["worktree_path"] == str(ticket)
     assert evidence_document["runtime"] == "codex"
-    assert evidence_document["effective_role"] == "engineer-expert"
+    assert evidence_document["effective_role"] == "engineer"
     assert evidence_document["model"] == "gpt-5.6-sol"
     assert evidence_document["model_reasoning_effort"] == expected_effort
     assert 'model_reasoning_effort="{0}"'.format(expected_effort) in launch[
@@ -735,7 +735,7 @@ def test_installed_runner_uses_runtime_user_core_skill_when_source_tracks_it(
 
     with engineer_probe(installed_commands, repository, fake_codex, environment) as (alias, worktree, _):
         records = [json.loads(line) for line in fake_codex.log_file.read_text().splitlines()]
-        arguments = next(record["argv"] for record in records if record["role"].startswith("engineer-"))
+        arguments = next(record["argv"] for record in records if record["role"] == "engineer")
     task = {"alias": alias, "worktree_path": str(worktree)}
     skills_argument = next(
         argument for argument in arguments if argument.startswith("skills=")
@@ -805,7 +805,7 @@ def test_installed_runner_uses_runtime_user_skill_from_newer_primary_history(
 
     with engineer_probe(installed_commands, repository, fake_codex, environment) as (alias, worktree, _):
         records = [json.loads(line) for line in fake_codex.log_file.read_text().splitlines()]
-        arguments = next(record["argv"] for record in records if record["role"].startswith("engineer-"))
+        arguments = next(record["argv"] for record in records if record["role"] == "engineer")
     task = {"alias": alias, "worktree_path": str(worktree)}
     skills_argument = next(
         argument for argument in arguments if argument.startswith("skills=")

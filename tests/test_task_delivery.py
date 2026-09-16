@@ -58,7 +58,7 @@ elif role == 'team-leader':
         assert 'settings.py together' in prompt
         assert 'traces/' in prompt
     if stage < 3:
-        child_role = ['engineer-junior', 'standards-reviewer', 'spec-reviewer'][stage]
+        child_role = ['engineer', 'standards-reviewer', 'spec-reviewer'][stage]
         batch = Path('.scratch') / ('batch-' + generation + '-' + str(stage) + '.yml')
         batch.write_text(yaml.safe_dump({'tasks': [{
             'ticket_id': ticket, 'ticket_name': os.environ['GRAPHTRAJ_TICKET_NAME'], 'role': child_role,
@@ -72,7 +72,7 @@ elif role == 'team-leader':
         (round_dir / 'leader.md').write_text('Candidate commit: ' + candidate + '\n' + (
             'Decision: REJECT\nDiagnosis: main\nRationale: The accepted split defers settings.py to a dependent Ticket, so render.py cannot validate independently. Main must merge the affected behavior.\n'
             if failure else 'Decision: ACCEPT\nRationale: Both Reviews and command validation support the accepted behavior.\n'))
-elif role.startswith('engineer-'):
+elif role == 'engineer':
     if ticket == '1':
         Path('render.py').write_text('from settings import greeting\n\ndef render():\n    return greeting\n\nif __name__ == "__main__":\n    print(render())\n')
         if generation == '2':

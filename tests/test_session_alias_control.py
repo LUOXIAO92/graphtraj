@@ -149,7 +149,7 @@ def test_installed_alias_control_resumes_and_interrupts_one_team_session(
     config_file.write_text(yaml.safe_dump(config))
     peer_mapping_file = next(
         path for path in session_root.glob("*/mapping.yml")
-        if yaml.safe_load(path.read_text())["role"].startswith("engineer-")
+        if yaml.safe_load(path.read_text())["role"] == "engineer"
     )
     peer_alias = yaml.safe_load(peer_mapping_file.read_text())["alias"]
     (integration / "other-ticket-in-progress.txt").write_text(
@@ -432,8 +432,8 @@ def test_installed_send_resumes_an_unregistered_leader_session(
     assert registration["tasks"] == [
         {
             "ticket_id": "76",
-            "role": "engineer-junior",
-            "alias": "76-session-alias-control@j1",
+            "role": "engineer",
+            "alias": "76-session-alias-control@e1",
             "launch_status": "registered",
         }
     ]
@@ -724,7 +724,7 @@ def test_installed_status_reports_native_requests_and_commit_diff(
                 "session": "native-session",
                 "ticket_id": "96",
                 "team_generation": 1,
-                "role": "engineer-senior",
+                "role": "engineer",
                 "parent": None,
                 "retained_batch_file": "batch.yml",
                 "worktree_path": str(integration),

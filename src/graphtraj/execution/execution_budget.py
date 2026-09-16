@@ -16,6 +16,7 @@ from typing import Any, Callable, Iterator, Mapping
 
 import yaml
 
+from graphtraj.configuration.project_roles import ROLE_REFERENCES
 from graphtraj.execution.runner_io import write_yaml_durably
 from graphtraj.execution.runner_models import RunnerError
 
@@ -39,8 +40,6 @@ _SESSION_FIELDS = frozenset(
 )
 _BUDGET_FIELDS = frozenset(
     {
-        "engineer_tier",
-        "tier_reason",
         "estimated_minutes",
         "planned_sessions",
         "correction_rounds",
@@ -48,14 +47,14 @@ _BUDGET_FIELDS = frozenset(
         "on_exceed",
     }
 )
+# Already accepted Tickets retain their estimation-only tier fields.
+_LEGACY_BUDGET_FIELDS = frozenset({"engineer_tier", "tier_reason"})
 _ROLE_SESSIONS = {
     "team-leader": "team_leader",
     "delivery-state": "delivery_state",
     "standards-reviewer": "standards_reviewer",
     "spec-reviewer": "spec_reviewer",
-    "engineer-junior": "engineer",
-    "engineer-senior": "engineer",
-    "engineer-expert": "engineer",
+    "engineer": "engineer",
 }
 
 
@@ -182,7 +181,9 @@ def caller_notice_fd() -> tuple[int | None, bool]:
 
 
 def execution_budget_stage(role: str) -> str:
-    if role.startswith("engineer-"):
+    """Return the stage that owns one role's elapsed-time accounting."""
+
+    if ROLE_REFERENCES.get(role, role) == "engineer":
         return "implementation"
     if role in {"standards-reviewer", "spec-reviewer"}:
         return "review"
@@ -339,7 +340,7 @@ class ExecutionBudgetMonitor:
                 changed = created or state["budget"] != budget.definition
                 if changed:
                     state["budget"] = budget.definition
-                session_key = _ROLE_SESSIONS.get(role)
+                session_key = _ROLE_SESSIONS.get(ROLE_REFERENCES.get(role, role))
                 if session and session_key is not None:
                     state["sessions"][session_key] += 1
                     changed = True
@@ -595,12 +596,11 @@ def _validate_budget(value: Any) -> None:
     ):
         raise ExecutionBudgetError("execution budget front matter has invalid fields")
     budget = value["execution_budget"]
-    if frozenset(budget) not in {_BUDGET_FIELDS, _BUDGET_FIELDS | {"revision_reason"}}:
+    allowed = _BUDGET_FIELDS | _LEGACY_BUDGET_FIELDS | {"revision_reason"}
+    if not _BUDGET_FIELDS <= frozenset(budget) <= allowed:
         raise ExecutionBudgetError("execution budget front matter has invalid fields")
     if (
-        budget["engineer_tier"] not in {"junior", "senior", "expert"}
-        or not _text(budget["tier_reason"])
-        or not _text(budget["estimation_note"])
+        not _text(budget["estimation_note"])
         or not _text(budget["on_exceed"])
         or not isinstance(budget["estimated_minutes"], dict)
         or set(budget["estimated_minutes"]) != _MINUTE_FIELDS

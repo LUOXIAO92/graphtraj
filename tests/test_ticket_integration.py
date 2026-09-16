@@ -168,7 +168,7 @@ def test_grouped_presets_apply_operator_settings_and_preserve_existing_history(
     assert launched.returncode == 0, launched.stderr
     records = [json.loads(line) for line in fake_codex.log_file.read_text().splitlines()]
     assert {record["role"] for record in records} == {
-        "team-leader", "engineer-junior", "standards-reviewer", "spec-reviewer", "delivery-state",
+        "team-leader", "engineer", "standards-reviewer", "spec-reviewer", "delivery-state",
     }
     for record in records:
         if record["role"] == "delivery-state":
@@ -426,7 +426,7 @@ def test_shared_integration_enforces_main_and_returns_retained_outcome(
     command = (sys.executable, "-c", "assert open('TEAM_ROUND_DELIVERED.txt').read() == 'complete team round\\n'")
     command = (*command[:2], command[2] + f"; raise SystemExit({validation_exit})")
     monkeypatch.chdir(root)
-    monkeypatch.setenv("GRAPHTRAJ_ROLE", "engineer-expert")
+    monkeypatch.setenv("GRAPHTRAJ_ROLE", "engineer")
     before = read_worldline(state, root)
     with pytest.raises(ValueError) as error:
         integrate_ticket(configuration, "83", command)

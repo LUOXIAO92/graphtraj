@@ -314,17 +314,17 @@ as `coding-team.team-leader` or `coding-team.spec-reviewer`. Each preset selects
 and `model`, with optional `reasoning_effort`, `base_url` and `api_key_env`. The latter names an
 environment variable, never stores the credential. Omitted settings use the
 Runtime's defaults. Team Leader additionally supports `allow_runtime_swarm`,
-which defaults to true. Presets include Team Leader, Engineer tiers, both
+which defaults to true. Presets include Team Leader, one unified Engineer, both
 Reviewer axes, Delivery State and Merge Resolver. Main's already selected
 Runtime is outside these presets.
 
 Set `reasoning_effort` on a role when its model needs a different reasoning
 level. For example, this entry inside the existing `roles` mapping selects
-`high` for the Senior Engineer:
+`high` for the Engineer:
 
 ```yaml
 coding-team:
-  engineer-senior:
+  engineer:
     runtime: codex
     model: gpt-5.6-terra
     reasoning_effort: high
@@ -351,7 +351,7 @@ Repository Skill from a Harness-owned Skill at the same physical path.
 
 Use the installed `task-delivery` Skill for the full workflow. Main registers
 accepted GitHub Issue definitions and dependencies, generates the current
-graph with `graphtraj ticket graph`, and selects ready Tickets and difficulty.
+graph with `graphtraj ticket graph`, and selects ready Tickets.
 Only validated `dev` integration satisfies a dependency.
 
 Main dispatches ready Tickets to Team Leaders with a block-style YAML Batch:
@@ -361,7 +361,7 @@ tasks:
   - ticket_id: "123"
     ticket_name: example-feature
     role: coding-team.team-leader
-    instruction: Senior difficulty. Deliver the current accepted Ticket.
+    instruction: Deliver the current accepted Ticket.
 ```
 
 The Ticket must already be registered. The Batch selects work; its optional

@@ -157,6 +157,55 @@ def test_installed_command_registers_an_accepted_issue_as_a_ticket(
     ]
 
 
+def test_installed_command_registers_an_accepted_ticket_without_an_engineer_tier(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+) -> None:
+    """Registration keeps difficulty and its budget without an Engineer tier."""
+    project = temporary_git_repository
+    state = _configure(project)
+    issue = _write(
+        project / "issue.yml",
+        {
+            **_ticket("77", "unified-engineer"),
+            "body": (
+                "---\n"
+                "difficulty: medium\n"
+                "difficulty_reason: One role source spans setup and dispatch\n"
+                "execution_budget:\n"
+                "  estimated_minutes:\n"
+                "    implementation: 10\n"
+                "    validation: 10\n"
+                "    review: 5\n"
+                "    total: 30\n"
+                "  planned_sessions:\n"
+                "    team_leader: 1\n"
+                "    engineer: 1\n"
+                "    standards_reviewer: 1\n"
+                "    spec_reviewer: 1\n"
+                "    delivery_state: 1\n"
+                "  correction_rounds: 1\n"
+                "  estimation_note: The accepted budget selects no Engineer role\n"
+                "  on_exceed: Notify the caller and preserve the running Session\n"
+                "---\n"
+                "\n"
+                "Deliver unified-engineer.\n"
+            ),
+        },
+    )
+
+    result = _run(
+        installed_commands, project, "register", "--ticket-file", str(issue)
+    )
+
+    assert result.returncode == 0, result.stderr
+    snapshot = (state / "tickets" / "77-unified-engineer" / "ticket.md").read_text(
+        encoding="utf-8"
+    )
+    assert snapshot.startswith("---\ndifficulty: medium\n")
+    assert "engineer_tier" not in snapshot
+
+
 def test_installed_command_registers_non_coding_ticket_with_front_matter(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,

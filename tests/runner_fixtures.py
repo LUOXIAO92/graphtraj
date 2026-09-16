@@ -62,7 +62,7 @@ def engineer_probe(commands, harness, fake_codex, environment, *, body="Probe th
     # Only the executable's model work is controlled at the Runtime boundary.
     fake_codex.executable.write_text(
         "#!" + sys.executable + "\nimport os, sys\n"
-        + "engineer = os.environ.get('GRAPHTRAJ_ROLE', '').startswith('engineer-')\n"
+        + "engineer = os.environ.get('GRAPHTRAJ_ROLE') == 'engineer'\n"
         + "if not engineer:\n    os.environ.pop('FAKE_CODEX_RELEASE_FILE', None)\n"
         + "target = " + repr(str(executable or driver)) + " if engineer else " + repr(str(driver)) + "\n"
         + "os.execv(target, [target, *sys.argv[1:]])\n"
@@ -88,7 +88,7 @@ def engineer_probe(commands, harness, fake_codex, environment, *, body="Probe th
             while time.monotonic() < deadline:
                 for path in (harness / ".graphtraj" / "runner").glob("sessions/*/mapping.yml"):
                     mapping = yaml.safe_load(path.read_text())
-                    if mapping["role"].startswith("engineer-"):
+                    if mapping["role"] == "engineer":
                         alias = mapping["alias"]
                         break
                 if alias:
@@ -104,7 +104,7 @@ def engineer_probe(commands, harness, fake_codex, environment, *, body="Probe th
                 while time.monotonic() < deadline:
                     if fake_codex.log_file.exists():
                         records = [json.loads(line) for line in fake_codex.log_file.read_text().splitlines()]
-                        if any(record.get("role", "").startswith("engineer-") for record in records):
+                        if any(record.get("role") == "engineer" for record in records):
                             break
                     time.sleep(0.01)
                 else:

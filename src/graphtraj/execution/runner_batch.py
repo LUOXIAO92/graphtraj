@@ -172,9 +172,7 @@ def _read_task(
         not isinstance(requested_skills, list)
         or any(not isinstance(name, str) or not name.strip() for name in requested_skills)
         or len(requested_skills) != len(set(requested_skills))
-        or ("skills" in task_document and policy_role not in {
-            "engineer-junior", "engineer-senior", "engineer-expert",
-        })
+        or ("skills" in task_document and policy_role != "engineer")
     ):
         raise RunnerError(
             "SKILL_SELECTION_INVALID",

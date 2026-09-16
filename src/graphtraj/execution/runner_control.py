@@ -18,6 +18,7 @@ from graphtraj.runtimes.codex.codex_adapter import (
     read_codex_session_identity,
     refresh_codex_report_paths,
 )
+from graphtraj.configuration.project_roles import ROLE_REFERENCES
 from graphtraj.graph.delivery_worldline import read_worldline
 from graphtraj.execution.execution_budget import caller_notice_fd, execution_budget_monitor
 from graphtraj.configuration.project_configuration import (
@@ -228,8 +229,8 @@ def _send_session_locked(
         else []
     )
     notice_monitor = monitor
-    if stopped and mapping["role"] not in {
-        "engineer-junior", "engineer-senior", "engineer-expert", "team-leader",
+    if stopped and ROLE_REFERENCES.get(mapping["role"], mapping["role"]) not in {
+        "engineer", "team-leader",
     }:
         raise RunnerError(
             "EXECUTION_BUDGET_STOPPED",
@@ -559,7 +560,7 @@ def _refresh_current_team_report_request(
     *,
     reports_only: bool = False,
 ) -> Dict[str, Any]:
-    role = mapping["role"]
+    role = ROLE_REFERENCES.get(mapping["role"], mapping["role"])
     if role == "team-leader" and "GRAPHTRAJ_TEAM_ROUND" not in environment:
         if not reports_only:
             return request
@@ -577,9 +578,7 @@ def _refresh_current_team_report_request(
             )
         except RuntimeAdapterError as error:
             raise RunnerError(error.code, error.message) from error
-    if role in {
-        "engineer-junior", "engineer-senior", "engineer-expert",
-    }:
+    if role == "engineer":
         names = ("engineer.md", "validation.md")
     elif role == "team-leader":
         names = ("leader.md",)

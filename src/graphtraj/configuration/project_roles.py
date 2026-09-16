@@ -15,17 +15,21 @@ ROLES_PATH = Path(".graphtraj") / "roles.yml"
 # Keep the established policy and Session identifiers behind grouped references.
 ROLE_NAMES = (
     "team-leader",
-    "engineer-junior",
-    "engineer-senior",
-    "engineer-expert",
+    "engineer",
     "standards-reviewer",
     "spec-reviewer",
     "delivery-state",
     "merge-resolver",
 )
+# Retained Batch, Session and Team records may still name one of these identities.
+_LEGACY_ENGINEER_NAMES = ("engineer-junior", "engineer-senior", "engineer-expert")
 ROLE_REFERENCES = {
-    "coding-team." + name if name != "delivery-state" else name: name
-    for name in ROLE_NAMES
+    **{
+        "coding-team." + name if name != "delivery-state" else name: name
+        for name in ROLE_NAMES
+    },
+    **{name: "engineer" for name in _LEGACY_ENGINEER_NAMES},
+    **{"coding-team." + name: "engineer" for name in _LEGACY_ENGINEER_NAMES},
 }
 _REQUIRED_FIELDS = frozenset({"runtime", "model"})
 _CONNECTION_FIELDS = frozenset({"base_url", "api_key_env"})
@@ -38,9 +42,7 @@ _DEFAULT_PRESETS: dict[str, dict[str, object]] = {
         "model": "gpt-5.6-sol",
         "allow_runtime_swarm": True,
     },
-    "engineer-junior": {"runtime": "codex", "model": "gpt-5.6-luna"},
-    "engineer-senior": {"runtime": "codex", "model": "gpt-5.6-terra"},
-    "engineer-expert": {"runtime": "codex", "model": "gpt-5.6-sol"},
+    "engineer": {"runtime": "codex", "model": "gpt-5.6-sol"},
     "standards-reviewer": {"runtime": "codex", "model": "gpt-5.6-sol"},
     "spec-reviewer": {"runtime": "codex", "model": "gpt-5.6-sol"},
     "delivery-state": {"runtime": "codex", "model": "gpt-5.6-luna"},
@@ -197,14 +199,6 @@ def _roles_from_document(document: Any) -> ProjectRoles:
         if not isinstance(coding, dict):
             diagnostics.append("roles.coding-team must be a mapping.")
         else:
-            coding = dict(coding)
-            if "engineer" in coding:
-                engineer = coding.pop("engineer")
-                for name in ("engineer-junior", "engineer-senior", "engineer-expert"):
-                    if name in coding:
-                        diagnostics.append("Use engineer or tiered Engineer presets, not both.")
-                    else:
-                        coding[name] = engineer
             for name, value in coding.items():
                 if name not in ROLE_NAMES or name == "delivery-state":
                     diagnostics.append("roles.coding-team.{0} is not a supported preset.".format(name))

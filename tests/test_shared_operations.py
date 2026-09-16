@@ -210,7 +210,7 @@ def test_python_and_cli_commit_team_state_and_worldline_facts(
         "worktree": ".graphtraj/worktrees/73-shared-state", "branch": "agent/73-shared-state",
         "members": {
             "team_leader": {"role": "team-leader", "session_ref": "73-shared-state@l1"},
-            "engineer": {"role": "engineer-expert", "session_ref": None},
+            "engineer": {"role": "engineer", "session_ref": None},
             "standards_reviewer": {"role": "standards-reviewer", "session_ref": None},
             "spec_reviewer": {"role": "spec-reviewer", "session_ref": None},
         },

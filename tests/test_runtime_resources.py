@@ -53,12 +53,10 @@ def test_installed_setup_leaves_main_configuration_to_the_user(
     assert not (harness / ".codex" / "hooks" / "worktree_guard.py").exists()
 
 
-@pytest.mark.parametrize("role_name", ("engineer-junior", "engineer-senior", "engineer-expert"))
 def test_runtime_executes_the_resolved_responsibility_and_required_skill(
     monkeypatch: pytest.MonkeyPatch,
     temporary_git_repository: Path,
     tmp_path: Path,
-    role_name: str,
 ) -> None:
     monkeypatch.syspath_prepend(str(PROJECT_ROOT / "src"))
     from graphtraj.runtimes.codex.codex_adapter import create_codex_turn, preflight_runtime_context
@@ -76,7 +74,7 @@ def test_runtime_executes_the_resolved_responsibility_and_required_skill(
     # boundary. Its output requires both the supplied instruction and Skill.
     role = replace(
         resolve_child_role(
-            role_name,
+            "engineer",
             RolePreset(
                 "codex", "operator-model", None, None,
                 reasoning_effort="high",
@@ -507,9 +505,8 @@ def test_reviewer_send_refreshes_exact_replacement_report_permissions(
     assert "--dangerously-bypass-hook-trust" not in arguments
 
 
-@pytest.mark.parametrize(
-    "role", ("engineer-junior", "engineer-senior", "engineer-expert")
-)
+# A retained Session identity resolves to the same unified Engineer policy.
+@pytest.mark.parametrize("role", ("engineer", "engineer-senior"))
 @pytest.mark.parametrize("reports_only", (False, True))
 def test_engineer_resume_drops_only_the_predecessor_readme_override(
     monkeypatch: pytest.MonkeyPatch,

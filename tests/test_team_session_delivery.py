@@ -82,7 +82,7 @@ def test_engineer_cannot_launch_as_main(
     )
     ready_team(root, "Deliver one complete Team Round.")
     environment.update(
-        GRAPHTRAJ_ROLE="engineer-junior",
+        GRAPHTRAJ_ROLE="engineer",
         GRAPHTRAJ_AGENT_RUNNER=str(installed_commands.runner),
         FAKE_CODEX_LIFECYCLE_ACTION="complete-team-round",
     )
@@ -159,8 +159,8 @@ def test_public_team_phases_and_parent_capacity_transfer(
         return mapping
 
     try:
-        engineer = running_child("114-small-team@j1")
-        assert engineer["role"] == "engineer-junior"
+        engineer = running_child("114-small-team@e1")
+        assert engineer["role"] == "engineer"
         assert read_graph(state)["tickets"][0]["status"] == "implementing"
         engineer_release.touch()
         assert running_child("114-small-team@r1")["role"] == "standards-reviewer"
@@ -253,7 +253,7 @@ def test_real_small_team(
     environment.pop("PYTHONPATH", None)
     environment["PATH"] = str(python.parent) + os.pathsep + environment["PATH"]
     instruction = (
-        "For the team-leader only: select coding-team.engineer-junior for this bounded probe. "
+        "For the team-leader only: select coding-team.engineer for this bounded probe. "
         "Use the installed public Python Runner operations for child registration: "
         f"{python} -c 'from pathlib import Path; from graphtraj.execution.runner_batch import parse_batch; "
         "from graphtraj.execution.runner_launch import launch_batch; "
@@ -352,7 +352,7 @@ def test_real_small_team(
         mappings = [yaml.safe_load(path.read_text()) for path in
                     (root / ".graphtraj/runner/sessions").glob("*/mapping.yml")]
         assert {mapping["role"] for mapping in mappings} == {
-            "team-leader", "engineer-junior", "standards-reviewer", "spec-reviewer", "delivery-state",
+            "team-leader", "engineer", "standards-reviewer", "spec-reviewer", "delivery-state",
         }
         assert len({mapping["session"] for mapping in mappings}) == 5
         assert all(mapping["worktree_path"] == str(worktree) for mapping in mappings)

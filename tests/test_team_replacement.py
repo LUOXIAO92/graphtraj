@@ -54,11 +54,11 @@ def test_installed_team_and_member_replacement(
                 assert str(trace.relative_to(Path(os.environ['GRAPHTRAJ_HARNESS_ROOT']))) in prompt
                 assert 'Handoff: preserve' in trace.read_text()
 """)
-    script = script.replace("elif role.startswith('engineer-'):", """elif role.startswith('engineer-') and 'Continue this Team seat' in sys.stdin.read():
+    script = script.replace("elif role == 'engineer':", """elif role == 'engineer' and 'Continue this Team seat' in sys.stdin.read():
         emit({'type': 'item.completed', 'item': {'type': 'agent_message', 'text': 'Engineer replacement ready to continue.'}})
-    elif role.startswith('engineer-'):""")
+    elif role == 'engineer':""")
     if during_implementation is True:
-        script = script.replace("elif role.startswith('engineer-'):", """elif role.startswith('engineer-'):
+        script = script.replace("elif role == 'engineer':", """elif role == 'engineer':
         if os.environ.get('GRAPHTRAJ_TEAM_GENERATION') == '1':
             Path(os.environ['ENGINEER_STARTED']).touch()
             deadline = time.monotonic() + 30
@@ -148,7 +148,7 @@ configured_events =""", 1)
     team = yaml.safe_load(team_file.read_text())
     leader = team["members"]["team_leader"]["session_ref"]
     reviewer = team["members"]["spec_reviewer"]["session_ref"] or (
-        "76-session-alias-control@r2" if during_implementation == "reviewing" else "76-session-alias-control@j1"
+        "76-session-alias-control@r2" if during_implementation == "reviewing" else "76-session-alias-control@e1"
     )
     trace = ticket_dir / "teams/1/traces" / reviewer / "events.jsonl"
     prior = trace.read_bytes()

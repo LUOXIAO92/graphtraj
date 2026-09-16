@@ -248,7 +248,7 @@ def test_one_position_completes_one_round_with_sequential_reviewers(
         assert len(active) <= 1
     assert not active
     assert [role for role in roles if role != "delivery-state"] == [
-        "team-leader", "engineer-junior", "team-leader", "team-leader",
+        "team-leader", "engineer", "team-leader", "team-leader",
         "standards-reviewer", "team-leader", "spec-reviewer", "team-leader",
     ]
     leaders = [event for event in events if event["kind"] == "start" and event["role"] == "team-leader"]

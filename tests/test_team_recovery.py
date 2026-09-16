@@ -11,7 +11,7 @@ import pytest
 import yaml
 
 from conftest import FakeCodex, InstalledCommands, app_server_peer, run_process, wait_for_file
-from runner_fixtures import configure_harness
+from runner_fixtures import configure_harness, retained_state
 from test_session_alias_control import _register_ready_ticket
 
 
@@ -973,7 +973,7 @@ def test_main_replaces_an_unregistered_failed_engineer_from_its_durable_alias(
     mapping = yaml.safe_load(mapping_file.read_text())
     alias = mapping['alias']
     trace = ticket / 'teams/1/traces' / alias / 'events.jsonl'
-    trace_before = trace.read_bytes()
+    trace_before = retained_state(trace)
     assert team['members']['engineer']['session_ref'] is None
     cause = [
         json.loads(line)['event_id']
@@ -994,7 +994,7 @@ def test_main_replaces_an_unregistered_failed_engineer_from_its_durable_alias(
     team = yaml.safe_load(team_file.read_text())
     assert replacement != alias
     assert team['members']['engineer']['session_ref'] == replacement
-    assert trace.read_bytes() == trace_before
+    assert retained_state(trace) == trace_before
 
 
 @pytest.mark.parametrize(
@@ -1340,7 +1340,7 @@ def test_missing_current_review_can_be_corrected_in_the_retained_session(
     status_before = yaml.safe_load(command('status', reviewer).stdout)['aliases'][0]
     assert status_before['last_outcome'] == ('completed' if native else 'runtime-error')
     preserved = {
-        path: path.read_bytes()
+        path: retained_state(path)
         for path in (
             reports / 'engineer.md', reports / 'validation.md', reports / 'standards.md',
             ticket / 'teams/1/traces' / team['members']['engineer']['session_ref'] / 'events.jsonl',
@@ -1385,7 +1385,7 @@ def test_missing_current_review_can_be_corrected_in_the_retained_session(
     assert status['session'] == status_before['session']
     assert reviewer_trace.read_bytes().startswith(prior_trace)
     assert reviewer_trace.read_text().count('turn_context') == (2 if native else 3)
-    assert all(path.read_bytes() == content for path, content in preserved.items())
+    assert all(retained_state(path) == content for path, content in preserved.items())
     recovery_prompt = reviewer_trace.read_text() if native else (
         harness / current['worktree'] / '.scratch/recovery-prompt-spec-reviewer'
     ).read_text()

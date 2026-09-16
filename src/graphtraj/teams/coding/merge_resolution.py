@@ -50,8 +50,10 @@ def launch_merge_resolver(batch: Batch, cwd: Path) -> LaunchResponse:
         raise RunnerError("ALIAS_ALLOCATION_FAILED", "No fresh Merge Resolver Session alias is available.")
     trace = traces / alias / "events.jsonl"
     trace.parent.mkdir()
+    # The Trace entry later reads the Runtime-owned native Session record;
+    # this Session keeps the Runner's own records for the same execution.
     trace.touch()
-    os.link(trace, session_directory / "events.jsonl")
+    (session_directory / "events.jsonl").touch()
     prompt = (
         task.ticket_content
         + f"\nFixed incoming candidate: {conflict['candidate']}\nExisting dev state: {conflict['dev_before']}"

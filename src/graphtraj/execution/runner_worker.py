@@ -146,6 +146,7 @@ def run(job_file: Path) -> int:
                         args=(
                             budget_monitor,
                             mapping,
+                            session_directory,
                             monitor_stop,
                             deliver_parentless_leader_notices,
                         ),
@@ -157,6 +158,7 @@ def run(job_file: Path) -> int:
                 request, prompt, session_directory, record_session,
                 job.get("context_evidence", {}),
                 expected_session=expected_session if operation == "resume" else None,
+                trace_file=Path(base_mapping["trace_file"]),
             )
             previous_sigterm = signal.signal(signal.SIGTERM, request_termination)
             try:
@@ -261,6 +263,7 @@ def _append_follow_up(events_file: Path, causes: list[str]) -> None:
 def _monitor_execution_budget(
     monitor: ExecutionBudgetMonitor,
     mapping: dict[str, object],
+    session_directory: Path,
     stop: threading.Event,
     deliver_parentless_leader_notices: bool,
 ) -> None:
@@ -274,10 +277,7 @@ def _monitor_execution_budget(
             return
         from graphtraj.execution.runner_control import _send_session
 
-        trace_file = mapping.get("trace_file")
-        if not isinstance(trace_file, str):
-            return
-        parent_directory = Path(trace_file).parent.parent / parent
+        parent_directory = session_directory.parent / parent
         parent_mapping = yaml.safe_load(
             (parent_directory / "mapping.yml").read_text(encoding="utf-8")
         )

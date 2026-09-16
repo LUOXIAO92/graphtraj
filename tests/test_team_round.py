@@ -10,7 +10,7 @@ import yaml
 import pytest
 
 from conftest import wait_for_file, FakeCodex, InstalledCommands, run_process, wait_for_file
-from runner_fixtures import configure_harness
+from runner_fixtures import configure_harness, retained_state
 
 
 def _register_ready_inline_ticket(harness_root: Path, product: Path) -> None:
@@ -463,11 +463,18 @@ def test_installed_runner_obeys_the_explicit_leader_decision_for_a_run_free_team
     assert all((path.stat().st_mode & 0o222 == 0) is round_closed for path in round_directory.iterdir())
     traces = list((ticket_directory / "teams" / "1" / "traces").glob("*/events.jsonl"))
     assert len(traces) == 5
-    assert all(
-        json.loads(trace.read_text().splitlines()[0])
-        == {"type": "runtime", "runtime": "codex"}
+    session_records = [
+        harness_root / ".graphtraj" / "runner" / "sessions" / trace.parent.name / "events.jsonl"
         for trace in traces
+    ]
+    # Each Session identifies its Runtime in the Runner's own records, while
+    # its Trace entry reads the Runtime-owned native Session record directly.
+    assert all(
+        json.loads(records.read_text().splitlines()[0])
+        == {"type": "runtime", "runtime": "codex"}
+        for records in session_records
     )
+    assert all(trace.is_symlink() and trace.resolve().is_file() for trace in traces)
     mappings = [
         yaml.safe_load(path.read_text())
         for path in (harness_root / ".graphtraj" / "runner" / "sessions").glob("*/mapping.yml")
@@ -524,7 +531,7 @@ def test_installed_runner_obeys_the_explicit_leader_decision_for_a_run_free_team
         assert len(mappings) == 5
         observed = [
             json.loads(line)
-            for trace in traces for line in trace.read_text().splitlines()
+            for records in session_records for line in records.read_text().splitlines()
             if line.startswith("{") and json.loads(line).get("type") == "report-observed"
         ]
         for name in ("engineer.md", "validation.md", "leader.md"):
@@ -534,8 +541,11 @@ def test_installed_runner_obeys_the_explicit_leader_decision_for_a_run_free_team
                 for event in observed
             )
         for seat in team["members"].values():
-            trace = ticket_directory / "teams" / "1" / "traces" / seat["session_ref"] / "events.jsonl"
-            assert trace.read_text().count('"type": "runner-execution-start"') >= 2
+            records = (
+                harness_root / ".graphtraj" / "runner" / "sessions"
+                / seat["session_ref"] / "events.jsonl"
+            )
+            assert records.read_text().count('"type": "runner-execution-start"') >= 2
     else:
         assert not (round_directory.parent / "2").exists()
 
@@ -618,7 +628,7 @@ def test_installed_runner_retries_an_unregistered_team_and_preserves_history(
         team_directory / 'traces',
     ]
     retained = {
-        path: path.read_bytes()
+        path: retained_state(path)
         for directory in history_roots for path in directory.rglob('*') if path.is_file()
     }
     assert list((team_directory / 'traces').glob('*/events.jsonl'))
@@ -639,7 +649,7 @@ def test_installed_runner_retries_an_unregistered_team_and_preserves_history(
     assert current['current_candidate']
     team = yaml.safe_load((team_directory / 'team.yml').read_text())
     assert team['members']['team_leader']['session_ref'].endswith('@l2')
-    assert all(path.read_bytes() == content for path, content in retained.items())
+    assert all(retained_state(path) == content for path, content in retained.items())
     accepted_ticket = (ticket_directory / 'ticket.yml').read_bytes()
     accepted_team = (team_directory / 'team.yml').read_bytes()
 

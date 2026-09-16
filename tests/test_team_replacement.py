@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from importlib import resources
 
@@ -8,7 +9,7 @@ import pytest
 import yaml
 
 from conftest import run_process, wait_for_file
-from runner_fixtures import configure_harness
+from runner_fixtures import configure_harness, retained_state
 from test_session_alias_control import _register_ready_ticket
 
 
@@ -151,7 +152,7 @@ configured_events =""", 1)
         "76-session-alias-control@r2" if during_implementation == "reviewing" else "76-session-alias-control@e1"
     )
     trace = ticket_dir / "teams/1/traces" / reviewer / "events.jsonl"
-    prior = trace.read_bytes()
+    prior = retained_state(trace)
 
     def events():
         return [json.loads(line) for shard in sorted((root / ".graphtraj/state/worldline").glob("*.jsonl")) for line in shard.read_text().splitlines()]
@@ -169,17 +170,17 @@ configured_events =""", 1)
     if not during_implementation:
         engineer = team["members"]["engineer"]["session_ref"]
         engineer_trace = ticket_dir / "teams/1/traces" / engineer / "events.jsonl"
-        engineer_before = engineer_trace.read_bytes()
+        engineer_before = retained_state(engineer_trace)
         replacement = command("replace", engineer, "--actor", "main", "--caused-by-event-id", cause)
         assert replacement.returncode == 0, replacement.stdout + replacement.stderr
-        assert engineer_trace.read_bytes() == engineer_before
+        assert retained_state(engineer_trace) == engineer_before
         assert yaml.safe_load(team_file.read_text())["members"]["engineer"]["session_ref"] != engineer
         assert yaml.safe_load((ticket_dir / "ticket.yml").read_text()) == original
         replaced = command("replace", reviewer, "--actor", "main", "--caused-by-event-id", cause)
         assert replaced.returncode == 0, replaced.stdout + replaced.stderr
         new_alias = yaml.safe_load(replaced.stdout)["replacement_alias"]
         assert new_alias != reviewer
-        assert trace.read_bytes() == prior
+        assert retained_state(trace) == prior
         current = yaml.safe_load(team_file.read_text())
         assert current["team_ordinal"] == 1
         assert current["members"]["spec_reviewer"]["session_ref"] == new_alias

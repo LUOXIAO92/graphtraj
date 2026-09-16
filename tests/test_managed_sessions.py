@@ -232,12 +232,18 @@ def test_real_registered_session(managed_project: ManagedProject) -> None:
     native = Path(metadata['rollout_path'])
     native_records = [json.loads(line) for line in native.read_text().splitlines()]
     assert native_records[0]['payload']['id'] == launched['session']
-    retained = Path(mapping['trace_file']).read_bytes().splitlines(keepends=True)
-    raw = b''.join(
-        line for line in retained
-        if json.loads(line)['type'] not in {'runtime', 'runner-execution-start', 'runner-follow-up'}
-    )
-    assert raw == native.read_bytes()
+    # The Trace entry reads that Runtime-owned native file directly, while the
+    # Runner's own records stay in the Session directory.
+    trace = Path(mapping['trace_file'])
+    assert os.readlink(trace) == str(native)
+    assert trace.read_bytes() == native.read_bytes()
+    session_records = (directory / 'events.jsonl').read_text()
+    assert '"type":"runtime"' in session_records
+    assert '"type": "runner-execution-start"' in session_records
+    assert '"type":"runner-follow-up"' in session_records
+    assert '"type":"runtime"' not in native.read_text()
+    assert 'runner-execution-start' not in native.read_text()
+    assert 'runner-follow-up' not in native.read_text()
 
 
 def test_active_input_reaches_the_same_native_execution(managed_project: ManagedProject) -> None:
@@ -491,12 +497,16 @@ def test_multiple_native_requests_keep_input_and_trace_contents(managed_project:
     ]
     from graphtraj.execution.runner_status import read_alias_mapping
     from graphtraj.runtimes.codex.codex_adapter import read_codex_last_agent_message
-    mapping, _ = read_alias_mapping(root / '.graphtraj/runner', alias)
+    mapping, session_directory = read_alias_mapping(root / '.graphtraj/runner', alias)
     trace = Path(mapping['trace_file'])
     assert json.loads(read_codex_last_agent_message(trace)) == answer
-    raw = b''.join(line for line in trace.read_bytes().splitlines(keepends=True)
-                   if json.loads(line)['type'] not in {'runtime', 'runner-execution-start', 'runner-follow-up'})
-    assert raw == native.read_bytes()
+    assert os.readlink(trace) == str(native)
+    assert trace.read_bytes() == native.read_bytes()
+    session_records = (session_directory / 'events.jsonl').read_text()
+    assert '"type":"runtime"' in session_records
+    assert '"type": "runner-execution-start"' in session_records
+    assert '"type":"runtime"' not in native.read_text()
+    assert 'runner-execution-start' not in native.read_text()
 
 
 @pytest.mark.parametrize('operation', ['send', 'interrupt'])

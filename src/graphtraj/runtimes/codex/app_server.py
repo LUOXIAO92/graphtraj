@@ -173,7 +173,6 @@ class CodexAppServer:
         self._pending: dict[int, asyncio.Future[dict[str, Any] | CodexAdapterError]] = {}
         self._sequence = 0
         self._sessions: dict[str, CodexSession] = {}
-        self._resumed_sessions: set[str] = set()
         self._resuming: set[str] = set()
         self._turns: dict[tuple[str, str], _ExecutionState] = {}
         self._active: dict[str, str | None] = {}
@@ -349,22 +348,21 @@ class CodexAppServer:
         except (KeyError, TypeError, ValueError, AttributeError) as error:
             raise self._protocol_failure(f'{method}: {error}') from error
         self._sessions[session.thread_id] = session
-        if thread_id is not None:
-            self._resumed_sessions.add(session.thread_id)
         return session
 
-    def retain_native_trace(self, session: CodexSession, trace_directory: Path) -> None:
-        """Retain raw native rollout records for one owned Session in the given Trace.
+    def retain_native_trace(self, session: CodexSession, trace_file: Path) -> None:
+        """Read one owned Session's native records through the given Trace entry.
 
-        Collection starts immediately and continues independently of a caller
-        waiting for a particular execution. Calling this once per connection
-        Session preserves C.1's Session and execution handles unchanged.
+        The Trace entry becomes a symbolic link to the Runtime-owned native
+        rollout as soon as that file exists, and keeps reading it while the
+        Session runs. Calling this once per connection Session preserves C.1's
+        Session and execution handles unchanged.
         """
 
         self._require_session(session)
-        if not isinstance(trace_directory, Path):
+        if not isinstance(trace_file, Path):
             raise CodexAdapterError(
-                'RUNTIME_REQUEST_INVALID', 'A Trace directory path is required.',
+                'RUNTIME_REQUEST_INVALID', 'A Trace entry path is required.',
             )
         if session.thread_id in self._traces:
             raise CodexAdapterError(
@@ -372,7 +370,7 @@ class CodexAppServer:
             )
         try:
             trace = CodexNativeTrace(
-                trace_directory,
+                trace_file,
                 session.thread_id,
                 session.rollout_path,
                 Path(
@@ -380,7 +378,6 @@ class CodexAppServer:
                         'CODEX_HOME', Path.home() / '.codex',
                     )
                 ),
-                resumed=session.thread_id in self._resumed_sessions,
             )
         except OSError as error:
             raise CodexAdapterError(
@@ -524,7 +521,7 @@ class CodexAppServer:
         return result.copy()
 
     async def _collect_native_trace(self, trace: CodexNativeTrace) -> None:
-        """Poll one native rollout without blocking control-message processing."""
+        """Watch for one native rollout without blocking control-message processing."""
 
         try:
             while not self._closed:
@@ -539,7 +536,7 @@ class CodexAppServer:
             ))
 
     def _collect_native_trace_once(self, thread_id: str) -> None:
-        """Drain a terminal Session's rollout once before returning its result."""
+        """Link a terminal Session's rollout once before returning its result."""
 
         trace = self._traces.get(thread_id)
         if trace is None:
@@ -555,7 +552,7 @@ class CodexAppServer:
             raise failure from error
 
     async def _finish_native_traces(self) -> None:
-        """Stop background collection and make one final native-record drain."""
+        """Stop background collection after one final link attempt."""
 
         for task in self._trace_tasks.values():
             task.cancel()

@@ -12,7 +12,7 @@ import yaml
 
 from conftest import InstalledCommands, run_process, wait_for_file
 from test_existing_repository_setup import run_setup
-from runner_fixtures import configure_harness
+from runner_fixtures import configure_harness, retained_state
 from test_ticket_graph import _change_status, _register, _ticket
 
 
@@ -140,14 +140,14 @@ def test_grouped_presets_apply_operator_settings_and_preserve_existing_history(
     roles_file.write_text(yaml.safe_dump(document))
     roles_before = roles_file.read_bytes()
     retained = {
-        path: path.read_bytes()
+        path: retained_state(path)
         for directory in (state / "batches", state / "worldline", state / "tickets/83-integration/teams")
         for path in directory.rglob("*") if path.is_file()
     }
     setup = run_setup(installed_commands, root, answers="")
     assert setup.returncode == 0, setup.stderr
     assert roles_file.read_bytes() == roles_before
-    assert {path: path.read_bytes() for path in retained} == retained
+    assert {path: retained_state(path) for path in retained} == retained
 
     _register(installed_commands, root, _ticket("89", "grouped-settings"))
     _change_status(installed_commands, root, "89", "ready")
@@ -191,7 +191,7 @@ def test_grouped_presets_apply_operator_settings_and_preserve_existing_history(
         if path.parent == state / "worldline":
             assert path.read_bytes().startswith(content)
         else:
-            assert path.read_bytes() == content
+            assert retained_state(path) == content
 
 
 def test_failed_validation_retains_evidence_without_unlocking_and_main_can_retry(

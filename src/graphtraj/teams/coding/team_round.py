@@ -1991,8 +1991,18 @@ def _process_corrections(
 
 
 def _current_runtime_diagnostic(
-    session_directory: Path, stderr_offset: int, event_offset: int
+    session_directory: Path,
+    trace_file: Path,
+    stderr_offset: int,
+    trace_offset: int,
 ) -> str:
+    """Collect Runtime output recorded since this execution started.
+
+    The Runtime writes its own records into the Runtime-owned Session file,
+    which reaches the Harness only through the retained Trace entry, so that
+    entry supplies the Runtime's error records for the current execution.
+    """
+
     diagnostics = [_diagnostic_since(session_directory / "stderr.log", stderr_offset)]
     try:
         diagnostics.append(
@@ -2001,8 +2011,8 @@ def _current_runtime_diagnostic(
     except (OSError, UnicodeError):
         pass
     try:
-        with (session_directory / "events.jsonl").open("rb") as events:
-            events.seek(event_offset)
+        with trace_file.open("rb") as events:
+            events.seek(trace_offset)
             diagnostics.extend(_runtime_event_errors(events.read()))
     except OSError:
         pass
@@ -2272,13 +2282,15 @@ def _execute_agent(
         session_directory.mkdir(parents=True, exist_ok=False)
         trace_directory = traces / alias
         trace_directory.mkdir()
-        trace = trace_directory / "events.jsonl"
-        trace.touch()
-        os.link(trace, session_directory / "events.jsonl")
+        # The Trace entry later reads the Runtime-owned native Session record;
+        # this Session keeps the Runner's own records for the same execution.
+        (trace_directory / "events.jsonl").touch()
+        (session_directory / "events.jsonl").touch()
     else:
         session_directory = project.runner_directory / "sessions" / alias
         if not session_directory.is_dir():
             raise RunnerError("RUNTIME_WORKER_FAILED", "The mapped Session is unavailable.")
+    trace = traces / alias / "events.jsonl"
 
     policy_role = _task_policy(task, role)
     monitor = (
@@ -2325,7 +2337,7 @@ def _execute_agent(
                     "parent": parent_alias,
                     "retained_batch_file": str(retained_batch),
                     "worktree_path": str(worktree),
-                    "trace_file": str(session_directory / "events.jsonl"),
+                    "trace_file": str(trace),
                     "report_file": (
                         task.report_file.as_posix()
                         if task.report_file is not None else None
@@ -2421,7 +2433,12 @@ def _execute_agent(
         stderr_offset = 0
     with events_file.open("a", encoding="utf-8") as events:
         events.write(json.dumps({"type": "runner-execution-start"}) + "\n")
-    event_offset = events_file.stat().st_size
+    try:
+        # The Trace entry reads the Runtime-owned native record, which this
+        # execution keeps appending to while it runs.
+        trace_offset = trace.stat().st_size
+    except OSError:
+        trace_offset = 0
     environment = {
         **runtime_environment,
         **(task_environment or {}),
@@ -2557,7 +2574,7 @@ def _execute_agent(
     if not wait_for_completion:
         return alias, session_id
     diagnostic = _current_runtime_diagnostic(
-        session_directory, stderr_offset, event_offset
+        session_directory, trace, stderr_offset, trace_offset
     )
     if outcome == "budget-stopped":
         if role == "team-leader" and monitor is not None:

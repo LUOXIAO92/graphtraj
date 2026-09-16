@@ -125,9 +125,12 @@ def _operation_total(trace_file: Path, session: str) -> int:
     """Count one native Codex tool request for each call ID in one Session."""
 
     try:
-        records = trace_file.read_text(encoding="utf-8").splitlines()
+        text = trace_file.read_text(encoding="utf-8")
     except (OSError, UnicodeError) as error:
         raise _diagnostic_failure() from error
+    # The Runtime appends to the linked native file, so a running Session can
+    # end with a record that is not written completely yet.
+    records = text.splitlines() if text.endswith("\n") else text.splitlines()[:-1]
     calls = set()
     try:
         for record in records:

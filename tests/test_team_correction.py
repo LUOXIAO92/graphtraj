@@ -212,10 +212,15 @@ def test_installed_team_corrects_engineer_and_reviewer_in_same_round(
     assert len([c for c in calls if c['role'] == 'engineer']) == 2
     assert len([c for c in calls if c['role'] == 'standards-reviewer']) == (2 if timing == 'after-review' else 1)
     traces = ticket / 'teams/1/traces'
-    engineer = traces / team['members']['engineer']['session_ref'] / 'events.jsonl'
-    reviewer = traces / team['members']['spec_reviewer']['session_ref'] / 'events.jsonl'
-    assert 'Unrequested feature' in engineer.read_text()
-    assert 'Unsupported finding' in reviewer.read_text()
+    engineer = team['members']['engineer']['session_ref']
+    reviewer = team['members']['spec_reviewer']['session_ref']
+    # Each Trace entry reads the Runtime-owned native Session file, while the
+    # reports the Runner observed stay in that Session's own records.
+    sessions = harness / '.graphtraj/runner/sessions'
+    assert (traces / engineer / 'events.jsonl').is_symlink()
+    assert (traces / reviewer / 'events.jsonl').is_symlink()
+    assert 'Unrequested feature' in (sessions / engineer / 'events.jsonl').read_text()
+    assert 'Unsupported finding' in (sessions / reviewer / 'events.jsonl').read_text()
     events = [json.loads(line) for p in (harness / '.graphtraj/state/worldline').glob('*.jsonl') for line in p.read_text().splitlines()]
     corrections = [e for e in events if e['kind'] == 'team-process-correction']
     assert [e['responsible_role'] for e in corrections] == ['engineer', 'spec-reviewer']
@@ -227,7 +232,12 @@ def test_installed_team_corrects_engineer_and_reviewer_in_same_round(
     assert len({e['candidate'] for e in candidates}) == 2
     for event in candidates:
         assert all('traces/' in ref for ref in event['evidence_refs'])
-        assert all(event['candidate'] in (harness / ref).read_text() for ref in event['evidence_refs'])
+        # Each Trace entry reads the Runtime-owned native Session file, so the
+        # report the Runner observed is read from that Session's own records.
+        assert all(
+            event['candidate'] in (sessions / Path(ref).parent.name / 'events.jsonl').read_text()
+            for ref in event['evidence_refs']
+        )
     for event in corrections:
         assert any(event['event_id'] in c['prompt'] for c in calls if c['role'] == event['responsible_role'])
 

@@ -328,48 +328,43 @@ def test_current_runtime_diagnostic_uses_only_current_error_events(
     stderr = session / "stderr.log"
     stderr.write_text("retained Permission denied diagnostic\n", encoding="utf-8")
     stderr_offset = stderr.stat().st_size
-    events = session / "events.jsonl"
-    events.write_text(
-        json.dumps({"type": "report-observed", "content": "Permission denied"})
+    # Diagnostic error records are native records, which reach the Harness only
+    # through the retained Trace entry that reads the Runtime-owned file.
+    trace = session / "trace.jsonl"
+    trace.write_text(
+        json.dumps(
+            {
+                "type": "item.completed",
+                "item": {
+                    "type": "command_execution",
+                    "aggregated_output": "source says Permission denied",
+                    "exit_code": 0,
+                    "status": "completed",
+                },
+            }
+        )
+        + "\n"
+        + json.dumps(
+            {
+                "type": "item.completed",
+                "item": {
+                    "type": "agent_message",
+                    "text": "the Agent quoted Permission denied",
+                },
+            }
+        )
         + "\n",
         encoding="utf-8",
     )
-    event_offset = events.stat().st_size
-    with events.open("a", encoding="utf-8") as stream:
-        stream.write(
-            json.dumps(
-                {
-                    "type": "item.completed",
-                    "item": {
-                        "type": "command_execution",
-                        "aggregated_output": "source says Permission denied",
-                        "exit_code": 0,
-                        "status": "completed",
-                    },
-                }
-            )
-            + "\n"
-        )
-        stream.write(
-            json.dumps(
-                {
-                    "type": "item.completed",
-                    "item": {
-                        "type": "agent_message",
-                        "text": "the Agent quoted Permission denied",
-                    },
-                }
-            )
-            + "\n"
-        )
+    trace_offset = trace.stat().st_size
 
     diagnostic = _current_runtime_diagnostic(
-        session, stderr_offset, event_offset
+        session, trace, stderr_offset, trace_offset
     )
     assert not _runtime_access_failure(diagnostic, (report,))
 
-    parse_offset = events.stat().st_size
-    with events.open("a", encoding="utf-8") as stream:
+    parse_offset = trace.stat().st_size
+    with trace.open("a", encoding="utf-8") as stream:
         stream.write(
             json.dumps(
                 {
@@ -389,13 +384,13 @@ def test_current_runtime_diagnostic_uses_only_current_error_events(
             + "\n"
         )
     parse_diagnostic = _current_runtime_diagnostic(
-        session, stderr_offset, parse_offset
+        session, trace, stderr_offset, parse_offset
     )
     assert not _runtime_access_failure(parse_diagnostic, (report,))
     assert _runtime_command_parse_error(parse_diagnostic) == "Cannot verify option: --glob"
 
-    wrong_target_offset = events.stat().st_size
-    with events.open("a", encoding="utf-8") as stream:
+    wrong_target_offset = trace.stat().st_size
+    with trace.open("a", encoding="utf-8") as stream:
         stream.write(
             json.dumps(
                 {
@@ -415,12 +410,12 @@ def test_current_runtime_diagnostic_uses_only_current_error_events(
             + "\n"
         )
     wrong_target = _current_runtime_diagnostic(
-        session, stderr_offset, wrong_target_offset
+        session, trace, stderr_offset, wrong_target_offset
     )
     assert not _runtime_access_failure(wrong_target, (report,))
 
-    denial_offset = events.stat().st_size
-    with events.open("a", encoding="utf-8") as stream:
+    denial_offset = trace.stat().st_size
+    with trace.open("a", encoding="utf-8") as stream:
         stream.write(
             json.dumps(
                 {
@@ -438,8 +433,8 @@ def test_current_runtime_diagnostic_uses_only_current_error_events(
                 }
             )
             + "\n"
-    )
-    denial = _current_runtime_diagnostic(session, stderr_offset, denial_offset)
+        )
+    denial = _current_runtime_diagnostic(session, trace, stderr_offset, denial_offset)
     assert _runtime_access_failure(denial, (report,))
     assert _runtime_access_failure(
         "Native startup failed: symlinked writable roots are not supported",

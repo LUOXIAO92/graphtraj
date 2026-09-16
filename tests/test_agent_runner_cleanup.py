@@ -328,8 +328,11 @@ def test_installed_cleanup_removes_a_preflight_failed_team_session_after_integra
         / "events.jsonl"
     )
     assert not (failed_session / "mapping.yml").exists()
-    assert events.is_file()
-    assert os.path.samefile(events, trace)
+    # A preflight failure leaves an allocation whose Session record and Trace
+    # entry are both still empty, so nothing is removed but empty records.
+    assert events.is_file() and events.read_bytes() == b""
+    assert trace.is_file() and not trace.is_symlink()
+    assert trace.read_bytes() == b""
     durable_before = _durable_contents(ticket)
     mappings = _ticket_mappings(ticket)
 
@@ -391,9 +394,13 @@ def test_installed_cleanup_removes_a_terminal_unmapped_startup_failure_after_int
     assert Path(launch["mapping"]["retained_batch_file"]).is_file()
     assert failure["terminal_confirmed"] is True
     assert (failed_session / "worker-stderr.log").is_file()
-    assert os.path.samefile(failed_session / "events.jsonl", trace)
-    assert '"type":"runtime"' in trace.read_text(encoding="utf-8")
-    assert '"type": "runner-execution-start"' in trace.read_text(encoding="utf-8")
+    # The Runner keeps its own records in the Session directory, while this
+    # Runtime failure left the Trace entry empty and unlinked.
+    session_records = (failed_session / "events.jsonl").read_text(encoding="utf-8")
+    assert '"type":"runtime"' in session_records
+    assert '"type": "runner-execution-start"' in session_records
+    assert trace.is_file() and not trace.is_symlink()
+    assert trace.read_bytes() == b""
     durable_before = _durable_contents(ticket)
 
     cleaned = _cleanup(ticket)
@@ -413,7 +420,9 @@ def test_installed_cleanup_refuses_an_unattributed_session_record_without_partia
     sessions = ticket.root / ".graphtraj" / "runner" / "sessions"
     record = sessions / (ticket.ticket_id + "-" + ticket.ticket_name + "@e99")
     record.mkdir()
-    (record / "events.jsonl").touch()
+    (record / "events.jsonl").write_text(
+        '{"type":"runtime","runtime":"codex"}\n', encoding="utf-8"
+    )
     trace = (
         ticket.ticket_directory
         / "teams"

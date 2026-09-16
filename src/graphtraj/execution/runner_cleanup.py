@@ -313,17 +313,20 @@ def _unstarted_session_directory(
         / "events.jsonl"
     )
     try:
+        # The Trace entry reads the Runtime-owned native Session record through
+        # a link, so these are no longer the same record. An allocation that
+        # still holds no record is safe to remove; anything else must be
+        # attributed by its own launch documents before removal.
         if (
             events.is_symlink()
             or not events.is_file()
             or trace.is_symlink()
             or not trace.is_file()
-            or not os.path.samefile(events, trace)
         ):
             return False
         launch_file = directory / "launch.yml"
         if not os.path.lexists(str(launch_file)):
-            return True
+            return events.stat().st_size == 0 and trace.stat().st_size == 0
         error_file = directory / "launch-error.yml"
         if (
             launch_file.is_symlink()

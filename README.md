@@ -488,8 +488,8 @@ Worldline event. `interrupt_session(alias, root)` targets the mapped execution
 and waits for native confirmation; other Sessions keep running. A race with
 native completion returns an operation error and does not silently queue input.
 
-The Worker closes its connection after the terminal result and final Trace
-drain. A send made during that close waits for the prior owner to finish. The
+The Worker closes its connection after the terminal result. A send made
+during that close waits for the prior owner to finish. The
 private file control endpoint is shared by Runner callers; it needs no global
 service or listening socket. Runtime permissions and the existing capacity and
 budget checks still apply. Native requests without a response handler fail
@@ -609,7 +609,7 @@ from graphtraj.runtimes.runtime_adapter import RuntimeContext
 async def execute(
     context: RuntimeContext,
     worktree: Path,
-    trace_directory: Path,
+    trace_file: Path,
     prompt: str,
 ):
     async with CodexAppServer(
@@ -617,7 +617,7 @@ async def execute(
         environment=context.runtime_environment(),
     ) as adapter:
         session = await adapter.create_session(context)
-        adapter.retain_native_trace(session, trace_directory)
+        adapter.retain_native_trace(session, trace_file)
         execution = await adapter.start_execution(session, prompt)
         result = await adapter.wait(execution, timeout=600)
         return session.thread_id, session.rollout_path, result
@@ -650,13 +650,16 @@ connection requests without an execution identity invalidate the connection.
 Handlers must yield to the event loop and cooperate with cancellation. Native
 `serverRequest/resolved` cancels a withdrawn request's handler.
 
-Call `retain_native_trace(session, trace_directory)` once after `create_session`
-or `resume_session` when the complete native Session record is required. It
-writes the Runtime identity and copies complete rollout JSONL records unchanged
-to `trace_directory/events.jsonl` while the Session runs. Reuse the same Trace
-directory after continuation; its retained native position prevents duplicate
-history, waits for delayed rollout creation and incomplete trailing records,
-and performs a final drain at terminal result or connection close.
+Call `retain_native_trace(session, trace_file)` once after `create_session` or
+`resume_session` when the complete native Session record is required. It waits
+for the Runtime to create the rollout at `session.rollout_path` and then makes
+the Trace entry a symbolic link to that Runtime-owned file, so readers see the
+native content, order, timestamps and encrypted fields unchanged, including
+records appended while the Session runs. GraphTraj writes nothing through the
+link. Reuse the same Trace entry after continuation: a resumed Session keeps
+reading the same native file, so retained records are not copied again. A Trace
+entry that already holds an earlier copied record set keeps that content
+unchanged.
 
 `create_session` and `resume_session` accept an optional native `approval_policy`,
 including `"untrusted"` or `"never"`. By default, directory trust, approval policy
@@ -671,8 +674,8 @@ request types have controlled protocol checks, not equivalent live coverage.
 
 An observer should drain `next_notification()` for raw native control events.
 They retain native IDs and include retry/error notifications. They do not replace
-the rollout at `session.rollout_path`; `retain_native_trace` preserves that
-complete native record separately.
+the rollout at `session.rollout_path`; `retain_native_trace` links that
+complete native record into the Trace.
 The Adapter buffers notifications for that observer, accepts JSON lines up to
 16 MiB, and retains the last 16 KiB of stderr in `stderr_tail` for diagnostics.
 

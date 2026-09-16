@@ -485,81 +485,75 @@ class _NativePositionStorageError(OSError):
 
 
 class CodexNativeTrace:
-    """Incrementally retain one raw Codex rollout in its Session Trace.
+    """Read one Runtime-owned native Session record through its retained Trace.
 
-    The collector copies complete JSONL records as bytes. It deliberately does
-    not inspect or rewrite native record fields.
+    The Trace entry is a symbolic link to the native rollout file that the
+    Runtime owns, so a reader sees the native records themselves, including
+    records appended while the Session runs, and no copy is retained.
+    GraphTraj never writes through this link.
     """
 
     def __init__(
         self,
-        session_directory: Path,
+        trace_file: Path,
         session: str,
         rollout_path: Path | None,
         codex_home: Path,
-        *,
-        resumed: bool,
     ) -> None:
-        """Prepare durable position tracking for one known native Session."""
+        """Record the Trace entry and the native Session it must read."""
 
-        self._session_directory = session_directory
+        self._trace_file = trace_file
         self._session = session
         self._codex_home = codex_home
-        self._events_file = session_directory / "events.jsonl"
-        session_directory.mkdir(parents=True, exist_ok=True)
-        existing_trace = self._events_file.exists() and self._events_file.stat().st_size > 0
-        self._rollout, self._position = _native_session_state(session_directory, session)
-        self._pending_position: Tuple[Path, int] | None = None
-        self._skip_existing = resumed and existing_trace and self._rollout is None
-        if self._rollout is None:
-            self._rollout = rollout_path
-            self._skip_existing_rollout()
-        record_runtime_identity(self._events_file, "codex")
+        self._rollout = rollout_path
 
     def collect(self) -> None:
-        """Append every newly complete native record available at this instant."""
+        """Link the Trace entry to the native Session file once it exists."""
 
-        self._settle_pending_position()
-        if self._rollout is None or not self._rollout.exists():
+        if self._rollout is None or not self._rollout.is_file():
             discovered = _find_native_session(self._session, self._codex_home)
-            if discovered is not None:
-                self._rollout = discovered
-                self._skip_existing_rollout()
-        if self._rollout is not None:
-            try:
-                self._position = _append_native_records(
-                    self._rollout,
-                    self._position,
-                    self._events_file,
-                    self._session_directory,
-                )
-            except _NativePositionStorageError as error:
-                self._position = error.position
-                self._pending_position = (self._rollout, error.position)
-                raise
-
-    def _settle_pending_position(self) -> None:
-        """Persist consumed native bytes before reading any additional source records."""
-
-        if self._pending_position is None:
+            if discovered is None:
+                return
+            self._rollout = discovered
+        if _linked_to(self._trace_file, self._rollout):
             return
-        rollout, position = self._pending_position
-        write_yaml_durably(
-            self._session_directory / "native-session.yml",
-            {"path": str(rollout), "position": position},
-        )
-        self._pending_position = None
-
-    def _skip_existing_rollout(self) -> None:
-        """Avoid copying historical records into a resumed Trace without position state."""
-
-        if not self._skip_existing or self._rollout is None:
+        if _retains_records(self._trace_file):
             return
-        try:
-            self._position = self._rollout.stat().st_size
-        except OSError:
-            return
-        self._skip_existing = False
+        _link_native_trace(self._trace_file, self._rollout)
+
+
+def _linked_to(trace_file: Path, rollout: Path) -> bool:
+    """Return whether this Trace entry already reads that native file."""
+
+    try:
+        if not trace_file.is_symlink():
+            return False
+        return Path(os.path.realpath(trace_file)) == Path(os.path.realpath(rollout))
+    except OSError:
+        return False
+
+
+def _retains_records(trace_file: Path) -> bool:
+    """Return whether this Trace entry already holds an earlier record set."""
+
+    try:
+        return not trace_file.is_symlink() and trace_file.stat().st_size > 0
+    except OSError:
+        return False
+
+
+def _link_native_trace(trace_file: Path, rollout: Path) -> None:
+    """Point one Trace entry at its Runtime-owned native Session file.
+
+    The link replaces any placeholder atomically so a reader never observes a
+    missing Trace entry.
+    """
+
+    trace_file.parent.mkdir(parents=True, exist_ok=True)
+    pending = trace_file.with_name("." + trace_file.name + ".link")
+    pending.unlink(missing_ok=True)
+    pending.symlink_to(rollout)
+    os.replace(pending, trace_file)
 
 
 def create_codex_turn(

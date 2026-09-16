@@ -25,6 +25,7 @@ class CodexManagedExecution:
         session_directory: Path,
         session_started: Callable[[str, int], None],
         context_evidence: dict,
+        trace_file: Path,
         expected_session: str | None = None,
     ) -> None:
         """Capture immutable task configuration for one Worker execution."""
@@ -32,6 +33,7 @@ class CodexManagedExecution:
         self.command = (request['arguments'][0], 'app-server', '--listen', 'stdio://')
         self.prompt = prompt
         self.directory = session_directory
+        self.trace_file = trace_file
         self.started = session_started
         self.expected_session = expected_session
         self.execution: CodexExecution | None = None
@@ -65,7 +67,7 @@ class CodexManagedExecution:
                     'session': session.thread_id,
                     'rollout_path': str(session.rollout_path) if session.rollout_path else None,
                 })
-                adapter.retain_native_trace(session, self.directory)
+                adapter.retain_native_trace(session, self.trace_file)
                 self.execution = await adapter.start_execution(session, self.prompt)
                 self.result = asyncio.create_task(adapter.wait(self.execution))
                 self.started(session.thread_id, adapter.service_pid)

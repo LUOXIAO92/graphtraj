@@ -1146,8 +1146,9 @@ def test_installed_send_notifies_its_caller_while_a_budgeted_resume_runs(
         finally:
             release.touch()
     wait_for_file(mapping_file.parent / "execution.yml")
-    trace = ticket / "teams/1/traces" / mapping["alias"] / "events.jsonl"
-    assert cause in trace.read_text(encoding="utf-8")
+    # The Runner records the follow-up cause in the Session's own records,
+    # while the Trace entry reads the Runtime-owned Session file.
+    assert cause in (mapping_file.parent / "events.jsonl").read_text(encoding="utf-8")
     assert (mapping_file.parent / "worker-stderr.log").is_file()
 
     usage_file = ticket / "execution-budget.yml"

@@ -188,17 +188,26 @@ def _validate_causes(
 
 
 def _validate_evidence(harness_root: Path, references: list[str]) -> None:
+    """Reject retained evidence that is missing or recorded outside the project.
+
+    A Session Trace entry is a symbolic link that reads the Runtime-owned
+    native Session record, which the Runtime keeps outside the Harness Project
+    Root. Such a link must itself live inside the project and read a file;
+    every other reference must resolve inside the project.
+    """
+
     root = harness_root.resolve()
     for reference in references:
         relative = Path(reference)
         if relative.is_absolute():
             raise ValueError("retained evidence reference must be project-relative")
         evidence = harness_root / relative
+        location = evidence.parent if evidence.is_symlink() else evidence
         try:
-            evidence.resolve().relative_to(root)
+            location.resolve().relative_to(root)
         except (OSError, ValueError) as error:
             raise ValueError("retained evidence reference escapes the Harness Project Root") from error
-        if evidence.is_symlink() or not evidence.is_file():
+        if not evidence.is_file():
             raise ValueError("retained evidence does not exist")
 
 

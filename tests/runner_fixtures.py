@@ -48,6 +48,17 @@ def configure_harness(
     return harness_root, worktree_root, integration, environment
 
 
+def retained_state(path: Path) -> bytes | str:
+    """Return what a later run must not change for one retained record.
+
+    A retained Trace entry reads the Runtime-owned native Session file through a
+    symbolic link, and its owner may keep appending to that file. The fake
+    Runtime also reuses one native Session file per test, so a linked entry is
+    compared by its link target and every other record by its own bytes.
+    """
+    return os.readlink(path) if path.is_symlink() else path.read_bytes()
+
+
 @contextlib.contextmanager
 def engineer_probe(commands, harness, fake_codex, environment, *, body="Probe the Adapter.", executable=None):
     """Dispatch a real Team Leader with only the Engineer's Runtime substituted."""

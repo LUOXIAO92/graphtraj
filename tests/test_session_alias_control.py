@@ -135,7 +135,8 @@ def test_installed_alias_control_resumes_and_interrupts_one_team_session(
     team["current_round"] = 2
     team_file.write_text(yaml.safe_dump(team), encoding="utf-8")
     trace = ticket_directory / "teams" / "1" / "traces" / alias / "events.jsonl"
-    trace_before = trace.read_text(encoding="utf-8")
+    session_records = mapping_file.parent / "events.jsonl"
+    records_before = session_records.read_text(encoding="utf-8")
     worldline = [
         json.loads(line)
         for shard in (harness_root / ".graphtraj" / "state" / "worldline").glob("*.jsonl")
@@ -270,8 +271,14 @@ def test_installed_alias_control_resumes_and_interrupts_one_team_session(
             }
         ]
     }
-    assert trace.read_text(encoding="utf-8") != trace_before
-    assert cause in trace.read_text(encoding="utf-8")
+    # The Runner records the follow-up cause in the Session's own records,
+    # while the Trace entry keeps reading the Runtime-owned Session file.
+    assert session_records.read_text(encoding="utf-8") != records_before
+    assert cause in session_records.read_text(encoding="utf-8")
+    assert trace.is_symlink()
+    assert Path(os.readlink(trace)) == Path(
+        yaml.safe_load((mapping_file.parent / "session.yml").read_text())["rollout_path"]
+    )
     resumed_mapping = yaml.safe_load(mapping_file.read_text(encoding="utf-8"))
     assert resumed_mapping["alias"] == alias
     assert resumed_mapping["session"] == session
@@ -695,9 +702,27 @@ def test_installed_status_reports_native_requests_and_commit_diff(
     alias = "diagnostics@e1"
     session_directory = harness_root / ".graphtraj" / "runner" / "sessions" / alias
     session_directory.mkdir(parents=True)
-    trace = session_directory / "events.jsonl"
-    trace.write_text(
+    # The Session keeps the Runner's own records; the Trace entry reads the
+    # Runtime-owned native record, which may still be written when read.
+    (session_directory / "events.jsonl").write_text(
         "{\"type\":\"runtime\",\"runtime\":\"codex\"}\n"
+        "{\"type\": \"runner-execution-start\"}\n",
+        encoding="utf-8",
+    )
+    trace = (
+        harness_root
+        / ".graphtraj"
+        / "state"
+        / "tickets"
+        / "96-diagnostics"
+        / "teams"
+        / "1"
+        / "traces"
+        / alias
+        / "events.jsonl"
+    )
+    trace.parent.mkdir(parents=True)
+    trace.write_text(
         "{\"type\":\"response_item\",\"payload\":{\"type\":\"message\",\"role\":\"assistant\"}}\n"
         "{\"type\":\"response_item\",\"payload\":{\"type\":\"custom_tool_call\",\"call_id\":\"call-exec\",\"name\":\"functions.exec\",\"input\":\"{\\\"cmd\\\":\\\"first && second\\\"}\"}}\n"
         "{\"type\":\"response_item\",\"payload\":{\"type\":\"custom_tool_call\",\"call_id\":\"call-exec\",\"name\":\"functions.exec\",\"input\":\"{\\\"cmd\\\":\\\"first && second\\\"}\"}}\n"
@@ -712,7 +737,8 @@ def test_installed_status_reports_native_requests_and_commit_diff(
         "{\"type\":\"response_item\",\"payload\":{\"type\":\"image_generation_call\",\"id\":\"image-generation\",\"status\":\"completed\",\"result\":\"generated\"}}\n"
         "{\"type\":\"event_msg\",\"payload\":{\"type\":\"item_started\",\"item\":{\"type\":\"CommandExecution\",\"command\":\"first && second\"}}}\n"
         "{\"type\":\"event_msg\",\"payload\":{\"type\":\"item_completed\",\"item\":{\"type\":\"CommandExecution\",\"command\":\"first && second\",\"exit_code\":1}}}\n"
-        "{\"type\":\"event_msg\",\"payload\":{\"type\":\"item_completed\",\"item\":{\"type\":\"FileChange\",\"path\":\"added.txt\"}}}\n",
+        "{\"type\":\"event_msg\",\"payload\":{\"type\":\"item_completed\",\"item\":{\"type\":\"FileChange\",\"path\":\"added.txt\"}}}\n"
+        "{\"type\":\"response_item\",\"payload\":{\"type\":\"custom_tool_call\",\"call_id\":\"call-unwrit",
         encoding="utf-8",
     )
     (session_directory / "execution.yml").write_text("outcome: completed\n", encoding="utf-8")

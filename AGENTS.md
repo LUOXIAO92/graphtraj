@@ -66,35 +66,15 @@ def calculate_total(
     return discounted + tax + shipping
 ```
 
-## Team chain of command
-
-For work assigned to a Team, task instructions and result handoffs follow:
-Main -> Team Leader -> Engineer / Reviewers -> Team Leader -> Main.
-
-- Main gives the Leader the Ticket outcomes, constraints, shared inputs and
-  concrete failures. The Leader owns member assignments, diagnosis, validation
-  scope, rework, review corrections and collection of member results.
-- Main must not directly dispatch or send task instructions or questions to
-  the Team's Engineers or Reviewers through a Batch, `send`, or a separate
-  conversation. Send them to the Leader. Engineers and Reviewers route any
-  such direct Main instruction back through their Leader instead of executing it.
-- Failure recovery, budget stops, report formatting, report delivery and small
-  corrections follow the same chain. A broken Leader workflow calls for recovery
-  of that workflow, not Main taking over its members. Recovery guidance that
-  offers a direct member command does not override this ownership rule.
-- Main may handle approvals and Driver controls assigned to Main; those
-  operations do not authorize member task instructions. Actual communication
-  must follow this chain even when Batch parent/child records look correct.
-
 ## Coordination and source investigation
 
 Main and Team Leaders coordinate through accepted requirements, documented
-commands, handoffs and retained evidence. Main owns Team dispatch and cross-Ticket
-delivery decisions; Leaders own member dispatch and assess their Ticket's results.
+commands, handoffs and retained evidence. Main owns dispatch and delivery
+decisions; Leaders coordinate their Ticket and assess returned evidence.
 They must not expand setup, scheduling, continuation or status checks into
 source-code investigations or reconstruct internal execution flows themselves.
-Implementation investigation belongs to Engineers; within a Team, obtain their
-findings through the Leader under the chain above.
+Assign concrete implementation failures or unanswered implementation questions
+to an Engineer with the existing evidence, and reuse the returned findings.
 Reading a specific diff needed to assess that evidence remains within scope;
 independent Reviewers retain their assigned code-review responsibilities.
 

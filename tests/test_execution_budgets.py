@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import select
 import subprocess
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 
 import yaml
@@ -131,6 +133,13 @@ def test_installed_runner_notifies_its_nested_caller_before_the_worker_finishes(
             "ticket_name": "adapter-probe",
         }
         assert notice["actual"]["elapsed_minutes"] >= 0.01
+
+        # The event instant comes from the actual budget check and names its
+        # timezone; elapsed duration stays a separate field.
+        instant = datetime.fromisoformat(notice["occurred_at"])
+        assert instant.utcoffset() is not None
+        expected = datetime.fromtimestamp(started + 0.0105 * 60).astimezone()
+        assert instant == expected.replace(microsecond=0)
 
         status = run_process(
             [str(installed_commands.runner), "status", alias],
@@ -1499,26 +1508,28 @@ def test_installed_send_queues_a_late_stop_after_the_caller_returns(
             time.sleep(0.02)
         assert yaml.safe_load(usage_file.read_text(encoding="utf-8"))["stopped"] is True
         assert len(queued) == 1
-        assert queued[0]["params"] == {
-            "threadId": "thread-main",
-            "clientUserMessageId": "71034556-830a-5f40-8ec6-80c65b263a52",
-            "input": [
-                {
-                    "type": "text",
-                    "text": (
-                        "$retro Analyze the enforced stochastic stop for Ticket 76 "
-                        "using the supplied wrap-up and retained evidence. Identify "
-                        "scheduling corrections before deciding continuation. Reuse "
-                        "existing findings; do not restart work."
-                    ),
-                },
-                {
-                    "type": "skill",
-                    "name": "retro",
-                    "path": str((harness / ".agents/skills/retro/SKILL.md").resolve()),
-                },
-            ],
+        params = queued[0]["params"]
+        assert params["threadId"] == "thread-main"
+        assert params["clientUserMessageId"] == "71034556-830a-5f40-8ec6-80c65b263a52"
+        assert params["input"][1] == {
+            "type": "skill",
+            "name": "retro",
+            "path": str((harness / ".agents/skills/retro/SKILL.md").resolve()),
         }
+
+        # The late stop keeps the instant the stop actually happened, not the
+        # later moment this input was submitted, and keeps elapsed separate.
+        text = params["input"][0]["text"]
+        stop_instant = datetime.fromtimestamp(started + 260).astimezone()
+        assert "$retro" in text
+        assert "Stop time: " + stop_instant.isoformat(timespec="seconds") in text
+        assert "Elapsed work: " in text
+        instants = re.findall(
+            r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}", text
+        )
+        assert instants[0] == stop_instant.isoformat(timespec="seconds")
+        assert instants[1] != instants[0]
+
     finally:
         release.touch()
 

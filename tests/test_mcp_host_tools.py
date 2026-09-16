@@ -1370,28 +1370,19 @@ def test_installed_mcp_server_queues_a_budget_stop_to_the_request_caller(
         # and allowance reminders above stay ordinary caller notices.
         queued = _queued_submissions(protocol)
         assert len(queued) == 1, queued
-        assert queued[0]["params"] == {
-            "threadId":            "thread-main",
-            "clientUserMessageId": "71034556-830a-5f40-8ec6-80c65b263a52",
-            "input":               [
-                {
-                    "type": "text",
-                    "text": (
-                        "$retro Analyze the enforced stochastic stop for Ticket 76 "
-                        "using the supplied wrap-up and retained evidence. Identify "
-                        "scheduling corrections before deciding continuation. Reuse "
-                        "existing findings; do not restart work."
-                    ),
-                },
-                {
-                    "type": "skill",
-                    "name": "retro",
-                    "path": str(
-                        (harness / ".agents/skills/retro/SKILL.md").resolve()
-                    ),
-                },
-            ],
+        params = queued[0]["params"]
+        assert params["threadId"] == "thread-main"
+        assert params["clientUserMessageId"] == "71034556-830a-5f40-8ec6-80c65b263a52"
+        assert params["input"][1] == {
+            "type": "skill",
+            "name": "retro",
+            "path": str((harness / ".agents/skills/retro/SKILL.md").resolve()),
         }
+        text = params["input"][0]["text"]
+        assert text.startswith("$retro ")
+        assert "Stop time: " in text
+        assert "Input sent to your native queue at: " in text
+        assert "Elapsed work: " in text
 
         # A repeated stop keeps the existing dedup, and a request without Codex
         # caller metadata keeps the generic behaviour without a notice channel.

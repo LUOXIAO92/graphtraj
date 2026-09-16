@@ -168,7 +168,11 @@ For a Codex Main, `agent-runner` automatically binds that same caller channel
 when its caller provides `CODEX_THREAD_ID`. `CodexMainRecovery` ignores ordinary
 estimate/allowance notices and sends only a sampled stop through an experimental
 `thread/queue/add` request with a stable native `clientUserMessageId` and the
-actual absolute `retro/SKILL.md` path. The short-lived sender never resumes or
+actual absolute `retro/SKILL.md` path. The submitted input names the stop with
+its absolute stop instant and that instant's timezone, the absolute instant the
+input entered the native queue, and the elapsed work duration as a separate
+expression, so a stop the host runs later still shows when it happened instead
+of the moment it was submitted. The short-lived sender never resumes or
 drives Main; its owning Codex client consumes the queued input after any active
 turn. It never continues the Ticket or clears budget accounting automatically.
 

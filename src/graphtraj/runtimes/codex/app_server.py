@@ -11,9 +11,11 @@ import signal
 import threading
 import uuid
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Mapping, Sequence
 
+from graphtraj.execution.execution_budget import _duration
 from graphtraj.runtimes.codex.codex_adapter import (
     CodexAdapterError,
     CodexNativeTrace,
@@ -47,6 +49,26 @@ def _native_turn(value: Any) -> dict[str, Any]:
         ):
             raise ValueError('Invalid native turn item')
     return value
+
+
+def _instant(value: Any) -> bool:
+    """Accept only an event instant that names its own explicit UTC offset."""
+    if not isinstance(value, str) or not value:
+        return False
+    try:
+        return datetime.fromisoformat(value).utcoffset() is not None
+    except ValueError:
+        return False
+
+
+def _elapsed_minutes(value: Any) -> bool:
+    """Accept only a finite nonnegative elapsed duration in minutes."""
+    return (
+        not isinstance(value, bool)
+        and isinstance(value, (int, float))
+        and math.isfinite(value)
+        and value >= 0
+    )
 
 
 def _text_input(prompt: str) -> list[dict[str, str]]:
@@ -1091,7 +1113,13 @@ class CodexMainRecovery:
                 uuid.NAMESPACE_URL,
                 "graphtraj:budget-stop:{0}:{1}:{2}".format(ticket_id, ticket_name, limit),
             ))
-            submission = asyncio.run(self._queue_retro(ticket_id, message_id))
+            submission = asyncio.run(self._queue_retro(
+                ticket_id,
+                message_id,
+                limit,
+                notice["occurred_at"],
+                notice["actual"]["elapsed_minutes"],
+            ))
             with self._lock:
                 self._stops.add(stop)
                 self._queue_submissions.append(submission)
@@ -1103,8 +1131,22 @@ class CodexMainRecovery:
                 "The Codex Main budget notice is invalid: {0}".format(error),
             ))
 
-    async def _queue_retro(self, ticket_id: str, message_id: str) -> str:
-        """Use a separate experimental sender that never resumes or starts Main."""
+    async def _queue_retro(
+        self,
+        ticket_id: str,
+        message_id: str,
+        limit: float,
+        stop_instant: str,
+        elapsed_minutes: float,
+    ) -> str:
+        """Use a separate experimental sender that never resumes or starts Main.
+
+        The delivered input names the actual stop event, its absolute stop
+        instant with timezone, the absolute instant this input was sent to the
+        native queue, and the elapsed work duration as a separate expression.
+        A stop consumed later still shows when it happened.
+        """
+        sent_instant = datetime.now().astimezone().isoformat(timespec="seconds")
         async with CodexAppServer(
             cwd=self._cwd,
             command=self._command,
@@ -1119,11 +1161,20 @@ class CodexMainRecovery:
                     {
                         "type": "text",
                         "text": (
-                            "$retro Analyze the enforced stochastic stop for Ticket {0} "
-                            "using the supplied wrap-up and retained evidence. Identify "
-                            "scheduling corrections before deciding continuation. Reuse "
-                            "existing findings; do not restart work."
-                        ).format(ticket_id),
+                            "$retro Analyze the enforced stochastic stop {0}:{1} for "
+                            "Ticket {2} using the supplied wrap-up and retained "
+                            "evidence. Stop time: {3}. Input sent to your native queue "
+                            "at: {4}. Elapsed work: {5}. Identify scheduling "
+                            "corrections before deciding continuation. Reuse existing "
+                            "findings; do not restart work."
+                        ).format(
+                            "stochastic_stop",
+                            limit,
+                            ticket_id,
+                            stop_instant,
+                            sent_instant,
+                            _duration(elapsed_minutes),
+                        ),
                     },
                     {
                         "type": "skill",
@@ -1151,6 +1202,7 @@ class CodexMainRecovery:
             return None
         ticket = notice.get("ticket")
         limit = threshold.get("limit")
+        actual = notice.get("actual")
         if (
             not isinstance(ticket, Mapping)
             or not isinstance(ticket.get("ticket_id"), str)
@@ -1160,6 +1212,9 @@ class CodexMainRecovery:
             or isinstance(limit, bool)
             or not isinstance(limit, (int, float))
             or not math.isfinite(limit)
+            or not _instant(notice.get("occurred_at"))
+            or not isinstance(actual, Mapping)
+            or not _elapsed_minutes(actual.get("elapsed_minutes"))
         ):
             raise CodexAdapterError("RUNTIME_REQUEST_INVALID", "The stochastic-stop notice is invalid.")
         return json.dumps(

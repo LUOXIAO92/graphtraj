@@ -6,7 +6,9 @@ import asyncio
 import errno
 import json
 import os
+import re
 from dataclasses import replace
+from datetime import datetime
 import sys
 from pathlib import Path
 
@@ -221,12 +223,15 @@ def test_active_input_and_interrupt_target_only_the_expected_execution(
     asyncio.run(exercise())
 
 
-def test_budget_stop_queues_one_explicit_retro_without_waiting_for_active_main(
+def test_budget_stop_submits_one_explicit_retro_for_an_active_main(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     peer: Path,
 ) -> None:
-    """A sampled stop reaches Main's native queue while its turn stays active."""
+    """One sampled stop is queued once for Main; the queue is not consumption."""
+
+    # This observes native queue acceptance, deduplication and unchanged turn
+    # ownership. Timeliness needs the host evidence recorded for this Ticket.
 
     from graphtraj.execution import execution_budget
     from graphtraj.execution.execution_budget import (
@@ -268,6 +273,7 @@ def test_budget_stop_queues_one_explicit_retro_without_waiting_for_active_main(
         skill.write_text("name: retro\n", encoding="utf-8")
         duplicate = {
             "type": "execution-budget-exceeded",
+            "occurred_at": datetime.fromtimestamp(1120.7).astimezone().isoformat(timespec="seconds"),
             "ticket": {"ticket_id": "116", "ticket_name": "session-budget-control"},
             "threshold": {"kind": "stochastic_stop", "limit": 2},
             "actual": {"elapsed_minutes": 2.011},
@@ -310,22 +316,30 @@ def test_budget_stop_queues_one_explicit_retro_without_waiting_for_active_main(
             queue = [item for item in queued if item.get("method") == "thread/queue/add"]
             assert len(queue) == 1
             assert not any(item.get("method") == "turn/start" for item in queued)
-            assert queue[0]["params"] == {
-                "threadId": session.thread_id,
-                "clientUserMessageId": "fd403ef4-1047-54e3-9eb3-ec71c26912eb",
-                "input": [
-                    {
-                        "type": "text",
-                        "text": (
-                            "$retro Analyze the enforced stochastic stop for Ticket 116 "
-                            "using the supplied wrap-up and retained evidence. Identify "
-                            "scheduling corrections before deciding continuation. Reuse "
-                            "existing findings; do not restart work."
-                        ),
-                    },
-                    {"type": "skill", "name": "retro", "path": str(skill.resolve())},
-                ],
+            params = queue[0]["params"]
+            assert params["threadId"] == session.thread_id
+            assert params["clientUserMessageId"] == "fd403ef4-1047-54e3-9eb3-ec71c26912eb"
+            assert params["input"][1] == {
+                "type": "skill", "name": "retro", "path": str(skill.resolve()),
             }
+
+            # The delivered input carries the actual stop instant, not the
+            # moment it was queued, and keeps elapsed duration separate.
+            text = params["input"][0]["text"]
+            stop_instant = datetime.fromtimestamp(1120.7).astimezone().replace(microsecond=0)
+            assert stop_instant.isoformat(timespec="seconds") in text
+            assert "Elapsed work: 00:02:00" in text
+            instants = [
+                datetime.fromisoformat(match)
+                for match in re.findall(
+                    r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}", text
+                )
+            ]
+            assert len(instants) == 2
+            assert all(instant.utcoffset() is not None for instant in instants)
+            assert instants[0] == stop_instant
+            assert abs(instants[1] - datetime.now().astimezone()).total_seconds() < 60
+            assert "$retro" in text
             assert recovery.queue_submissions == ("queued-1",)
             await adapter.interrupt(active)
             assert (await adapter.wait(active, timeout=2))["outcome"] == "interrupted"
@@ -364,8 +378,10 @@ def test_main_recovery_keeps_queue_error_visible_when_runner_fails(
     skill.write_text("name: retro\n", encoding="utf-8")
     stop = {
         "type": "execution-budget-exceeded",
+        "occurred_at": datetime.fromtimestamp(1000.0).astimezone().isoformat(timespec="seconds"),
         "ticket": {"ticket_id": "116", "ticket_name": "session-budget-control"},
         "threshold": {"kind": "stochastic_stop", "limit": 2},
+        "actual": {"elapsed_minutes": 2.011},
     }
 
     with pytest.raises(RuntimeAdapterError) as caught:
@@ -411,8 +427,10 @@ def test_main_recovery_close_keeps_cleanup_owned_after_waiter_cancellation(
                 os.write(recovery.notice_fd, (
                     json.dumps({
                         "type": "execution-budget-exceeded",
+                        "occurred_at": datetime.now().astimezone().isoformat(timespec="seconds"),
                         "ticket": {"ticket_id": "116", "ticket_name": "session-budget-control"},
                         "threshold": {"kind": "stochastic_stop", "limit": 2},
+                        "actual": {"elapsed_minutes": 2.011},
                     }) + "\n"
                 ).encode())
             closing = asyncio.create_task(asyncio.to_thread(recovery.close))
@@ -458,8 +476,10 @@ def test_agent_runner_uses_native_queue_for_a_codex_main_caller(
 
     stop = {
         "type": "execution-budget-exceeded",
+        "occurred_at": datetime.fromtimestamp(1000.0).astimezone().isoformat(timespec="seconds"),
         "ticket": {"ticket_id": "116", "ticket_name": "session-budget-control"},
         "threshold": {"kind": "stochastic_stop", "limit": 2},
+        "actual": {"elapsed_minutes": 2.011},
     }
     with _budget_notices():
         descriptor, owned = caller_notice_fd()

@@ -164,42 +164,38 @@ operation. Without a selected or inherited channel, budget accounting and
 Leader notices remain retained and Python produces no terminal output; the
 CLI selects stderr. Conflict integration retains notices in its evidence log.
 
-For a Codex Main, `agent-runner` automatically binds that same caller channel
-when its caller provides `CODEX_THREAD_ID`. `CodexMainRecovery` ignores ordinary
-estimate/allowance notices and sends only a sampled stop through an experimental
-`thread/queue/add` request with a stable native `clientUserMessageId` and the
-actual absolute `retro/SKILL.md` path. The submitted input names the stop with
-its absolute stop instant and that instant's timezone, the absolute instant the
-input entered the native queue, and the elapsed work duration as a separate
-expression, so a stop the host runs later still shows when it happened instead
-of the moment it was submitted. The short-lived sender never resumes or
-drives Main; its owning Codex client consumes the queued input after any active
-turn. It never continues the Ticket or clears budget accounting automatically.
+For a Codex Main, `agent-runner` and the MCP server automatically bind that same
+caller channel when the caller provides its Codex thread identity
+(`CODEX_THREAD_ID`, or `params._meta.threadId` for a tool request).
+`CodexMainRecovery` ignores ordinary estimate/allowance notices and retains only
+a sampled stop: the deterministic stop identity, the stop's own absolute instant
+with its explicit UTC offset, the elapsed work duration as a separate
+expression, and the explicit `$retro` instruction with the absolute
+`retro/SKILL.md` path. The document the awaited call returns carries that stop
+as `stop_deliveries`, and the delivery instant is stamped when the call returns,
+so Main handles the event inside its current turn instead of after the turn
+ends. A delayed stop keeps the instant it actually happened and never reports
+itself as just-happening. Nothing is queued into Main's native input, no second
+Main or Driver is created, and the binding never continues the Ticket or clears
+budget accounting automatically.
 
-Consumption is owned for as long as the resumed Worker can still emit. An
-`agent-runner send` returns after the Worker starts, and that Worker keeps the
-caller writer, so the binding hands a still-open channel to a detached
-continuation instead of closing it with the command. The continuation reads
-until every writer closes, so a stop that is written after `send` returned is
-still queued once, with the same stop identity and duplicate suppression. The
-exited caller's descriptors are released, so `send` neither waits for the
-Worker nor holds the caller's stdout/stderr open. A single-threaded caller
-detaches as described; a Python caller that is already multi-threaded keeps the
-previous release behavior rather than forking that interpreter.
+One delivery is retained per stop: a repeated stop notice or a repeated call
+keeps the same stop identity without delivering again. Retained failure stays
+visible - a caller-channel or delivery error inside the caller's lifetime is
+raised by the recovery binding and remains chained to a wrapped Runner error.
+Without the caller's Codex identity, Runner keeps its ordinary
+inherited-channel or stderr behavior.
 
-Because a detached continuation has no caller left, its delivery failures and
-native sender diagnostics are appended to
-`<harness root>/.graphtraj/runner/codex-main-recovery.log` instead of raising.
-Queue acceptance is distinct from Main consumption and Skill completion. Queue
-or connection errors inside the caller's lifetime are still raised by the
-recovery binding (and remain chained to a wrapped Runner error); confirm host
-consumption with the actual host evidence. Without `CODEX_THREAD_ID`, Runner
-retains its ordinary inherited-channel or stderr behavior.
+A stop sampled after the call that was awaiting it has already returned has no
+in-band carrier: the resumed Worker keeps the caller channel, but that call
+cannot be answered twice. Such a stop is retained in the Ticket's
+`execution-budget.yml` and reported to the Team Leader; it is not placed in
+Main's input box.
 
 `agent-runner send --reports-only` collects a report a Session already holds.
 It resumes that Session read-only without attaching the budget monitor, so
-returning existing evidence advances no stopping check, repeats no sampled
-stop and queues no new retro input. Every other `send` and `continue` keeps
+returning existing evidence advances no stopping check, repeats no sampled stop
+and delivers no new retro instruction. Every other `send` and `continue` keeps
 the Ticket under its budget control, and this mode changes no accounting,
 identity or stop history.
 
@@ -223,11 +219,11 @@ def launch_from_codex_main(
             return launch_batch(batch, harness)
 ```
 
-The environment thread ID is used only for native queue delivery. A CLI message,
-`thread/resume`, or a second Main driver is not used. Preserve the host's
-existing configuration and permissions; the queue sender adds no role or Skill
-discovery configuration. The exact Codex input shape and the consumption
-boundary are in the Codex-only recovery reference.
+The environment thread identity only selects that same caller channel. A CLI
+message, `thread/resume`, `thread/queue/add` or a second Main driver is not
+used. Preserve the host's existing configuration and permissions; the delivery
+adds no role or Skill discovery configuration. The delivered fields and the
+late-stop boundary are in the Codex-only recovery reference.
 
 ## Core Skills and their sources
 
@@ -774,17 +770,18 @@ handler)`.
 
 A Codex host sends its calling thread on every tool request. When the server
 receives `params._meta.threadId`, it routes live budget notices to that Main
-through the same recovery binding the CLI uses: an enforced stop queues `$retro`
-plus the native `retro` Skill input for that thread with the existing
-`CodexMainRecovery`, retention and deduplication, and it still arrives after the
-tool call has returned because the resumed execution keeps the caller channel
-open. Ordinary elapsed and allowance reminders stay ordinary notices. Without
-that request metadata, or without the installed Skill at
-`.agents/skills/retro/SKILL.md` in the server's working directory, the tools keep
-their generic behaviour and run without a caller notice channel; such a stop is
-only retained in the Ticket's `execution-budget.yml` and reported to the Team
-Leader. Nothing here writes Main developer instructions or user Runtime
-configuration, and queue acceptance does not prove the host consumed the input.
+through the same recovery binding the CLI uses: an enforced stop returns with
+that tool call as `stop_deliveries`, carrying the deterministic stop identity,
+the stop's own absolute instant, the elapsed duration and the explicit `$retro`
+instruction with the `retro` Skill path, using the existing
+`CodexMainRecovery` retention and deduplication. Ordinary elapsed and allowance
+reminders stay ordinary notices. Without that request metadata, or without the
+installed Skill at `.agents/skills/retro/SKILL.md` in the server's working
+directory, the tools keep their generic behaviour and run without a caller
+notice channel; such a stop is only retained in the Ticket's
+`execution-budget.yml` and reported to the Team Leader. Nothing here writes Main
+developer instructions or user Runtime configuration, and no stop is queued into
+the host's native input.
 
 A host can run the whole loop from tools alone: `dispatch` a Batch, read
 identity, activity and outcome with `alias_status`, steer the owned execution

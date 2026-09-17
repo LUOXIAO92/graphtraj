@@ -223,21 +223,10 @@ def test_active_input_and_interrupt_target_only_the_expected_execution(
     asyncio.run(exercise())
 
 
-def test_budget_stop_submits_one_explicit_retro_for_an_active_main(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-    peer: Path,
-) -> None:
-    """One sampled stop is queued once for Main; the queue is not consumption."""
-
-    # This observes native queue acceptance, deduplication and unchanged turn
-    # ownership. Timeliness needs the host evidence recorded for this Ticket.
-
+def _controlled_stop_ticket(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    """Return a Ticket monitor whose next stopping check samples a real stop."""
     from graphtraj.execution import execution_budget
-    from graphtraj.execution.execution_budget import (
-        budget_notice_output,
-        execution_budget_monitor,
-    )
+    from graphtraj.execution.execution_budget import execution_budget_monitor
 
     ticket = tmp_path / "ticket"
     ticket.mkdir()
@@ -247,14 +236,12 @@ def test_budget_stop_submits_one_explicit_retro_for_an_active_main(
     (ticket / "ticket.md").write_text(
         "---\n"
         "difficulty: high\n"
-        "difficulty_reason: controlled host recovery\n"
+        "difficulty_reason: controlled caller delivery\n"
         "execution_budget:\n"
-        "  engineer_tier: senior\n"
-        "  tier_reason: controlled host recovery\n"
         "  estimated_minutes: {implementation: 0.01, validation: 0.01, review: 0.01, total: 0.01}\n"
         "  planned_sessions: {team_leader: 1, engineer: 1, standards_reviewer: 1, spec_reviewer: 1, delivery_state: 1}\n"
         "  correction_rounds: 1\n"
-        "  estimation_note: controlled host recovery\n"
+        "  estimation_note: controlled caller delivery\n"
         "  on_exceed: stop\n"
         "---\n",
         encoding="utf-8",
@@ -265,97 +252,103 @@ def test_budget_stop_submits_one_explicit_retro_for_an_active_main(
     monkeypatch.setattr(execution_budget.random, "random", lambda: 0.99)
     monitor = execution_budget_monitor(ticket, "116", "session-budget-control")
     assert monitor is not None
+    return monitor, now
 
-    async def exercise() -> None:
-        protocol = tmp_path / "protocol.jsonl"
-        skill = tmp_path / "harness/.agents/skills/retro/SKILL.md"
-        skill.parent.mkdir(parents=True)
-        skill.write_text("name: retro\n", encoding="utf-8")
-        duplicate = {
-            "type": "execution-budget-exceeded",
-            "occurred_at": datetime.fromtimestamp(1120.7).astimezone().isoformat(timespec="seconds"),
-            "ticket": {"ticket_id": "116", "ticket_name": "session-budget-control"},
-            "threshold": {"kind": "stochastic_stop", "limit": 2},
-            "actual": {"elapsed_minutes": 2.011},
-            "stage": "implementation",
-            "responsible_role": "engineer",
-        }
 
-        def queued_messages() -> list[dict]:
-            if not protocol.exists():
-                return []
-            return [
-                json.loads(line)
-                for line in protocol.read_text(encoding="utf-8").splitlines()
-            ]
+def _retro_skill(tmp_path: Path) -> Path:
+    skill = tmp_path / "harness/.agents/skills/retro/SKILL.md"
+    skill.parent.mkdir(parents=True)
+    skill.write_text("name: retro\n", encoding="utf-8")
+    return skill
 
-        async with CodexAppServer(command=[str(peer)], cwd=tmp_path) as adapter:
-            session = await adapter.create_session(context(tmp_path / "worktree", peer))
-            active = await adapter.start_execution(session, "hold")
-            with CodexMainRecovery(
-                session.thread_id,
-                skill,
-                cwd=tmp_path,
-                command=[str(peer)],
-                environment={"PEER_PROTOCOL_LOG": str(protocol)},
-            ) as recovery:
-                with budget_notice_output(recovery.notice_fd):
-                    assert monitor.check("engineer", "implementation") is False
-                    now[0] += 0.7
-                    assert monitor.check("engineer", "implementation") is False
-                    now[0] += 120
-                    assert monitor.check("engineer", "implementation") is True
-                    os.write(recovery.notice_fd, (json.dumps(duplicate) + "\n").encode())
 
-                with pytest.raises(RuntimeAdapterError, match="active"):
-                    await adapter.start_execution(session, "must still reject")
+def test_budget_stop_returns_one_in_band_delivery_to_the_awaiting_call(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """A sampled stop reaches Main with the result of the call it is awaiting."""
 
-            queued = queued_messages()
-            initialized = next(item for item in queued if item.get("method") == "initialize")
-            assert initialized["params"]["capabilities"] == {"experimentalApi": True}
-            queue = [item for item in queued if item.get("method") == "thread/queue/add"]
-            assert len(queue) == 1
-            assert not any(item.get("method") == "turn/start" for item in queued)
-            params = queue[0]["params"]
-            assert params["threadId"] == session.thread_id
-            assert params["clientUserMessageId"] == "fd403ef4-1047-54e3-9eb3-ec71c26912eb"
-            assert params["input"][1] == {
-                "type": "skill", "name": "retro", "path": str(skill.resolve()),
-            }
+    from graphtraj.execution.execution_budget import budget_notice_output
 
-            # The delivered input carries the actual stop instant, not the
-            # moment it was queued, and keeps elapsed duration separate.
-            text = params["input"][0]["text"]
-            stop_instant = datetime.fromtimestamp(1120.7).astimezone().replace(microsecond=0)
-            assert stop_instant.isoformat(timespec="seconds") in text
-            assert "Elapsed work: 00:02:00" in text
-            instants = [
-                datetime.fromisoformat(match)
-                for match in re.findall(
-                    r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}", text
-                )
-            ]
-            assert len(instants) == 2
-            assert all(instant.utcoffset() is not None for instant in instants)
-            assert instants[0] == stop_instant
-            assert abs(instants[1] - datetime.now().astimezone()).total_seconds() < 60
-            assert "$retro" in text
-            assert recovery.queue_submissions == ("queued-1",)
-            await adapter.interrupt(active)
-            assert (await adapter.wait(active, timeout=2))["outcome"] == "interrupted"
+    monitor, now = _controlled_stop_ticket(monkeypatch, tmp_path)
+    skill = _retro_skill(tmp_path)
+    bin_directory = tmp_path / "bin"
+    bin_directory.mkdir()
+    native_client_log = tmp_path / "native-client.log"
+    native_client = bin_directory / "codex"
+    native_client.write_text(
+        "#!" + sys.executable + "\n"
+        "import pathlib\n"
+        "pathlib.Path(" + repr(str(native_client_log)) + ").write_text('started')\n",
+        encoding="utf-8",
+    )
+    native_client.chmod(0o755)
+    monkeypatch.setenv("PATH", str(bin_directory))
 
-    asyncio.run(exercise())
+    reminder = {
+        "type": "execution-budget-exceeded",
+        "occurred_at": datetime.fromtimestamp(1000.0).astimezone().isoformat(timespec="seconds"),
+        "ticket": {"ticket_id": "116", "ticket_name": "session-budget-control"},
+        "threshold": {"kind": "estimated_minutes", "limit": "total"},
+        "actual": {"elapsed_minutes": 0.5},
+        "message": "System reminder: Elapsed time: 00:00:30.",
+    }
+
+    with CodexMainRecovery(skill) as recovery:
+        with budget_notice_output(recovery.notice_fd):
+            # The monitor's own checks raise the ordinary reminder and then the
+            # enforced stop, exactly as a live Runner operation would.
+            assert monitor.check("engineer", "implementation") is False
+            now[0] += 0.7
+            assert monitor.check("engineer", "implementation") is False
+            now[0] += 120
+            assert monitor.check("engineer", "implementation") is True
+            os.write(recovery.notice_fd, (json.dumps(reminder) + "\n").encode())
+            # A repeated delivery of the same stop stays deduplicated.
+            os.write(recovery.notice_fd, (
+                json.dumps({
+                    "type": "execution-budget-exceeded",
+                    "occurred_at": datetime.fromtimestamp(1120.7).astimezone().isoformat(timespec="seconds"),
+                    "ticket": {"ticket_id": "116", "ticket_name": "session-budget-control"},
+                    "threshold": {"kind": "stochastic_stop", "limit": 2},
+                    "actual": {"elapsed_minutes": 2.011},
+                }) + "\n"
+            ).encode())
+        document = recovery.attach_stop_deliveries({"tasks": []})
+
+    deliveries = document["stop_deliveries"]
+    assert len(deliveries) == 1
+    delivery = deliveries[0]
+    assert delivery["stop_id"] == "fd403ef4-1047-54e3-9eb3-ec71c26912eb"
+    assert delivery["stop"] == "stochastic_stop:2"
+    assert delivery["ticket"] == {
+        "ticket_id": "116", "ticket_name": "session-budget-control",
+    }
+    assert delivery["elapsed"] == "00:02:00"
+    assert delivery["instruction"].startswith("$retro ")
+    assert delivery["skill"] == {"name": "retro", "path": str(skill.resolve())}
+    triggered_at = datetime.fromisoformat(delivery["triggered_at"])
+    delivered_at = datetime.fromisoformat(delivery["delivered_at"])
+    assert delivery["triggered_at"] == (
+        datetime.fromtimestamp(1120.7).astimezone().isoformat(timespec="seconds")
+    )
+    assert triggered_at.utcoffset() is not None
+    assert delivered_at.utcoffset() is not None
+    # The delivery is late by construction, so it must not read as just-happened.
+    assert abs((datetime.now().astimezone() - triggered_at).total_seconds()) > 60
+    assert delivered_at > triggered_at
+    # The delivered stop is the result of the awaiting call: no native input
+    # request, no second Main and no other client process is started for it.
+    assert not native_client_log.exists()
+    with pytest.raises(RuntimeAdapterError):
+        _ = recovery.notice_fd
 
 
 def test_main_recovery_surfaces_caller_notice_errors(
     tmp_path: Path,
-    peer: Path,
 ) -> None:
     """Malformed caller-channel input remains visible to the owning host."""
-    skill = tmp_path / "harness/.agents/skills/retro/SKILL.md"
-    skill.parent.mkdir(parents=True)
-    skill.write_text("name: retro\n", encoding="utf-8")
-    recovery = CodexMainRecovery("thread-main", skill, cwd=tmp_path, command=[str(peer)])
+    recovery = CodexMainRecovery(_retro_skill(tmp_path))
 
     with pytest.raises(RuntimeAdapterError) as caught:
         with recovery:
@@ -366,114 +359,64 @@ def test_main_recovery_surfaces_caller_notice_errors(
     assert repeated.value.code == "RUNTIME_REQUEST_INVALID"
 
 
-def test_main_recovery_keeps_queue_error_visible_when_runner_fails(
+def test_main_recovery_keeps_delivery_error_visible_when_runner_fails(
     tmp_path: Path,
-    peer: Path,
 ) -> None:
-    """A queue rejection remains observable beside the Runner failure."""
-    from graphtraj.execution.execution_budget import budget_notice_output
-
-    skill = tmp_path / "harness/.agents/skills/retro/SKILL.md"
-    skill.parent.mkdir(parents=True)
-    skill.write_text("name: retro\n", encoding="utf-8")
+    """A rejected stop delivery remains observable beside the Runner failure."""
     stop = {
         "type": "execution-budget-exceeded",
-        "occurred_at": datetime.fromtimestamp(1000.0).astimezone().isoformat(timespec="seconds"),
+        "occurred_at": "2026-09-17T02:20:24",
         "ticket": {"ticket_id": "116", "ticket_name": "session-budget-control"},
         "threshold": {"kind": "stochastic_stop", "limit": 2},
         "actual": {"elapsed_minutes": 2.011},
     }
 
     with pytest.raises(RuntimeAdapterError) as caught:
-        with CodexMainRecovery(
-            "thread-main",
-            skill,
-            cwd=tmp_path,
-            command=[str(peer)],
-            environment={"PEER_REJECT_QUEUE": "1"},
-        ) as recovery:
-            with budget_notice_output(recovery.notice_fd):
-                os.write(recovery.notice_fd, (json.dumps(stop) + "\n").encode())
+        with CodexMainRecovery(_retro_skill(tmp_path)) as recovery:
+            os.write(recovery.notice_fd, (json.dumps(stop) + "\n").encode())
             raise RuntimeError("Runner operation failed")
-    assert caught.value.code == "RUNTIME_RPC_ERROR"
+    assert caught.value.code == "RUNTIME_REQUEST_INVALID"
     assert isinstance(caught.value.__context__, RuntimeError)
 
 
-def test_main_recovery_close_keeps_cleanup_owned_after_waiter_cancellation(
-    tmp_path: Path,
-    peer: Path,
-) -> None:
-    """A cancelled close waiter cannot abandon the queue reader or its descriptor."""
-
-    from graphtraj.execution.execution_budget import budget_notice_output, caller_notice_fd
-
-    async def exercise() -> None:
-        skill = tmp_path / "harness/.agents/skills/retro/SKILL.md"
-        skill.parent.mkdir(parents=True)
-        skill.write_text("name: retro\n", encoding="utf-8")
-        recovery = CodexMainRecovery(
-            "thread-main",
-            skill,
-            cwd=tmp_path,
-            command=[str(peer)],
-            environment={"PEER_PAUSE_QUEUE": "1"},
-        )
-        duplicate = None
-        recovery.__enter__()
-        try:
-            with budget_notice_output(recovery.notice_fd):
-                duplicate, owned = caller_notice_fd()
-                assert owned
-                os.write(recovery.notice_fd, (
-                    json.dumps({
-                        "type": "execution-budget-exceeded",
-                        "occurred_at": datetime.now().astimezone().isoformat(timespec="seconds"),
-                        "ticket": {"ticket_id": "116", "ticket_name": "session-budget-control"},
-                        "threshold": {"kind": "stochastic_stop", "limit": 2},
-                        "actual": {"elapsed_minutes": 2.011},
-                    }) + "\n"
-                ).encode())
-            closing = asyncio.create_task(asyncio.to_thread(recovery.close))
-            await asyncio.sleep(0.05)
-            closing.cancel()
-            with pytest.raises(asyncio.CancelledError):
-                await closing
-            await asyncio.to_thread(recovery.close)
-            assert recovery.queue_submissions == ("queued-1",)
-            with pytest.raises(RuntimeAdapterError):
-                _ = recovery.notice_fd
-        finally:
-            if duplicate is not None:
-                os.close(duplicate)
-            await asyncio.to_thread(recovery.close)
-
-    asyncio.run(exercise())
+def test_main_recovery_close_releases_the_caller_channel_once(tmp_path: Path) -> None:
+    """Repeated closes stay safe and keep the delivered stop identity."""
+    recovery = CodexMainRecovery(_retro_skill(tmp_path))
+    stop = {
+        "type": "execution-budget-exceeded",
+        "occurred_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+        "ticket": {"ticket_id": "116", "ticket_name": "session-budget-control"},
+        "threshold": {"kind": "stochastic_stop", "limit": 2},
+        "actual": {"elapsed_minutes": 2.011},
+    }
+    with recovery:
+        os.write(recovery.notice_fd, (json.dumps(stop) + "\n").encode())
+        deliveries = recovery.take_stop_deliveries()
+        assert len(deliveries) == 1
+        assert recovery.take_stop_deliveries() == ()
+    recovery.close()
+    with pytest.raises(RuntimeAdapterError):
+        _ = recovery.notice_fd
 
 
-def test_agent_runner_uses_native_queue_for_a_codex_main_caller(
+def test_agent_runner_returns_the_delivered_stop_with_its_result(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
-    peer: Path,
 ) -> None:
-    """The ordinary Runner caller channel queues a stop without host plumbing."""
+    """The awaited Runner call returns the stop instead of queueing it."""
+
+    from click.testing import CliRunner
 
     from graphtraj.execution.execution_budget import caller_notice_fd
-    from graphtraj.interfaces.cli.agent_runner import _budget_notices
+    from graphtraj.interfaces.cli import agent_runner
 
     skill = tmp_path / ".agents/skills/retro/SKILL.md"
     skill.parent.mkdir(parents=True)
     skill.write_text("name: retro\n", encoding="utf-8")
-    bin_directory = tmp_path / "bin"
-    bin_directory.mkdir()
-    (bin_directory / "codex").symlink_to(peer)
-    protocol = tmp_path / "protocol.jsonl"
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("CODEX_THREAD_ID", "thread-main")
-    monkeypatch.setenv("PATH", str(bin_directory))
-    monkeypatch.setenv("PEER_PROTOCOL_LOG", str(protocol))
     monkeypatch.delenv("GRAPHTRAJ_BUDGET_NOTICE_FD", raising=False)
     monkeypatch.delenv("GRAPHTRAJ_ROLE", raising=False)
-
     stop = {
         "type": "execution-budget-exceeded",
         "occurred_at": datetime.fromtimestamp(1000.0).astimezone().isoformat(timespec="seconds"),
@@ -481,21 +424,32 @@ def test_agent_runner_uses_native_queue_for_a_codex_main_caller(
         "threshold": {"kind": "stochastic_stop", "limit": 2},
         "actual": {"elapsed_minutes": 2.011},
     }
-    with _budget_notices():
+
+    def interrupt_after_a_sampled_stop(alias: str, cwd: Path) -> dict:
+        """Return one operation result after a stop reached the caller channel."""
         descriptor, owned = caller_notice_fd()
-        assert descriptor is not None and owned
+        assert descriptor is not None
         try:
             os.write(descriptor, (json.dumps(stop) + "\n").encode())
         finally:
-            os.close(descriptor)
+            if owned:
+                os.close(descriptor)
+        return {"alias": alias, "interrupt_status": "interrupted"}
 
-    requests = [
-        json.loads(line)
-        for line in protocol.read_text(encoding="utf-8").splitlines()
-        if json.loads(line).get("method") == "thread/queue/add"
-    ]
-    assert len(requests) == 1
-    assert requests[0]["params"]["threadId"] == "thread-main"
+    monkeypatch.setattr(
+        agent_runner, "interrupt_session", interrupt_after_a_sampled_stop,
+    )
+    result = CliRunner().invoke(agent_runner.main, ["interrupt", "engineer@e1"])
+
+    assert result.exit_code == 0, result.output
+    document = yaml.safe_load(result.output)
+    assert document["alias"] == "engineer@e1"
+    delivery = document["stop_deliveries"][0]
+    assert delivery["stop_id"] == "fd403ef4-1047-54e3-9eb3-ec71c26912eb"
+    assert delivery["stop"] == "stochastic_stop:2"
+    assert delivery["instruction"].startswith("$retro ")
+    assert delivery["skill"]["path"] == str(skill.resolve())
+    assert delivery["elapsed"] == "00:02:00"
 
 
 def test_server_request_keeps_native_id_and_does_not_block_other_sessions(

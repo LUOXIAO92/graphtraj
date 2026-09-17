@@ -1519,13 +1519,18 @@ def _read_pipe_to_eof(descriptor: int, timeout: float) -> tuple[bytes, bool]:
         data += chunk
 
 
-def test_installed_send_queues_a_late_stop_after_the_caller_returns(
+def test_installed_send_retains_a_late_stop_without_an_awaiting_call(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
     fake_codex: FakeCodex,
     tmp_path: Path,
 ) -> None:
-    """A Worker that still owns the caller writer reaches the native queue."""
+    """A stop after `send` returned has no in-band call to return through.
+
+    The acknowledged caller is gone before the Worker samples the stop, so the
+    delivery stays retained in the Ticket's budget state instead of being
+    queued into Main's native input.
+    """
 
     harness, _, _, environment = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path
@@ -1549,16 +1554,16 @@ def test_installed_send_queues_a_late_stop_after_the_caller_returns(
         "    budget.random.random = lambda: 0.99\n",
         encoding="utf-8",
     )
-    # Only the Codex Main queue sender is replaced; the resumed Worker keeps its
-    # own recorded Runtime executable.
+    # The controlled `codex` on Main's PATH only records whether any native
+    # client is started; the resumed Worker keeps its own Runtime executable.
     main_bin = tmp_path / "late-stop-main-bin"
     main_bin.mkdir()
-    queue_sender = main_bin / "codex"
-    queue_sender.write_text(
+    native_client = main_bin / "codex"
+    native_client.write_text(
         "#!" + sys.executable + "\n"
         + Path(__file__).with_name("codex_stdio_peer.py").read_text()
     )
-    queue_sender.chmod(0o755)
+    native_client.chmod(0o755)
     protocol = tmp_path / "late-stop-main-protocol.jsonl"
     batch = harness / "late-stop-batch.yml"
     batch.write_text(
@@ -1635,39 +1640,14 @@ def test_installed_send_queues_a_late_stop_after_the_caller_returns(
     clock.write_text(str(started + 260), encoding="utf-8")
     try:
         deadline = time.monotonic() + 20
-        queued: list[dict] = []
         while time.monotonic() < deadline:
-            queued = [
-                json.loads(line)
-                for line in protocol.read_text(encoding="utf-8").splitlines()
-                if json.loads(line).get("method") == "thread/queue/add"
-            ] if protocol.is_file() else []
-            if queued:
+            if yaml.safe_load(usage_file.read_text(encoding="utf-8"))["stopped"]:
                 break
             time.sleep(0.02)
         assert yaml.safe_load(usage_file.read_text(encoding="utf-8"))["stopped"] is True
-        assert len(queued) == 1
-        params = queued[0]["params"]
-        assert params["threadId"] == "thread-main"
-        assert params["clientUserMessageId"] == "71034556-830a-5f40-8ec6-80c65b263a52"
-        assert params["input"][1] == {
-            "type": "skill",
-            "name": "retro",
-            "path": str((harness / ".agents/skills/retro/SKILL.md").resolve()),
-        }
-
-        # The late stop keeps the instant the stop actually happened, not the
-        # later moment this input was submitted, and keeps elapsed separate.
-        text = params["input"][0]["text"]
-        stop_instant = datetime.fromtimestamp(started + 260).astimezone()
-        assert "$retro" in text
-        assert "Stop time: " + stop_instant.isoformat(timespec="seconds") in text
-        assert "Elapsed work: " in text
-        instants = re.findall(
-            r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}", text
-        )
-        assert instants[0] == stop_instant.isoformat(timespec="seconds")
-        assert instants[1] != instants[0]
+        # No native Main input is queued for this recovery; the awaiting call
+        # already answered, so the stop is only retained in the budget state.
+        assert not protocol.exists()
 
     finally:
         release.touch()

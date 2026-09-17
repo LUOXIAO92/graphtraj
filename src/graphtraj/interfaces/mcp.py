@@ -322,7 +322,7 @@ def send_session_instruction(arguments: Mapping[str, Any]) -> ToolResult:
 
     ``reports_only`` resumes the Session to return evidence it already holds
     without sampling the Ticket budget, so a report collection cannot repeat a
-    sampled stop or queue another retro input.
+    sampled stop or deliver another retro instruction.
     """
 
     return ToolResult(
@@ -510,7 +510,9 @@ def _initialize_result(params: Mapping[str, Any]) -> dict[str, Any]:
 
 
 @contextmanager
-def _caller_notices(params: Mapping[str, Any]) -> Iterator[None]:
+def _caller_notices(
+    params: Mapping[str, Any],
+) -> Iterator[CodexMainRecovery | None]:
     """Route live budget notices to the Codex Main that made this request.
 
     A worker's inherited channel wins. Otherwise the request's own Codex
@@ -528,13 +530,13 @@ def _caller_notices(params: Mapping[str, Any]) -> Iterator[None]:
         if recovery is not None:
             with recovery:
                 with budget_notice_output(recovery.notice_fd):
-                    yield
+                    yield recovery
             return
-        yield
+        yield None
         return
     try:
         with budget_notice_output(descriptor):
-            yield
+            yield None
     finally:
         if owned:
             os.close(descriptor)
@@ -557,8 +559,13 @@ def _tool_call_response(
             request_id, INVALID_PARAMS, "Tool arguments must be an object."
         )
     try:
-        with _caller_notices(params):
+        with _caller_notices(params) as recovery:
             result = tool.handler(arguments)
+            document = (
+                recovery.attach_stop_deliveries(result.document)
+                if recovery is not None
+                else result.document
+            )
     except (
         OSError,
         UnicodeError,
@@ -582,9 +589,9 @@ def _tool_call_response(
         {
             # The text is the CLI's YAML rendering of the same document.
             "content":           [
-                {"type": "text", "text": yaml.safe_dump(result.document, sort_keys=False)}
+                {"type": "text", "text": yaml.safe_dump(document, sort_keys=False)}
             ],
-            "structuredContent": result.document,
+            "structuredContent": document,
             "isError":           result.failed,
         },
     )

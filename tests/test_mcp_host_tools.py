@@ -1400,6 +1400,69 @@ def test_installed_mcp_server_returns_a_budget_stop_to_the_request_caller(
         assert _native_queue_submissions(protocol) == []
 
 
+def test_installed_runner_returns_a_budget_stop_with_the_awaiting_call(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    """The installed CLI returns the enforced stop in the result Main awaits."""
+
+    from test_execution_budgets import _budget_body
+    from test_session_alias_control import _register_ready_ticket
+
+    harness, _, _, environment = configure_harness(
+        installed_commands, temporary_git_repository, fake_codex, tmp_path,
+    )
+    _register_ready_ticket(installed_commands, harness, body=_budget_body(total=1))
+    clock = tmp_path / "cli-caller-clock"
+    clock.write_text(str(time.time()), encoding="utf-8")
+    run_environment, protocol = _controlled_budget_server(
+        installed_commands,
+        fake_codex,
+        harness,
+        environment,
+        tmp_path,
+        BUDGET_CLOCK=str(clock),
+        FAKE_CODEX_FINAL_LEADER_CLOCK=str(clock),
+        FAKE_CODEX_CAPTURE_STDIN="1",
+    )
+    batch = harness / "cli-caller-batch.yml"
+    batch.write_text(
+        "tasks:\n"
+        '  - ticket_id: "76"\n'
+        "    ticket_name: session-alias-control\n"
+        "    role: coding-team.team-leader\n",
+        encoding="utf-8",
+    )
+    completed = run_process(
+        [str(installed_commands.runner), "--batch-input", str(batch)],
+        cwd=harness,
+        env={**run_environment, "CODEX_THREAD_ID": "thread-main"},
+        timeout=300,
+    )
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    document = yaml.safe_load(completed.stdout)
+    assert document["tasks"][0]["launch_status"] == "stopped"
+    delivery = document["stop_deliveries"][0]
+    assert delivery["stop_id"] == "71034556-830a-5f40-8ec6-80c65b263a52"
+    assert delivery["stop"] == "stochastic_stop:2"
+    assert delivery["ticket"] == {
+        "ticket_id": "76", "ticket_name": "session-alias-control",
+    }
+    assert delivery["instruction"].startswith("$retro ")
+    assert delivery["skill"] == {
+        "name": "retro",
+        "path": str((harness / ".agents/skills/retro/SKILL.md").resolve()),
+    }
+    triggered_at = datetime.fromisoformat(delivery["triggered_at"])
+    delivered_at = datetime.fromisoformat(delivery["delivered_at"])
+    assert triggered_at.utcoffset() is not None
+    assert delivered_at.utcoffset() is not None
+    assert re.fullmatch(r"\d{2}:\d{2}:\d{2}", delivery["elapsed"])
+    assert _native_queue_submissions(protocol) == []
+
+
 def test_installed_mcp_server_returns_each_caller_its_own_stop(
     installed_commands: InstalledCommands,
     mcp_executable: Path,

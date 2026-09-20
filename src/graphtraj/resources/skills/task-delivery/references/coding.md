@@ -12,31 +12,36 @@ configuration changes; distinguish bootstrap from candidate validation. Assign
 source files by repository responsibility; shared Project Documents remain
 Main-owned. Pass known usable entrypoints and failures to the Leader.
 
-Main and Team Leaders do not execute tests, including pre-dispatch baselines
-and validation probes. Assign those checks to an Engineer and supply existing
-candidate/environment evidence for reuse. The Leader assesses the results;
-Main coordinates shared validation and integration without rerunning tests.
+Main does not run tests. Engineers may run development checks; the Leader alone
+owns test acceptance and runs any acceptance checks still needed. Reviewers
+inspect code and evidence without running tests or probes. Reuse valid evidence.
 
-Select the configured coding-team.team-leader preset and give the Leader the
-accepted code Ticket; difficulty stays an estimation property. A Batch task uses
+Select the coding Leader preset from the user's configured team and give it the
+accepted code Ticket and assigned Engineer preset. Apply any user-selected
+expertise mapping without hard-coding model names or role tiers; difficulty
+stays an estimation property. A Batch task uses
 its ticket_id, ticket_name, role and concise instruction; the registered current
 definition supplies the complete requirements.
 
-The coding Leader owns its Engineer, Standards and Spec Reviewers, fixed
-candidate and comparison point, same-Round corrections and implementation
-rework. Receive its final candidate, both Reviews, validation and decision.
-Use the Runner-supplied team protocol; Main does not schedule its Reviewers.
+The Leader first assesses the Ticket difficulty and scope using the supplied
+investigation findings. Small fixes and test modifications do not use TDD or
+code-review Skills. For other work, select only the affected Review axes; each
+axis may run at most once per Ticket, including later corrections or Sessions.
+The Leader verifies subsequent corrections and acceptance using retained
+evidence instead of restarting Review. Receive the candidate, applicable Review
+results, validation evidence and the Leader decision. Main communicates only
+with that Leader; all Agents observe the same direct-parent/child boundary.
 
 For an observed code integration conflict, pass
 --resolve-conflict <evidence-based instruction> before the validation command's
 -- separator to graphtraj ticket integrate. The coding team's Merge Resolver
 handles the conflict; Main accepts and commits the resolution using the
-returned validation evidence. Any required tests remain Engineer-executed.
+returned validation evidence. Any required acceptance tests remain Leader-owned.
 
 For a system/provider failure that ended the Team driver, let the caller judge
-when the external cause is resolved. Resume the failed member's existing alias
-with `agent-runner send`, using the causal Worldline event, and wait for that
-execution to finish. Then dispatch a Batch selecting only the affected Ticket
+when the external cause is resolved. Main addresses the failure through its directly assigned Leader. That Leader
+resumes its own failed member using the causal Worldline event; Main does not
+send to the member. Wait for the recovered execution to finish. Then dispatch a Batch selecting only the affected Ticket
 again to continue its current Team from retained state. A successful Runtime
 retry alone does not establish Team acceptance. Keep completed evidence and
 member Sessions; do not replay unrelated Tickets from a multi-ticket Batch.

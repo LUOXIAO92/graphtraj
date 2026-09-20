@@ -1,10 +1,24 @@
 ---
 name: code-review
-description: "Review the changes since a fixed point (commit, branch, tag, or merge-base) along two axes: Standards (does the code follow this repo's documented coding standards?) and Spec (does the code match what the originating issue/spec asked for?). Runs both reviews in parallel sub-agents and reports them side by side. Use when the user wants to review a branch, a PR, work-in-progress changes, or asks to \"review since X\"."
+description: "Review the changes since a fixed point (commit, branch, tag, or merge-base) along two axes: Standards (does the code follow this repo's documented coding standards?) and Spec (does the code match what the originating issue/spec asked for?). Uses only the necessary axes, at most once per axis per Ticket; Reviewers do not run tests. Use when the user wants to review a branch, a PR, work-in-progress changes, or asks to \"review since X\"."
 ---
 
-Within a GraphTraj Team, the Team Leader schedules the Standards and Spec
-Reviewers through agent-runner against the same candidate and comparison.
+Do not use this Skill for small fixes, test modifications, or instruction-only
+changes to prompts, Skills and guidance. The Leader first
+assesses difficulty and scope. Each Review axis may be invoked at most once per
+Ticket or standalone review task; a changed candidate, Round, Session or Agent
+does not reset that limit. Keep the report and evidence for subsequent correction
+verification by the Leader.
+
+Reviewers use controlled read-only queries and write only their assigned report.
+They never execute project code, tests, builds, installations or validation probes.
+Review code and existing evidence; return a missing validation fact to the direct parent.
+The Leader is the sole test-acceptance role. Reports must retain concrete evidence
+for findings; static violations need the rule and location, while behavior failures
+need the relevant input and failure evidence.
+
+Within a GraphTraj Team, the Team Leader schedules only the necessary Review
+axes through agent-runner against the assigned candidate and comparison.
 Use [task-delivery](../task-delivery/SKILL.md) for dispatch, notification-based
 waiting and recovery, including the shared Harness polling limit. Main receives
 the Team result without starting another review or monitoring its members.
@@ -17,7 +31,9 @@ Two-axis review of the diff between `HEAD` and a fixed point the user supplies:
 - **Standards**: does the code conform to this repo's documented coding standards?
 - **Spec**: does the code faithfully implement the originating issue / spec?
 
-Both axes run as **parallel sub-agents** so they don't pollute each other's context, then this skill aggregates their findings.
+When both axes are needed, they may run in parallel as direct children of the
+same parent. All communication and report delivery follows that parent; no Agent
+contacts a sibling or skips a level.
 
 The issue tracker should have been provided to you. If `docs/agents/issue-tracker.md` is missing, tell the user to run `/setup-project`.
 
@@ -68,11 +84,12 @@ Each smell reads *what it is* → *how to fix*; match it against the diff:
 - **Middle Man**: a class or function that mostly just delegates onward. → cut it, call the real target direct.
 - **Refused Bequest**: a subclass or implementer that ignores or overrides most of what it inherits. → drop the inheritance, use composition.
 
-### 4. Spawn both sub-agents in parallel
+### 4. Dispatch the necessary axes once
 
-Reuse valid axis reports for the same candidate, comparison and requirements,
-unless the user requests a fresh review. Dispatch only unfinished or affected
-axes. A missing report copy calls for report recovery, not repeating the review.
+Reuse existing reports and evidence for unchanged behavior. Dispatch an axis
+only if it is needed and has not already run for this Ticket. Candidate corrections
+do not create permission to repeat an axis. A missing report copy calls for
+report recovery through its parent, not repeating the review.
 
 **Standards sub-agent prompt** should include:
 

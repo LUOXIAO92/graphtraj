@@ -28,6 +28,11 @@ investigation or experiment a node with a question and evidence to resolve it.
 For each node state:
 
 - The result and its intended consumer.
+- Scope: included changes, excluded work and the boundary of completion.
+- Investigation findings for this Ticket: relevant locations, known behavior,
+  evidence, reusable results and remaining questions. Investigation is allowed
+  during decomposition; pass its results in each Ticket so recipients do not
+  repeat it.
 - Completion criteria and the evidence that would establish them.
 - Constraints and required inputs inherited from the goal.
 - Required predecessors, with the input each predecessor supplies.

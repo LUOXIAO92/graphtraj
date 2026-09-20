@@ -7,3 +7,7 @@ instructions: |
   use native swarm, perform formal implementation or Review, or change delivery
   state. Work only in the current Worktree and treat CONTEXT.md and docs/ as
   read-only. Return concise findings through this Session.
+  Communicate only with your direct parent, not siblings or other branches.
+  Do not access cross-level raw Sessions or reports. Notify your parent of
+  permission requests through the existing execution; native approval still
+  applies. Normal waits do not authorize relaunching an Agent or adding time.

@@ -1,11 +1,18 @@
 # Recovery decisions
 
 Identify the failing action and who can change its cause before assigning work.
-Return an Agent-correctable error to its existing Session with the concrete
-failure, evidence and expected result for reflection and correction. A dispatch
+Return an Agent-correctable error through its direct parent with the concrete
+failure, evidence and expected result. Communicate only with your own direct
+parent and children; Main does not contact a Team member to recover it. A dispatch
 mistake belongs to the dispatcher. System/provider outages or throttling return
 to the superior for a later retry; permission/configuration failures go to the
 role authorized to correct that configuration. Do not treat them as bad work.
+
+Permission requests notify the direct parent immediately through its existing
+execution; notification does not approve them. Use actual available capabilities
+and report a missing delivery path instead of creating a second execution.
+Normal watchdog, member, tool and approval waits are not failures. State queries
+return summaries; lack of output or a stale heartbeat alone is not proof of death.
 
 Keep the candidate, author-attributed reports, tests and completed steps when
 still valid. Report transport failure calls for report delivery, not a new
@@ -18,20 +25,36 @@ Judge Session health from evidence. Repeated same-kind errors, expanding repair
 scope or demonstrated context decay may justify a fresh member Session.
 Preserve the previous scene and provide accepted goals/constraints, current
 commit, valid checks/reports, attempted fixes and remaining work. Reuse only
-still-applicable evidence; a changed candidate needs proportionate validation
-and affected review. Whole-Team replacement is a last resort when local
+still-applicable evidence. A changed candidate needs proportionate checks, but
+does not reset the once-per-Ticket Review-axis limit. The Leader verifies later
+corrections and owns test acceptance. Whole-Team replacement is a last resort when local
 continuation cannot recover; explain why. A failure count does not select a
 model, replacement or escalation by itself.
 
-An enforced execution-budget stop is reported automatically by the timer to
-Leader and the calling Main. After receiving that notice and the limited
-wrap-up, the caller's host integration explicitly invokes `$retro` for this stop.
-Preserve the Skill's invocation policy; a name in CLI output is not an invocation.
-Ordinary budget reminders do not trigger retro. Handle each stop once using
-its existing event and decision; delivery retries do not repeat the analysis.
-For a Codex Main, use [Codex recovery delivery](codex-recovery.md). Other hosts
-use their supported input mechanism, not Codex app-server. Report a missing
-host integration instead of claiming delivery or enabling implicit discovery.
+Replacement belongs to the target's direct parent or the user. Prefer a stop
+request, using interrupt when needed or immediately for an out-of-control child.
+Confirm the target and all descendants have stopped before replacing any of
+them. Use Runner's descendant-stop capability when available; a single-Agent
+stop receipt does not prove a subtree stopped. A legacy Main-only gate does not
+authorize cross-level recovery. On a confirmed abnormality, notify its direct
+parent and stop its descendants through the supported control interface; do not
+automatically replace Agents or increase budgets.
+
+An enforced execution-budget stop is delivered by the timer to the Leader and
+the calling Main. Under the user's explicit standing authorization, Main runs
+the named retro from that event and the limited wrap-up; it does not require
+a fresh user input for each stop. Keep explicit-only Skill discovery and the
+scope of the user's authorization. Ordinary reminders do not trigger retro.
+Handle each stop once using its event and retained decision. For a Codex Main,
+use [Codex recovery delivery](codex-recovery.md). Return the event through the
+active tool call; a log entry or accepted queue row is not delivered recovery.
+
+Read retained reports returned by your direct child. Missing member evidence
+is handled through that child, not by contacting its members. Do not wake a
+Leader again while the Ticket execution is running merely to collect reports.
+After an execution has ended, use report-only collection through the same
+hierarchy when necessary; it must not start another work-budget sampler or new
+implementation.
 
 Reuse existing findings and inspect only missing decision evidence.
 Separate necessary implementation/review from avoidable scheduling, repeated

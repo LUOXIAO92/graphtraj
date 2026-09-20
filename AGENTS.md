@@ -68,27 +68,40 @@ def calculate_total(
 
 ## Coordination and source investigation
 
-Main and Team Leaders coordinate through accepted requirements, documented
-commands, handoffs and retained evidence. Main owns dispatch and delivery
-decisions; Leaders coordinate their Ticket and assess returned evidence.
-They must not expand setup, scheduling, continuation or status checks into
-source-code investigations or reconstruct internal execution flows themselves.
-Assign concrete implementation failures or unanswered implementation questions
-to an Engineer with the existing evidence, and reuse the returned findings.
-Reading a specific diff needed to assess that evidence remains within scope;
-independent Reviewers retain their assigned code-review responsibilities.
+Main may investigate to decompose work and gives each Ticket its scope,
+investigation findings, relevant locations and reusable evidence. The Leader
+assesses actual difficulty and scope before selecting methods. Coordination,
+status and recovery do not authorize reconstructing internal execution flows;
+Engineers own remaining implementation questions. A specific diff may be read
+when needed to assess supplied evidence.
+
+Every Agent communicates only with its direct parent and direct children.
+Cross-level observation uses status summaries, not raw Sessions or reports.
+Runner interruption of one's own descendant subtree is the control exception;
+it does not permit cross-level messages, approvals or replacement. Only the
+target's direct parent or the user may replace it, after the target and all
+descendants are confirmed stopped. Report missing tool capabilities through
+the direct hierarchy instead of bypassing it.
+
+Small fixes and test modifications do not use TDD or code-review Skills. Each
+Review axis runs at most once per Ticket, including later Rounds, Sessions and
+Teams; the Leader verifies corrections using retained evidence. Do not wake an
+Agent that is already executing merely to collect reports or status. Preserve
+ponytail and reports with concrete supporting evidence.
 
 ## Standard checks
 
-This project includes programming work. Main and Team Leaders must not execute
-any tests, including baseline, regression, smoke, installation and integration
-tests or validation probes. Running them through a script or integration command
-does not provide an exception. Engineers execute tests and report their candidate,
-environment and results. Main coordinates shared validation and evidence reuse;
-Leaders define the needed checks and assess the returned evidence. Independent
-Reviewers retain their assigned validation responsibilities.
+This project includes programming work. Main must not run tests. Engineers may
+run development tests and report the candidate, environment, commands and
+results. The Leader alone owns test acceptance and runs any acceptance checks
+still needed, reusing valid development evidence. Reviewers use controlled
+read-only queries and write their evidence report; they may not execute project
+code, tests, builds, installations or validation probes, or modify candidates.
+Wrappers and temporary environments do not change those responsibilities.
 
-The test commands below are for those test executors, not Main or Team Leaders.
+Instruction-only changes to prompts, Skills and guidance end with consistency
+checking and a commit where tracked; no tests or Reviewers. The commands below
+are for the authorized test executors when source changes require them.
 
 - Run focused tests with `pytest -p no:cacheprovider -q <paths>`.
 - Run the complete suite with `pytest -p no:cacheprovider -q` only when the

@@ -22,17 +22,19 @@ registration, readiness and graph revisions.
 
 Choose the executor from the task's needed expertise and accepted completion
 criteria. Direct work stays with the current Agent when it needs no formal
-team. For projects with programming work, Main and Team Leaders must not execute
-any tests, including setup baselines, validation probes and integration tests.
-Assign test execution to an Engineer; Main and Leaders assess the returned
-evidence. This also applies to auxiliary scripts and does not itself require
-creating a Ticket or a Team for each script.
+team. Apply the user's ownership and configured role choices; do not infer
+fixed role tiers from difficulty. Instruction-only changes need a consistency
+check and a commit where tracked, not tests or Reviewers.
+Main does not run tests. Engineers may run development tests; the Leader
+is the sole test-acceptance role and runs any still-needed acceptance checks,
+reusing valid development evidence. Reviewers never run tests or probes. This
+does not require a Team for every auxiliary script.
 
 For engineering delivery, read [coding dispatch](references/coding.md).
 For another task type, use its actually available role or agreed direct work
 arrangement; a team protocol must exist before it can be dispatched.
 
-Give the executor the authoritative task, required inputs, acceptance mapping
+Give the executor the Ticket scope, its investigation findings, required inputs, acceptance mapping
 and relevant predecessor evidence. Preserve the agreed
 [node boundaries](../task-breakdown/SKILL.md#find-the-useful-boundaries) in the
 dispatch instructions. Confirm sources are reachable from the assigned role's
@@ -43,7 +45,16 @@ internal specialist workflow and acceptance decision.
 
 ## Dispatch and follow up
 
+Every Agent communicates only with its direct parent and direct children;
+coordinate failures and report corrections through the same hierarchy.
+Cross-level status queries expose summaries, not raw member reports or Sessions.
+The permitted control exception is interrupting one's own descendant subtree;
+it does not authorize cross-level messages, approvals or replacement.
+
 Formal team work uses `agent-runner --batch-input <batch.yml>`.
+This describes the existing interface. When the accepted swarm launch interface
+is implemented, use it for activation and aliases for later interaction; do not
+invent supported commands or duplicate the task DAG in launch instructions.
 Respect configured depth and concurrency. A Batch starts all selected tasks
 or none; reduce it or wait when there is insufficient capacity.
 
@@ -63,9 +74,10 @@ limit across Main, Leader, delegates, scripts and tools. Use
 retained evidence; do not query both merely to confirm nothing changed.
 Progress messages use known state and do not trigger another check.
 
-Send relevant new evidence with `agent-runner send <alias> --instruction <text>
---caused-by-event-id <event-id>` under its active-execution semantics; do not
-start a second driver to deliver it. Use `agent-runner interrupt <alias>` when
+Do not wake or relaunch the Leader of an executing Ticket. Deliver relevant new
+evidence only through its existing live execution; do not create another turn
+or Driver to retrieve reports or status. After an execution has ended, use the
+documented recovery path through the direct child and its causal event. Use `agent-runner interrupt <alias>` when
 interruption is intended. Reuse valid reports and validation for unchanged
 paths; have the assigned executor run affected checks and explicitly required
 fresh validation.
@@ -76,10 +88,13 @@ failure, sampled budget stop or repeated unproductive correction, read
 [recovery decisions](references/recovery.md). Correct Main's scope or dispatch
 errors as Main; the responsible Agent and its superior judge internal recovery.
 
-Only Main or the user retires a formal Team. Use
-`agent-runner replace <leader-alias> --actor main
---caused-by-event-id <event-id>`; the successor uses the existing task
-definition, branch, Worktree and predecessor's handoff.
+Only the target's direct parent or the user may replace an Agent or Team.
+Prefer asking the direct child to stop; interrupt when needed, or immediately
+if it is out of control. Confirm the target and all descendants are stopped
+before creating replacements, using the existing task and retained handoff.
+An installed Main-only replacement gate or single-Agent interrupt is a tool
+limitation, not permission for Main to replace a grandchild or assume its
+descendants stopped. Return the limitation through the direct hierarchy.
 
 ## Revise the graph when evidence requires it
 
@@ -106,9 +121,9 @@ revision alone does not accept a candidate or manufacture Team evidence.
 ## Integrate and continue
 
 Integrate accepted file results into the configured shared branch using the
-appropriate validation evidence. In projects with programming work, Engineers
-execute any required integration tests; Main must not run tests through the
-integration command. For a registered formal Ticket use:
+appropriate validation evidence. The Leader owns any required
+integration acceptance tests; Main must not run tests through the integration
+command. For a registered formal Ticket use:
 
 ```text
 graphtraj ticket integrate --ticket-id <id> -- <validation-command> <arguments>

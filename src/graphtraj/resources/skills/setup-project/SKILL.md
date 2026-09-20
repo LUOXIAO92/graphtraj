@@ -24,11 +24,12 @@ the project's responsibility rule below. A project-wide yes still requires
 choosing the workflow for each task. Record the answer in the project guidance's
 Agent skills section.
 
-When the project includes programming work, Main and Team Leaders must not
-execute any tests, during setup or subsequent delivery. Assign test execution
-to an Engineer and record this prohibition explicitly in the project's guidance,
-using [coding setup](references/coding.md). Apply it before any setup baseline
-or validation probe. Read that reference only when the answer is affirmative.
+When the project includes programming work, Main does not run tests. Engineers
+may run development tests; the Leader alone owns test acceptance and any
+still-needed acceptance checks. Reviewers never run tests or probes. Record
+these responsibilities in the project guidance using
+[coding setup](references/coding.md), before any setup baseline or validation
+probe. Read that reference only when the answer is affirmative.
 
 ## Configure shared conventions
 

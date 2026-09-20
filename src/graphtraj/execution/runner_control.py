@@ -255,6 +255,7 @@ def _send_session_locked(
     request = _refresh_current_team_report_request(
         request, mapping, worktree, team_environment,
         reports_only=stopped or reports_only,
+        session_directory=session_directory,
     )
     if stopped:
         instruction = (
@@ -578,6 +579,7 @@ def _refresh_current_team_report_request(
     environment: Dict[str, str],
     *,
     reports_only: bool = False,
+    session_directory: Path | None = None,
 ) -> Dict[str, Any]:
     role = ROLE_REFERENCES.get(mapping["role"], mapping["role"])
     if role == "team-leader" and "GRAPHTRAJ_TEAM_ROUND" not in environment:
@@ -594,6 +596,7 @@ def _refresh_current_team_report_request(
                 report_files=(),
                 role=role,
                 reports_only=True,
+                session_directory=session_directory,
             )
         except RuntimeAdapterError as error:
             raise RunnerError(error.code, error.message) from error
@@ -629,6 +632,7 @@ def _refresh_current_team_report_request(
             report_files=report_files,
             role=role,
             reports_only=reports_only,
+            session_directory=session_directory,
         )
     except RuntimeAdapterError as error:
         raise RunnerError(error.code, error.message) from error

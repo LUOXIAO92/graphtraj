@@ -383,6 +383,17 @@ def test_installed_runner_obeys_the_explicit_leader_decision_for_a_run_free_team
         batch_directory = harness_root / '.graphtraj/state/batches'
         assert (filesystem.get(str(registration)) == 'write') is leader
         assert (filesystem.get(str(batch_directory)) == 'write') is leader
+        # Direct control reads causal Worldline events and takes one Runner
+        # capacity position, at their real locations instead of the Ticket
+        # evidence directory.
+        assert (
+            filesystem.get(str(harness_root / '.graphtraj/state/worldline/.lock'))
+            == 'write'
+        ) is leader
+        assert (
+            filesystem.get(str(harness_root / '.graphtraj/runner/capacity'))
+            == 'write'
+        ) is leader
         report_names = {
             "engineer": {"engineer.md", "validation.md"},
             "standards-reviewer": {"standards.md"},
@@ -785,7 +796,18 @@ profile = settings['default_permissions']
 filesystem = settings['permissions'][profile]['filesystem']
 targets = [Path(path) for path, access in filesystem.items() if access == 'write']
 assert registration in targets
-assert len(targets) == 2
+# Exact write grants only: the registered Batch, its retention directory, this
+# Leader's own report and the Worldline lock direct control opens. No wildcard
+# and no shared Runner, state or Session directory.
+harness_store = Path(os.environ['GRAPHTRAJ_HARNESS_ROOT']) / '.graphtraj'
+ticket = harness_store / 'state' / 'tickets' / '75-inline-specialist'
+assert set(targets) == {
+    registration,
+    harness_store / 'state' / 'batches',
+    harness_store / 'state' / 'worldline' / '.lock',
+    harness_store / 'runner' / 'capacity',
+    ticket / 'teams' / '1' / 'rounds' / '1' / 'leader.md',
+}
 assert registration.parent not in targets
 command = [os.environ['TEST_CODEX_SANDBOX'], 'sandbox', '-C', str(Path.cwd()), '-P', profile]
 # The test Harness is below the OS temp directory, which :workspace normally

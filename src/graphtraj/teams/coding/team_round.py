@@ -2351,6 +2351,12 @@ def _execute_agent(
             report_files=report_files,
             child_batch_write_paths=(registration, project.state_directory / "batches")
             if policy_role == "team-leader" and registration is not None else (),
+            # The Leader's own direct control reads causal Worldline events and
+            # takes one capacity position; both live outside its Worktree.
+            leader_control_write_paths=(
+                project.state_directory / "worldline" / ".lock",
+                project.runner_directory / "capacity",
+            ) if policy_role == "team-leader" else (),
         ).finalize()
         launch_file = session_directory / "launch.yml"
         write_yaml_durably(
@@ -2719,6 +2725,7 @@ def _resume_job(
             report_files=report_files,
             role=role,
             reports_only=reports_only,
+            session_directory=session_directory,
         )
     except RuntimeAdapterError as error:
         raise RunnerError(error.code, error.message) from error

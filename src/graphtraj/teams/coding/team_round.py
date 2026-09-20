@@ -349,6 +349,7 @@ def _run_batch_workers(
         workers = []
         with capacity_positions(project, len(batch.tasks), capacity_fd) as positions:
             if retained is None:
+                _require_configured_inline_groups(project, batch)
                 retained = retain_batch(project.state_directory, batch)
             for index, position in enumerate(positions):
                 try:
@@ -384,6 +385,23 @@ def _run_batch_workers(
     finally:
         if close_notice_fd and notice_fd is not None:
             os.close(notice_fd)
+
+
+def _require_configured_inline_groups(project: Any, batch: Batch) -> None:
+    """Refuse an inline role whose group-qualified spelling names no group.
+
+    An inline role carries its own Runtime settings, so only its spelling has
+    to name a group the project configuration declares. A bare inline name
+    selects a temporary role and needs no configured group.
+    """
+    for task in batch.tasks:
+        reference = task.role_reference
+        if task.inline_preset is None or reference is None or "." not in reference:
+            continue
+        try:
+            project.roles.resolve(reference)
+        except ProjectRolesError as error:
+            raise RunnerError("ROLE_NOT_CONFIGURED", str(error)) from error
 
 
 def _failed_task(task: Task, error: RunnerError) -> dict[str, Any]:
@@ -2317,17 +2335,15 @@ def _execute_agent(
     ordinal = yaml.safe_load(team_file.read_text())["current_round"] if team_file.exists() else 1
     report_files = _role_report_files(task, policy_role, role, generation, ordinal)
     # The launched entity keeps its role name; the configured reference that
-    # selected its Runtime settings travels with this Session's records.
-    reference = (
-        task.role_reference
-        if task.role_reference is not None and policy_role == role
-        else role
-    )
+    # selected its Runtime settings travels with this Session's records. A seat
+    # another identity occupies is selected by its own role, not by its batch's.
+    own_seat = task.role == role
+    reference = task.role_reference if own_seat and task.role_reference is not None else role
     if expected_session is None:
         try:
             preset = (
                 task.inline_preset
-                if task.inline_preset is not None and task.role == role
+                if own_seat and task.inline_preset is not None
                 else project.roles.preset(reference)
             )
         except ProjectRolesError as error:
@@ -2503,6 +2519,7 @@ def _execute_agent(
                         (leader_directory / "mapping.yml").read_text(encoding="utf-8")
                     )
                     leader_session = leader_mapping["session"]
+                    leader_role = leader_mapping["role"]
                 except (KeyError, OSError, TypeError, yaml.YAMLError) as error:
                     raise RunnerError(
                         "RUNTIME_WORKER_FAILED",
@@ -2512,8 +2529,10 @@ def _execute_agent(
 
                 def resume_leader() -> None:
                     try:
+                        # The notice wakes the Leader under its own role, not the
+                        # notifying child's, so its identity and settings hold.
                         _execute_agent(
-                            project, task, task.role, worktree, evidence, traces,
+                            project, task, leader_role, worktree, evidence, traces,
                             parent_alias, leader_session,
                             leader_directory / "child-registration.yml", None,
                             retained_batch,

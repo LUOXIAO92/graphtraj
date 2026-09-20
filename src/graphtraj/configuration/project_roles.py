@@ -77,31 +77,37 @@ class ProjectRoles:
     """
 
     presets: Mapping[str, RolePreset]
+    groups: frozenset[str] = frozenset()
 
     def resolve(self, reference: str) -> str:
         """Return the configured reference that one role reference selects.
 
-        A group-qualified reference selects exactly that group role, and a
-        top-level preset name selects itself. A bare role name selects a group
-        role only when exactly one configured group declares it.
+        A named group selects exactly that group role, a top-level preset name
+        selects itself, and a bare role name selects a group role only when
+        exactly one configured group declares it. A flat roles.yml declares no
+        group, so its former group token is read as part of the role name.
         """
         retained = retained_role_reference(reference)
         if retained in self.presets:
             return retained
-        if "." not in retained:
-            matches = sorted(
-                candidate
-                for candidate in self.presets
-                if logical_role(candidate) == retained
-            )
-            if len(matches) == 1:
-                return matches[0]
-            if matches:
-                raise ProjectRolesError((
-                    "roles.{0} is declared by more than one group: {1}.".format(
-                        retained, ", ".join(matches)
-                    ),
-                ))
+        group, _, name = retained.rpartition(".")
+        if group and self.groups:
+            raise ProjectRolesError((
+                "roles.{0} is not a configured preset reference.".format(retained),
+            ))
+        matches = sorted(
+            candidate
+            for candidate in self.presets
+            if logical_role(candidate) == name
+        )
+        if len(matches) == 1:
+            return matches[0]
+        if matches:
+            raise ProjectRolesError((
+                "roles.{0} is declared by more than one group: {1}.".format(
+                    name, ", ".join(matches)
+                ),
+            ))
         raise ProjectRolesError((
             "roles.{0} is not a configured preset reference.".format(retained),
         ))
@@ -270,7 +276,7 @@ def _roles_from_document(document: Any) -> ProjectRoles:
     if diagnostics:
         raise ProjectRolesError(tuple(diagnostics))
 
-    return ProjectRoles(presets=presets)
+    return ProjectRoles(presets=presets, groups=frozenset(grouped))
 
 
 def _add_preset(

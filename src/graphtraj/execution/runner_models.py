@@ -17,6 +17,8 @@ ROLE_ALIAS_MARKERS = {
     "standards-reviewer": "r",
     "spec-reviewer": "r",
 }
+
+
 def role_alias_marker(role: str) -> str:
     """Return the stable alias marker for a configured or temporary role."""
 

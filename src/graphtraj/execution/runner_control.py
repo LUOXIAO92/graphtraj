@@ -580,7 +580,7 @@ def _refresh_current_team_report_request(
     worktree: Path,
     environment: Dict[str, str],
     *,
-                         reports_only: bool = False,
+    reports_only: bool = False,
 ) -> Dict[str, Any]:
     role = logical_role(mapping["role"])
     if role == "team-leader" and "GRAPHTRAJ_TEAM_ROUND" not in environment:

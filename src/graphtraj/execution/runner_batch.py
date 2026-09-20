@@ -153,6 +153,7 @@ def _read_task(
                     " ".join(error.diagnostics)
                 ),
             ) from error
+        role_reference = next(iter(role_value))
         policy_role = role if has_packaged_role(role) else "temporary-role"
     else:
         raise RunnerError(

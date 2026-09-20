@@ -3,6 +3,7 @@
 import os
 from pathlib import Path
 
+from graphtraj.configuration.project_roles import logical_role
 from graphtraj.execution.runner_models import Batch, LaunchResponse, RunnerError
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 
@@ -16,7 +17,7 @@ def launch_batch(batch: Batch, cwd: Path) -> LaunchResponse:
     """
     registration = os.environ.get("GRAPHTRAJ_PARENT_REGISTRATION")
     caller_role = os.environ.get("GRAPHTRAJ_ROLE")
-    if caller_role and (caller_role != "team-leader" or not registration):
+    if caller_role and (logical_role(caller_role) != "team-leader" or not registration):
         raise RunnerError(
             "authority-denied",
             "Only Main or a Team Leader with its Runner registration context may dispatch a Batch.",
@@ -25,7 +26,7 @@ def launch_batch(batch: Batch, cwd: Path) -> LaunchResponse:
         from graphtraj.teams.coding.team_round import register_child_batch
 
         return register_child_batch(batch, cwd, Path(registration))
-    if any(task.role == "merge-resolver" for task in batch.tasks):
+    if any(logical_role(task.role) == "merge-resolver" for task in batch.tasks):
         from graphtraj.teams.coding.merge_resolution import launch_merge_resolver
 
         return launch_merge_resolver(batch, cwd)

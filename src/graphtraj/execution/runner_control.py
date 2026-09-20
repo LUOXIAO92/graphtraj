@@ -18,7 +18,7 @@ from graphtraj.runtimes.codex.codex_adapter import (
     read_codex_session_identity,
     refresh_codex_report_paths,
 )
-from graphtraj.configuration.project_roles import ROLE_REFERENCES
+from graphtraj.configuration.project_roles import logical_role
 from graphtraj.graph.delivery_worldline import read_worldline
 from graphtraj.execution.execution_budget import caller_notice_fd, execution_budget_monitor
 from graphtraj.configuration.project_configuration import (
@@ -240,14 +240,12 @@ def _send_session_locked(
         monitor.pending_leader_notices()
         if stopped
         and not budget_notice
-        and mapping["role"] == "team-leader"
+        and logical_role(mapping["role"]) == "team-leader"
         and monitor is not None
         else []
     )
     notice_monitor = monitor
-    if stopped and ROLE_REFERENCES.get(mapping["role"], mapping["role"]) not in {
-        "engineer", "team-leader",
-    }:
+    if stopped and logical_role(mapping["role"]) not in {"engineer", "team-leader"}:
         raise RunnerError(
             "EXECUTION_BUDGET_STOPPED",
             "Runner selected stopping; this Session cannot start new work.",
@@ -293,7 +291,7 @@ def _send_session_locked(
         }
         if monitor is not None:
             resume["monitor_execution_budget"] = True
-            if mapping["role"] == "team-leader":
+            if logical_role(mapping["role"]) == "team-leader":
                 resume["deliver_parentless_leader_notices"] = True
             if leader_notice_keys:
                 resume["leader_notice_keys"] = list(leader_notice_keys)
@@ -308,7 +306,7 @@ def _send_session_locked(
             notice_fd, close_notice_fd = caller_notice_fd()
             if notice_fd is not None:
                 worker_environment["GRAPHTRAJ_BUDGET_NOTICE_FD"] = str(notice_fd)
-        if mapping["role"] == "team-leader":
+        if logical_role(mapping["role"]) == "team-leader":
             worker_environment.update(
                 GRAPHTRAJ_PARENT_ALIAS=alias,
                 GRAPHTRAJ_PARENT_REGISTRATION=str(session_directory / "child-registration.yml"),
@@ -542,11 +540,16 @@ def _team_runtime_environment(mapping: Dict[str, Any], cwd: Path) -> Dict[str, s
     except (OSError, TypeError, ValueError, yaml.YAMLError, ProjectConfigurationError) as error:
         raise RunnerError("session-not-resumable", "Cannot restore the Team Runtime context: {0}".format(error)) from error
     environment["GRAPHTRAJ_TEAM_ROUND"] = str(round_ordinal)
-    if mapping["role"] in {"standards-reviewer", "spec-reviewer"}:
+    reviewer = logical_role(mapping["role"]) in {"standards-reviewer", "spec-reviewer"}
+    if reviewer:
         candidate = ticket.get("current_candidate")
         if not isinstance(candidate, str) or not candidate:
             raise _not_resumable()
-        axis = "Standards" if mapping["role"] == "standards-reviewer" else "Spec"
+        axis = (
+            "Standards"
+            if logical_role(mapping["role"]) == "standards-reviewer"
+            else "Spec"
+        )
         try:
             report_path = _reviewer_report_file(mapping)
         except ValueError:
@@ -577,9 +580,9 @@ def _refresh_current_team_report_request(
     worktree: Path,
     environment: Dict[str, str],
     *,
-    reports_only: bool = False,
+                         reports_only: bool = False,
 ) -> Dict[str, Any]:
-    role = ROLE_REFERENCES.get(mapping["role"], mapping["role"])
+    role = logical_role(mapping["role"])
     if role == "team-leader" and "GRAPHTRAJ_TEAM_ROUND" not in environment:
         if not reports_only:
             return request

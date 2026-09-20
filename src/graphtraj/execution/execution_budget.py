@@ -17,7 +17,7 @@ from typing import Any, Callable, Iterator, Mapping
 
 import yaml
 
-from graphtraj.configuration.project_roles import ROLE_REFERENCES
+from graphtraj.configuration.project_roles import logical_role
 from graphtraj.execution.runner_io import write_yaml_durably
 from graphtraj.execution.runner_models import RunnerError
 
@@ -50,13 +50,6 @@ _BUDGET_FIELDS = frozenset(
 )
 # Already accepted Tickets retain their estimation-only tier fields.
 _LEGACY_BUDGET_FIELDS = frozenset({"engineer_tier", "tier_reason"})
-_ROLE_SESSIONS = {
-    "team-leader": "team_leader",
-    "delivery-state": "delivery_state",
-    "standards-reviewer": "standards_reviewer",
-    "spec-reviewer": "spec_reviewer",
-    "engineer": "engineer",
-}
 
 
 class ExecutionBudgetError(ValueError):
@@ -184,13 +177,21 @@ def caller_notice_fd() -> tuple[int | None, bool]:
 def execution_budget_stage(role: str) -> str:
     """Return the stage that owns one role's elapsed-time accounting."""
 
-    if ROLE_REFERENCES.get(role, role) == "engineer":
+    name = logical_role(role)
+    if name == "engineer":
         return "implementation"
-    if role in {"standards-reviewer", "spec-reviewer"}:
+    if name in {"standards-reviewer", "spec-reviewer"}:
         return "review"
-    if role == "delivery-state":
+    if name == "delivery-state":
         return "delivery-state"
     return "team-lead"
+
+
+def _session_key(role: str) -> str | None:
+    """Return the session counter that owns one role, if it has a seat."""
+
+    name = logical_role(role)
+    return None if name == "temporary-role" else name.replace("-", "_")
 
 
 class ExecutionBudgetMonitor:
@@ -341,8 +342,9 @@ class ExecutionBudgetMonitor:
                 changed = created or state["budget"] != budget.definition
                 if changed:
                     state["budget"] = budget.definition
-                session_key = _ROLE_SESSIONS.get(ROLE_REFERENCES.get(role, role))
+                session_key = _session_key(role)
                 if session and session_key is not None:
+                    state["sessions"].setdefault(session_key, 0)
                     state["sessions"][session_key] += 1
                     changed = True
                 if correction:
@@ -421,7 +423,7 @@ def _read_usage(
             {
                 "started_at": time.time(),
                 "budget": budget.definition,
-                "sessions": {role: 0 for role in _SESSION_FIELDS},
+                "sessions": {role: 0 for role in definition["planned_sessions"]},
                 "corrections": 0,
                 "notifications": [],
                 "allowance_minutes": base_allowance
@@ -475,7 +477,8 @@ def _read_usage(
         or not _nonnegative_number(state["started_at"])
         or not isinstance(state["budget"], dict)
         or not isinstance(state["sessions"], dict)
-        or set(state["sessions"]) != _SESSION_FIELDS
+        or not _SESSION_FIELDS <= set(state["sessions"])
+        or any(not isinstance(name, str) for name in state["sessions"])
         or any(type(value) is not int or value < 0 for value in state["sessions"].values())
         or type(state["corrections"]) is not int
         or state["corrections"] < 0
@@ -558,7 +561,7 @@ def _new_notices(
                     )
                 )
     for session_role, limit in definition["planned_sessions"].items():
-        if state["sessions"][session_role] > limit:
+        if state["sessions"].get(session_role, 0) > limit:
             exceeded.append(("planned_sessions." + session_role, limit, None))
     if state["corrections"] > definition["correction_rounds"]:
         exceeded.append(("correction_rounds", definition["correction_rounds"], None))
@@ -619,7 +622,8 @@ def _validate_budget(value: Any) -> None:
         or set(budget["estimated_minutes"]) != _MINUTE_FIELDS
         or any(not _positive_number(item) for item in budget["estimated_minutes"].values())
         or not isinstance(budget["planned_sessions"], dict)
-        or set(budget["planned_sessions"]) != _SESSION_FIELDS
+        or not _SESSION_FIELDS <= set(budget["planned_sessions"])
+        or any(not _text(name) for name in budget["planned_sessions"])
         or any(not _positive_number(item) for item in budget["planned_sessions"].values())
         or not _nonnegative_number(budget["correction_rounds"])
         or (

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Mapping, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
-from graphtraj.configuration.project_roles import ROLE_REFERENCES, RolePreset
+from graphtraj.configuration.project_roles import ProjectRoles, RolePreset, logical_role
 
 
 ROLE_ALIAS_MARKERS = {
@@ -17,13 +17,10 @@ ROLE_ALIAS_MARKERS = {
     "standards-reviewer": "r",
     "spec-reviewer": "r",
 }
-LOGICAL_ROLES = tuple(ROLE_ALIAS_MARKERS)
-
-
 def role_alias_marker(role: str) -> str:
     """Return the stable alias marker for a configured or temporary role."""
 
-    return ROLE_ALIAS_MARKERS.get(ROLE_REFERENCES.get(role, role), "x")
+    return ROLE_ALIAS_MARKERS.get(logical_role(role), "x")
 
 
 PUBLIC_ERROR_CODES = frozenset(
@@ -142,6 +139,7 @@ class Task:
     report_file: Optional[Path] = None
     inline_preset: RolePreset | None = None
     policy_role: str | None = None
+    role_reference: str | None = None
 
 
 
@@ -163,7 +161,7 @@ class Project:
     integration_branch: str
     integration_worktree: Path
     dev_commit: str
-    role_bindings: Mapping[str, RolePreset]
+    roles: ProjectRoles
     max_concurrency: int = 18
 
     @property

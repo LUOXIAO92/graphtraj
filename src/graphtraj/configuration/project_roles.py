@@ -12,29 +12,23 @@ import yaml
 
 
 ROLES_PATH = Path(".graphtraj") / "roles.yml"
-# Keep the established policy and Session identifiers behind grouped references.
-ROLE_NAMES = (
-    "team-leader",
-    "engineer",
-    "standards-reviewer",
-    "spec-reviewer",
-    "delivery-state",
-    "merge-resolver",
+# One top-level preset name or one group-qualified '<group>.<role>' reference.
+ROLE_NAME = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+ROLE_REFERENCE = re.compile(
+    r"^[a-z0-9]+(?:-[a-z0-9]+)*(?:\.[a-z0-9]+(?:-[a-z0-9]+)*)?$"
 )
-# Retained Batch, Session and Team records may still name one of these identities.
-_LEGACY_ENGINEER_NAMES = ("engineer-junior", "engineer-senior", "engineer-expert")
-ROLE_REFERENCES = {
-    **{
-        "coding-team." + name if name != "delivery-state" else name: name
-        for name in ROLE_NAMES
-    },
-    **{name: "engineer" for name in _LEGACY_ENGINEER_NAMES},
-    **{"coding-team." + name: "engineer" for name in _LEGACY_ENGINEER_NAMES},
+# Retained Batch, Session and Team records may still name a former Engineer tier.
+_RETAINED_ENGINEER_REFERENCES = {
+    "engineer-junior": "coding-team.engineer",
+    "engineer-senior": "coding-team.engineer",
+    "engineer-expert": "coding-team.engineer",
+    "coding-team.engineer-junior": "coding-team.engineer",
+    "coding-team.engineer-senior": "coding-team.engineer",
+    "coding-team.engineer-expert": "coding-team.engineer",
 }
 _REQUIRED_FIELDS = frozenset({"runtime", "model"})
 _CONNECTION_FIELDS = frozenset({"base_url", "api_key_env"})
 _ENVIRONMENT_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
-_ROLE_NAME = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
 _DEFAULT_PRESETS: dict[str, dict[str, object]] = {
     "team-leader": {
@@ -76,9 +70,60 @@ class RolePreset:
 
 @dataclass(frozen=True)
 class ProjectRoles:
-    """The validated reusable child-role presets for one Harness Project."""
+    """The validated reusable child-role presets for one Harness Project.
+
+    Keys are configured references: one group-qualified '<group>.<role>' name
+    per declared group role, plus one entry per top-level preset.
+    """
 
     presets: Mapping[str, RolePreset]
+
+    def resolve(self, reference: str) -> str:
+        """Return the configured reference that one role reference selects.
+
+        A group-qualified reference selects exactly that group role, and a
+        top-level preset name selects itself. A bare role name selects a group
+        role only when exactly one configured group declares it.
+        """
+        retained = retained_role_reference(reference)
+        if retained in self.presets:
+            return retained
+        if "." not in retained:
+            matches = sorted(
+                candidate
+                for candidate in self.presets
+                if logical_role(candidate) == retained
+            )
+            if len(matches) == 1:
+                return matches[0]
+            if matches:
+                raise ProjectRolesError((
+                    "roles.{0} is declared by more than one group: {1}.".format(
+                        retained, ", ".join(matches)
+                    ),
+                ))
+        raise ProjectRolesError((
+            "roles.{0} is not a configured preset reference.".format(retained),
+        ))
+
+    def preset(self, reference: str) -> RolePreset:
+        """Return the Runtime settings that one role reference selects."""
+        return self.presets[self.resolve(reference)]
+
+
+def logical_role(reference: str) -> str:
+    """Return the role name one configured or retained reference selects.
+
+    The group of a '<group>.<role>' reference only selects Runtime settings;
+    the role name after the last dot keeps the packaged responsibility.
+    """
+    retained = _RETAINED_ENGINEER_REFERENCES.get(reference, reference)
+    return retained.rpartition(".")[2]
+
+
+def retained_role_reference(reference: str) -> str:
+    """Return the configured reference spelling for one supplied reference."""
+    return _RETAINED_ENGINEER_REFERENCES.get(reference, reference)
 
 
 class _UniqueKeyLoader(yaml.SafeLoader):
@@ -132,7 +177,7 @@ def default_roles_content() -> str:
 
 def default_project_roles() -> ProjectRoles:
     """Return the validated established reusable coding-role presets."""
-    return _roles_from_document({"roles": _DEFAULT_PRESETS})
+    return _roles_from_document(yaml.safe_load(default_roles_content()))
 
 
 def load_project_roles(harness_root: Path) -> ProjectRoles:
@@ -165,13 +210,11 @@ def parse_inline_role(value: object) -> tuple[str, RolePreset]:
             ("An inline Batch role must contain exactly one role entry.",)
         )
     name, settings = next(iter(value.items()))
-    if not isinstance(name, str) or (
-        name not in ROLE_REFERENCES and not _ROLE_NAME.fullmatch(name)
-    ):
+    if not isinstance(name, str) or ROLE_REFERENCE.fullmatch(name) is None:
         raise ProjectRolesError(
             ("An inline Batch role must use a preset reference or lowercase kebab-case name.",)
         )
-    name = ROLE_REFERENCES.get(name, name)
+    name = logical_role(name)
     diagnostics: list[str] = []
     preset = _role_preset(name, settings, diagnostics)
     if diagnostics or preset is None:
@@ -191,46 +234,59 @@ def _roles_from_document(document: Any) -> ProjectRoles:
         diagnostics.append("roles.yml.roles must be a mapping.")
         raise ProjectRolesError(tuple(diagnostics))
 
-    # Resolve the one supported team explicitly; YAML dots have no path meaning.
-    # Read older flat presets without rewriting operator settings or history.
-    entries = dict(entries)
-    if "coding-team" in entries:
-        coding = entries.pop("coding-team")
-        if not isinstance(coding, dict):
-            diagnostics.append("roles.coding-team must be a mapping.")
+    # A group maps its own role names to Runtime settings; its references are
+    # '<group>.<role>'. A top-level entry is one preset named by itself. YAML
+    # dots have no path meaning, so the group shape is read from its entries.
+    grouped: dict[str, Any] = {}
+    flat: dict[str, Any] = {}
+    for name, entry in entries.items():
+        if not isinstance(name, str) or ROLE_NAME.fullmatch(name) is None:
+            diagnostics.append("roles.yml.roles contains an unsupported name.")
+        elif isinstance(entry, dict) and entry and all(
+            isinstance(value, dict) for value in entry.values()
+        ):
+            grouped[name] = entry
         else:
-            for name, value in coding.items():
-                if name not in ROLE_NAMES or name == "delivery-state":
-                    diagnostics.append("roles.coding-team.{0} is not a supported preset.".format(name))
-                elif name in entries:
-                    diagnostics.append("{0} preset is defined more than once.".format(name))
-                else:
-                    entries[name] = value
+            flat[name] = entry
 
-    known_entries: dict[str, object] = {}
-    for name, value in entries.items():
-        if not isinstance(name, str):
-            diagnostics.append("roles.yml.roles contains an unsupported preset name.")
-            continue
-        if name not in ROLE_NAMES:
-            diagnostics.append("roles.{0} is not a supported preset.".format(name))
-            continue
-        known_entries[name] = value
-
+    group_roles: set[str] = set()
     presets: dict[str, RolePreset] = {}
-    for name in ROLE_NAMES:
-        entry = known_entries.get(name)
-        if entry is None:
-            diagnostics.append("{0} preset is required.".format(name))
+    for group_name, group in grouped.items():
+        for name, entry in group.items():
+            if not isinstance(name, str) or ROLE_NAME.fullmatch(name) is None:
+                diagnostics.append(
+                    "roles.{0} contains an unsupported role name.".format(group_name)
+                )
+                continue
+            group_roles.add(name)
+            _add_preset(group_name + "." + name, entry, presets, diagnostics)
+
+    for name, entry in flat.items():
+        if name in group_roles:
+            diagnostics.append("{0} preset is defined more than once.".format(name))
             continue
-        preset = _role_preset(name, entry, diagnostics)
-        if preset is not None:
-            presets[name] = preset
+        _add_preset(name, entry, presets, diagnostics)
 
     if diagnostics:
         raise ProjectRolesError(tuple(diagnostics))
 
     return ProjectRoles(presets=presets)
+
+
+def _add_preset(
+    reference: str,
+    entry: object,
+    presets: dict[str, RolePreset],
+    diagnostics: list[str],
+) -> None:
+    """Validate one reference's Runtime settings and keep them by reference."""
+
+    if reference in presets:
+        diagnostics.append("{0} preset is defined more than once.".format(reference))
+        return
+    preset = _role_preset(reference, entry, diagnostics)
+    if preset is not None:
+        presets[reference] = preset
 
 
 def _role_preset(
@@ -245,7 +301,7 @@ def _role_preset(
         return None
     initial_count = len(diagnostics)
     allowed = _REQUIRED_FIELDS | _CONNECTION_FIELDS | {"reasoning_effort"}
-    if name == "team-leader":
+    if logical_role(name) == "team-leader":
         allowed = allowed | {"allow_runtime_swarm"}
     for field in entry:
         if field not in allowed:
@@ -279,10 +335,14 @@ def _role_preset(
                 name
             )
         )
-    if name == "team-leader" and "allow_runtime_swarm" in entry and not isinstance(
-        entry["allow_runtime_swarm"], bool
+    if (
+        logical_role(name) == "team-leader"
+        and "allow_runtime_swarm" in entry
+        and not isinstance(entry["allow_runtime_swarm"], bool)
     ):
-        diagnostics.append("team-leader.allow_runtime_swarm must be a boolean.")
+        diagnostics.append(
+            "{0}.allow_runtime_swarm must be a boolean.".format(name)
+        )
     if len(diagnostics) != initial_count:
         return None
     return RolePreset(
@@ -294,7 +354,7 @@ def _role_preset(
         ),
         allow_runtime_swarm=(
             bool(entry.get("allow_runtime_swarm", True))
-            if name == "team-leader"
+            if logical_role(name) == "team-leader"
             else False
         ),
         reasoning_effort=(

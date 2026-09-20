@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import Dict, List
 
 from graphtraj.execution.runner_models import (
-    LOGICAL_ROLES,
     Project,
     RunnerError,
     Task,
@@ -329,7 +328,7 @@ def discover_project(
         integration_branch=branch,
         integration_worktree=integration,
         dev_commit=dev_commit,
-        role_bindings={role: roles.presets[role] for role in LOGICAL_ROLES},
+        roles=roles,
         max_concurrency=configuration.max_concurrency,
     )
 

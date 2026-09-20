@@ -13,6 +13,7 @@ import yaml
 from graphtraj.workspace.git_repository import GitRepositoryError, SourceRepository
 from graphtraj.execution.runner_models import RunnerError, StatusResponse
 from graphtraj.execution.runner_connection import session_operation
+from graphtraj.execution.runner_heartbeat import ownership_is_held, read_heartbeat
 from graphtraj.workspace.runner_project import discover_runner_directory
 
 
@@ -115,10 +116,42 @@ def _status_session(
         if execution_file.is_file():
             return {**identity, "activity": "idle",
                     "last_outcome": read_terminal_outcome(execution_file)}
-        raise
+        return {
+            **identity,
+            **_unresponsive_status(mapping, session_directory),
+        }
     if "last_outcome" in mapping and "last_outcome" not in status:
         status["last_outcome"] = mapping["last_outcome"]
     return {**identity, **status}
+
+
+def _unresponsive_status(
+    mapping: Dict[str, Any], session_directory: Path
+) -> Dict[str, Any]:
+    """Judge one execution whose Worker did not answer a control request.
+
+    The judgement combines the control response with the recorded heartbeat,
+    the ownership lock the recorded Worker still holds and any terminal
+    record. No single signal decides: a heartbeat's age, silence in the native
+    Trace, a process identifier that resolves or even one that the operating
+    system handed to an unrelated process are never taken alone as proof that
+    the execution lives or died.
+
+    Returns
+    -------
+    ``activity: unreachable`` while the recorded owner still holds its
+    ownership lock, so the execution cannot be confirmed; ``activity:
+    abnormal`` when that owner is gone, including after its identifier was
+    reused, and no terminal record was published. A heartbeat that names this
+    Worker adds ``heartbeat_at``, the last moment it held the execution.
+    """
+    activity = "abnormal"
+    if ownership_is_held(session_directory, mapping["worker_pid"]):
+        activity = "unreachable"
+    heartbeat = read_heartbeat(session_directory)
+    if heartbeat is not None and heartbeat["worker_pid"] == mapping["worker_pid"]:
+        return {"activity": activity, "heartbeat_at": heartbeat["updated_at"]}
+    return {"activity": activity}
 
 
 def _operation_total(trace_file: Path, session: str) -> int:

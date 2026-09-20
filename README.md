@@ -488,6 +488,20 @@ or `interrupted`. These describe native execution, independently of the service
 PID. The native result, final answer and error details are retained in the
 Session's `execution.yml`; `stderr.log` retains Runtime diagnostics.
 
+While a Worker holds an execution it publishes a heartbeat record in the
+Session directory, including through every normal wait: a watchdog delay, a
+waiting child, a running tool or a pending request reply. The record updates
+independently of model output, so a quiet native Trace is not read as failure.
+When the Worker does not answer a control request within the control timeout,
+status reports `activity: unreachable` while the owner it recorded still holds
+the process (lost contact, not death) and `activity: abnormal` when that owner
+is gone, or its process identifier now belongs to another process, without a
+terminal record; either report adds `heartbeat_at`, the last moment that owner
+held the execution. Ownership is proven by the lock the Worker holds in the
+Session directory, which the operating system releases when the process ends,
+so a reused process identifier cannot pass for the recorded owner. An existing
+terminal record is never overturned by a missing or stale heartbeat.
+
 `send_instruction(alias, text, root, (event_id,))` uses native active input when
 running. For an idle Session it starts a Worker that restores the same native
 conversation and its resolved Context. A continuation gets a new execution ID

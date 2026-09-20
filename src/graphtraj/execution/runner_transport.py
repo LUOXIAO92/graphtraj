@@ -11,6 +11,7 @@ from typing import Any, Dict
 RUNTIME_DIAGNOSTIC_FILES = frozenset(
     {
         "events.jsonl",
+        "heartbeat.yml",
         "launch-error.yml",
         "launch.yml",
         "mapping.yml",

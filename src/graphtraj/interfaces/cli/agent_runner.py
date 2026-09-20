@@ -24,9 +24,18 @@ from graphtraj.execution.runner_models import RunnerError
 from graphtraj.execution.runner_status import status_aliases
 
 
+_MAIN_RECOVERY: "CodexMainRecovery | None" = None
+
+
 @contextmanager
 def _budget_notices() -> Iterator[None]:
-    """Select CLI stderr only when no inherited caller channel is available."""
+    """Select CLI stderr only when no inherited caller channel is available.
+
+    A Codex Main caller keeps its own recovery binding selected for the whole
+    command, so the document this operation returns can carry an enforced stop
+    to the turn that is waiting for it.
+    """
+    global _MAIN_RECOVERY
     descriptor, owned = caller_notice_fd()
     if descriptor is None:
         from graphtraj.runtimes.codex.app_server import CodexMainRecovery
@@ -34,8 +43,12 @@ def _budget_notices() -> Iterator[None]:
         recovery = CodexMainRecovery.from_environment(Path.cwd().resolve())
         if recovery is not None:
             with recovery:
-                with budget_notice_output(recovery.notice_fd):
-                    yield
+                _MAIN_RECOVERY = recovery
+                try:
+                    with budget_notice_output(recovery.notice_fd):
+                        yield
+                finally:
+                    _MAIN_RECOVERY = None
             return
         try:
             descriptor, owned = os.dup(sys.stderr.fileno()), True
@@ -82,7 +95,14 @@ def main(context: click.Context, batch_input: Path | None) -> None:
 
 
 def _emit_result(document: dict) -> None:
-    """Render one Runner result document without changing its schema."""
+    """Render one Runner result document, including any delivered stop.
+
+    A stop the caller channel delivered during this operation travels with the
+    document, so the Main awaiting this call handles it without another input.
+    Every other result keeps its existing schema.
+    """
+    if _MAIN_RECOVERY is not None and isinstance(document, dict):
+        document = _MAIN_RECOVERY.attach_stop_deliveries(document)
     click.echo(yaml.safe_dump(document, sort_keys=False), nl=False)
 
 
@@ -164,11 +184,22 @@ def reply(alias: str, request_file: Path, response: str) -> None:
     "--caused-by-event-id",
     multiple=True,
 )
-def send(alias: str, instruction: str, caused_by_event_id: tuple[str, ...]) -> None:
+@click.option(
+    "--reports-only",
+    is_flag=True,
+    help="Collect existing reports without sampling the Ticket budget.",
+)
+def send(
+    alias: str,
+    instruction: str,
+    caused_by_event_id: tuple[str, ...],
+    reports_only: bool,
+) -> None:
     """Resume one Session using causal Project Worldline event IDs."""
     try:
         response = send_instruction(
             alias, instruction, Path.cwd().resolve(), caused_by_event_id,
+            reports_only=reports_only,
         )
     except RunnerError as error:
         _fail(error, alias=alias)

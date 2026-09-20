@@ -143,6 +143,7 @@ _SEND_SCHEMA = {
         "alias":               {"type": "string"},
         "instruction":         {"type": "string"},
         "caused_by_event_ids": {"type": "array", "items": {"type": "string"}},
+        "reports_only":        {"type": "boolean"},
     },
     "required":             ["alias", "instruction"],
     "additionalProperties": False,
@@ -300,6 +301,15 @@ def _string_list_argument(
     return tuple(value)
 
 
+def _boolean_argument(arguments: Mapping[str, Any], name: str) -> bool:
+    """Return one optional flag, defaulting to the operation's plain behavior."""
+
+    value = arguments.get(name, False)
+    if not isinstance(value, bool):
+        raise ValueError("{0} must be a boolean".format(name))
+    return value
+
+
 def dispatch_batch(arguments: Mapping[str, Any]) -> ToolResult:
     """Dispatch one structured Batch; the returned identity stays owned."""
 
@@ -308,7 +318,12 @@ def dispatch_batch(arguments: Mapping[str, Any]) -> ToolResult:
 
 
 def send_session_instruction(arguments: Mapping[str, Any]) -> ToolResult:
-    """Steer an active execution or continue an idle mapped Session."""
+    """Steer an active execution or continue an idle mapped Session.
+
+    ``reports_only`` resumes the Session to return evidence it already holds
+    without sampling the Ticket budget, so a report collection cannot repeat a
+    sampled stop or deliver another retro instruction.
+    """
 
     return ToolResult(
         send_instruction(
@@ -316,6 +331,7 @@ def send_session_instruction(arguments: Mapping[str, Any]) -> ToolResult:
             _string_argument(arguments, "instruction"),
             Path.cwd(),
             _string_list_argument(arguments, "caused_by_event_ids"),
+            reports_only=_boolean_argument(arguments, "reports_only"),
         )
     )
 
@@ -494,7 +510,9 @@ def _initialize_result(params: Mapping[str, Any]) -> dict[str, Any]:
 
 
 @contextmanager
-def _caller_notices(params: Mapping[str, Any]) -> Iterator[None]:
+def _caller_notices(
+    params: Mapping[str, Any],
+) -> Iterator[CodexMainRecovery | None]:
     """Route live budget notices to the Codex Main that made this request.
 
     A worker's inherited channel wins. Otherwise the request's own Codex
@@ -512,13 +530,13 @@ def _caller_notices(params: Mapping[str, Any]) -> Iterator[None]:
         if recovery is not None:
             with recovery:
                 with budget_notice_output(recovery.notice_fd):
-                    yield
+                    yield recovery
             return
-        yield
+        yield None
         return
     try:
         with budget_notice_output(descriptor):
-            yield
+            yield None
     finally:
         if owned:
             os.close(descriptor)
@@ -541,8 +559,13 @@ def _tool_call_response(
             request_id, INVALID_PARAMS, "Tool arguments must be an object."
         )
     try:
-        with _caller_notices(params):
+        with _caller_notices(params) as recovery:
             result = tool.handler(arguments)
+            document = (
+                recovery.attach_stop_deliveries(result.document)
+                if recovery is not None
+                else result.document
+            )
     except (
         OSError,
         UnicodeError,
@@ -566,9 +589,9 @@ def _tool_call_response(
         {
             # The text is the CLI's YAML rendering of the same document.
             "content":           [
-                {"type": "text", "text": yaml.safe_dump(result.document, sort_keys=False)}
+                {"type": "text", "text": yaml.safe_dump(document, sort_keys=False)}
             ],
-            "structuredContent": result.document,
+            "structuredContent": document,
             "isError":           result.failed,
         },
     )

@@ -1,45 +1,20 @@
 # Codex recovery delivery
 
-Read this only when Main is Codex. Use the native app-server input API for
-Main's existing thread. On versions supporting `thread/queue/add`, enqueue the
-explicit Skill input with a stable `clientUserMessageId` for that stop. A
-separate app-server client can write the native queue without resuming Main;
-the owning client consumes it after its active turn. Verify consumption in the
-actual host: queue acceptance alone does not prove Main ran the Skill.
+When an enforced stop occurs, return its identity, real trigger/send instants,
+separate elapsed duration and retained wrap-up through the original Main's
+active Runner tool call. Keep the caller notice channel connected so Main can
+handle the event before its long turn ends. Verify actual CLI and MCP delivery;
+a log entry or eventual queue consumption does not establish timely handling.
 
-After `initialize` with `experimentalApi: true` and `initialized`, submit
-`thread/queue/add` with resolved caller identity, stop identity and Skill path:
+The user has explicitly authorized automatic retro for these events. Main
+executes that named Skill from the delivered evidence and makes the recovery
+decision without another user confirmation. Preserve explicit-only discovery:
+this is execution of the specified standing instruction, not permission to
+select arbitrary Skills. Ordinary reminders do not invoke retro, and delivery
+retries do not repeat analysis for the same stop.
 
-When the installed `graphtraj-mcp` entry serves the operation, the caller
-identity is the Codex thread on the request itself (`params._meta.threadId`); a
-request without it keeps the generic MCP behaviour and selects no caller
-channel.
-
-```json
-{
-  "threadId": "<caller-thread-id>",
-  "clientUserMessageId": "<stable-id-for-this-stop>",
-  "input": [
-    {
-      "type": "text",
-      "text": "$retro Analyze stop <event-id> using the supplied wrap-up and retained evidence. Identify scheduling corrections before deciding continuation. Reuse existing findings; skip historical tool results; do not restart work."
-    },
-    {
-      "type": "skill",
-      "name": "retro",
-      "path": "<absolute-harness-root>/.agents/skills/retro/SKILL.md"
-    }
-  ]
-}
-```
-
-Report unsupported native queue or host consumption explicitly. When an owning
-host already exposes its connection, native `turn/start` after the active turn
-is another available path; keep any wait outside the pending tool callback so
-that callback can return. Do not resume a second copy of an active Main to send
-input. Preserve the Skill's explicit-only policy and existing Runtime settings.
-
-Keep protocol fields in Codex-specific integration; common budget and Team
-logic supply their ordinary events. Follow [recovery decisions](recovery.md)
-for the analysis result and continuation authorization. Distinguish notice
-receipt, accepted queue input, Skill execution and installed automatic wiring.
+Do not enqueue another user message or resume a second Main/Driver for this
+automatic recovery. Preserve native Runtime permissions and configuration.
+Keep Codex-specific details in Codex integration; common budget and Team logic
+supply their ordinary events. Read the user's authorization clarification in
+ADR 0039 (2026-09-17) and follow [recovery decisions](recovery.md).

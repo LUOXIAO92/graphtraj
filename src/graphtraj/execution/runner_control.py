@@ -115,8 +115,15 @@ def send_instruction(
     instruction: str,
     cwd: Path,
     caused_by_event_ids: tuple[str, ...],
+    *,
+    reports_only: bool = False,
 ) -> Dict[str, str]:
-    """Steer an active execution or continue an idle mapped Session."""
+    """Steer an active execution or continue an idle mapped Session.
+
+    ``reports_only`` selects report collection: the Session is resumed to
+    return evidence it already holds, so it starts no new work and samples no
+    stopping check. The default keeps a continuation under budget control.
+    """
 
     if not instruction.strip():
         raise RunnerError(
@@ -146,6 +153,7 @@ def send_instruction(
             mapping,
             caused_by_event_ids,
             cwd,
+            reports_only=reports_only,
         )
     raise _not_resumable()
 
@@ -161,6 +169,7 @@ def _send_session(
     budget_notice: bool = False,
     leader_notice_keys: tuple[str, ...] = (),
     capacity_fd: int | None = None,
+    reports_only: bool = False,
 ) -> Dict[str, str]:
     """Serialize alias changes so two idle sends cannot create competing owners."""
     launch_file = session_directory / "launch.yml"
@@ -172,7 +181,7 @@ def _send_session(
         return _send_session_locked(
             alias, instruction, session_directory, mapping, caused_by_event_ids, cwd,
             budget_notice=budget_notice, leader_notice_keys=leader_notice_keys,
-            capacity_fd=capacity_fd,
+            capacity_fd=capacity_fd, reports_only=reports_only,
         )
 
 
@@ -187,8 +196,15 @@ def _send_session_locked(
     budget_notice: bool = False,
     leader_notice_keys: tuple[str, ...] = (),
     capacity_fd: int | None = None,
+    reports_only: bool = False,
 ) -> Dict[str, str]:
-    """Deliver input or restore the retained Context under the alias lock."""
+    """Deliver input or restore the retained Context under the alias lock.
+
+    A report collection never attaches the budget monitor, so returning
+    evidence the Session already holds advances no stopping check, emits no
+    new stop notice and produces no new retro input. Every other resume keeps
+    the monitor and the Ticket's budget control.
+    """
     execution_file = session_directory / "execution.yml"
     if not os.path.lexists(str(execution_file)):
         status = session_operation(mapping, "status")
@@ -237,7 +253,8 @@ def _send_session_locked(
             "Runner selected stopping; this Session cannot start new work.",
         )
     request = _refresh_current_team_report_request(
-        request, mapping, worktree, team_environment, reports_only=stopped
+        request, mapping, worktree, team_environment,
+        reports_only=stopped or reports_only,
     )
     if stopped:
         instruction = (
@@ -252,6 +269,8 @@ def _send_session_locked(
             + "".join(notice["message"] + "\n" for notice in pending_notices)
             + instruction
         )
+        monitor = None
+    elif reports_only:
         monitor = None
     resume_file = session_directory / "resume.yml"
     error_file = session_directory / "resume-error.yml"

@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import select
 import shutil
 import subprocess
 import sys
 import time
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Iterator
 
@@ -1241,8 +1243,8 @@ def test_real_codex_host_dispatches_and_controls_a_managed_child_offline(
     assert continued["isError"] is True
     assert continued["content"][0]["text"] == yaml.safe_load(cli.stdout)["error"]["message"]
 
-def _queued_submissions(protocol: Path) -> list[dict]:
-    """Return the Main queue submissions the controlled app-server peer received."""
+def _native_queue_submissions(protocol: Path) -> list[dict]:
+    """Return any native Main queue input the controlled app-server peer received."""
 
     if not protocol.is_file():
         return []
@@ -1318,14 +1320,14 @@ def _controlled_budget_server(
     }, protocol
 
 
-def test_installed_mcp_server_queues_a_budget_stop_to_the_request_caller(
+def test_installed_mcp_server_returns_a_budget_stop_to_the_request_caller(
     installed_commands: InstalledCommands,
     mcp_executable: Path,
     temporary_git_repository: Path,
     fake_codex: FakeCodex,
     tmp_path: Path,
 ) -> None:
-    """A stop produced by the MCP dispatch reaches the calling Codex thread."""
+    """A stop produced by the MCP dispatch returns with that tool call."""
 
     from test_execution_budgets import _budget_body
     from test_session_alias_control import _register_ready_ticket
@@ -1366,41 +1368,102 @@ def test_installed_mcp_server_queues_a_budget_stop_to_the_request_caller(
         )
         assert usage["stopped"] is True
         assert len(usage["notifications"]) > 1
-        # Only the enforced stop submits the explicit Skill input; the elapsed
-        # and allowance reminders above stay ordinary caller notices.
-        queued = _queued_submissions(protocol)
-        assert len(queued) == 1, queued
-        assert queued[0]["params"] == {
-            "threadId":            "thread-main",
-            "clientUserMessageId": "71034556-830a-5f40-8ec6-80c65b263a52",
-            "input":               [
-                {
-                    "type": "text",
-                    "text": (
-                        "$retro Analyze the enforced stochastic stop for Ticket 76 "
-                        "using the supplied wrap-up and retained evidence. Identify "
-                        "scheduling corrections before deciding continuation. Reuse "
-                        "existing findings; do not restart work."
-                    ),
-                },
-                {
-                    "type": "skill",
-                    "name": "retro",
-                    "path": str(
-                        (harness / ".agents/skills/retro/SKILL.md").resolve()
-                    ),
-                },
-            ],
-        }
 
-        # A repeated stop keeps the existing dedup, and a request without Codex
-        # caller metadata keeps the generic behaviour without a notice channel.
+        # The awaited call returns the enforced stop itself: identity, both
+        # actual instants with their offsets, separate elapsed duration and the
+        # explicit Skill reference. Ordinary reminders carry none of it.
+        delivery = stopped["structuredContent"]["stop_deliveries"][0]
+        assert delivery["stop_id"] == "71034556-830a-5f40-8ec6-80c65b263a52"
+        assert delivery["stop"] == "stochastic_stop:2"
+        assert delivery["ticket"] == {
+            "ticket_id": "76", "ticket_name": "session-alias-control",
+        }
+        assert delivery["instruction"].startswith("$retro ")
+        assert delivery["skill"] == {
+            "name": "retro",
+            "path": str((harness / ".agents/skills/retro/SKILL.md").resolve()),
+        }
+        triggered_at = datetime.fromisoformat(delivery["triggered_at"])
+        delivered_at = datetime.fromisoformat(delivery["delivered_at"])
+        assert triggered_at.utcoffset() is not None
+        assert delivered_at.utcoffset() is not None
+        assert delivery["elapsed"] != delivery["triggered_at"]
+        assert re.fullmatch(r"\d{2}:\d{2}:\d{2}", delivery["elapsed"])
+        # Nothing is queued into Main's native input for this recovery.
+        assert _native_queue_submissions(protocol) == []
+
+        # A repeated delivery of one stop stays deduplicated, and a request
+        # without Codex caller metadata keeps the generic behaviour.
         repeated = server.call("dispatch", {"tasks": [task]})["result"]
         assert repeated["isError"] is False, repeated
-        assert _queued_submissions(protocol) == queued
+        assert "stop_deliveries" not in repeated["structuredContent"]
+        assert _native_queue_submissions(protocol) == []
 
 
-def test_installed_mcp_server_keeps_each_caller_stop_on_its_own_thread(
+def test_installed_runner_returns_a_budget_stop_with_the_awaiting_call(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    """The installed CLI returns the enforced stop in the result Main awaits."""
+
+    from test_execution_budgets import _budget_body
+    from test_session_alias_control import _register_ready_ticket
+
+    harness, _, _, environment = configure_harness(
+        installed_commands, temporary_git_repository, fake_codex, tmp_path,
+    )
+    _register_ready_ticket(installed_commands, harness, body=_budget_body(total=1))
+    clock = tmp_path / "cli-caller-clock"
+    clock.write_text(str(time.time()), encoding="utf-8")
+    run_environment, protocol = _controlled_budget_server(
+        installed_commands,
+        fake_codex,
+        harness,
+        environment,
+        tmp_path,
+        BUDGET_CLOCK=str(clock),
+        FAKE_CODEX_FINAL_LEADER_CLOCK=str(clock),
+        FAKE_CODEX_CAPTURE_STDIN="1",
+    )
+    batch = harness / "cli-caller-batch.yml"
+    batch.write_text(
+        "tasks:\n"
+        '  - ticket_id: "76"\n'
+        "    ticket_name: session-alias-control\n"
+        "    role: coding-team.team-leader\n",
+        encoding="utf-8",
+    )
+    completed = run_process(
+        [str(installed_commands.runner), "--batch-input", str(batch)],
+        cwd=harness,
+        env={**run_environment, "CODEX_THREAD_ID": "thread-main"},
+        timeout=300,
+    )
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    document = yaml.safe_load(completed.stdout)
+    assert document["tasks"][0]["launch_status"] == "stopped"
+    delivery = document["stop_deliveries"][0]
+    assert delivery["stop_id"] == "71034556-830a-5f40-8ec6-80c65b263a52"
+    assert delivery["stop"] == "stochastic_stop:2"
+    assert delivery["ticket"] == {
+        "ticket_id": "76", "ticket_name": "session-alias-control",
+    }
+    assert delivery["instruction"].startswith("$retro ")
+    assert delivery["skill"] == {
+        "name": "retro",
+        "path": str((harness / ".agents/skills/retro/SKILL.md").resolve()),
+    }
+    triggered_at = datetime.fromisoformat(delivery["triggered_at"])
+    delivered_at = datetime.fromisoformat(delivery["delivered_at"])
+    assert triggered_at.utcoffset() is not None
+    assert delivered_at.utcoffset() is not None
+    assert re.fullmatch(r"\d{2}:\d{2}:\d{2}", delivery["elapsed"])
+    assert _native_queue_submissions(protocol) == []
+
+
+def test_installed_mcp_server_returns_each_caller_its_own_stop(
     installed_commands: InstalledCommands,
     mcp_executable: Path,
     temporary_git_repository: Path,
@@ -1454,23 +1517,25 @@ def test_installed_mcp_server_keeps_each_caller_stop_on_its_own_thread(
             )["result"]
             assert stopped["isError"] is False, stopped
             assert stopped["structuredContent"]["tasks"][0]["launch_status"] == "stopped"
+            delivery = stopped["structuredContent"]["stop_deliveries"][0]
+            assert delivery["ticket"]["ticket_id"] == ticket_id
 
-        queued = _queued_submissions(protocol)
-        assert [message["params"]["threadId"] for message in queued] == [
-            "thread-one", "thread-two",
-        ]
-        assert "Ticket 76" in queued[0]["params"]["input"][0]["text"]
-        assert "Ticket 77" in queued[1]["params"]["input"][0]["text"]
+        assert _native_queue_submissions(protocol) == []
 
 
-def test_installed_mcp_server_queues_a_late_stop_after_the_tool_call_returns(
+def test_installed_mcp_server_does_not_queue_a_late_stop_without_a_waiting_call(
     installed_commands: InstalledCommands,
     mcp_executable: Path,
     temporary_git_repository: Path,
     fake_codex: FakeCodex,
     tmp_path: Path,
 ) -> None:
-    """A resumed Worker that still owns the caller writer reaches that Main."""
+    """A stop sampled after the tool call returned has no in-band carrier.
+
+    The resumed Worker keeps the caller's channel open, but the call it would
+    return through has already answered, so this stop only stays retained in
+    the Ticket's budget state. It is not queued into Main's native input.
+    """
 
     from test_execution_budgets import _budget_body
     from test_session_alias_control import _register_ready_ticket
@@ -1509,7 +1574,7 @@ def test_installed_mcp_server_queues_a_late_stop_after_the_tool_call_returns(
         )["result"]
         assert launched["isError"] is False, launched
         alias = launched["structuredContent"]["tasks"][0]["alias"]
-        assert _queued_submissions(protocol) == []
+        assert _native_queue_submissions(protocol) == []
         cause = [
             json.loads(line)["event_id"]
             for path in (harness / ".graphtraj/state/worldline").glob("*.jsonl")
@@ -1531,25 +1596,18 @@ def test_installed_mcp_server_queues_a_late_stop_after_the_tool_call_returns(
             assert sent["structuredContent"] == {
                 "alias": alias, "send_status": "sent",
             }
-            # The acknowledged call returned before the timer fired, so the
-            # stop arrives through the existing late-consumer ownership.
-            assert _queued_submissions(protocol) == []
             clock.write_text(str(started + 260), encoding="utf-8")
             deadline = time.monotonic() + 20
-            queued: list[dict] = []
             while time.monotonic() < deadline:
-                queued = _queued_submissions(protocol)
-                if queued:
+                if yaml.safe_load(
+                    (ticket / "execution-budget.yml").read_text(encoding="utf-8")
+                )["stopped"]:
                     break
                 time.sleep(0.02)
         finally:
             release.touch()
 
-        assert len(queued) == 1, queued
-        assert queued[0]["params"]["threadId"] == "thread-main"
-        assert queued[0]["params"]["clientUserMessageId"] == (
-            "71034556-830a-5f40-8ec6-80c65b263a52"
-        )
+        assert _native_queue_submissions(protocol) == []
 
     usage = yaml.safe_load((ticket / "execution-budget.yml").read_text(encoding="utf-8"))
     assert usage["stopped"] is True
@@ -1597,8 +1655,9 @@ def test_installed_mcp_server_keeps_the_continue_path_on_the_request_caller(
         )["result"]
         assert stopped["isError"] is False, stopped
         assert stopped["structuredContent"]["tasks"][0]["launch_status"] == "stopped"
-        queued = _queued_submissions(protocol)
-        assert len(queued) == 1, queued
+        delivery = stopped["structuredContent"]["stop_deliveries"][0]
+        assert delivery["stop"] == "stochastic_stop:2"
+        assert _native_queue_submissions(protocol) == []
 
         # Main records the continuation decision and revises the retained budget,
         # exactly as the accepted D.3 flow requires.
@@ -1665,8 +1724,9 @@ def test_installed_mcp_server_keeps_the_continue_path_on_the_request_caller(
         assert continuation["launch_status"] == "accepted"
         assert continuation["continuation_event_id"]
         # The continuation is served by the same request-scoped caller binding
-        # and submits no new stop: only the enforced stop above queues input.
-        assert _queued_submissions(protocol) == queued
+        # and delivers no new stop.
+        assert "stop_deliveries" not in continuation
+        assert _native_queue_submissions(protocol) == []
 
     after = yaml.safe_load((ticket / "ticket.yml").read_text(encoding="utf-8"))
     assert after["status"] == "awaiting-integration"

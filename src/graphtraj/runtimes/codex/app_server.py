@@ -9,11 +9,14 @@ import os
 import select
 import signal
 import threading
+import time
 import uuid
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Mapping, Sequence
 
+from graphtraj.execution.execution_budget import _duration
 from graphtraj.runtimes.codex.codex_adapter import (
     CodexAdapterError,
     CodexNativeTrace,
@@ -47,6 +50,26 @@ def _native_turn(value: Any) -> dict[str, Any]:
         ):
             raise ValueError('Invalid native turn item')
     return value
+
+
+def _instant(value: Any) -> bool:
+    """Accept only an event instant that names its own explicit UTC offset."""
+    if not isinstance(value, str) or not value:
+        return False
+    try:
+        return datetime.fromisoformat(value).utcoffset() is not None
+    except ValueError:
+        return False
+
+
+def _elapsed_minutes(value: Any) -> bool:
+    """Accept only a finite nonnegative elapsed duration in minutes."""
+    return (
+        not isinstance(value, bool)
+        and isinstance(value, (int, float))
+        and math.isfinite(value)
+        and value >= 0
+    )
 
 
 def _text_input(prompt: str) -> list[dict[str, str]]:
@@ -437,37 +460,6 @@ class CodexAppServer:
             self._active.pop(session.thread_id, None)
         return execution
 
-    async def queue_input(
-        self,
-        thread_id: str,
-        client_user_message_id: str,
-        inputs: list[dict[str, Any]],
-    ) -> str:
-        """Enqueue explicit input for an existing native thread without owning it."""
-        if (
-            not self._experimental_api
-            or not isinstance(thread_id, str)
-            or not thread_id
-            or not isinstance(client_user_message_id, str)
-            or not client_user_message_id
-            or not isinstance(inputs, list)
-            or not inputs
-        ):
-            raise CodexAdapterError(
-                'RUNTIME_REQUEST_INVALID',
-                'Experimental Codex queue input requires a thread, message ID, and input.',
-            )
-        response = await self._call('thread/queue/add', {
-            'threadId': thread_id,
-            'clientUserMessageId': client_user_message_id,
-            'input': inputs,
-        })
-        try:
-            submission = response['queuedSubmission']['id']
-            return _native_id(submission)
-        except (KeyError, TypeError, ValueError) as error:
-            raise self._protocol_failure(f'thread/queue/add: {error}') from error
-
     async def send_input(self, execution: CodexExecution, prompt: str) -> None:
         """Steer exactly the expected active native execution."""
         self._require_active(execution)
@@ -801,52 +793,39 @@ class CodexAppServer:
 
 
 class CodexMainRecovery:
-    """Route caller notices to an existing Codex Main through its native queue.
+    """Return one enforced stop through the Runner call Main is awaiting.
 
-    This short-lived sender knows only the Main thread ID. It never resumes or
-    drives that thread; the owning Codex client consumes queued input itself.
+    The binding owns the neutral caller-notice channel of one Runner
+    operation. A sampled stochastic stop that arrives on that channel is
+    retained as a delivery - stop identity, the stop's own absolute instant,
+    the elapsed work duration and the explicit ``retro`` Skill reference - so
+    the document this call returns carries it to the active Main. Ordinary
+    estimate and allowance notices stay inert. Nothing is queued into Main's
+    native input, and no second Main or Driver is created.
     """
 
-    def __init__(
-        self,
-        thread_id: str,
-        retro_skill_path: Path,
-        *,
-        cwd: Path,
-        command: Sequence[str] = ("codex", "app-server", "--listen", "stdio://"),
-        environment: Mapping[str, str] | None = None,
-        request_timeout: float = 30,
-    ) -> None:
-        """Configure one caller-notice binding for the supplied Main thread."""
+    def __init__(self, retro_skill_path: Path) -> None:
+        """Bind one caller channel to an existing absolute ``retro`` Skill path."""
         if (
-            not isinstance(thread_id, str)
-            or not thread_id
-            or not isinstance(cwd, Path)
-            or not cwd.is_absolute()
-            or not isinstance(retro_skill_path, Path)
+            not isinstance(retro_skill_path, Path)
             or not retro_skill_path.is_absolute()
             or retro_skill_path.name != "SKILL.md"
             or not retro_skill_path.is_file()
         ):
             raise CodexAdapterError(
                 "RUNTIME_REQUEST_INVALID",
-                "Codex Main recovery requires a thread and existing absolute SKILL.md path.",
+                "Codex Main recovery requires an existing absolute SKILL.md path.",
             )
-        self._thread_id = thread_id
         self._retro_skill_path = retro_skill_path.resolve()
-        self._cwd = cwd
-        self._command = tuple(command)
-        self._environment = dict(environment or {})
-        self._request_timeout = request_timeout
         self._read_fd: int | None = None
         self._notice_fd: int | None = None
         self._reader: threading.Thread | None = None
         self._closing = threading.Event()
+        self._idle_pass = threading.Event()
         self._lock = threading.Lock()
         self._pending = b""
-        self._producer_open = False
         self._stops: set[str] = set()
-        self._queue_submissions: list[str] = []
+        self._deliveries: list[dict[str, Any]] = []
         self._error: CodexAdapterError | None = None
         self._opened = False
         self._closed = False
@@ -854,14 +833,9 @@ class CodexMainRecovery:
     @classmethod
     def from_environment(cls, cwd: Path) -> "CodexMainRecovery | None":
         """Return the installed caller binding when this process owns a Codex Main."""
-        thread_id = os.environ.get("CODEX_THREAD_ID")
-        if not thread_id or os.environ.get("GRAPHTRAJ_ROLE"):
+        if not os.environ.get("CODEX_THREAD_ID") or os.environ.get("GRAPHTRAJ_ROLE"):
             return None
-        return cls(
-            thread_id,
-            cwd / ".agents/skills/retro/SKILL.md",
-            cwd=cwd,
-        )
+        return cls(cwd / ".agents/skills/retro/SKILL.md")
 
     @classmethod
     def from_request(
@@ -881,7 +855,7 @@ class CodexMainRecovery:
         skill_path = cwd / ".agents/skills/retro/SKILL.md"
         if not isinstance(thread_id, str) or not thread_id or not skill_path.is_file():
             return None
-        return cls(thread_id, skill_path, cwd=cwd)
+        return cls(skill_path)
 
     def __enter__(self) -> "CodexMainRecovery":
         """Start the narrow notice reader before the wrapped Runner operation."""
@@ -892,7 +866,6 @@ class CodexMainRecovery:
                     "The Codex Main recovery binding cannot be opened twice.",
                 )
             self._read_fd, self._notice_fd = os.pipe()
-            self._producer_open = True
             self._opened = True
             self._reader = threading.Thread(
                 target=self._read_notices,
@@ -902,7 +875,7 @@ class CodexMainRecovery:
         return self
 
     def __exit__(self, *exc: object) -> None:
-        """Finish queue submission and preserve any wrapped-operation exception chain."""
+        """Stop reading notices and preserve any wrapped-operation exception chain."""
         self.close()
 
     @property
@@ -916,135 +889,129 @@ class CodexMainRecovery:
                 )
             return self._notice_fd
 
-    @property
-    def queue_submissions(self) -> tuple[str, ...]:
-        """Return accepted native queue identities without claiming consumption."""
-        with self._lock:
-            return tuple(self._queue_submissions)
-
     def close(self) -> None:
-        """Drain queued notices and surface any queue or reader failure."""
+        """Release the caller channel and surface any retained reader failure."""
         with self._lock:
-            if self._closed:
-                error = self._error
-                if error is not None:
-                    raise error
-                return
+            first_close = not self._closed
             self._closing.set()
             if self._notice_fd is not None:
                 os.close(self._notice_fd)
                 self._notice_fd = None
             reader = self._reader
-        if reader is not None:
+        if first_close and reader is not None and reader is not threading.current_thread():
             reader.join()
-        self._release_notice_reader()
         with self._lock:
             self._closed = True
             error = self._error
         if error is not None:
             raise error
 
-    def _release_notice_reader(self) -> None:
-        """Own consumption until the resumed producer can no longer emit.
+    def take_stop_deliveries(self) -> tuple[dict[str, Any], ...]:
+        """Return the stops this call now delivers, each stamped once at the return.
 
-        A resumed Worker keeps its inherited writer after this caller returns,
-        so a producer that is still open when this caller closes is handed to a
-        detached continuation. That continuation ends when every writer closes,
-        which is the only point where the producer can no longer send a stop.
+        The delivery instant is the actual moment this document returns to
+        Main, so a stop withheld until a long operation finished keeps showing
+        its own trigger instant instead of appearing to have just happened.
         """
+        # Let the reader retain input already waiting in the caller channel, so
+        # a stop written by this operation is not left behind by the return.
+        self._idle_pass.clear()
+        self._idle_pass.wait(0.5)
         with self._lock:
-            read_fd, self._read_fd = self._read_fd, None
-            producer_open = self._producer_open
-            pending = self._pending
-        if read_fd is None:
-            return
-        if not producer_open or not self._detach_consumer(read_fd, pending):
-            os.close(read_fd)
+            deliveries, self._deliveries = self._deliveries, []
+        if not deliveries:
+            return ()
+        delivered_at = datetime.now().astimezone().isoformat(timespec="seconds")
+        return tuple(
+            {**delivery, "delivered_at": delivered_at} for delivery in deliveries
+        )
 
-    def _detach_consumer(self, read_fd: int, pending: bytes) -> bool:
-        """Continue delivery in a detached process; return False when it cannot start.
+    def attach_stop_deliveries(
+        self, document: Mapping[str, Any]
+    ) -> dict[str, Any]:
+        """Return one Runner document carrying the stops this call delivered.
 
-        Only a single-threaded caller detaches: forking a multi-threaded
-        interpreter is unsafe, so that caller keeps the existing release
-        behavior. The resumed Worker's caller satisfies this condition.
+        Ordinary results keep their existing shape: the field appears only when
+        this call actually returns a stop to the Main that made it.
         """
-        if threading.active_count() != 1:
-            return False
-        try:
-            child = os.fork()
-        except OSError:
-            return False
-        if child:
-            return True
-        self._read_fd = read_fd
-        self._pending = pending
-        self._closing.clear()
-        self._own_consumer_resources(read_fd)
-        known = self._error
-        try:
-            self._read_notices()
-            error = self._error
-        except BaseException as failure:  # Detach cleanly instead of returning.
-            error = CodexAdapterError(
-                "RUNTIME_REQUEST_FAILED",
-                "The Codex Main notice channel failed: {0}".format(failure),
-                terminal_confirmed=False,
-            )
-        os.close(read_fd)
-        if error is not None and error is not known:
-            self._report_late_error(error)
-        os._exit(0)
+        deliveries = self.take_stop_deliveries()
+        if not deliveries:
+            return dict(document)
+        return {**document, "stop_deliveries": list(deliveries)}
 
-    def _own_consumer_resources(self, read_fd: int) -> None:
-        """Keep only the caller pipe and private diagnostics in a detached consumer.
+    def _deliver_notice(self, line: bytes) -> None:
+        """Retain one stochastic stop while keeping ordinary caller notices inert."""
+        try:
+            notice = json.loads(line)
+            if not isinstance(notice, dict):
+                raise ValueError("Budget notice is not an object")
+            stop = self._stop_key(notice)
+            if stop is None:
+                return
+            with self._lock:
+                if stop in self._stops:
+                    return
+                ticket_id, ticket_name, limit = json.loads(stop)
+                delivery = self._stop_delivery(
+                    ticket_id,
+                    ticket_name,
+                    limit,
+                    notice["occurred_at"],
+                    notice["actual"]["elapsed_minutes"],
+                )
+                self._stops.add(stop)
+                self._deliveries.append(delivery)
+        except CodexAdapterError as error:
+            self._record_error(error)
+        except (TypeError, ValueError, json.JSONDecodeError) as error:
+            self._record_error(CodexAdapterError(
+                "RUNTIME_REQUEST_INVALID",
+                "The Codex Main budget notice is invalid: {0}".format(error),
+            ))
 
-        The exited caller's descriptors must be released so its own pipes close,
-        and no inherited writer copy may stay open: consuming until every writer
-        closes is what bounds this continuation to the producer's lifetime.
+    def _stop_delivery(
+        self,
+        ticket_id: str,
+        ticket_name: str,
+        limit: float,
+        triggered_at: str,
+        elapsed_minutes: float,
+    ) -> dict[str, Any]:
+        """Describe one enforced stop for the Runner call that returns it.
+
+        The instruction is the user's standing explicit ``retro`` input: Main
+        executes that named Skill from this evidence without another approval,
+        while ordinary reminders never carry it.
         """
-        try:
-            os.setsid()
-        except OSError:
-            pass
-        devnull = os.open(os.devnull, os.O_RDWR)
-        for descriptor in (0, 1, 2):
-            os.dup2(devnull, descriptor)
-        if devnull > 2:
-            os.close(devnull)
-        diagnostics = self._open_consumer_diagnostics()
-        if diagnostics is not None:
-            os.dup2(diagnostics, 2)
-            os.close(diagnostics)
-        # Notice descriptors stay below the select() limit used to read them.
-        os.closerange(3, read_fd)
-        os.closerange(read_fd + 1, 1024)
+        elapsed = _duration(elapsed_minutes)
+        stop_id = str(uuid.uuid5(
+            uuid.NAMESPACE_URL,
+            "graphtraj:budget-stop:{0}:{1}:{2}".format(ticket_id, ticket_name, limit),
+        ))
+        return {
+            "stop_id": stop_id,
+            "stop": "stochastic_stop:{0}".format(limit),
+            "ticket": {"ticket_id": ticket_id, "ticket_name": ticket_name},
+            "triggered_at": triggered_at,
+            "elapsed": elapsed,
+            "instruction": (
+                "$retro Analyze the enforced stochastic stop stochastic_stop:{0} "
+                "for Ticket {1} using the retained wrap-up and evidence. Stop time: "
+                "{2}. Elapsed work: {3}. Execute the retro Skill now for this stop, "
+                "identify scheduling corrections before deciding continuation, "
+                "reuse existing findings and do not restart work."
+            ).format(limit, ticket_id, triggered_at, elapsed),
+            "skill": {"name": "retro", "path": str(self._retro_skill_path)},
+        }
 
-    def _open_consumer_diagnostics(self) -> int | None:
-        """Open the Runner's recovery log, when that directory is available."""
-        try:
-            directory = self._cwd / ".graphtraj" / "runner"
-            directory.mkdir(parents=True, exist_ok=True)
-            return os.open(
-                str(directory / "codex-main-recovery.log"),
-                os.O_WRONLY | os.O_CREAT | os.O_APPEND,
-                0o644,
-            )
-        except OSError:
-            return None
-
-    @staticmethod
-    def _report_late_error(error: CodexAdapterError) -> None:
-        """Keep a delivery failure visible after its caller has already exited."""
-        try:
-            os.write(
-                2,
-                ("graphtraj: Codex Main recovery: " + error.message + "\n").encode(),
-            )
-        except OSError:
-            pass
+    def _record_error(self, error: CodexAdapterError) -> None:
+        """Keep the first concrete delivery failure for every close caller."""
+        with self._lock:
+            if self._error is None:
+                self._error = error
 
     def _read_notices(self) -> None:
-        """Read JSONL until this caller closes or every producing writer does."""
+        """Read JSONL until this caller closes the channel."""
         pending = self._pending
         try:
             while self._read_fd is not None:
@@ -1052,11 +1019,10 @@ class CodexMainRecovery:
                 if not ready:
                     if self._closing.is_set():
                         return
+                    self._idle_pass.set()
                     continue
                 chunk = os.read(self._read_fd, 8192)
                 if not chunk:
-                    with self._lock:
-                        self._producer_open = False
                     return
                 pending += chunk
                 while b"\n" in pending:
@@ -1074,71 +1040,6 @@ class CodexMainRecovery:
             with self._lock:
                 self._pending = pending
 
-    def _deliver_notice(self, line: bytes) -> None:
-        """Queue one stochastic stop while retaining ordinary caller notices as inert."""
-        try:
-            notice = json.loads(line)
-            if not isinstance(notice, dict):
-                raise ValueError("Budget notice is not an object")
-            stop = self._stop_key(notice)
-            if stop is None:
-                return
-            with self._lock:
-                if stop in self._stops:
-                    return
-            ticket_id, ticket_name, limit = json.loads(stop)
-            message_id = str(uuid.uuid5(
-                uuid.NAMESPACE_URL,
-                "graphtraj:budget-stop:{0}:{1}:{2}".format(ticket_id, ticket_name, limit),
-            ))
-            submission = asyncio.run(self._queue_retro(ticket_id, message_id))
-            with self._lock:
-                self._stops.add(stop)
-                self._queue_submissions.append(submission)
-        except CodexAdapterError as error:
-            self._record_error(error)
-        except (TypeError, ValueError, json.JSONDecodeError) as error:
-            self._record_error(CodexAdapterError(
-                "RUNTIME_REQUEST_INVALID",
-                "The Codex Main budget notice is invalid: {0}".format(error),
-            ))
-
-    async def _queue_retro(self, ticket_id: str, message_id: str) -> str:
-        """Use a separate experimental sender that never resumes or starts Main."""
-        async with CodexAppServer(
-            cwd=self._cwd,
-            command=self._command,
-            environment=self._environment,
-            request_timeout=self._request_timeout,
-            experimental_api=True,
-        ) as sender:
-            return await sender.queue_input(
-                self._thread_id,
-                message_id,
-                [
-                    {
-                        "type": "text",
-                        "text": (
-                            "$retro Analyze the enforced stochastic stop for Ticket {0} "
-                            "using the supplied wrap-up and retained evidence. Identify "
-                            "scheduling corrections before deciding continuation. Reuse "
-                            "existing findings; do not restart work."
-                        ).format(ticket_id),
-                    },
-                    {
-                        "type": "skill",
-                        "name": "retro",
-                        "path": str(self._retro_skill_path),
-                    },
-                ],
-            )
-
-    def _record_error(self, error: CodexAdapterError) -> None:
-        """Keep the first concrete delivery failure for every close caller."""
-        with self._lock:
-            if self._error is None:
-                self._error = error
-
     @staticmethod
     def _stop_key(notice: Mapping[str, Any]) -> str | None:
         """Return a stable stop identity without adding Codex fields to budget state."""
@@ -1151,6 +1052,7 @@ class CodexMainRecovery:
             return None
         ticket = notice.get("ticket")
         limit = threshold.get("limit")
+        actual = notice.get("actual")
         if (
             not isinstance(ticket, Mapping)
             or not isinstance(ticket.get("ticket_id"), str)
@@ -1160,6 +1062,9 @@ class CodexMainRecovery:
             or isinstance(limit, bool)
             or not isinstance(limit, (int, float))
             or not math.isfinite(limit)
+            or not _instant(notice.get("occurred_at"))
+            or not isinstance(actual, Mapping)
+            or not _elapsed_minutes(actual.get("elapsed_minutes"))
         ):
             raise CodexAdapterError("RUNTIME_REQUEST_INVALID", "The stochastic-stop notice is invalid.")
         return json.dumps(

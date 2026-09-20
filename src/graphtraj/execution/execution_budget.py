@@ -9,6 +9,7 @@ import os
 import random
 import time
 from contextlib import contextmanager
+from datetime import datetime
 from contextvars import ContextVar
 from dataclasses import dataclass
 from pathlib import Path
@@ -509,7 +510,8 @@ def _new_notices(
     stage: str,
 ) -> list[dict[str, Any]]:
     definition = budget.definition["execution_budget"]
-    elapsed = max(0.0, (time.time() - state["started_at"]) / 60)
+    observed_at = time.time()
+    elapsed = max(0.0, (observed_at - state["started_at"]) / 60)
     actual = {
         "elapsed_minutes": elapsed,
         "sessions": dict(state["sessions"]),
@@ -566,6 +568,7 @@ def _new_notices(
         if key not in seen:
             notice = {
                     "type": "execution-budget-exceeded",
+                    "occurred_at": _event_instant(observed_at),
                     "ticket": {"ticket_id": ticket_id, "ticket_name": ticket_name},
                     "threshold": {"kind": kind, "limit": limit},
                     "actual": actual,
@@ -577,6 +580,16 @@ def _new_notices(
                 notice["message"] = message
             notices.append(notice)
     return notices
+
+
+def _event_instant(seconds: float) -> str:
+    """Return one budget event's absolute instant with its explicit UTC offset.
+
+    The offset is the machine's actual local offset at that instant, so a
+    receiver can tell when the event happened without guessing a time or
+    reading the elapsed duration as a clock time.
+    """
+    return datetime.fromtimestamp(seconds).astimezone().isoformat(timespec="seconds")
 
 
 def _duration(minutes: float) -> str:

@@ -22,6 +22,10 @@ _MEMBER_KEYS = {
     "spec_reviewer",
 }
 _ENGINEERS = {"engineer"}
+_REVIEW_REPORTS = {
+    "standards_reviewer": "standards.md",
+    "spec_reviewer": "spec.md",
+}
 _COMMON = {"phase", "ticket_id", "caused_by_event_ids", "evidence_refs"}
 
 
@@ -221,11 +225,21 @@ def apply_delivery_state_request(
             candidate = _validate_candidate(request["candidate"])
             if ticket["status"] != "reviewing" or ticket["current_candidate"] != candidate:
                 raise ValueError("Leader decision does not match the fixed candidate")
+            # A completed Round uses the Leader and Engineer Sessions plus the
+            # Reviewer Session of each axis that reported for it.
+            reported = {Path(ref).name for ref in request["evidence_refs"]}
+            required_sessions = {"team_leader", "engineer"} | {
+                seat
+                for seat, report in _REVIEW_REPORTS.items()
+                if report in reported
+            }
             if any(
-                member["session_ref"] is None
-                for member in team_update["members"].values()
+                team_update["members"][name]["session_ref"] is None
+                for name in required_sessions
             ):
-                raise ValueError("Leader decision requires every Team member Session")
+                raise ValueError(
+                    "Leader decision requires the Sessions of the completed Team Round"
+                )
             if request["decision"] == "accepted":
                 ticket_update["status"] = _transition(ticket, "awaiting-integration")
                 close_round = True

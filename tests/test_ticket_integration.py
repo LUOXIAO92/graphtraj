@@ -17,7 +17,9 @@ from test_ticket_graph import _change_status, _register, _ticket
 
 
 @pytest.fixture
-def accepted_ticket(installed_commands, temporary_git_repository, fake_codex, tmp_path):
+def accepted_ticket(
+    installed_commands, temporary_git_repository, fake_codex, tmp_path, request
+):
     root, worktrees, _, environment = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path
     )
@@ -27,9 +29,11 @@ def accepted_ticket(installed_commands, temporary_git_repository, fake_codex, tm
     _change_status(installed_commands, root, "83", "ready")
     batch = root / "batch.yml"
     batch.write_text(yaml.safe_dump({"tasks": [{"ticket_id": "83", "ticket_name": "integration", "role": "coding-team.team-leader"}]}))
+    selected_axes = getattr(request, "param", None)
     environment.update(
         FAKE_CODEX_LIFECYCLE_ACTION="complete-team-round",
         GRAPHTRAJ_AGENT_RUNNER=str(installed_commands.runner),
+        **({} if selected_axes is None else {"FAKE_CODEX_REVIEW_AXES": selected_axes}),
     )
     launched = run_process([str(installed_commands.runner), "--batch-input", str(batch)], cwd=root, env=environment)
     assert launched.returncode == 0, launched.stderr
@@ -86,6 +90,45 @@ def test_main_integrates_an_accepted_candidate_and_unlocks_only_satisfied_depend
     assert {event["ticket_id"] for event in unlocked} == {"84", "85"}
     assert all(event["caused_by_event_ids"] == [integrated["event_id"]] for event in unlocked)
     assert not any(path.name in {"task-map.yml", "dag.md", "ledger.yml"} for path in state.rglob("*"))
+
+
+@pytest.mark.parametrize("accepted_ticket", [""], indirect=True)
+def test_main_integrates_a_candidate_accepted_without_review_reports(
+    installed_commands, accepted_ticket,
+):
+    """A zero-axis acceptance leaves no report or Session to forge for Main."""
+    root, worktrees, state, candidate = accepted_ticket
+    ticket = state / "tickets/83-integration"
+    round_directory = ticket / "teams/1/rounds/1"
+    assert {path.name for path in round_directory.iterdir()} == {
+        "engineer.md", "validation.md", "leader.md"
+    }
+    team = yaml.safe_load((ticket / "teams/1/team.yml").read_text())
+    assert team["members"]["standards_reviewer"]["session_ref"] is None
+    assert team["members"]["spec_reviewer"]["session_ref"] is None
+
+    result = run_process(
+        [
+            str(installed_commands.product),
+            "ticket",
+            "integrate",
+            "--ticket-id",
+            "83",
+            "--",
+            sys.executable,
+            "-c",
+            "pass",
+        ],
+        cwd=root,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert yaml.safe_load(result.stdout)["status"] == "integrated"
+    assert run_process(
+        ["git", "merge-base", "--is-ancestor", candidate, "HEAD"],
+        cwd=worktrees / "dev",
+    ).returncode == 0
+    assert (worktrees / "dev/TEAM_ROUND_DELIVERED.txt").read_text() == "complete team round\n"
 
 
 def test_main_integration_refuses_dirty_dev(

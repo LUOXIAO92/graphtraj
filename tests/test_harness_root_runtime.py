@@ -108,7 +108,7 @@ def test_installed_runtime_projects_enabled_external_skill_directories(
     unselected = harness_skill.parent.parent / 'unselected' / 'SKILL.md'
     unselected.parent.mkdir()
     unselected.write_text('---\nname: unselected\ndescription: Unselected.\n---\n')
-    reference = harness_skill.parent.parent / 'tdd' / 'tests.md'
+    reference = harness_skill.parent.parent / 'ponytail' / 'tests.md'
     with engineer_probe(installed_commands, harness, fake_codex, environment):
         records = [json.loads(line) for line in fake_codex.log_file.read_text().splitlines()]
         arguments = next(record['argv'] for record in records if record['role'] == 'engineer')
@@ -649,7 +649,7 @@ def test_engineer_runtime_context_finalizes_worktree_facts_once(
         skill["name"]
         for skill in evidence_document["effective_skills"]
         if skill["source"] == "runtime-user"
-    } == {"implement", "ponytail", "tdd"}
+    } == {"implement", "ponytail"}
     repository_skills = {
         skill["name"]: skill
         for skill in evidence_document["effective_skills"]
@@ -688,7 +688,7 @@ def test_engineer_runtime_context_finalizes_worktree_facts_once(
         skill["name"]
         for skill in context.evidence_document()["effective_skills"]
         if skill["source"] == "runtime-user"
-    } == {"implement", "ponytail", "tdd"}
+    } == {"implement", "ponytail"}
 
 
 def test_installed_runner_uses_runtime_user_core_skill_when_source_tracks_it(

@@ -698,14 +698,38 @@ def _deliver_ticket(project: Any, requested: Task, retained_batch: Path, capacit
             ),
         )
         child_results = []
-        remaining = {"standards-reviewer", "spec-reviewer"}
-        while remaining:
+        reviewed_axes = _reviewed_axes(ticket_directory)
+        rejected_batch = False
+        while True:
             reviewer_batch, reviewer_batch_path, leader_alias, leader_session = next_formal_batch(
                 project, task, definition, ticket_content, worktree, ticket_directory,
                 traces, leader_alias, leader_session, registration, retained_batch,
+                optional_formal=True,
             )
-            if not {child.role for child in reviewer_batch.tasks} <= remaining:
-                raise RunnerError("BATCH_SCHEMA_INVALID", "The child Batch must select remaining Review axes for this candidate.")
+            # The Leader selects the Review axes for this candidate; when it registers
+            # no child Batch, Review is complete and the Leader decides.
+            if reviewer_batch is None:
+                break
+            roles = {child.role for child in reviewer_batch.tasks}
+            if not roles <= _REVIEWER_ROLES or roles & reviewed_axes:
+                error = RunnerError(
+                    "BATCH_SCHEMA_INVALID",
+                    "Each Review axis runs at most once per Ticket; verify the retained "
+                    "reports of the axes that already ran and register only another axis.",
+                )
+                if rejected_batch:
+                    raise error
+                rejected_batch = True
+                leader_alias, leader_session = run_agent(
+                    project, task, "team-leader", worktree, ticket_directory, traces,
+                    leader_alias, leader_session, registration, None, retained_batch,
+                    _evidence_recovery_prompt(
+                        project, task, traces, leader_alias, worktree, error,
+                        "verify the retained Review reports and register only Review axes "
+                        "that have not run for this Ticket, or report the Round decision",
+                    ),
+                )
+                continue
             try:
                 reviewed = _run_batch_workers(
                     project, reviewer_batch, reviewer_batch_path, leader_alias, capacity_fd,
@@ -779,7 +803,7 @@ def _deliver_ticket(project: Any, requested: Task, retained_batch: Path, capacit
                         "member-" + member,
                     )
                     predecessor = event["event_id"]
-                remaining.remove(child.role)
+                reviewed_axes.add(child.role)
                 child_results.append({"role": child.role, "alias": alias, "session": session,
                                       "trace": _trace_ref(project, traces, alias)})
 
@@ -1253,7 +1277,8 @@ def _resume_active_ticket(
         except RunnerError:
             if target.is_file():
                 raise
-            remaining.add(role)
+            # No retained Session for this axis: the Leader either selected no such
+            # axis or already completed it, so resuming must not force another run.
             continue
         report_file = _review_report_file(role, mapping)
         reviewer_task, reviewer_batch_path = session_task(role, mapping)
@@ -1270,7 +1295,8 @@ def _resume_active_ticket(
                 if declared != [candidate]:
                     report.unlink()
         if not target.is_file() and not source.is_file():
-            remaining.add(role)
+            if role not in _reviewed_axes(ticket_directory):
+                remaining.add(role)
             continue
         if not target.is_file():
             _collect_review_report(
@@ -1560,11 +1586,16 @@ def _next_formal_batch(
     *,
     capacity_fd: int,
     allow_no_formal: bool = False,
+    optional_formal: bool = False,
     correct_process: Callable[[], bool | None] | None = None,
 ) -> tuple[Batch | None, Path | None, str, str]:
     """Return the next Batch unless correction completes all remaining work.
 
     The correction callback may return True when no formal child is needed.
+    ``allow_no_formal`` marks a completed Round: no child Batch is required and
+    a registered formal Batch is refused for the Leader to correct.
+    ``optional_formal`` lets the Leader select the remaining Review axes: while
+    it registers child Batches they run, and no registration ends that work.
     """
 
     run_agent = partial(_run_agent, capacity_fd=capacity_fd)
@@ -1601,7 +1632,7 @@ def _next_formal_batch(
     while True:
         corrected_all = correct_process() if correct_process is not None else False
         if not registration.exists():
-            if allow_no_formal or corrected_all:
+            if allow_no_formal or optional_formal or corrected_all:
                 return None, None, leader_alias, leader_session
             recover_dispatch(
                 RunnerError(
@@ -2906,6 +2937,23 @@ def _review_report_file(role: str, mapping: dict[str, Any]) -> Path:
     return report
 
 
+def _reviewed_axes(ticket_directory: Path) -> set[str]:
+    """Return the Review axes that already reported for this Ticket.
+
+    Retained Round reports are the evidence a completed axis leaves behind, so
+    they keep an axis from running twice across Rounds, Sessions and Teams.
+    """
+    return {
+        role
+        for role in _REVIEWER_ROLES
+        if any(
+            (ticket_directory / "teams").glob(
+                "*/rounds/*/" + _review_report_name(role)
+            )
+        )
+    }
+
+
 def _link_worktree(project: Any, worktree: Path, evidence: Path) -> None:
     (worktree / ".scratch").mkdir(exist_ok=True)
     links = {
@@ -2931,7 +2979,13 @@ def _link_worktree(project: Any, worktree: Path, evidence: Path) -> None:
 
 
 def _validate_round(round_directory: Path, worktree: Path) -> str:
-    required = {"engineer.md", "validation.md", "standards.md", "spec.md", "leader.md"}
+    """Return the Round's fixed candidate once its evidence is complete.
+
+    The Engineer reports and the Leader decision are always required. A Review
+    axis report is part of the Round only when the Leader ran that axis.
+    """
+    required = {"engineer.md", "validation.md", "leader.md"}
+    allowed = required | {_review_report_name(role) for role in _REVIEWER_ROLES}
     try:
         paths = tuple(round_directory.iterdir())
     except OSError as error:
@@ -2939,8 +2993,10 @@ def _validate_round(round_directory: Path, worktree: Path) -> str:
             _AGENT_EVIDENCE_ERROR,
             "The Team Round evidence is missing or unreadable.",
         ) from error
+    names = {path.name for path in paths}
     if (
-        {path.name for path in paths} != required
+        not required <= names
+        or not names <= allowed
         or any(path.is_symlink() or not path.is_file() for path in paths)
     ):
         raise RunnerError(
@@ -2951,7 +3007,7 @@ def _validate_round(round_directory: Path, worktree: Path) -> str:
     try:
         inspected = [
             (round_directory / name).read_text(encoding="utf-8")
-            for name in required
+            for name in sorted(names)
         ]
     except (OSError, UnicodeError) as error:
         raise RunnerError(

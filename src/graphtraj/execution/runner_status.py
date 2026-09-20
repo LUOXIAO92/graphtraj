@@ -34,6 +34,28 @@ SESSION_MAPPING_FIELDS = frozenset(
         "runtime_pid",
     }
 )
+# The Runner's own record of one Agent Entity and its direct parent. The native
+# Session is bound once from the Runtime handle; these fields are established
+# with it and a later launch input or request may not change them.
+SESSION_BINDING_FIELDS = (
+    "alias",
+    "runtime",
+    "ticket_id",
+    "team_generation",
+    "role",
+    "parent",
+)
+
+
+def conflicting_binding_field(
+    recorded: Mapping[str, Any], requested: Mapping[str, Any]
+) -> str | None:
+    """Return the first binding field the request would change, if any."""
+
+    for field in SESSION_BINDING_FIELDS:
+        if requested.get(field) != recorded.get(field):
+            return field
+    return None
 
 
 def status_aliases(

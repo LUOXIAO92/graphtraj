@@ -100,6 +100,7 @@ DETAIL_ERROR_CATEGORIES = {
     "RUNTIME_ACCESS_DENIED": "invalid-config",
     "RUNTIME_START_FAILED": "launch-failed",
     "RUNTIME_SESSION_MISSING": "launch-failed",
+    "AGENT_BINDING_CONFLICT": "launch-failed",
     "RUNTIME_REQUEST_INVALID": "launch-failed",
     "ALIAS_ALLOCATION_FAILED": "launch-failed",
     "METADATA_WRITE_FAILED": "launch-failed",

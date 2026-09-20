@@ -35,6 +35,7 @@ from graphtraj.execution.runner_process import (
 )
 from graphtraj.workspace.runner_project import discover_project, discover_runner_directory
 from graphtraj.execution.runner_status import (
+    SESSION_BINDING_FIELDS,
     is_session_mapping,
     read_alias_mapping,
     read_terminal_outcome,
@@ -43,13 +44,7 @@ from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 
 
 SESSION_IDENTITY_READERS = {"codex": read_codex_session_identity}
-SESSION_IMMUTABLE_MAPPING_FIELDS = (
-    "alias",
-    "runtime",
-    "ticket_id",
-    "team_generation",
-    "role",
-    "parent",
+SESSION_IMMUTABLE_MAPPING_FIELDS = SESSION_BINDING_FIELDS + (
     "retained_batch_file",
     "worktree_path",
     "trace_file",

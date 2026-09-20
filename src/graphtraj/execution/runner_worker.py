@@ -20,6 +20,7 @@ from graphtraj.execution.execution_budget import (
     execution_budget_stage,
 )
 from graphtraj.execution.runner_io import write_yaml_durably
+from graphtraj.execution.runner_status import conflicting_binding_field
 from graphtraj.execution.runner_transport import runtime_launch_failure
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 
@@ -58,6 +59,10 @@ def run(job_file: Path) -> int:
             base_mapping = job["mapping"]
             if not isinstance(base_mapping, dict):
                 raise ValueError("session mapping is not a mapping")
+            # The Session's own record owns the Agent Entity and its direct
+            # parent, so a launch input or request that disagrees is refused
+            # before this Worker starts any Runtime or changes the record.
+            _require_recorded_binding(session_directory, operation, base_mapping)
             monitor_execution_budget = job.get("monitor_execution_budget", False)
             if not isinstance(monitor_execution_budget, bool):
                 raise ValueError("budget monitor request is invalid")
@@ -245,6 +250,39 @@ def run(job_file: Path) -> int:
         if previous_sigterm is not None:
             signal.signal(signal.SIGTERM, previous_sigterm)
     return 1
+
+
+def _require_recorded_binding(
+    session_directory: Path, operation: str, requested: dict[str, object]
+) -> None:
+    """Refuse a request that would change the entity this Session records.
+
+    A launch establishes one Agent Entity and its direct parent. Every later
+    execution resumes that recorded entity, so a re-submitted launch input
+    cannot create a second entity for the alias and a modified request parent
+    cannot re-parent the existing one. The refusal keeps the record readable
+    and leaves its own failure document as evidence.
+    """
+    mapping_file = session_directory / "mapping.yml"
+    if not os.path.lexists(str(mapping_file)):
+        return
+    try:
+        recorded = yaml.safe_load(mapping_file.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, yaml.YAMLError):
+        recorded = None
+    if not isinstance(recorded, dict):
+        raise RuntimeAdapterError(
+            "AGENT_BINDING_CONFLICT",
+            "The Session record could not be read, so this request cannot own it.",
+        )
+    if operation == "launch":
+        reason = "The Session record already binds this alias to an Agent Entity."
+    else:
+        field = conflicting_binding_field(recorded, requested)
+        if field is None:
+            return
+        reason = "The request changes the recorded {0} of this Agent Entity.".format(field)
+    raise RuntimeAdapterError("AGENT_BINDING_CONFLICT", reason)
 
 
 def _append_follow_up(events_file: Path, causes: list[str]) -> None:

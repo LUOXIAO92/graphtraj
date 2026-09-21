@@ -986,6 +986,8 @@ def test_role_connection_selects_native_provider_without_persisting_key(
     role = ResolvedChildRole("temporary-role", "Run the bounded task.", (), RolePreset(
         "codex", "deepseek-flash", "https://example.com/v1", "ROLE_TEST_API_KEY",
         reasoning_effort="high",
+        codex={"approval": {"model": "review", "base_url": "https://review.example",
+                             "api_key_env": "REVIEW_KEY"}},
     ))
     context = preflight_runtime_context(
         runtime_store=tmp_path / ".codex", executable=_runtime_executable(tmp_path),

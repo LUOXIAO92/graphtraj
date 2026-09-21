@@ -604,7 +604,9 @@ def test_each_session_projects_resolved_role_skills_and_task_access(
                 assert (str(root / 'git-common') in filesystem) == (index == 0)
                 assert not any(str(tmp_path / ['second', 'first'][index]) in key for key in filesystem)
             different_connection = context(tmp_path / 'third', peer, replace(
-                role, settings=replace(role.settings, base_url='https://different.invalid/v1')))
+                role, settings=replace(role.settings, base_url='https://different.invalid/v1',
+                    codex={'approval': {'model': 'review', 'base_url': 'https://review.invalid',
+                                         'api_key_env': 'REVIEW_KEY'}})))
             with pytest.raises(RuntimeAdapterError) as caught:
                 await adapter.create_session(different_connection)
             assert caught.value.code == 'RUNTIME_CONNECTION_MISMATCH'
@@ -889,7 +891,9 @@ def test_connection_overrides_cannot_leak_into_a_session_using_defaults(
 
     async def exercise() -> None:
         role = ResolvedChildRole('temporary-role', 'Bounded task.', (),
-                                 RolePreset('codex', 'model', 'https://role.invalid/v1', None))
+                                 RolePreset('codex', 'model', 'https://role.invalid/v1', None,
+                                 codex={'approval': {'model': 'review', 'base_url': 'https://review.invalid',
+                                                      'api_key_env': 'REVIEW_KEY'}}))
         selected = context(tmp_path / 'selected', peer, role)
         ordinary = context(tmp_path / 'ordinary', peer)
         async with CodexAppServer(command=[str(peer)], cwd=tmp_path,

@@ -177,6 +177,8 @@ def test_grouped_presets_apply_operator_settings_and_preserve_existing_history(
             model="operator-" + name,
             base_url="https://runtime.example.invalid/" + name,
             reasoning_effort="high",
+            codex={"approval": {"model": "review", "base_url": "https://review.example",
+                                 "api_key_env": "REVIEW_KEY"}},
         )
     if flat_roles:
         document["roles"] = {**presets, "delivery-state": document["roles"]["delivery-state"]}

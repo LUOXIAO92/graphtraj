@@ -13,9 +13,10 @@ import yaml
 
 ROLES_PATH = Path(".graphtraj") / "roles.yml"
 # One top-level preset name or one group-qualified '<group>.<role>' reference.
-ROLE_NAME = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+# Configured names join their word groups with '_'; a retained name keeps '-'.
+ROLE_NAME = re.compile(r"^[a-z0-9]+(?:[_-][a-z0-9]+)*$")
 ROLE_REFERENCE = re.compile(
-    r"^[a-z0-9]+(?:-[a-z0-9]+)*(?:\.[a-z0-9]+(?:-[a-z0-9]+)*)?$"
+    r"^[a-z0-9]+(?:[_-][a-z0-9]+)*(?:\.[a-z0-9]+(?:[_-][a-z0-9]+)*)?$"
 )
 # Retained Batch, Session and Team records may still name a former Engineer tier.
 _RETAINED_ENGINEER_REFERENCES = {
@@ -31,16 +32,16 @@ _CONNECTION_FIELDS = frozenset({"base_url", "api_key_env"})
 _ENVIRONMENT_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 _DEFAULT_PRESETS: dict[str, dict[str, object]] = {
-    "team-leader": {
+    "team_leader": {
         "runtime": "codex",
         "model": "gpt-5.6-sol",
         "allow_runtime_swarm": True,
     },
     "engineer": {"runtime": "codex", "model": "gpt-5.6-sol"},
-    "standards-reviewer": {"runtime": "codex", "model": "gpt-5.6-sol"},
-    "spec-reviewer": {"runtime": "codex", "model": "gpt-5.6-sol"},
-    "delivery-state": {"runtime": "codex", "model": "gpt-5.6-luna"},
-    "merge-resolver": {"runtime": "codex", "model": "gpt-5.6-sol"},
+    "standards_reviewer": {"runtime": "codex", "model": "gpt-5.6-sol"},
+    "spec_reviewer": {"runtime": "codex", "model": "gpt-5.6-sol"},
+    "delivery_state": {"runtime": "codex", "model": "gpt-5.6-luna"},
+    "merge_resolver": {"runtime": "codex", "model": "gpt-5.6-sol"},
 }
 
 
@@ -88,14 +89,16 @@ class ProjectRoles:
         exactly one configured group declares it. A flat roles.yml declares no
         group, so its former group token is read as part of the role name.
         """
+        for candidate in _reference_spellings(reference):
+            if candidate in self.presets:
+                return candidate
         retained = retained_role_reference(reference)
-        if retained in self.presets:
-            return retained
-        group, _, name = retained.rpartition(".")
+        group, _, _ = retained.rpartition(".")
         if group and self.groups:
             raise ProjectRolesError((
                 "roles.{0} is not a configured preset reference.".format(retained),
             ))
+        name = logical_role(retained)
         matches = sorted(
             candidate
             for candidate in self.presets
@@ -122,15 +125,32 @@ def logical_role(reference: str) -> str:
     """Return the role name one configured or retained reference selects.
 
     The group of a '<group>.<role>' reference only selects Runtime settings;
-    the role name after the last dot keeps the packaged responsibility.
+    the role name after the last dot keeps the packaged responsibility, one
+    word group per '-', so a configured '_' spelling and an installed
+    hyphenated template name the same role.
     """
     retained = _RETAINED_ENGINEER_REFERENCES.get(reference, reference)
-    return retained.rpartition(".")[2]
+    return retained.rpartition(".")[2].replace("_", "-")
 
 
 def retained_role_reference(reference: str) -> str:
     """Return the configured reference spelling for one supplied reference."""
     return _RETAINED_ENGINEER_REFERENCES.get(reference, reference)
+
+
+def _reference_spellings(reference: str) -> tuple[str, ...]:
+    """Return the spellings one supplied reference may use for the configured roles.
+
+    Retained Batch, Session and Team records may name a former Engineer tier,
+    and either side of a rename may spell a group or role word group with '_'
+    or '-'. The configured spelling is the one roles.yml declares.
+    """
+    spellings: list[str] = []
+    for candidate in (retained_role_reference(reference), reference):
+        for spelling in (candidate, candidate.replace("-", "_"), candidate.replace("_", "-")):
+            if spelling not in spellings:
+                spellings.append(spelling)
+    return tuple(spellings)
 
 
 class _UniqueKeyLoader(yaml.SafeLoader):
@@ -174,11 +194,11 @@ def roles_exist(harness_root: Path) -> bool:
 def default_roles_content() -> str:
     """Render the established reusable coding-role presets."""
     return yaml.safe_dump({"roles": {
-        "coding-team": {
+        "coding_team": {
             name: preset for name, preset in _DEFAULT_PRESETS.items()
-            if name != "delivery-state"
+            if name != "delivery_state"
         },
-        "delivery-state": _DEFAULT_PRESETS["delivery-state"],
+        "delivery_state": _DEFAULT_PRESETS["delivery_state"],
     }}, sort_keys=False)
 
 

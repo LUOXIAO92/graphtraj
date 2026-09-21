@@ -248,13 +248,20 @@ def _ticket_mappings(
     mappings: list[Path] = []
     errors: list[str] = []
     busy: list[str] = []
+    # A current alias spells the Ticket name with underscores and names the
+    # whole-Team handover generation; a retained alias keeps its historical
+    # hyphenated name, Team suffix and role marker.
+    retained_prefix = re.escape(target.ticket_id + "-" + target.ticket_name)
+    current_prefix = re.escape(
+        target.ticket_id + "-" + target.ticket_name.replace("-", "_")
+    )
     prefix = re.compile(
-        re.escape(target.ticket_id + "-" + target.ticket_name)
-        + r"(?:-team[1-9][0-9]*)?@"
+        retained_prefix + r"(?:-team[1-9][0-9]*)?@"
+        + r"|" + current_prefix + r"-handover[0-9]+-"
     )
     unstarted_alias = re.compile(
-        re.escape(target.ticket_id + "-" + target.ticket_name)
-        + r"(?:-team(?P<generation>[2-9][0-9]*|1[0-9]+))?@[deljmsrx][1-9][0-9]*"
+        retained_prefix + r"(?:-team(?P<generation>[2-9][0-9]*|1[0-9]+))?@[deljmsrx][1-9][0-9]*"
+        + r"|" + current_prefix + r"-handover(?P<handover>[0-9]+)-[A-Za-z0-9_]+@\w+"
     )
     for directory in sessions.iterdir():
         alias_candidate = prefix.match(directory.name) is not None
@@ -267,7 +274,7 @@ def _ticket_mappings(
             if alias_candidate:
                 match = unstarted_alias.fullmatch(directory.name)
                 if match is not None and _unstarted_session_directory(
-                    target, directory, match.group("generation") or "1"
+                    target, directory, _alias_generation(match)
                 ):
                     mappings.append(directory)
                 else:
@@ -298,6 +305,18 @@ def _ticket_mappings(
         ):
             busy.append(directory.name)
     return mappings, errors, busy
+
+
+def _alias_generation(match: re.Match[str]) -> str:
+    """Return the Team generation one unstarted Session alias names.
+
+    A retained alias carries its Team suffix, or implies generation 1 when the
+    first Team wrote none; a current alias counts whole-Team handovers from zero.
+    """
+    generation = match.group("generation")
+    if generation is None and match.group("handover") is not None:
+        generation = str(int(match.group("handover")) + 1)
+    return generation or "1"
 
 
 def _unstarted_session_directory(

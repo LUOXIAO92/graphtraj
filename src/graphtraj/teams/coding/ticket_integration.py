@@ -184,7 +184,7 @@ def _resolve(configuration: ProjectConfiguration, record: dict, log: TextIO) -> 
 
     batch = parse_batch({"tasks": [{
         "ticket_id": record["ticket_id"], "ticket_name": record["ticket_name"],
-        "role": "coding-team.merge-resolver",
+        "role": "coding_team.merge_resolver",
     }]})
     log.flush()
     try:

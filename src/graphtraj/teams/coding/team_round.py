@@ -47,7 +47,6 @@ from graphtraj.execution.runner_models import (
     LaunchResponse,
     RunnerError,
     Task,
-    role_alias_marker,
 )
 from graphtraj.workspace.runner_project import (
     discover_project,
@@ -1764,7 +1763,6 @@ def _request_state(
     *,
     capacity_fd: int | None = None,
 ) -> tuple[str, str, dict[str, Any]]:
-    state_alias = alias or "{0}-{1}@d1".format(task.ticket_id, task.ticket_name)
     runtime_request = worktree / ".scratch" / "delivery-state" / (request_name + ".yml")
     runtime_request.parent.mkdir(parents=True, exist_ok=True)
     environment = {
@@ -2972,14 +2970,24 @@ def _run_session_worker(
 
 
 def _agent_alias(project: Any, task: Task, role: str, generation: int = 1) -> str:
-    marker = role_alias_marker(role)
-    suffix = 2 if logical_role(role) == "spec-reviewer" else 1
-    prefix = f"{task.ticket_id}-{task.ticket_name}"
-    if generation > 1:
-        prefix += f"-team{generation}"
-    while (project.runner_directory / "sessions" / f"{prefix}@{marker}{suffix}").exists():
-        suffix += 2 if marker == "r" else 1
-    return f"{prefix}@{marker}{suffix}"
+    """Return a free Agent alias for one Session of this Team generation.
+
+    The alias names the Ticket, the whole-Team handover generation counted from
+    zero, the configured role and the entity. Word groups inside one component
+    use '_'; the entity starts as the role name and takes a numbered successor
+    when that name is occupied, so no existing Session is overwritten.
+    """
+    role_name = logical_role(role).replace("-", "_")
+    prefix = "{0}-{1}-handover{2}-{3}@".format(
+        task.ticket_id, task.ticket_name.replace("-", "_"), generation - 1, role_name
+    )
+    suffix = 1
+    while True:
+        entity = role_name if suffix == 1 else "{0}_{1}".format(role_name, suffix)
+        alias = prefix + entity
+        if not (project.runner_directory / "sessions" / alias).exists():
+            return alias
+        suffix += 1
 
 
 def _role_report_files(

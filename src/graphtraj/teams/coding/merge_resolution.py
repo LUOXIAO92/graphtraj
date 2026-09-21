@@ -12,7 +12,7 @@ from graphtraj.execution.runner_batch import retain_batch
 from graphtraj.execution.runner_models import Batch, LaunchResponse, RunnerError
 from graphtraj.workspace.runner_project import discover_project, run_git
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
-from graphtraj.teams.coding.team_round import _run_agent
+from graphtraj.teams.coding.team_round import _agent_alias, _run_agent
 from graphtraj.graph.ticket_graph import _load_states
 
 
@@ -37,9 +37,10 @@ def launch_merge_resolver(batch: Batch, cwd: Path) -> LaunchResponse:
     definition = directory / record["current_definition"]
     task = replace(task, ticket_file=definition, ticket_content=definition.read_text())
     retained = retain_batch(project.state_directory, batch)
-    traces = directory / "teams" / str(record["active_team_ordinal"]) / "traces"
-    for ordinal in range(1, 10000):
-        alias = f"{task.ticket_id}-{task.ticket_name}@m{ordinal}"
+    generation = int(record["active_team_ordinal"])
+    traces = directory / "teams" / str(generation) / "traces"
+    for _ in range(10000):
+        alias = _agent_alias(project, task, task.role, generation)
         session_directory = project.runner_directory / "sessions" / alias
         try:
             session_directory.mkdir()

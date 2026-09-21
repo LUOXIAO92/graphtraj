@@ -22,38 +22,38 @@ from runner_fixtures import configure_harness
 # expert group repeats the Engineer name with its own Runtime settings.
 TWO_GROUPS = """\
 roles:
-  coding-team:
-    team-leader:
+  coding_team:
+    team_leader:
       runtime: codex
       model: gpt-5.6-sol
       allow_runtime_swarm: true
     engineer:
       runtime: codex
       model: gpt-5.6-sol
-    standards-reviewer:
+    standards_reviewer:
       runtime: codex
       model: gpt-5.6-sol
-    spec-reviewer:
+    spec_reviewer:
       runtime: codex
       model: gpt-5.6-sol
-  coding-team-expert:
+  coding_team_expert:
     engineer:
       runtime: codex
       model: gpt-6-astra
       reasoning_effort: middle
       base_url: https://astra.example/v1
       api_key_env: ASTRA_API_KEY
-    data-engineer:
+    data_engineer:
       runtime: codex
       model: gpt-6-astra
-  delivery-state:
+  delivery_state:
     runtime: codex
     model: gpt-5.6-luna
 """
 
 DUPLICATE_ROLE = """\
 roles:
-  coding-team:
+  coding_team:
     engineer:
       runtime: codex
       model: gpt-5.6-sol
@@ -91,8 +91,8 @@ def test_two_groups_select_different_settings_for_one_role_name(
     _write_roles(tmp_path, TWO_GROUPS)
 
     roles = load_project_roles(tmp_path)
-    normal = roles.presets["coding-team.engineer"]
-    expert = roles.presets["coding-team-expert.engineer"]
+    normal = roles.presets["coding_team.engineer"]
+    expert = roles.presets["coding_team_expert.engineer"]
 
     assert (normal.model, normal.reasoning_effort) == ("gpt-5.6-sol", None)
     assert (expert.model, expert.reasoning_effort) == ("gpt-6-astra", "middle")
@@ -101,13 +101,13 @@ def test_two_groups_select_different_settings_for_one_role_name(
         "ASTRA_API_KEY",
     )
 
-    task = read_batch(_batch_task(tmp_path, "coding-team-expert.engineer"), tmp_path).tasks[0]
+    task = read_batch(_batch_task(tmp_path, "coding_team_expert.engineer"), tmp_path).tasks[0]
 
     # The launched identity stays the role name; the reference keeps the group.
     assert task.role == "engineer"
-    assert task.role_reference == "coding-team-expert.engineer"
+    assert task.role_reference == "coding_team_expert.engineer"
     assert roles.preset(task.role_reference) == expert
-    assert roles.preset("coding-team.engineer") == normal
+    assert roles.preset("coding_team.engineer") == normal
 
 
 def test_unconfigured_and_ambiguous_references_are_rejected(tmp_path: Path) -> None:
@@ -116,9 +116,9 @@ def test_unconfigured_and_ambiguous_references_are_rejected(tmp_path: Path) -> N
     roles = load_project_roles(tmp_path)
 
     with pytest.raises(ProjectRolesError) as absent:
-        roles.preset("coding-team-security.engineer")
+        roles.preset("coding_team_security.engineer")
 
-    assert "coding-team-security.engineer" in str(absent.value)
+    assert "coding_team_security.engineer" in str(absent.value)
     assert "is not a configured preset reference." in str(absent.value)
 
     # A bare name two groups declare names both groups instead of picking one.
@@ -126,16 +126,16 @@ def test_unconfigured_and_ambiguous_references_are_rejected(tmp_path: Path) -> N
         roles.preset("engineer")
 
     message = str(ambiguous.value)
-    assert "coding-team.engineer" in message
-    assert "coding-team-expert.engineer" in message
+    assert "coding_team.engineer" in message
+    assert "coding_team_expert.engineer" in message
 
     # One group declaring a bare name, and one top-level preset, still resolve.
-    assert roles.resolve("data-engineer") == "coding-team-expert.data-engineer"
-    assert roles.preset("delivery-state").model == "gpt-5.6-luna"
+    assert roles.resolve("data_engineer") == "coding_team_expert.data_engineer"
+    assert roles.preset("delivery_state").model == "gpt-5.6-luna"
 
-    task = read_batch(_batch_task(tmp_path, "coding-team-security.engineer"), tmp_path).tasks[0]
+    task = read_batch(_batch_task(tmp_path, "coding_team_security.engineer"), tmp_path).tasks[0]
 
-    assert task.role_reference == "coding-team-security.engineer"
+    assert task.role_reference == "coding_team_security.engineer"
     assert task.role == "engineer"
     with pytest.raises(ProjectRolesError):
         roles.preset(task.role_reference)
@@ -180,8 +180,8 @@ def test_a_configured_group_reaches_a_real_launch(
     _change_status(installed_commands, harness_root, "143", "ready")
 
     document = yaml.safe_load(default_roles_content())
-    document["roles"]["coding-team-experiment"] = {
-        "team-leader": {
+    document["roles"]["coding_team_experiment"] = {
+        "team_leader": {
             "runtime": "codex",
             "model": "gpt-6-venus",
             "reasoning_effort": "low",
@@ -190,7 +190,7 @@ def test_a_configured_group_reaches_a_real_launch(
     }
     _write_roles(harness_root, yaml.safe_dump(document, sort_keys=False))
 
-    batch = _batch_task(harness_root, "coding-team-experiment.team-leader")
+    batch = _batch_task(harness_root, "coding_team_experiment.team_leader")
     environment.update(
         {
             "FAKE_CODEX_LIFECYCLE_ACTION": "complete-team-round",
@@ -224,13 +224,13 @@ def test_a_configured_group_reaches_a_real_launch(
         for record in leaders
     )
 
+    leader_alias = "143-configurable_role_dispatch-handover0-team_leader@team_leader"
     launch = yaml.safe_load(
         (
-            harness_root
-            / ".graphtraj/runner/sessions/143-configurable-role-dispatch@l1/launch.yml"
+            harness_root / ".graphtraj/runner/sessions" / leader_alias / "launch.yml"
         ).read_text(encoding="utf-8")
     )
     assert launch["mapping"]["role"] == "team-leader"
-    assert launch["mapping"]["role_reference"] == "coding-team-experiment.team-leader"
+    assert launch["mapping"]["role_reference"] == "coding_team_experiment.team_leader"
     assert launch["context_evidence"]["model"] == "gpt-6-venus"
     assert launch["context_evidence"]["model_reasoning_effort"] == "low"

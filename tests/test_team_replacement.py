@@ -40,7 +40,10 @@ def test_installed_team_and_member_replacement(
         root = Path(os.environ['GRAPHTRAJ_HARNESS_ROOT'])
         shard = sorted((root / '.graphtraj/state/worldline').glob('*.jsonl'))[-1]
         cause = json.loads(shard.read_text().splitlines()[-1])['event_id']
-        alias = os.environ['GRAPHTRAJ_TICKET_ID'] + '-' + os.environ['GRAPHTRAJ_TICKET_NAME'] + '@l1'
+        alias = (os.environ['GRAPHTRAJ_TICKET_ID'] + '-'
+                 + os.environ['GRAPHTRAJ_TICKET_NAME'].replace('-', '_') + '-handover'
+                 + str(int(os.environ.get('GRAPHTRAJ_TEAM_GENERATION', '1')) - 1)
+                 + '-team_leader@team_leader')
         denied = subprocess.run([os.environ['GRAPHTRAJ_AGENT_RUNNER'], 'send', alias,
                                  '--instruction', 'Start more work', '--caused-by-event-id', cause],
                                 cwd=root, capture_output=True, text=True)
@@ -51,7 +54,7 @@ def test_installed_team_and_member_replacement(
             prompt = sys.stdin.read()
             if 'Continue from the previous' in prompt:
                 team = evidence / 'teams/1'
-                trace = next((team / 'traces').glob('*@l1/events.jsonl'))
+                trace = next((team / 'traces').glob('*@team_leader/events.jsonl'))
                 assert str(trace.relative_to(Path(os.environ['GRAPHTRAJ_HARNESS_ROOT']))) in prompt
                 assert 'Handoff: preserve' in trace.read_text()
 """)
@@ -149,7 +152,9 @@ configured_events =""", 1)
     team = yaml.safe_load(team_file.read_text())
     leader = team["members"]["team_leader"]["session_ref"]
     reviewer = team["members"]["spec_reviewer"]["session_ref"] or (
-        "76-session-alias-control@r2" if during_implementation == "reviewing" else "76-session-alias-control@e1"
+        "76-session_alias_control-handover0-spec_reviewer@spec_reviewer"
+        if during_implementation == "reviewing"
+        else "76-session_alias_control-handover0-engineer@engineer"
     )
     trace = ticket_dir / "teams/1/traces" / reviewer / "events.jsonl"
     prior = retained_state(trace)
@@ -192,6 +197,10 @@ configured_events =""", 1)
     successor = yaml.safe_load((ticket_dir / "teams/2/team.yml").read_text())
     assert successor["team_ordinal"] == 2
     assert successor["status"] == "active"
+    # Only the whole-Team handover counts up, from handover0 to handover1.
+    assert successor["members"]["team_leader"]["session_ref"] == (
+        "76-session_alias_control-handover1-team_leader@team_leader"
+    )
     if delivery == "rework":
         assert retired["current_round"] == successor["current_round"] == 2
         for generation in (1, 2):
@@ -215,7 +224,8 @@ configured_events =""", 1)
     assert yaml.safe_load(stale.stdout)["error"]["code"] == "team-not-active"
     assert not list(ticket_dir.rglob("*handoff*"))
     if during_implementation == "reviewing":
-        for old_alias in ("76-session-alias-control@r1", "76-session-alias-control@r2"):
+        for old_alias in ("76-session_alias_control-handover0-standards_reviewer@standards_reviewer",
+                          "76-session_alias_control-handover0-spec_reviewer@spec_reviewer"):
             status = command("status", old_alias)
             assert yaml.safe_load(status.stdout)["aliases"][0]["last_outcome"] == "interrupted"
         active = set()

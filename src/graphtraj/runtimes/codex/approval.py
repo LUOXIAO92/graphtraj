@@ -62,7 +62,8 @@ def _completion(route: dict, context: dict) -> dict:
                 'action is authorized and consistent with the restrictions; deny ambiguous requests, '
                 'secret disclosure, destructive unauthorized changes and security weakening. '
                 'A sandbox boundary alone is not a denial: authorized narrow escalations may be allowed. '
-                'Never grant session-wide or future approval. Return only a JSON object with '
+                'For a permissions request, decide whether to grant the exact requested profile. '
+                'Return only a JSON object with '
                 'request_id copied exactly, decision (accept or decline), and a short rationale.'
             )},
             {'role': 'user', 'content': json.dumps(context, ensure_ascii=False)},
@@ -81,8 +82,8 @@ def _completion(route: dict, context: dict) -> dict:
     return json.loads(choice['message']['content'])
 
 
-async def review_request(route: dict, context: dict) -> tuple[dict, str]:
-    """Return one native decision; malformed, failed or timed-out calls deny."""
+async def review_request(route: dict, context: dict) -> dict:
+    """Return a validated decision; call failures use the native RPC error path."""
     try:
         result = await asyncio.wait_for(asyncio.to_thread(_completion, route, context), 30)
         if (not isinstance(result, dict)
@@ -92,7 +93,10 @@ async def review_request(route: dict, context: dict) -> tuple[dict, str]:
                 or result['decision'] not in context['allowed_decisions']
                 or not isinstance(result['rationale'], str) or not result['rationale'].strip()):
             raise ValueError('Invalid approval decision')
-        return {'decision': result['decision']}, result['rationale']
+        return {'decision': result['decision']}
     except Exception as error:
         # Do not expose credentials, endpoint response bodies or request contents in errors.
-        return {'decision': 'decline'}, 'Approval failed closed: ' + type(error).__name__
+        raise RuntimeAdapterError(
+            'RUNTIME_REQUEST_FAILED', 'Approval call failed: ' + type(error).__name__,
+            terminal_confirmed=False,
+        ) from error

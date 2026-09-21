@@ -70,9 +70,9 @@ def completion_stub(monkeypatch: pytest.MonkeyPatch, decision: str, calls: list)
 
 
 @pytest.mark.parametrize('decision,expected', [
-    ('accept', 'accept'), ('decline', 'decline'), ('acceptForSession', 'decline'),
-    ('wrong-request', 'decline'), ('malformed', 'decline'),
-    ('timeout', 'decline'), ('error', 'decline'),
+    ('accept', 'accept'), ('decline', 'decline'), ('acceptForSession', 'error'),
+    ('wrong-request', 'error'), ('malformed', 'error'),
+    ('timeout', 'error'), ('error', 'error'),
 ])
 def test_model_decision_reaches_only_native_request(
     tmp_path: Path, peer: Path, monkeypatch: pytest.MonkeyPatch, decision: str, expected: str,
@@ -84,10 +84,15 @@ def test_model_decision_reaches_only_native_request(
     worker = CodexManagedExecution(request, 'request: authorize printf APPROVAL_121 only',
         directory, lambda *_: None, {}, directory / 'events.jsonl')
     result = worker.run()
-    assert result['outcome'] == 'completed'
+    assert result['outcome'] == ('runtime-error' if expected == 'error' else 'completed')
     replies = list((tmp_path / 'native').glob('*.replies.jsonl'))
     reply = json.loads(replies[0].read_text())
-    assert reply == {'id': 'approval', 'result': {'decision': expected}}
+    if expected == 'error':
+        assert reply['id'] == 'approval'
+        assert reply['error']['code'] == -32603
+        assert 'RUNTIME_REQUEST_FAILED' == result['error']['code']
+    else:
+        assert reply == {'id': 'approval', 'result': {'decision': expected}}
     http, body = calls[0]
     assert http.full_url == 'https://api.deepseek.com/chat/completions'
     assert http.get_header('Authorization') == 'Bearer test-key'
@@ -100,7 +105,7 @@ def test_model_decision_reaches_only_native_request(
     assert reviewed['allowed_decisions'] == ['accept', 'decline']
     assert worker.context.session_document()['adapter_request']['model'] == 'work-model'
     assert request['session_parameters']['config']['approvals_reviewer'] == 'user'
-    assert 'test-key' not in (directory / 'approval-decisions.jsonl').read_text()
+    assert 'test-key' not in json.dumps(reply)
 
 
 def test_resume_refreshes_route_preserving_session_and_work_model(
@@ -132,8 +137,9 @@ def test_resume_refreshes_route_preserving_session_and_work_model(
     assert params['approvalsReviewer'] == 'user'
     assert calls[-1][0].full_url == 'https://review.example/v1/chat/completions'
     assert calls[-1][1]['model'] == 'new-approval-model'
-    records = [json.loads(line) for line in (directory / 'approval-decisions.jsonl').read_text().splitlines()]
-    assert [record['decision'] for record in records] == ['accept', 'decline']
+    replies = next((tmp_path / 'native').glob('*.replies.jsonl'))
+    records = [json.loads(line) for line in replies.read_text().splitlines()]
+    assert [record['result']['decision'] for record in records] == ['accept', 'decline']
 
 
 def test_missing_custom_route_reports_field_and_hosted_keeps_guardian(tmp_path: Path, peer: Path) -> None:
@@ -160,3 +166,43 @@ def test_missing_custom_route_reports_field_and_hosted_keeps_guardian(tmp_path: 
     request = context(hosted, peer, replace(role, settings=replace(settings, base_url=None))).launch_document()['adapter_request']
     assert 'approval' not in request
     assert request['session_parameters']['config']['approvals_reviewer'] == 'auto_review'
+
+
+@pytest.mark.parametrize('decision', ['accept', 'decline'])
+def test_permission_request_uses_model_decision(
+    tmp_path: Path, peer: Path, monkeypatch: pytest.MonkeyPatch, decision: str,
+) -> None:
+    """A reviewed permission request returns its exact grant or a model denial."""
+    request, directory = managed(tmp_path, peer, monkeypatch)
+    calls = []
+    completion_stub(monkeypatch, decision, calls)
+    result = CodexManagedExecution(request, 'request:permissions for the task', directory,
+        lambda *_: None, {}, directory / 'events.jsonl').run()
+    assert result['outcome'] == 'completed'
+    reply = json.loads(next((tmp_path / 'native').glob('*.replies.jsonl')).read_text())
+    expected = {'network': {'enabled': True}} if decision == 'accept' else {}
+    assert reply == {'id': 'approval', 'result': {'permissions': expected}}
+    reviewed = json.loads(calls[0][1]['messages'][1]['content'])
+    assert reviewed['request']['permissions'] == {'network': {'enabled': True}}
+
+
+@pytest.mark.parametrize('history', ['large-history', 'invalid-history'])
+def test_native_history_is_not_replaced_by_an_adapter_denial(
+    tmp_path: Path, peer: Path, monkeypatch: pytest.MonkeyPatch, history: str,
+) -> None:
+    """Long context reaches review; unreadable context uses the native error channel."""
+    request, directory = managed(tmp_path, peer, monkeypatch)
+    calls = []
+    completion_stub(monkeypatch, 'accept', calls)
+    result = CodexManagedExecution(request, 'request:' + history, directory,
+        lambda *_: None, {}, directory / 'events.jsonl').run()
+    reply = json.loads(next((tmp_path / 'native').glob('*.replies.jsonl')).read_text())
+    if history == 'large-history':
+        assert result['outcome'] == 'completed'
+        reviewed = json.loads(calls[0][1]['messages'][1]['content'])
+        assert len(reviewed['history'][0]['content']) == 200001
+        assert reply['result']['decision'] == 'accept'
+    else:
+        assert result['outcome'] == 'runtime-error'
+        assert reply['error']['code'] == -32603
+        assert not calls

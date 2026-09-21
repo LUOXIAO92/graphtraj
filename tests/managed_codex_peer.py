@@ -17,15 +17,17 @@ pending = {}
 
 def ask(kind: str = 'approval') -> None:
     """Reuse native IDs deliberately to exercise caller identity and expiry."""
-    request_id = 'approval' if kind == 'approval' else 7
+    request_id = 'approval' if kind in {'approval', 'permissions'} else 7
     pending[request_id] = kind
     emit({'id': request_id, 'method': (
         'item/commandExecution/requestApproval' if kind == 'approval'
+        else 'item/permissions/requestApproval' if kind == 'permissions'
         else 'item/tool/requestUserInput'
     ), 'params': {
         'threadId': session, 'turnId': execution,
         **({'command': 'printf APPROVAL_121', 'cwd': parameters['cwd']}
-           if kind == 'approval' else {'questions': [{'id': 'color', 'question': 'Choose a color.'}]}),
+           if kind == 'approval' else {'permissions': {'network': {'enabled': True}}}
+           if kind == 'permissions' else {'questions': [{'id': 'color', 'question': 'Choose a color.'}]}),
     }})
 
 
@@ -39,10 +41,10 @@ for line in sys.stdin:
     params = request.get('params', {})
     if method is None:
         kind = pending.pop(request['id'])
-        if 'error' in request:
-            continue
         with native.with_suffix('.replies.jsonl').open('a') as stream:
             stream.write(json.dumps(request) + '\n')
+        if 'error' in request:
+            continue
         if kind == 'approval':
             decision = request['result']['decision']
             assert decision in ('accept', 'decline')
@@ -120,7 +122,16 @@ for line in sys.stdin:
         raise AssertionError(request)
     emit({'id': request['id'], 'result': result})
     if method == 'turn/start' and 'request:' in params['input'][0]['text']:
-        ask()
+        prompt = params['input'][0]['text']
+        if 'large-history' in prompt:
+            with native.open('a') as stream:
+                stream.write(json.dumps({'type': 'response_item', 'payload': {
+                    'type': 'message', 'role': 'user', 'content': 'x' * 200001,
+                }}) + '\n')
+        if 'invalid-history' in prompt:
+            with native.open('a') as stream:
+                stream.write('invalid JSON\n')
+        ask('permissions' if 'request:permissions' in prompt else 'approval')
         if 'request:multiple' in params['input'][0]['text']:
             ask('input')
 

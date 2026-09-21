@@ -226,12 +226,10 @@ class CodexManagedExecution:
             self.requests.pop(token, None)
 
     async def _review_approval(self, request: CodexServerRequest) -> dict:
-        """Review this request and retain routing/decision evidence without credentials."""
-        if request.method == 'item/permissions/requestApproval':
-            # Permission grants affect later operations, rather than this exact action.
-            return {'permissions': {}, 'scope': 'turn'}
+        """Review this request and return its native response without a separate log."""
         if request.method not in {
             'item/commandExecution/requestApproval', 'item/fileChange/requestApproval',
+            'item/permissions/requestApproval',
         }:
             raise RuntimeAdapterError('RUNTIME_REQUEST_UNHANDLED', 'Unsupported automatic approval request.')
         available = request.params.get('availableDecisions')
@@ -248,20 +246,19 @@ class CodexManagedExecution:
             'default_permissions': params['config'].get('default_permissions'),
             'item': self.approval_items.get(request.params.get('itemId')),
         }
-        try:
-            context['history'] = self._approval_history()
-            if request.method == 'item/fileChange/requestApproval' and not context['item']:
-                raise ValueError('File changes are not available for review')
-            result, rationale = await review_request(self.approval, context)
-        except (OSError, ValueError) as error:
-            result, rationale = {'decision': 'decline'}, 'Approval context unavailable: ' + type(error).__name__
-        with (self.directory / 'approval-decisions.jsonl').open('a', encoding='utf-8') as stream:
-            stream.write(json.dumps({
-                'request_id': request.request_id, 'method': request.method,
-                'thread_id': request.params.get('threadId'), 'turn_id': request.params.get('turnId'),
-                'model': self.approval['model'], 'base_url': self.approval['base_url'],
-                'decision': result['decision'], 'rationale': rationale,
-            }) + '\n')
+        context['history'] = self._approval_history()
+        if request.method == 'item/fileChange/requestApproval' and not context['item']:
+            raise RuntimeAdapterError(
+                'RUNTIME_REQUEST_FAILED', 'File changes are not available for review.',
+                terminal_confirmed=False,
+            )
+        result = await review_request(self.approval, context)
+        if request.method == 'item/permissions/requestApproval':
+            # Return only the exact requested profile; omitted scope uses Codex's
+            # native default (turn). A denial grants nothing, only after review.
+            return {'permissions': (
+                request.params['permissions'] if result['decision'] == 'accept' else {}
+            )}
         return result
 
     def _approval_history(self) -> list[dict]:
@@ -278,10 +275,6 @@ class CodexManagedExecution:
                     'custom_tool_call', 'custom_tool_call_output',
                 }:
                     history.append(payload)
-        # ponytail: deny histories over 200k characters; add native compacted context
-        # if long Sessions need review. Never silently drop authorization/restrictions.
-        if len(json.dumps(history)) > 200_000:
-            raise ValueError('Approval history exceeds the supported context size')
         return history
 
     def _pending_requests(self) -> list[dict]:

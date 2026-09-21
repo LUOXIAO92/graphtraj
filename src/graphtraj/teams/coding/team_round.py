@@ -57,7 +57,11 @@ from graphtraj.workspace.runner_project import (
     run_git,
     runtime_executable,
 )
-from graphtraj.execution.runner_status import read_alias_mapping, read_terminal_outcome
+from graphtraj.execution.runner_status import (
+    conflicting_binding_field,
+    read_alias_mapping,
+    read_terminal_outcome,
+)
 from graphtraj.execution.runner_transport import record_runtime_identity
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 from graphtraj.graph.ticket_graph import _load_states
@@ -2705,10 +2709,19 @@ def _resume_job(
         or not isinstance(mapping, dict)
         or launch.get("runtime") != mapping.get("runtime")
         or not isinstance(launch.get("adapter_request"), dict)
+        or not isinstance(launch.get("mapping"), dict)
         or mapping.get("session") != expected_session
         or not isinstance(launch.get("connection"), dict)
     ):
         raise RunnerError("RUNTIME_WORKER_FAILED", "The mapped Session is unavailable.")
+    # The Session record owns the Agent Entity and its direct parent; a retained
+    # launch input that disagrees cannot re-attach or re-parent it.
+    if conflicting_binding_field(mapping, launch["mapping"]) is not None:
+        raise RunnerError(
+            "AGENT_BINDING_CONFLICT",
+            "The retained launch input does not match this Session's recorded "
+            "Agent Entity, so it cannot change its ownership.",
+        )
     connection = launch["connection"]
     if any(
         key not in {"base_url", "api_key_env"}

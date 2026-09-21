@@ -206,6 +206,12 @@ def _assert_denied(entry: dict) -> None:
     assert entry["document"]["error"]["code"] == "authority-denied", entry
 
 
+def _assert_denied_after_authority(entry: dict) -> None:
+    """A probe the authority layer admitted is refused by the request itself."""
+    assert entry["returncode"] == 1, entry
+    assert entry["document"]["error"]["code"] != "authority-denied", entry
+
+
 def _assert_summary(entry: dict, alias: str, activity: str) -> None:
     """A cross-level observation returns only the coarse activity."""
     document = entry["document"]["aliases"][0]
@@ -268,7 +274,13 @@ def test_control_entries_follow_recorded_direct_ownership(
             peers = _probe(
                 installed_commands, root, launch_environment, engineer,
                 log=tmp_path / "engineer-probes.jsonl", name="peers", batch=batch,
-                targets={"leader": leader, "reviewer": standards, "other": other},
+                targets={
+                    "leader": leader, "reviewer": standards, "other": other,
+                    "leader_registration": str(
+                        root / ".graphtraj" / "runner" / "sessions" / leader
+                        / "child-registration.yml"
+                    ),
+                },
             )
             children = _probe(
                 installed_commands, root, launch_environment, leader,
@@ -290,16 +302,24 @@ def test_control_entries_follow_recorded_direct_ownership(
                 launched.kill()
                 launched.wait(timeout=10)
 
-    # An Engineer controls neither its sibling, its parent, nor another branch.
+    # An Engineer controls neither its sibling, its parent, nor another branch,
+    # whether it carries the projected values, carries none of them, or carries
+    # a consistent forgery of its Leader's identity.
     _assert_full(peers["status-self"], engineer)
     assert peers["status-self"]["document"]["aliases"][0]["execution_id"] == _mapping(root, engineer)["execution_id"]
     _assert_summary(peers["status-parent-leader"], leader, "idle")
     _assert_summary(peers["status-sibling-reviewer"], standards, "running")
     _assert_summary(peers["status-other-branch"], other, "running")
+    _assert_summary(peers["status-other-branch-cleared-env"], other, "running")
     for name in (
         "send-sibling-reviewer", "interrupt-sibling-reviewer",
         "requests-sibling-reviewer", "replace-sibling-reviewer",
         "replace-parent-leader", "register-child-batch",
+        "reply-sibling-reviewer", "reply-parent-leader",
+        "requests-parent-leader-cleared-env", "send-parent-leader-cleared-env",
+        "replace-parent-leader-cleared-env", "interrupt-parent-leader-cleared-env",
+        "register-child-batch-cleared-env", "send-sibling-reviewer-forged-env",
+        "replace-sibling-reviewer-forged-env",
     ):
         _assert_denied(peers[name])
 
@@ -312,14 +332,19 @@ def test_control_entries_follow_recorded_direct_ownership(
     _assert_summary(children["status-other-branch"], other, "running")
     assert children["requests-child-reviewer"]["document"]["alias"] == standards
     assert children["requests-child-reviewer"]["document"]["requests"] == []
+    # The approval entry admits the direct parent and then refuses the
+    # fabricated request it was given, so the caller never reaches the reply.
+    _assert_denied_after_authority(children["reply-child-reviewer"])
     assert children["send-child-reviewer"]["document"] == {
         "alias": standards, "send_status": "sent",
     }
     for name in (
         "send-other-branch", "requests-other-branch", "interrupt-other-branch",
-        "replace-other-branch", "register-foreign-session",
+        "replace-other-branch", "register-foreign-session", "reply-other-branch",
+        "send-other-branch-cleared-env",
     ):
         _assert_denied(children[name])
+    _assert_summary(children["status-other-branch-cleared-env"], other, "running")
     replacement = children["replace-child-engineer"]["document"]
     assert children["replace-child-engineer"]["returncode"] == 0, replacement
     assert replacement["alias"] == engineer

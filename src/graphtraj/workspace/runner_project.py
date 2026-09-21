@@ -339,6 +339,31 @@ def discover_runner_directory(cwd: Path) -> Path:
     return configuration.harness_root / ".graphtraj" / "runner"
 
 
+def discover_project_root(cwd: Path) -> Path:
+    """Locate the Harness Project Root that contains one working directory.
+
+    A Batch dispatch may be invoked from inside the project, such as from the
+    Ticket Worktree of the Session that dispatches it, so the entry walks up
+    from its own working directory instead of trusting a projected root path.
+    When an Agent Session inside the project resolves its root this way, the
+    directory it resolves is the same one Main reaches from the project root.
+    """
+    current = _resolve_path(
+        cwd,
+        code="PROJECT_NOT_FOUND",
+        message="Agent Runner must be invoked from the Harness Project Root.",
+    )
+    for candidate in (current, *current.parents):
+        try:
+            return load_project_configuration(candidate).harness_root
+        except ProjectConfigurationError:
+            continue
+    raise RunnerError(
+        "PROJECT_NOT_FOUND",
+        "Agent Runner must be invoked from the Harness Project Root.",
+    )
+
+
 def _load_graphtraj_configuration(cwd: Path) -> ProjectConfiguration:
     root = _resolve_path(
         cwd,

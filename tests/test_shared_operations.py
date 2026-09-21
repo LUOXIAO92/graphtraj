@@ -314,14 +314,16 @@ def test_python_and_cli_launch_the_same_structured_batch_and_errors(
         assert yaml.safe_load(result.stdout) == {"error": error.value.as_document()}
     assert list((root / ".graphtraj/state/batches").iterdir()) == before
 
-    # Direct callers must use the same child-registration route as the CLI.
+    # Only the calling Session decides the route: a registration path supplied
+    # in the environment cannot divert a Main caller into the child-registration
+    # route, so the direct call and the CLI dispatch the same Team.
     monkeypatch.setenv("GRAPHTRAJ_PARENT_REGISTRATION", str(root / "registration.yml"))
     monkeypatch.setenv("GRAPHTRAJ_TICKET_ID", "74")
-    with pytest.raises(RunnerError) as error:
-        launch_batch(batch, root)
+    direct = launch_batch(batch, root)
     result = CliRunner().invoke(runner_main, ["--batch-input", str(_write(path, document))])
-    assert result.exit_code == 1
-    assert yaml.safe_load(result.stdout) == {"error": error.value.as_document()}
+    assert result.exit_code == 0, result.output
+    for response in (direct.document, yaml.safe_load(result.stdout)):
+        assert response["tasks"][0]["launch_status"] == "launched"
     assert not (root / "registration.yml").exists()
 
 

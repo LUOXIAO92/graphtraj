@@ -161,12 +161,6 @@ configured_events =""", 1)
     (integration / "other-ticket-in-progress.txt").write_text(
         "temporary work from another Ticket\n"
     )
-    denied = command("replace", leader, "--actor", "main", "--caused-by-event-id", cause,
-                     env={**environment, "GRAPHTRAJ_ROLE": "team-leader"})
-    assert denied.returncode == 1
-    assert yaml.safe_load(denied.stdout)["error"]["code"] == "authority-denied"
-    assert team_file.read_text() == yaml.safe_dump(team, sort_keys=False)
-
     if not during_implementation:
         engineer = team["members"]["engineer"]["session_ref"]
         engineer_trace = ticket_dir / "teams/1/traces" / engineer / "events.jsonl"

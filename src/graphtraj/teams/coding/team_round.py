@@ -51,6 +51,7 @@ from graphtraj.execution.runner_models import (
 )
 from graphtraj.workspace.runner_project import (
     discover_project,
+    discover_project_root,
     git_succeeds,
     provision_worktree,
     run_git,
@@ -77,12 +78,12 @@ _AGENT_EVIDENCE_ERROR = "AGENT_EVIDENCE_INVALID"
 def register_child_batch(batch: Batch, cwd: Path, registration: Path) -> LaunchResponse:
     """Retain and register the Team Leader's one direct child Batch."""
 
+    # The entry's own working directory locates the project, and the Runner's
+    # own record decides which Session this registration belongs to; a request
+    # cannot name another Leader's registration path.
     project = discover_project(
-        Path(os.environ.get("GRAPHTRAJ_HARNESS_ROOT", cwd)),
-        require_clean_integration=False,
+        discover_project_root(cwd), require_clean_integration=False
     )
-    # The Runner's own record decides which Session this registration belongs
-    # to; a request cannot name another Leader's registration path.
     caller = caller_alias(project.runner_directory)
     parent = (
         read_alias_mapping(project.runner_directory, caller)[0]

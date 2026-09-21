@@ -70,13 +70,18 @@ def test_dispatch_depth_one_stops_before_registering_team_children(
     assert [mapping["role"] for mapping in mappings] == ["team-leader"]
 
 
-def test_engineer_cannot_launch_as_main(
+def test_a_projected_role_cannot_choose_the_launch_entry(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
     fake_codex: FakeCodex,
     tmp_path: Path,
 ) -> None:
-    """A delegated leaf's Runner context cannot reset its depth by using Main's entry."""
+    """A carried role does not move a Batch dispatch off the caller's own route.
+
+    A Session is identified by the process tree its command runs in, so the
+    child-registration route a leaf must use is exercised where a real Session
+    exists, and a Main caller stays on Main's route whatever it carries.
+    """
     root, _, _, environment = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path,
     )
@@ -93,9 +98,10 @@ def test_engineer_cannot_launch_as_main(
             "ticket_id": "114", "ticket_name": "small-team", "role": "team-leader",
         }]}]),
     ], cwd=root, env=environment, timeout=30)
-    assert json.loads(result.stdout).get("error", {}).get("code") == "authority-denied", result.stdout
-    assert not list((root / ".graphtraj/state/batches").glob("*.yml"))
-    assert not list((root / ".graphtraj/runner/sessions").glob("*/mapping.yml"))
+    document = json.loads(result.stdout)
+    assert "error" not in document, result.stdout
+    assert document["tasks"][0]["launch_status"] == "accepted", document
+    assert list((root / ".graphtraj/state/batches").glob("*.yml"))
 
 
 @pytest.mark.parametrize("capacity", [2, 1])

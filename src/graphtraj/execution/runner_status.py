@@ -10,11 +10,11 @@ from typing import Any, Dict, Mapping, Sequence, Tuple
 
 import yaml
 
-from graphtraj.configuration.project_roles import logical_role
 from graphtraj.workspace.git_repository import GitRepositoryError, SourceRepository
 from graphtraj.execution.runner_models import RunnerError, StatusResponse
 from graphtraj.execution.runner_connection import session_operation
 from graphtraj.execution.runner_heartbeat import ownership_is_held, read_heartbeat
+from graphtraj.execution.runner_process import process_ancestors
 from graphtraj.workspace.runner_project import discover_runner_directory
 
 
@@ -61,33 +61,56 @@ def conflicting_binding_field(
 
 
 def caller_alias(runner_directory: Path) -> str | None:
-    """Return the calling Agent Session's alias, or ``None`` for Main and the user.
+    """Return the alias of the live Session that owns the calling process.
 
-    The Runner projects each Session's own alias and role into its Worker
-    environment, so a control request supplies neither. The projection is then
-    checked against the Runner's recorded Agent Entity: an alias the Runner did
-    not record, or a recorded role, Ticket or Team generation that disagrees
-    with the projection, grants no authority. Forged environment values are the
-    host isolation boundary owned by T3c, not this check.
+    A control request identifies itself by the process tree it runs in, never
+    by a value it carries. The Runner records each Session's Worker and native
+    Runtime process identifiers in its own mapping, and the Worker holds its
+    ownership lock for as long as it owns that Session, so the caller is the
+    Session whose recorded owner is a live ancestor of this process. When Main
+    or the user calls, no live Session owns the process and the result is
+    ``None``.
+
+    Neither a projected environment variable nor a request field can establish
+    or raise this identity: a missing, forged or copied value is simply not
+    consulted. Host isolation from a caller that leaves its own process tree is
+    the separate boundary owned by T3c.
     """
-    role  = os.environ.get("GRAPHTRAJ_ROLE")
-    alias = os.environ.get("GRAPHTRAJ_PARENT_ALIAS")
-    if not role and not alias:
+    owners = _live_session_owners(runner_directory)
+    if not owners:
         return None
-    if not role or not alias:
-        raise _authority_denied()
-    mapping, _ = read_alias_mapping(runner_directory, alias)
-    if (
-        logical_role(mapping["role"]) != logical_role(role)
-        or mapping["ticket_id"]
-        != os.environ.get("GRAPHTRAJ_TICKET_ID", mapping["ticket_id"])
-        or str(mapping["team_generation"])
-        != os.environ.get(
-            "GRAPHTRAJ_TEAM_GENERATION", str(mapping["team_generation"])
-        )
-    ):
-        raise _authority_denied()
-    return alias
+    for pid in process_ancestors(os.getpid()):
+        alias = owners.get(pid)
+        if alias is not None:
+            return alias
+    return None
+
+
+def _live_session_owners(runner_directory: Path) -> Dict[int, str]:
+    """Map each live Session's recorded process identifiers to its alias.
+
+    Liveness is the ownership lock the recorded Worker still holds, so an
+    identifier the operating system later handed to an unrelated process
+    cannot present an earlier owner's lock.
+    """
+    session_root = runner_directory / "sessions"
+    if session_root.is_symlink() or not session_root.is_dir():
+        return {}
+    try:
+        aliases = sorted(os.listdir(session_root))
+    except OSError:
+        return {}
+    owners: Dict[int, str] = {}
+    for alias in aliases:
+        try:
+            mapping, session_directory = read_alias_mapping(runner_directory, alias)
+        except RunnerError:
+            continue
+        if not ownership_is_held(session_directory, mapping["worker_pid"]):
+            continue
+        owners.setdefault(mapping["runtime_pid"], alias)
+        owners.setdefault(mapping["worker_pid"], alias)
+    return owners
 
 
 def require_direct_authority(

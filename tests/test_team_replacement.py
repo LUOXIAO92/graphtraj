@@ -171,20 +171,16 @@ configured_events =""", 1)
         engineer = team["members"]["engineer"]["session_ref"]
         engineer_trace = ticket_dir / "teams/1/traces" / engineer / "events.jsonl"
         engineer_before = retained_state(engineer_trace)
-        replacement = command("replace", engineer, "--actor", "main", "--caused-by-event-id", cause)
-        assert replacement.returncode == 0, replacement.stdout + replacement.stderr
+        # Only a member's direct parent may replace it: Main reaches the Team
+        # Leader it dispatched itself, not the Leader's members.
+        for member in (engineer, reviewer):
+            denied_member = command("replace", member, "--actor", "main", "--caused-by-event-id", cause)
+            assert denied_member.returncode == 1, denied_member.stdout
+            assert yaml.safe_load(denied_member.stdout)["error"]["code"] == "authority-denied"
         assert retained_state(engineer_trace) == engineer_before
-        assert yaml.safe_load(team_file.read_text())["members"]["engineer"]["session_ref"] != engineer
-        assert yaml.safe_load((ticket_dir / "ticket.yml").read_text()) == original
-        replaced = command("replace", reviewer, "--actor", "main", "--caused-by-event-id", cause)
-        assert replaced.returncode == 0, replaced.stdout + replaced.stderr
-        new_alias = yaml.safe_load(replaced.stdout)["replacement_alias"]
-        assert new_alias != reviewer
         assert retained_state(trace) == prior
-        current = yaml.safe_load(team_file.read_text())
-        assert current["team_ordinal"] == 1
-        assert current["members"]["spec_reviewer"]["session_ref"] == new_alias
-        assert current["members"]["team_leader"]["session_ref"] == leader
+        assert team_file.read_text() == yaml.safe_dump(team, sort_keys=False)
+        assert yaml.safe_load((ticket_dir / "ticket.yml").read_text()) == original
 
     replaced = command("replace", leader, "--actor", "user", "--caused-by-event-id", events()[-1]["event_id"])
     assert replaced.returncode == 0, replaced.stdout + replaced.stderr

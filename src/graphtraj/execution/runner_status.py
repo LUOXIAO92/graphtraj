@@ -10,6 +10,7 @@ from typing import Any, Dict, Mapping, Sequence, Tuple
 
 import yaml
 
+from graphtraj.configuration.project_roles import logical_role
 from graphtraj.workspace.git_repository import GitRepositoryError, SourceRepository
 from graphtraj.execution.runner_models import RunnerError, StatusResponse
 from graphtraj.execution.runner_connection import session_operation
@@ -59,6 +60,91 @@ def conflicting_binding_field(
     return None
 
 
+def caller_alias(runner_directory: Path) -> str | None:
+    """Return the calling Agent Session's alias, or ``None`` for Main and the user.
+
+    The Runner projects each Session's own alias and role into its Worker
+    environment, so a control request supplies neither. The projection is then
+    checked against the Runner's recorded Agent Entity: an alias the Runner did
+    not record, or a recorded role, Ticket or Team generation that disagrees
+    with the projection, grants no authority. Forged environment values are the
+    host isolation boundary owned by T3c, not this check.
+    """
+    role  = os.environ.get("GRAPHTRAJ_ROLE")
+    alias = os.environ.get("GRAPHTRAJ_PARENT_ALIAS")
+    if not role and not alias:
+        return None
+    if not role or not alias:
+        raise _authority_denied()
+    mapping, _ = read_alias_mapping(runner_directory, alias)
+    if (
+        logical_role(mapping["role"]) != logical_role(role)
+        or mapping["ticket_id"]
+        != os.environ.get("GRAPHTRAJ_TICKET_ID", mapping["ticket_id"])
+        or str(mapping["team_generation"])
+        != os.environ.get(
+            "GRAPHTRAJ_TEAM_GENERATION", str(mapping["team_generation"])
+        )
+    ):
+        raise _authority_denied()
+    return alias
+
+
+def require_direct_authority(
+    runner_directory: Path, alias: str, mapping: Mapping[str, Any]
+) -> None:
+    """Refuse ordinary control of a target that is not the caller's direct child.
+
+    A Session may always address itself, and Main or the user keep the existing
+    unrestricted behavior.
+    """
+    caller = caller_alias(runner_directory)
+    if caller is None or caller == alias or mapping.get("parent") == caller:
+        return
+    raise _authority_denied()
+
+
+def require_descendant_authority(
+    runner_directory: Path, alias: str, mapping: Mapping[str, Any]
+) -> None:
+    """Refuse interruption of a target outside the caller's own descent.
+
+    This is the one control exception: a caller may interrupt the subtree it
+    owns without an intermediary Agent responding. It grants no message,
+    approval or replacement authority.
+    """
+    caller = caller_alias(runner_directory)
+    if caller is None or caller == alias:
+        return
+    seen = {alias}
+    parent = mapping.get("parent")
+    while isinstance(parent, str) and parent not in seen:
+        if parent == caller:
+            return
+        seen.add(parent)
+        parent = read_alias_mapping(runner_directory, parent)[0].get("parent")
+    raise _authority_denied()
+
+
+def require_replacement_authority(
+    runner_directory: Path, alias: str, mapping: Mapping[str, Any], actor: str
+) -> None:
+    """Refuse replacement by anyone but the target's direct parent or the user.
+
+    An Agent caller is judged only by the recorded parent, so its ``actor``
+    value cannot promote it. Without a Session context the caller is Main or the
+    user: the user may replace any target, while Main acts only on its own
+    direct children and cannot reach past a Team Leader into its members.
+    """
+    caller = caller_alias(runner_directory)
+    if caller is not None:
+        if mapping.get("parent") == caller:
+            return
+        raise _authority_denied()
+    if actor != "user" and mapping.get("parent") is not None:
+        raise _authority_denied()
+
+
 def status_aliases(
     aliases: Sequence[str],
     cwd: Path,
@@ -75,6 +161,7 @@ def status_aliases(
             "Git diagnostics require both --baseline and --candidate.",
         )
     runner_directory = discover_runner_directory(cwd)
+    caller = caller_alias(runner_directory)
     results = []
     errors = []
     for alias in aliases:
@@ -83,6 +170,7 @@ def status_aliases(
                 _status_alias(
                     runner_directory,
                     alias,
+                    caller=caller,
                     operation_total=operation_total,
                     baseline=baseline,
                     candidate=candidate,
@@ -102,11 +190,14 @@ def _status_alias(
     runner_directory: Path,
     alias: str,
     *,
+    caller: str | None,
     operation_total: bool,
     baseline: str | None,
     candidate: str | None,
 ) -> Dict[str, Any]:
     mapping, session_directory = read_alias_mapping(runner_directory, alias)
+    if caller is not None and caller != alias and mapping.get("parent") != caller:
+        return _status_summary(mapping, session_directory, alias)
     status = _status_session(mapping, session_directory, alias)
     if operation_total:
         status["operation_total"] = _operation_total(
@@ -145,6 +236,22 @@ def _status_session(
     if "last_outcome" in mapping and "last_outcome" not in status:
         status["last_outcome"] = mapping["last_outcome"]
     return {**identity, **status}
+
+
+def _status_summary(
+    mapping: Dict[str, Any], session_directory: Path, alias: str
+) -> Dict[str, Any]:
+    """Return only the coarse activity of a Session outside the caller's branch.
+
+    A cross-level observation exposes neither the private native Session
+    identity nor Session diagnostics, so the caller cannot read another
+    branch's execution or evidence through status.
+    """
+    status = _status_session(mapping, session_directory, alias)
+    summary = {"alias": alias, "activity": status["activity"]}
+    if "last_outcome" in status:
+        summary["last_outcome"] = status["last_outcome"]
+    return summary
 
 
 def _unresponsive_status(
@@ -318,6 +425,14 @@ def read_terminal_outcome(turn_file: Path) -> str:
     ):
         raise _invalid_activity()
     return turn["outcome"]
+
+
+def _authority_denied() -> RunnerError:
+    return RunnerError(
+        "authority-denied",
+        "Only the target's direct parent, its own subtree, or the user may "
+        "control this Session.",
+    )
 
 
 def _alias_not_found() -> RunnerError:

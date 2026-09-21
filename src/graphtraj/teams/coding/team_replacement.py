@@ -18,7 +18,10 @@ from graphtraj.execution.runner_control import _require_project_events, interrup
 from graphtraj.execution.runner_models import RunnerError
 from graphtraj.execution.runner_process import OPERATION_TIMEOUT_SECONDS
 from graphtraj.workspace.runner_project import discover_project, run_git
-from graphtraj.execution.runner_status import read_alias_mapping
+from graphtraj.execution.runner_status import (
+    read_alias_mapping,
+    require_replacement_authority,
+)
 from graphtraj.teams.coding.team_round import (
     _deliver_ticket,
     _request_state,
@@ -49,13 +52,12 @@ def require_active_session(project, alias):
 
 
 def replace_session(alias, actor, caused_by_event_ids, cwd):
-    if os.environ.get("GRAPHTRAJ_ROLE") or os.environ.get("GRAPHTRAJ_PARENT_ALIAS"):
-        raise RunnerError("authority-denied", "Only Main or the user may initiate Team replacement.")
+    project = discover_project(cwd, require_clean_integration=False)
+    mapping, session_directory = read_alias_mapping(project.runner_directory, alias)
+    require_replacement_authority(project.runner_directory, alias, mapping, actor)
     if not caused_by_event_ids or len(caused_by_event_ids) != len(set(caused_by_event_ids)):
         raise RunnerError("invalid-input", "Replacement requires unique causal Project Worldline event IDs.")
-    project = discover_project(cwd, require_clean_integration=False)
     _require_project_events(cwd, caused_by_event_ids)
-    mapping, session_directory = read_alias_mapping(project.runner_directory, alias)
     directory, ticket = _load_states(project.state_directory / "tickets")[mapping["ticket_id"]]
     generation = mapping["team_generation"]
     team_file = directory / "teams" / str(generation) / "team.yml"

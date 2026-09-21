@@ -57,6 +57,7 @@ from graphtraj.workspace.runner_project import (
     runtime_executable,
 )
 from graphtraj.execution.runner_status import (
+    caller_alias,
     conflicting_binding_field,
     read_alias_mapping,
     read_terminal_outcome,
@@ -76,7 +77,29 @@ _AGENT_EVIDENCE_ERROR = "AGENT_EVIDENCE_INVALID"
 def register_child_batch(batch: Batch, cwd: Path, registration: Path) -> LaunchResponse:
     """Retain and register the Team Leader's one direct child Batch."""
 
-    parent_ticket = os.environ.get("GRAPHTRAJ_TICKET_ID")
+    project = discover_project(
+        Path(os.environ.get("GRAPHTRAJ_HARNESS_ROOT", cwd)),
+        require_clean_integration=False,
+    )
+    # The Runner's own record decides which Session this registration belongs
+    # to; a request cannot name another Leader's registration path.
+    caller = caller_alias(project.runner_directory)
+    parent = (
+        read_alias_mapping(project.runner_directory, caller)[0]
+        if caller is not None else None
+    )
+    if (
+        parent is None
+        or logical_role(parent["role"]) != "team-leader"
+        or registration
+        != project.runner_directory / "sessions" / caller / "child-registration.yml"
+    ):
+        raise RunnerError(
+            "authority-denied",
+            "Only a Team Leader may register a direct child Batch, and only "
+            "through its own Session registration.",
+        )
+    parent_ticket = parent["ticket_id"]
     if any(
         task.ticket_id != parent_ticket
         or (
@@ -94,13 +117,9 @@ def register_child_batch(batch: Batch, cwd: Path, registration: Path) -> LaunchR
         or len(batch.tasks) == 1 and _is_inline_specialist(batch.tasks[0])
     ):
         raise RunnerError("BATCH_SCHEMA_INVALID", "A direct child Batch must contain one Engineer, one or both Reviewers, or one temporary specialist.")
-    project = discover_project(
-        Path(os.environ.get("GRAPHTRAJ_HARNESS_ROOT", cwd)),
-        require_clean_integration=False,
-    )
     limit = load_project_configuration(project.harness_root).dispatch_depth
     depth = 1
-    parent_alias = os.environ["GRAPHTRAJ_PARENT_ALIAS"]
+    parent_alias = caller
     # Count retained Session ancestry, not Batches or resumptions.
     while parent_alias is not None:
         depth += 1
@@ -113,11 +132,11 @@ def register_child_batch(batch: Batch, cwd: Path, registration: Path) -> LaunchR
         parent_alias = parent["parent"]
     from graphtraj.teams.coding.team_replacement import require_active_session
 
-    team = require_active_session(project, os.environ["GRAPHTRAJ_PARENT_ALIAS"])
+    team = require_active_session(project, caller)
     members = {seat["role"]: seat["session_ref"] for seat in team["members"].values()} if team else {}
     children = [
         {"ticket_id": task.ticket_id, "role": task.role,
-         "alias": members.get(task.role) or _agent_alias(project, task, task.role, int(os.environ.get("GRAPHTRAJ_TEAM_GENERATION", "1"))), "launch_status": "registered"}
+         "alias": members.get(task.role) or _agent_alias(project, task, task.role, parent["team_generation"]), "launch_status": "registered"}
         for task in batch.tasks
     ]
     try:
@@ -2539,9 +2558,12 @@ def _execute_agent(
             GRAPHTRAJ_REVIEW_BRIEF=brief,
             GRAPHTRAJ_REVIEW_REPORT=str(report),
         )
+    # Every Agent Entity carries its own alias, so its control requests are
+    # judged against the Runner's recorded owner; only a Team Leader also
+    # carries the child-registration path it is allowed to write.
+    environment["GRAPHTRAJ_PARENT_ALIAS"] = alias
     if registration is not None:
         environment["GRAPHTRAJ_PARENT_REGISTRATION"] = str(registration)
-        environment["GRAPHTRAJ_PARENT_ALIAS"] = alias
     notice_threads: list[threading.Thread] = []
     notice_failures: list[BaseException] = []
     try:

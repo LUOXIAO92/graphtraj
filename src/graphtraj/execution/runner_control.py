@@ -39,6 +39,8 @@ from graphtraj.execution.runner_status import (
     is_session_mapping,
     read_alias_mapping,
     read_terminal_outcome,
+    require_direct_authority,
+    require_descendant_authority,
 )
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 
@@ -59,7 +61,9 @@ def pending_requests(
     Supply ``execution_id`` to reject a mapping that has moved to a successor.
     Each returned request carries the identity required by ``reply_to_request``.
     """
-    mapping, directory = read_alias_mapping(discover_runner_directory(cwd), alias)
+    runner_directory = discover_runner_directory(cwd)
+    mapping, directory = read_alias_mapping(runner_directory, alias)
+    require_direct_authority(runner_directory, alias, mapping)
     if execution_id is not None and execution_id != mapping.get('execution_id'):
         raise RunnerError('operation-failed', 'The requested execution is no longer mapped.')
     identity = {'alias': alias, 'session': mapping['session'],
@@ -93,7 +97,9 @@ def reply_to_request(alias: str, request: dict, response: dict, cwd: Path) -> di
         json.dumps(response, allow_nan=False)
     except (ValueError, TypeError) as error:
         raise RunnerError('invalid-input', 'The native response must be a JSON object.') from error
-    mapping, directory = read_alias_mapping(discover_runner_directory(cwd), alias)
+    runner_directory = discover_runner_directory(cwd)
+    mapping, directory = read_alias_mapping(runner_directory, alias)
+    require_direct_authority(runner_directory, alias, mapping)
     if any(request[key] != mapping.get(key) for key in ('session', 'execution_id')):
         raise RunnerError('operation-failed', 'The requested native execution is no longer mapped.')
     if (directory / 'execution.yml').exists():
@@ -134,6 +140,7 @@ def send_instruction(
         )
     runner_directory = discover_runner_directory(cwd)
     mapping, session_directory = read_alias_mapping(runner_directory, alias)
+    require_direct_authority(runner_directory, alias, mapping)
     if is_session_mapping(mapping):
         _require_project_events(cwd, caused_by_event_ids)
         from graphtraj.teams.coding.team_replacement import require_active_session
@@ -298,14 +305,16 @@ def _send_session_locked(
         worker_environment = dict(os.environ)
         worker_environment.update(_resume_environment(mapping, connection))
         worker_environment.update(team_environment)
+        # Every resumed Session carries its own Agent Entity alias, so its
+        # control requests are judged against the Runner's recorded owner.
+        worker_environment["GRAPHTRAJ_PARENT_ALIAS"] = alias
         if monitor is not None:
             notice_fd, close_notice_fd = caller_notice_fd()
             if notice_fd is not None:
                 worker_environment["GRAPHTRAJ_BUDGET_NOTICE_FD"] = str(notice_fd)
         if logical_role(mapping["role"]) == "team-leader":
-            worker_environment.update(
-                GRAPHTRAJ_PARENT_ALIAS=alias,
-                GRAPHTRAJ_PARENT_REGISTRATION=str(session_directory / "child-registration.yml"),
+            worker_environment["GRAPHTRAJ_PARENT_REGISTRATION"] = str(
+                session_directory / "child-registration.yml"
             )
         with capacity_positions(
             load_project_configuration(cwd), 1, capacity_fd
@@ -363,6 +372,7 @@ def interrupt_session(alias: str, cwd: Path) -> Dict[str, str]:
 
     runner_directory = discover_runner_directory(cwd)
     mapping, session_directory = read_alias_mapping(runner_directory, alias)
+    require_descendant_authority(runner_directory, alias, mapping)
     return _interrupt_session(alias, session_directory, mapping)
 
 

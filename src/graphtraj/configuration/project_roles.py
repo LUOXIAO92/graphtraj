@@ -66,6 +66,7 @@ class RolePreset:
     api_key_env: str | None
     allow_runtime_swarm: bool = False
     reasoning_effort: str | None = None
+    codex: Mapping[str, object] | None = None
 
 
 @dataclass(frozen=True)
@@ -306,9 +307,11 @@ def _role_preset(
         diagnostics.append("{0} must be a mapping.".format(name))
         return None
     initial_count = len(diagnostics)
-    allowed = _REQUIRED_FIELDS | _CONNECTION_FIELDS | {"reasoning_effort"}
+    allowed = _REQUIRED_FIELDS | _CONNECTION_FIELDS | {"reasoning_effort", "codex"}
     if logical_role(name) == "team-leader":
         allowed = allowed | {"allow_runtime_swarm"}
+    if "codex" in entry and not isinstance(entry["codex"], dict):
+        diagnostics.append("{0}.codex must be a mapping.".format(name))
     for field in entry:
         if field not in allowed:
             diagnostics.append("{0}.{1} is not supported.".format(name, field))
@@ -352,6 +355,7 @@ def _role_preset(
     if len(diagnostics) != initial_count:
         return None
     return RolePreset(
+        codex=entry.get("codex"),
         runtime=str(entry["runtime"]),
         model=str(entry["model"]),
         base_url=str(entry["base_url"]) if "base_url" in entry else None,

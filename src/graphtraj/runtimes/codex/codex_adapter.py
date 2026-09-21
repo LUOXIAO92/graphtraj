@@ -27,6 +27,7 @@ from graphtraj.runtimes.runtime_adapter import (
 )
 from graphtraj.execution.runner_transport import record_runtime_identity, runtime_turn_outcome
 from graphtraj.execution.runner_io import write_yaml_durably
+from graphtraj.runtimes.codex.approval import approval_route
 from graphtraj.configuration.project_roles import logical_role
 from graphtraj.configuration.role_definitions import ResolvedChildRole
 from graphtraj.workspace.git_repository import GitRepositoryError, SourceRepository
@@ -85,6 +86,7 @@ class _CodexRole:
     default_permissions: str
     agents: Mapping[str, Any]
     native_settings: Mapping[str, Any]
+    approval: Mapping[str, str] | None = None
 
     def _launch_request(
         self,
@@ -147,7 +149,10 @@ class _CodexRole:
         for skill in effective_skills:
             if skill.enabled:
                 filesystem[str(skill.path.parent)] = "read"
-        approvals_reviewer = _harness_approvals_reviewer(runtime_store)
+        approvals_reviewer = (
+            "user" if self.approval is not None
+            else _harness_approvals_reviewer(runtime_store)
+        )
         overrides = (
             *native_settings.items(),
             ("default_permissions", self.default_permissions),
@@ -168,6 +173,7 @@ class _CodexRole:
             arguments.extend(("-c", "{0}={1}".format(key, _toml_value(value))))
         arguments.extend(("--json", "-"))
         return {
+            **({"approval": dict(self.approval)} if self.approval is not None else {}),
             "arguments": arguments,
             "worktree_path": str(worktree),
             "session_parameters": {
@@ -736,7 +742,7 @@ def _validate_launch_request(
     if (
         not isinstance(request, dict)
         or not {"arguments", "worktree_path"}.issubset(request)
-        or not set(request).issubset({"arguments", "worktree_path", "session_parameters"})
+        or not set(request).issubset({"arguments", "worktree_path", "session_parameters", "approval"})
     ):
         raise CodexAdapterError(
             "RUNTIME_REQUEST_INVALID",
@@ -932,6 +938,7 @@ def _resolve_codex_role(role: ResolvedChildRole) -> _CodexRole:
 
     return _CodexRole(
         name=role.name,
+        approval=approval_route(role.settings.codex, custom=role.settings.base_url is not None),
         reasoning_effort=reasoning_effort,
         developer_instructions=role.instructions,
         required_skills=role.required_skills,

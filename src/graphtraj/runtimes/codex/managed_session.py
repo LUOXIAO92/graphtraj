@@ -3,16 +3,45 @@
 from __future__ import annotations
 
 import asyncio
+import copy
+import os
 import json
 import uuid
 from concurrent.futures import CancelledError
 from pathlib import Path
 from typing import Callable
 
+import yaml
+
+from graphtraj.configuration.project_roles import load_project_roles
+from graphtraj.runtimes.codex.approval import approval_route, review_request
+
 from graphtraj.execution.runner_io import write_yaml_durably
 from graphtraj.runtimes.codex.app_server import CodexAppServer, CodexExecution, CodexServerRequest
 from graphtraj.runtimes.codex.codex_adapter import restore_codex_context
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
+
+
+def refresh_approval_route(request: dict, session_directory: Path) -> None:
+    """Reload only approval routing for the mapped role, preserving work settings."""
+    config = request.get('session_parameters', {}).get('config', {})
+    if config.get('model_provider', 'openai') == 'openai':
+        request.pop('approval', None)
+        return
+    root = os.environ.get('GRAPHTRAJ_HARNESS_ROOT')
+    if not root:
+        raise RuntimeAdapterError('ROLE_CONFIG_INVALID', 'Harness root is required to refresh codex.approval.')
+    mapping = yaml.safe_load((session_directory / 'mapping.yml').read_text(encoding='utf-8'))
+    roles = load_project_roles(Path(root))
+    settings = roles.presets[roles.resolve(mapping.get('role_reference') or mapping['role'])]
+    request['approval'] = approval_route(settings.codex, custom=True)
+    config['approvals_reviewer'] = 'user'
+    request['session_parameters']['approvalsReviewer'] = 'user'
+    arguments = request['arguments']
+    for index in range(len(arguments) - 2, -1, -1):
+        if arguments[index] == '-c' and arguments[index + 1].startswith('approvals_reviewer='):
+            del arguments[index:index + 2]
+    arguments[2:2] = ['-c', 'approvals_reviewer="user"']
 
 
 class CodexManagedExecution:
@@ -29,7 +58,12 @@ class CodexManagedExecution:
         expected_session: str | None = None,
     ) -> None:
         """Capture immutable task configuration for one Worker execution."""
+        request = copy.deepcopy(request)
+        if expected_session:
+            refresh_approval_route(request, session_directory)
         self.context = restore_codex_context(request, context_evidence)
+        self.approval = request.get("approval")
+        self.approval_items: dict[str, dict] = {}
         self.command = (request['arguments'][0], 'app-server', '--listen', 'stdio://')
         self.prompt = prompt
         self.directory = session_directory
@@ -108,6 +142,10 @@ class CodexManagedExecution:
         try:
             while True:
                 notification = await self.adapter.next_notification()
+                if notification['method'] in {'item/started', 'item/completed'}:
+                    item = notification.get('params', {}).get('item', {})
+                    if isinstance(item.get('id'), str):
+                        self.approval_items[item['id']] = item
                 if notification['method'] == 'error':
                     with (self.directory / 'stderr.log').open('a', encoding='utf-8') as stream:
                         stream.write(json.dumps(notification) + '\n')
@@ -177,6 +215,8 @@ class CodexManagedExecution:
 
     async def _request(self, request: CodexServerRequest) -> dict:
         """Hold one native callback until an explicit reply or native cancellation."""
+        if self.approval is not None and request.method.endswith("/requestApproval"):
+            return await self._review_approval(request)
         token = uuid.uuid4().hex
         response = asyncio.get_running_loop().create_future()
         self.requests[token] = (request, response)
@@ -184,6 +224,65 @@ class CodexManagedExecution:
             return await response
         finally:
             self.requests.pop(token, None)
+
+    async def _review_approval(self, request: CodexServerRequest) -> dict:
+        """Review this request and retain routing/decision evidence without credentials."""
+        if request.method == 'item/permissions/requestApproval':
+            # Permission grants affect later operations, rather than this exact action.
+            return {'permissions': {}, 'scope': 'turn'}
+        if request.method not in {
+            'item/commandExecution/requestApproval', 'item/fileChange/requestApproval',
+        }:
+            raise RuntimeAdapterError('RUNTIME_REQUEST_UNHANDLED', 'Unsupported automatic approval request.')
+        available = request.params.get('availableDecisions')
+        allowed = [value for value in ('accept', 'decline') if available is None or value in available]
+        if 'decline' not in allowed:
+            raise RuntimeAdapterError('RUNTIME_REQUEST_UNHANDLED', 'Approval request has no supported deny decision.')
+        params = self.context.session_document()['adapter_request']
+        context = {
+            'request_id': request.request_id, 'method': request.method,
+            'request': request.params, 'allowed_decisions': allowed,
+            'authorization': self.prompt,
+            'developer_instructions': params['developerInstructions'],
+            'permissions': params['config'].get('permissions'),
+            'default_permissions': params['config'].get('default_permissions'),
+            'item': self.approval_items.get(request.params.get('itemId')),
+        }
+        try:
+            context['history'] = self._approval_history()
+            if request.method == 'item/fileChange/requestApproval' and not context['item']:
+                raise ValueError('File changes are not available for review')
+            result, rationale = await review_request(self.approval, context)
+        except (OSError, ValueError) as error:
+            result, rationale = {'decision': 'decline'}, 'Approval context unavailable: ' + type(error).__name__
+        with (self.directory / 'approval-decisions.jsonl').open('a', encoding='utf-8') as stream:
+            stream.write(json.dumps({
+                'request_id': request.request_id, 'method': request.method,
+                'thread_id': request.params.get('threadId'), 'turn_id': request.params.get('turnId'),
+                'model': self.approval['model'], 'base_url': self.approval['base_url'],
+                'decision': result['decision'], 'rationale': rationale,
+            }) + '\n')
+        return result
+
+    def _approval_history(self) -> list[dict]:
+        """Read this Session's visible context, including authorization before resume."""
+        history = []
+        if not self.trace_file.exists():
+            return history
+        with self.trace_file.open(encoding='utf-8') as stream:
+            for line in stream:
+                record = json.loads(line)
+                payload = record.get('payload', {})
+                if record.get('type') == 'response_item' and payload.get('type') in {
+                    'message', 'function_call', 'function_call_output',
+                    'custom_tool_call', 'custom_tool_call_output',
+                }:
+                    history.append(payload)
+        # ponytail: deny histories over 200k characters; add native compacted context
+        # if long Sessions need review. Never silently drop authorization/restrictions.
+        if len(json.dumps(history)) > 200_000:
+            raise ValueError('Approval history exceeds the supported context size')
+        return history
 
     def _pending_requests(self) -> list[dict]:
         """Snapshot native contents with the identity of this execution's owner."""

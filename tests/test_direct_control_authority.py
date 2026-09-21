@@ -81,15 +81,6 @@ UNREACHABLE_APPROVAL = {
     "base_url": "https://127.0.0.1:1/v1",
     "api_key_env": "GRAPHTRAJ_TEST_APPROVAL_KEY",
 }
-# The connection a hosted role's review runs on when the Harness Runtime Store
-# selects the host's default auto_review.
-HOSTED_APPROVAL = {
-    "model": "work-model",
-    "base_url": "https://api.openai.com/v1",
-    "api_key_env": "OPENAI_API_KEY",
-}
-
-
 def _configure_leader_approval_route(root: Path) -> None:
     """Give the Team Leader's role the provider route its own reviews run on."""
     roles_file = root / ".graphtraj" / "roles.yml"
@@ -107,14 +98,12 @@ def _configure_leader_approval_route(root: Path) -> None:
 
 
 def _approval_harness(
-    tmp_path: Path, *, custom: bool = False, reviewer: str | None = None
+    tmp_path: Path, *, custom: bool = False
 ) -> tuple[Path, Path]:
     """Return one Harness root and Runner directory for an Engineer's review.
 
     ``custom`` configures the role's own provider route; otherwise the role is
-    hosted and ``reviewer`` is the reviews the Harness Runtime Store selects,
-    where ``auto_review`` is the host review and any other value (or no file)
-    hands the decision to the user.
+    hosted, and its host reviews outside the Runner.
     """
     harness_root = tmp_path / "approval-harness"
     settings: dict = {"runtime": "codex", "model": "work-model"}
@@ -132,12 +121,6 @@ def _approval_harness(
         yaml.safe_dump({"roles": {"coding_team": {"engineer": settings}}}),
         encoding="utf-8",
     )
-    if reviewer is not None:
-        runtime_store = harness_root / ".codex"
-        runtime_store.mkdir(parents=True)
-        (runtime_store / "config.toml").write_text(
-            'approvals_reviewer = ' + json.dumps(reviewer) + "\n", encoding="utf-8",
-        )
     return harness_root, harness_root / ".graphtraj" / "runner"
 
 
@@ -172,19 +155,18 @@ def _approval_stub(
     decision: str,
     reviewed: list,
     request_id: str | None = None,
-    key_env: str = UNREACHABLE_APPROVAL["api_key_env"],
 ) -> None:
     """Answer the routed provider while recording the request it received."""
 
     # The route reads its key variable before it reaches the provider, so the
     # review can only be attempted while that variable resolves.
-    monkeypatch.setenv(key_env, "test-key")
+    monkeypatch.setenv(UNREACHABLE_APPROVAL["api_key_env"], "test-key")
 
     class Provider:
         def open(self, request, timeout):
             """Return one provider envelope, or fail as an unreachable route."""
             payload = json.loads(request.data)
-            reviewed.append({"url": request.full_url, **payload})
+            reviewed.append(payload)
             if decision == "unavailable":
                 raise OSError("provider unavailable")
             asked = json.loads(payload["messages"][1]["content"])["request_id"]
@@ -488,58 +470,22 @@ def test_over_level_replacement_needs_this_requests_own_accept(
     assert unreviewed == []
 
 
-def test_hosted_role_is_reviewed_on_the_connection_it_runs_on(
+def test_hosted_role_without_a_provider_route_is_refused(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A hosted role's default auto_review decides the over-level replacement."""
-    harness_root, runner_directory = _approval_harness(tmp_path, reviewer="auto_review")
-    caller = "132-ticket-handover0-engineer@engineer"
-    leader = "132-ticket-handover0-team_leader@team_leader"
-    # A hosted Session connects through the environment's provider; with no
-    # override it reaches the provider's own address.
-    monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
-    _write_session(runner_directory, caller, "engineer", leader)
-    _write_session(runner_directory, leader, "team_leader", None)
-
-    reviewed: list = []
-    _approval_stub(
-        monkeypatch, decision="accept", reviewed=reviewed,
-        key_env=HOSTED_APPROVAL["api_key_env"],
-    )
-    _replacement_request(runner_directory, caller, harness_root, leader, monkeypatch)
-    assert len(reviewed) == 1
-    assert reviewed[0]["url"] == HOSTED_APPROVAL["base_url"] + "/chat/completions"
-    assert reviewed[0]["model"] == HOSTED_APPROVAL["model"]
-
-    # The same host review refuses the request when it declines it.
-    _approval_stub(
-        monkeypatch, decision="decline", reviewed=[],
-        key_env=HOSTED_APPROVAL["api_key_env"],
-    )
-    with pytest.raises(RunnerError) as declined:
-        _replacement_request(runner_directory, caller, harness_root, leader, monkeypatch)
-    assert declined.value.code == "authority-denied"
-
-
-@pytest.mark.parametrize("reviewer", [None, "user"])
-def test_host_reviewed_by_the_user_is_not_obtained(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, reviewer: str | None
-) -> None:
-    """A host that reviews with the user is refused, and no review is faked."""
-    harness_root, runner_directory = _approval_harness(tmp_path, reviewer=reviewer)
+    """A hosted role's own review is not obtained, and none is invented."""
+    harness_root, runner_directory = _approval_harness(tmp_path)
     caller = "132-ticket-handover0-engineer@engineer"
     leader = "132-ticket-handover0-team_leader@team_leader"
     _write_session(runner_directory, caller, "engineer", leader)
     _write_session(runner_directory, leader, "team_leader", None)
 
     reviewed: list = []
-    _approval_stub(
-        monkeypatch, decision="accept", reviewed=reviewed,
-        key_env=HOSTED_APPROVAL["api_key_env"],
-    )
+    _approval_stub(monkeypatch, decision="accept", reviewed=reviewed)
     with pytest.raises(RunnerError) as refused:
         _replacement_request(runner_directory, caller, harness_root, leader, monkeypatch)
     assert refused.value.code == "authority-denied"
+    # The host reviews inside its own Session; the Runner called nothing.
     assert reviewed == []
 
 

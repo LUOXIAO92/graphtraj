@@ -16,11 +16,6 @@ from graphtraj.configuration.project_roles import RolePreset
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 
 
-# The provider a hosted role's Session runs on when the role configures no
-# provider of its own, so the same connection that serves the Session reviews.
-HOSTED_BASE_URL = "https://api.openai.com/v1"
-
-
 def approval_route(settings: Mapping[str, Any] | None, *, custom: bool) -> dict | None:
     """Validate the adapter-only route; hosted Sessions keep native Guardian."""
     if not custom:
@@ -57,41 +52,31 @@ def harness_approvals_reviewer(runtime_store: Path) -> Any | None:
     return document.get('approvals_reviewer')
 
 
-def role_approval_route(settings: RolePreset, runtime_store: Path) -> dict | None:
-    """Return the route one role's own Runtime reviews this request on.
+def role_approval_route(settings: RolePreset) -> dict | None:
+    """Return the route this role's own provider reviews on, if it has one.
 
-    A role with its own provider reviews on the adapter-only ``codex.approval``
-    route its Sessions already use. A hosted role is reviewed on the connection
-    its Session runs on, which is where the host's default ``auto_review``
-    decides. ``None`` means the host hands its approvals to the user instead of
-    a model review, which is the one decision this route cannot produce.
+    Only a role that runs on its own provider configures an adapter-only
+    ``codex.approval`` route. A hosted role is reviewed by the host's own
+    Guardian inside its Session, which the Runner may not stand in for, so no
+    route exists here.
     """
-    if settings.base_url is not None:
-        return approval_route(settings.codex, custom=True)
-    if harness_approvals_reviewer(runtime_store) != 'auto_review':
-        return None
-    hosted = {
-        'model': settings.model,
-        'base_url': os.environ.get('OPENAI_BASE_URL') or HOSTED_BASE_URL,
-        'api_key_env': settings.api_key_env or 'OPENAI_API_KEY',
-    }
-    # Validate the derived route through the same adapter rule a role route passes.
-    return approval_route({'approval': hosted}, custom=True)
+    return approval_route(settings.codex, custom=settings.base_url is not None)
 
 
-def review_role_request(settings: RolePreset, runtime_store: Path, context: Mapping[str, Any]) -> dict:
+def review_role_request(settings: RolePreset, context: Mapping[str, Any]) -> dict:
     """Return the reviewed decision for this exact request.
 
-    Only a validated model decision comes back. A host that reviews with the
-    user raises ``RUNTIME_REQUEST_UNHANDLED``: that window is not reachable
-    from the Runner, so this entry never stands in for the user's answer.
+    Only a validated decision from the role's own provider route comes back. A
+    hosted role is reviewed by its host, which this entry cannot consult for a
+    request that is no native Session operation, so it raises
+    ``RUNTIME_REQUEST_UNHANDLED`` rather than inventing a reviewer.
     """
-    route = role_approval_route(settings, runtime_store)
+    route = role_approval_route(settings)
     if route is None:
         raise RuntimeAdapterError(
             'RUNTIME_REQUEST_UNHANDLED',
-            'The host reviews approvals with the user, and the Runner has no channel '
-            'to open that window for this request.',
+            'The role has no provider route, and its own Runtime reviews outside '
+            'the Runner, so no decision can be obtained for this request.',
         )
     return asyncio.run(review_request(route, dict(context)))
 

@@ -53,7 +53,7 @@ def review_role_request(
     if settings.runtime == "codex":
         from graphtraj.runtimes.codex.approval import review_role_request as review
 
-        return review(settings, harness_root / ".codex", context)
+        return review(settings, context)
     raise RuntimeAdapterError(
         "ROLE_NOT_SUPPORTED",
         "The caller's role runs on a Runtime that reviews no request.",

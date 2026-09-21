@@ -73,10 +73,33 @@ def _completion(route: dict, context: dict) -> dict:
     key = os.environ.get(route['api_key_env'])
     if not key:
         raise ValueError('Approval API key environment variable is not set')
+    # JSON mode guarantees JSON syntax, not this request's response envelope.
+    # Supply the exact envelope without deriving a decision or repairing a reply.
+    schema = {
+        'type': 'object', 'additionalProperties': False,
+        'required': ['request_id', 'decision', 'rationale'],
+        'properties': {
+            'request_id': {
+                'type': 'integer' if type(context['request_id']) is int else 'string',
+                'const': context['request_id'],
+            },
+            'decision': {'type': 'string', 'enum': context['allowed_decisions']},
+            'rationale': {'type': 'string', 'minLength': 1},
+        },
+    }
+    transport = (
+        '\n\nYour answer must be one JSON instance matching the following response schema. '
+        'Return exactly the three required properties, no extras or markdown. '
+        'Copy request_id with its exact JSON value and type, including integer zero. '
+        'Do not output the schema itself or the API response_format setting: '
+        'type and json_object are not answer properties. '
+        'The policy determines the decision; this schema only defines its transport.\n'
+        + json.dumps(schema)
+    )
     body = {
         'model': route['model'],
         'messages': [
-            {'role': 'system', 'content': default_approval_policy()},
+            {'role': 'system', 'content': default_approval_policy() + transport},
             {'role': 'user', 'content': json.dumps(context, ensure_ascii=False)},
         ],
         'response_format': {'type': 'json_object'},

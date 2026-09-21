@@ -283,3 +283,53 @@ def test_offered_native_command_decisions_preserve_denial_semantics(
         assert reviewed['native_decisions'][decision] == expected
         assert reply['result'] == {'decision': expected}
         assert result['outcome'] == ('interrupted' if expected == 'cancel' else 'completed')
+
+
+@pytest.mark.parametrize('request_id,malformed', [(0, False), ('0', False), (0, True)])
+def test_response_contract_binds_exact_id_without_repairing_live_malformed_shape(
+    tmp_path: Path,
+    peer: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    request_id: int | str,
+    malformed: bool,
+) -> None:
+    """JSON mode carries an exact response schema; the observed invalid shape still fails."""
+    request, directory = managed(tmp_path, peer, monkeypatch)
+    monkeypatch.setenv('MANAGED_APPROVAL_REQUEST_ID', json.dumps(request_id))
+    captured = []
+
+    class Provider:
+        def open(self, http_request, timeout: int):
+            """Inspect the live transport contract and supply a controlled completion."""
+            body = json.loads(http_request.data)
+            captured.append(body)
+            result = {'decision': 'accept', 'rationale': 'The requested action is authorized.'}
+            if malformed:
+                result['type'] = 'json_object'  # Actual observed invalid provider envelope.
+            else:
+                result['request_id'] = request_id
+            return BytesIO(json.dumps({'choices': [{'finish_reason': 'stop',
+                'message': {'content': json.dumps(result)}}]}).encode())
+
+    monkeypatch.setattr(approval, 'build_opener', lambda *args: Provider())
+    result = CodexManagedExecution(request, 'request: authorize printf only', directory,
+        lambda *_: None, {}, directory / 'events.jsonl').run()
+    assert len(captured) == 1
+    body = captured[0]
+    schema = json.loads(body['messages'][0]['content'].splitlines()[-1])
+    assert body['response_format'] == {'type': 'json_object'}
+    assert schema['required'] == ['request_id', 'decision', 'rationale']
+    assert schema['additionalProperties'] is False
+    assert schema['properties']['request_id'] == {
+        'type': 'integer' if type(request_id) is int else 'string', 'const': request_id,
+    }
+    assert schema['properties']['decision']['enum'] == ['accept', 'decline']
+    reply = json.loads(next((tmp_path / 'native').glob('*.replies.jsonl')).read_text())
+    assert type(reply['id']) is type(request_id)
+    assert reply['id'] == request_id
+    if malformed:
+        assert result['outcome'] == 'runtime-error'
+        assert reply['error']['code'] == -32603
+    else:
+        assert result['outcome'] == 'completed'
+        assert reply['result'] == {'decision': 'accept'}

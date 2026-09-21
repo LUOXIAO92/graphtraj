@@ -171,7 +171,7 @@ def test_grouped_presets_apply_operator_settings_and_preserve_existing_history(
     root, _, state, _ = accepted_ticket
     roles_file = root / ".graphtraj/roles.yml"
     document = yaml.safe_load(roles_file.read_text())
-    presets = document["roles"]["coding-team"]
+    presets = document["roles"]["coding_team"]
     for name, preset in presets.items():
         preset.update(
             model="operator-" + name,
@@ -179,7 +179,7 @@ def test_grouped_presets_apply_operator_settings_and_preserve_existing_history(
             reasoning_effort="high",
         )
     if flat_roles:
-        document["roles"] = {**presets, "delivery-state": document["roles"]["delivery-state"]}
+        document["roles"] = {**presets, "delivery_state": document["roles"]["delivery_state"]}
     roles_file.write_text(yaml.safe_dump(document))
     roles_before = roles_file.read_bytes()
     retained = {
@@ -216,7 +216,7 @@ def test_grouped_presets_apply_operator_settings_and_preserve_existing_history(
     for record in records:
         if record["role"] == "delivery-state":
             continue
-        selected = presets[record["role"]]
+        selected = presets[record["role"].replace("-", "_")]
         assert record["argv"][record["argv"].index("--model") + 1] == selected["model"]
         assert record["connection"]["base_url"] == selected["base_url"]
         settings = {
@@ -300,7 +300,7 @@ def test_main_resolves_observed_textual_conflict_then_validates_dev(
     root, worktrees, state, candidate = accepted_ticket
     roles_file = root / ".graphtraj/roles.yml"
     roles = yaml.safe_load(roles_file.read_text())
-    roles["roles"]["coding-team"]["merge-resolver"]["model"] = "gpt-5.6-luna"
+    roles["roles"]["coding_team"]["merge_resolver"]["model"] = "gpt-5.6-luna"
     roles_file.write_text(yaml.safe_dump(roles))
     dev = worktrees / "dev"
     (dev / "TEAM_ROUND_DELIVERED.txt").write_text("conflicting integration work\n")

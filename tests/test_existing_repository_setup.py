@@ -103,14 +103,14 @@ def test_setup_creates_grouped_coding_presets_and_shared_delivery_state(
         )
     )
     assert set(role_config) == {"roles"}
-    assert set(role_config["roles"]) == {"coding-team", "delivery-state"}
-    roles = role_config["roles"]["coding-team"]
+    assert set(role_config["roles"]) == {"coding_team", "delivery_state"}
+    roles = role_config["roles"]["coding_team"]
     assert set(roles) == {
-        "team-leader",
+        "team_leader",
         "engineer",
-        "standards-reviewer",
-        "spec-reviewer",
-        "merge-resolver",
+        "standards_reviewer",
+        "spec_reviewer",
+        "merge_resolver",
     }
     assert "main" not in roles
     for name, preset in roles.items():
@@ -119,10 +119,10 @@ def test_setup_creates_grouped_coding_presets_and_shared_delivery_state(
         assert set(preset).issubset(
             {"runtime", "model", "base_url", "api_key_env", "allow_runtime_swarm"}
         )
-        if name != "team-leader":
+        if name != "team_leader":
             assert "allow_runtime_swarm" not in preset
-    assert roles["team-leader"]["allow_runtime_swarm"] is True
-    assert role_config["roles"]["delivery-state"]["runtime"] == "codex"
+    assert roles["team_leader"]["allow_runtime_swarm"] is True
+    assert role_config["roles"]["delivery_state"]["runtime"] == "codex"
     assert not (temporary_git_repository / ".codex" / "agents").exists()
 
 

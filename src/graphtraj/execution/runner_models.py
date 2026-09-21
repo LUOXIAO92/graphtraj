@@ -6,23 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
-from graphtraj.configuration.project_roles import ProjectRoles, RolePreset, logical_role
-
-
-ROLE_ALIAS_MARKERS = {
-    "team-leader": "l",
-    "delivery-state": "d",
-    "merge-resolver": "m",
-    "engineer": "e",
-    "standards-reviewer": "r",
-    "spec-reviewer": "r",
-}
-
-
-def role_alias_marker(role: str) -> str:
-    """Return the stable alias marker for a configured or temporary role."""
-
-    return ROLE_ALIAS_MARKERS.get(logical_role(role), "x")
+from graphtraj.configuration.project_roles import ProjectRoles, RolePreset
 
 
 PUBLIC_ERROR_CODES = frozenset(

@@ -269,9 +269,9 @@ def test_installed_runner_obeys_the_explicit_leader_decision_for_a_run_free_team
     )
     roles_file = harness_root / '.graphtraj' / 'roles.yml'
     roles = yaml.safe_load(roles_file.read_text())
-    roles['roles']['coding-team']['team-leader'].pop('allow_runtime_swarm', None)
+    roles['roles']['coding_team']['team_leader'].pop('allow_runtime_swarm', None)
     if swarm is not None:
-        roles['roles']['coding-team']['team-leader']['allow_runtime_swarm'] = swarm
+        roles['roles']['coding_team']['team_leader']['allow_runtime_swarm'] = swarm
     roles_file.write_text(yaml.safe_dump(roles))
     policy_log = tmp_path / 'policy.jsonl'
     environment['FAKE_CODEX_POLICY_LOG'] = str(policy_log)
@@ -379,7 +379,7 @@ def test_installed_runner_obeys_the_explicit_leader_decision_for_a_run_free_team
             Path(skill['path']).parent.name
             for skill in call['settings']['skills']['config'] if skill['enabled']
         } == required_skills[call['role']]
-        registration = harness_root / '.graphtraj/runner/sessions/74-complete-team-round@l1/child-registration.yml'
+        registration = harness_root / '.graphtraj/runner/sessions/74-complete_team_round-handover0-team_leader@team_leader/child-registration.yml'
         batch_directory = harness_root / '.graphtraj/state/batches'
         assert (filesystem.get(str(registration)) == 'write') is leader
         assert (filesystem.get(str(batch_directory)) == 'write') is leader
@@ -748,7 +748,7 @@ def test_installed_runner_retries_an_unregistered_team_and_preserves_history(
     assert current['active_team_ordinal'] == 1
     assert current['current_candidate']
     team = yaml.safe_load((team_directory / 'team.yml').read_text())
-    assert team['members']['team_leader']['session_ref'].endswith('@l2')
+    assert team['members']['team_leader']['session_ref'].endswith('@team_leader_2')
     assert all(retained_state(path) == content for path, content in retained.items())
     accepted_ticket = (ticket_directory / 'ticket.yml').read_bytes()
     accepted_team = (team_directory / 'team.yml').read_bytes()

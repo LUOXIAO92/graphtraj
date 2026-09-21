@@ -338,7 +338,7 @@ def test_installed_team_corrects_missing_member_evidence_in_its_existing_session
     state = yaml.safe_load((ticket / 'ticket.yml').read_text())
     team = yaml.safe_load((ticket / 'teams/1/team.yml').read_text())
     if target == 'delivery-state':
-        trace = next((ticket / 'teams/1/traces').glob('*@d*/events.jsonl'))
+        trace = next((ticket / 'teams/1/traces').glob('*@delivery_state/events.jsonl'))
     else:
         seat = {
             'engineer': 'engineer',
@@ -512,7 +512,7 @@ def test_provider_failure_returns_to_the_caller_for_an_explicit_same_session_ret
         prompt = (harness / current['worktree'] / '.scratch/recovery-prompt-spec-reviewer').read_text()
         assert 'Failure:' in prompt and 'Evidence:' in prompt and 'Expected result:' in prompt
     if target == 'provider-rework':
-        state_trace = next((ticket / 'teams/1/traces').glob('*@d*/events.jsonl'))
+        state_trace = next((ticket / 'teams/1/traces').glob('*@delivery_state/events.jsonl'))
         assert state_trace.read_text().count('turn_context') == 9
 
 
@@ -845,7 +845,7 @@ def test_invalid_review_report_stops_the_matching_state_request_without_retry(
     ticket = harness / '.graphtraj/state/tickets/76-session-alias-control'
     state = yaml.safe_load((ticket / 'ticket.yml').read_text())
     assert state['status'] == 'reviewing'
-    state_trace = next((ticket / 'teams/1/traces').glob('*@d*/events.jsonl'))
+    state_trace = next((ticket / 'teams/1/traces').glob('*@delivery_state/events.jsonl'))
     assert state_trace.read_text().count('turn_context') == 6
 
 
@@ -880,7 +880,7 @@ def test_access_failure_returns_to_the_responsible_operator_without_agent_reflec
     assert error['code'] == 'invalid-config'
     assert 'responsible operator' in error['message']
     ticket = harness / '.graphtraj/state/tickets/76-session-alias-control'
-    engineer = next((ticket / 'teams/1/traces').glob('*@e*/events.jsonl'))
+    engineer = next((ticket / 'teams/1/traces').glob('*@engineer/events.jsonl'))
     assert 'Recovery required:' not in engineer.read_text()
 
 
@@ -1130,7 +1130,7 @@ def test_completed_current_configuration_failure_returns_to_the_operator(
     assert error['code'] == 'invalid-config'
     assert 'responsible operator' in error['message']
     ticket = harness / '.graphtraj/state/tickets/76-session-alias-control'
-    reviewer = next((ticket / 'teams/1/traces').glob('*@r2/events.jsonl'))
+    reviewer = next((ticket / 'teams/1/traces').glob('*@spec_reviewer/events.jsonl'))
     assert 'Recovery required:' not in reviewer.read_text()
 
 
@@ -1291,7 +1291,7 @@ def test_missing_current_review_can_be_corrected_in_the_retained_session(
         config = tomllib.loads(config_file.read_text()) if config_file.exists() else {}
         roles_file = harness / '.graphtraj/roles.yml'
         roles = yaml.safe_load(roles_file.read_text())
-        roles['roles']['coding-team']['spec-reviewer'].update(
+        roles['roles']['coding_team']['spec_reviewer'].update(
             model=os.environ.get('CODEX_RECOVERY_MODEL', config.get('model', 'gpt-5.6')),
             reasoning_effort='low',
         )
@@ -1300,7 +1300,7 @@ def test_missing_current_review_can_be_corrected_in_the_retained_session(
         environment.pop('PYTHONPATH', None)
         print('Recovery probe control: ' + json.dumps({
             'root': str(harness), 'runner': str(installed_commands.runner),
-            'reviewer': '76-session-alias-control@r2',
+            'reviewer': '76-session_alias_control-handover0-spec_reviewer@spec_reviewer',
         }), flush=True)
 
         def stop_native_probe() -> None:

@@ -127,6 +127,15 @@ def test_installed_alias_control_resumes_and_interrupts_one_team_session(
     mapping = yaml.safe_load(mapping_file.read_text(encoding="utf-8"))
     alias = mapping["alias"]
     session = mapping["session"]
+    # The first Team names the Ticket, handover0, the configured role and the
+    # entity for every Session it starts.
+    assert alias == "76-session_alias_control-handover0-team_leader@team_leader"
+    assert all(
+        yaml.safe_load(path.read_text(encoding="utf-8"))["alias"].startswith(
+            "76-session_alias_control-handover0-"
+        )
+        for path in session_root.glob("*/mapping.yml")
+    )
     ticket_directory = (
         harness_root / ".graphtraj" / "state" / "tickets" / "76-session-alias-control"
     )
@@ -440,7 +449,7 @@ def test_installed_send_resumes_an_unregistered_leader_session(
         {
             "ticket_id": "76",
             "role": "engineer",
-            "alias": "76-session-alias-control@e1",
+            "alias": "76-session_alias_control-handover0-engineer@engineer",
             "launch_status": "registered",
         }
     ]
@@ -792,3 +801,90 @@ def test_installed_status_reports_native_requests_and_commit_diff(
             }
         ]
     }
+
+
+def _retained_session(
+    harness_root: Path,
+    worktree: Path,
+    alias: str,
+    role: str,
+) -> Path:
+    """Write one recorded Session and its finished execution without a Runtime."""
+    directory = harness_root / ".graphtraj" / "runner" / "sessions" / alias
+    directory.mkdir(parents=True)
+    (directory / "events.jsonl").write_text("", encoding="utf-8")
+    (directory / "execution.yml").write_text("outcome: completed\n", encoding="utf-8")
+    (directory / "mapping.yml").write_text(
+        yaml.safe_dump(
+            {
+                "alias": alias,
+                "runtime": "codex",
+                "session": "native-session",
+                "ticket_id": "76",
+                "team_generation": 1,
+                "role": role,
+                "parent": None,
+                "retained_batch_file": "batch.yml",
+                "worktree_path": str(worktree),
+                "trace_file": str(directory / "events.jsonl"),
+                "worker_pid": 1,
+                "runtime_pid": 1,
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    return directory
+
+
+def test_installed_status_accepts_configured_entity_names_and_retains_history(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    """An arbitrary entity name is locatable, an invalid one is refused, and history keeps its spelling."""
+    harness_root, _, integration, environment = configure_harness(
+        installed_commands,
+        temporary_git_repository,
+        fake_codex,
+        tmp_path,
+    )
+    current_alias = "76-session_alias_control-handover0-engineer@小明"
+    retained_alias = "76-session-alias-control@e1"
+    current = _retained_session(harness_root, integration, current_alias, "engineer")
+    retained = _retained_session(harness_root, integration, retained_alias, "engineer")
+    current_record = (current / "mapping.yml").read_bytes()
+    retained_record = (retained / "mapping.yml").read_bytes()
+
+    located = run_process(
+        [str(installed_commands.runner), "status", current_alias, retained_alias],
+        cwd=harness_root,
+        env=environment,
+    )
+
+    assert located.returncode == 0, located.stdout + located.stderr
+    assert [
+        entry["alias"] for entry in yaml.safe_load(located.stdout)["aliases"]
+    ] == [current_alias, retained_alias]
+
+    for refused_alias in (
+        "76-session_alias_control-handover0-engineer@xiao-ming",
+        "76-session_alias_control-handover0-engineer@xiao ming",
+        "76-session_alias_control-handover0-engineer@../engineer",
+        "76-session_alias_control-handover0-engineer@小..明",
+        "76-session_alias_control-handover0-engineer@first@second",
+    ):
+        refused = run_process(
+            [str(installed_commands.runner), "status", refused_alias],
+            cwd=harness_root,
+            env=environment,
+        )
+        assert refused.returncode == 1, refused_alias
+        assert [
+            entry["error"]["code"]
+            for entry in yaml.safe_load(refused.stdout)["aliases"]
+        ] == ["alias-not-found"], refused_alias
+
+    assert (current / "mapping.yml").read_bytes() == current_record
+    assert (retained / "mapping.yml").read_bytes() == retained_record

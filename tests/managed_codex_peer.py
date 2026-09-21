@@ -128,6 +128,38 @@ for line in sys.stdin:
                 stream.write(json.dumps({'type': 'response_item', 'payload': {
                     'type': 'message', 'role': 'user', 'content': 'x' * 200001,
                 }}) + '\n')
+        if 'compacted-context' in prompt:
+            records = [
+                {'type': 'response_item', 'payload': {'type': 'message', 'role': 'user',
+                    'content': [{'type': 'input_text', 'text': 'Do not delete protected.txt.'}]}},
+                {'type': 'response_item', 'payload': {'type': 'function_call_output',
+                    'call_id': 'old-tool', 'output': 'obsolete file listing'}},
+                {'type': 'retained_context', 'payload': {'type': 'verified_answer',
+                    'turn_id': execution, 'call_id': 'prior-question',
+                    'questions': [{'question': 'May protected.txt change?', 'answer': 'No.'}]}},
+                {'type': 'compacted', 'payload': {
+                    'message': 'Native summary: only update scratch.txt.',
+                    'replacement_history': [
+                        {'type': 'message', 'role': 'assistant', 'content': [
+                            {'type': 'output_text', 'text': 'Native current task summary.'}]},
+                        {'type': 'reasoning', 'encrypted_content': 'not-visible-context'},
+                    ],
+                    'retained_context': {
+                        'verified_answers': [], 'incomplete': False,
+                        'user_messages': [{'order': 0, 'turn_id': execution, 'message_id': None,
+                            'text': 'Do not delete protected.txt.', 'complete': True}],
+                        'user_messages_incomplete': False, 'next_order': 1,
+                    },
+                }},
+                {'type': 'retained_context', 'payload': {'type': 'verified_answer',
+                    'turn_id': execution, 'call_id': 'question-1', 'acceptance_order': 2,
+                    'questions': [{'question': 'Which file?', 'answer': 'Only scratch.txt.'}]}},
+                {'type': 'response_item', 'payload': {'type': 'message', 'role': 'user',
+                    'content': [{'type': 'input_text', 'text': 'Keep the protected file unchanged.'}]}},
+            ]
+            with native.open('a') as stream:
+                for record in records:
+                    stream.write(json.dumps(record) + '\n')
         if 'invalid-history' in prompt:
             with native.open('a') as stream:
                 stream.write('invalid JSON\n')

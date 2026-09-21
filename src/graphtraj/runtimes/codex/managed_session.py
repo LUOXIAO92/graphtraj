@@ -246,7 +246,7 @@ class CodexManagedExecution:
             'default_permissions': params['config'].get('default_permissions'),
             'item': self.approval_items.get(request.params.get('itemId')),
         }
-        context['history'] = self._approval_history()
+        context.update(self._approval_context())
         if request.method == 'item/fileChange/requestApproval' and not context['item']:
             raise RuntimeAdapterError(
                 'RUNTIME_REQUEST_FAILED', 'File changes are not available for review.',
@@ -261,21 +261,47 @@ class CodexManagedExecution:
             )}
         return result
 
-    def _approval_history(self) -> list[dict]:
-        """Read this Session's visible context, including authorization before resume."""
-        history = []
+    def _approval_context(self) -> dict:
+        """Map native rollout snapshots and subsequent items without new compaction.
+
+        Codex 0.154.0 history/src/rollout_payload.rs defines compacted.message,
+        replacement_history, retained_context, and separate turn_context and
+        retained_context events. Preserve user/developer inputs across snapshots
+        so compaction cannot remove explicit task restrictions from this review.
+        """
+        visible = {
+            'message', 'function_call', 'function_call_output',
+            'custom_tool_call', 'custom_tool_call_output',
+        }
+        context = {'history': [], 'authorization_messages': [],
+                   'compaction': None, 'retained_context_events': [], 'turn_context': None}
         if not self.trace_file.exists():
-            return history
+            return context
         with self.trace_file.open(encoding='utf-8') as stream:
             for line in stream:
                 record = json.loads(line)
                 payload = record.get('payload', {})
-                if record.get('type') == 'response_item' and payload.get('type') in {
-                    'message', 'function_call', 'function_call_output',
-                    'custom_tool_call', 'custom_tool_call_output',
-                }:
-                    history.append(payload)
-        return history
+                kind = record.get('type')
+                if kind == 'response_item' and payload.get('type') in visible:
+                    context['history'].append(payload)
+                    if payload.get('type') == 'message' and payload.get('role') in {'user', 'developer'}:
+                        context['authorization_messages'].append(payload)
+                elif kind == 'compacted':
+                    # Use the native replacement and summary rather than summarize
+                    # or silently retain superseded tool evidence ourselves.
+                    replacement = payload.get('replacement_history')
+                    context['history'] = [
+                        item for item in (replacement or []) if item.get('type') in visible
+                    ]
+                    context['compaction'] = {
+                        'message': payload.get('message'),
+                        'retained_context': payload.get('retained_context'),
+                    }
+                elif kind == 'retained_context':
+                    context['retained_context_events'].append(payload)
+                elif kind == 'turn_context':
+                    context['turn_context'] = payload
+        return context
 
     def _pending_requests(self) -> list[dict]:
         """Snapshot native contents with the identity of this execution's owner."""

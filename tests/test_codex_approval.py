@@ -206,3 +206,40 @@ def test_native_history_is_not_replaced_by_an_adapter_denial(
         assert result['outcome'] == 'runtime-error'
         assert reply['error']['code'] == -32603
         assert not calls
+
+
+def test_official_policy_and_native_compaction_reach_review(
+    tmp_path: Path, peer: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Official default rules and current native context reach the provider together."""
+    request, directory = managed(tmp_path, peer, monkeypatch)
+    calls = []
+    completion_stub(monkeypatch, 'accept', calls)
+    result = CodexManagedExecution(request, 'request:compacted-context; update scratch.txt only',
+        directory, lambda *_: None, {}, directory / 'events.jsonl').run()
+    assert result['outcome'] == 'completed'
+    messages = calls[0][1]['messages']
+    # This asserts the sourced policy reaches the HTTP boundary, not its prose tokens.
+    assets = Path(approval.__file__).with_name('policy')
+    official = (assets / 'policy_template.md').read_text().rstrip().replace(
+        '{{ tenant_policy_config }}', (assets / 'policy.md').read_text().strip())
+    assert messages[0]['role'] == 'system'
+    assert messages[0]['content'].startswith(official)
+    reviewed = json.loads(messages[1]['content'])
+    assert reviewed['authorization'].endswith('update scratch.txt only')
+    assert reviewed['developer_instructions'] == 'Do not delete files.'
+    assert reviewed['turn_context']['model'] == 'work-model'
+    assert reviewed['history'] == [
+        {'type': 'message', 'role': 'assistant', 'content': [
+            {'type': 'output_text', 'text': 'Native current task summary.'}]},
+        {'type': 'message', 'role': 'user', 'content': [
+            {'type': 'input_text', 'text': 'Keep the protected file unchanged.'}]},
+    ]
+    assert reviewed['authorization_messages'][0]['content'][0]['text'] == 'Do not delete protected.txt.'
+    assert reviewed['authorization_messages'][-1]['content'][0]['text'] == 'Keep the protected file unchanged.'
+    assert reviewed['compaction']['message'] == 'Native summary: only update scratch.txt.'
+    assert reviewed['compaction']['retained_context']['user_messages'][0]['complete'] is True
+    assert [event['questions'][0]['answer'] for event in reviewed['retained_context_events']] == [
+        'No.', 'Only scratch.txt.',
+    ]
+    assert reviewed['request']['command'] == 'printf APPROVAL_121'

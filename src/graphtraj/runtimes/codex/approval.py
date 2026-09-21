@@ -6,13 +6,19 @@ import asyncio
 import json
 import os
 import re
+import tomllib
 from pathlib import Path
 from typing import Any, Mapping
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
-from graphtraj.configuration.project_roles import load_project_roles
+from graphtraj.configuration.project_roles import RolePreset
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
+
+
+# The provider a hosted role's Session runs on when the role configures no
+# provider of its own, so the same connection that serves the Session reviews.
+HOSTED_BASE_URL = "https://api.openai.com/v1"
 
 
 def approval_route(settings: Mapping[str, Any] | None, *, custom: bool) -> dict | None:
@@ -33,17 +39,61 @@ def approval_route(settings: Mapping[str, Any] | None, *, custom: bool) -> dict 
     return dict(route)
 
 
-def role_approval_route(harness_root: Path, role_reference: str) -> dict | None:
-    """Return the approval route one mapped role configures, if any.
+def harness_approvals_reviewer(runtime_store: Path) -> Any | None:
+    """Return the approvals reviewer the Harness Runtime Store selects.
 
-    A route exists only for a role that runs on its own provider, which is the
-    same condition the Codex Adapter applies before it hands a native approval
-    request to :func:`review_request`; a hosted role keeps the native Guardian
-    and has no route here.
+    One Session runs with its Ticket Worktree as the native project root, so
+    the Runtime Store configuration sits outside the native lookup. Only this
+    selected value is forwarded; a missing, unreadable or unparsable file adds
+    no override and keeps the native default.
     """
-    roles = load_project_roles(harness_root)
-    settings = roles.presets[roles.resolve(role_reference)]
-    return approval_route(settings.codex, custom=settings.base_url is not None)
+    config = runtime_store / 'config.toml'
+    try:
+        document = tomllib.loads(config.read_text(encoding='utf-8'))
+    except FileNotFoundError:
+        return None
+    except (OSError, UnicodeError, tomllib.TOMLDecodeError):
+        return None
+    return document.get('approvals_reviewer')
+
+
+def role_approval_route(settings: RolePreset, runtime_store: Path) -> dict | None:
+    """Return the route one role's own Runtime reviews this request on.
+
+    A role with its own provider reviews on the adapter-only ``codex.approval``
+    route its Sessions already use. A hosted role is reviewed on the connection
+    its Session runs on, which is where the host's default ``auto_review``
+    decides. ``None`` means the host hands its approvals to the user instead of
+    a model review, which is the one decision this route cannot produce.
+    """
+    if settings.base_url is not None:
+        return approval_route(settings.codex, custom=True)
+    if harness_approvals_reviewer(runtime_store) != 'auto_review':
+        return None
+    hosted = {
+        'model': settings.model,
+        'base_url': os.environ.get('OPENAI_BASE_URL') or HOSTED_BASE_URL,
+        'api_key_env': settings.api_key_env or 'OPENAI_API_KEY',
+    }
+    # Validate the derived route through the same adapter rule a role route passes.
+    return approval_route({'approval': hosted}, custom=True)
+
+
+def review_role_request(settings: RolePreset, runtime_store: Path, context: Mapping[str, Any]) -> dict:
+    """Return the reviewed decision for this exact request.
+
+    Only a validated model decision comes back. A host that reviews with the
+    user raises ``RUNTIME_REQUEST_UNHANDLED``: that window is not reachable
+    from the Runner, so this entry never stands in for the user's answer.
+    """
+    route = role_approval_route(settings, runtime_store)
+    if route is None:
+        raise RuntimeAdapterError(
+            'RUNTIME_REQUEST_UNHANDLED',
+            'The host reviews approvals with the user, and the Runner has no channel '
+            'to open that window for this request.',
+        )
+    return asyncio.run(review_request(route, dict(context)))
 
 
 class _NoRedirect(HTTPRedirectHandler):

@@ -27,7 +27,7 @@ from graphtraj.runtimes.runtime_adapter import (
 )
 from graphtraj.execution.runner_transport import record_runtime_identity, runtime_turn_outcome
 from graphtraj.execution.runner_io import write_yaml_durably
-from graphtraj.runtimes.codex.approval import approval_route
+from graphtraj.runtimes.codex.approval import approval_route, harness_approvals_reviewer
 from graphtraj.configuration.project_roles import logical_role
 from graphtraj.configuration.role_definitions import ResolvedChildRole
 from graphtraj.workspace.git_repository import GitRepositoryError, SourceRepository
@@ -151,7 +151,7 @@ class _CodexRole:
                 filesystem[str(skill.path.parent)] = "read"
         approvals_reviewer = (
             "user" if self.approval is not None
-            else _harness_approvals_reviewer(runtime_store)
+            else harness_approvals_reviewer(runtime_store)
         )
         overrides = (
             *native_settings.items(),
@@ -815,24 +815,6 @@ def _reject_legacy_user_sandbox_config(codex_home: Path | None = None) -> None:
             "The loaded Codex user configuration contains sandbox_mode, "
             "which disables the selected permission profile.",
         )
-
-
-def _harness_approvals_reviewer(runtime_store: Path) -> Any | None:
-    """Return the approvals reviewer the Harness Runtime Store selects.
-
-    One Session runs with its Ticket Worktree as the native project root, so
-    the Runtime Store configuration sits outside the native lookup. Only this
-    selected value is forwarded; a missing, unreadable or unparsable file adds
-    no override and keeps the native default.
-    """
-    config = runtime_store / "config.toml"
-    try:
-        document = tomllib.loads(config.read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        return None
-    except (OSError, UnicodeError, tomllib.TOMLDecodeError):
-        return None
-    return document.get("approvals_reviewer")
 
 
 def _resume_arguments(launch_arguments: List[str], session: str) -> List[str]:

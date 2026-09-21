@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 import os
 import re
@@ -18,8 +17,7 @@ from graphtraj.execution.runner_models import RunnerError, StatusResponse
 from graphtraj.execution.runner_connection import session_operation
 from graphtraj.execution.runner_heartbeat import ownership_is_held, read_heartbeat
 from graphtraj.execution.runner_process import process_ancestors
-from graphtraj.runtimes.codex.approval import role_approval_route, review_request
-from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
+from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError, review_role_request
 from graphtraj.workspace.runner_project import discover_runner_directory
 
 
@@ -213,15 +211,15 @@ def _require_reviewed_replacement(
 ) -> None:
     """Continue one over-level replacement only with this request's approval.
 
-    The review is the Runtime's existing approval path: the routed model that
-    the caller's own role configures, asked once for this request and bound to
-    the caller and the target seat it names. A refusal, a cancellation, no
-    answer, a failing route or no usable route all end in the same refusal, and
-    no failure escapes as an exception. A caller with no live Session owner is
-    Main or the user, which has no mapped role to review with: the native
-    approval window belongs to a running Session's Runtime, which the Runner
-    cannot open from here, so such a request is refused rather than continued
-    unreviewed.
+    The review is the caller's own Runtime asking its own reviewer for this one
+    request, bound to the caller and the target seat it names: a role's own
+    provider route, or a hosted role's host review. A refusal, a cancellation,
+    no answer, a failing route or a decision this Runtime cannot obtain all end
+    in a refusal, and no failure escapes as an exception. A caller with no live
+    Session owner is Main or the user, which has no mapped role to review with:
+    the user's own window belongs to a running Session's Runtime, which the
+    Runner cannot open from here, so such a request is refused rather than
+    continued unreviewed.
     """
     if caller is None:
         raise _replacement_denied(
@@ -229,19 +227,6 @@ def _require_reviewed_replacement(
         )
     caller_mapping, _ = read_alias_mapping(runner_directory, caller)
     role_reference = caller_mapping.get("role_reference") or caller_mapping["role"]
-    try:
-        route = role_approval_route(harness_root, role_reference)
-    except (ProjectRolesError, RuntimeAdapterError, OSError, UnicodeError) as error:
-        raise RunnerError(
-            "invalid-config",
-            "The approval route configured for the caller's role is unusable, "
-            "so the replacement was not executed.",
-        ) from error
-    if route is None:
-        raise _replacement_denied(
-            "the caller's role configures no approval route, and no Runtime "
-            "window can be opened for this request"
-        )
     context = {
         "request_id": uuid.uuid4().hex,
         "operation": "replace-session",
@@ -255,8 +240,19 @@ def _require_reviewed_replacement(
         "allowed_decisions": ["accept", "decline"],
     }
     try:
-        decision = asyncio.run(review_request(route, context))
+        decision = review_role_request(harness_root, role_reference, context)
+    except ProjectRolesError as error:
+        raise RunnerError(
+            "invalid-config",
+            "The caller's role cannot be resolved for review, so the "
+            "replacement was not executed.",
+        ) from error
     except RuntimeAdapterError as error:
+        if error.code == "RUNTIME_REQUEST_UNHANDLED":
+            raise _replacement_denied(
+                "the caller's Runtime reviews this on the user's own window, "
+                "which cannot be opened for this request"
+            ) from error
         # The review was attempted and produced no decision. This is not a
         # refusal by the review, so it keeps its own outcome instead of being
         # reported as a denied request.

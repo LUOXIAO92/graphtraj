@@ -27,7 +27,7 @@ from graphtraj.runtimes.runtime_adapter import (
 )
 from graphtraj.execution.runner_transport import record_runtime_identity, runtime_turn_outcome
 from graphtraj.execution.runner_io import write_yaml_durably
-from graphtraj.configuration.project_roles import ROLE_REFERENCES
+from graphtraj.configuration.project_roles import logical_role
 from graphtraj.configuration.role_definitions import ResolvedChildRole
 from graphtraj.workspace.git_repository import GitRepositoryError, SourceRepository
 from graphtraj.configuration.skill_check import (
@@ -1144,7 +1144,7 @@ def refresh_codex_report_paths(
 ) -> Dict[str, Any]:
     """Refresh only exact report and direct-control permissions in one resume."""
 
-    resolved_role = ROLE_REFERENCES.get(role, role)
+    resolved_role = logical_role(role)
     arguments, request_worktree = _validate_launch_request(request)
     if request_worktree != worktree:
         raise CodexAdapterError(

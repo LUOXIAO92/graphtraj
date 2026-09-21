@@ -47,7 +47,7 @@ def test_configured_engineer_preset_serves_the_engineer_seat(tmp_path: Path) -> 
     }
     path.write_text(yaml.safe_dump(document))
 
-    preset = load_project_roles(tmp_path).presets["engineer"]
+    preset = load_project_roles(tmp_path).presets["coding-team.engineer"]
 
     assert preset.model == "operator-selected-model"
     assert preset.reasoning_effort == "high"
@@ -76,19 +76,22 @@ def test_engineer_batch_reference_resolves_to_the_unified_role(role: str) -> Non
     assert task.requested_skills == ("implement",)
 
 
-def test_engineer_tier_names_are_no_longer_presets(tmp_path: Path) -> None:
-    """A tiered preset is rejected instead of silently configuring one Engineer."""
+def test_a_tier_named_group_role_keeps_its_own_reference(tmp_path: Path) -> None:
+    """A tier is one configured role instead of silently serving the Engineer seat."""
     path = tmp_path / ".graphtraj" / "roles.yml"
     path.parent.mkdir()
     path.write_text(
         default_roles_content().replace("  engineer:", "  engineer-senior:")
     )
 
+    roles = load_project_roles(tmp_path)
+
+    assert "coding-team.engineer-senior" in roles.presets
     with pytest.raises(ProjectRolesError) as error:
-        load_project_roles(tmp_path)
+        roles.preset("coding-team.engineer")
 
     assert any(
-        "engineer-senior" in diagnostic for diagnostic in error.value.diagnostics
+        "coding-team.engineer" in diagnostic for diagnostic in error.value.diagnostics
     )
 
 
@@ -128,13 +131,14 @@ def test_retained_tiered_batch_still_resolves_for_recovery(tmp_path: Path) -> No
 
     task = read_batch(retained, tmp_path).tasks[0]
     role = resolve_child_role(
-        task.policy_role, default_project_roles().presets["engineer"]
+        task.policy_role, default_project_roles().presets["coding-team.engineer"]
     )
 
     assert retained.read_bytes() == original
     assert task.role == "engineer"
     assert role.name == "engineer"
-    assert role.required_skills == ("implement", "ponytail", "tdd")
+    # The installed Engineer template is the source of its required Skills.
+    assert role.required_skills == ("implement", "ponytail")
 
 
 @pytest.mark.parametrize(

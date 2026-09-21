@@ -7,18 +7,18 @@ import re
 from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
-from typing import Mapping
 
 import yaml
 
 from graphtraj.configuration.project_roles import (
-    ROLE_NAMES,
-    ROLE_REFERENCES,
+    ROLE_REFERENCE,
     ProjectRolesError,
-    RolePreset,
     _UniqueKeyLoader,
+    logical_role,
     parse_inline_role,
+    retained_role_reference,
 )
+from graphtraj.configuration.role_definitions import has_packaged_role
 from graphtraj.execution.runner_models import Batch, RunnerError, Task
 
 
@@ -103,16 +103,6 @@ def parse_batch(document: object) -> Batch:
     )
 
 
-def resolved_role_preset(
-    task: Task, role_bindings: Mapping[str, RolePreset]
-) -> RolePreset:
-    """Return one task's immutable inline or reusable Runtime settings."""
-
-    if task.inline_preset is not None:
-        return task.inline_preset
-    return role_bindings[task.role]
-
-
 def _read_task(
     task_document: object,
 ) -> Task:
@@ -143,13 +133,15 @@ def _read_task(
         )
     role_value = task_document["role"]
     inline_preset = None
+    role_reference = None
     if isinstance(role_value, str):
-        role = ROLE_REFERENCES.get(role_value, role_value)
-        if role not in ROLE_NAMES:
+        role_reference = retained_role_reference(role_value)
+        if ROLE_REFERENCE.fullmatch(role_reference) is None:
             raise RunnerError(
                 "ROLE_NOT_CONFIGURED",
-                "The selected logical Engineer role is not configured.",
+                "The selected role reference is not a configured preset reference.",
             )
+        role = logical_role(role_reference)
         policy_role = role
     elif isinstance(role_value, dict):
         try:
@@ -161,11 +153,12 @@ def _read_task(
                     " ".join(error.diagnostics)
                 ),
             ) from error
-        policy_role = role if role in ROLE_NAMES else "temporary-role"
+        role_reference = next(iter(role_value))
+        policy_role = role if has_packaged_role(role) else "temporary-role"
     else:
         raise RunnerError(
             "ROLE_NOT_CONFIGURED",
-            "The selected logical Engineer role is not configured.",
+            "The selected role reference is not a configured preset reference.",
         )
     requested_skills = task_document.get("skills", [])
     if (
@@ -196,6 +189,7 @@ def _read_task(
         requested_skills=tuple(requested_skills),
         inline_preset=inline_preset,
         policy_role=policy_role,
+        role_reference=role_reference,
     )
 
 

@@ -11,6 +11,7 @@ from pathlib import Path
 
 import yaml
 
+from graphtraj.configuration.project_roles import logical_role
 from graphtraj.execution.runner_batch import read_batch
 from graphtraj.execution.runner_capacity import capacity_positions
 from graphtraj.execution.runner_control import _require_project_events, interrupt_session
@@ -37,7 +38,11 @@ def require_active_session(project, alias):
     team = yaml.safe_load(team_file.read_text())
     if team["status"] != "active" or ticket["active_team_ordinal"] != mapping["team_generation"]:
         raise RunnerError("team-not-active", "The Team has stopped starting new work.")
-    seats = [seat for seat in team["members"].values() if seat["role"] == mapping["role"]]
+    seats = [
+        seat
+        for seat in team["members"].values()
+        if logical_role(seat["role"]) == logical_role(mapping["role"])
+    ]
     if seats and seats[0]["session_ref"] not in {None, alias}:
         raise RunnerError("seat-replaced", "This Session no longer occupies its Team seat.")
     return team
@@ -61,7 +66,7 @@ def replace_session(alias, actor, caused_by_event_ids, cwd):
         if member["session_ref"] == alias
         or (
             member["session_ref"] is None
-            and member["role"] == mapping["role"]
+            and logical_role(member["role"]) == logical_role(mapping["role"])
         )
     ]
     seat = seats[0] if len(seats) == 1 else None
@@ -148,7 +153,7 @@ def replace_session(alias, actor, caused_by_event_ids, cwd):
 
     require_active_session(project, alias)
     stop(alias)
-    if task.role.endswith("reviewer"):
+    if logical_role(task.role) in {"standards-reviewer", "spec-reviewer"}:
         task = replace(task, report_file=Path(".state/reviews") / (alias + "-replacement.md"))
     current_commit = run_git(worktree, "rev-parse", "HEAD")
     prior_trace = _trace_ref(project, traces, alias)

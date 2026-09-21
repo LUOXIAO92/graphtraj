@@ -7,13 +7,13 @@ from importlib import resources
 
 import yaml
 
-from graphtraj.configuration.project_roles import ROLE_NAMES, ROLE_REFERENCES, RolePreset
+from graphtraj.configuration.project_roles import ROLE_NAME, RolePreset
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 
 
 @dataclass(frozen=True)
 class ResolvedChildRole:
-    """Fixed responsibilities and required Skills with selected Runtime settings."""
+    """One role's installed responsibilities with its selected Runtime settings."""
 
     name: str
     instructions: str
@@ -25,14 +25,27 @@ class ResolvedChildRole:
         return self.name == "team-leader" and self.settings.allow_runtime_swarm
 
 
+def has_packaged_role(name: str) -> bool:
+    """Return whether an installed role template defines this role name."""
+
+    if ROLE_NAME.fullmatch(name) is None:
+        return False
+    return resources.files("graphtraj.resources").joinpath(
+        "roles", name + ".yml"
+    ).is_file()
+
+
 def resolve_child_role(name: str, settings: RolePreset) -> ResolvedChildRole:
-    """Resolve a known child policy; temporary Batch names use temporary-role."""
-    name = ROLE_REFERENCES.get(name, name)
-    if name not in (*ROLE_NAMES, "temporary-role"):
-        raise RuntimeAdapterError("ROLE_NOT_SUPPORTED", "The child role is not supported by this Runner.")
+    """Resolve one configured role's responsibilities from its templates.
+
+    A role name without its own installed template keeps its actual name and
+    uses the generic temporary-role responsibilities.
+    """
+
+    template = name if has_packaged_role(name) else "temporary-role"
     try:
         document = yaml.safe_load(resources.files("graphtraj.resources").joinpath(
-            "roles", name + ".yml"
+            "roles", template + ".yml"
         ).read_text(encoding="utf-8"))
         instructions = document["instructions"]
         required_skills = document["required_skills"]

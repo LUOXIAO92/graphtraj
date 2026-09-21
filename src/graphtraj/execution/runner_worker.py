@@ -13,6 +13,7 @@ from pathlib import Path
 import yaml
 
 from graphtraj.runtimes.codex.managed_session import CodexManagedExecution
+from graphtraj.configuration.project_roles import logical_role
 from graphtraj.execution.runner_connection import worker_connection
 from graphtraj.execution.execution_budget import (
     ExecutionBudgetMonitor,
@@ -233,7 +234,7 @@ def run(job_file: Path) -> int:
             if (
                 budget_monitor is not None
                 and deliver_parentless_leader_notices
-                and base_mapping.get("role") == "team-leader"
+                and logical_role(base_mapping.get("role", "")) == "team-leader"
                 and base_mapping.get("parent") is None
             ):
                 notices = budget_monitor.pending_leader_notices()
@@ -344,6 +345,7 @@ def _monitor_execution_budget(
 ) -> None:
     role = mapping["role"]
     assert isinstance(role, str)
+    stage = execution_budget_stage(role)
 
     def deliver(messages: list[str]) -> None:
         parent = mapping.get("parent")
@@ -370,18 +372,18 @@ def _monitor_execution_budget(
         )
 
     while not stop.is_set():
-        stopped = monitor.check(role, execution_budget_stage(role))
+        stopped = monitor.check(role, stage)
         if isinstance(mapping.get("parent"), str):
             monitor.deliver_leader_notices(deliver)
         elif (
             deliver_parentless_leader_notices
-            and role == "team-leader"
+            and logical_role(role) == "team-leader"
             and monitor.pending_leader_notices()
         ):
             os.kill(os.getpid(), signal.SIGTERM)
             return
         if stopped and (
-            execution_budget_stage(role) == "implementation" or role == "team-leader"
+            stage == "implementation" or logical_role(role) == "team-leader"
         ):
             os.kill(os.getpid(), signal.SIGTERM)
             return

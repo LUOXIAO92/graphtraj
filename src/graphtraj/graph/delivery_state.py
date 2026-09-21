@@ -9,7 +9,7 @@ from typing import Any, Mapping
 
 import yaml
 
-from graphtraj.configuration.project_roles import ROLE_REFERENCES
+from graphtraj.configuration.project_roles import logical_role
 from graphtraj.graph.delivery_worldline import append_project_worldline_event, read_worldline
 from graphtraj.execution.runner_io import write_yaml_durably
 from graphtraj.graph.ticket_graph import _TRANSITIONS, _load_states
@@ -178,13 +178,11 @@ def apply_delivery_state_request(
         elif phase == "correction":
             if ticket["status"] != "reviewing":
                 raise ValueError("Process correction requires an open Team Round")
-            responsible_role = ROLE_REFERENCES.get(
-                request["responsible_role"], request["responsible_role"]
-            )
+            responsible_role = logical_role(request["responsible_role"])
             responsible = next(
                 (member for seat, member in team_update["members"].items()
                  if seat != "team_leader"
-                 and ROLE_REFERENCES.get(member["role"], member["role"]) == responsible_role),
+                 and logical_role(member["role"]) == responsible_role),
                 None,
             )
             if responsible is None or not request["session_ref"] or responsible["session_ref"] != request["session_ref"]:
@@ -345,7 +343,8 @@ def _validate_members(value: Any) -> dict[str, dict[str, str | None]]:
         if (
             not isinstance(member, dict)
             or set(member) != {"role", "session_ref"}
-            or ROLE_REFERENCES.get(seat_role, seat_role) not in expected[name]
+            or not isinstance(seat_role, str)
+            or logical_role(seat_role) not in expected[name]
             or (
                 member.get("session_ref") is not None
                 and (not isinstance(member["session_ref"], str) or not member["session_ref"])

@@ -2,19 +2,24 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import re
+import uuid
 from pathlib import Path
 from typing import Any, Dict, Mapping, Sequence, Tuple
 
 import yaml
 
+from graphtraj.configuration.project_roles import ProjectRolesError
 from graphtraj.workspace.git_repository import GitRepositoryError, SourceRepository
 from graphtraj.execution.runner_models import RunnerError, StatusResponse
 from graphtraj.execution.runner_connection import session_operation
 from graphtraj.execution.runner_heartbeat import ownership_is_held, read_heartbeat
 from graphtraj.execution.runner_process import process_ancestors
+from graphtraj.runtimes.codex.approval import role_approval_route, review_request
+from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 from graphtraj.workspace.runner_project import discover_runner_directory
 
 
@@ -178,20 +183,90 @@ def require_descendant_authority(
 
 
 def require_replacement_authority(
-    runner_directory: Path, alias: str, mapping: Mapping[str, Any]
+    runner_directory: Path,
+    alias: str,
+    mapping: Mapping[str, Any],
+    *,
+    harness_root: Path,
 ) -> None:
-    """Authorize one replacement by the recorded direct relation.
+    """Authorize one replacement, directly or by this request's own review.
 
     The target's recorded direct parent replaces it, and Main or the user
     replaces a top-level Session recorded without a parent. Every other caller
-    is over level and is refused here: the ``--actor`` value is a self-report
-    and takes no part in this judgement, so it can neither promote a caller nor
-    stand in for the user's approval.
+    is over level: the entry asks the approval route that caller's own mapped
+    role configures to review this exact request, and the replacement continues
+    only on an explicit ``accept``. The ``--actor`` value, a request field and
+    every projected environment value take no part in this judgement.
     """
     caller = caller_alias(runner_directory)
     if is_direct_owner(caller, mapping):
         return
-    raise _replacement_denied()
+    _require_reviewed_replacement(runner_directory, harness_root, caller, alias, mapping)
+
+
+def _require_reviewed_replacement(
+    runner_directory: Path,
+    harness_root: Path,
+    caller: str | None,
+    alias: str,
+    mapping: Mapping[str, Any],
+) -> None:
+    """Continue one over-level replacement only with this request's approval.
+
+    The review is the Runtime's existing approval path: the routed model that
+    the caller's own role configures, asked once for this request and bound to
+    the caller and the target seat it names. A refusal, a cancellation, no
+    answer, a failing route or no usable route all end in the same refusal, and
+    no failure escapes as an exception. A caller with no live Session owner is
+    Main or the user, which has no mapped role to review with: the native
+    approval window belongs to a running Session's Runtime, which the Runner
+    cannot open from here, so such a request is refused rather than continued
+    unreviewed.
+    """
+    if caller is None:
+        raise _replacement_denied(
+            "a caller without a live Session has no mapped role to review it"
+        )
+    caller_mapping, _ = read_alias_mapping(runner_directory, caller)
+    role_reference = caller_mapping.get("role_reference") or caller_mapping["role"]
+    try:
+        route = role_approval_route(harness_root, role_reference)
+    except (ProjectRolesError, RuntimeAdapterError, OSError, UnicodeError) as error:
+        raise RunnerError(
+            "invalid-config",
+            "The approval route configured for the caller's role is unusable, "
+            "so the replacement was not executed.",
+        ) from error
+    if route is None:
+        raise _replacement_denied(
+            "the caller's role configures no approval route, and no Runtime "
+            "window can be opened for this request"
+        )
+    context = {
+        "request_id": uuid.uuid4().hex,
+        "operation": "replace-session",
+        "caller_alias": caller,
+        "caller_role": caller_mapping["role"],
+        "target_alias": alias,
+        "target_role": mapping["role"],
+        "target_ticket_id": mapping["ticket_id"],
+        "target_team_generation": mapping["team_generation"],
+        "target_parent_alias": mapping.get("parent"),
+        "allowed_decisions": ["accept", "decline"],
+    }
+    try:
+        decision = asyncio.run(review_request(route, context))
+    except RuntimeAdapterError as error:
+        # The review was attempted and produced no decision. This is not a
+        # refusal by the review, so it keeps its own outcome instead of being
+        # reported as a denied request.
+        raise RunnerError(
+            "operation-failed",
+            "The Runtime approval for this replacement could not be obtained, "
+            "so the replacement was not executed.",
+        ) from error
+    if decision.get("decision") != "accept":
+        raise _replacement_denied("the Runtime review did not accept it")
 
 
 def status_aliases(
@@ -485,11 +560,14 @@ def _authority_denied() -> RunnerError:
     )
 
 
-def _replacement_denied() -> RunnerError:
+def _replacement_denied(detail: str) -> RunnerError:
+    """Return the refusal for one replacement this caller may not perform."""
+
     return RunnerError(
         "authority-denied",
-        "Only the target's direct parent may replace it; this caller did not "
-        "receive the Runtime's approval for this replacement.",
+        "Replacement refused: {0}. Only the target's recorded direct parent "
+        "may replace it, and an over-level request continues only when its "
+        "Runtime approval accepts that request.".format(detail),
     )
 
 

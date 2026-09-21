@@ -6,11 +6,16 @@ import json
 import os
 import subprocess
 import time
+from io import BytesIO
 from pathlib import Path
 
+import pytest
 import yaml
 
 from conftest import FakeCodex, InstalledCommands, run_process
+from graphtraj.execution import runner_status
+from graphtraj.execution.runner_models import RunnerError
+from graphtraj.runtimes.codex import approval
 from runner_fixtures import configure_harness
 from test_session_alias_control import _register_ready_ticket
 
@@ -66,6 +71,126 @@ def _controlled_codex(fake_codex: FakeCodex) -> None:
         "    raise SystemExit(0)\n"
     )
     fake_codex.executable.write_text(script.replace(marker, injection + marker, 1))
+
+
+# The Runtime approval a custom-provider role configures. Reviewing this
+# request reaches this endpoint, which no test environment can serve: the
+# review is attempted and cannot be obtained, so the entry must refuse.
+UNREACHABLE_APPROVAL = {
+    "model": "review-model",
+    "base_url": "https://127.0.0.1:1/v1",
+    "api_key_env": "GRAPHTRAJ_TEST_APPROVAL_KEY",
+}
+
+
+def _configure_leader_approval_route(root: Path) -> None:
+    """Give the Team Leader's role the provider route its Harness reviews on.
+
+    The Engineer's role keeps no route, so one run shows both over-level paths:
+    a role that reaches the Runtime review and cannot obtain its decision, and
+    a role that has no route to reach at all.
+    """
+    roles_file = root / ".graphtraj" / "roles.yml"
+    document = yaml.safe_load(roles_file.read_text(encoding="utf-8"))
+    document["roles"]["coding_team"]["team_leader"].update(
+        {
+            "base_url": "https://work.example/v1",
+            "api_key_env": "GRAPHTRAJ_TEST_WORK_KEY",
+            "codex": {"approval": dict(UNREACHABLE_APPROVAL)},
+        }
+    )
+    roles_file.write_text(
+        yaml.safe_dump(document, sort_keys=False), encoding="utf-8"
+    )
+
+
+def _approval_harness(tmp_path: Path, *, route: bool) -> tuple[Path, Path]:
+    """Return one Harness root and Runner directory whose Engineer may review."""
+    harness_root = tmp_path / "approval-harness"
+    settings: dict = {"runtime": "codex", "model": "work-model"}
+    if route:
+        settings.update(
+            {
+                "base_url": "https://work.example/v1",
+                "api_key_env": "WORK_KEY",
+                "codex": {"approval": dict(UNREACHABLE_APPROVAL)},
+            }
+        )
+    roles_file = harness_root / ".graphtraj" / "roles.yml"
+    roles_file.parent.mkdir(parents=True)
+    roles_file.write_text(
+        yaml.safe_dump({"roles": {"coding_team": {"engineer": settings}}}),
+        encoding="utf-8",
+    )
+    return harness_root, harness_root / ".graphtraj" / "runner"
+
+
+def _write_session(runner_directory: Path, alias: str, role: str, parent: str | None) -> None:
+    """Record one Session entity and its direct parent as the Runner would."""
+    directory = runner_directory / "sessions" / alias
+    directory.mkdir(parents=True)
+    (directory / "mapping.yml").write_text(
+        yaml.safe_dump(
+            {
+                "alias": alias,
+                "runtime": "codex",
+                "session": "native",
+                "ticket_id": "132",
+                "team_generation": 1,
+                "role": role,
+                "parent": parent,
+                "retained_batch_file": "batch.yml",
+                "worktree_path": str(directory / "worktree"),
+                "trace_file": str(directory / "events.jsonl"),
+                "worker_pid": 4242,
+                "runtime_pid": 4243,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def _approval_stub(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    decision: str,
+    reviewed: list,
+    request_id: str | None = None,
+) -> None:
+    """Answer the routed provider while recording the request it received."""
+
+    # The route reads its key variable before it reaches the provider, so the
+    # review can only be attempted while that variable resolves.
+    monkeypatch.setenv(UNREACHABLE_APPROVAL["api_key_env"], "test-key")
+
+    class Provider:
+        def open(self, request, timeout):
+            """Return one provider envelope, or fail as an unreachable route."""
+            payload = json.loads(request.data)
+            reviewed.append(payload)
+            if decision == "unavailable":
+                raise OSError("provider unavailable")
+            asked = json.loads(payload["messages"][1]["content"])["request_id"]
+            review = {
+                "request_id": asked if request_id is None else request_id,
+                "decision": decision,
+                "rationale": "test decision",
+            }
+            envelope = {
+                "choices": [
+                    {"finish_reason": "stop", "message": {"content": json.dumps(review)}}
+                ]
+            }
+            return BytesIO(json.dumps(envelope).encode())
+
+    monkeypatch.setattr(approval, "build_opener", lambda *args: Provider())
+
+
+def _entity_count(root: Path, role: str) -> int:
+    """Count retained Sessions whose entity name belongs to one role."""
+    sessions = root / ".graphtraj" / "runner" / "sessions"
+    entities = [path.name.rpartition("@")[2] for path in sessions.iterdir()]
+    return sum(entity == role or entity.startswith(role + "_") for entity in entities)
 
 
 def _mapping(root: Path, alias: str) -> dict:
@@ -232,6 +357,12 @@ def _assert_denied(entry: dict) -> None:
     assert entry["document"]["error"]["code"] == "authority-denied", entry
 
 
+def _assert_code(entry: dict, code: str) -> None:
+    """One refused probe reports the supplied public error code."""
+    assert entry["returncode"] == 1, entry
+    assert entry["document"]["error"]["code"] == code, entry
+
+
 def _assert_denied_after_authority(entry: dict) -> None:
     """A probe the authority layer admitted is refused by the request itself."""
     assert entry["returncode"] == 1, entry
@@ -262,6 +393,103 @@ def _assert_status_document(document: dict, alias: str, *, full: bool) -> None:
         assert set(document) <= {"alias", "activity", "last_outcome"}, document
 
 
+def _replacement_request(
+    runner_directory: Path, caller: str | None, harness_root: Path, target: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Ask one replacement entry to authorize ``target`` for the given caller."""
+    monkeypatch.setattr(runner_status, "caller_alias", lambda directory: caller)
+    mapping, _ = runner_status.read_alias_mapping(runner_directory, target)
+    runner_status.require_replacement_authority(
+        runner_directory, target, mapping, harness_root=harness_root
+    )
+
+
+def test_over_level_replacement_needs_this_requests_own_accept(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Only an accept for this exact request lets an over-level replacement run."""
+    harness_root, runner_directory = _approval_harness(tmp_path, route=True)
+    caller = "132-ticket-handover0-engineer@engineer"
+    leader = "132-ticket-handover0-team_leader@team_leader"
+    member = "132-ticket-handover0-engineer@engineer_2"
+    _write_session(runner_directory, caller, "engineer", leader)
+    _write_session(runner_directory, leader, "team_leader", None)
+    _write_session(runner_directory, member, "engineer", caller)
+
+    # A reviewed request for a target outside the caller's direct relation
+    # continues, and the Runtime receives this request's own binding.
+    reviewed: list = []
+    _approval_stub(monkeypatch, decision="accept", reviewed=reviewed)
+    _replacement_request(runner_directory, caller, harness_root, leader, monkeypatch)
+    assert len(reviewed) == 1
+    context = json.loads(reviewed[0]["messages"][1]["content"])
+    assert context["caller_alias"] == caller
+    assert context["caller_role"] == "engineer"
+    assert context["target_alias"] == leader
+    assert context["target_role"] == "team_leader"
+    assert context["target_ticket_id"] == "132"
+    assert context["target_team_generation"] == 1
+    assert context["target_parent_alias"] is None
+    assert context["allowed_decisions"] == ["accept", "decline"]
+
+    # An answer bound to another request is not an approval for this one, and
+    # it is no decision at all: the entry refuses as an unobtainable approval.
+    _approval_stub(monkeypatch, decision="accept", reviewed=[], request_id="other")
+    with pytest.raises(RunnerError) as elsewhere:
+        _replacement_request(runner_directory, caller, harness_root, leader, monkeypatch)
+    assert elsewhere.value.code == "operation-failed"
+
+    # A reviewed decline is refused as the denial it is.
+    _approval_stub(monkeypatch, decision="decline", reviewed=[])
+    with pytest.raises(RunnerError) as declined:
+        _replacement_request(runner_directory, caller, harness_root, leader, monkeypatch)
+    assert declined.value.code == "authority-denied"
+
+    # A route that cannot answer produces no decision: the entry reports the
+    # failed operation instead, and no exception escapes to the caller.
+    _approval_stub(monkeypatch, decision="unavailable", reviewed=[])
+    with pytest.raises(RunnerError) as unreached:
+        _replacement_request(runner_directory, caller, harness_root, leader, monkeypatch)
+    assert unreached.value.code == "operation-failed"
+
+    # The caller's own direct child needs no review at all.
+    direct: list = []
+    _approval_stub(monkeypatch, decision="decline", reviewed=direct)
+    _replacement_request(runner_directory, caller, harness_root, member, monkeypatch)
+    assert direct == []
+
+    # A caller with no live Session is Main or the user: it has no mapped role
+    # to review with, so a target beyond its own top-level Sessions is refused
+    # before any route is reached.
+    unreviewed: list = []
+    _approval_stub(monkeypatch, decision="accept", reviewed=unreviewed)
+    with pytest.raises(RunnerError) as no_role:
+        _replacement_request(runner_directory, None, harness_root, member, monkeypatch)
+    assert no_role.value.code == "authority-denied"
+    _replacement_request(runner_directory, None, harness_root, leader, monkeypatch)
+    assert unreviewed == []
+
+
+def test_replacement_without_a_review_route_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A caller whose role configures no route never replaces an over-level target."""
+    harness_root, runner_directory = _approval_harness(tmp_path, route=False)
+    caller = "132-ticket-handover0-engineer@engineer"
+    leader = "132-ticket-handover0-team_leader@team_leader"
+    _write_session(runner_directory, caller, "engineer", leader)
+    _write_session(runner_directory, leader, "team_leader", None)
+
+    reviewed: list = []
+    _approval_stub(monkeypatch, decision="accept", reviewed=reviewed)
+    with pytest.raises(RunnerError) as refused:
+        _replacement_request(runner_directory, caller, harness_root, leader, monkeypatch)
+    assert refused.value.code == "authority-denied"
+    # A hosted role keeps the native Guardian, so no route was called.
+    assert reviewed == []
+
+
 def test_control_entries_follow_recorded_direct_ownership(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
@@ -273,6 +501,7 @@ def test_control_entries_follow_recorded_direct_ownership(
         installed_commands, temporary_git_repository, fake_codex, tmp_path,
     )
     _controlled_codex(fake_codex)
+    _configure_leader_approval_route(root)
     _register_ready_ticket(installed_commands, root)
     release  = tmp_path / "release-reviews"
     hold     = tmp_path / "hold-specialist"
@@ -291,6 +520,7 @@ def test_control_entries_follow_recorded_direct_ownership(
         "HOLD_FILE_INVESTIGATION_SPECIALIST": str(hold),
         "GRAPHTRAJ_AGENT_RUNNER": str(installed_commands.runner),
         "DIRECT_CONTROL_PROBE_FILE": str(PROBE_FILE),
+        "GRAPHTRAJ_TEST_APPROVAL_KEY": "test-key",
     }
     with (tmp_path / "authority-team.log").open("w", encoding="utf-8") as output:
         launched = subprocess.Popen(
@@ -380,10 +610,14 @@ def test_control_entries_follow_recorded_direct_ownership(
     }
     for name in (
         "send-other-branch", "requests-other-branch", "interrupt-other-branch",
-        "replace-other-branch", "register-foreign-session", "reply-other-branch",
+        "register-foreign-session", "reply-other-branch",
         "send-other-branch-cleared-env",
     ):
         _assert_denied(children[name])
+    # The Leader's role configures an approval route, so its over-level request
+    # reaches that review; this environment cannot serve it, the entry reports
+    # that the approval was not obtained, and the target is left untouched.
+    _assert_code(children["replace-other-branch"], "operation-failed")
     _assert_summary(children["status-other-branch-cleared-env"], other, "running")
     replacement = children["replace-child-engineer"]["document"]
     assert children["replace-child-engineer"]["returncode"] == 0, replacement
@@ -434,4 +668,15 @@ def test_control_entries_follow_recorded_direct_ownership(
         )
         assert refused.returncode == 1, refused.stdout + refused.stderr
         assert yaml.safe_load(refused.stdout)["error"]["code"] == "authority-denied", refused.stdout
-    assert yaml.safe_load(team_file.read_text(encoding="utf-8"))["members"]["engineer"]["session_ref"] == seat
+    current_team = yaml.safe_load(team_file.read_text(encoding="utf-8"))
+    assert current_team["team_ordinal"] == 1
+    assert current_team["status"] == "active"
+    assert current_team["members"]["team_leader"]["session_ref"] == leader
+    assert current_team["members"]["engineer"]["session_ref"] == seat
+    # No refused over-level request created a replacement entity: each role
+    # the probes aimed at still has exactly the Session it started with, apart
+    # from the one direct replacement the Team Leader was allowed to make.
+    assert _entity_count(root, "team_leader") == 1
+    assert _entity_count(root, "engineer") == 2
+    assert _entity_count(root, "standards_reviewer") == 1
+    assert _entity_count(root, "investigation_specialist") == 1

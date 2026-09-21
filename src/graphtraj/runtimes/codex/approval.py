@@ -11,6 +11,7 @@ from typing import Any, Mapping
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
+from graphtraj.configuration.project_roles import load_project_roles
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 
 
@@ -30,6 +31,19 @@ def approval_route(settings: Mapping[str, Any] | None, *, custom: bool) -> dict 
     if not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', route['api_key_env']):
         raise RuntimeAdapterError('ROLE_CONFIG_INVALID', 'codex.approval.api_key_env must name an environment variable.')
     return dict(route)
+
+
+def role_approval_route(harness_root: Path, role_reference: str) -> dict | None:
+    """Return the approval route one mapped role configures, if any.
+
+    A route exists only for a role that runs on its own provider, which is the
+    same condition the Codex Adapter applies before it hands a native approval
+    request to :func:`review_request`; a hosted role keeps the native Guardian
+    and has no route here.
+    """
+    roles = load_project_roles(harness_root)
+    settings = roles.presets[roles.resolve(role_reference)]
+    return approval_route(settings.codex, custom=settings.base_url is not None)
 
 
 class _NoRedirect(HTTPRedirectHandler):

@@ -49,7 +49,9 @@ def managed(tmp_path: Path, peer: Path, monkeypatch: pytest.MonkeyPatch):
     return request, directory
 
 
-def completion_stub(monkeypatch: pytest.MonkeyPatch, decision: str, calls: list) -> None:
+def completion_stub(
+    monkeypatch: pytest.MonkeyPatch, decision: str, calls: list, request_id: int | str = 'approval',
+) -> None:
     """Capture the actual HTTP request while controlling the provider response."""
     class Provider:
         def open(self, request, timeout: int):
@@ -60,7 +62,7 @@ def completion_stub(monkeypatch: pytest.MonkeyPatch, decision: str, calls: list)
                 raise TimeoutError('transport deadline')
             if decision == 'error':
                 raise OSError('provider unavailable')
-            review = {'request_id': 'approval', 'decision': decision, 'rationale': 'test decision'}
+            review = {'request_id': request_id, 'decision': decision, 'rationale': 'test decision'}
             if decision == 'wrong-request':
                 review.update(request_id='other', decision='accept')
             content = 'invalid JSON' if decision == 'malformed' else json.dumps(review)
@@ -243,3 +245,41 @@ def test_official_policy_and_native_compaction_reach_review(
         'No.', 'Only scratch.txt.',
     ]
     assert reviewed['request']['command'] == 'printf APPROVAL_121'
+
+
+@pytest.mark.parametrize('available,decision,expected', [
+    (['accept', 'cancel'], 'accept', 'accept'),
+    (['accept', 'cancel'], 'decline', 'cancel'),
+    (['accept', 'decline', 'cancel'], 'decline', 'decline'),
+    (['acceptForSession', 'cancel'], 'accept', 'error'),
+])
+def test_offered_native_command_decisions_preserve_denial_semantics(
+    tmp_path: Path,
+    peer: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    available: list[str],
+    decision: str,
+    expected: str,
+) -> None:
+    """Review schema-supported accept/cancel options and return only the offered reply."""
+    request, directory = managed(tmp_path, peer, monkeypatch)
+    monkeypatch.setenv('MANAGED_APPROVAL_DECISIONS', json.dumps(available))
+    monkeypatch.setenv('MANAGED_APPROVAL_REQUEST_ID', '0')
+    calls = []
+    completion_stub(monkeypatch, decision, calls, request_id=0)
+    result = CodexManagedExecution(request, 'request: authorize printf only', directory,
+        lambda *_: None, {}, directory / 'events.jsonl').run()
+    assert len(calls) == 1
+    reviewed = json.loads(calls[0][1]['messages'][1]['content'])
+    assert reviewed['request_id'] == 0
+    assert reviewed['request']['availableDecisions'] == available
+    reply = json.loads(next((tmp_path / 'native').glob('*.replies.jsonl')).read_text())
+    assert reply['id'] == 0
+    if expected == 'error':
+        assert reviewed['allowed_decisions'] == ['decline']
+        assert result['outcome'] == 'runtime-error'
+        assert reply['error']['code'] == -32603
+    else:
+        assert reviewed['native_decisions'][decision] == expected
+        assert reply['result'] == {'decision': expected}
+        assert result['outcome'] == ('interrupted' if expected == 'cancel' else 'completed')

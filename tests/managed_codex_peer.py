@@ -18,6 +18,8 @@ pending = {}
 def ask(kind: str = 'approval') -> None:
     """Reuse native IDs deliberately to exercise caller identity and expiry."""
     request_id = 'approval' if kind in {'approval', 'permissions'} else 7
+    if 'MANAGED_APPROVAL_REQUEST_ID' in os.environ and kind == 'approval':
+        request_id = json.loads(os.environ['MANAGED_APPROVAL_REQUEST_ID'])
     pending[request_id] = kind
     emit({'id': request_id, 'method': (
         'item/commandExecution/requestApproval' if kind == 'approval'
@@ -25,6 +27,8 @@ def ask(kind: str = 'approval') -> None:
         else 'item/tool/requestUserInput'
     ), 'params': {
         'threadId': session, 'turnId': execution,
+        **({'availableDecisions': json.loads(os.environ['MANAGED_APPROVAL_DECISIONS'])}
+           if kind == 'approval' and 'MANAGED_APPROVAL_DECISIONS' in os.environ else {}),
         **({'command': 'printf APPROVAL_121', 'cwd': parameters['cwd']}
            if kind == 'approval' else {'permissions': {'network': {'enabled': True}}}
            if kind == 'permissions' else {'questions': [{'id': 'color', 'question': 'Choose a color.'}]}),
@@ -47,7 +51,7 @@ for line in sys.stdin:
             continue
         if kind == 'approval':
             decision = request['result']['decision']
-            assert decision in ('accept', 'decline')
+            assert decision in ('accept', 'decline', 'cancel')
             text = 'approval:' + decision
         else:
             text = json.dumps(request['result'], sort_keys=True)
@@ -58,7 +62,8 @@ for line in sys.stdin:
                 'type': 'task_complete', 'last_agent_message': text,
             }}) + '\n')
         emit({'method': 'turn/completed', 'params': {
-            'threadId': session, 'turn': {'id': execution, 'status': 'completed',
+            'threadId': session, 'turn': {'id': execution, 'status': (
+                'interrupted' if kind == 'approval' and decision == 'cancel' else 'completed'),
                 'items': [{'type': 'agentMessage', 'text': text}]},
         }})
         continue

@@ -233,13 +233,21 @@ class CodexManagedExecution:
         }:
             raise RuntimeAdapterError('RUNTIME_REQUEST_UNHANDLED', 'Unsupported automatic approval request.')
         available = request.params.get('availableDecisions')
-        allowed = [value for value in ('accept', 'decline') if available is None or value in available]
-        if 'decline' not in allowed:
+        # Codex 0.154.0 normally offers Abort (wire: cancel), not Declined.
+        # Preserve the offered denial's continue/interrupt semantics.
+        deny = next((value for value in ('decline', 'cancel')
+                     if available is None or value in available), None)
+        if deny is None:
             raise RuntimeAdapterError('RUNTIME_REQUEST_UNHANDLED', 'Approval request has no supported deny decision.')
+        decisions = {'decline': deny}
+        if available is None or 'accept' in available:
+            decisions['accept'] = 'accept'
+        allowed = [value for value in ('accept', 'decline') if value in decisions]
         params = self.context.session_document()['adapter_request']
         context = {
             'request_id': request.request_id, 'method': request.method,
             'request': request.params, 'allowed_decisions': allowed,
+            'native_decisions': decisions,
             'authorization': self.prompt,
             'developer_instructions': params['developerInstructions'],
             'permissions': params['config'].get('permissions'),
@@ -259,7 +267,7 @@ class CodexManagedExecution:
             return {'permissions': (
                 request.params['permissions'] if result['decision'] == 'accept' else {}
             )}
-        return result
+        return {'decision': decisions[result['decision']]}
 
     def _approval_context(self) -> dict:
         """Map native rollout snapshots and subsequent items without new compaction.

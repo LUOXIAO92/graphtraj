@@ -24,7 +24,9 @@ def _controlled_codex(fake_codex: FakeCodex) -> None:
 
     The hold is selected by the Session's own role, so a test can keep one
     descendant running without stopping the rest of its Team. A replaced
-    Engineer delivers a distinct commit so a later Session can repeat it.
+    Engineer delivers a distinct commit so a later Session can repeat it. A
+    probe set for a member is forwarded by the member's own direct parent: no
+    other caller may reach it, so the parent is the only path that exists.
     """
     script = fake_codex.executable.read_text(encoding="utf-8")
     marker = "lifecycle_action = os.environ.get('FAKE_CODEX_LIFECYCLE_ACTION')"
@@ -45,6 +47,19 @@ def _controlled_codex(fake_codex: FakeCodex) -> None:
         "if role_hold is not None:\n"
         "    while not Path(role_hold).exists():\n"
         "        time.sleep(0.01)\n"
+        "if (os.environ.get('DIRECT_CONTROL_FORWARD_TO') and runtime_prompt"
+        " and 'Run the direct control probes' in runtime_prompt):\n"
+        "    child = {key: value for key, value in os.environ.items()"
+        " if key != 'DIRECT_CONTROL_FORWARD_TO'}\n"
+        "    forwarded = subprocess.run([os.environ['GRAPHTRAJ_AGENT_RUNNER'], 'send',"
+        " os.environ['DIRECT_CONTROL_FORWARD_TO'], '--instruction', 'Run the direct control probes now.',"
+        " '--caused-by-event-id', os.environ['DIRECT_CONTROL_CAUSE']],"
+        " cwd=os.environ['GRAPHTRAJ_HARNESS_ROOT'], env=child, capture_output=True, text=True)\n"
+        "    with open(os.environ['DIRECT_CONTROL_PROBE_LOG'], 'a', encoding='utf-8') as stream:\n"
+        "        stream.write(json.dumps({'probe': 'forward-send', 'returncode': forwarded.returncode,\n"
+        "            'stdout': forwarded.stdout,\n"
+        "            'stderr': forwarded.stderr}) + '\\n')\n"
+        "    raise SystemExit(0)\n"
         "if os.environ.get('DIRECT_CONTROL_PROBE_FILE') and runtime_prompt and 'Run the direct control probes' in runtime_prompt:\n"
         "    import runpy\n"
         "    runpy.run_path(os.environ['DIRECT_CONTROL_PROBE_FILE'], run_name='direct_control_probes')\n"
@@ -152,8 +167,15 @@ def _probe(
     name: str,
     targets: dict,
     batch: Path,
+    forward_to: str | None = None,
 ) -> dict:
-    """Resume one Session to run its probes and return the recorded results."""
+    """Run one probe set and return its recorded results.
+
+    The instruction reaches ``alias`` directly. When ``forward_to`` names a
+    member, the addressed Session is that member's recorded direct parent and
+    forwards the same instruction, so the member's own process tree runs the
+    probes.
+    """
     log.unlink(missing_ok=True)
     completed = run_process(
         [
@@ -171,6 +193,10 @@ def _probe(
             "DIRECT_CONTROL_BATCH": str(batch),
             "FAKE_CODEX_CAPTURE_STDIN": "1",
             "FAKE_CODEX_APPEND_LOG": "1",
+            **(
+                {"DIRECT_CONTROL_FORWARD_TO": forward_to}
+                if forward_to is not None else {}
+            ),
         },
         timeout=60,
     )
@@ -227,6 +253,15 @@ def _assert_full(entry: dict, alias: str) -> None:
     assert document["session"] and document["execution_id"], entry
 
 
+def _assert_status_document(document: dict, alias: str, *, full: bool) -> None:
+    """One status document read from Main keeps or drops the private identity."""
+    assert document["alias"] == alias, document
+    if full:
+        assert document["session"] and document["execution_id"], document
+    else:
+        assert set(document) <= {"alias", "activity", "last_outcome"}, document
+
+
 def test_control_entries_follow_recorded_direct_ownership(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
@@ -272,8 +307,9 @@ def test_control_entries_follow_recorded_direct_ownership(
             _wait_running(installed_commands, root, environment, (standards, spec, other))
 
             peers = _probe(
-                installed_commands, root, launch_environment, engineer,
+                installed_commands, root, launch_environment, leader,
                 log=tmp_path / "engineer-probes.jsonl", name="peers", batch=batch,
+                forward_to=engineer,
                 targets={
                     "leader": leader, "reviewer": standards, "other": other,
                     "leader_registration": str(
@@ -282,6 +318,7 @@ def test_control_entries_follow_recorded_direct_ownership(
                     ),
                 },
             )
+            assert peers.pop("forward-send")["returncode"] == 0, peers
             children = _probe(
                 installed_commands, root, launch_environment, leader,
                 log=tmp_path / "leader-probes.jsonl", name="children", batch=batch,
@@ -314,7 +351,7 @@ def test_control_entries_follow_recorded_direct_ownership(
     for name in (
         "send-sibling-reviewer", "interrupt-sibling-reviewer",
         "requests-sibling-reviewer", "replace-sibling-reviewer",
-        "replace-parent-leader", "register-child-batch",
+        "replace-parent-leader", "replace-parent-leader-user-actor", "register-child-batch",
         "reply-sibling-reviewer", "reply-parent-leader",
         "requests-parent-leader-cleared-env", "send-parent-leader-cleared-env",
         "replace-parent-leader-cleared-env", "interrupt-parent-leader-cleared-env",
@@ -335,6 +372,9 @@ def test_control_entries_follow_recorded_direct_ownership(
     # The approval entry admits the direct parent and then refuses the
     # fabricated request it was given, so the caller never reaches the reply.
     _assert_denied_after_authority(children["reply-child-reviewer"])
+    # The Leader's own child-registration entry is admitted, so only the Batch
+    # rules refuse the Leader-shaped Batch it was handed.
+    _assert_denied_after_authority(children["register-own-registration"])
     assert children["send-child-reviewer"]["document"] == {
         "alias": standards, "send_status": "sent",
     }
@@ -354,26 +394,44 @@ def test_control_entries_follow_recorded_direct_ownership(
         "alias": standards, "interrupt_status": "interrupted",
     }
 
-    # Main keeps full observation and the user keeps its replacement authority,
-    # while Main itself cannot reach past a Team Leader into its members.
-    assert _status(installed_commands, root, environment, leader)["session"]
-    assert _status(installed_commands, root, environment, engineer)["execution_id"]
+    # Main observes the Team Leader it dispatched itself in full, and a Session
+    # beyond that direct relation as a summary only.
     ticket_directory = root / ".graphtraj" / "state" / "tickets" / "76-session-alias-control"
     team_file = ticket_directory / "teams" / "1" / "team.yml"
     seat = yaml.safe_load(team_file.read_text(encoding="utf-8"))["members"]["engineer"]["session_ref"]
+    _assert_status_document(
+        _status(installed_commands, root, environment, leader), leader, full=True,
+    )
+    _assert_status_document(
+        _status(installed_commands, root, environment, standards), standards, full=False,
+    )
+    _assert_status_document(
+        _status(installed_commands, root, environment, seat), seat, full=False,
+    )
+
+    # An ordinary control and a replacement of a member both lie outside Main's
+    # direct relation, and the --actor self-report changes neither verdict.
+    request_file = tmp_path / "main-reply.yml"
+    request_file.write_text(
+        yaml.safe_dump(
+            {"alias": standards, "session": "none", "execution_id": "none", "request_token": "none"}
+        ),
+        encoding="utf-8",
+    )
     control_environment = {**environment, "FAKE_CODEX_LIFECYCLE_ACTION": "complete-team-round"}
-    denied = run_process(
-        [str(installed_commands.runner), "replace", seat, "--actor", "main",
+    for arguments in (
+        ["send", standards, "--instruction", "Report your current activity.",
          "--caused-by-event-id", _cause(root)],
-        cwd=root, env=control_environment, timeout=30,
-    )
-    assert denied.returncode == 1, denied.stdout
-    assert yaml.safe_load(denied.stdout)["error"]["code"] == "authority-denied"
+        ["requests", standards],
+        ["reply", standards, "--request-file", str(request_file),
+         "--response", '{"decision": "accept"}'],
+        ["replace", seat, "--actor", "main", "--caused-by-event-id", _cause(root)],
+        ["replace", seat, "--actor", "user", "--caused-by-event-id", _cause(root)],
+    ):
+        refused = run_process(
+            [str(installed_commands.runner), *arguments],
+            cwd=root, env=control_environment, timeout=30,
+        )
+        assert refused.returncode == 1, refused.stdout + refused.stderr
+        assert yaml.safe_load(refused.stdout)["error"]["code"] == "authority-denied", refused.stdout
     assert yaml.safe_load(team_file.read_text(encoding="utf-8"))["members"]["engineer"]["session_ref"] == seat
-    allowed = run_process(
-        [str(installed_commands.runner), "replace", seat, "--actor", "user",
-         "--caused-by-event-id", _cause(root)],
-        cwd=root, env=control_environment, timeout=60,
-    )
-    assert allowed.returncode == 0, allowed.stdout + allowed.stderr
-    assert yaml.safe_load(allowed.stdout)["replacement_alias"] != seat

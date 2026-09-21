@@ -123,16 +123,34 @@ def _live_session_owners(runner_directory: Path) -> Dict[int, str]:
     return owners
 
 
+def is_direct_owner(caller: str | None, mapping: Mapping[str, Any]) -> bool:
+    """Return whether one caller directly owns the Agent this mapping records.
+
+    A Session directly owns the children the Runner recorded with it as their
+    parent. A caller with no live Session owner is Main or the user, which
+    directly owns the top-level Sessions the Runner recorded without a parent;
+    a sibling, a grandchild or another branch stays outside that relation. The
+    recorded parent alone decides, so no request field and no projected
+    environment value can widen the relation.
+    """
+    parent = mapping.get("parent")
+    if caller is None:
+        return parent is None
+    return parent == caller
+
+
 def require_direct_authority(
     runner_directory: Path, alias: str, mapping: Mapping[str, Any]
 ) -> None:
-    """Refuse ordinary control of a target that is not the caller's direct child.
+    """Refuse ordinary control of a target outside the caller's direct relation.
 
-    A Session may always address itself, and Main or the user keep the existing
-    unrestricted behavior.
+    A Session addresses itself and its recorded direct children. Main and the
+    user, which have no live Session owner, address the top-level Sessions the
+    Runner recorded without a parent. A message, an approval query, an
+    approval reply and a created child Batch all use this one judgement.
     """
     caller = caller_alias(runner_directory)
-    if caller is None or caller == alias or mapping.get("parent") == caller:
+    if caller == alias or is_direct_owner(caller, mapping):
         return
     raise _authority_denied()
 
@@ -160,22 +178,20 @@ def require_descendant_authority(
 
 
 def require_replacement_authority(
-    runner_directory: Path, alias: str, mapping: Mapping[str, Any], actor: str
+    runner_directory: Path, alias: str, mapping: Mapping[str, Any]
 ) -> None:
-    """Refuse replacement by anyone but the target's direct parent or the user.
+    """Authorize one replacement by the recorded direct relation.
 
-    An Agent caller is judged only by the recorded parent, so its ``actor``
-    value cannot promote it. Without a Session context the caller is Main or the
-    user: the user may replace any target, while Main acts only on its own
-    direct children and cannot reach past a Team Leader into its members.
+    The target's recorded direct parent replaces it, and Main or the user
+    replaces a top-level Session recorded without a parent. Every other caller
+    is over level and is refused here: the ``--actor`` value is a self-report
+    and takes no part in this judgement, so it can neither promote a caller nor
+    stand in for the user's approval.
     """
     caller = caller_alias(runner_directory)
-    if caller is not None:
-        if mapping.get("parent") == caller:
-            return
-        raise _authority_denied()
-    if actor != "user" and mapping.get("parent") is not None:
-        raise _authority_denied()
+    if is_direct_owner(caller, mapping):
+        return
+    raise _replacement_denied()
 
 
 def status_aliases(
@@ -229,7 +245,9 @@ def _status_alias(
     candidate: str | None,
 ) -> Dict[str, Any]:
     mapping, session_directory = read_alias_mapping(runner_directory, alias)
-    if caller is not None and caller != alias and mapping.get("parent") != caller:
+    # A cross-level observation keeps only the coarse activity, for an Agent
+    # caller and for a caller with no live Session owner alike.
+    if caller != alias and not is_direct_owner(caller, mapping):
         return _status_summary(mapping, session_directory, alias)
     status = _status_session(mapping, session_directory, alias)
     if operation_total:
@@ -463,8 +481,15 @@ def read_terminal_outcome(turn_file: Path) -> str:
 def _authority_denied() -> RunnerError:
     return RunnerError(
         "authority-denied",
-        "Only the target's direct parent, its own subtree, or the user may "
-        "control this Session.",
+        "Only the target's direct parent may control this Session.",
+    )
+
+
+def _replacement_denied() -> RunnerError:
+    return RunnerError(
+        "authority-denied",
+        "Only the target's direct parent may replace it; this caller did not "
+        "receive the Runtime's approval for this replacement.",
     )
 
 

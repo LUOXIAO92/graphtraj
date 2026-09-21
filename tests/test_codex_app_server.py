@@ -7,6 +7,7 @@ import errno
 import json
 import os
 import re
+import tomllib
 from dataclasses import replace
 from datetime import datetime
 import sys
@@ -20,6 +21,7 @@ from graphtraj.configuration.role_definitions import ResolvedChildRole
 from graphtraj.runtimes.codex.codex_adapter import (
     preflight_runtime_context,
     read_codex_last_agent_message,
+    refresh_codex_report_paths,
 )
 from graphtraj.runtimes.codex.app_server import (
     CodexAppServer,
@@ -46,6 +48,7 @@ def context(
     role: ResolvedChildRole | None = None,
     requested_skills: tuple[str, ...] = (),
     report_files: tuple[Path, ...] = (),
+    leader_control_write_paths: tuple[Path, ...] = (),
 ) -> RuntimeContext:
     """Resolve real packaged permissions without unrelated Runner dispatch."""
     root.mkdir(exist_ok=True)
@@ -58,6 +61,7 @@ def context(
         worktree=root, evidence=root / 'evidence',
         repository_skill_source=root, requested_skills=requested_skills,
         report_files=report_files,
+        leader_control_write_paths=leader_control_write_paths,
     ).finalize()
 
 
@@ -1068,3 +1072,115 @@ def test_request_failure_leaves_target_interruptible_and_reports_terminal_confir
             assert terminal.value.terminal_confirmed
 
     asyncio.run(exercise())
+
+
+def _native_settings_of_arguments(arguments: list[str]) -> dict:
+    """Read the exact native settings one Adapter request renders as -c overrides."""
+    settings: dict = {}
+    for index, argument in enumerate(arguments[:-1]):
+        if argument == '-c':
+            settings.update(tomllib.loads(arguments[index + 1]))
+    return settings
+
+
+def _native_settings(resolved: RuntimeContext) -> dict:
+    """Read the exact native settings one resolved Context sends to a Session."""
+    return _native_settings_of_arguments(
+        resolved.launch_document()['adapter_request']['arguments']
+    )
+
+
+def _native_filesystem(request: dict) -> dict:
+    """Read the filesystem map one durable Adapter request projects."""
+    settings = _native_settings_of_arguments(request['arguments'])
+    profile = settings['default_permissions']
+    return settings['permissions'][profile]['filesystem']
+
+
+@pytest.mark.parametrize(
+    'selected, expected',
+    [('auto_review', 'auto_review'), (None, None), ('user', 'user')],
+)
+def test_harness_approvals_reviewer_reaches_create_and_resume(
+    tmp_path: Path, peer: Path, selected: str | None, expected: str | None,
+) -> None:
+    """The selected Reviewer travels verbatim; an absent one keeps the native default."""
+    root = tmp_path / 'worktree'
+    runtime_store = root / '.codex'
+    runtime_store.mkdir(parents=True)
+    runtime_store.joinpath('config.toml').write_text(
+        'approval_policy = "on-request"\n'
+        + ('' if selected is None else 'approvals_reviewer = ' + json.dumps(selected) + '\n')
+    )
+    report_files = (Path('.state/teams/1/rounds/1/engineer.md'),)
+    resolved = context(
+        root, peer,
+        ResolvedChildRole('engineer', 'Implement the Ticket.', (),
+                          RolePreset('codex', 'chosen-model', None, None, reasoning_effort='low')),
+        report_files=report_files,
+    )
+
+    parameters = resolved.session_document()['adapter_request']
+    assert parameters['config'].get('approvals_reviewer') == expected
+    assert _native_settings(resolved).get('approvals_reviewer') == expected
+    # Only the Reviewer travels; the existing per-call approval policy keeps its meaning.
+    assert 'approval_policy' not in parameters['config']
+    assert 'approval_policy' not in _native_settings(resolved)
+
+    resumed = refresh_codex_report_paths(
+        resolved.launch_document()['adapter_request'],
+        worktree=root, evidence=root / 'evidence', report_files=report_files,
+        role='engineer',
+    )
+    assert resumed['session_parameters']['config'].get('approvals_reviewer') == expected
+
+
+def test_team_leader_projection_shares_only_its_direct_control_paths(
+    tmp_path: Path, peer: Path,
+) -> None:
+    """Direct control gains the Runner paths it writes, and nothing wider."""
+    root = tmp_path / 'worktree'
+    root.mkdir()
+    (root / '.codex').mkdir()
+    leader_alias = '144-native-dispatch-permissions@l1'
+    child_alias = '144-native-dispatch-permissions@e1'
+    sessions = root / 'runner' / 'sessions'
+    for alias, parent in [
+        (leader_alias, None), (child_alias, leader_alias), ('other-ticket@e1', 'other-ticket@l1'),
+    ]:
+        directory = sessions / alias
+        directory.mkdir(parents=True)
+        (directory / 'mapping.yml').write_text(
+            yaml.safe_dump({'alias': alias, 'parent': parent})
+        )
+    worldline_lock = root / 'state' / 'worldline' / '.lock'
+    capacity = root / 'runner' / 'capacity'
+    resolved = context(
+        root, peer,
+        ResolvedChildRole('team-leader', 'Lead the Team.', (),
+                          RolePreset('codex', 'chosen-model', None, None, reasoning_effort='max')),
+        leader_control_write_paths=(worldline_lock, capacity),
+    )
+    launch = _native_filesystem(resolved.launch_document()['adapter_request'])
+    assert launch[str(worldline_lock)] == 'write'
+    assert launch[str(capacity)] == 'write'
+    # Direct child Sessions do not exist yet when this Session is created.
+    assert launch.get(str(sessions / child_alias)) != 'write'
+    assert launch.get(str(sessions)) != 'write'
+    assert launch.get(str(worldline_lock.parent)) != 'write'
+
+    resumed = refresh_codex_report_paths(
+        resolved.launch_document()['adapter_request'],
+        worktree=root, evidence=root / 'evidence',
+        report_files=(Path('.state/teams/1/rounds/1/leader.md'),),
+        role='team-leader', session_directory=sessions / leader_alias,
+    )
+    filesystem = _native_filesystem(resumed)
+    assert filesystem[str(sessions / child_alias)] == 'write'
+    # The durable launch request keeps its grants across this resume.
+    assert filesystem[str(worldline_lock)] == 'write'
+    assert filesystem[str(capacity)] == 'write'
+    # No wildcard, no shared Runner directory and no other Ticket's Session.
+    assert filesystem.get(str(sessions)) != 'write'
+    assert filesystem.get(str(sessions / 'other-ticket@e1')) != 'write'
+    assert filesystem[':workspace_roots']['.'] == 'write'

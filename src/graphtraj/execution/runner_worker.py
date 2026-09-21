@@ -21,6 +21,11 @@ from graphtraj.execution.execution_budget import (
     execution_budget_stage,
 )
 from graphtraj.execution.runner_io import write_yaml_durably
+from graphtraj.execution.runner_heartbeat import (
+    HEARTBEAT_INTERVAL_SECONDS,
+    hold_ownership,
+    write_heartbeat,
+)
 from graphtraj.execution.runner_transport import runtime_launch_failure
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 
@@ -102,6 +107,23 @@ def run(job_file: Path) -> int:
             if runtime != "codex":
                 raise ValueError("unsupported Runtime")
 
+            # Publish ownership from Worker startup, and keep publishing through
+            # every normal wait until this Worker stops holding the Session.
+            # The stream stays referenced here: closing it, or ending the
+            # process, is what releases the ownership the heartbeat names.
+            owner_lock = hold_ownership(session_directory, os.getpid())
+            heartbeat = {
+                "alias": base_mapping["alias"],
+                "worker_pid": os.getpid(),
+            }
+            heartbeat_stop = threading.Event()
+            heartbeat_thread = threading.Thread(
+                target=_publish_heartbeat,
+                args=(session_directory, heartbeat, heartbeat_stop),
+                daemon=True,
+            )
+            heartbeat_thread.start()
+
             def record_session(session: str, runtime_pid: int) -> None:
                 """Persist native execution identity before acknowledging its caller."""
                 nonlocal mapping_recorded, monitor_thread
@@ -133,6 +155,8 @@ def run(job_file: Path) -> int:
                 (session_directory / "execution.yml").unlink(missing_ok=True)
                 write_yaml_durably(session_directory / "mapping.yml", mapping)
                 mapping_recorded = True
+                heartbeat["execution_id"] = mapping["execution_id"]
+                write_heartbeat(session_directory, heartbeat)
                 if budget_monitor is not None and leader_notice_keys:
                     budget_monitor.mark_leader_notices_delivered(
                         leader_notice_keys
@@ -169,6 +193,8 @@ def run(job_file: Path) -> int:
                     write_yaml_durably(session_directory / "execution.yml", terminal)
                     terminal_published = True
             finally:
+                heartbeat_stop.set()
+                heartbeat_thread.join()
                 if monitor_stop is not None:
                     monitor_stop.set()
                 if monitor_thread is not None:
@@ -259,6 +285,17 @@ def _append_follow_up(events_file: Path, causes: list[str]) -> None:
         )
         events.flush()
         os.fsync(events.fileno())
+
+
+def _publish_heartbeat(
+    session_directory: Path,
+    record: dict[str, object],
+    stop: threading.Event,
+) -> None:
+    """Keep one Session's ownership record current independently of its work."""
+    while not stop.is_set():
+        write_heartbeat(session_directory, record)
+        stop.wait(HEARTBEAT_INTERVAL_SECONDS)
 
 
 def _monitor_execution_budget(

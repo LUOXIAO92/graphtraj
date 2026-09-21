@@ -11,6 +11,7 @@ import pytest
 
 from conftest import wait_for_file, FakeCodex, InstalledCommands, run_process, wait_for_file
 from runner_fixtures import configure_harness, retained_state
+from test_ticket_graph import _change_status, _register, _ticket
 
 
 def _register_ready_inline_ticket(harness_root: Path, product: Path) -> None:
@@ -369,7 +370,7 @@ def test_installed_runner_obeys_the_explicit_leader_decision_for_a_run_free_team
         assert filesystem[':workspace_roots']['docs'] == 'read'
         required_skills = {
             'team-leader': set(),
-            'engineer': {'implement', 'ponytail', 'tdd'},
+            'engineer': {'implement', 'ponytail'},
             'standards-reviewer': {'ponytail-review'},
             'spec-reviewer': set(),
             'delivery-state': set(),
@@ -382,6 +383,17 @@ def test_installed_runner_obeys_the_explicit_leader_decision_for_a_run_free_team
         batch_directory = harness_root / '.graphtraj/state/batches'
         assert (filesystem.get(str(registration)) == 'write') is leader
         assert (filesystem.get(str(batch_directory)) == 'write') is leader
+        # Direct control reads causal Worldline events and takes one Runner
+        # capacity position, at their real locations instead of the Ticket
+        # evidence directory.
+        assert (
+            filesystem.get(str(harness_root / '.graphtraj/state/worldline/.lock'))
+            == 'write'
+        ) is leader
+        assert (
+            filesystem.get(str(harness_root / '.graphtraj/runner/capacity'))
+            == 'write'
+        ) is leader
         report_names = {
             "engineer": {"engineer.md", "validation.md"},
             "standards-reviewer": {"standards.md"},
@@ -516,7 +528,9 @@ def test_installed_runner_obeys_the_explicit_leader_decision_for_a_run_free_team
     assert all(path.stat().st_mode & 0o222 == 0 for path in retained_batches)
     if leader_decision == "rework":
         second = round_directory.parent / "2"
-        assert {path.name for path in second.iterdir()} == {path.name for path in round_directory.iterdir()}
+        assert {path.name for path in second.iterdir()} == {
+            "engineer.md", "validation.md", "leader.md"
+        }
         assert all(path.stat().st_mode & 0o222 == 0 for path in second.iterdir())
         rejected = next(event for event in worldline if event["kind"] == "team-round-implementation-rejected")
         rework = next(event for event in worldline if event["kind"] == "team-round-rework-started")
@@ -540,14 +554,100 @@ def test_installed_runner_obeys_the_explicit_leader_decision_for_a_run_free_team
                 and current["current_candidate"] in event["content"]
                 for event in observed
             )
-        for seat in team["members"].values():
-            records = (
+        executions = {
+            seat: (
                 harness_root / ".graphtraj" / "runner" / "sessions"
-                / seat["session_ref"] / "events.jsonl"
-            )
-            assert records.read_text().count('"type": "runner-execution-start"') >= 2
+                / member["session_ref"] / "events.jsonl"
+            ).read_text().count('"type": "runner-execution-start"')
+            for seat, member in team["members"].items()
+        }
+        # A rework Round keeps the Engineer and the Leader busy without
+        # repeating a Review axis that already reported for this Ticket.
+        assert executions["engineer"] >= 2
+        assert executions["team_leader"] >= 2
+        assert executions["standards_reviewer"] == 1
+        assert executions["spec_reviewer"] == 1
     else:
         assert not (round_directory.parent / "2").exists()
+
+
+@pytest.mark.parametrize(
+    ("axes", "reports"),
+    (
+        ("", {"engineer.md", "validation.md", "leader.md"}),
+        (
+            "standards-reviewer",
+            {"engineer.md", "validation.md", "standards.md", "leader.md"},
+        ),
+        (
+            "standards-reviewer spec-reviewer",
+            {"engineer.md", "validation.md", "standards.md", "spec.md", "leader.md"},
+        ),
+    ),
+)
+def test_installed_runner_accepts_the_review_axes_the_leader_selects(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+    axes: str,
+    reports: set[str],
+) -> None:
+    """The Leader's Review selection closes the Round without a forced axis."""
+    harness_root, _, _, environment = configure_harness(
+        installed_commands, temporary_git_repository, fake_codex, tmp_path,
+    )
+    _register(
+        installed_commands, harness_root, _ticket("74", "selected-review-axes")
+    )
+    _change_status(installed_commands, harness_root, "74", "ready")
+    batch = harness_root / "batch.yml"
+    batch.write_text(
+        'tasks:\n'
+        '  - ticket_id: "74"\n'
+        '    ticket_name: selected-review-axes\n'
+        '    role: coding-team.team-leader\n'
+    )
+    environment.update(
+        FAKE_CODEX_LIFECYCLE_ACTION="complete-team-round",
+        FAKE_CODEX_REVIEW_AXES=axes,
+        GRAPHTRAJ_AGENT_RUNNER=str(installed_commands.runner),
+    )
+
+    launched = run_process(
+        [str(installed_commands.runner), "--batch-input", str(batch)],
+        cwd=harness_root,
+        env=environment,
+        timeout=45,
+    )
+
+    assert launched.returncode == 0, launched.stderr
+    ticket_directory = (
+        harness_root / ".graphtraj" / "state" / "tickets" / "74-selected-review-axes"
+    )
+    current = yaml.safe_load((ticket_directory / "ticket.yml").read_text())
+    assert current["status"] == "awaiting-integration"
+    candidate = current["current_candidate"]
+    round_directory = ticket_directory / "teams" / "1" / "rounds" / "1"
+    assert {path.name for path in round_directory.iterdir()} == reports
+    assert all(
+        candidate in (round_directory / name).read_text() for name in reports
+    )
+    team = yaml.safe_load((ticket_directory / "teams" / "1" / "team.yml").read_text())
+    for seat, role in (
+        ("standards_reviewer", "standards-reviewer"),
+        ("spec_reviewer", "spec-reviewer"),
+    ):
+        session_ref = team["members"][seat]["session_ref"]
+        if role not in axes:
+            assert session_ref is None
+            continue
+        assert session_ref
+        records = (
+            harness_root / ".graphtraj" / "runner" / "sessions"
+            / session_ref / "events.jsonl"
+        )
+        assert records.read_text().count('"type": "runner-execution-start"') == 1
 
 
 def test_installed_runner_rejects_non_run_free_main_batch_fields(
@@ -696,7 +796,18 @@ profile = settings['default_permissions']
 filesystem = settings['permissions'][profile]['filesystem']
 targets = [Path(path) for path, access in filesystem.items() if access == 'write']
 assert registration in targets
-assert len(targets) == 2
+# Exact write grants only: the registered Batch, its retention directory, this
+# Leader's own report and the Worldline lock direct control opens. No wildcard
+# and no shared Runner, state or Session directory.
+harness_store = Path(os.environ['GRAPHTRAJ_HARNESS_ROOT']) / '.graphtraj'
+ticket = harness_store / 'state' / 'tickets' / '75-inline-specialist'
+assert set(targets) == {
+    registration,
+    harness_store / 'state' / 'batches',
+    harness_store / 'state' / 'worldline' / '.lock',
+    harness_store / 'runner' / 'capacity',
+    ticket / 'teams' / '1' / 'rounds' / '1' / 'leader.md',
+}
 assert registration.parent not in targets
 command = [os.environ['TEST_CODEX_SANDBOX'], 'sandbox', '-C', str(Path.cwd()), '-P', profile]
 # The test Harness is below the OS temp directory, which :workspace normally

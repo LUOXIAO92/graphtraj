@@ -129,13 +129,16 @@ def observe(
     activity: str,
     outcome: str | None = None,
     timeout: float = 10,
+    waiting_for: str | None = None,
 ) -> dict:
     """Wait for an observable execution state, bounded independently of a PID."""
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         status = call('status', [alias])['aliases'][0]
-        if status.get('activity') == activity and (
-            outcome is None or status.get('last_outcome') == outcome
+        if (
+            status.get('activity') == activity
+            and (outcome is None or status.get('last_outcome') == outcome)
+            and (waiting_for is None or status.get('waiting_for') == waiting_for)
         ):
             return status
         time.sleep(0.02)
@@ -589,3 +592,148 @@ def test_idle_continuation_survives_predecessor_status_reply_cleanup(
             observe(call, alias, 'idle', 'interrupted')
         finally:
             release.set()
+
+
+def test_permission_wait_keeps_heartbeating(managed_project: ManagedProject) -> None:
+    """A pending request reply keeps heartbeating while the model stays silent."""
+    from graphtraj.execution.runner_heartbeat import read_heartbeat
+    from graphtraj.execution.runner_status import read_alias_mapping
+
+    root, _, call, _ = managed_project
+    launched = call('launch', launch_document('request:approval'))['tasks'][0]
+    alias = launched['alias']
+    waiting = observe(call, alias, 'running', waiting_for='runtime-request')
+    mapping, session_directory = read_alias_mapping(root / '.graphtraj/runner', alias)
+    first = read_heartbeat(session_directory)
+    assert first['alias'] == alias
+    assert first['worker_pid'] == mapping['worker_pid']
+    assert first['execution_id'] == waiting['execution_id']
+    deadline = time.monotonic() + 5
+    while read_heartbeat(session_directory)['updated_at'] == first['updated_at']:
+        assert time.monotonic() < deadline, 'The waiting Worker stopped heartbeating'
+        time.sleep(0.05)
+    current = call('status', [alias])['aliases'][0]
+    assert current['activity'] == 'running'
+    assert current['waiting_for'] == 'runtime-request'
+    assert call('interrupt', [alias]) == {'alias': alias, 'interrupt_status': 'interrupted'}
+    observe(call, alias, 'idle', 'interrupted')
+
+
+def test_terminal_record_is_kept_without_a_usable_heartbeat(
+    managed_project: ManagedProject,
+) -> None:
+    """A published outcome survives a stale and a missing Worker heartbeat."""
+    from graphtraj.execution.runner_heartbeat import HEARTBEAT_FILE_NAME, read_heartbeat
+    from graphtraj.execution.runner_status import read_alias_mapping
+
+    root, cause, call, _ = managed_project
+    launched = call('launch', launch_document())['tasks'][0]
+    alias = launched['alias']
+    call('send', [alias, 'complete task', [cause]])
+    completed = observe(call, alias, 'idle', 'completed')
+    mapping, session_directory = read_alias_mapping(root / '.graphtraj/runner', alias)
+    assert read_heartbeat(session_directory)['execution_id'] == completed['execution_id']
+    heartbeat_file = session_directory / HEARTBEAT_FILE_NAME
+    heartbeat_file.write_text(
+        yaml.safe_dump(
+            {
+                'alias': alias,
+                'worker_pid': mapping['worker_pid'],
+                'updated_at': 0.0,
+            },
+            sort_keys=False,
+        ),
+        encoding='utf-8',
+    )
+    stale = call('status', [alias])['aliases'][0]
+    assert (stale['activity'], stale['last_outcome']) == ('idle', 'completed')
+    heartbeat_file.unlink()
+    missing = call('status', [alias])['aliases'][0]
+    assert (missing['activity'], missing['last_outcome']) == ('idle', 'completed')
+
+
+def test_identifier_without_the_ownership_lock_is_not_the_owned_execution(
+    managed_project: ManagedProject,
+) -> None:
+    """A live reused identifier and an absent owner both report an abnormal end."""
+    import subprocess
+
+    from graphtraj.execution.runner_heartbeat import hold_ownership, write_heartbeat
+
+    root, _, call, _ = managed_project
+    stand_in = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'])
+    try:
+        alias = 'reused-identifier@e1'
+        directory = root / '.graphtraj/runner/sessions' / alias
+        directory.mkdir(parents=True)
+        trace = directory / 'events.jsonl'
+        trace.write_text('', encoding='utf-8')
+        (directory / 'mapping.yml').write_text(
+            yaml.safe_dump(
+                {
+                    'alias': alias,
+                    'runtime': 'codex',
+                    'session': 'native-session',
+                    'ticket_id': '113',
+                    'team_generation': 1,
+                    'role': 'managed-probe',
+                    'parent': None,
+                    'retained_batch_file': 'batch.yml',
+                    'worktree_path': str(root),
+                    'trace_file': str(trace),
+                    'worker_pid': stand_in.pid,
+                    'runtime_pid': stand_in.pid,
+                },
+                sort_keys=False,
+            ),
+            encoding='utf-8',
+        )
+        # The identifier is live again in an unrelated process. The earlier
+        # owner's lock file is left behind released, as a killed Worker does.
+        hold_ownership(directory, stand_in.pid).close()
+        write_heartbeat(directory, {
+            'alias': alias,
+            'worker_pid': stand_in.pid,
+            'execution_id': 'native-execution',
+        })
+        status = call('status', [alias])['aliases'][0]
+        assert status['activity'] == 'abnormal', status
+        assert 'last_outcome' not in status
+        assert status['heartbeat_at'] > 0
+        # An owner that is gone entirely reports the same, never death by PID.
+        stand_in.terminate()
+        stand_in.wait(timeout=5)
+        assert call('status', [alias])['aliases'][0]['activity'] == 'abnormal'
+    finally:
+        stand_in.terminate()
+        stand_in.wait(timeout=5)
+
+
+def test_stopped_worker_reports_lost_contact_and_recovers(
+    managed_project: ManagedProject,
+) -> None:
+    """A stopped Worker is lost contact, not death, and answers again later."""
+    import signal
+
+    from graphtraj.execution.runner_heartbeat import read_heartbeat
+    from graphtraj.execution.runner_status import read_alias_mapping
+
+    root, _, call, _ = managed_project
+    launched = call('launch', launch_document('request:approval'))['tasks'][0]
+    alias = launched['alias']
+    observe(call, alias, 'running', waiting_for='runtime-request')
+    mapping, session_directory = read_alias_mapping(root / '.graphtraj/runner', alias)
+    os.kill(mapping['worker_pid'], signal.SIGSTOP)
+    try:
+        stopped = read_heartbeat(session_directory)
+        lost = call('status', [alias], timeout=30)['aliases'][0]
+        assert lost['activity'] == 'unreachable', lost
+        # The heartbeat stayed frozen while control was unanswered, so the
+        # judgement came from the owner and process identity, not from it.
+        assert read_heartbeat(session_directory)['updated_at'] == stopped['updated_at']
+    finally:
+        os.kill(mapping['worker_pid'], signal.SIGCONT)
+    recovered = observe(call, alias, 'running', waiting_for='runtime-request', timeout=15)
+    assert recovered['session'] == launched['session']
+    assert call('interrupt', [alias]) == {'alias': alias, 'interrupt_status': 'interrupted'}
+    observe(call, alias, 'idle', 'interrupted')

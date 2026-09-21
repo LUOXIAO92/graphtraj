@@ -90,6 +90,7 @@ class _CodexRole:
         self,
         *,
         executable: Path,
+        runtime_store: Path,
         worktree: Path,
         evidence: Path,
         git_common_directory: Path,
@@ -97,6 +98,7 @@ class _CodexRole:
         report_files: Tuple[Path, ...],
         model: str,
         child_batch_write_paths: Tuple[Path, ...] = (),
+        leader_control_write_paths: Tuple[Path, ...] = (),
     ) -> Dict[str, Any]:
         """Render the private request consumed by this Adapter's worker."""
 
@@ -128,6 +130,11 @@ class _CodexRole:
             # Leader. The native profile permits only these exact paths.
             for path in child_batch_write_paths:
                 filesystem[str(path)] = "write"
+            # Direct control also reads causal Worldline events and takes one
+            # Runner capacity position. Later resumes inherit these exact
+            # paths from this durable request instead of re-granting them.
+            for path in leader_control_write_paths:
+                filesystem[str(path)] = "write"
         if self.name == "merge-resolver":
             filesystem[str(evidence)] = "read"
         if self.name in {"engineer", "merge-resolver"}:
@@ -140,10 +147,16 @@ class _CodexRole:
         for skill in effective_skills:
             if skill.enabled:
                 filesystem[str(skill.path.parent)] = "read"
+        approvals_reviewer = _harness_approvals_reviewer(runtime_store)
         overrides = (
             *native_settings.items(),
             ("default_permissions", self.default_permissions),
             ("model_reasoning_effort", self.reasoning_effort),
+            *(
+                (("approvals_reviewer", approvals_reviewer),)
+                if approvals_reviewer is not None
+                else ()
+            ),
             ("developer_instructions", developer_instructions),
             ("agents", self.agents),
             (
@@ -172,6 +185,7 @@ class _CodexRole:
 @dataclass(frozen=True)
 class _CodexRuntimePreflight:
     _executable: Path
+    _runtime_store: Path
     _git_common_directory: Path
     _role: _CodexRole
     _model: str
@@ -184,6 +198,7 @@ class _CodexRuntimePreflight:
     _requested_skills: Tuple[str, ...]
     _report_files: Tuple[Path, ...]
     _child_batch_write_paths: Tuple[Path, ...]
+    _leader_control_write_paths: Tuple[Path, ...]
 
     def finalize(self) -> RuntimeContext:
         """Resolve Ticket Worktree facts shared by supported role boundaries."""
@@ -193,6 +208,7 @@ class _CodexRuntimePreflight:
         )
         request = self._role._launch_request(
             executable=self._executable,
+            runtime_store=self._runtime_store,
             worktree=self._worktree,
             evidence=self._evidence,
             git_common_directory=self._git_common_directory,
@@ -200,6 +216,7 @@ class _CodexRuntimePreflight:
             report_files=self._report_files,
             model=self._model,
             child_batch_write_paths=self._child_batch_write_paths,
+            leader_control_write_paths=self._leader_control_write_paths,
         )
         return _CodexRuntimeContext(
             _launch=json.dumps({
@@ -282,6 +299,7 @@ def preflight_runtime_context(
     requested_skills: Tuple[str, ...],
     report_files: Tuple[Path, ...] = (),
     child_batch_write_paths: Tuple[Path, ...] = (),
+    leader_control_write_paths: Tuple[Path, ...] = (),
 ) -> RuntimeContextPreflight:
     """Prepare one Codex role without crossing role-specific boundaries."""
 
@@ -297,6 +315,7 @@ def preflight_runtime_context(
     )
     resolved_role._launch_request(
         executable=executable,
+        runtime_store=runtime_store,
         git_common_directory=git_common_directory,
         worktree=worktree,
         evidence=evidence,
@@ -304,9 +323,11 @@ def preflight_runtime_context(
         report_files=report_files,
         model=settings.model,
         child_batch_write_paths=child_batch_write_paths,
+        leader_control_write_paths=leader_control_write_paths,
     )
     return _CodexRuntimePreflight(
         _executable=executable,
+        _runtime_store=runtime_store,
         _git_common_directory=git_common_directory,
         _role=resolved_role,
         _model=settings.model,
@@ -319,6 +340,7 @@ def preflight_runtime_context(
         _requested_skills=requested_skills,
         _report_files=report_files,
         _child_batch_write_paths=child_batch_write_paths,
+        _leader_control_write_paths=leader_control_write_paths,
     )
 
 
@@ -789,6 +811,24 @@ def _reject_legacy_user_sandbox_config(codex_home: Path | None = None) -> None:
         )
 
 
+def _harness_approvals_reviewer(runtime_store: Path) -> Any | None:
+    """Return the approvals reviewer the Harness Runtime Store selects.
+
+    One Session runs with its Ticket Worktree as the native project root, so
+    the Runtime Store configuration sits outside the native lookup. Only this
+    selected value is forwarded; a missing, unreadable or unparsable file adds
+    no override and keeps the native default.
+    """
+    config = runtime_store / "config.toml"
+    try:
+        document = tomllib.loads(config.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return None
+    except (OSError, UnicodeError, tomllib.TOMLDecodeError):
+        return None
+    return document.get("approvals_reviewer")
+
+
 def _resume_arguments(launch_arguments: List[str], session: str) -> List[str]:
     if (
         len(launch_arguments) < 4
@@ -1100,8 +1140,11 @@ def refresh_codex_report_paths(
     report_files: Tuple[Path, ...],
     role: str,
     reports_only: bool = False,
+    session_directory: Path | None = None,
 ) -> Dict[str, Any]:
-    """Refresh only exact report permissions in one durable resume request."""
+    """Refresh only exact report and direct-control permissions in one resume."""
+
+    resolved_role = logical_role(role)
     arguments, request_worktree = _validate_launch_request(request)
     if request_worktree != worktree:
         raise CodexAdapterError(
@@ -1146,7 +1189,7 @@ def refresh_codex_report_paths(
     filesystem = profile["filesystem"]
     workspace_roots = filesystem.get(":workspace_roots")
     if (
-        logical_role(role) == "engineer"
+        resolved_role == "engineer"
         and isinstance(workspace_roots, dict)
         and workspace_roots.get(".") == "write"
         and workspace_roots.get("README.md") == "read"
@@ -1166,6 +1209,12 @@ def refresh_codex_report_paths(
             del filesystem[path]
     for path in native_report_paths:
         filesystem[str(path)] = "write"
+    if resolved_role == "team-leader" and session_directory is not None:
+        # Continuing one direct child writes its Session directory, which
+        # exists only after this Session started. Every other Leader path is
+        # already granted by the durable launch request.
+        for path in _leader_child_session_directories(session_directory):
+            filesystem[str(path)] = "write"
     refreshed[permissions_index + 1] = "permissions={0}".format(
         _toml_value(permissions)
     )
@@ -1175,6 +1224,24 @@ def refresh_codex_report_paths(
     if params is not None:
         params["config"]["permissions"] = permissions
     return result
+
+
+def _leader_child_session_directories(
+    session_directory: Path,
+) -> Tuple[Path, ...]:
+    """Return the registered direct child Session directories of one Leader."""
+    directories: list[Path] = []
+    for mapping_file in sorted(session_directory.parent.glob("*/mapping.yml")):
+        try:
+            mapping = yaml.safe_load(mapping_file.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, yaml.YAMLError):
+            continue
+        if (
+            isinstance(mapping, dict)
+            and mapping.get("parent") == session_directory.name
+        ):
+            directories.append(mapping_file.parent)
+    return tuple(directories)
 
 
 def _resume_request_setting(

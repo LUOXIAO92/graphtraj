@@ -22,14 +22,14 @@ def test_default_presets_expose_one_engineer_role() -> None:
     """Setup writes one Engineer preset beside the Team Leader and Reviewers."""
     document = yaml.safe_load(default_roles_content())
 
-    assert set(document["roles"]["coding-team"]) == {
-        "team-leader",
+    assert set(document["roles"]["coding_team"]) == {
+        "team_leader",
         "engineer",
-        "standards-reviewer",
-        "spec-reviewer",
-        "merge-resolver",
+        "standards_reviewer",
+        "spec_reviewer",
+        "merge_resolver",
     }
-    assert document["roles"]["delivery-state"]["runtime"] == "codex"
+    assert document["roles"]["delivery_state"]["runtime"] == "codex"
 
 
 def test_configured_engineer_preset_serves_the_engineer_seat(tmp_path: Path) -> None:
@@ -38,7 +38,7 @@ def test_configured_engineer_preset_serves_the_engineer_seat(tmp_path: Path) -> 
     path.parent.mkdir()
     path.write_text(default_roles_content())
     document = yaml.safe_load(path.read_text())
-    document["roles"]["coding-team"]["engineer"] = {
+    document["roles"]["coding_team"]["engineer"] = {
         "runtime": "codex",
         "model": "operator-selected-model",
         "reasoning_effort": "high",
@@ -47,7 +47,7 @@ def test_configured_engineer_preset_serves_the_engineer_seat(tmp_path: Path) -> 
     }
     path.write_text(yaml.safe_dump(document))
 
-    preset = load_project_roles(tmp_path).presets["coding-team.engineer"]
+    preset = load_project_roles(tmp_path).presets["coding_team.engineer"]
 
     assert preset.model == "operator-selected-model"
     assert preset.reasoning_effort == "high"
@@ -86,12 +86,12 @@ def test_a_tier_named_group_role_keeps_its_own_reference(tmp_path: Path) -> None
 
     roles = load_project_roles(tmp_path)
 
-    assert "coding-team.engineer-senior" in roles.presets
+    assert "coding_team.engineer-senior" in roles.presets
     with pytest.raises(ProjectRolesError) as error:
-        roles.preset("coding-team.engineer")
+        roles.preset("coding_team.engineer")
 
     assert any(
-        "coding-team.engineer" in diagnostic for diagnostic in error.value.diagnostics
+        "coding_team.engineer" in diagnostic for diagnostic in error.value.diagnostics
     )
 
 
@@ -131,7 +131,7 @@ def test_retained_tiered_batch_still_resolves_for_recovery(tmp_path: Path) -> No
 
     task = read_batch(retained, tmp_path).tasks[0]
     role = resolve_child_role(
-        task.policy_role, default_project_roles().presets["coding-team.engineer"]
+        task.policy_role, default_project_roles().presets["coding_team.engineer"]
     )
 
     assert retained.read_bytes() == original

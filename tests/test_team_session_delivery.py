@@ -141,7 +141,7 @@ def test_public_team_phases_and_parent_capacity_transfer(
         }]}]),
     ], cwd=root, env=environment, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     runner = root / ".graphtraj/runner"
-    leader = "114-small-team@l1"
+    leader = "114-small_team-handover0-team_leader@team_leader"
 
     def running_child(alias: str) -> dict:
         """Read a child's public identity and status while its model work is held."""
@@ -159,13 +159,17 @@ def test_public_team_phases_and_parent_capacity_transfer(
         return mapping
 
     try:
-        engineer = running_child("114-small-team@e1")
+        engineer = running_child("114-small_team-handover0-engineer@engineer")
         assert engineer["role"] == "engineer"
         assert read_graph(state)["tickets"][0]["status"] == "implementing"
         engineer_release.touch()
-        assert running_child("114-small-team@r1")["role"] == "standards-reviewer"
+        assert running_child(
+            "114-small_team-handover0-standards_reviewer@standards_reviewer"
+        )["role"] == "standards-reviewer"
         if capacity == 2:
-            assert running_child("114-small-team@r2")["role"] == "spec-reviewer"
+            assert running_child(
+                "114-small_team-handover0-spec_reviewer@spec_reviewer"
+            )["role"] == "spec-reviewer"
         reviewing = read_graph(state)["tickets"][0]
         assert reviewing["status"] == "reviewing"
         candidate = next(event["candidate"] for event in read_worldline(state, root)
@@ -233,9 +237,9 @@ def test_real_small_team(
     model = os.environ.get("CODEX_TEAM_MODEL", config.get("model", "gpt-5.6"))
     roles_file = root / ".graphtraj/roles.yml"
     roles = yaml.safe_load(roles_file.read_text())
-    for preset in [*roles["roles"]["coding-team"].values(), roles["roles"]["delivery-state"]]:
+    for preset in [*roles["roles"]["coding_team"].values(), roles["roles"]["delivery_state"]]:
         preset.update(model=model, reasoning_effort="low")
-    roles["roles"]["coding-team"]["team-leader"]["allow_runtime_swarm"] = False
+    roles["roles"]["coding_team"]["team_leader"]["allow_runtime_swarm"] = False
     roles_file.write_text(yaml.safe_dump(roles))
     limits = root / ".graphtraj/config.yml"
     configuration = yaml.safe_load(limits.read_text())

@@ -25,13 +25,23 @@ class ResolvedChildRole:
         return self.name == "team-leader" and self.settings.allow_runtime_swarm
 
 
+def packaged_role_name(name: str) -> str:
+    """Return the installed template name for one configured role name.
+
+    Installed templates keep their hyphenated file names, so a configured
+    underscore name selects the same template.
+    """
+
+    return name.replace("_", "-")
+
+
 def has_packaged_role(name: str) -> bool:
     """Return whether an installed role template defines this role name."""
 
     if ROLE_NAME.fullmatch(name) is None:
         return False
     return resources.files("graphtraj.resources").joinpath(
-        "roles", name + ".yml"
+        "roles", packaged_role_name(name) + ".yml"
     ).is_file()
 
 
@@ -42,7 +52,7 @@ def resolve_child_role(name: str, settings: RolePreset) -> ResolvedChildRole:
     uses the generic temporary-role responsibilities.
     """
 
-    template = name if has_packaged_role(name) else "temporary-role"
+    template = packaged_role_name(name) if has_packaged_role(name) else "temporary-role"
     try:
         document = yaml.safe_load(resources.files("graphtraj.resources").joinpath(
             "roles", template + ".yml"

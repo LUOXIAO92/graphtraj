@@ -17,7 +17,17 @@ from graphtraj.execution.runner_heartbeat import ownership_is_held, read_heartbe
 from graphtraj.workspace.runner_project import discover_runner_directory
 
 
-ALIAS = re.compile(r"^[A-Za-z0-9._%-]+@[ldmjserx][1-9][0-9]*$")
+# One Agent alias. A current alias names the Ticket, its whole-Team handover
+# generation counted from zero, the configured role and the entity, joined by
+# '-' with '_' inside a word group; the entity name after '@' may be any
+# non-English name. A retained alias keeps its historical Team suffix, role
+# marker and ordinal, so existing Sessions stay locatable. Whitespace, a path
+# separator, a doubled dot and a separator inside the entity name are rejected.
+ALIAS = re.compile(
+    r"^(?!.*\.\.)"
+    r"(?:[A-Za-z0-9_]+(?:-[A-Za-z0-9_]+)*-handover[0-9]+-[A-Za-z0-9_]+@\w+"
+    r"|[A-Za-z0-9._%-]+@[ldmjserx][1-9][0-9]*)$"
+)
 TERMINAL_OUTCOMES = frozenset({"completed", "interrupted", "runtime-error"})
 SESSION_MAPPING_FIELDS = frozenset(
     {

@@ -80,17 +80,3 @@ RuntimeAdapter = Callable[
 ResumeRuntimeAdapter = Callable[
     [Mapping[str, Any], str, str, Path, SessionStarted], RuntimeTurn
 ]
-
-
-def native_command_approval(command: str, cwd: str) -> bool:
-    """Return whether the caller's own native Runtime approved this command.
-
-    The Runtime details stay in the Adapter: this entry only asks whether the
-    decision already recorded for the command line this process is running,
-    in the working directory it is running in, is an approval. It reads what
-    already happened; it produces no request and stores nothing.
-    """
-
-    from graphtraj.runtimes.codex.native_approval import codex_native_command_approval
-
-    return codex_native_command_approval(command, cwd)

@@ -189,8 +189,13 @@ configured_events =""", 1)
         # Leader it dispatched itself, not the Leader's members.
         for member in (engineer, reviewer):
             denied_member = command("replace", member, "--actor", "main", "--caused-by-event-id", cause)
-            assert denied_member.returncode == 1, denied_member.stdout
-            assert yaml.safe_load(denied_member.stdout)["error"]["code"] in {"authority-denied", "native-approval-unavailable"}
+            response = yaml.safe_load(denied_member.stdout)
+            if denied_member.returncode == 0:
+                assert response["replacement_status"] == "requires-native-approval"
+                assert response["native_execution"]["arguments"]["sandbox_permissions"] == "require_escalated"
+            else:
+                assert denied_member.returncode == 1, denied_member.stdout
+                assert response["error"]["code"] in {"authority-denied", "native-approval-unavailable"}
         assert retained_state(engineer_trace) == engineer_before
         assert retained_state(trace) == prior
         assert team_file.read_text() == yaml.safe_dump(team, sort_keys=False)

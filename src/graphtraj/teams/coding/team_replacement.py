@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import sys
 import time
 from contextlib import ExitStack
 from dataclasses import replace
@@ -21,6 +22,7 @@ from graphtraj.workspace.runner_project import discover_project, run_git
 from graphtraj.execution.runner_status import (
     read_alias_mapping,
     require_replacement_authority,
+    require_stopped_subtree,
 )
 from graphtraj.teams.coding.team_round import (
     _deliver_ticket,
@@ -51,10 +53,37 @@ def require_active_session(project, alias):
     return team
 
 
-def replace_session(alias, actor, caused_by_event_ids, cwd):
+def replace_session(
+    alias: str, actor: str, caused_by_event_ids: tuple[str, ...], cwd: Path
+) -> dict:
+    """Check ownership, then execute this replacement via native approval if needed."""
+    project = discover_project(cwd, require_clean_integration=False)
+    mapping, _ = read_alias_mapping(project.runner_directory, alias)
+    # Native approval executes the concrete remaining operation, not a replay of
+    # the public entry or a command carrying an approved/skip-authority flag.
+    script = (
+        "from pathlib import Path; import yaml; "
+        "from graphtraj.teams.coding.team_replacement import _replace_stopped_session; "
+        "print(yaml.safe_dump(_replace_stopped_session("
+        + repr(alias) + ", " + repr(actor) + ", "
+        + repr(tuple(caused_by_event_ids)) + ", Path(" + repr(str(cwd))
+        + ")), sort_keys=False))"
+    )
+    result = require_replacement_authority(
+        project.runner_directory, alias, mapping, [sys.executable, "-c", script]
+    )
+    if result is not None:
+        return result
+    return _replace_stopped_session(alias, actor, caused_by_event_ids, cwd)
+
+
+def _replace_stopped_session(
+    alias: str, actor: str, caused_by_event_ids: tuple[str, ...], cwd: Path
+) -> dict:
+    """Perform the replacement after relation/native approval; recheck stopped state."""
     project = discover_project(cwd, require_clean_integration=False)
     mapping, session_directory = read_alias_mapping(project.runner_directory, alias)
-    require_replacement_authority(project.runner_directory, alias, mapping)
+    require_stopped_subtree(project.runner_directory, alias)
     if not caused_by_event_ids or len(caused_by_event_ids) != len(set(caused_by_event_ids)):
         raise RunnerError("invalid-input", "Replacement requires unique causal Project Worldline event IDs.")
     _require_project_events(cwd, caused_by_event_ids)

@@ -175,11 +175,27 @@ configured_events =""", 1)
         for member in (engineer, reviewer):
             denied_member = command("replace", member, "--actor", "main", "--caused-by-event-id", cause)
             assert denied_member.returncode == 1, denied_member.stdout
-            assert yaml.safe_load(denied_member.stdout)["error"]["code"] == "authority-denied"
+            assert yaml.safe_load(denied_member.stdout)["error"]["code"] in {"authority-denied", "native-approval-unavailable"}
         assert retained_state(engineer_trace) == engineer_before
         assert retained_state(trace) == prior
         assert team_file.read_text() == yaml.safe_dump(team, sort_keys=False)
         assert yaml.safe_load((ticket_dir / "ticket.yml").read_text()) == original
+
+    if during_implementation:
+        refused = command("replace", leader, "--actor", "user", "--caused-by-event-id", events()[-1]["event_id"])
+        assert refused.returncode == 1
+        assert yaml.safe_load(refused.stdout)["error"]["code"] == "replacement-not-stopped"
+        # Stop the existing execution before replacement; replacement itself
+        # must not silently turn permission into an interruption operation.
+        interrupted = command("interrupt", leader)
+        assert interrupted.returncode == 0, interrupted.stdout + interrupted.stderr
+        for path in (root / ".graphtraj/runner/sessions").glob("*/mapping.yml"):
+            mapping = yaml.safe_load(path.read_text())
+            if mapping.get("parent") == leader:
+                status = yaml.safe_load(command("status", mapping["alias"]).stdout)["aliases"][0]
+                if status["activity"] != "idle":
+                    result = command("interrupt", mapping["alias"])
+                    assert result.returncode == 0, result.stdout + result.stderr
 
     replaced = command("replace", leader, "--actor", "user", "--caused-by-event-id", events()[-1]["event_id"])
     assert replaced.returncode == 0, replaced.stdout + replaced.stderr

@@ -13,6 +13,9 @@ PUBLIC_ERROR_CODES = frozenset(
     {
         "invalid-input",
         "authority-denied",
+        "native-approval-unavailable",
+        "native-replacement-failed",
+        "replacement-not-stopped",
         "team-not-active",
         "seat-replaced",
         "insufficient-capacity",

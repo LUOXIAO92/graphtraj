@@ -64,7 +64,6 @@ class CodexManagedExecution:
         self.context = restore_codex_context(request, context_evidence)
         self.approval = request.get("approval")
         self.approval_items: dict[str, dict] = {}
-        self.approval_result: dict | None = None
         self.command = (request['arguments'][0], 'app-server', '--listen', 'stdio://')
         self.prompt = prompt
         self.directory = session_directory
@@ -164,12 +163,6 @@ class CodexManagedExecution:
             return {'activity': 'idle', 'last_outcome': self.outcome['outcome']}
         if request.get('operation') == 'requests' and self.outcome is not None:
             return {'requests': []}
-        # The decided command is read once, for as long as this Worker holds it.
-        if request.get('operation') == 'approval' and self.execution is not None and (
-            request.get('session'), request.get('execution_id')
-        ) == (self.execution.thread_id, self.execution.turn_id):
-            record, self.approval_result = self.approval_result, None
-            return {'approval': record}
         if self.outcome is not None or self.loop is None or self.loop.is_closed():
             raise RuntimeAdapterError('operation-failed', 'The execution is no longer active.')
         try:
@@ -208,12 +201,6 @@ class CodexManagedExecution:
                 raise RuntimeAdapterError('operation-failed', 'The native request is no longer pending.')
             native, response = pending
             response.set_result(request['response'])
-            if (
-                native.method == 'item/commandExecution/requestApproval'
-                and isinstance(request['response'], dict)
-                and isinstance(request['response'].get('decision'), str)
-            ):
-                self._remember_approval(native, request['response']['decision'])
             return {'request_id': native.request_id, 'reply_status': 'submitted'}
         if request['operation'] == 'send':
             await self.adapter.send_input(execution, request['instruction'])
@@ -274,7 +261,6 @@ class CodexManagedExecution:
                 terminal_confirmed=False,
             )
         result = await review_request(self.approval, context)
-        self._remember_approval(request, result['decision'])
         if request.method == 'item/permissions/requestApproval':
             # Return only the exact requested profile; omitted scope uses Codex's
             # native default (turn). A denial grants nothing, only after review.
@@ -282,25 +268,6 @@ class CodexManagedExecution:
                 request.params['permissions'] if result['decision'] == 'accept' else {}
             )}
         return {'decision': decisions[result['decision']]}
-
-    def _remember_approval(self, native: CodexServerRequest, decision: str) -> None:
-        """Keep the decided command transiently for one later read.
-
-        Only the latest decided command is held, in this Worker's memory and for
-        this execution only, and a read consumes it: the decision can then
-        authorize at most the one command it names. Nothing is written down.
-        """
-        command = native.params.get('command')
-        if command is None or self.execution is None:
-            return
-        self.approval_result = {
-            'alias': self.directory.name,
-            'session': self.execution.thread_id,
-            'execution_id': self.execution.turn_id,
-            'command': command,
-            'cwd': native.params.get('cwd'),
-            'decision': decision,
-        }
 
     def _approval_context(self) -> dict:
         """Map native rollout snapshots and subsequent items without new compaction.

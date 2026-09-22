@@ -5,8 +5,6 @@ from __future__ import annotations
 import json
 import os
 import re
-import shlex
-import sys
 from pathlib import Path
 from typing import Any, Dict, Mapping, Sequence, Tuple
 
@@ -180,72 +178,59 @@ def require_descendant_authority(
 
 
 def require_replacement_authority(
-    runner_directory: Path, alias: str, mapping: Mapping[str, Any]
-) -> None:
-    """Authorize one replacement by the recorded relation or a native approval.
+    runner_directory: Path,
+    alias: str,
+    mapping: Mapping[str, Any],
+    command: Sequence[str] | None = None,
+) -> dict | None:
+    """Run the specified replacement through the caller's native approval.
 
-    The target's recorded direct parent replaces it, and Main or the user
-    replaces a top-level Session recorded without a parent. Every other caller
-    is over level and continues only with the caller's own Runtime approval of
-    this exact command execution: a Session caller's Worker keeps that decision
-    for one read. Callers without a Worker have no verified approval handoff;
-    their command history cannot establish permission for this invocation.
-    The ``--actor`` value, a request field and every projected environment
-    value are self-reports and take no part in this judgement.
+    Direct owners and a recorded Runtime without approvals continue locally.
+    Otherwise the native execution interface runs the remaining operation;
+    its returned document is the replacement result, never an approval record.
     """
+    from graphtraj.runtimes.replacement import caller_runtime, execute_replacement
+
     caller = caller_alias(runner_directory)
     if is_direct_owner(caller, mapping):
-        return
-    if caller is not None and _worker_approval_covers_this_command(
-        runner_directory, caller, alias
-    ):
-        return
-    raise _replacement_denied()
+        return None
+    runtime = (
+        read_alias_mapping(runner_directory, caller)[0]["runtime"]
+        if caller is not None else caller_runtime()
+    )
+    # pi deliberately has no native approval mechanism. Unknown Runtime or a
+    # missing Codex channel is not evidence of that capability choice.
+    if runtime == "pi":
+        return None
+    if runtime != "codex" or command is None:
+        raise _replacement_denied()
+    return execute_replacement(command)
 
 
-def _worker_approval_covers_this_command(
-    runner_directory: Path, caller: str, alias: str
-) -> bool:
-    """Return whether the caller's Runtime approved this very command.
-
-    The caller's Runtime decided about the command execution that runs this
-    entry, and its Worker keeps that decision transiently for one read. The
-    replacement continues only when the record belongs to this caller's
-    Session and execution, names this process's own command line and working
-    directory exactly, names the target being replaced, and is an explicit
-    ``accept``. A missing, already consumed, mismatched or non-accepting record
-    refuses, so no carried value can promote a caller.
-    """
-    mapping, _ = read_alias_mapping(runner_directory, caller)
-    try:
-        record = session_operation(mapping, "approval").get("approval")
-    except RunnerError:
-        return False
-    if not isinstance(record, dict) or record.get("decision") != "accept":
-        return False
-    if (
-        record.get("alias") != caller
-        or record.get("session") != mapping.get("session")
-        or record.get("execution_id") != mapping.get("execution_id")
-    ):
-        return False
-    if alias not in sys.argv or record.get("cwd") != os.getcwd():
-        return False
-    return _same_command(record.get("command"), sys.argv)
-
-
-def _same_command(recorded: Any, argv: Sequence[str]) -> bool:
-    """Compare one recorded native command with this process's argv exactly.
-
-    A native command carried as a sequence must equal the arguments one for
-    one; one carried as text must equal the shell-quoted form of the same
-    arguments. Nothing is matched by substring or by similarity.
-    """
-    if isinstance(recorded, str):
-        return recorded == shlex.join(argv)
-    if isinstance(recorded, (list, tuple)):
-        return list(recorded) == list(argv)
-    return False
+def require_stopped_subtree(runner_directory: Path, alias: str) -> None:
+    """Require terminal execution for the target and every recorded descendant."""
+    mappings = {
+        path.name: read_alias_mapping(runner_directory, path.name)
+        for path in (runner_directory / "sessions").iterdir()
+        if path.is_dir()
+    }
+    pending = [alias]
+    seen: set[str] = set()
+    while pending:
+        current = pending.pop()
+        if current in seen:
+            continue
+        seen.add(current)
+        mapping, directory = mappings[current]
+        if _status_session(mapping, directory, current)["activity"] != "idle":
+            raise RunnerError(
+                "replacement-not-stopped",
+                "The target and all descendants must be stopped before replacement.",
+            )
+        pending.extend(
+            name for name, (child, _) in mappings.items()
+            if child.get("parent") == current
+        )
 
 
 def status_aliases(

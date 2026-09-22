@@ -17,6 +17,7 @@ from graphtraj.execution.runner_models import RunnerError, StatusResponse
 from graphtraj.execution.runner_connection import session_operation
 from graphtraj.execution.runner_heartbeat import ownership_is_held, read_heartbeat
 from graphtraj.execution.runner_process import process_ancestors
+from graphtraj.runtimes.runtime_adapter import native_command_approval
 from graphtraj.workspace.runner_project import discover_runner_directory
 
 
@@ -187,21 +188,39 @@ def require_replacement_authority(
     The target's recorded direct parent replaces it, and Main or the user
     replaces a top-level Session recorded without a parent. Every other caller
     is over level and continues only with the caller's own Runtime approval of
-    this exact command execution, read once from that Session's Worker. The
-    ``--actor`` value, a request field and every projected environment value
-    are self-reports and take no part in this judgement.
+    this exact command execution: a Session caller's Worker keeps that decision
+    for one read, and a caller with no GraphTraj Session, such as Main, has it
+    read from the record its own native Runtime wrote for this command line.
+    The ``--actor`` value, a request field and every projected environment
+    value are self-reports and take no part in this judgement.
     """
     caller = caller_alias(runner_directory)
     if is_direct_owner(caller, mapping):
         return
-    if caller is not None and _native_approval_covers_this_command(
+    if caller is not None and _worker_approval_covers_this_command(
         runner_directory, caller, alias
     ):
+        return
+    if _native_approval_covers_this_command(alias):
         return
     raise _replacement_denied()
 
 
-def _native_approval_covers_this_command(
+def _native_approval_covers_this_command(alias: str) -> bool:
+    """Return whether the caller's own native Runtime approved this command.
+
+    Main and the user run no GraphTraj Session, so no Worker holds a decision
+    for them. Their own native Runtime still decides about the command line
+    that runs this entry, and that decision is read here for this one command
+    line, working directory and target. It is asked for by name, so nothing
+    the request or the environment carries can stand in for it.
+    """
+    if alias not in sys.argv:
+        return False
+    return native_command_approval(shlex.join(sys.argv), os.getcwd())
+
+
+def _worker_approval_covers_this_command(
     runner_directory: Path, caller: str, alias: str
 ) -> bool:
     """Return whether the caller's Runtime approved this very command.

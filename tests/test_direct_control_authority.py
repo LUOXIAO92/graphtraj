@@ -558,3 +558,132 @@ def test_control_entries_follow_recorded_direct_ownership(
         assert refused.returncode == 1, refused.stdout + refused.stderr
         assert yaml.safe_load(refused.stdout)["error"]["code"] == "authority-denied", refused.stdout
     assert yaml.safe_load(team_file.read_text(encoding="utf-8"))["members"]["engineer"]["session_ref"] == seat
+
+
+def _native_rollout(
+    tmp_path: Path, thread: str, *, records: list[dict]
+) -> Path:
+    """Write one native Codex session rollout and point the environment at it."""
+    home = tmp_path / "codex-home"
+    session = home / "sessions" / "2026" / "09" / "22"
+    session.mkdir(parents=True, exist_ok=True)
+    rollout = session / "rollout-2026-09-22T00-00-00-{0}.jsonl".format(thread)
+    rollout.write_text(
+        "\n".join(json.dumps(record) for record in records) + "\n",
+        encoding="utf-8",
+    )
+    return home
+
+
+def _escalated_call_records(command: str, cwd: str) -> list[dict]:
+    """One escalated tool call that the native Runtime then produced a result for."""
+    call_id = "call_escalated"
+    return [
+        {"type": "session_meta", "payload": {"session_id": "thread"}},
+        {
+            "type": "response_item",
+            "payload": {
+                "type": "custom_tool_call",
+                "name": "exec",
+                "call_id": call_id,
+                "input": (
+                    'text(await tools.exec_command({cmd:"' + command
+                    + '",workdir:"' + cwd
+                    + '",sandbox_permissions:"require_escalated",yield_time_ms:1000}));'
+                ),
+            },
+        },
+        {
+            "type": "response_item",
+            "payload": {"type": "custom_tool_call_output", "call_id": call_id},
+        },
+    ]
+
+
+def test_native_session_approval_covers_this_replace_command(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A caller with no Session continues on its own native approval of this command."""
+    runner_directory = tmp_path / "harness" / ".graphtraj" / "runner"
+    leader = "132-ticket-handover0-team_leader@team_leader"
+    member = "132-ticket-handover0-engineer@engineer_2"
+    _record_direct_session(runner_directory, leader, "team_leader", None)
+    _record_direct_session(runner_directory, member, "engineer", leader)
+    thread = "01a0c781-608b-7a90-b640-1422636d029f"
+    command = _replacement_command(member)
+    monkeypatch.setattr(sys, "argv", list(command))
+    monkeypatch.setenv("CODEX_THREAD_ID", thread)
+
+    # The caller's own native session approved this escalated command line in
+    # this working directory: the over-level replacement continues.
+    home = _native_rollout(
+        tmp_path, thread,
+        records=_escalated_call_records(" ".join(command), os.getcwd()),
+    )
+    monkeypatch.setenv("CODEX_HOME", str(home))
+    _ask_to_replace(runner_directory, None, member, monkeypatch)
+
+    # Every deviation refuses: no record for the thread, a denial instead of a
+    # result, another command line, another working directory, no escalation
+    # request, and a command reached by substring rather than by equality.
+    for name, records, environ in (
+        ("no-record", _escalated_call_records(" ".join(command), os.getcwd()), {"CODEX_THREAD_ID": "other"}),
+        (
+            "no-result",
+            _escalated_call_records(" ".join(command), os.getcwd())[:2],
+            {},
+        ),
+        (
+            "another-command",
+            _escalated_call_records("agent-runner status " + member, os.getcwd()),
+            {},
+        ),
+        ("another-cwd", _escalated_call_records(" ".join(command), "/"), {}),
+        (
+            "not-escalated",
+            [
+                record for record in _escalated_call_records(" ".join(command), os.getcwd())
+                if "require_escalated" not in json.dumps(record)
+            ],
+            {},
+        ),
+        (
+            "substring",
+            _escalated_call_records("echo " + " ".join(command), os.getcwd()),
+            {},
+        ),
+    ):
+        home = _native_rollout(tmp_path, thread, records=records)
+        monkeypatch.setenv("CODEX_HOME", str(home))
+        monkeypatch.setenv("CODEX_THREAD_ID", environ.get("CODEX_THREAD_ID", thread))
+        with pytest.raises(RunnerError) as refused:
+            _ask_to_replace(runner_directory, None, member, monkeypatch)
+        assert refused.value.code == "authority-denied", name
+
+    # A later identical call that produced no result refuses, instead of
+    # falling back to the earlier approval of the same command line.
+    records = _escalated_call_records(" ".join(command), os.getcwd())
+    later = json.loads(json.dumps(records[1]))
+    later["payload"]["call_id"] = "call_later"
+    home = _native_rollout(
+        tmp_path, thread, records=records + [later]
+    )
+    monkeypatch.setenv("CODEX_HOME", str(home))
+    monkeypatch.setenv("CODEX_THREAD_ID", thread)
+    with pytest.raises(RunnerError) as superseded:
+        _ask_to_replace(runner_directory, None, member, monkeypatch)
+    assert superseded.value.code == "authority-denied"
+
+    # A later identical call that asked for no escalation refuses too.
+    records = _escalated_call_records(" ".join(command), os.getcwd())
+    plain = json.loads(json.dumps(records[1]))
+    plain["payload"]["call_id"] = "call_plain"
+    plain["payload"]["input"] = plain["payload"]["input"].replace(
+        ',sandbox_permissions:"require_escalated"', ""
+    )
+    home = _native_rollout(tmp_path, thread, records=records + [plain])
+    monkeypatch.setenv("CODEX_HOME", str(home))
+    monkeypatch.setenv("CODEX_THREAD_ID", thread)
+    with pytest.raises(RunnerError) as unescalated:
+        _ask_to_replace(runner_directory, None, member, monkeypatch)
+    assert unescalated.value.code == "authority-denied"

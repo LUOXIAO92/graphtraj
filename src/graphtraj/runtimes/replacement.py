@@ -47,13 +47,41 @@ def caller_runtime() -> str | None:
 
 
 def execute_replacement(command: Sequence[str]) -> dict:
-    """Ask the inherited Codex wrapper to execute this exact remaining operation.
+    """Request native execution of this exact remaining operation.
 
     The native wrapper owns approval, rejection, cancellation and execution.
-    GraphTraj reads only the operation's normal result. No prior decision or
-    approval token is retained or accepted. Missing access is an error, not a
-    Runtime with no approval mechanism.
+    GraphTraj reads only the operation's normal result. Without an inherited
+    wrapper, return the exact execution request to the actual caller's native
+    tool. No prior decision or approval token is retained or accepted; a broken
+    inherited channel remains an error.
     """
+    if "CODEX_ESCALATE_SOCKET" not in os.environ:
+        # The caller's native tool owns approval and executes the operation
+        # itself. Returning this request grants no authority and changes no seat.
+        return {
+            "replacement_status": "requires-native-approval",
+            "instruction": (
+                "In the actual calling Runtime, invoke exec_command with the exact "
+                "arguments below. Native approval executes the remaining replacement; "
+                "its output is the final operation result. If denied or cancelled, "
+                "stop without executing the command by another route."
+            ),
+            "native_execution": {
+                "tool": "exec_command",
+                "arguments": {
+                    "cmd": shlex.join(command),
+                    "workdir": os.getcwd(),
+                    "login": False,
+                    "sandbox_permissions": "require_escalated",
+                    "justification": (
+                        "Allow this non-direct replacement after GraphTraj checked "
+                        "the recorded caller relationship? The target and all "
+                        "descendants must still be stopped before replacement."
+                    ),
+                },
+            },
+        }
+
     try:
         descriptor = int(os.environ["CODEX_ESCALATE_SOCKET"])
         wrapper = os.environ["EXEC_WRAPPER"]
@@ -65,8 +93,7 @@ def execute_replacement(command: Sequence[str]) -> dict:
         raise RunnerError(
             "native-approval-unavailable",
             "Codex approval exists but its native execution channel is unavailable. "
-            "This operation needs the caller's shell_zsh_fork execution backend "
-            "and bundled zsh; no replacement was executed.",
+            "The inherited execution channel is invalid; no replacement was executed.",
         ) from error
 
     try:

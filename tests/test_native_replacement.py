@@ -2,6 +2,8 @@
 
 import os
 import socket
+import shlex
+import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -44,9 +46,28 @@ def test_native_execution_owns_continuation(tmp_path: Path, monkeypatch, decisio
     assert marker.exists() == (decision == "allow")
 
 
-def test_missing_channel_is_not_no_approval(monkeypatch) -> None:
-    """Codex without its inherited channel must not execute locally."""
+def test_native_tool_continuation_requires_execution(tmp_path: Path, monkeypatch) -> None:
+    """Returning a request does not run it; native execution supplies the result."""
     monkeypatch.delenv("CODEX_ESCALATE_SOCKET", raising=False)
+    marker = tmp_path / "operation with ' quotes"
+    command = [sys.executable, "-c", (
+        f"from pathlib import Path; Path({str(marker)!r}).touch(); "
+        "print('replacement_alias: successor')"
+    )]
+    request = replacement.execute_replacement(command)
+    assert request["replacement_status"] == "requires-native-approval"
+    arguments = request["native_execution"]["arguments"]
+    assert arguments["sandbox_permissions"] == "require_escalated"
+    assert not marker.exists()  # Refusal/cancel leaves the operation unexecuted.
+    result = subprocess.run(shlex.split(arguments["cmd"]), capture_output=True, text=True)
+    assert result.returncode == 0
+    assert yaml.safe_load(result.stdout) == {"replacement_alias": "successor"}
+    assert marker.exists()
+
+
+def test_invalid_channel_does_not_fall_back(monkeypatch) -> None:
+    """A broken existing connection is not absence of approval capability."""
+    monkeypatch.setenv("CODEX_ESCALATE_SOCKET", "invalid")
     with pytest.raises(RunnerError) as error:
         replacement.execute_replacement([sys.executable, "-c", "raise AssertionError"])
     assert error.value.code == "native-approval-unavailable"
@@ -69,6 +90,9 @@ def test_recorded_runtime_controls_native_stage(tmp_path: Path, monkeypatch, run
     target, _ = runner_status.read_alias_mapping(root, parent)
     if runtime == "pi":
         assert runner_status.require_replacement_authority(root, parent, target, ["unused"]) is None
+    elif runtime == "codex":
+        result = runner_status.require_replacement_authority(root, parent, target, ["unused"])
+        assert result["replacement_status"] == "requires-native-approval"
     else:
         with pytest.raises(RunnerError):
             runner_status.require_replacement_authority(root, parent, target, ["unused"])
@@ -120,3 +144,23 @@ def test_external_runtime_uses_executable_not_environment(monkeypatch) -> None:
     assert replacement.caller_runtime() == "codex"
     monkeypatch.setattr(replacement, "process_executable", lambda pid: Path("/bin/zsh"))
     assert replacement.caller_runtime() is None
+
+
+def test_public_non_direct_replacement_returns_native_request(tmp_path: Path, monkeypatch) -> None:
+    """The public entry checks ownership and yields without changing the seat."""
+    root = tmp_path / "runner"
+    parent = "132-ticket-handover0-team_leader@leader"
+    child = "132-ticket-handover0-engineer@child"
+    _record_direct_session(root, parent, "team-leader", None)
+    _record_direct_session(root, child, "engineer", parent)
+    monkeypatch.setattr(team_replacement, "discover_project", lambda *a, **k: SimpleNamespace(runner_directory=root))
+    monkeypatch.setattr(runner_status, "caller_alias", lambda directory: None)
+    monkeypatch.setattr(replacement, "caller_runtime", lambda: "codex")
+    monkeypatch.delenv("CODEX_ESCALATE_SOCKET", raising=False)
+    def unexpected_execution(*args):
+        """Fail if requesting approval executes the operation locally."""
+        pytest.fail("replacement ran before native execution")
+    monkeypatch.setattr(team_replacement, "_replace_stopped_session", unexpected_execution)
+    result = team_replacement.replace_session(child, "main", ("cause",), tmp_path)
+    assert result["replacement_status"] == "requires-native-approval"
+    assert result["native_execution"]["arguments"]["sandbox_permissions"] == "require_escalated"

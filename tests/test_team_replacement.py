@@ -51,7 +51,9 @@ def test_installed_team_and_member_replacement(
         emit({'type': 'item.completed', 'item': {'type': 'agent_message', 'text': 'Handoff: preserve TEAM_ROUND_DELIVERED.txt and continue the Ticket.'}})
     elif role == 'team-leader':
         if os.environ.get('GRAPHTRAJ_TEAM_GENERATION') == '2' and 'resume' not in sys.argv:
+            import io
             prompt = sys.stdin.read()
+            sys.stdin = io.StringIO(prompt)
             if 'Continue from the previous' in prompt:
                 team = evidence / 'teams/1'
                 trace = next((team / 'traces').glob('*@team_leader/events.jsonl'))
@@ -96,6 +98,19 @@ configured_events =""", 1)
         while not (probe / 'release-reviewers').exists():
             time.sleep(0.01)
 """)
+    if not during_implementation:
+        # The retired Team already completed its Review axes. Its successor
+        # verifies those retained reports instead of dispatching them again.
+        script = script.replace(
+            "        engineer_stage = 1 if inline_specialist else 0",
+            "        if os.environ.get('GRAPHTRAJ_TEAM_GENERATION') == '2':\n"
+            "            review_axes = []\n"
+            "        engineer_stage = 1 if inline_specialist else 0",
+        )
+        script = script.replace(
+            "and ordinal == '1':",
+            "and ordinal == '1' and os.environ.get('GRAPHTRAJ_TEAM_GENERATION') == '1':",
+        )
     if delivery == "rework":
         script = script.replace("            if serial:", """            if ordinal == '2':
                 import yaml
@@ -187,8 +202,10 @@ configured_events =""", 1)
         assert yaml.safe_load(refused.stdout)["error"]["code"] == "replacement-not-stopped"
         # Stop the existing execution before replacement; replacement itself
         # must not silently turn permission into an interruption operation.
-        interrupted = command("interrupt", leader)
-        assert interrupted.returncode == 0, interrupted.stdout + interrupted.stderr
+        status = yaml.safe_load(command("status", leader).stdout)["aliases"][0]
+        if status["activity"] != "idle":
+            interrupted = command("interrupt", leader)
+            assert interrupted.returncode == 0, interrupted.stdout + interrupted.stderr
         for path in (root / ".graphtraj/runner/sessions").glob("*/mapping.yml"):
             mapping = yaml.safe_load(path.read_text())
             if mapping.get("parent") == leader:
@@ -196,6 +213,9 @@ configured_events =""", 1)
                 if status["activity"] != "idle":
                     result = command("interrupt", mapping["alias"])
                     assert result.returncode == 0, result.stdout + result.stderr
+        # Native interruption is acknowledged before the outer Team worker
+        # finishes its failure handoff and releases its capacity position.
+        launched.communicate(timeout=60)
 
     replaced = command("replace", leader, "--actor", "user", "--caused-by-event-id", events()[-1]["event_id"])
     assert replaced.returncode == 0, replaced.stdout + replaced.stderr
@@ -218,14 +238,20 @@ configured_events =""", 1)
         "76-session_alias_control-handover1-team_leader@team_leader"
     )
     if delivery == "rework":
-        assert retired["current_round"] == successor["current_round"] == 2
+        assert retired["current_round"] == 2
+        assert successor["current_round"] == 1
         for generation in (1, 2):
             rounds = ticket_dir / "teams" / str(generation) / "rounds"
-            assert {path.name for path in rounds.iterdir()} == {"1", "2"}
+            assert {path.name for path in rounds.iterdir()} == ({"1", "2"} if generation == 1 else {"1"})
             assert all(not path.stat().st_mode & 0o200 for path in rounds.rglob("*.md"))
             reworks = [event for event in events()
                        if event["kind"] == "team-round-rework-started" and event["team_ordinal"] == generation]
-            assert len(reworks) == 1 and reworks[0]["team_round"] == 2
+            if generation == 1:
+                assert len(reworks) == 1 and reworks[0]["team_round"] == 2
+            else:
+                assert reworks == []
+        for report in ("standards.md", "spec.md"):
+            assert len(list((ticket_dir / "teams").glob("*/rounds/*/" + report))) == 1
     ticket = yaml.safe_load((ticket_dir / "ticket.yml").read_text())
     assert ticket["active_team_ordinal"] == 2
     assert ticket["status"] == "awaiting-integration"

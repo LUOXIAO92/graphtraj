@@ -15,6 +15,7 @@ from graphtraj.execution.runner_models import RunnerError, StatusResponse
 from graphtraj.execution.runner_connection import session_operation
 from graphtraj.execution.runner_heartbeat import ownership_is_held, read_heartbeat
 from graphtraj.execution.runner_process import process_ancestors
+from graphtraj.execution.runner_transport import valid_terminal_launch_failure
 from graphtraj.workspace.runner_project import discover_runner_directory
 
 
@@ -209,11 +210,17 @@ def require_replacement_authority(
 
 def require_stopped_subtree(runner_directory: Path, alias: str) -> None:
     """Require terminal execution for the target and every recorded descendant."""
-    mappings = {
-        path.name: read_alias_mapping(runner_directory, path.name)
-        for path in (runner_directory / "sessions").iterdir()
-        if path.is_dir()
-    }
+    # The target must always be an established, valid Session. Other allocated
+    # directories may retain a confirmed startup failure without any Session.
+    mappings = {alias: read_alias_mapping(runner_directory, alias)}
+    for path in (runner_directory / "sessions").iterdir():
+        if path.name == alias:
+            continue
+        if not path.is_dir() and not path.is_symlink():
+            continue
+        if _terminal_unestablished_launch(path):
+            continue
+        mappings[path.name] = read_alias_mapping(runner_directory, path.name)
     pending = [alias]
     seen: set[str] = set()
     while pending:
@@ -231,6 +238,36 @@ def require_stopped_subtree(runner_directory: Path, alias: str) -> None:
             name for name, (child, _) in mappings.items()
             if child.get("parent") == current
         )
+
+
+def _terminal_unestablished_launch(directory: Path) -> bool:
+    """Recognize a retained, terminated launch that never established a Session.
+
+    Anything with identity/turn evidence, including a broken link, still needs
+    strict mapping validation. Missing or uncertain failure evidence does not
+    exempt an allocation from the stopped-subtree check.
+    """
+    if directory.is_symlink() or any(
+        os.path.lexists(directory / name)
+        for name in ("mapping.yml", "session.yml", "native-session.yml", "execution.yml")
+    ):
+        return False
+    launch_file = directory / "launch.yml"
+    error_file = directory / "launch-error.yml"
+    if any(path.is_symlink() or not path.is_file() for path in (launch_file, error_file)):
+        return False
+    try:
+        launch = yaml.safe_load(launch_file.read_text(encoding="utf-8"))
+        failure = yaml.safe_load(error_file.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, yaml.YAMLError):
+        return False
+    return (
+        isinstance(launch, dict)
+        and launch.get("operation") == "launch"
+        and isinstance(launch.get("mapping"), dict)
+        and launch["mapping"].get("alias") == directory.name
+        and valid_terminal_launch_failure(failure)
+    )
 
 
 def status_aliases(

@@ -11,6 +11,7 @@ import yaml
 
 from graphtraj.execution import runner_status
 from graphtraj.execution.runner_models import RunnerError
+from graphtraj.execution.runner_transport import runtime_launch_failure
 from graphtraj.runtimes import replacement
 from graphtraj.teams.coding import team_replacement
 from test_direct_control_authority import _record_direct_session
@@ -75,8 +76,11 @@ def test_recorded_runtime_controls_native_stage(tmp_path: Path, monkeypatch, run
     assert runner_status.require_replacement_authority(root, parent, target) is None
 
 
-def test_public_replacement_requires_stopped_descendants(tmp_path: Path, monkeypatch) -> None:
-    """An idle direct target with an active descendant cannot be replaced."""
+@pytest.mark.parametrize("child_activity", ["idle", "running"])
+def test_public_replacement_checks_descendants_with_failed_launch_residue(
+    tmp_path: Path, monkeypatch, child_activity: str
+) -> None:
+    """Terminal unrelated startup residue neither blocks nor hides a live descendant."""
     root = tmp_path / "runner"
     parent = "132-ticket-handover0-team_leader@leader"
     child = "132-ticket-handover0-engineer@child"
@@ -85,10 +89,27 @@ def test_public_replacement_requires_stopped_descendants(tmp_path: Path, monkeyp
     (root / "sessions" / parent / "execution.yml").write_text("outcome: completed\n")
     monkeypatch.setattr(team_replacement, "discover_project", lambda *a, **k: SimpleNamespace(runner_directory=root))
     monkeypatch.setattr(runner_status, "caller_alias", lambda directory: None)
+    if child_activity == "idle":
+        (root / "sessions" / child / "execution.yml").write_text("outcome: completed\n")
+    failed = root / "sessions" / "132-ticket-handover0-engineer@failed"
+    failed.mkdir()
+    (failed / "launch.yml").write_text(yaml.safe_dump({
+        "operation": "launch",
+        "mapping": {"alias": failed.name, "parent": None, "runtime": "codex"},
+    }))
+    failure = yaml.safe_dump(runtime_launch_failure(
+        "RUNTIME_START_FAILED", "Runtime could not create its sqlite directory.", "",
+        terminal_confirmed=True,
+    ))
+    (failed / "launch-error.yml").write_text(failure)
     monkeypatch.setattr(runner_status, "session_operation", lambda *a: {"activity": "running"})
     with pytest.raises(RunnerError) as error:
-        team_replacement.replace_session(parent, "user", ("cause",), tmp_path)
-    assert error.value.code == "replacement-not-stopped"
+        # Missing causes deliberately stop at the next public validation step,
+        # after the stopped-subtree check, without creating a replacement.
+        team_replacement.replace_session(parent, "user", (), tmp_path)
+    expected = "invalid-input" if child_activity == "idle" else "replacement-not-stopped"
+    assert error.value.code == expected
+    assert (failed / "launch-error.yml").read_text() == failure
 
 
 def test_external_runtime_uses_executable_not_environment(monkeypatch) -> None:

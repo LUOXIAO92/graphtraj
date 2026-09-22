@@ -44,6 +44,12 @@ try:
     elif operation == 'reply':
         from graphtraj.execution.runner_control import reply_to_request
         result = reply_to_request(arguments[0], arguments[1], arguments[2], root)
+    elif operation == 'approval':
+        from graphtraj.execution.runner_connection import session_operation
+        from graphtraj.execution.runner_status import read_alias_mapping
+        from graphtraj.workspace.runner_project import discover_runner_directory
+        mapping, _ = read_alias_mapping(discover_runner_directory(root), arguments[0])
+        result = session_operation(mapping, 'approval')
     else:
         result = interrupt_session(arguments[0], root)
     print(json.dumps(result))
@@ -392,6 +398,27 @@ def test_later_caller_can_answer_native_approval(managed_project: ManagedProject
     native = root / 'native' / ('rollout-' + launched['session'] + '.jsonl')
     records = [json.loads(line) for line in native.read_text().splitlines()]
     assert records[-1]['payload']['last_agent_message'] == 'approval:accept'
+
+
+def test_decided_command_is_read_once_from_the_worker(
+    managed_project: ManagedProject,
+) -> None:
+    """The Worker keeps the command it approved and hands it over exactly once."""
+    root, cause, call, _ = managed_project
+    launched = call('launch', launch_document())['tasks'][0]
+    call('send', [launched['alias'], 'unhandled request', [cause]])
+    request, = call('requests', [launched['alias']])['requests']
+    assert call('approval', [launched['alias']]) == {'approval': None}
+    call('reply', [launched['alias'], request, {'decision': 'accept'}])
+    observe(call, launched['alias'], 'idle', 'completed')
+    record = call('approval', [launched['alias']])['approval']
+    assert record == {
+        'alias': launched['alias'], 'session': launched['session'],
+        'execution_id': request['execution_id'], 'command': 'printf APPROVAL_121',
+        'cwd': str(root / '.graphtraj/.agent-worktrees/dev'), 'decision': 'accept',
+    }
+    # One read consumes it: no second replacement rides on the same decision.
+    assert call('approval', [launched['alias']]) == {'approval': None}
 
 
 def test_installed_cli_declines_the_same_request_as_python(managed_project: ManagedProject) -> None:

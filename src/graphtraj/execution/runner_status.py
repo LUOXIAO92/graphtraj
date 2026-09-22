@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import os
 import re
+import shlex
+import sys
 from pathlib import Path
 from typing import Any, Dict, Mapping, Sequence, Tuple
 
@@ -180,18 +182,68 @@ def require_descendant_authority(
 def require_replacement_authority(
     runner_directory: Path, alias: str, mapping: Mapping[str, Any]
 ) -> None:
-    """Authorize one replacement by the recorded direct relation.
+    """Authorize one replacement by the recorded relation or a native approval.
 
     The target's recorded direct parent replaces it, and Main or the user
     replaces a top-level Session recorded without a parent. Every other caller
-    is over level and is refused here: the ``--actor`` value is a self-report
-    and takes no part in this judgement, so it can neither promote a caller nor
-    stand in for the user's approval.
+    is over level and continues only with the caller's own Runtime approval of
+    this exact command execution, read once from that Session's Worker. The
+    ``--actor`` value, a request field and every projected environment value
+    are self-reports and take no part in this judgement.
     """
     caller = caller_alias(runner_directory)
     if is_direct_owner(caller, mapping):
         return
+    if caller is not None and _native_approval_covers_this_command(
+        runner_directory, caller, alias
+    ):
+        return
     raise _replacement_denied()
+
+
+def _native_approval_covers_this_command(
+    runner_directory: Path, caller: str, alias: str
+) -> bool:
+    """Return whether the caller's Runtime approved this very command.
+
+    The caller's Runtime decided about the command execution that runs this
+    entry, and its Worker keeps that decision transiently for one read. The
+    replacement continues only when the record belongs to this caller's
+    Session and execution, names this process's own command line and working
+    directory exactly, names the target being replaced, and is an explicit
+    ``accept``. A missing, already consumed, mismatched or non-accepting record
+    refuses, so no carried value can promote a caller.
+    """
+    mapping, _ = read_alias_mapping(runner_directory, caller)
+    try:
+        record = session_operation(mapping, "approval").get("approval")
+    except RunnerError:
+        return False
+    if not isinstance(record, dict) or record.get("decision") != "accept":
+        return False
+    if (
+        record.get("alias") != caller
+        or record.get("session") != mapping.get("session")
+        or record.get("execution_id") != mapping.get("execution_id")
+    ):
+        return False
+    if alias not in sys.argv or record.get("cwd") != os.getcwd():
+        return False
+    return _same_command(record.get("command"), sys.argv)
+
+
+def _same_command(recorded: Any, argv: Sequence[str]) -> bool:
+    """Compare one recorded native command with this process's argv exactly.
+
+    A native command carried as a sequence must equal the arguments one for
+    one; one carried as text must equal the shell-quoted form of the same
+    arguments. Nothing is matched by substring or by similarity.
+    """
+    if isinstance(recorded, str):
+        return recorded == shlex.join(argv)
+    if isinstance(recorded, (list, tuple)):
+        return list(recorded) == list(argv)
+    return False
 
 
 def status_aliases(

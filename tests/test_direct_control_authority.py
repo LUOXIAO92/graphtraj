@@ -5,12 +5,16 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 import time
 from pathlib import Path
 
+import pytest
 import yaml
 
 from conftest import FakeCodex, InstalledCommands, run_process
+from graphtraj.execution import runner_status
+from graphtraj.execution.runner_models import RunnerError
 from runner_fixtures import configure_harness
 from test_session_alias_control import _register_ready_ticket
 
@@ -260,6 +264,125 @@ def _assert_status_document(document: dict, alias: str, *, full: bool) -> None:
         assert document["session"] and document["execution_id"], document
     else:
         assert set(document) <= {"alias", "activity", "last_outcome"}, document
+
+
+def _record_direct_session(
+    runner_directory: Path, alias: str, role: str, parent: str | None
+) -> None:
+    """Record one Session and its direct parent as the Runner would."""
+    directory = runner_directory / "sessions" / alias
+    directory.mkdir(parents=True)
+    (directory / "mapping.yml").write_text(
+        yaml.safe_dump(
+            {
+                "alias": alias, "runtime": "codex", "session": "native",
+                "execution_id": "turn", "ticket_id": "132", "team_generation": 1,
+                "role": role, "parent": parent, "retained_batch_file": "batch.yml",
+                "worktree_path": str(directory / "worktree"),
+                "trace_file": str(directory / "events.jsonl"),
+                "worker_pid": 4242, "runtime_pid": 4243,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def _ask_to_replace(
+    runner_directory: Path, caller: str | None, target: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Ask one replacement entry to authorize the target for the caller."""
+    monkeypatch.setattr(runner_status, "caller_alias", lambda directory: caller)
+    mapping, _ = runner_status.read_alias_mapping(runner_directory, target)
+    runner_status.require_replacement_authority(runner_directory, target, mapping)
+
+
+def _replacement_command(target: str) -> list:
+    """One exact replace command line, as the Runtime would have approved it."""
+    return [
+        "agent-runner", "replace", target,
+        "--actor", "user", "--caused-by-event-id", "evt",
+    ]
+
+
+def _decided_command(
+    runner_directory: Path, monkeypatch: pytest.MonkeyPatch, *, argv: list, **record: object
+) -> list:
+    """Answer the entry's one read with a native decision, as a Worker would."""
+    caller = "132-ticket-handover0-engineer@engineer"
+    monkeypatch.setattr(sys, "argv", list(argv))
+    reads: list = []
+    mapping, _ = runner_status.read_alias_mapping(runner_directory, caller)
+
+    def read(requested, operation, **arguments):
+        """Serve the one decision read the entry makes."""
+        assert (requested, operation) == (mapping, "approval"), (requested, operation)
+        reads.append(operation)
+        return {"approval": dict(record) if record else None}
+
+    monkeypatch.setattr(runner_status, "session_operation", read)
+    return reads
+
+
+def test_over_level_replacement_needs_this_commands_own_native_decision(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Only this command's accepted native decision lets an over-level replacement run."""
+    runner_directory = tmp_path / "harness" / ".graphtraj" / "runner"
+    caller = "132-ticket-handover0-engineer@engineer"
+    leader = "132-ticket-handover0-team_leader@team_leader"
+    member = "132-ticket-handover0-engineer@engineer_2"
+    _record_direct_session(runner_directory, caller, "engineer", leader)
+    _record_direct_session(runner_directory, leader, "team_leader", None)
+    _record_direct_session(runner_directory, member, "engineer", caller)
+    mapping, _ = runner_status.read_alias_mapping(runner_directory, caller)
+    command = _replacement_command(leader)
+    decided = {
+        "alias": caller, "session": mapping["session"],
+        "execution_id": mapping["execution_id"], "command": list(command),
+        "cwd": os.getcwd(), "decision": "accept",
+    }
+
+    # The native decision named this exact command line and working directory.
+    reads = _decided_command(runner_directory, monkeypatch, argv=command, **decided)
+    _ask_to_replace(runner_directory, caller, leader, monkeypatch)
+    assert reads == ["approval"]
+
+    # Every deviation refuses: a decline, another command line, another working
+    # directory, another Session, and a decision already consumed.
+    for change, value in (
+        ("decision", "decline"),
+        ("decision", "cancel"),
+        ("command", ["agent-runner", "status", leader]),
+        ("command", "agent-runner replace " + leader),
+        ("cwd", "/"),
+        ("alias", leader),
+        ("session", "other"),
+        ("execution_id", "other"),
+    ):
+        _decided_command(
+            runner_directory, monkeypatch, argv=command, **{**decided, change: value}
+        )
+        with pytest.raises(RunnerError) as refused:
+            _ask_to_replace(runner_directory, caller, leader, monkeypatch)
+        assert refused.value.code == "authority-denied", (change, value)
+
+    _decided_command(runner_directory, monkeypatch, argv=command)
+    with pytest.raises(RunnerError) as consumed:
+        _ask_to_replace(runner_directory, caller, leader, monkeypatch)
+    assert consumed.value.code == "authority-denied"
+
+    # A caller with no live Session owns only the top-level Session: it has no
+    # Worker to read a decision from, so a member stays refused, while the
+    # Leader recorded without a parent stays allowed.
+    _decided_command(runner_directory, monkeypatch, argv=command)
+    with pytest.raises(RunnerError) as main:
+        _ask_to_replace(runner_directory, None, member, monkeypatch)
+    assert main.value.code == "authority-denied"
+    _ask_to_replace(runner_directory, None, leader, monkeypatch)
+    reads = _decided_command(runner_directory, monkeypatch, argv=command)
+    _ask_to_replace(runner_directory, caller, member, monkeypatch)
+    assert reads == []
 
 
 def test_control_entries_follow_recorded_direct_ownership(

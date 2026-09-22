@@ -8,6 +8,32 @@ mistake belongs to the dispatcher. System/provider outages or throttling return
 to the superior for a later retry; permission/configuration failures go to the
 role authorized to correct that configuration. Do not treat them as bad work.
 
+## Choose the Round before continuing
+
+Use the Leader's diagnosis, not the choice to resume an existing Agent:
+
+- Process corrections, such as scope expansion or unsupported Review findings,
+  stay in the current Round.
+- Runtime recovery or delivery of a missing report resumes the interrupted work;
+  neither alone opens a Round.
+- A supported implementation defect that the Leader confirms requires rework
+  closes the current Round and opens the next Round in the same Team. The same
+  Agents may continue; their Session identity does not determine the Round.
+
+The Leader records the rework through the existing delivery-state workflow.
+Before the implementation follow-up, Main and Leader use the registered new
+Round and its report destinations. A send, resume or budget restart alone does
+not record this transition. Keep the existing budget and Review-axis limits.
+
+Read still-valid evidence from previous Rounds and reference it where needed.
+Write the new candidate's implementation, validation and Leader decision in the
+new Round; do not copy old reports or append new-round results to a closed Round.
+Each new report covers that Round's work and result, with references to reused
+evidence rather than a running history of all attempts. Reusing earlier Review
+reports does not require another Review or writing back into their Round.
+
+## Recover the execution
+
 Permission requests notify the direct parent immediately through its existing
 execution; notification does not approve them. Use actual available capabilities
 and report a missing delivery path instead of creating a second execution.

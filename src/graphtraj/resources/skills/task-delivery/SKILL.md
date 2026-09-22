@@ -83,9 +83,11 @@ paths; have the assigned executor run affected checks and explicitly required
 fresh validation.
 
 Receive the result, validation, required review evidence and acceptance
-decision. Runtime success alone does not establish acceptance. For an execution
-failure, sampled budget stop or repeated unproductive correction, read
-[recovery decisions](references/recovery.md). Correct Main's scope or dispatch
+decision. Runtime success alone does not establish acceptance. Before following
+up on a Leader's implementation rejection, read
+[Round handling](references/recovery.md#choose-the-round-before-continuing).
+For an execution failure, sampled budget stop or repeated unproductive correction,
+read [recovery decisions](references/recovery.md). Correct Main's scope or dispatch
 errors as Main; the responsible Agent and its superior judge internal recovery.
 
 Only the target's direct parent or the user may replace an Agent or Team.

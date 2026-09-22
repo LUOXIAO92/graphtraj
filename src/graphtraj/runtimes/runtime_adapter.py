@@ -34,32 +34,6 @@ class RuntimeAdapterError(Exception):
         self.terminal_confirmed = terminal_confirmed
 
 
-def review_role_request(
-    harness_root: Path,
-    role_reference: str,
-    context: Mapping[str, Any],
-) -> dict:
-    """Return the review decision one mapped role's own Runtime gives a request.
-
-    The caller supplies only Runtime-agnostic facts: who asked, which seat the
-    request names and what the request is. Each Runtime decides how its roles
-    review, so an implementation resolves the role's own provider route, a
-    hosted default, or its own user channel without the caller knowing which.
-    A Runtime without a review path raises :class:`RuntimeAdapterError`.
-    """
-    from graphtraj.configuration.project_roles import load_project_roles
-
-    settings = load_project_roles(harness_root).preset(role_reference)
-    if settings.runtime == "codex":
-        from graphtraj.runtimes.codex.approval import review_role_request as review
-
-        return review(settings, context)
-    raise RuntimeAdapterError(
-        "ROLE_NOT_SUPPORTED",
-        "The caller's role runs on a Runtime that reviews no request.",
-    )
-
-
 class RuntimeTurn(Protocol):
     """One Adapter-owned Runtime invocation."""
 

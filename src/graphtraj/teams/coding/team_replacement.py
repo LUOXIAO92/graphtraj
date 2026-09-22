@@ -54,9 +54,7 @@ def require_active_session(project, alias):
 def replace_session(alias, actor, caused_by_event_ids, cwd):
     project = discover_project(cwd, require_clean_integration=False)
     mapping, session_directory = read_alias_mapping(project.runner_directory, alias)
-    require_replacement_authority(
-        project.runner_directory, alias, mapping, harness_root=project.harness_root
-    )
+    require_replacement_authority(project.runner_directory, alias, mapping)
     if not caused_by_event_ids or len(caused_by_event_ids) != len(set(caused_by_event_ids)):
         raise RunnerError("invalid-input", "Replacement requires unique causal Project Worldline event IDs.")
     _require_project_events(cwd, caused_by_event_ids)

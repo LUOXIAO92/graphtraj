@@ -6,13 +6,11 @@ import asyncio
 import json
 import os
 import re
-import tomllib
 from pathlib import Path
 from typing import Any, Mapping
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
-from graphtraj.configuration.project_roles import RolePreset
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 
 
@@ -32,53 +30,6 @@ def approval_route(settings: Mapping[str, Any] | None, *, custom: bool) -> dict 
     if not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', route['api_key_env']):
         raise RuntimeAdapterError('ROLE_CONFIG_INVALID', 'codex.approval.api_key_env must name an environment variable.')
     return dict(route)
-
-
-def harness_approvals_reviewer(runtime_store: Path) -> Any | None:
-    """Return the approvals reviewer the Harness Runtime Store selects.
-
-    One Session runs with its Ticket Worktree as the native project root, so
-    the Runtime Store configuration sits outside the native lookup. Only this
-    selected value is forwarded; a missing, unreadable or unparsable file adds
-    no override and keeps the native default.
-    """
-    config = runtime_store / 'config.toml'
-    try:
-        document = tomllib.loads(config.read_text(encoding='utf-8'))
-    except FileNotFoundError:
-        return None
-    except (OSError, UnicodeError, tomllib.TOMLDecodeError):
-        return None
-    return document.get('approvals_reviewer')
-
-
-def role_approval_route(settings: RolePreset) -> dict | None:
-    """Return the route this role's own provider reviews on, if it has one.
-
-    Only a role that runs on its own provider configures an adapter-only
-    ``codex.approval`` route. A hosted role is reviewed by the host's own
-    Guardian inside its Session, which the Runner may not stand in for, so no
-    route exists here.
-    """
-    return approval_route(settings.codex, custom=settings.base_url is not None)
-
-
-def review_role_request(settings: RolePreset, context: Mapping[str, Any]) -> dict:
-    """Return the reviewed decision for this exact request.
-
-    Only a validated decision from the role's own provider route comes back. A
-    hosted role is reviewed by its host, which this entry cannot consult for a
-    request that is no native Session operation, so it raises
-    ``RUNTIME_REQUEST_UNHANDLED`` rather than inventing a reviewer.
-    """
-    route = role_approval_route(settings)
-    if route is None:
-        raise RuntimeAdapterError(
-            'RUNTIME_REQUEST_UNHANDLED',
-            'The role has no provider route, and its own Runtime reviews outside '
-            'the Runner, so no decision can be obtained for this request.',
-        )
-    return asyncio.run(review_request(route, dict(context)))
 
 
 class _NoRedirect(HTTPRedirectHandler):

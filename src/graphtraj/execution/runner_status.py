@@ -5,8 +5,10 @@ from __future__ import annotations
 import json
 import os
 import re
+from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
-from typing import Any, Dict, Mapping, Sequence, Tuple
+from typing import Any, Dict, Iterator, Mapping, Sequence, Tuple
 
 import yaml
 
@@ -17,6 +19,24 @@ from graphtraj.execution.runner_heartbeat import ownership_is_held, read_heartbe
 from graphtraj.execution.runner_process import process_ancestors
 from graphtraj.execution.runner_transport import valid_terminal_launch_failure
 from graphtraj.workspace.runner_project import discover_runner_directory
+
+
+_runtime_caller: ContextVar[tuple[Path, str] | None] = ContextVar('runtime_caller', default=None)
+
+
+@contextmanager
+def runtime_caller(runner_directory: Path, identity: str) -> Iterator[None]:
+    """Scope an identity received on the private Runtime callback connection.
+
+    This is not a CLI/MCP identity input. Native helpers use their actual thread
+    ID, which cannot match a formal alias, and receive summary-only observation.
+    The Adapter verifies their native parent chain before entering this scope.
+    """
+    token = _runtime_caller.set((runner_directory.resolve(), identity))
+    try:
+        yield
+    finally:
+        _runtime_caller.reset(token)
 
 
 # One Agent alias. A current alias names the Ticket, its whole-Team handover
@@ -72,7 +92,11 @@ def conflicting_binding_field(
 
 
 def caller_alias(runner_directory: Path) -> str | None:
-    """Return the alias of the live Session that owns the calling process.
+    """Return the identity bound to a native callback or the calling process.
+
+    An owned Runtime callback supplies its verified identity in a scoped
+    context: the formal alias, or a native helper thread ID for summary queries.
+    Ordinary CLI/MCP requests cannot select that context with their arguments.
 
     A control request identifies itself by the process tree it runs in, never
     by a value it carries. The Runner records each Session's Worker and native
@@ -87,6 +111,11 @@ def caller_alias(runner_directory: Path) -> str | None:
     consulted. Host isolation from a caller that leaves its own process tree is
     the separate boundary owned by T3c.
     """
+    native = _runtime_caller.get()
+    if native is not None:
+        if native[0] != runner_directory.resolve():
+            raise _authority_denied()
+        return native[1]
     owners = _live_session_owners(runner_directory)
     if not owners:
         return None

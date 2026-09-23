@@ -196,6 +196,7 @@ class CodexAppServer:
         self._pending: dict[int, asyncio.Future[dict[str, Any] | CodexAdapterError]] = {}
         self._sequence = 0
         self._sessions: dict[str, CodexSession] = {}
+        self._thread_parents: dict[str, str | None] = {}
         self._resuming: set[str] = set()
         self._turns: dict[tuple[str, str], _ExecutionState] = {}
         self._active: dict[str, str | None] = {}
@@ -356,6 +357,9 @@ class CodexAppServer:
         if approval_policy is not None:
             params['approvalPolicy'] = approval_policy
         if thread_id is not None:
+            # The native resume schema restores the original tool declarations;
+            # it does not accept new dynamicTools for an existing Session.
+            params.pop('dynamicTools', None)
             params['threadId'] = thread_id
             params['excludeTurns'] = True
         response = await self._call(method, params)
@@ -559,6 +563,33 @@ class CodexAppServer:
             if state is not None and state.handle is execution:
                 return state
         raise CodexAdapterError('RUNTIME_LIFECYCLE_INVALID', 'The execution belongs to another connection.')
+
+    async def read_thread_parent(self, thread_id: str) -> str | None:
+        """Read immutable native parent identity over the owned Runtime connection.
+
+        This reads metadata, never conversation turns. The identifier must come
+        from a native callback when used for authorization; validating a caller's
+        claimed identifier does not authenticate an ordinary CLI process.
+        """
+        if not isinstance(thread_id, str) or not thread_id:
+            raise CodexAdapterError('RUNTIME_REQUEST_INVALID', 'A native thread ID is required.')
+        response = await self._call('thread/read', {
+            'threadId': thread_id, 'includeTurns': False,
+        })
+        thread = response.get('thread')
+        if (
+            not isinstance(thread, dict)
+            or thread.get('id') != thread_id
+            or 'parentThreadId' not in thread
+        ):
+            raise self._protocol_failure('Native thread metadata does not identify its parent.')
+        parent = thread['parentThreadId']
+        if parent is not None and (not isinstance(parent, str) or not parent or parent == thread_id):
+            raise self._protocol_failure('Native thread metadata has an invalid parent.')
+        if thread_id in self._thread_parents and self._thread_parents[thread_id] != parent:
+            raise self._protocol_failure('Native thread metadata changed its recorded parent.')
+        self._thread_parents[thread_id] = parent
+        return parent
 
     async def next_notification(self, *, timeout: float | None = None) -> dict[str, Any]:
         """Receive a raw native notification; one observer drains this connection.

@@ -72,6 +72,7 @@ class CodexManagedExecution:
         self.started = session_started
         self.expected_session = expected_session
         self.execution: CodexExecution | None = None
+        self.native_session: str | None = None
         self.loop: asyncio.AbstractEventLoop | None = None
         self.adapter: CodexAppServer | None = None
         self.result: asyncio.Task | None = None
@@ -88,7 +89,8 @@ class CodexManagedExecution:
         self.loop = asyncio.get_running_loop()
         adapter = CodexAppServer(cwd=Path(self.context.session_document()['adapter_request']['cwd']),
                                  command=self.command, request_timeout=5,
-                                 on_request=self._request, request_handler_timeout=None)
+                                 on_request=self._request, request_handler_timeout=None,
+                                 experimental_api=True)
         self.adapter = adapter
         observer = None
         try:
@@ -98,6 +100,7 @@ class CodexManagedExecution:
                     await adapter.resume_session(self.context, self.expected_session)
                     if self.expected_session else await adapter.create_session(self.context)
                 )
+                self.native_session = session.thread_id
                 write_yaml_durably(self.directory / 'session.yml', {
                     'session': session.thread_id,
                     'rollout_path': str(session.rollout_path) if session.rollout_path else None,
@@ -216,6 +219,8 @@ class CodexManagedExecution:
 
     async def _request(self, request: CodexServerRequest) -> dict:
         """Hold one native callback until an explicit reply or native cancellation."""
+        if request.method == 'item/tool/call' and request.params.get('tool') == 'graphtraj_status':
+            return await self._native_status(request)
         if self.approval is not None and request.method.endswith("/requestApproval"):
             return await self._review_approval(request)
         token = uuid.uuid4().hex
@@ -226,6 +231,50 @@ class CodexManagedExecution:
             return await response
         finally:
             self.requests.pop(token, None)
+
+    async def _native_status(self, request: CodexServerRequest) -> dict:
+        """Apply existing status visibility to the Runtime-authenticated issuer."""
+        from graphtraj.execution.runner_models import RunnerError, StatusResponse
+        from graphtraj.execution.runner_status import runtime_caller, status_aliases
+        from graphtraj.workspace.runner_project import discover_project_root, discover_runner_directory
+
+        try:
+            thread = request.params.get('threadId')
+            arguments = request.params.get('arguments')
+            if (
+                not isinstance(thread, str) or not thread
+                or self.native_session is None or self.adapter is None
+                or not isinstance(arguments, dict) or set(arguments) != {'aliases'}
+                or not isinstance(arguments['aliases'], list) or not arguments['aliases']
+                or any(not isinstance(alias, str) for alias in arguments['aliases'])
+            ):
+                raise RunnerError('invalid-input', 'Supply only the target aliases.')
+            current: str | None = thread
+            seen: set[str] = set()
+            while current != self.native_session:
+                if current in seen:
+                    raise RunnerError('authority-denied', 'Native parent chain is cyclic.')
+                seen.add(current)
+                current = await self.adapter.read_thread_parent(current)
+                if current is None:
+                    raise RunnerError('authority-denied', 'Native caller is outside this Session subtree.')
+            identity = self.directory.name if thread == self.native_session else thread
+            cwd = Path(self.context.session_document()['adapter_request']['cwd'])
+            root = discover_project_root(cwd)
+
+            def observe() -> StatusResponse:
+                """Reuse the public operation without authorizing from process ancestry."""
+                with runtime_caller(discover_runner_directory(root), identity):
+                    return status_aliases(arguments['aliases'], root)
+
+            response = await asyncio.to_thread(observe)
+            document, success = response.document, response.succeeded
+        except (RunnerError, RuntimeAdapterError) as error:
+            document, success = {'error': {'code': error.code, 'message': error.message}}, False
+        return {
+            'contentItems': [{'type': 'inputText', 'text': json.dumps(document)}],
+            'success': success,
+        }
 
     async def _notify_direct_parent(self, request: CodexServerRequest, token: str) -> None:
         """Tell the recorded direct parent about this request before the turn waits.

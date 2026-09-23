@@ -97,6 +97,7 @@ if sys.argv[1:] == ['exec', '--help']:
 
 initialized = False
 sessions = {}
+parent_reads = {}
 active = {}
 requests = {}
 exchange = json.loads(os.environ.get('PEER_REQUEST_EXCHANGE', 'null'))
@@ -148,6 +149,17 @@ for line in sys.stdin:
             'cwd': params['cwd'],
         }
         emit({'method': 'thread/started', 'params': {'thread': result['thread']}})
+    elif method == 'thread/read':
+        assert initialized
+        assert params['includeTurns'] is False
+        thread_id = params['threadId']
+        parents = json.loads(os.environ['PEER_THREAD_PARENTS'])
+        parent = parents[thread_id]
+        if isinstance(parent, list):
+            index = parent_reads.get(thread_id, 0)
+            parent_reads[thread_id] = index + 1
+            parent = parent[index]
+        result = {'thread': {'id': thread_id, 'parentThreadId': parent, 'turns': []}}
     elif method == 'thread/queue/add':
         assert initialized
         assert message['params']['threadId']

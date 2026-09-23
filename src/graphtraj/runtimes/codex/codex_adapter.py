@@ -179,6 +179,23 @@ class _CodexRole:
             "session_parameters": {
                 "cwd": str(worktree),
                 "model": model,
+                "dynamicTools": [{
+                    "type": "function",
+                    "name": "graphtraj_status",
+                    "description": "Read Runner status using your native Session identity.",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "aliases": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "minItems": 1,
+                            },
+                        },
+                        "required": ["aliases"],
+                        "additionalProperties": False,
+                    },
+                }],
                 "developerInstructions": developer_instructions,
                 "config": {
                     key: value for key, value in overrides

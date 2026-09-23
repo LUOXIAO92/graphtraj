@@ -104,6 +104,7 @@ def register_child_batch(batch: Batch, cwd: Path, registration: Path) -> LaunchR
             "through its own Session registration.",
         )
     parent_ticket = parent["ticket_id"]
+    direct_parent = parent
     if any(
         task.ticket_id != parent_ticket
         or (
@@ -137,6 +138,11 @@ def register_child_batch(batch: Batch, cwd: Path, registration: Path) -> LaunchR
     from graphtraj.teams.coding.team_replacement import require_active_session
 
     team = require_active_session(project, caller)
+    if len(batch.tasks) == 1 and _is_inline_specialist(batch.tasks[0]):
+        # A temporary role has no Team seat or handoff to the Team's original
+        # driver. Launch it here so the selected installed Runner owns its
+        # Context and Worker, including when that driver predates this build.
+        return _launch_temporary_child(project, batch, caller, direct_parent)
     members = {seat["role"]: seat["session_ref"] for seat in team["members"].values()} if team else {}
     children = [
         {"ticket_id": task.ticket_id, "role": task.role,
@@ -159,6 +165,32 @@ def register_child_batch(batch: Batch, cwd: Path, registration: Path) -> LaunchR
             "retained_batch_file": str(retained),
             "tasks": children,
         },
+        succeeded=True,
+    )
+
+
+def _launch_temporary_child(
+    project: Any, batch: Batch, parent_alias: str, parent: dict[str, Any],
+) -> LaunchResponse:
+    """Launch one already-authorized temporary child through this Runner build."""
+    task = _registered_ticket_task(project, batch.tasks[0])
+    evidence = project.state_directory / "tickets" / (task.ticket_id + "-" + task.ticket_name)
+    traces = evidence / "teams" / str(parent["team_generation"]) / "traces"
+    traces.mkdir(parents=True, exist_ok=True)
+    with capacity_positions(project, 1) as positions:
+        retained = retain_batch(project.state_directory, batch)
+        alias, session = _run_agent(
+            project, task, task.role, Path(parent["worktree_path"]), evidence,
+            traces, None, None, None, parent_alias, retained,
+            capacity_fd=positions[0].fileno(), wait_for_completion=False,
+        )
+    mapping, _ = read_alias_mapping(project.runner_directory, alias)
+    return LaunchResponse(
+        document={"retained_batch_file": str(retained), "tasks": [{
+            "ticket_id": task.ticket_id, "ticket_name": task.ticket_name,
+            "role": task.role, "launch_status": "launched", "alias": alias,
+            "session": session, "execution_id": mapping["execution_id"],
+        }]},
         succeeded=True,
     )
 

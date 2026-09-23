@@ -98,6 +98,15 @@ Continue only when authorized with `agent-runner continue --ticket-id <id>
 --caused-by-event-id <decision-event-id>`. Preserve original accounting and stop
 history; budget edits alone do not resume work, and a user pause stays in effect.
 
+That command accepts only a sampled-stopped Ticket. Its return may report missing
+Engineer evidence or `not-accepted` without running a new Leader turn. After the
+Driver ends, send the remaining implementation or acceptance work to the same
+Leader through the causal event; use the existing execution while it is active.
+An old stopped-before-acceptance report supplies neither acceptance nor rejection.
+Once the Leader has delivered a decision, finish missing registration through
+[the semantic state commands](command-inputs.md#finish-retained-delivery), rather
+than invoking `continue` again on a Ticket whose stop has already been cleared.
+
 An external observer timeout is not necessarily a stopped Team. Retain the
 timeout, hand off that event and inspect the owned execution as needed; do not
 suspend the observer to evade its deadline or start a duplicate driver.

@@ -40,3 +40,26 @@ Keep existing GitHub identities stable; new nodes refer to accepted GitHub
 Tickets. Include dependent definitions whose edges change. Deactivate removed
 or superseded Tickets and identify replacements where applicable. Preserve
 accepted behavior and acceptance coverage across the complete correction.
+
+## Finish retained delivery
+
+Use `graphtraj delivery-state apply --request-file <request.yml>
+--facts-file <facts.yml>` for missing registration after the Leader's handoff.
+Both documents describe the same authoritative facts. Read current Ticket and
+Team state first and apply only missing phases; a tool return is not a Leader
+decision. Main can register the facts supplied by its direct Leader without
+reading the members' private reports or repeating their work.
+
+Each request contains `phase`, `ticket_id`, `caused_by_event_ids` and
+`evidence_refs`. Add the fields for its phase:
+
+- `member`: `member: engineer`, the configured `role`, and the existing alias
+  as `session_ref`; this records the original member, not a replacement.
+- `candidate`: the Leader's exact 40-character `candidate` commit.
+- `final`: that `candidate` and the Leader's `decision: accepted` or `rejected`.
+
+Reference the direct Leader's report and the actual causal event; use the event
+returned by each applied phase for the next dependent phase. An accepted final
+records the Team decision and moves the Ticket to integration. A generic rejected
+final does not start rework; for an implementation rejection that requires
+another Round, follow [Round handling](recovery.md#choose-the-round-before-continuing).

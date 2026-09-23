@@ -329,6 +329,34 @@ def test_a_child_request_reaches_the_running_direct_parent(
         )
         assert not (runner_directory / "sessions" / child_alias / "execution.yml").exists()
 
+        # Knowing the request is not the authority to answer it. This caller
+        # stands outside the child's recorded direct relation, presents that
+        # child's exact pending identity, and is refused before the request is
+        # compared, so no carried value widens the relation.
+        outside_request = tmp_path / "outside-request.yml"
+        outside_request.write_text(
+            yaml.safe_dump(
+                {
+                    "session": record["identity"]["session"],
+                    "execution_id": record["identity"]["execution_id"],
+                    "request_token": record["identity"]["request_token"],
+                }
+            ),
+            encoding="utf-8",
+        )
+        refused = run_process(
+            [
+                str(installed_commands.runner), "reply", child_alias,
+                "--request-file", str(outside_request),
+                "--response", '{"decision":"accept"}',
+            ],
+            cwd=root, env=environment, timeout=30,
+        )
+        assert refused.returncode == 1, refused.stdout + refused.stderr
+        refusal = yaml.safe_load(refused.stdout)
+        assert refusal["alias"] == child_alias, refusal
+        assert refusal["error"]["code"] == "authority-denied", refusal
+
         release.touch()
         replied = _await_records(
             parent_log, lambda records: any(
@@ -338,6 +366,12 @@ def test_a_child_request_reaches_the_running_direct_parent(
         reply, = [item for item in replied if item["call"] == ["reply", child_alias]]
         assert reply["returncode"] == 0, reply
         assert yaml.safe_load(reply["document"])["reply_status"] == "submitted"
+        # The refused caller consumed nothing: the same native request, by the
+        # notice's own token, stayed answerable by the recorded direct parent.
+        answered_request = json.loads(
+            (tmp_path / "child-request.json").read_text(encoding="utf-8")
+        )
+        assert answered_request["request_token"] == record["identity"]["request_token"]
         wait_for_file(runner_directory / "sessions" / child_alias / "execution.yml")
         native = tmp_path / "native" / ("rollout-" + child["session"] + ".jsonl")
         assert json.loads(native.read_text(encoding="utf-8").splitlines()[-1])[

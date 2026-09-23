@@ -59,6 +59,87 @@ SESSION_IMMUTABLE_MAPPING_FIELDS = SESSION_BINDING_FIELDS + (
 )
 
 
+def notify_direct_parent(
+    session_directory: Path,
+    notice: str,
+    identity: Mapping[str, Any] | None = None,
+) -> Dict[str, Any]:
+    """Deliver one notice into the recorded direct parent's existing execution.
+
+    A child Session reports an event - a native request waiting for a decision,
+    or an abnormal end - to the parent its own record names. The notice travels
+    through the parent's control channel into the execution that parent already
+    owns, so a parent that is running or waiting receives it in the same
+    Session and execution without a second execution, a copied Session or a
+    polling reader. What the parent's owning execution acknowledged is
+    recorded; registering the event alone is not a delivery.
+
+    Parameters
+    ----------
+    session_directory
+        Session directory of the notifying Session. Its own record supplies
+        the direct parent, never a value the caller carries.
+    notice
+        Plain-text input delivered to the parent's execution.
+    identity
+        Optional facts of what produced the notice, retained in the record.
+
+    Returns
+    -------
+    The delivery record: ``parent``, the acknowledged ``parent_session`` and
+    ``parent_execution_id``, and ``delivery`` - ``received``,
+    ``not-delivered`` with the observed activity or error, or
+    ``no-direct-parent``. The same record is appended to
+    ``parent-notices.jsonl`` in the notifying Session directory.
+    """
+    record: Dict[str, Any] = {
+        "at": time.time(), "notice": notice, "parent": None,
+        "delivery": "no-direct-parent",
+    }
+    if identity is not None:
+        record["identity"] = dict(identity)
+    try:
+        runner_directory = session_directory.parent.parent
+        mapping, _ = read_alias_mapping(runner_directory, session_directory.name)
+        parent = mapping.get("parent")
+        if isinstance(parent, str):
+            record["parent"] = parent
+            parent_mapping, parent_directory = read_alias_mapping(
+                runner_directory, parent
+            )
+            owning = owning_execution(parent, parent_directory, parent_mapping)
+            if owning is None or owning.get("activity") != "running":
+                record["delivery"] = "not-delivered"
+                record["activity"] = (owning or {}).get("activity", "idle")
+            else:
+                session_operation(parent_mapping, "send", instruction=notice)
+                record.update({
+                    "delivery": "received",
+                    "parent_session": parent_mapping["session"],
+                    "parent_execution_id": parent_mapping["execution_id"],
+                })
+    except RunnerError as error:
+        record["delivery"] = "not-delivered"
+        record["error"] = {"code": error.code, "message": error.message}
+    try:
+        _append_notice_record(session_directory, record)
+    except OSError:
+        # A record this Runner cannot write never changes the request the
+        # notice announces; the returned record still states what was observed.
+        pass
+    return record
+
+
+def _append_notice_record(
+    session_directory: Path, record: Mapping[str, Any]
+) -> None:
+    """Retain one notice record beside the Session's other Runner records."""
+    with (session_directory / "parent-notices.jsonl").open(
+        "a", encoding="utf-8"
+    ) as stream:
+        stream.write(json.dumps(record, sort_keys=True) + "\n")
+
+
 def pending_requests(
     alias: str, cwd: Path, *, execution_id: str | None = None,
 ) -> dict:

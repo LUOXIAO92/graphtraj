@@ -16,6 +16,7 @@ import yaml
 from graphtraj.configuration.project_roles import load_project_roles
 from graphtraj.runtimes.codex.approval import approval_route, review_request
 
+from graphtraj.execution.runner_control import notify_direct_parent
 from graphtraj.execution.runner_io import write_yaml_durably
 from graphtraj.runtimes.codex.app_server import CodexAppServer, CodexExecution, CodexServerRequest
 from graphtraj.runtimes.codex.codex_adapter import restore_codex_context
@@ -221,9 +222,39 @@ class CodexManagedExecution:
         response = asyncio.get_running_loop().create_future()
         self.requests[token] = (request, response)
         try:
+            await self._notify_direct_parent(request, token)
             return await response
         finally:
             self.requests.pop(token, None)
+
+    async def _notify_direct_parent(self, request: CodexServerRequest, token: str) -> None:
+        """Tell the recorded direct parent about this request before the turn waits.
+
+        The notice reaches the parent's own execution through the parent's
+        control channel; a parent that is busy or waiting receives it as input
+        in the Session and execution it already holds. The notice announces the
+        request for the parent's native approval reply and never answers it, so
+        this execution keeps waiting for the response either way.
+        """
+        # The request names its own native execution: it can arrive before
+        # start_execution returns this Worker the handle it retains.
+        session = request.params.get("threadId")
+        execution_id = request.params.get("turnId")
+        notice = (
+            "Direct child notice: Session {0} waits for your decision on native "
+            "request {1} ({2}) in execution {3}. Reply through the existing "
+            "reply entry for that request when you decide; receiving this "
+            "notice neither approves nor declines it.".format(
+                session, request.request_id, request.method, execution_id,
+            )
+        )
+        await asyncio.to_thread(
+            notify_direct_parent, self.directory, notice, {
+                "request_id": request.request_id, "method": request.method,
+                "request_token": token, "session": session,
+                "execution_id": execution_id,
+            },
+        )
 
     async def _review_approval(self, request: CodexServerRequest) -> dict:
         """Review this request and return its native response without a separate log."""

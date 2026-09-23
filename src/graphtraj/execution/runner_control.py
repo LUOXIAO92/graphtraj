@@ -460,11 +460,11 @@ def _interrupt_session(
     try:
         session_operation(mapping, "interrupt")
     except RunnerError:
-        # Completion can win the native interrupt race; a retained terminal
-        # outcome still confirms stopping, never mere contact loss.
-        if not execution_file.is_file():
+        # Native completion can precede the Worker's terminal-file drain.
+        # Reuse its live terminal acknowledgement as well as durable outcomes;
+        # lost contact or a stale heartbeat still cannot establish stopping.
+        if owning_execution(alias, session_directory, mapping) is not None:
             raise
-        read_terminal_outcome(execution_file)
         return {"alias": alias, "interrupt_status": "stopped"}
     return {"alias": alias, "interrupt_status": "interrupted"}
 

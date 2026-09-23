@@ -37,7 +37,7 @@ from graphtraj.execution.runner_control import (
 )
 from graphtraj.execution.runner_launch import launch_batch
 from graphtraj.execution.runner_models import RunnerError
-from graphtraj.execution.runner_status import status_aliases
+from graphtraj.execution.runner_status import status_aliases, status_tree
 from graphtraj.graph.ticket_graph import (
     read_graph,
     register_ticket,
@@ -251,20 +251,31 @@ def update_current_ticket_state(arguments: Mapping[str, Any]) -> ToolResult:
 
 
 def read_alias_status(arguments: Mapping[str, Any]) -> ToolResult:
-    """Report the requested Session aliases; never discover a Run."""
+    """Report the requested Session aliases, or the visible Session tree."""
 
     aliases = arguments.get("aliases")
-    if not isinstance(aliases, list) or not all(
-        isinstance(alias, str) for alias in aliases
-    ):
-        raise ValueError("aliases must be a list of Session alias strings")
-    response = status_aliases(
-        aliases,
-        Path.cwd(),
-        operation_total=bool(arguments.get("operation_total", False)),
-        baseline=arguments.get("baseline"),
-        candidate=arguments.get("candidate"),
-    )
+    operation_total = bool(arguments.get("operation_total", False))
+    baseline = arguments.get("baseline")
+    candidate = arguments.get("candidate")
+    if aliases is None:
+        response = status_tree(
+            Path.cwd(),
+            operation_total=operation_total,
+            baseline=baseline,
+            candidate=candidate,
+        )
+    else:
+        if not isinstance(aliases, list) or not all(
+            isinstance(alias, str) for alias in aliases
+        ):
+            raise ValueError("aliases must be a list of Session alias strings")
+        response = status_aliases(
+            aliases,
+            Path.cwd(),
+            operation_total=operation_total,
+            baseline=baseline,
+            candidate=candidate,
+        )
     return ToolResult(response.document, failed=not response.succeeded)
 
 
@@ -415,7 +426,8 @@ register_tool(
 register_tool(
     "alias_status",
     "Read the explicitly supplied Session aliases, including their Runtime "
-    "activity and last outcome. Equivalent to `agent-runner status`.",
+    "activity and last outcome, or omit `aliases` for the Session tree this "
+    "caller may see. Equivalent to `agent-runner status`.",
     {
         "type": "object",
         "properties": {
@@ -424,7 +436,6 @@ register_tool(
             "baseline":        {"type": ["string", "null"]},
             "candidate":       {"type": ["string", "null"]},
         },
-        "required":             ["aliases"],
         "additionalProperties": False,
     },
     read_alias_status,

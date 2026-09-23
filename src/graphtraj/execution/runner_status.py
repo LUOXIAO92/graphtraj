@@ -280,11 +280,7 @@ def status_aliases(
 ) -> StatusResponse:
     """Read exactly the supplied durable aliases; never discover a Run."""
 
-    if (baseline is None) != (candidate is None):
-        raise RunnerError(
-            "invalid-input",
-            "Git diagnostics require both --baseline and --candidate.",
-        )
+    _require_git_pair(baseline, candidate)
     runner_directory = discover_runner_directory(cwd)
     caller = caller_alias(runner_directory)
     results = []
@@ -309,6 +305,132 @@ def status_aliases(
         succeeded=not errors,
         errors=tuple(errors),
     )
+
+
+def status_tree(
+    cwd: Path,
+    *,
+    operation_total: bool = False,
+    baseline: str | None = None,
+    candidate: str | None = None,
+) -> StatusResponse:
+    """Return the visible Agent status tree from the Runner's own records.
+
+    Every Session this Runner recorded for the project is enumerated from its
+    retained ``sessions/<alias>/mapping.yml`` record, so one query needs no
+    alias list and no process identifier, and a later caller reads the same
+    tree after a restart.
+
+    Visibility reuses the recorded direct relation unchanged. A live Session
+    owns the subtree rooted at itself; a caller with no live Session owner,
+    which is Main or the user, owns every recorded top-level Session and its
+    subtree. Each node keeps its ``parent`` and ``children`` names and the
+    per-Agent detail ``_status_alias`` already allows, so only the caller
+    itself and its recorded direct children carry a full status and every
+    deeper node keeps the coarse activity and last outcome.
+
+    One unreadable record or one Session whose status cannot be judged adds
+    that node's own error and leaves the remaining tree intact. A record with
+    no known parent appears at the top level for Main and the user and stays
+    out of a Session caller's tree, which the recorded relation defines.
+    """
+    _require_git_pair(baseline, candidate)
+    runner_directory = discover_runner_directory(cwd)
+    caller = caller_alias(runner_directory)
+    records, failures = _recorded_sessions(runner_directory)
+
+    children: Dict[str, list[str]] = {}
+    for alias, mapping in records.items():
+        parent = mapping.get("parent")
+        if isinstance(parent, str):
+            children.setdefault(parent, []).append(alias)
+    roots = (
+        [alias for alias, mapping in records.items() if mapping.get("parent") is None]
+        if caller is None
+        else [caller] if caller in records else []
+    )
+
+    nodes: list[Dict[str, Any]] = []
+    errors: list[RunnerError] = []
+    seen: set[str] = set()
+    pending = [(alias, None) for alias in reversed(roots)]
+    while pending:
+        alias, parent = pending.pop()
+        # A recorded parent cycle is cut once the walk revisits an alias.
+        if alias in seen:
+            continue
+        seen.add(alias)
+        node: Dict[str, Any] = {
+            "alias": alias,
+            "parent": parent,
+            "children": sorted(children.get(alias, ())),
+        }
+        try:
+            node.update(
+                _status_alias(
+                    runner_directory,
+                    alias,
+                    caller=caller,
+                    operation_total=operation_total,
+                    baseline=baseline,
+                    candidate=candidate,
+                )
+            )
+        except RunnerError as error:
+            node["error"] = error.as_document()
+            errors.append(error)
+        nodes.append(node)
+        pending.extend(
+            (child, alias) for child in reversed(sorted(children.get(alias, ())))
+        )
+    if caller is None:
+        for alias, error in failures:
+            nodes.append(
+                {"alias": alias, "parent": None, "children": [],
+                 "error": error.as_document()}
+            )
+            errors.append(error)
+    return StatusResponse(
+        document={"agents": nodes},
+        succeeded=not errors,
+        errors=tuple(errors),
+    )
+
+
+def _recorded_sessions(
+    runner_directory: Path,
+) -> Tuple[Dict[str, Dict[str, Any]], list[Tuple[str, RunnerError]]]:
+    """Read every Session record the Runner retains for this project.
+
+    Returns the valid records by alias and the alias of each record that could
+    not be read with the error it raised, so one unreadable Session never stops
+    the enumeration of the rest.
+    """
+    session_root = runner_directory / "sessions"
+    if session_root.is_symlink() or not session_root.is_dir():
+        return {}, []
+    try:
+        entries = sorted(os.listdir(session_root))
+    except OSError:
+        return {}, []
+    records: Dict[str, Dict[str, Any]] = {}
+    failures: list[Tuple[str, RunnerError]] = []
+    for alias in entries:
+        try:
+            records[alias] = read_alias_mapping(runner_directory, alias)[0]
+        except RunnerError as error:
+            failures.append((alias, error))
+    return records, failures
+
+
+def _require_git_pair(baseline: str | None, candidate: str | None) -> None:
+    """Require the two Git diagnostics commits together or not at all."""
+
+    if (baseline is None) != (candidate is None):
+        raise RunnerError(
+            "invalid-input",
+            "Git diagnostics require both --baseline and --candidate.",
+        )
 
 
 def _status_alias(

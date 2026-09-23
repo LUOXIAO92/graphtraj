@@ -119,7 +119,7 @@ All module names in this table are beneath `graphtraj`.
 | `graph.delivery_worldline` | `append_project_worldline_event(state, root, event)`; `read_worldline(state, root)` | Recorded event, or chronological event dictionaries. |
 | `execution.runner_batch` | `parse_batch(document)`; `read_batch(path, cwd)` | Existing validated `Batch`. File input retains its exact bytes; a Python dictionary retains equivalent YAML. |
 | `execution.runner_launch` | `launch_batch(batch, cwd)` | Existing `LaunchResponse` with `document` and `succeeded`, including per-task failures. |
-| `execution.runner_status` | `status_aliases(aliases, cwd, operation_total=False, baseline=None, candidate=None)` | Existing `StatusResponse` with `document`, `succeeded` and `errors`. |
+| `execution.runner_status` | `status_aliases(aliases, cwd, operation_total=False, baseline=None, candidate=None)`; `status_tree(cwd, operation_total=False, baseline=None, candidate=None)` | Existing `StatusResponse` with `document`, `succeeded` and `errors`. The tree operation returns one `agents` document without an alias list. |
 | `execution.runner_control` | `send_instruction(alias, instruction, cwd, caused_by_event_ids)`; `interrupt_session(alias, cwd)` | Session operation result dictionary. |
 | `execution.runner_cleanup` | `cleanup_ticket(cwd, ticket_id)` | Existing `CleanupResponse` with `document` and `succeeded`. |
 | `teams.coding.team_round` | `continue_stopped_ticket(ticket_id, caused_by_event_ids, cwd)` | Continuation result and its causal event ID. |
@@ -380,8 +380,8 @@ Run public commands from the Harness Project Root:
 
 ```text
 agent-runner --batch-input batch.yml
-agent-runner status <alias> [<alias>...]
-agent-runner status --operation-total <alias> [<alias>...]
+agent-runner status [<alias>...]
+agent-runner status --operation-total [<alias>...]
 agent-runner status --baseline <commit-or-ref> --candidate <commit-or-ref> <alias> [<alias>...]
 agent-runner requests <alias> [--execution-id <native-execution-id>]
 agent-runner reply <alias> --request-file request.yml --response '{"decision":"decline"}'
@@ -487,6 +487,17 @@ Query `status_aliases([alias], root)` to get `session`, `execution_id`, and
 or `interrupted`. These describe native execution, independently of the service
 PID. The native result, final answer and error details are retained in the
 Session's `execution.yml`; `stderr.log` retains Runtime diagnostics.
+
+`status_tree(root)` reads the Session records the Runner retained for this
+project instead of an alias list, so one query reports the whole Agent tree:
+each node's recorded `parent` and `children`, plus its status. A live Session
+sees the subtree rooted at itself; Main and the user see each recorded
+top-level Session and its subtree. The caller itself and its recorded direct
+children keep the full status, and every deeper Session keeps the coarse
+activity and last outcome. A record that cannot be read, or one Session whose
+status cannot be judged, carries its own `error` while the rest of the tree
+still returns. `agent-runner status` with no alias prints this document, and a
+later caller reads the same tree from those records.
 
 While a Worker holds an execution it publishes a heartbeat record in the
 Session directory, including through every normal wait: a watchdog delay, a
@@ -766,7 +777,7 @@ The tools are the existing graph, execution, control and interaction operations:
 | `ticket_register` | One accepted definition: `ticket_id`, `ticket_name`, `source`, `title`, `body`, `dependencies`. | `ticket_directory` of the registered Ticket; the same operation as `graphtraj ticket register`. |
 | `ticket_revise` | One product-preserving revision: `product_preserving`, `caused_by_event_ids`, `evidence_refs`, `tickets`. | Recorded causal event; the same operation as `graphtraj ticket revise`. |
 | `ticket_update` | One evidence-backed state change: `ticket_id`, `status`, `active_team_ordinal`, `worktree`, `branch`, `current_candidate`, `caused_by_event_ids`, `evidence_refs`. | Recorded causal event; the same operation as `graphtraj ticket update`. |
-| `alias_status` | `aliases`, and optionally `operation_total`, `baseline`, `candidate`. | Session status document; the same document as `agent-runner status`. |
+| `alias_status` | optionally `aliases`, `operation_total`, `baseline`, `candidate`. | Session status document, or the visible Session tree when `aliases` is omitted; the same document as `agent-runner status`. |
 | `dispatch` | One structured Batch document: `tasks` with `ticket_id`, `ticket_name`, `role` (a preset reference or one inline role), and optionally `instruction` and `skills`. | Each dispatched execution's `launch_status`, `alias` and `session`; the same document as `agent-runner --batch-input`. The call returns while those executions stay owned. |
 | `send_instruction` | `alias`, `instruction`, `caused_by_event_ids`, and optionally `reports_only`. | `send_status`; the same operation as `agent-runner send`. |
 | `interrupt` | `alias`. | `interrupt_status`; the same operation as `agent-runner interrupt`. |

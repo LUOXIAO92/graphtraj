@@ -21,7 +21,7 @@ from graphtraj.execution.runner_control import (
 )
 from graphtraj.execution.runner_launch import launch_batch
 from graphtraj.execution.runner_models import RunnerError
-from graphtraj.execution.runner_status import status_aliases
+from graphtraj.execution.runner_status import status_aliases, status_tree
 
 
 _MAIN_RECOVERY: "CodexMainRecovery | None" = None
@@ -114,7 +114,7 @@ def _fail(error: RunnerError, **identity: str) -> NoReturn:
 
 
 @main.command()
-@click.argument("aliases", nargs=-1, required=True)
+@click.argument("aliases", nargs=-1, required=False)
 @click.option(
     "--operation-total",
     is_flag=True,
@@ -128,15 +128,23 @@ def status(
     baseline: str | None,
     candidate: str | None,
 ) -> None:
-    """Inspect the explicitly supplied Session aliases."""
+    """Inspect the supplied Session aliases, or the visible Session tree."""
     try:
-        response = status_aliases(
-            aliases,
-            Path.cwd().resolve(),
-            operation_total=operation_total,
-            baseline=baseline,
-            candidate=candidate,
-        )
+        if aliases:
+            response = status_aliases(
+                aliases,
+                Path.cwd().resolve(),
+                operation_total=operation_total,
+                baseline=baseline,
+                candidate=candidate,
+            )
+        else:
+            response = status_tree(
+                Path.cwd().resolve(),
+                operation_total=operation_total,
+                baseline=baseline,
+                candidate=candidate,
+            )
     except RunnerError as error:
         _fail(error)
     _emit_result(response.document)

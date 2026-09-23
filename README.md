@@ -391,7 +391,6 @@ agent-runner reply <alias> --request-file request.yml --response '{"decision":"d
 agent-runner send <alias> --instruction <text> --caused-by-event-id <event-id>
 agent-runner send <alias> --instruction <text> --caused-by-event-id <event-id> --reports-only
 agent-runner interrupt <alias>
-agent-runner handle-abnormal <alias>
 agent-runner continue --ticket-id <id> --caused-by-event-id <event-id>
 agent-runner replace <member-alias> --caused-by-event-id <event-id>
 agent-runner replace <leader-alias> --actor main --caused-by-event-id <event-id>
@@ -532,16 +531,6 @@ cannot create or resume work, including through `send` or report collection.
 This prohibition persists on the old entities after replacement; Sessions,
 aliases and evidence remain retained. Ordinary native completion still permits
 continuation. A send racing native completion never silently queues input.
-
-`handle_abnormal_session(alias, root)` handles one Session the existing
-judgement reads as abnormal, which is an execution whose recorded owner is
-gone without a terminal record. It sends the notice to that Session's recorded
-direct parent through the parent's own execution, so the parent receives the
-abnormal facts together with the stop result of every member, and stops the
-whole descendant subtree exactly as `interrupt_session` does. A Session that
-is running, normally waiting, unreachable or already finished changes nothing:
-the result reports the observed `activity` instead. The CLI and MCP entries
-are `agent-runner handle-abnormal <alias>` and `handle_abnormal`.
 
 The Worker closes its connection after the terminal result. A send made
 during that close waits for the prior owner to finish. The
@@ -803,7 +792,6 @@ The tools are the existing graph, execution, control and interaction operations:
 | `swarm` | One structured swarm input: `tasks` with `role` (a preset reference or one inline role), optionally `instruction` and `skills`, and the `ticket_id` Main selected from the DAG. | Each activated Agent's `launch_status`, `alias` and `session`; the same document as `agent-runner --swarm-input`. The call returns while those executions stay owned, and later calls address the returned alias. |
 | `send_instruction` | `alias`, `instruction`, `caused_by_event_ids`, and optionally `reports_only`. | `send_status`; the same operation as `agent-runner send`. |
 | `interrupt` | `alias`. | `interrupt_status`; the same operation as `agent-runner interrupt`. |
-| `handle_abnormal` | `alias`. | `handled`, the observed `activity` and, for a handled abnormality, the `interrupt_status` with the `notice` delivery record; the same operation as `agent-runner handle-abnormal`. |
 | `continue` | `ticket_id`, `caused_by_event_ids`. | The continued Team's result and `continuation_event_id`; the same D.3 stop/continue operation as `agent-runner continue`. |
 | `pending_requests` | `alias`, and optionally `execution_id`. | The pending native approval or user-input requests, with the identity `reply_to_request` needs; the same document as `agent-runner requests`. |
 | `reply_to_request` | `alias`, the `request` document returned by `pending_requests`, and an explicit `response` object. | `request_id` and `reply_status`; the same operation as `agent-runner reply`. |

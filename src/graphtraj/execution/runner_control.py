@@ -47,7 +47,6 @@ from graphtraj.execution.runner_status import (
     require_descendant_authority,
     require_execution_allowed,
     _recorded_sessions,
-    _status_session,
 )
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 
@@ -549,97 +548,6 @@ def _interrupt_session(
             raise
         return {"alias": alias, "interrupt_status": "stopped"}
     return {"alias": alias, "interrupt_status": "interrupted"}
-
-
-def handle_abnormal_session(alias: str, cwd: Path) -> Dict[str, Any]:
-    """Handle one Agent the existing judgement reads as abnormal.
-
-    A direct parent, or Main and the user, reports the Session it observed to
-    this entry. The Runner re-reads that Session's own record: only an
-    execution whose recorded owner is gone without a terminal record is
-    abnormal. Its recorded direct parent is then notified through the parent's
-    existing execution, and its whole descendant subtree is stopped directly,
-    so members that lost their parent neither keep working nor wait for that
-    parent to relay a stop.
-
-    A Session that is not abnormal changes nothing: no execution is stopped
-    and no notice is delivered. Its observed ``activity`` is reported instead,
-    including ``unreachable``, which is lost contact rather than death.
-
-    Parameters
-    ----------
-    alias
-        Alias of the Session the caller observed.
-    cwd
-        Working directory inside the Harness Project Root.
-
-    Returns
-    -------
-    ``alias``, ``handled`` and the observed ``activity`` with the recorded
-    ``session``, ``execution_id`` and ``heartbeat_at``. A handled abnormality
-    also carries the ``interrupt_status`` with every member's own stop result
-    and the ``notice`` delivery record for the direct parent.
-    """
-
-    runner_directory = discover_runner_directory(cwd)
-    mapping, session_directory = read_alias_mapping(runner_directory, alias)
-    require_descendant_authority(runner_directory, alias, mapping)
-    status = _status_session(mapping, session_directory, alias)
-    if status["activity"] != "abnormal":
-        return {"alias": alias, "handled": False, **status}
-
-    # The stop runs before the notice, so the parent receives the abnormal
-    # facts together with what each member's stop was confirmed to do.
-    result = interrupt_session(alias, cwd)
-    notice = notify_direct_parent(
-        session_directory,
-        _abnormal_notice(alias, status, result),
-        identity={
-            "alias":            alias,
-            "activity":         status["activity"],
-            "session":          status.get("session"),
-            "execution_id":     status.get("execution_id"),
-            "heartbeat_at":     status.get("heartbeat_at"),
-            "interrupt_status": result["interrupt_status"],
-            "members":          result["members"],
-        },
-    )
-    return {"alias": alias, "handled": True, **status, **result, "notice": notice}
-
-
-def _abnormal_notice(
-    alias: str, status: Mapping[str, Any], result: Mapping[str, Any]
-) -> str:
-    """Render the abnormal facts and each member's stop result for the parent."""
-
-    facts = ["activity {0}".format(status["activity"])]
-    if status.get("session"):
-        facts.append("session {0}".format(status["session"]))
-    if status.get("execution_id"):
-        facts.append("execution {0}".format(status["execution_id"]))
-    if "heartbeat_at" in status:
-        facts.append("last heartbeat {0}".format(status["heartbeat_at"]))
-    facts.append("no terminal record")
-
-    members = "; ".join(
-        "{0} {1}{2}".format(
-            item["alias"], item["interrupt_status"], _stop_detail(item),
-        )
-        for item in result["members"]
-    )
-    return (
-        "The Runner judged {0} abnormal: {1}. Its descendant subtree was "
-        "stopped directly with result {2}: {3}."
-    ).format(alias, ", ".join(facts), result["interrupt_status"], members)
-
-
-def _stop_detail(item: Mapping[str, Any]) -> str:
-    """Return one member's own failure detail, or nothing when confirmed."""
-
-    error = item.get("error")
-    if not isinstance(error, Mapping):
-        return ""
-    return " ({0}: {1})".format(error.get("code"), error.get("message"))
 
 
 def _require_project_events(cwd: Path, event_ids: tuple[str, ...]) -> None:

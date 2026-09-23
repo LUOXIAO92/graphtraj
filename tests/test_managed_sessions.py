@@ -34,6 +34,30 @@ operation, arguments = json.loads(sys.argv[2])
 try:
     if operation == 'launch':
         result = launch_batch(parse_batch(arguments), root).document
+    elif operation == 'child':
+        # Exercise the common managed Worker boundary with a parent-bound job.
+        import os, subprocess, yaml
+        from graphtraj.execution.runner_control import _await_session_resume
+        from graphtraj.execution.runner_status import read_alias_mapping
+        parent, alias = arguments[:2]
+        runner = root / '.graphtraj/runner'
+        parent_mapping, parent_directory = read_alias_mapping(runner, parent)
+        job = yaml.safe_load((parent_directory / 'launch.yml').read_text())
+        directory = runner / 'sessions' / alias
+        directory.mkdir()
+        (directory / 'events.jsonl').touch()
+        job['mapping'].update(alias=alias, parent=parent, trace_file=str(directory / 'native.jsonl'))
+        (directory / 'launch.yml').write_text(yaml.safe_dump(job))
+        with (directory / 'worker-stderr.log').open('w') as diagnostics:
+            worker = subprocess.Popen(
+                [sys.executable, '-m', 'graphtraj.execution.runner_worker', str(directory / 'launch.yml')],
+                stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=diagnostics,
+                env={**os.environ, "GRAPHTRAJ_TICKET_ID": parent_mapping["ticket_id"],
+                     "GRAPHTRAJ_ROLE": parent_mapping["role"], "GRAPHTRAJ_PARENT_ALIAS": alias})
+            worker.stdin.write((arguments[2] if len(arguments) > 2 else 'hold').encode())
+            worker.stdin.close()
+        _await_session_resume(worker, directory, directory / 'launch-error.yml', None)
+        result = {'alias': alias, 'session': read_alias_mapping(runner, alias)[0]['session']}
     elif operation == 'status':
         result = status_aliases(arguments, root, operation_total=True).document
     elif operation == 'send':

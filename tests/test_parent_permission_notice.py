@@ -17,10 +17,12 @@ import sys
 import time
 from pathlib import Path
 
+import pytest
 import yaml
 
 from conftest import FakeCodex, InstalledCommands, run_process, wait_for_file
 from runner_fixtures import configure_harness
+from test_managed_sessions import managed_project
 from test_session_alias_control import _register_ready_ticket
 
 
@@ -343,3 +345,119 @@ def test_a_child_request_reaches_the_running_direct_parent(
     finally:
         round_process.kill()
         round_process.wait(timeout=30)
+
+
+def _session_mapping(root: Path, alias: str) -> dict:
+    """Read the identity a managed Worker retained in this isolated project."""
+    return yaml.safe_load(
+        (root / ".graphtraj/runner/sessions" / alias / "mapping.yml").read_text(
+            encoding="utf-8"
+        )
+    )
+
+
+@pytest.mark.skipif(
+    os.environ.get('CODEX_MANAGED_REAL') != '1',
+    reason='explicit real Codex boundary probe',
+)
+def test_real_native_parent_receives_the_child_request_notice(
+    managed_project, tmp_path: Path,
+) -> None:
+    """A real parent execution takes the notice into its own native record.
+
+    The parent runs the installed real Codex through the existing configured
+    connection, so the notice has to be accepted by that Runtime in the
+    execution it already owns. Only the child keeps the controlled peer that
+    produces the synthetic approval request, which is the side this ticket does
+    not have to prove.
+    """
+    import shutil
+    import tomllib
+
+    from test_managed_sessions import launch_document
+
+    root, _, call, executable = managed_project
+    real = shutil.which('codex')
+    assert real
+    controlled = tmp_path / 'controlled-peer.py'
+    peer = Path(__file__).with_name('managed_codex_peer.py').read_text(encoding='utf-8')
+    # The controlled producer raises its request once this Session has
+    # published its own record, which a real first turn reaches later.
+    trigger = "        ask('permissions' if 'request:permissions' in prompt else 'approval')"
+    assert peer.count(trigger) == 1
+    controlled.write_text(
+        peer.replace(trigger, '        time.sleep(3)\n' + trigger, 1),
+        encoding='utf-8',
+    )
+    # The parent alias is its own Session name; the child's alias ends with the
+    # generation suffix this probe records, so one executable serves both sides.
+    executable.write_text(
+        '#!' + sys.executable + '\n'
+        'import os, sys\n'
+        "alias = os.environ.get('GRAPHTRAJ_PARENT_ALIAS', '')\n"
+        "if alias.endswith('@e1'):\n"
+        '    os.execv(sys.executable, [sys.executable, '
+        + repr(str(controlled)) + ', *sys.argv[1:]])\n'
+        'os.execv(' + repr(str(real)) + ', [' + repr(str(real)) + ', *sys.argv[1:]])\n',
+        encoding='utf-8',
+    )
+    executable.chmod(0o755)
+    # An isolated native store keeps the operator's connection settings intact.
+    native_home = root / 'codex-home'
+    native_home.mkdir(exist_ok=True)
+    operator = Path(os.environ.get('CODEX_HOME', Path.home() / '.codex'))
+    for name in ('config.toml', 'auth.json'):
+        if (operator / name).is_file():
+            shutil.copy2(operator / name, native_home / name)
+    config_file = native_home / 'config.toml'
+    config = tomllib.loads(config_file.read_text()) if config_file.exists() else {}
+    busy = (
+        'Run this exact shell command with a long tool wait, and keep waiting '
+        'until it ends. Do not run other commands or finish early: '
+        + sys.executable + " -c 'import time; from pathlib import Path; "
+        "p=Path(\"parent-busy\"); [(p.write_text(str(i)), time.sleep(0.1)) for i in range(150)]'"
+    )
+    document = launch_document(busy)
+    preset = document['tasks'][0]['role']['managed-probe']
+    preset['model'] = os.environ.get('CODEX_MANAGED_MODEL', config.get('model', preset['model']))
+    parent = call('launch', document, timeout=30)['tasks'][0]['alias']
+    parent_before = _session_mapping(root, parent)
+    sessions = root / '.graphtraj/runner/sessions'
+
+    # The child asks for a native decision while the parent still owns its turn.
+    child = call('child', [parent, 'notice-child@e1', 'request:approval'], timeout=30)['alias']
+    assert child.endswith('@e1')
+    child_before = _session_mapping(root, child)
+    sessions_before = sorted(path.name for path in sessions.iterdir())
+    notices = sessions / child / 'parent-notices.jsonl'
+    records = _await_records(
+        notices,
+        lambda items: any(item['delivery'] == 'received' for item in items),
+        timeout=90,
+    )
+    record, = [item for item in records if item['delivery'] == 'received']
+
+    # The real Runtime acknowledged a steer for exactly the execution it owned,
+    # and no second execution, Session or copy appeared for either side.
+    assert record['parent'] == parent
+    assert record['parent_session'] == parent_before['session']
+    assert record['parent_execution_id'] == parent_before['execution_id']
+    assert record['identity']['session'] == child_before['session']
+    assert _session_mapping(root, parent) == parent_before
+    assert _session_mapping(root, child) == child_before
+    assert not (sessions / child / 'execution.yml').exists()
+    assert sorted(path.name for path in sessions.iterdir()) == sessions_before
+
+    # The parent execution's own native record carries the input it received
+    # once that real turn consumes it.
+    from test_managed_sessions import observe
+
+    observe(call, parent, 'idle', timeout=180)
+    trace = Path(parent_before['trace_file'])
+    deadline = time.monotonic() + 30
+    while time.monotonic() < deadline and record['notice'] not in trace.read_text(errors='replace'):
+        time.sleep(0.1)
+    assert record['notice'] in trace.read_text(errors='replace')
+
+    # The notice answered nothing: the child's request still has no native reply.
+    assert not (tmp_path / 'native' / ('rollout-' + child_before['session'] + '.replies.jsonl')).exists()

@@ -258,25 +258,19 @@ class ExecutionBudgetMonitor:
     def deliver_leader_notices(
         self, deliver: Callable[[list[str]], None]
     ) -> None:
-        lock_path = self.ticket_directory / ".execution-budget.lock"
+        """Serialize delivery without holding the budget lock across the callback."""
+        # Session recovery reads the budget while holding its launch lock.
+        # Delivery may need that Session lock, so use a separate persistent lock.
+        lock_path = self.ticket_directory / ".execution-budget-notices.lock"
         with lock_path.open("a+", encoding="utf-8") as lock:
             fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
             try:
-                budget = _current_budget(self.ticket_directory)
-                if budget is None:
-                    return
-                state, _ = _read_usage(self.ticket_directory, budget)
-                pending = [
-                    notice for notice in state["leader_notices"]
-                    if not notice["delivered"]
-                ]
+                pending = self.pending_leader_notices()
                 if not pending:
                     return
                 deliver([notice["message"] for notice in pending])
-                for notice in pending:
-                    notice["delivered"] = True
-                write_yaml_durably(
-                    self.ticket_directory / "execution-budget.yml", state
+                self.mark_leader_notices_delivered(
+                    [notice["key"] for notice in pending]
                 )
             finally:
                 fcntl.flock(lock.fileno(), fcntl.LOCK_UN)

@@ -17,9 +17,9 @@ from pathlib import Path
 def main() -> int:
     """Record synthetic access checks and one direct-child public status query.
 
-    Run only from the direct parent's existing execution. The output directory
-    must be new. Exit 0 means the host canary checks and both status commands
-    succeeded; it does not establish complete Agent isolation.
+    Run only from the direct parent's existing execution at the Harness root.
+    The output directory must be new. Exit 0 means the host canary checks and
+    both status commands succeeded; it does not establish complete isolation.
     """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--runner", type=Path, required=True)
@@ -58,6 +58,7 @@ def main() -> int:
         (output / f"{name}.stderr").write_text(result.stderr, encoding="utf-8")
         results.append({
             "name": name, "command": command, "exit_code": result.returncode,
+            "cwd": str(Path.cwd()),
         })
         (output / "results.json").write_text(
             json.dumps(results, indent=2) + "\n", encoding="utf-8"

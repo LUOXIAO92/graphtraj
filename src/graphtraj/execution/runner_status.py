@@ -105,12 +105,16 @@ def _live_session_owners(runner_directory: Path) -> Dict[int, str]:
     cannot present an earlier owner's lock.
     """
     session_root = runner_directory / "sessions"
-    if session_root.is_symlink() or not session_root.is_dir():
-        return {}
     try:
+        if session_root.is_symlink() or not session_root.is_dir():
+            return {}
         aliases = sorted(os.listdir(session_root))
-    except OSError:
-        return {}
+    except OSError as error:
+        # Inaccessible ownership records do not establish a Main caller.
+        raise RunnerError(
+            "authority-denied",
+            "Caller identity cannot be verified because Session records are inaccessible.",
+        ) from error
     owners: Dict[int, str] = {}
     for alias in aliases:
         try:

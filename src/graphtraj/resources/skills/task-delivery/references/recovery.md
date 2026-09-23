@@ -99,7 +99,10 @@ Continue only when authorized with `agent-runner continue --ticket-id <id>
 history; budget edits alone do not resume work, and a user pause stays in effect.
 
 That command accepts only a sampled-stopped Ticket. Its return may report missing
-Engineer evidence or `not-accepted` without running a new Leader turn. After the
+Engineer evidence or `not-accepted` without running a new Leader turn. When a
+stopped implementation needs a new Round, finish this retained-evidence recovery
+in the old Round first, then register the new Round before sending implementation
+work. Otherwise recovery can copy the old incomplete result into the new Round. After the
 Driver ends, send the remaining implementation or acceptance work to the same
 Leader through the causal event; use the existing execution while it is active.
 An old stopped-before-acceptance report supplies neither acceptance nor rejection.

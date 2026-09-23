@@ -226,10 +226,20 @@ def interrupt(alias: str) -> None:
 
 @main.command()
 @click.argument("alias")
-@click.option("--actor", type=click.Choice(["main", "user"]), required=True)
+@click.option(
+    "--actor",
+    type=click.Choice(["main", "user"]),
+    help="Names the Main or user who retires the Team in a whole-Team handover.",
+)
 @click.option("--caused-by-event-id", multiple=True, required=True)
-def replace(alias: str, actor: str, caused_by_event_id: tuple[str, ...]) -> None:
-    """Replace a seat; replacing the Leader retires the whole Team."""
+def replace(alias: str, actor: str | None, caused_by_event_id: tuple[str, ...]) -> None:
+    """Replace a seat; replacing the Leader retires the whole Team.
+
+    The Runner's recorded direct relation decides who may replace the target:
+    a Session manages the seats it directly parented and Main or the user
+    manages the Sessions the Runner recorded without a parent. A carried actor
+    name grants no authority and is recorded only for a whole-Team handover.
+    """
     from graphtraj.teams.coding.team_replacement import replace_session
 
     try:

@@ -392,6 +392,7 @@ agent-runner send <alias> --instruction <text> --caused-by-event-id <event-id>
 agent-runner send <alias> --instruction <text> --caused-by-event-id <event-id> --reports-only
 agent-runner interrupt <alias>
 agent-runner continue --ticket-id <id> --caused-by-event-id <event-id>
+agent-runner replace <member-alias> --caused-by-event-id <event-id>
 agent-runner replace <leader-alias> --actor main --caused-by-event-id <event-id>
 graphtraj ticket graph
 graphtraj worldline read
@@ -406,7 +407,8 @@ adversarial decision. Process corrections stay in the current Team Round.
 Only a compliant implementation rejection confirmed by the Leader opens the
 next Round. Main or the user can retire a Team; replacement retains the Ticket
 branch and Worktree, and reads the prior Leader's final response from its Trace.
-Replacing another member changes only that seat.
+Replacing another member changes only that seat, and the Runner's recorded
+direct parent decides who may replace it.
 
 Continue an unfinished Team with its original Leader launch after deciding the
 next action. Runner reuses retained Sessions, the Worktree, candidate, and valid

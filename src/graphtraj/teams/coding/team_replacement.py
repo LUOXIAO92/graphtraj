@@ -54,9 +54,14 @@ def require_active_session(project, alias):
 
 
 def replace_session(
-    alias: str, actor: str, caused_by_event_ids: tuple[str, ...], cwd: Path
+    alias: str, actor: str | None, caused_by_event_ids: tuple[str, ...], cwd: Path
 ) -> dict:
-    """Check ownership, then execute this replacement via native approval if needed."""
+    """Check ownership, then execute this replacement via native approval if needed.
+
+    The Runner's recorded direct relation decides who may replace the target;
+    the carried actor name grants no authority and only names who retired a
+    Team in a whole-Team handover.
+    """
     project = discover_project(cwd, require_clean_integration=False)
     mapping, _ = read_alias_mapping(project.runner_directory, alias)
     # Native approval executes the concrete remaining operation, not a replay of
@@ -78,7 +83,7 @@ def replace_session(
 
 
 def _replace_stopped_session(
-    alias: str, actor: str, caused_by_event_ids: tuple[str, ...], cwd: Path
+    alias: str, actor: str | None, caused_by_event_ids: tuple[str, ...], cwd: Path
 ) -> dict:
     """Perform the replacement after relation/native approval; recheck stopped state."""
     project = discover_project(cwd, require_clean_integration=False)
@@ -137,6 +142,11 @@ def _replace_stopped_session(
     if seat == "team_leader":
         if team["status"] not in {"active", "retiring"}:
             raise RunnerError("team-not-active", "The Team is already retired.")
+        if actor not in {"main", "user"}:
+            raise RunnerError(
+                "invalid-input",
+                "Replacing a Team Leader retires the Team; name --actor main or user.",
+            )
         # Interrupting makes the owning Team worker stop instead of scheduling
         # subsequent work. Release its execution capacity before Delivery State
         # records retirement; a fully occupied project needs no spare position.

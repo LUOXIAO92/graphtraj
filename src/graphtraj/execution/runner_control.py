@@ -7,6 +7,7 @@ import json
 import os
 import subprocess
 import sys
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -548,6 +549,108 @@ def _interrupt_session(
             raise
         return {"alias": alias, "interrupt_status": "stopped"}
     return {"alias": alias, "interrupt_status": "interrupted"}
+
+
+ABNORMAL_RESPONSE_FILE = "abnormal-response.yml"
+
+# One answer at a time in this process. The judgment that starts an answer is
+# also made by the stop itself, because interrupt_session reads each member's
+# owner through owning_execution, so a judgment made inside an answer may not
+# start a second one. The lock is coarse on purpose: one Runner process answers
+# one judged abnormality at a time. ponytail: a process-wide lock, use per
+# Session locks if concurrent answers ever need to overlap.
+_abnormal_response_lock = threading.Lock()
+
+
+def respond_to_abnormal_session(
+    alias: str, session_directory: Path, abnormal: Mapping[str, Any]
+) -> None:
+    """Answer one Session the Runner judged abnormal, from its own records.
+
+    An abnormal judgment names an Agent whose recorded owner is gone and that
+    published no terminal record. The Runner answers it directly: the Session's
+    recorded direct parent receives the notice in the execution that parent
+    already owns, and the Session's recorded subtree is stopped, so no member
+    keeps working under an Agent that lost control of it. Neither step depends
+    on the lost Agent forwarding anything.
+
+    Parameters
+    ----------
+    alias
+        Session the Runner judged abnormal.
+    session_directory
+        Directory of that Session, whose own record names the direct parent.
+    abnormal
+        The judged status document: ``activity`` and, when the recorded
+        heartbeat names this Worker, ``heartbeat_at``.
+
+    A judgment observed from outside the caller's own descent changes nothing
+    here: that caller keeps reading the abnormal activity, and the caller
+    entitled to control this subtree answers it by asking. The answer is
+    claimed durably before it runs and retained afterwards, so a later caller
+    repeats neither the notice nor the stop, and a stop that cannot be
+    confirmed stays visible in the notice instead of being reported as done.
+    """
+    if not _abnormal_response_lock.acquire(blocking=False):
+        return
+    try:
+        runner_directory = session_directory.parent.parent
+        mapping, _ = read_alias_mapping(runner_directory, alias)
+        try:
+            require_descendant_authority(runner_directory, alias, mapping)
+        except RunnerError:
+            return
+        claim = session_directory / ABNORMAL_RESPONSE_FILE
+        try:
+            with claim.open("x", encoding="utf-8") as stream:
+                stream.write(json.dumps({"alias": alias, "at": time.time()}) + "\n")
+        except FileExistsError:
+            return
+        try:
+            # A public control entry locates the Runner from a working
+            # directory; this Session's own record names that project.
+            stopped = interrupt_session(alias, runner_directory.parent.parent)
+        except RunnerError as error:
+            stopped = {
+                "alias": alias, "interrupt_status": "unconfirmed",
+                "members": [], "error": error.as_document(),
+            }
+        identity = {**stopped, "activity": abnormal["activity"]}
+        if "heartbeat_at" in abnormal:
+            identity["heartbeat_at"] = abnormal["heartbeat_at"]
+        notify_direct_parent(
+            session_directory,
+            _abnormal_notice(alias, abnormal, stopped),
+            identity,
+        )
+    finally:
+        _abnormal_response_lock.release()
+
+
+def _abnormal_notice(
+    alias: str, abnormal: Mapping[str, Any], stopped: Mapping[str, Any]
+) -> str:
+    """Return the abnormality and the stop result as text the parent reads."""
+    basis = "activity=abnormal, ownership lock released, no terminal record"
+    heartbeat_at = abnormal.get("heartbeat_at")
+    if isinstance(heartbeat_at, (int, float)) and not isinstance(heartbeat_at, bool):
+        basis += ", last heartbeat " + time.strftime(
+            "%Y-%m-%dT%H:%M:%S", time.localtime(heartbeat_at)
+        )
+    members = ", ".join(
+        "{0}={1}".format(item["alias"], item["interrupt_status"])
+        for item in stopped["members"]
+    ) or "no member result"
+    failure = stopped.get("error")
+    return "Runner judged Agent {0} abnormal ({1}). Subtree stop {2}: {3}{4}".format(
+        alias,
+        basis,
+        stopped["interrupt_status"],
+        members,
+        "" if failure is None else " ({0}: {1})".format(
+            failure["code"], failure["message"]
+        ),
+    )
 
 
 def _require_project_events(cwd: Path, event_ids: tuple[str, ...]) -> None:

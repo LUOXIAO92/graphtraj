@@ -563,10 +563,17 @@ def _status_session(
         if execution_file.is_file():
             return {**identity, "activity": "idle",
                     "last_outcome": read_terminal_outcome(execution_file)}
-        return {
-            **identity,
-            **_unresponsive_status(mapping, session_directory),
-        }
+        unresponsive = _unresponsive_status(mapping, session_directory)
+        if unresponsive["activity"] == "abnormal":
+            # The judged abnormality is answered here, as part of the judgement
+            # the Runner already makes: the Session's direct parent is notified
+            # and its subtree stops, both without the lost Agent forwarding
+            # anything (T9c). Imported here because the control operations read
+            # this module for the judgment they repeat.
+            from graphtraj.execution.runner_control import respond_to_abnormal_session
+
+            respond_to_abnormal_session(alias, session_directory, unresponsive)
+        return {**identity, **unresponsive}
     if "last_outcome" in mapping and "last_outcome" not in status:
         status["last_outcome"] = mapping["last_outcome"]
     return {**identity, **status}

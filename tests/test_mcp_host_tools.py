@@ -26,7 +26,7 @@ from test_ticket_graph import _configure, _ticket, _write
 TOOL_NAMES = {
     "alias_status",
     "continue",
-    "dispatch",
+    "swarm",
     "interrupt",
     "pending_requests",
     "reply_to_request",
@@ -536,7 +536,7 @@ def test_installed_mcp_server_dispatches_and_controls_a_managed_child(
     """A host dispatches one managed child and controls it by its identity."""
 
     root, cause = managed_mcp.root, managed_mcp.cause
-    dispatched = managed_mcp.document("dispatch", {"tasks": [_inline_task()]})
+    dispatched = managed_mcp.document("swarm", {"tasks": [_inline_task()]})
     assert set(dispatched) == {"retained_batch_file", "tasks"}
     task, = dispatched["tasks"]
     assert task["launch_status"] == "launched"
@@ -663,9 +663,9 @@ def test_installed_mcp_server_rejects_execution_input_like_the_cli(
     )
     stale_request = _write(root / "stale-request.yml", {"alias": "missing@l1"})
     cases = (
-        ("dispatch", {"tasks": []}, ["--batch-input", str(empty_batch)]),
-        ("dispatch", {"tasks": [_inline_task() | {"ticket_id": "999"}]},
-         ["--batch-input", str(unregistered)]),
+        ("swarm", {"tasks": []}, ["--swarm-input", str(empty_batch)]),
+        ("swarm", {"tasks": [_inline_task() | {"ticket_id": "999"}]},
+         ["--swarm-input", str(unregistered)]),
         ("send_instruction", {"alias": "missing@l1", "instruction": "steer",
                               "caused_by_event_ids": []},
          ["send", "missing@l1", "--instruction", "steer"]),
@@ -753,7 +753,7 @@ def test_installed_mcp_server_continues_a_stopped_ticket_with_unchanged_semantic
     ticket = harness / ".graphtraj/state/tickets/76-session-alias-control"
 
     with _started_mcp(mcp_executable, harness, environment) as server:
-        stopped = server.call("dispatch", {"tasks": [{
+        stopped = server.call("swarm", {"tasks": [{
             "ticket_id":   "76",
             "ticket_name": "session-alias-control",
             "role":        "coding-team.team-leader",
@@ -813,7 +813,7 @@ def test_installed_mcp_server_continues_a_stopped_ticket_with_unchanged_semantic
             "--revision-file", str(revision),
         )
         assert revised.returncode == 0, revised.stderr
-        again = server.call("dispatch", {"tasks": [{
+        again = server.call("swarm", {"tasks": [{
             "ticket_id":   "76",
             "ticket_name": "session-alias-control",
             "role":        "coding-team.team-leader",
@@ -1173,7 +1173,7 @@ def test_real_codex_host_dispatches_and_controls_a_managed_child_offline(
         assert set(discovered["tools"]) == TOOL_NAMES
         assert discovered["toolsError"] is None
 
-        dispatched = _host_tool(host, probe, "dispatch", {"tasks": [_inline_task()]})
+        dispatched = _host_tool(host, probe, "swarm", {"tasks": [_inline_task()]})
         assert dispatched["isError"] is False, dispatched
         task, = dispatched["structuredContent"]["tasks"]
         assert task["launch_status"] == "launched"
@@ -1357,7 +1357,7 @@ def test_installed_mcp_server_returns_a_budget_stop_to_the_request_caller(
 
     with _started_mcp(mcp_executable, harness, mcp_environment) as server:
         stopped = server.call(
-            "dispatch", {"tasks": [task]}, thread_id="thread-main"
+            "swarm", {"tasks": [task]}, thread_id="thread-main"
         )["result"]
         assert stopped["isError"] is False, stopped
         assert stopped["structuredContent"]["tasks"][0]["launch_status"] == "stopped"
@@ -1394,7 +1394,7 @@ def test_installed_mcp_server_returns_a_budget_stop_to_the_request_caller(
 
         # A repeated delivery of one stop stays deduplicated, and a request
         # without Codex caller metadata keeps the generic behaviour.
-        repeated = server.call("dispatch", {"tasks": [task]})["result"]
+        repeated = server.call("swarm", {"tasks": [task]})["result"]
         assert repeated["isError"] is False, repeated
         assert "stop_deliveries" not in repeated["structuredContent"]
         assert _native_queue_submissions(protocol) == []
@@ -1436,7 +1436,7 @@ def test_installed_runner_returns_a_budget_stop_with_the_awaiting_call(
         encoding="utf-8",
     )
     completed = run_process(
-        [str(installed_commands.runner), "--batch-input", str(batch)],
+        [str(installed_commands.runner), "--swarm-input", str(batch)],
         cwd=harness,
         env={**run_environment, "CODEX_THREAD_ID": "thread-main"},
         timeout=300,
@@ -1513,7 +1513,7 @@ def test_installed_mcp_server_returns_each_caller_its_own_stop(
     with _started_mcp(mcp_executable, harness, mcp_environment) as server:
         for ticket_id, thread_id in (("76", "thread-one"), ("77", "thread-two")):
             stopped = server.call(
-                "dispatch", {"tasks": [tasks[ticket_id]]}, thread_id=thread_id
+                "swarm", {"tasks": [tasks[ticket_id]]}, thread_id=thread_id
             )["result"]
             assert stopped["isError"] is False, stopped
             assert stopped["structuredContent"]["tasks"][0]["launch_status"] == "stopped"
@@ -1570,7 +1570,7 @@ def test_installed_mcp_server_does_not_queue_a_late_stop_without_a_waiting_call(
 
     with _started_mcp(mcp_executable, harness, mcp_environment) as server:
         launched = server.call(
-            "dispatch", {"tasks": [task]}, thread_id="thread-main"
+            "swarm", {"tasks": [task]}, thread_id="thread-main"
         )["result"]
         assert launched["isError"] is False, launched
         alias = launched["structuredContent"]["tasks"][0]["alias"]
@@ -1651,7 +1651,7 @@ def test_installed_mcp_server_keeps_the_continue_path_on_the_request_caller(
 
     with _started_mcp(mcp_executable, harness, mcp_environment) as server:
         stopped = server.call(
-            "dispatch", {"tasks": [task]}, thread_id="thread-main"
+            "swarm", {"tasks": [task]}, thread_id="thread-main"
         )["result"]
         assert stopped["isError"] is False, stopped
         assert stopped["structuredContent"]["tasks"][0]["launch_status"] == "stopped"

@@ -107,7 +107,7 @@ def test_installed_alias_control_resumes_and_interrupts_one_team_session(
         encoding="utf-8",
     )
     launched = run_process(
-        [str(installed_commands.runner), "--batch-input", str(batch)],
+        [str(installed_commands.runner), "--swarm-input", str(batch)],
         cwd=harness_root,
         env={
             **environment,
@@ -249,7 +249,7 @@ def test_installed_alias_control_resumes_and_interrupts_one_team_session(
     assert yaml.safe_load(denied.stdout)["error"]["code"] == "insufficient-capacity"
     assert peer_mapping_file.read_text() == peer_before
     denied_batch = run_process(
-        [str(installed_commands.runner), "--batch-input", str(batch)],
+        [str(installed_commands.runner), "--swarm-input", str(batch)],
         cwd=harness_root, env=environment,
     )
     assert denied_batch.returncode == 1
@@ -352,7 +352,7 @@ def test_installed_runner_keeps_clean_dev_requirement_for_new_ticket_worktree(
     )
 
     launched = run_process(
-        [str(installed_commands.runner), "--batch-input", str(batch)],
+        [str(installed_commands.runner), "--swarm-input", str(batch)],
         cwd=harness_root,
         env=environment,
         timeout=15,
@@ -395,7 +395,7 @@ def test_installed_send_resumes_an_unregistered_leader_session(
         encoding="utf-8",
     )
     launched = run_process(
-        [str(installed_commands.runner), "--batch-input", str(batch)],
+        [str(installed_commands.runner), "--swarm-input", str(batch)],
         cwd=harness_root,
         env=environment,
         timeout=15,
@@ -537,7 +537,7 @@ Deliver the accepted Session transport behavior.
         encoding="utf-8",
     )
     launched = run_process(
-        [str(installed_commands.runner), "--batch-input", str(batch)],
+        [str(installed_commands.runner), "--swarm-input", str(batch)],
         cwd=harness_root,
         env=run_environment,
         timeout=15,
@@ -671,7 +671,7 @@ Deliver the accepted Session transport behavior.
     policy_log = tmp_path / "leader-policy.jsonl"
 
     result = run_process(
-        [str(installed_commands.runner), "--batch-input", str(batch)],
+        [str(installed_commands.runner), "--swarm-input", str(batch)],
         cwd=harness_root,
         env={
             **environment,

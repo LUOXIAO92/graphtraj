@@ -90,7 +90,7 @@ def engineer_probe(commands, harness, fake_codex, environment, *, body="Probe th
     }]}))
     with (harness / "probe-output.log").open("w+") as output:
         process = subprocess.Popen(
-            [str(commands.runner), "--batch-input", str(batch)], cwd=harness, env=env,
+            [str(commands.runner), "--swarm-input", str(batch)], cwd=harness, env=env,
             text=True, stdout=output, stderr=subprocess.STDOUT,
         )
         alias = None

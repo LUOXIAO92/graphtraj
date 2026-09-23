@@ -335,7 +335,7 @@ def test_installed_runner_delivers_sampled_stop_to_leader_before_engineer_stops(
     ]
     assert "Execution was stopped by Runner" in engineer_inputs[-1]
     restarted = run_process(
-        [str(installed_commands.runner), "--batch-input", str(harness / "probe-batch.yml")],
+        [str(installed_commands.runner), "--swarm-input", str(harness / "probe-batch.yml")],
         cwd=harness,
         env=probe_environment,
     )
@@ -392,7 +392,7 @@ def test_installed_runner_collects_reviews_already_running_at_sampled_stop(
         "PYTHONPATH": str(controls),
     }
     process = subprocess.Popen(
-        [str(installed_commands.runner), "--batch-input", str(batch)],
+        [str(installed_commands.runner), "--swarm-input", str(batch)],
         cwd=harness,
         env=run_environment,
         text=True,
@@ -518,7 +518,7 @@ def test_installed_runner_stops_final_leader_before_acceptance(
         "PYTHONPATH": str(controls),
     }
     result = run_process(
-        [str(installed_commands.runner), "--batch-input", str(batch)],
+        [str(installed_commands.runner), "--swarm-input", str(batch)],
         cwd=harness,
         env=run_environment,
         timeout=30,
@@ -625,7 +625,7 @@ def test_installed_runner_stops_final_leader_before_acceptance(
     )
     assert revised.returncode == 0, revised.stderr
     ordinary_dispatch = run_process(
-        [str(installed_commands.runner), "--batch-input", str(batch)],
+        [str(installed_commands.runner), "--swarm-input", str(batch)],
         cwd=harness,
         env=run_environment,
         timeout=30,
@@ -723,7 +723,7 @@ def test_installed_runner_delivers_elapsed_notices_to_final_leader(
         encoding="utf-8",
     )
     result = run_process(
-        [str(installed_commands.runner), "--batch-input", str(batch)],
+        [str(installed_commands.runner), "--swarm-input", str(batch)],
         cwd=harness,
         env={
             **environment,
@@ -883,7 +883,7 @@ def test_installed_runner_counts_sessions_and_emits_one_correction_overrun(
         encoding="utf-8",
     )
     result = run_process(
-        [str(installed_commands.runner), "--batch-input", str(batch)],
+        [str(installed_commands.runner), "--swarm-input", str(batch)],
         cwd=harness,
         env={
             **environment,
@@ -946,7 +946,7 @@ def test_installed_runner_notifies_once_when_a_replacement_exceeds_session_plan(
         "RECOVERY_TARGET": "provider-replace",
     }
     failed = run_process(
-        [str(installed_commands.runner), "--batch-input", str(batch)],
+        [str(installed_commands.runner), "--swarm-input", str(batch)],
         cwd=harness,
         env=launch_environment,
         timeout=30,
@@ -1013,7 +1013,7 @@ def test_installed_send_notifies_its_caller_while_a_budgeted_resume_runs(
         encoding="utf-8",
     )
     launched = run_process(
-        [str(installed_commands.runner), "--batch-input", str(batch)],
+        [str(installed_commands.runner), "--swarm-input", str(batch)],
         cwd=harness,
         env={
             **environment,
@@ -1297,7 +1297,7 @@ def test_installed_send_delivers_elapsed_notices_to_the_resumed_leader(
         "PYTHONPATH": str(controls),
     }
     completed = run_process(
-        [str(installed_commands.runner), "--batch-input", str(batch)],
+        [str(installed_commands.runner), "--swarm-input", str(batch)],
         cwd=harness,
         env=run_environment,
         timeout=30,
@@ -1424,7 +1424,7 @@ def test_installed_send_collects_reports_without_sampling_the_stop(
         "PYTHONPATH": str(controls),
     }
     completed = run_process(
-        [str(installed_commands.runner), "--batch-input", str(batch)],
+        [str(installed_commands.runner), "--swarm-input", str(batch)],
         cwd=harness,
         env=run_environment,
         timeout=30,
@@ -1593,7 +1593,7 @@ def test_installed_send_retains_a_late_stop_without_an_awaiting_call(
         "PYTHONPATH": str(controls),
     }
     completed = run_process(
-        [str(installed_commands.runner), "--batch-input", str(batch)],
+        [str(installed_commands.runner), "--swarm-input", str(batch)],
         cwd=harness,
         env=run_environment,
         timeout=30,
@@ -1698,7 +1698,7 @@ def test_installed_runner_counts_implementation_rework_as_correction(
         "RECOVERY_TARGET": "provider-rework",
     }
     failed = run_process(
-        [str(installed_commands.runner), "--batch-input", str(batch)],
+        [str(installed_commands.runner), "--swarm-input", str(batch)],
         cwd=harness,
         env=runtime_environment,
         timeout=45,
@@ -1734,7 +1734,7 @@ def test_installed_runner_counts_implementation_rework_as_correction(
     wait_for_file(mapping_file.parent / "execution.yml")
 
     continued = run_process(
-        [str(installed_commands.runner), "--batch-input", str(batch)],
+        [str(installed_commands.runner), "--swarm-input", str(batch)],
         cwd=harness,
         env=runtime_environment,
         timeout=45,

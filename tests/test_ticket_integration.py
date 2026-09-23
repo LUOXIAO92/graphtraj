@@ -35,7 +35,7 @@ def accepted_ticket(
         GRAPHTRAJ_AGENT_RUNNER=str(installed_commands.runner),
         **({} if selected_axes is None else {"FAKE_CODEX_REVIEW_AXES": selected_axes}),
     )
-    launched = run_process([str(installed_commands.runner), "--batch-input", str(batch)], cwd=root, env=environment)
+    launched = run_process([str(installed_commands.runner), "--swarm-input", str(batch)], cwd=root, env=environment)
     assert launched.returncode == 0, launched.stderr
     state = root / ".graphtraj/state"
     record = yaml.safe_load((state / "tickets/83-integration/ticket.yml").read_text())
@@ -209,7 +209,7 @@ def test_grouped_presets_apply_operator_settings_and_preserve_existing_history(
         FAKE_CODEX_LIFECYCLE_ACTION="complete-team-round",
         GRAPHTRAJ_AGENT_RUNNER=str(installed_commands.runner),
     )
-    launched = run_process([str(installed_commands.runner), "--batch-input", str(batch)], cwd=root, env=environment)
+    launched = run_process([str(installed_commands.runner), "--swarm-input", str(batch)], cwd=root, env=environment)
     assert launched.returncode == 0, launched.stderr
     records = [json.loads(line) for line in fake_codex.log_file.read_text().splitlines()]
     assert {record["role"] for record in records} == {
@@ -364,7 +364,7 @@ def test_semantic_conflict_returns_to_main_and_requires_passing_validation(
         _change_status(installed_commands, root, "88", "ready")
         batch = root / "independent.yml"
         batch.write_text(yaml.safe_dump({"tasks": [{"ticket_id": "88", "ticket_name": "independent", "role": "team-leader"}]}))
-        launched = run_process([str(installed_commands.runner), "--batch-input", str(batch)], cwd=root, env={
+        launched = run_process([str(installed_commands.runner), "--swarm-input", str(batch)], cwd=root, env={
             **os.environ, "HOME": str(root / "operator-home"),
             "PATH": str(fake_codex.executable.parent) + os.pathsep + os.environ["PATH"],
             "FAKE_CODEX_LOG": str(fake_codex.log_file),
@@ -417,7 +417,7 @@ def test_resolver_requires_mains_observed_conflict(installed_commands, accepted_
     assert rejected.returncode == 1
     batch = root / "resolver.yml"
     batch.write_text(yaml.safe_dump({"tasks": [{"ticket_id": "83", "ticket_name": "integration", "role": "merge-resolver"}]}))
-    rejected = run_process([str(installed_commands.runner), "--batch-input", str(batch)], cwd=root)
+    rejected = run_process([str(installed_commands.runner), "--swarm-input", str(batch)], cwd=root)
     assert rejected.returncode == 1
     assert "conflict" in yaml.safe_load(rejected.stdout)["error"]["message"]
     assert fake_codex.log_file.read_bytes() == previous_runtime

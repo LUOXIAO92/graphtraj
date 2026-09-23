@@ -139,7 +139,7 @@ configured_events =""", 1)
 
     if during_implementation:
         environment["ENGINEER_STARTED"] = str(tmp_path / "engineer-started")
-        launched = subprocess.Popen([str(installed_commands.runner), "--batch-input", str(batch)],
+        launched = subprocess.Popen([str(installed_commands.runner), "--swarm-input", str(batch)],
                                     cwd=root, env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         def finish_original_batch():
             (tmp_path / "release-reviewers").touch()
@@ -159,7 +159,7 @@ configured_events =""", 1)
         else:
             wait_for_file(tmp_path / "engineer-started", timeout=15)
     else:
-        launched = command("--batch-input", str(batch))
+        launched = command("--swarm-input", str(batch))
         assert launched.returncode == 0, launched.stdout + launched.stderr
     ticket_dir = root / ".graphtraj/state/tickets/76-session-alias-control"
     original = yaml.safe_load((ticket_dir / "ticket.yml").read_text())

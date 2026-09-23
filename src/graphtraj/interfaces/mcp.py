@@ -28,14 +28,13 @@ from graphtraj.configuration.project_configuration import (
     load_project_configuration,
 )
 from graphtraj.execution.execution_budget import budget_notice_output, caller_notice_fd
-from graphtraj.execution.runner_batch import parse_batch
 from graphtraj.execution.runner_control import (
     interrupt_session,
     pending_requests,
     reply_to_request,
     send_instruction,
 )
-from graphtraj.execution.runner_launch import launch_batch
+from graphtraj.execution.runner_launch import launch_swarm
 from graphtraj.execution.runner_models import RunnerError
 from graphtraj.execution.runner_status import status_aliases, status_tree
 from graphtraj.graph.ticket_graph import (
@@ -119,7 +118,7 @@ _ALIAS_SCHEMA = {
     "required":             ["alias"],
     "additionalProperties": False,
 }
-_BATCH_TASK_SCHEMA = {
+_SWARM_TASK_SCHEMA = {
     "type": "object",
     "properties": {
         "ticket_id":   {"type": "string"},
@@ -128,12 +127,12 @@ _BATCH_TASK_SCHEMA = {
         "instruction": {"type": "string"},
         "skills":      {"type": "array", "items": {"type": "string"}},
     },
-    "required":             ["ticket_id", "ticket_name", "role"],
+    "required":             ["role"],
     "additionalProperties": False,
 }
-_DISPATCH_SCHEMA = {
+_SWARM_SCHEMA = {
     "type": "object",
-    "properties": {"tasks": {"type": "array", "items": _BATCH_TASK_SCHEMA}},
+    "properties": {"tasks": {"type": "array", "items": _SWARM_TASK_SCHEMA}},
     "required":             ["tasks"],
     "additionalProperties": False,
 }
@@ -321,10 +320,14 @@ def _boolean_argument(arguments: Mapping[str, Any], name: str) -> bool:
     return value
 
 
-def dispatch_batch(arguments: Mapping[str, Any]) -> ToolResult:
-    """Dispatch one structured Batch; the returned identity stays owned."""
+def launch_swarm_tool(arguments: Mapping[str, Any]) -> ToolResult:
+    """Activate one swarm input; the returned identity stays owned.
 
-    response = launch_batch(parse_batch(dict(arguments)), Path.cwd())
+    The calling Session's Ticket and the registered Ticket state supply the
+    identity each task does not repeat.
+    """
+
+    response = launch_swarm(dict(arguments), Path.cwd())
     return ToolResult(response.document, failed=not response.succeeded)
 
 
@@ -441,12 +444,12 @@ register_tool(
     read_alias_status,
 )
 register_tool(
-    "dispatch",
-    "Dispatch one structured Batch and return the identity of each dispatched "
-    "execution while it stays owned, so later calls can query and control it. "
-    "Equivalent to `agent-runner --batch-input`.",
-    _DISPATCH_SCHEMA,
-    dispatch_batch,
+    "swarm",
+    "Activate the roles this swarm input selects and return each Agent's alias, "
+    "so later calls query, steer and continue it by that alias rather than by "
+    "another launch input. Equivalent to `agent-runner --swarm-input`.",
+    _SWARM_SCHEMA,
+    launch_swarm_tool,
 )
 register_tool(
     "send_instruction",

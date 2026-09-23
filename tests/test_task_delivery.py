@@ -63,7 +63,7 @@ elif role == 'team-leader':
         batch.write_text(yaml.safe_dump({'tasks': [{
             'ticket_id': ticket, 'ticket_name': os.environ['GRAPHTRAJ_TICKET_NAME'], 'role': child_role,
         }]}))
-        result = subprocess.run([os.environ['GRAPHTRAJ_AGENT_RUNNER'], '--batch-input', str(batch)], text=True, capture_output=True)
+        result = subprocess.run([os.environ['GRAPHTRAJ_AGENT_RUNNER'], '--swarm-input', str(batch)], text=True, capture_output=True)
         assert result.returncode == 0, result.stdout + result.stderr
         assert yaml.safe_load(result.stdout)['tasks'][0]['launch_status'] == 'registered'
     else:
@@ -171,7 +171,7 @@ def test_installed_delivery_corrects_a_split_and_delivers_the_current_graph(
     _change_status(installed_commands, root, "1", "ready")
     batch = root / "frontier.yml"
     batch.write_text(yaml.safe_dump({"tasks": [{"ticket_id": "1", "ticket_name": "renderer", "role": "team-leader"}]}))
-    first_delivery = runner("--batch-input", str(batch))
+    first_delivery = runner("--swarm-input", str(batch))
     assert first_delivery["tasks"][0]["launch_status"] == "not-accepted"
     original_ticket = record("1", "renderer")
     first_round = state / "tickets/1-renderer/teams/1/rounds/1"
@@ -212,7 +212,7 @@ def test_installed_delivery_corrects_a_split_and_delivers_the_current_graph(
     assert [item["ticket_id"] for item in product("ticket", "graph")["tickets"] if item["ready"]] == ["3"]
     runner("cleanup", "--ticket-id", "1")
     batch.write_text(yaml.safe_dump({"tasks": [{"ticket_id": "3", "ticket_name": "cli", "role": "team-leader"}]}))
-    runner("--batch-input", str(batch))
+    runner("--swarm-input", str(batch))
     product("ticket", "integrate", "--ticket-id", "3", "--", sys.executable, "-c", "import subprocess, sys; assert subprocess.check_output([sys.executable, 'cli.py'], text=True) == 'hello world\\n'")
     runner("cleanup", "--ticket-id", "3")
     graph = product("ticket", "graph")["tickets"]

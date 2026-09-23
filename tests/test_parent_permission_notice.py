@@ -353,7 +353,9 @@ def test_a_child_request_reaches_the_running_direct_parent(
             cwd=root, env=environment, timeout=30,
         )
         assert refused.returncode == 1, refused.stdout + refused.stderr
-        assert yaml.safe_load(refused.stdout)["error"]["code"] == "authority-denied"
+        refusal = yaml.safe_load(refused.stdout)
+        assert refusal["alias"] == child_alias, refusal
+        assert refusal["error"]["code"] == "authority-denied", refusal
 
         release.touch()
         replied = _await_records(

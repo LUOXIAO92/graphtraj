@@ -337,6 +337,68 @@ def _status_alias(
     return status
 
 
+def owning_execution(
+    alias: str,
+    session_directory: Path,
+    mapping: Mapping[str, Any] | None,
+) -> Dict[str, Any] | None:
+    """Return the execution that still owns one Session directory, if any.
+
+    One Session directory owns one Agent Entity and at most one live
+    execution. The public create claims a directory that records nothing, and
+    a continue starts the next execution only after the retained terminal
+    record confirms the recorded execution ended. While the recorded owner
+    runs, normally waits, or holds its ownership lock without answering a
+    control call, that execution still owns the directory and neither entry
+    may start another.
+
+    Parameters
+    ----------
+    alias
+        Agent alias of the Session directory being claimed.
+    session_directory
+        Directory a create or continue would own.
+    mapping
+        The Session's recorded execution, or ``None`` for a create, which
+        claims a directory that records no Session at all.
+
+    Returns
+    -------
+    The owning execution's status document - ``activity`` plus ``session`` and
+    ``execution_id`` when recorded - or ``None`` once the retained terminal
+    record confirms the end, or when a create finds the directory free.
+    ``activity`` is ``running`` while that owner still answers for the
+    execution, ``unreachable`` while it holds its ownership lock without
+    answering, ``abnormal`` when that owner is gone without a terminal record,
+    and ``recorded`` when a create finds a directory that already holds a
+    Session record.
+    """
+    if mapping is None:
+        return {"activity": "recorded"} if os.path.lexists(
+            str(session_directory)
+        ) else None
+    status = _status_session(mapping, session_directory, alias)
+    return None if status["activity"] == "idle" else status
+
+
+def session_occupied(alias: str, owning: Mapping[str, Any] | None) -> RunnerError:
+    """Return the refusal a create or continue reports for an owned directory.
+
+    The message names the recorded execution so its caller can still deliver
+    to or stop it, and the refusal changes nothing about the Session.
+    """
+    facts = ""
+    if owning is not None and "session" in owning:
+        facts = " Recorded session {0}, execution {1}, activity {2}.".format(
+            owning["session"], owning.get("execution_id"), owning["activity"]
+        )
+    return RunnerError(
+        "operation-failed",
+        "The Session alias {0} still owns a Session record or execution, so no "
+        "other execution may start for it.{1}".format(alias, facts),
+    )
+
+
 def _status_session(
     mapping: Dict[str, Any], session_directory: Path, alias: str
 ) -> Dict[str, str]:

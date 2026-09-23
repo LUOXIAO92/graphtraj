@@ -190,7 +190,10 @@ def test_installed_alias_control_resumes_and_interrupts_one_team_session(
     )
 
     assert resumed.returncode == 0, resumed.stderr
-    assert yaml.safe_load(resumed.stdout) == {"alias": alias, "send_status": "sent"}
+    resumed_document = yaml.safe_load(resumed.stdout)
+    assert resumed_document["alias"] == alias
+    assert resumed_document["session"] == session
+    assert resumed_document["send_status"] == "sent"
     running = run_process(
         [str(installed_commands.runner), "status", alias],
         cwd=harness_root,
@@ -201,6 +204,8 @@ def test_installed_alias_control_resumes_and_interrupts_one_team_session(
     assert running_status["aliases"][0].pop("session") == session
     native_execution = running_status["aliases"][0].pop("execution_id")
     assert native_execution
+    # The continuation reported the execution the resumed Worker recorded.
+    assert resumed_document["execution_id"] == native_execution
     assert running_status == {
         "aliases": [
             {
@@ -225,7 +230,13 @@ def test_installed_alias_control_resumes_and_interrupts_one_team_session(
         env=environment,
     )
     assert unsupported.returncode == 0, unsupported.stdout + unsupported.stderr
-    assert yaml.safe_load(unsupported.stdout) == {"alias": alias, "send_status": "sent"}
+    # A live execution receives the input: no second execution is started.
+    assert yaml.safe_load(unsupported.stdout) == {
+        "alias": alias,
+        "session": session,
+        "execution_id": native_execution,
+        "send_status": "sent",
+    }
 
     wait_for_file(policy_log)
     peer_before = peer_mapping_file.read_text()

@@ -9,7 +9,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Mapping, Tuple
 
 import yaml
 
@@ -37,9 +37,11 @@ from graphtraj.workspace.runner_project import discover_project, discover_runner
 from graphtraj.execution.runner_status import (
     SESSION_BINDING_FIELDS,
     is_session_mapping,
+    owning_execution,
     read_alias_mapping,
     read_terminal_outcome,
     require_direct_authority,
+    session_occupied,
     require_descendant_authority,
 )
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
@@ -160,6 +162,15 @@ def send_instruction(
     raise _not_resumable()
 
 
+def _execution_identity(alias: str, mapping: Mapping[str, Any]) -> Dict[str, str]:
+    """Return the identity of the execution a successor can deliver to or stop."""
+    return {
+        "alias": alias,
+        "session": mapping["session"],
+        "execution_id": mapping["execution_id"],
+    }
+
+
 def _send_session(
     alias: str,
     instruction: str,
@@ -209,14 +220,18 @@ def _send_session_locked(
     """
     execution_file = session_directory / "execution.yml"
     if not os.path.lexists(str(execution_file)):
-        status = session_operation(mapping, "status")
-        if status["activity"] == "running":
+        # One execution owns this Session at a time: a live one receives this
+        # input, and only its retained terminal record lets the next one start.
+        owning = owning_execution(alias, session_directory, mapping)
+        if owning is not None:
+            if owning["activity"] != "running":
+                raise session_occupied(alias, owning)
             session_operation(mapping, "send", instruction=instruction)
             from graphtraj.execution.runner_worker import _append_follow_up
 
             if caused_by_event_ids:
                 _append_follow_up(session_directory / "events.jsonl", list(caused_by_event_ids))
-            return {"alias": alias, "send_status": "sent"}
+            return {**_execution_identity(alias, mapping), "send_status": "sent"}
         # Native completion can precede the owner's final Trace drain and close.
         deadline = time.monotonic() + OPERATION_TIMEOUT_SECONDS
         while not execution_file.is_file():
@@ -364,7 +379,10 @@ def _send_session_locked(
     finally:
         if close_notice_fd and notice_fd is not None:
             os.close(notice_fd)
-    return {"alias": alias, "send_status": "sent"}
+    # The started execution is the one the resumed Worker recorded, so the
+    # caller can deliver to or stop exactly that execution.
+    mapping, _ = read_alias_mapping(session_directory.parent.parent, alias)
+    return {**_execution_identity(alias, mapping), "send_status": "sent"}
 
 
 def interrupt_session(alias: str, cwd: Path) -> Dict[str, str]:

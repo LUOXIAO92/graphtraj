@@ -97,7 +97,7 @@ def test_installed_runner_applies_inline_settings_to_an_existing_preset(
     )
 
     launched = run_process(
-        [str(installed_commands.runner), "--batch-input", str(batch)],
+        [str(installed_commands.runner), "--swarm-input", str(batch)],
         cwd=harness_root,
         env=environment,
         timeout=10,
@@ -158,7 +158,7 @@ def test_installed_runner_accepts_non_english_engineer_self_review(
     )
 
     launched = run_process(
-        [str(installed_commands.runner), "--batch-input", str(batch)],
+        [str(installed_commands.runner), "--swarm-input", str(batch)],
         cwd=harness_root,
         env={
             **environment,
@@ -218,7 +218,7 @@ def test_installed_runner_rejects_invalid_inline_reasoning_effort(
     )
 
     result = run_process(
-        [str(installed_commands.runner), "--batch-input", str(batch)],
+        [str(installed_commands.runner), "--swarm-input", str(batch)],
         cwd=harness_root,
         env=environment,
         timeout=10,
@@ -349,7 +349,7 @@ def test_installed_runner_obeys_the_explicit_leader_decision_for_a_run_free_team
     )
 
     launched = run_process(
-        [str(installed_commands.runner), "--batch-input", str(batch)],
+        [str(installed_commands.runner), "--swarm-input", str(batch)],
         cwd=harness_root,
         env=environment,
         timeout=45,
@@ -615,7 +615,7 @@ def test_installed_runner_accepts_the_review_axes_the_leader_selects(
     )
 
     launched = run_process(
-        [str(installed_commands.runner), "--batch-input", str(batch)],
+        [str(installed_commands.runner), "--swarm-input", str(batch)],
         cwd=harness_root,
         env=environment,
         timeout=45,
@@ -677,7 +677,7 @@ def test_installed_runner_rejects_non_run_free_main_batch_fields(
         batch = harness_root / "invalid-{0}.yml".format(index)
         batch.write_text(yaml.safe_dump(document, sort_keys=False))
         result = run_process(
-            [str(installed_commands.runner), "--batch-input", str(batch)],
+            [str(installed_commands.runner), "--swarm-input", str(batch)],
             cwd=harness_root,
             env=environment,
         )
@@ -702,7 +702,7 @@ def test_installed_runner_retries_an_unregistered_team_and_preserves_history(
     if startup_failure == 'unsupported-runtime':
         environment['FAKE_CODEX_UNSUPPORTED'] = '1'
     result = run_process(
-        [str(installed_commands.runner), '--batch-input', str(batch)],
+        [str(installed_commands.runner), '--swarm-input', str(batch)],
         cwd=harness_root, env=environment,
     )
     assert result.returncode == 1
@@ -739,7 +739,7 @@ def test_installed_runner_retries_an_unregistered_team_and_preserves_history(
         GRAPHTRAJ_AGENT_RUNNER=str(installed_commands.runner),
     )
     retried = run_process(
-        [str(installed_commands.runner), '--batch-input', str(batch)],
+        [str(installed_commands.runner), '--swarm-input', str(batch)],
         cwd=harness_root, env=environment, timeout=45,
     )
     assert retried.returncode == 0, retried.stdout + retried.stderr
@@ -754,7 +754,7 @@ def test_installed_runner_retries_an_unregistered_team_and_preserves_history(
     accepted_team = (team_directory / 'team.yml').read_bytes()
 
     reopened = run_process(
-        [str(installed_commands.runner), '--batch-input', str(batch)],
+        [str(installed_commands.runner), '--swarm-input', str(batch)],
         cwd=harness_root, env=environment,
     )
     assert reopened.returncode == 1
@@ -844,7 +844,7 @@ raise SystemExit(completed.returncode)
         TEST_INSTALLED_RUNNER=str(installed_commands.runner),
     )
     result = run_process(
-        [str(installed_commands.runner), '--batch-input', str(batch)],
+        [str(installed_commands.runner), '--swarm-input', str(batch)],
         cwd=harness_root, env=environment, timeout=45,
     )
     assert result.returncode == 0, result.stdout + result.stderr
@@ -888,7 +888,7 @@ def test_installed_runner_runs_a_main_inline_specialist_without_creating_a_prese
     )
 
     launched = run_process(
-        [str(installed_commands.runner), "--batch-input", str(batch)],
+        [str(installed_commands.runner), "--swarm-input", str(batch)],
         cwd=harness_root,
         env=environment,
         timeout=10,
@@ -995,7 +995,7 @@ def test_installed_runner_keeps_new_inline_role_names_outside_formal_team_policy
     )
 
     launched = run_process(
-        [str(installed_commands.runner), "--batch-input", str(batch)],
+        [str(installed_commands.runner), "--swarm-input", str(batch)],
         cwd=harness_root,
         env=environment,
         timeout=10,
@@ -1069,7 +1069,7 @@ def test_installed_runner_runs_a_team_leader_inline_specialist_outside_the_team(
         environment["FAKE_CODEX_SERIAL_TEAM"] = "1"
 
     launched = run_process(
-        [str(installed_commands.runner), "--batch-input", str(batch)],
+        [str(installed_commands.runner), "--swarm-input", str(batch)],
         cwd=harness_root,
         env=environment,
         timeout=45,
@@ -1198,7 +1198,7 @@ def test_installed_runner_rejects_malformed_inline_roles_before_retaining_a_batc
     )
 
     result = run_process(
-        [str(installed_commands.runner), "--batch-input", str(batch)],
+        [str(installed_commands.runner), "--swarm-input", str(batch)],
         cwd=harness_root,
         env=environment,
     )

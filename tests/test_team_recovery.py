@@ -65,7 +65,7 @@ def dispatch(roles):
         for child in roles
     ]}, sort_keys=False))
     result = subprocess.run(
-        [os.environ['GRAPHTRAJ_AGENT_RUNNER'], '--batch-input', str(batch)],
+        [os.environ['GRAPHTRAJ_AGENT_RUNNER'], '--swarm-input', str(batch)],
         check=False, text=True, capture_output=True,
     )
     assert result.returncode == 0, result.stdout + result.stderr
@@ -323,7 +323,7 @@ def test_installed_team_corrects_missing_member_evidence_in_its_existing_session
     )
 
     result = run_process(
-        [str(installed_commands.runner), '--batch-input', str(batch)],
+        [str(installed_commands.runner), '--swarm-input', str(batch)],
         cwd=harness,
         env={
             **environment,
@@ -414,7 +414,7 @@ def test_provider_failure_returns_to_the_caller_for_an_explicit_same_session_ret
     }
 
     failed = run_process(
-        [str(installed_commands.runner), '--batch-input', str(batch)],
+        [str(installed_commands.runner), '--swarm-input', str(batch)],
         cwd=harness,
         env=launch_environment,
         timeout=45,
@@ -472,7 +472,7 @@ def test_provider_failure_returns_to_the_caller_for_an_explicit_same_session_ret
     assert (reports / 'engineer.md').is_file()
     assert (reports / 'validation.md').is_file()
     continued = run_process(
-        [str(installed_commands.runner), '--batch-input', str(batch)],
+        [str(installed_commands.runner), '--swarm-input', str(batch)],
         cwd=harness,
         env=launch_environment,
         timeout=45,
@@ -552,7 +552,7 @@ def test_retained_tiered_engineer_records_still_resume_for_recovery(
         'RECOVERY_TARGET': 'provider',
     }
     failed = run_process(
-        [str(installed_commands.runner), '--batch-input', str(batch)],
+        [str(installed_commands.runner), '--swarm-input', str(batch)],
         cwd=harness,
         env=launch_environment,
         timeout=45,
@@ -616,7 +616,7 @@ def test_retained_tiered_engineer_records_still_resume_for_recovery(
     trace = ticket / 'teams/1/traces' / mapping['alias'] / 'events.jsonl'
     assert trace.read_text().count('turn_context') == 2
     continued = run_process(
-        [str(installed_commands.runner), '--batch-input', str(batch)],
+        [str(installed_commands.runner), '--swarm-input', str(batch)],
         cwd=harness,
         env=launch_environment,
         timeout=45,
@@ -649,7 +649,7 @@ def test_preflight_failed_engineer_starts_once_from_the_leader_correction(
     }
 
     failed = run_process(
-        [str(installed_commands.runner), '--batch-input', str(batch)],
+        [str(installed_commands.runner), '--swarm-input', str(batch)],
         cwd=harness, env=runtime_environment, timeout=45,
     )
     assert failed.returncode == 1
@@ -667,7 +667,7 @@ def test_preflight_failed_engineer_starts_once_from_the_leader_correction(
         if yaml.safe_load(path.read_text())['role'] == 'engineer'
     ]
     repeated = run_process(
-        [str(installed_commands.runner), '--batch-input', str(batch)],
+        [str(installed_commands.runner), '--swarm-input', str(batch)],
         cwd=harness, env=runtime_environment, timeout=45,
     )
     assert repeated.returncode == 1
@@ -701,7 +701,7 @@ def test_preflight_failed_engineer_starts_once_from_the_leader_correction(
     assert corrected.returncode == 0, corrected.stdout + corrected.stderr
 
     continued = run_process(
-        [str(installed_commands.runner), '--batch-input', str(batch)],
+        [str(installed_commands.runner), '--swarm-input', str(batch)],
         cwd=harness, env=runtime_environment, timeout=45,
     )
     assert continued.returncode == 0, continued.stdout + continued.stderr
@@ -762,7 +762,7 @@ def test_retained_tiered_seat_starts_its_engineer_from_the_retained_batch(
         'RECOVERY_TARGET': 'startup-preflight',
     }
     failed = run_process(
-        [str(installed_commands.runner), '--batch-input', str(batch)],
+        [str(installed_commands.runner), '--swarm-input', str(batch)],
         cwd=harness, env=runtime_environment, timeout=45,
     )
 
@@ -794,7 +794,7 @@ def test_retained_tiered_seat_starts_its_engineer_from_the_retained_batch(
     )
     assert corrected.returncode == 0, corrected.stdout + corrected.stderr
     continued = run_process(
-        [str(installed_commands.runner), '--batch-input', str(batch)],
+        [str(installed_commands.runner), '--swarm-input', str(batch)],
         cwd=harness, env=runtime_environment, timeout=45,
     )
     assert continued.returncode == 0, continued.stdout + continued.stderr
@@ -827,7 +827,7 @@ def test_invalid_review_report_stops_the_matching_state_request_without_retry(
     )
 
     result = run_process(
-        [str(installed_commands.runner), '--batch-input', str(batch)],
+        [str(installed_commands.runner), '--swarm-input', str(batch)],
         cwd=harness,
         env={
             **environment,
@@ -865,7 +865,7 @@ def test_access_failure_returns_to_the_responsible_operator_without_agent_reflec
         '    role: coding-team.team-leader\n'
     )
     result = run_process(
-        [str(installed_commands.runner), '--batch-input', str(batch)],
+        [str(installed_commands.runner), '--swarm-input', str(batch)],
         cwd=harness,
         env={
             **environment,
@@ -906,7 +906,7 @@ def test_recovery_registers_a_completed_reviewer_before_finalizing(
     }
 
     failed = run_process(
-        [str(installed_commands.runner), '--batch-input', str(batch)],
+        [str(installed_commands.runner), '--swarm-input', str(batch)],
         cwd=harness, env=runtime_environment, timeout=45,
     )
 
@@ -918,7 +918,7 @@ def test_recovery_registers_a_completed_reviewer_before_finalizing(
     assert team['members']['spec_reviewer']['session_ref'] is None
 
     continued = run_process(
-        [str(installed_commands.runner), '--batch-input', str(batch)],
+        [str(installed_commands.runner), '--swarm-input', str(batch)],
         cwd=harness, env=runtime_environment, timeout=45,
     )
 
@@ -957,7 +957,7 @@ def test_main_replaces_an_unregistered_failed_engineer_from_its_durable_alias(
     }
 
     failed = run_process(
-        [str(installed_commands.runner), '--batch-input', str(batch)],
+        [str(installed_commands.runner), '--swarm-input', str(batch)],
         cwd=harness, env=runtime_environment, timeout=45,
     )
 
@@ -1024,7 +1024,7 @@ def test_replacement_reviewer_report_continues_the_current_team_once(
     }
 
     failed = run_process(
-        [str(installed_commands.runner), '--batch-input', str(batch)],
+        [str(installed_commands.runner), '--swarm-input', str(batch)],
         cwd=harness, env=runtime_environment, timeout=45,
     )
 
@@ -1079,7 +1079,7 @@ def test_replacement_reviewer_report_continues_the_current_team_once(
     assert report_target.endswith(alias + '-replacement.md')
 
     continued = run_process(
-        [str(installed_commands.runner), '--batch-input', str(batch)],
+        [str(installed_commands.runner), '--swarm-input', str(batch)],
         cwd=harness, env=runtime_environment, timeout=45,
     )
 
@@ -1115,7 +1115,7 @@ def test_completed_current_configuration_failure_returns_to_the_operator(
     )
 
     result = run_process(
-        [str(installed_commands.runner), '--batch-input', str(batch)],
+        [str(installed_commands.runner), '--swarm-input', str(batch)],
         cwd=harness,
         env={
             **environment,
@@ -1150,7 +1150,7 @@ def test_completed_current_command_parse_error_returns_to_the_reviewer(
         '    role: coding-team.team-leader\n'
     )
     result = run_process(
-        [str(installed_commands.runner), '--batch-input', str(batch)],
+        [str(installed_commands.runner), '--swarm-input', str(batch)],
         cwd=harness,
         env={
             **environment,
@@ -1192,7 +1192,7 @@ def test_retried_reviewer_report_continues_the_same_team_without_repeating_revie
         'RECOVERY_TARGET': 'provider-review',
     }
     failed = run_process(
-        [str(installed_commands.runner), '--batch-input', str(batch)],
+        [str(installed_commands.runner), '--swarm-input', str(batch)],
         cwd=harness,
         env=launch_environment,
         timeout=45,
@@ -1225,7 +1225,7 @@ def test_retried_reviewer_report_continues_the_same_team_without_repeating_revie
     assert (ticket / 'reviews/spec.md').is_file()
 
     continued = run_process(
-        [str(installed_commands.runner), '--batch-input', str(batch)],
+        [str(installed_commands.runner), '--swarm-input', str(batch)],
         cwd=harness,
         env=launch_environment,
         timeout=45,
@@ -1327,7 +1327,7 @@ def test_missing_current_review_can_be_corrected_in_the_retained_session(
             timeout=float(os.environ.get('CODEX_RECOVERY_WAIT', '900')) if native else 45,
         )
 
-    failed = command('--batch-input', str(batch))
+    failed = command('--swarm-input', str(batch))
     assert failed.returncode == 1, failed.stdout + failed.stderr
     assert 'caller or superior' in yaml.safe_load(failed.stdout)['tasks'][0]['error']['message']
     ticket = harness / '.graphtraj/state/tickets/76-session-alias-control'
@@ -1370,7 +1370,7 @@ def test_missing_current_review_can_be_corrected_in_the_retained_session(
         wait_for_file(harness / '.graphtraj/runner/sessions' / leader / 'execution.yml')
     batches_before = set((harness / '.graphtraj/state/batches').glob('*.yml'))
 
-    continued = command('--batch-input', str(batch))
+    continued = command('--swarm-input', str(batch))
 
     assert continued.returncode == 0, continued.stdout + continued.stderr
     current = yaml.safe_load((ticket / 'ticket.yml').read_text())
@@ -1423,7 +1423,7 @@ def test_missing_correction_report_returns_to_its_reviewer_without_replaying_wor
     )
 
     result = run_process(
-        [str(installed_commands.runner), '--batch-input', str(batch)],
+        [str(installed_commands.runner), '--swarm-input', str(batch)],
         cwd=harness, env=environment, timeout=45,
     )
 

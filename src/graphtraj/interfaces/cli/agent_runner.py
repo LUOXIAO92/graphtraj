@@ -11,7 +11,6 @@ import click
 import yaml
 
 from graphtraj.execution.execution_budget import budget_notice_output, caller_notice_fd
-from graphtraj.execution.runner_batch import read_batch
 from graphtraj.execution.runner_cleanup import cleanup_ticket
 from graphtraj.execution.runner_control import (
     interrupt_session,
@@ -19,7 +18,7 @@ from graphtraj.execution.runner_control import (
     reply_to_request,
     send_instruction,
 )
-from graphtraj.execution.runner_launch import launch_batch
+from graphtraj.execution.runner_launch import launch_swarm_file
 from graphtraj.execution.runner_models import RunnerError
 from graphtraj.execution.runner_status import status_aliases, status_tree
 
@@ -65,24 +64,24 @@ def _budget_notices() -> Iterator[None]:
 
 @click.group(invoke_without_command=True)
 @click.option(
-    "--batch-input",
+    "--swarm-input",
     metavar="YAML_FILE",
     type=click.Path(path_type=Path),
-    help="Dispatch the exact Team work selected by Main or a Team Leader.",
+    help="Activate the roles selected by Main or a Team Leader.",
 )
 @click.pass_context
-def main(context: click.Context, batch_input: Path | None) -> None:
+def main(context: click.Context, swarm_input: Path | None) -> None:
     """Launch formal GraphTraj roles and control their Sessions; no compatibility commands."""
     context.with_resource(_budget_notices())
     if context.invoked_subcommand is None:
-        if batch_input is None:
+        if swarm_input is None:
             error = RunnerError(
-                "BATCH_INPUT_REQUIRED", "Launch requires --batch-input YAML_FILE."
+                "BATCH_INPUT_REQUIRED", "Launch requires --swarm-input YAML_FILE."
             )
             _fail(error)
         try:
             cwd = Path.cwd().resolve()
-            response = launch_batch(read_batch(batch_input, cwd), cwd)
+            response = launch_swarm_file(swarm_input, cwd)
         except RunnerError as error:
             _fail(error)
         _emit_result(response.document)

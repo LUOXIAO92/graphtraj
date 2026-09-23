@@ -72,7 +72,7 @@ def starts(root, count):
 
 def launch(commands, root, batch, environment):
     return subprocess.Popen(
-        [str(commands.runner), "--batch-input", str(batch)], cwd=root, env=environment,
+        [str(commands.runner), "--swarm-input", str(batch)], cwd=root, env=environment,
         text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
     )
 
@@ -113,7 +113,7 @@ def test_separate_runners_share_capacity_and_reject_whole_batches(
     try:
         starts(root, 2)
         rejected = run_process(
-            [str(installed_commands.runner), "--batch-input", str(denied)],
+            [str(installed_commands.runner), "--swarm-input", str(denied)],
             cwd=root, env=environment, timeout=5,
         )
         assert rejected.returncode == 1
@@ -130,7 +130,7 @@ def test_separate_runners_share_capacity_and_reject_whole_batches(
 
     # All workers exited; their existing unlocked lock files must not consume capacity.
     retry = run_process(
-        [str(installed_commands.runner), "--batch-input", str(denied)],
+        [str(installed_commands.runner), "--swarm-input", str(denied)],
         cwd=root, env=environment, timeout=60,
     )
     output = yaml.safe_load(retry.stdout)
@@ -169,7 +169,7 @@ def test_reviewer_batch_starts_neither_role_when_only_one_position_is_free(
         starts(root, 1)
         (root / "release-302").touch()
         result = run_process(
-            [str(installed_commands.runner), "--batch-input", str(subject)],
+            [str(installed_commands.runner), "--swarm-input", str(subject)],
             cwd=root, env=environment, timeout=30,
         )
         assert result.returncode == 1, result.stdout
@@ -213,7 +213,7 @@ def test_duplicate_team_role_is_rejected_before_runtime_start(
     task = yaml.safe_load(batch.read_text())["tasks"][0]
     batch.write_text(yaml.safe_dump({"tasks": [task, task]}))
     result = run_process(
-        [str(installed_commands.runner), "--batch-input", str(batch)],
+        [str(installed_commands.runner), "--swarm-input", str(batch)],
         cwd=root, env=environment,
     )
     assert result.returncode == 1
@@ -233,7 +233,7 @@ def test_one_position_completes_one_round_with_sequential_reviewers(
     batch = ready_batch(installed_commands, root, ["78"], "serial")
     observe_runtime(fake_codex, root, environment)
     (root / "release").touch()
-    result = run_process([str(installed_commands.runner), "--batch-input", str(batch)], cwd=root, env=environment, timeout=60)
+    result = run_process([str(installed_commands.runner), "--swarm-input", str(batch)], cwd=root, env=environment, timeout=60)
     assert result.returncode == 0, result.stdout + result.stderr
     assert yaml.safe_load(result.stdout)["tasks"][0]["launch_status"] == "accepted"
     active = set()

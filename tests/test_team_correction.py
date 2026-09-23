@@ -43,7 +43,7 @@ def git(*args):
 def dispatch(roles):
     batch = scratch / 'children.yml'
     batch.write_text(json.dumps({'tasks': [dict(ticket_id='76', ticket_name='session-alias-control', role='coding-team.' + r if isinstance(r, str) else r) for r in roles]}))
-    result = subprocess.run([os.environ['GRAPHTRAJ_AGENT_RUNNER'], '--batch-input', str(batch)], capture_output=True, text=True)
+    result = subprocess.run([os.environ['GRAPHTRAJ_AGENT_RUNNER'], '--swarm-input', str(batch)], capture_output=True, text=True)
     assert result.returncode == 0, result.stdout + result.stderr
 
 if role == 'delivery-state':
@@ -182,7 +182,7 @@ def test_installed_team_corrects_engineer_and_reviewer_in_same_round(
     batch = harness / 'batch.yml'
     batch.write_text('tasks:\n  - ticket_id: "76"\n    ticket_name: session-alias-control\n    role: coding-team.team-leader\n')
     result = run_process(
-        [str(installed_commands.runner), '--batch-input', str(batch)], cwd=harness,
+        [str(installed_commands.runner), '--swarm-input', str(batch)], cwd=harness,
         env={**environment, 'GRAPHTRAJ_AGENT_RUNNER': str(installed_commands.runner),
              'CORRECTION_LOG': str(log), 'CORRECTION_TIMING': timing}, timeout=30,
     )
@@ -263,7 +263,7 @@ def test_engineer_report_restoration_preserves_valid_reviews(
     batch = harness / 'batch.yml'
     batch.write_text('tasks:\n  - ticket_id: "76"\n    ticket_name: session-alias-control\n    role: coding-team.team-leader\n')
     failed = run_process(
-        [str(installed_commands.runner), '--batch-input', str(batch)],
+        [str(installed_commands.runner), '--swarm-input', str(batch)],
         cwd=harness, env=environment, timeout=30,
     )
     assert failed.returncode == 1, failed.stdout + failed.stderr
@@ -284,7 +284,7 @@ def test_engineer_report_restoration_preserves_valid_reviews(
     batches_before = set((harness / '.graphtraj/state/batches').glob('*.yml'))
 
     continued = run_process(
-        [str(installed_commands.runner), '--batch-input', str(batch)],
+        [str(installed_commands.runner), '--swarm-input', str(batch)],
         cwd=harness, env=environment, timeout=30,
     )
 
@@ -343,7 +343,7 @@ def test_engineer_correction_repairs_only_its_report_delivery_errors(
     batch = harness / 'batch.yml'
     batch.write_text('tasks:\n  - ticket_id: "76"\n    ticket_name: session-alias-control\n    role: coding-team.team-leader\n')
     result = run_process(
-        [str(installed_commands.runner), '--batch-input', str(batch)],
+        [str(installed_commands.runner), '--swarm-input', str(batch)],
         cwd=harness, env=environment, timeout=30,
     )
     calls = [json.loads(line) for line in log.read_text().splitlines()]

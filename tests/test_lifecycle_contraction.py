@@ -24,7 +24,7 @@ def test_installed_commands_reject_delivery_run_inputs(
         "ticket_file": str(ticket),
     }]}))
     launch = run_process(
-        [str(installed_commands.runner), "--batch-input", str(batch)],
+        [str(installed_commands.runner), "--swarm-input", str(batch)],
         cwd=root, env=setup_environment(home, fake_codex),
     )
     assert launch.returncode != 0, launch.stdout
@@ -68,7 +68,7 @@ def test_team_engineer_keeps_explicit_repository_skill_selection(
         GRAPHTRAJ_AGENT_RUNNER=str(installed_commands.runner),
     )
     launched = run_process(
-        [str(installed_commands.runner), "--batch-input", str(batch)],
+        [str(installed_commands.runner), "--swarm-input", str(batch)],
         cwd=root, env=environment, timeout=45,
     )
     assert launched.returncode == 0, launched.stdout + launched.stderr

@@ -154,7 +154,7 @@ def _temporary_specialist(
         encoding="utf-8",
     )
     completed = run_process(
-        [str(commands.runner), "--batch-input", str(batch)],
+        [str(commands.runner), "--swarm-input", str(batch)],
         cwd=root, env=environment, timeout=30,
     )
     assert completed.returncode == 0, completed.stdout + completed.stderr
@@ -338,7 +338,7 @@ def test_control_entries_follow_recorded_direct_ownership(
     }
     with (tmp_path / "authority-team.log").open("w", encoding="utf-8") as output:
         launched = subprocess.Popen(
-            [str(installed_commands.runner), "--batch-input", str(batch)],
+            [str(installed_commands.runner), "--swarm-input", str(batch)],
             cwd=root, env=launch_environment, text=True,
             stdout=output, stderr=subprocess.STDOUT,
         )

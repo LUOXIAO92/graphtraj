@@ -201,7 +201,7 @@ def test_a_configured_group_reaches_a_real_launch(
     )
 
     launched = run_process(
-        [str(installed_commands.runner), "--batch-input", str(batch)],
+        [str(installed_commands.runner), "--swarm-input", str(batch)],
         cwd=harness_root,
         env=environment,
         timeout=30,

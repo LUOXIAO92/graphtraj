@@ -7,6 +7,7 @@ import re
 from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
+from typing import Any, Mapping
 
 import yaml
 
@@ -48,45 +49,156 @@ def read_batch(
 ) -> Batch:
     """Read and strictly validate one complete YAML batch input."""
 
-    source = batch_file if batch_file.is_absolute() else cwd / batch_file
+    document, source_bytes = _read_document(batch_file, cwd)
+    return replace(parse_batch(document), source_bytes=source_bytes)
+
+
+def read_swarm(
+    swarm_file: Path,
+    cwd: Path,
+    caller_ticket_id: str | None,
+    registered_tickets: Mapping[str, str],
+) -> Batch:
+    """Read one swarm launch input and project each task's current Ticket.
+
+    The file is validated exactly like a structured swarm document; only the
+    Ticket identity a caller must not repeat per task is filled in from the
+    calling Session and the registered Ticket state.
+    """
+    document, source_bytes = _read_document(swarm_file, cwd)
+    resolved = _resolved_swarm(document, caller_ticket_id, registered_tickets)
+    batch = parse_batch(resolved)
+    # An input that already names every task's identity keeps its own bytes as
+    # the retained record; when the caller left identity out, the resolved
+    # document is recorded instead, so a later read still finds it.
+    if document["tasks"] != resolved["tasks"]:
+        return batch
+    return replace(batch, source_bytes=source_bytes)
+
+
+def _read_document(
+    source_file: Path,
+    cwd: Path,
+) -> tuple[Any, bytes]:
+    """Read one YAML launch input document and retain its exact bytes."""
+
+    source = source_file if source_file.is_absolute() else cwd / source_file
     try:
         source = source.resolve(strict=True)
         if not source.is_file():
-            raise OSError("batch input is not a regular file")
+            raise OSError("launch input is not a regular file")
         source_bytes = source.read_bytes()
         source_text = source_bytes.decode("utf-8")
     except (OSError, UnicodeError) as error:
         raise RunnerError(
             "BATCH_FILE_INVALID",
-            "Batch input must resolve to a readable UTF-8 regular file.",
+            "Launch input must resolve to a readable UTF-8 regular file.",
         ) from error
     try:
         document = yaml.load(source_text, Loader=_UniqueKeyLoader)
     except yaml.YAMLError as error:
         raise RunnerError(
-            "BATCH_YAML_INVALID", "Batch input is not valid YAML."
+            "BATCH_YAML_INVALID", "Launch input is not valid YAML."
         ) from error
-    return replace(parse_batch(document), source_bytes=source_bytes)
+    return document, source_bytes
 
 
-def parse_batch(document: object) -> Batch:
-    """Validate a structured Batch document and retain its YAML representation.
+def parse_swarm(
+    document: object,
+    caller_ticket_id: str | None,
+    registered_tickets: Mapping[str, str],
+) -> Batch:
+    """Validate one swarm launch input and project each task's current Ticket.
 
-    Uses the same schema and RunnerError codes as read_batch. File input keeps
-    its original bytes; Python mappings retain an equivalent YAML document.
-    Neither path provisions resources or launches a Runtime.
+    Each task names the role alias to activate and the launch instruction it
+    receives. Ticket identity is not repeated per task: a caller working inside
+    a Ticket Session keeps that Ticket, and a name left out is read from the
+    registered Ticket state Main selected through the DAG. A task may still
+    name the Ticket its caller selected, which the existing Ticket and
+    authority checks keep judging.
+
+    The returned Batch is the resolved, self-contained record: every later read
+    of the retained file (continue, worker start, Session lookup) still finds
+    complete task identity. Returns Batch, or raises RunnerError before any
+    dispatch or retention.
     """
+    return parse_batch(_resolved_swarm(document, caller_ticket_id, registered_tickets))
+
+
+def _resolved_swarm(
+    document: object,
+    caller_ticket_id: str | None,
+    registered_tickets: Mapping[str, str],
+) -> dict[str, Any]:
+    """Return the swarm document whose tasks all carry complete identity."""
+    tasks = _launch_input_tasks(document)
+    return {
+        "tasks": [
+            _resolve_swarm_task(task, caller_ticket_id, registered_tickets)
+            for task in tasks
+        ]
+    }
+
+
+def _launch_input_tasks(document: object) -> list[Any]:
+    """Return the task documents of one launch input, or refuse the input."""
     if not isinstance(document, dict) or set(document) != {"tasks"}:
         raise RunnerError(
             "BATCH_SCHEMA_INVALID",
-            "Batch input must contain tasks and no top-level Runtime settings.",
+            "Launch input must contain tasks and no top-level Runtime settings.",
         )
     tasks = document["tasks"]
     if not isinstance(tasks, list) or not tasks:
         raise RunnerError(
             "TASK_COUNT_UNSUPPORTED",
-            "A batch must contain at least one task.",
+            "A launch must contain at least one task.",
         )
+    return tasks
+
+
+def _resolve_swarm_task(
+    task: object,
+    caller_ticket_id: str | None,
+    registered_tickets: Mapping[str, str],
+) -> dict[str, Any]:
+    """Return one swarm task with the Ticket identity its caller left out.
+
+    A supplied Ticket id wins over the calling Session's own Ticket, so Main's
+    DAG selection and a Leader's own Ticket both work; a missing name is that
+    registered Ticket's name.
+    """
+    allowed = {"ticket_id", "ticket_name", "role", "instruction", "skills"}
+    if not isinstance(task, dict) or "role" not in task or not set(task) <= allowed:
+        raise RunnerError(
+            "TASK_SCHEMA_INVALID",
+            "A swarm task must contain a role and only supported instruction, "
+            "Repository Skill selection or Ticket selection.",
+        )
+    ticket_id = task.get("ticket_id", caller_ticket_id)
+    if ticket_id is None:
+        raise RunnerError(
+            "TASK_SCHEMA_INVALID",
+            "A swarm task outside a Ticket Session must select the Ticket Main dispatched.",
+        )
+    ticket_name = task.get("ticket_name")
+    if ticket_name is not None:
+        return {**task, "ticket_id": ticket_id}
+    ticket_name = registered_tickets.get(ticket_id)
+    if ticket_name is None:
+        raise RunnerError(
+            "invalid-ticket", "The selected swarm Ticket is not registered."
+        )
+    return {**task, "ticket_id": ticket_id, "ticket_name": ticket_name}
+
+
+def parse_batch(document: object) -> Batch:
+    """Validate a structured Batch document and retain its YAML representation.
+
+    Uses the same schema and RunnerError codes as read_batch and parse_swarm.
+    File input keeps its original bytes; Python mappings retain an equivalent
+    YAML document. Neither path provisions resources or launches a Runtime.
+    """
+    tasks = _launch_input_tasks(document)
     validated_tasks = tuple(
         _read_task(task_document)
         for task_document in tasks

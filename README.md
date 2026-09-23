@@ -117,8 +117,8 @@ All module names in this table are beneath `graphtraj`.
 | `graph.ticket_graph` | `read_graph(state)` | Dictionary containing current Tickets and dependency readiness. |
 | `graph.delivery_state` | `apply_delivery_state_request(state, root, request, authoritative_facts)` | Recorded Ticket/Team event; request must match the supplied authoritative facts. |
 | `graph.delivery_worldline` | `append_project_worldline_event(state, root, event)`; `read_worldline(state, root)` | Recorded event, or chronological event dictionaries. |
-| `execution.runner_batch` | `parse_batch(document)`; `read_batch(path, cwd)` | Existing validated `Batch`. File input retains its exact bytes; a Python dictionary retains equivalent YAML. |
-| `execution.runner_launch` | `launch_batch(batch, cwd)` | Existing `LaunchResponse` with `document` and `succeeded`, including per-task failures. |
+| `execution.runner_batch` | `parse_swarm(document, caller_ticket_id, registered_tickets)`; `read_swarm(path, cwd, caller_ticket_id, registered_tickets)` | Existing validated `Batch` with each task's current Ticket projected into it. A launch input that already names its Tickets retains its exact bytes; one that leaves identity to the calling Session and the registered Ticket state retains the resolved document. |
+| `execution.runner_launch` | `launch_swarm(document, cwd)`; `launch_swarm_file(path, cwd)` | Existing `LaunchResponse` with `document` and `succeeded`, including per-task failures. |
 | `execution.runner_status` | `status_aliases(aliases, cwd, operation_total=False, baseline=None, candidate=None)`; `status_tree(cwd, operation_total=False, baseline=None, candidate=None)` | Existing `StatusResponse` with `document`, `succeeded` and `errors`. The tree operation returns one `agents` document without an alias list. |
 | `execution.runner_control` | `send_instruction(alias, instruction, cwd, caused_by_event_ids)`; `interrupt_session(alias, cwd)` | Session operation result dictionary. |
 | `execution.runner_cleanup` | `cleanup_ticket(cwd, ticket_id)` | Existing `CleanupResponse` with `document` and `succeeded`. |
@@ -361,25 +361,28 @@ accepted GitHub Issue definitions and dependencies, generates the current
 graph with `graphtraj ticket graph`, and selects ready Tickets.
 Only validated `dev` integration satisfies a dependency.
 
-Main dispatches ready Tickets to Team Leaders with a block-style YAML Batch:
+Main activates ready Tickets' Team Leaders with a block-style YAML swarm input:
 
 ```yaml
 tasks:
   - ticket_id: "123"
-    ticket_name: example-feature
     role: coding-team.team-leader
     instruction: Deliver the current accepted Ticket.
 ```
 
-The Ticket must already be registered. The Batch selects work; its optional
-instruction adds concise dispatch details to the accepted definition. Several
-ready Tickets may share one Batch when capacity permits. It has no Delivery
-Run identifier or Batch-level Runtime setting.
+`ticket_id` is Main's own DAG selection result; the Ticket name, scope,
+investigation findings and completion conditions come from that registered
+Ticket's current definition, so the input never repeats them. The input selects
+work; its optional instruction adds concise dispatch details to the accepted
+definition. Several ready Tickets may share one input when capacity permits. It
+has no Delivery Run identifier or input-level Runtime setting. A Session that
+already works inside one Ticket writes each task as its role and launch
+instruction alone, and the entry resolves that Ticket from the calling Session.
 
 Run public commands from the Harness Project Root:
 
 ```text
-agent-runner --batch-input batch.yml
+agent-runner --swarm-input swarm.yml
 agent-runner status [<alias>...]
 agent-runner status --operation-total [<alias>...]
 agent-runner status --baseline <commit-or-ref> --candidate <commit-or-ref> <alias> [<alias>...]
@@ -405,7 +408,7 @@ next Round. Main or the user can retire a Team; replacement retains the Ticket
 branch and Worktree, and reads the prior Leader's final response from its Trace.
 Replacing another member changes only that seat.
 
-Continue an unfinished Team with its original Leader Batch after deciding the
+Continue an unfinished Team with its original Leader launch after deciding the
 next action. Runner reuses retained Sessions, the Worktree, candidate, and valid
 reports. A missing or invalid report returns to its author with the failure,
 Trace, and expected report. A Leader can request correction in `leader.md` with
@@ -784,7 +787,7 @@ The tools are the existing graph, execution, control and interaction operations:
 | `ticket_revise` | One product-preserving revision: `product_preserving`, `caused_by_event_ids`, `evidence_refs`, `tickets`. | Recorded causal event; the same operation as `graphtraj ticket revise`. |
 | `ticket_update` | One evidence-backed state change: `ticket_id`, `status`, `active_team_ordinal`, `worktree`, `branch`, `current_candidate`, `caused_by_event_ids`, `evidence_refs`. | Recorded causal event; the same operation as `graphtraj ticket update`. |
 | `alias_status` | optionally `aliases`, `operation_total`, `baseline`, `candidate`. | Session status document, or the visible Session tree when `aliases` is omitted; the same document as `agent-runner status`. |
-| `dispatch` | One structured Batch document: `tasks` with `ticket_id`, `ticket_name`, `role` (a preset reference or one inline role), and optionally `instruction` and `skills`. | Each dispatched execution's `launch_status`, `alias` and `session`; the same document as `agent-runner --batch-input`. The call returns while those executions stay owned. |
+| `swarm` | One structured swarm input: `tasks` with `role` (a preset reference or one inline role), optionally `instruction` and `skills`, and the `ticket_id` Main selected from the DAG. | Each activated Agent's `launch_status`, `alias` and `session`; the same document as `agent-runner --swarm-input`. The call returns while those executions stay owned, and later calls address the returned alias. |
 | `send_instruction` | `alias`, `instruction`, `caused_by_event_ids`, and optionally `reports_only`. | `send_status`; the same operation as `agent-runner send`. |
 | `interrupt` | `alias`. | `interrupt_status`; the same operation as `agent-runner interrupt`. |
 | `continue` | `ticket_id`, `caused_by_event_ids`. | The continued Team's result and `continuation_event_id`; the same D.3 stop/continue operation as `agent-runner continue`. |
@@ -814,7 +817,7 @@ notice channel; such a stop is only retained in the Ticket's
 developer instructions or user Runtime configuration, and no stop is queued into
 the host's native input.
 
-A host can run the whole loop from tools alone: `dispatch` a Batch, read
+A host can run the whole loop from tools alone: `swarm` a launch input, read
 identity, activity and outcome with `alias_status`, steer the owned execution
 with `send_instruction`, answer a waiting native request with `pending_requests`
 plus `reply_to_request`, interrupt one execution with `interrupt`, and continue a

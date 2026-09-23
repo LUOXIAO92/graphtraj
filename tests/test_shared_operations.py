@@ -296,7 +296,7 @@ def test_python_and_cli_launch_the_same_structured_batch_and_errors(
     original = "# Keep the exact CLI input\n" + yaml.safe_dump(document, sort_keys=False)
     path.write_text(original)
     assert read_batch(path, root).tasks == batch.tasks
-    result = CliRunner().invoke(runner_main, ["--batch-input", str(path)])
+    result = CliRunner().invoke(runner_main, ["--swarm-input", str(path)])
     assert result.exit_code == 0, result.output
     rendered = yaml.safe_load(result.stdout)
     for response in (direct.document, rendered):
@@ -309,7 +309,7 @@ def test_python_and_cli_launch_the_same_structured_batch_and_errors(
     for invalid in ({"tasks": []}, {"tasks": document["tasks"] * 2}):
         with pytest.raises(RunnerError) as error:
             parse_batch(invalid)
-        result = CliRunner().invoke(runner_main, ["--batch-input", str(_write(path, invalid))])
+        result = CliRunner().invoke(runner_main, ["--swarm-input", str(_write(path, invalid))])
         assert result.exit_code == 1
         assert yaml.safe_load(result.stdout) == {"error": error.value.as_document()}
     assert list((root / ".graphtraj/state/batches").iterdir()) == before
@@ -320,7 +320,7 @@ def test_python_and_cli_launch_the_same_structured_batch_and_errors(
     monkeypatch.setenv("GRAPHTRAJ_PARENT_REGISTRATION", str(root / "registration.yml"))
     monkeypatch.setenv("GRAPHTRAJ_TICKET_ID", "74")
     direct = launch_batch(batch, root)
-    result = CliRunner().invoke(runner_main, ["--batch-input", str(_write(path, document))])
+    result = CliRunner().invoke(runner_main, ["--swarm-input", str(_write(path, document))])
     assert result.exit_code == 0, result.output
     for response in (direct.document, yaml.safe_load(result.stdout)):
         assert response["tasks"][0]["launch_status"] == "launched"

@@ -70,7 +70,7 @@ def _deliver_ticket(
         else:
             environment.update(FAKE_CODEX_EVENTS="[]", FAKE_CODEX_EXIT_CODE="1")
         failed = run_process(
-            [str(commands.runner), "--batch-input", str(batch)],
+            [str(commands.runner), "--swarm-input", str(batch)],
             cwd=root,
             env=environment,
             timeout=15,
@@ -92,7 +92,7 @@ def _deliver_ticket(
         GRAPHTRAJ_AGENT_RUNNER=str(commands.runner),
     )
     launched = run_process(
-        [str(commands.runner), "--batch-input", str(batch)],
+        [str(commands.runner), "--swarm-input", str(batch)],
         cwd=root,
         env=environment,
         timeout=15,

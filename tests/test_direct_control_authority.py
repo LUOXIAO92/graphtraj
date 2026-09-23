@@ -606,3 +606,59 @@ def test_caller_selected_history_cannot_authorize_replacement(
     # Direct ownership still authorizes without consulting the fabricated history.
     _ask_to_replace(runner_directory, None, leader, monkeypatch)
     _ask_to_replace(runner_directory, leader, member, monkeypatch)
+
+
+def test_only_the_recorded_direct_parent_answers_a_grandchild(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A grandchild's request never skips its recorded direct parent.
+
+    The grandparent and Main both carry the grandchild's exact pending request
+    and are refused by every reply entry before that request is compared, while
+    the recorded direct parent passes the same judgement and reaches the
+    request itself.
+    """
+    from graphtraj.execution.runner_control import pending_requests, reply_to_request
+
+    root, _, _, _ = configure_harness(
+        installed_commands, temporary_git_repository, fake_codex, tmp_path,
+    )
+    runner_directory = root / ".graphtraj" / "runner"
+    leader     = "132-ticket-handover0-team_leader@team_leader"
+    engineer   = "132-ticket-handover0-engineer@engineer_2"
+    grandchild = "132-ticket-handover0-specialist@specialist_1"
+    _record_direct_session(runner_directory, leader, "team_leader", None)
+    _record_direct_session(runner_directory, engineer, "engineer", leader)
+    _record_direct_session(
+        runner_directory, grandchild, "investigation-specialist", engineer,
+    )
+    request = {
+        "alias": grandchild, "session": "native",
+        "execution_id": "turn", "request_token": "token",
+    }
+    response = {"decision": "accept"}
+
+    for caller in (None, leader):
+        monkeypatch.setattr(
+            runner_status, "caller_alias", lambda directory, caller=caller: caller,
+        )
+        for entry, arguments in (
+            (pending_requests, (grandchild, root)),
+            (reply_to_request, (grandchild, request, response, root)),
+        ):
+            with pytest.raises(RunnerError) as refused:
+                entry(*arguments)
+            assert refused.value.code == "authority-denied", refused.value
+
+    # The recorded direct parent is admitted, so only the control channel it
+    # owns decides the request: the judgement is what stops the higher level.
+    monkeypatch.setattr(
+        runner_status, "caller_alias", lambda directory: engineer,
+    )
+    with pytest.raises(RunnerError) as unreachable:
+        reply_to_request(grandchild, request, response, root)
+    assert unreachable.value.code != "authority-denied", unreachable.value

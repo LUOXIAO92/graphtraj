@@ -233,8 +233,21 @@ def _records(log: Path) -> list[dict]:
 def _assert_denied(entry: dict) -> None:
     """One refused probe names the established authority error."""
     assert entry["returncode"] == 1, entry
-    expected = {"authority-denied", "native-approval-unavailable"} if entry["probe"].startswith("replace-") else {"authority-denied"}
-    assert entry["document"]["error"]["code"] in expected, entry
+    assert entry["document"]["error"]["code"] == "authority-denied", entry
+
+
+def _assert_native_approval(entry: dict) -> None:
+    """One non-direct replacement yields its caller Runtime's execution request.
+
+    GraphTraj judges the recorded relation first, so the request names the exact
+    remaining operation and grants no authority; only that Runtime executes it.
+    """
+    assert entry["returncode"] == 0, entry
+    document = entry["document"]
+    assert document["replacement_status"] == "requires-native-approval", entry
+    arguments = document["native_execution"]["arguments"]
+    assert arguments["sandbox_permissions"] == "require_escalated", entry
+    assert entry["arguments"][0] in arguments["cmd"], entry
 
 
 def _assert_denied_after_authority(entry: dict) -> None:
@@ -349,6 +362,10 @@ def test_control_entries_follow_recorded_direct_ownership(
             spec      = _role_alias(root, "spec-reviewer")
             other     = _temporary_specialist(installed_commands, root, launch_environment)
             _wait_running(installed_commands, root, environment, (standards, spec, other))
+            sessions_before = {
+                alias: _mapping(root, alias)["session"]
+                for alias in (leader, engineer, standards, spec, other)
+            }
 
             peers = _probe(
                 installed_commands, root, launch_environment, leader,
@@ -394,18 +411,28 @@ def test_control_entries_follow_recorded_direct_ownership(
     _assert_summary(peers["status-other-branch-cleared-env"], other, "running")
     for name in (
         "send-sibling-reviewer", "interrupt-sibling-reviewer",
-        "requests-sibling-reviewer", "replace-sibling-reviewer",
-        "replace-parent-leader", "replace-parent-leader-user-actor", "register-child-batch",
+        "requests-sibling-reviewer", "register-child-batch",
         "reply-sibling-reviewer", "reply-parent-leader",
         "requests-parent-leader-cleared-env", "send-parent-leader-cleared-env",
-        "replace-parent-leader-cleared-env", "interrupt-parent-leader-cleared-env",
+        "interrupt-parent-leader-cleared-env",
         "register-child-batch-cleared-env", "send-sibling-reviewer-forged-env",
-        "replace-sibling-reviewer-forged-env",
     ):
         _assert_denied(peers[name])
 
+    # A replacement outside the caller's direct relation is not refused here.
+    # GraphTraj judges the recorded relation and yields this one operation to
+    # the calling Runtime's own approval; the carried --actor value and a
+    # dropped or forged projection change neither verdict nor the seats.
+    for name in (
+        "replace-sibling-reviewer", "replace-parent-leader",
+        "replace-parent-leader-user-actor", "replace-parent-leader-cleared-env",
+        "replace-sibling-reviewer-forged-env",
+    ):
+        _assert_native_approval(peers[name])
+
     # A Team Leader controls its direct children only, and its own subtree for
-    # interruption, while approval and replacement stay with the direct owner.
+    # interruption. Its direct child seat is replaced outright, while a target
+    # outside that relation yields the Leader's own Runtime approval request.
     _assert_full(children["status-self"], leader)
     assert children["status-self"]["document"]["aliases"][0]["execution_id"] == _mapping(root, leader)["execution_id"]
     _assert_full(children["status-child-engineer"], engineer)
@@ -419,21 +446,30 @@ def test_control_entries_follow_recorded_direct_ownership(
     # The Leader's own child-registration entry is admitted, so only the Batch
     # rules refuse the Leader-shaped Batch it was handed.
     _assert_denied_after_authority(children["register-own-registration"])
-    assert children["send-child-reviewer"]["document"] == {
-        "alias": standards, "send_status": "sent",
-    }
+    # The send reaches the running child execution and reports that execution.
+    sent_to_child = children["send-child-reviewer"]["document"]
+    assert sent_to_child["alias"] == standards
+    assert sent_to_child["send_status"] == "sent"
+    assert sent_to_child["session"] == _mapping(root, standards)["session"]
+    assert sent_to_child["execution_id"] == _mapping(root, standards)["execution_id"]
     for name in (
         "send-other-branch", "requests-other-branch", "interrupt-other-branch",
-        "replace-other-branch", "register-foreign-session", "reply-other-branch",
+        "register-foreign-session", "reply-other-branch",
         "send-other-branch-cleared-env",
     ):
         _assert_denied(children[name])
+    _assert_native_approval(children["replace-other-branch"])
     _assert_summary(children["status-other-branch-cleared-env"], other, "running")
     replacement = children["replace-child-engineer"]["document"]
     assert children["replace-child-engineer"]["returncode"] == 0, replacement
     assert replacement["alias"] == engineer
     assert replacement["replacement_alias"] != engineer
     assert replacement["team_ordinal"] == 1
+    # Only that direct child gained a successor Session; the targets a caller
+    # may not reach keep their recorded entity.
+    assert _mapping(root, engineer)["session"] == sessions_before[engineer]
+    for alias in (leader, standards, spec, other):
+        assert _mapping(root, alias)["session"] == sessions_before[alias]
     assert children["interrupt-child-reviewer"]["document"] == {
         "alias": standards, "interrupt_status": "interrupted",
         "members": [{"alias": standards, "interrupt_status": "interrupted"}],
@@ -454,8 +490,8 @@ def test_control_entries_follow_recorded_direct_ownership(
         _status(installed_commands, root, environment, seat), seat, full=False,
     )
 
-    # An ordinary control and a replacement of a member both lie outside Main's
-    # direct relation, and the --actor self-report changes neither verdict.
+    # An ordinary control of a member lies outside Main's direct relation, and
+    # no carried value widens it.
     request_file = tmp_path / "main-reply.yml"
     request_file.write_text(
         yaml.safe_dump(
@@ -470,16 +506,30 @@ def test_control_entries_follow_recorded_direct_ownership(
         ["requests", standards],
         ["reply", standards, "--request-file", str(request_file),
          "--response", '{"decision": "accept"}'],
-        ["replace", seat, "--actor", "main", "--caused-by-event-id", _cause(root)],
-        ["replace", seat, "--actor", "user", "--caused-by-event-id", _cause(root)],
     ):
         refused = run_process(
             [str(installed_commands.runner), *arguments],
             cwd=root, env=control_environment, timeout=30,
         )
         assert refused.returncode == 1, refused.stdout + refused.stderr
-        expected = {"authority-denied", "native-approval-unavailable"} if arguments[0] == "replace" else {"authority-denied"}
-        assert yaml.safe_load(refused.stdout)["error"]["code"] in expected, refused.stdout
+        assert yaml.safe_load(refused.stdout)["error"]["code"] == "authority-denied", refused.stdout
+    # A member seat outside Main's direct relation is never replaced here: an
+    # ordinary entry refuses it, and the replacement entry yields this one
+    # operation to the calling Runtime's approval without changing the seat.
+    for actor in ("main", "user"):
+        refused = run_process(
+            [str(installed_commands.runner), "replace", seat, "--actor", actor,
+             "--caused-by-event-id", _cause(root)],
+            cwd=root, env=control_environment, timeout=30,
+        )
+        document = yaml.safe_load(refused.stdout)
+        if refused.returncode == 0:
+            assert document["replacement_status"] == "requires-native-approval", refused.stdout
+        else:
+            assert refused.returncode == 1, refused.stdout + refused.stderr
+            assert document["error"]["code"] in {
+                "authority-denied", "native-approval-unavailable",
+            }, refused.stdout
     assert yaml.safe_load(team_file.read_text(encoding="utf-8"))["members"]["engineer"]["session_ref"] == seat
 
 

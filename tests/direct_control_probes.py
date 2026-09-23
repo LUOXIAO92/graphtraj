@@ -51,7 +51,9 @@ PROBES = {
         ("interrupt-other-branch", ["interrupt", "{other}"], None),
         ("replace-other-branch", ["replace", "{other}", "--actor", "main",
                                   "--caused-by-event-id", "{cause}"], None),
-        ("replace-child-engineer", ["replace", "{engineer}", "--actor", "main",
+        # The Leader's own member needs no actor name: the recorded direct
+        # parent is what lets this entry replace the seat.
+        ("replace-child-engineer", ["replace", "{engineer}",
                                     "--caused-by-event-id", "{cause}"], None),
         ("register-foreign-session", ["--batch-input", "{batch}"],
          {"set": {"GRAPHTRAJ_PARENT_REGISTRATION": "{foreign_registration}"}}),

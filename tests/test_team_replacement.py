@@ -222,6 +222,11 @@ configured_events =""", 1)
         # finishes its failure handoff and releases its capacity position.
         launched.communicate(timeout=60)
 
+    # A whole-Team handover records the Main or user who retired it, so the
+    # entry refuses to retire the Team without that actor.
+    unrecorded = command("replace", leader, "--caused-by-event-id", events()[-1]["event_id"])
+    assert unrecorded.returncode == 1, unrecorded.stdout + unrecorded.stderr
+    assert yaml.safe_load(unrecorded.stdout)["error"]["code"] == "invalid-input"
     replaced = command("replace", leader, "--actor", "user", "--caused-by-event-id", events()[-1]["event_id"])
     assert replaced.returncode == 0, replaced.stdout + replaced.stderr
     if during_implementation:

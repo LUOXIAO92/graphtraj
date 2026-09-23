@@ -8,6 +8,7 @@ import os
 import subprocess
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Dict, Mapping, Tuple
 
@@ -29,6 +30,7 @@ from graphtraj.execution.runner_connection import session_operation
 from graphtraj.execution.runner_io import confirm_alias_mapping_durable, write_yaml_durably
 from graphtraj.execution.runner_capacity import capacity_positions
 from graphtraj.execution.runner_models import RunnerError
+from graphtraj.execution.runner_heartbeat import execution_start_lock
 from graphtraj.execution.runner_process import (
     OPERATION_TIMEOUT_SECONDS,
     stop_worker,
@@ -43,6 +45,8 @@ from graphtraj.execution.runner_status import (
     require_direct_authority,
     session_occupied,
     require_descendant_authority,
+    require_execution_allowed,
+    _recorded_sessions,
 )
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 
@@ -191,6 +195,8 @@ def _send_session(
     with launch_file.open("rb") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         mapping, _ = read_alias_mapping(session_directory.parent.parent, alias)
+        with execution_start_lock(session_directory.parent.parent):
+            require_execution_allowed(session_directory.parent.parent, alias, mapping)
         return _send_session_locked(
             alias, instruction, session_directory, mapping, caused_by_event_ids, cwd,
             budget_notice=budget_notice, leader_notice_keys=leader_notice_keys,
@@ -226,7 +232,9 @@ def _send_session_locked(
         if owning is not None:
             if owning["activity"] != "running":
                 raise session_occupied(alias, owning)
-            session_operation(mapping, "send", instruction=instruction)
+            with execution_start_lock(session_directory.parent.parent):
+                require_execution_allowed(session_directory.parent.parent, alias, mapping)
+                session_operation(mapping, "send", instruction=instruction)
             from graphtraj.execution.runner_worker import _append_follow_up
 
             if caused_by_event_ids:
@@ -385,26 +393,79 @@ def _send_session_locked(
     return {**_execution_identity(alias, mapping), "send_status": "sent"}
 
 
-def interrupt_session(alias: str, cwd: Path) -> Dict[str, str]:
-    """Interrupt one exact running Runtime Session by alias."""
+def interrupt_session(alias: str, cwd: Path) -> Dict[str, Any]:
+    """Prevent further subtree work and interrupt every recorded descendant.
+
+    Each member is addressed directly through its native execution owner.
+    Failure to reach one member does not prevent the others being stopped,
+    and only native terminal evidence counts as a complete confirmation.
+    """
 
     runner_directory = discover_runner_directory(cwd)
-    mapping, session_directory = read_alias_mapping(runner_directory, alias)
+    mapping, _ = read_alias_mapping(runner_directory, alias)
     require_descendant_authority(runner_directory, alias, mapping)
-    return _interrupt_session(alias, session_directory, mapping)
+    with execution_start_lock(runner_directory):
+        mapping, session_directory = read_alias_mapping(runner_directory, alias)
+        write_yaml_durably(session_directory / "stop.yml", {"alias": alias})
+        records, failures = _recorded_sessions(runner_directory)
+        # Allocations still preparing a job have no native Session yet. They
+        # must pass the Worker guard after we release this lock. Retain any
+        # unreadable record with native identity as explicitly unconfirmed.
+        failures = [
+            (name, error) for name, error in failures
+            if any(os.path.lexists(runner_directory / "sessions" / name / filename)
+                   for filename in ("mapping.yml", "session.yml", "native-session.yml"))
+        ]
+        pending = [alias]
+        members = []
+        seen = set()
+        while pending:
+            current = pending.pop()
+            if current in seen:
+                continue
+            seen.add(current)
+            members.append(current)
+            pending.extend(
+                name for name, child in records.items() if child.get("parent") == current
+            )
+
+    def stop_member(member: str) -> Dict[str, Any]:
+        """Return terminal confirmation or the member whose stop is unconfirmed."""
+        try:
+            current, directory = read_alias_mapping(runner_directory, member)
+            return _interrupt_session(member, directory, current)
+        except RunnerError as error:
+            return {"alias": member, "interrupt_status": "unconfirmed",
+                    "error": error.as_document()}
+
+    with ThreadPoolExecutor() as pool:
+        results = list(pool.map(stop_member, members))
+    results.extend(
+        {"alias": name, "interrupt_status": "unconfirmed", "error": error.as_document()}
+        for name, error in failures
+    )
+    complete = all(item["interrupt_status"] in {"interrupted", "stopped"} for item in results)
+    return {"alias": alias, "interrupt_status": "interrupted" if complete else "incomplete",
+            "members": results}
 
 
 def _interrupt_session(
     alias: str, session_directory: Path, mapping: Dict[str, Any]
 ) -> Dict[str, str]:
+    """Confirm a terminal member or await its exact native Turn interruption."""
     execution_file = session_directory / "execution.yml"
     if os.path.lexists(str(execution_file)):
         read_terminal_outcome(execution_file)
-        raise RunnerError(
-            "operation-failed",
-            "The requested Session has no active Runtime execution to interrupt.",
-        )
-    session_operation(mapping, "interrupt")
+        return {"alias": alias, "interrupt_status": "stopped"}
+    try:
+        session_operation(mapping, "interrupt")
+    except RunnerError:
+        # Native completion can precede the Worker's terminal-file drain.
+        # Reuse its live terminal acknowledgement as well as durable outcomes;
+        # lost contact or a stale heartbeat still cannot establish stopping.
+        if owning_execution(alias, session_directory, mapping) is not None:
+            raise
+        return {"alias": alias, "interrupt_status": "stopped"}
     return {"alias": alias, "interrupt_status": "interrupted"}
 
 
@@ -714,6 +775,8 @@ def _read_resume_error(error_file: Path) -> RunnerError:
         failure = yaml.safe_load(error_file.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, yaml.YAMLError):
         failure = None
+    if isinstance(failure, dict) and failure.get("code") == "subtree-stopped":
+        return RunnerError("subtree-stopped", failure["message"])
     if isinstance(failure, dict) and failure.get("code") in {
         "PROJECT_CONFIG_MISMATCH",
         "ROLE_GUARD_MISMATCH",

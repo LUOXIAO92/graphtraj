@@ -22,6 +22,20 @@ HEARTBEAT_FILE_NAME = "heartbeat.yml"
 HEARTBEAT_INTERVAL_SECONDS = 0.5
 
 
+def execution_start_lock(runner_directory: Path) -> IO[bytes]:
+    """Serialize execution startup with publication of a subtree stop.
+
+    Hold until the new execution's mapping is durable, or startup has failed.
+    Closing the returned stream releases the lock.
+    """
+    # ponytail: serialize project startup only; use branch locks if startup
+    # throughput becomes a measured problem. Running Turns never hold this.
+    runner_directory.mkdir(parents=True, exist_ok=True)
+    stream = (runner_directory / "execution-start.lock").open("a+b")
+    fcntl.flock(stream, fcntl.LOCK_EX)
+    return stream
+
+
 def write_heartbeat(directory: Path, record: dict[str, Any]) -> None:
     """Publish which entity the current process still holds and when.
 

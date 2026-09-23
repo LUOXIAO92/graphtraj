@@ -24,9 +24,14 @@ from graphtraj.execution.runner_io import write_yaml_durably
 from graphtraj.execution.runner_heartbeat import (
     HEARTBEAT_INTERVAL_SECONDS,
     hold_ownership,
+    execution_start_lock,
     write_heartbeat,
 )
-from graphtraj.execution.runner_status import conflicting_binding_field
+from graphtraj.execution.runner_status import (
+    conflicting_binding_field,
+    require_execution_allowed,
+)
+from graphtraj.execution.runner_models import RunnerError
 from graphtraj.execution.runner_transport import runtime_launch_failure
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 
@@ -46,6 +51,7 @@ def run(job_file: Path) -> int:
     monitor_thread: threading.Thread | None = None
     deliver_parentless_leader_notices = False
     leader_notice_keys: list[str] = []
+    startup_lock = None
 
     def request_termination(signum: int, frame: object) -> None:
         """Pass Worker/budget termination to the owned native execution."""
@@ -112,6 +118,14 @@ def run(job_file: Path) -> int:
             if runtime != "codex":
                 raise ValueError("unsupported Runtime")
 
+            startup_lock = execution_start_lock(session_directory.parent.parent)
+            try:
+                require_execution_allowed(
+                    session_directory.parent.parent, base_mapping["alias"], base_mapping,
+                )
+            except RunnerError as error:
+                raise RuntimeAdapterError(error.code, error.message, terminal_confirmed=True) from error
+
             # Publish ownership from Worker startup, and keep publishing through
             # every normal wait until this Worker stops holding the Session.
             # The stream stays referenced here: closing it, or ending the
@@ -162,6 +176,7 @@ def run(job_file: Path) -> int:
                 mapping_recorded = True
                 heartbeat["execution_id"] = mapping["execution_id"]
                 write_heartbeat(session_directory, heartbeat)
+                startup_lock.close()
                 if budget_monitor is not None and leader_notice_keys:
                     budget_monitor.mark_leader_notices_delivered(
                         leader_notice_keys
@@ -205,8 +220,14 @@ def run(job_file: Path) -> int:
                 if monitor_thread is not None:
                     monitor_thread.join()
         except RuntimeAdapterError as error:
+            if startup_lock is not None:
+                startup_lock.close()
             if mapping_recorded:
-                terminal = {"outcome": "runtime-error", "error": {"code": error.code, "message": error.message}}
+                terminal = {
+                    "outcome": "runtime-error",
+                    "terminal_confirmed": error.terminal_confirmed,
+                    "error": {"code": error.code, "message": error.message},
+                }
             else:
                 _write_worker_error(
                     session_directory,
@@ -216,6 +237,8 @@ def run(job_file: Path) -> int:
                     terminal_confirmed=error.terminal_confirmed,
                 )
         except (KeyError, OSError, TypeError, ValueError, yaml.YAMLError) as error:
+            if startup_lock is not None:
+                startup_lock.close()
             if mapping_recorded:
                 terminal = {"outcome": "runtime-error"}
             else:
@@ -274,6 +297,8 @@ def run(job_file: Path) -> int:
                     )
             return 0
     finally:
+        if startup_lock is not None:
+            startup_lock.close()
         if previous_sigterm is not None:
             signal.signal(signal.SIGTERM, previous_sigterm)
     return 1

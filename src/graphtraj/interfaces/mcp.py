@@ -348,7 +348,7 @@ def send_session_instruction(arguments: Mapping[str, Any]) -> ToolResult:
 
 
 def interrupt_session_execution(arguments: Mapping[str, Any]) -> ToolResult:
-    """Interrupt one exact running Runtime Session by alias."""
+    """Stop a descendant subtree and return each member confirmation."""
 
     return ToolResult(
         interrupt_session(_string_argument(arguments, "alias"), Path.cwd())
@@ -457,8 +457,8 @@ register_tool(
 )
 register_tool(
     "interrupt",
-    "Interrupt one exact running Runtime execution by alias while preserving its "
-    "Session. Equivalent to `agent-runner interrupt`.",
+    "Stop a descendant subtree and prevent further work while preserving its "
+    "Sessions. Returns each member confirmation. Equivalent to `agent-runner interrupt`.",
     _ALIAS_SCHEMA,
     interrupt_session_execution,
 )

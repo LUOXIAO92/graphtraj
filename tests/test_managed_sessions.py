@@ -34,6 +34,33 @@ operation, arguments = json.loads(sys.argv[2])
 try:
     if operation == 'launch':
         result = launch_batch(parse_batch(arguments), root).document
+    elif operation in ('child', 'resume-worker'):
+        # Exercise the common managed Worker boundary with a parent-bound job.
+        import os, subprocess, yaml
+        from graphtraj.execution.runner_control import _await_session_resume
+        from graphtraj.execution.runner_status import read_alias_mapping
+        parent, alias = arguments[:2]
+        runner = root / '.graphtraj/runner'
+        parent_mapping, parent_directory = read_alias_mapping(runner, parent)
+        job = yaml.safe_load((parent_directory / 'launch.yml').read_text())
+        directory = runner / 'sessions' / alias
+        if operation == 'child':
+            directory.mkdir()
+            (directory / 'events.jsonl').touch()
+            job['mapping'].update(alias=alias, parent=parent, trace_file=str(directory / 'native.jsonl'))
+        else:
+            job.update(operation='resume', expected_session=parent_mapping['session'])
+        job_file = directory / ('launch.yml' if operation == 'child' else 'resume.yml')
+        job_file.write_text(yaml.safe_dump(job))
+        with (directory / 'worker-stderr.log').open('w') as diagnostics:
+            worker = subprocess.Popen([sys.executable, '-m', 'graphtraj.execution.runner_worker', str(job_file)],
+                                      stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=diagnostics,
+                                      env={**os.environ, "GRAPHTRAJ_TICKET_ID": parent_mapping["ticket_id"],
+                                           "GRAPHTRAJ_ROLE": parent_mapping["role"], "GRAPHTRAJ_PARENT_ALIAS": alias})
+            worker.stdin.write((arguments[2] if len(arguments) > 2 else 'hold').encode())
+            worker.stdin.close()
+        _await_session_resume(worker, directory, directory / ('launch-error.yml' if operation == 'child' else 'resume-error.yml'), None)
+        result = {'alias': alias, 'session': read_alias_mapping(runner, alias)[0]['session']}
     elif operation == 'status':
         result = status_aliases(arguments, root, operation_total=True).document
     elif operation == 'send':
@@ -227,10 +254,8 @@ def test_real_registered_session(managed_project: ManagedProject) -> None:
     observe(call, alias, 'idle', 'interrupted')
     observe(call, peer['alias'], 'running')
     call('interrupt', [peer['alias']])
-    call('send', [alias, 'Reply with the word remembered at the start. Use no tools.', [cause]])
-    final = observe(call, alias, 'idle', 'completed', timeout=timeout)
-    assert final['session'] == launched['session']
-    answer_contains('MANAGED_MEMORY_113')
+    denied = call('send', [alias, 'Reply with the word remembered at the start.', [cause]], returncode=1)
+    assert denied['error']['code'] == 'subtree-stopped'
     metadata = yaml.safe_load((directory / 'session.yml').read_text())
     native = Path(metadata['rollout_path'])
     native_records = [json.loads(line) for line in native.read_text().splitlines()]
@@ -298,6 +323,7 @@ def test_interrupt_is_targeted_and_terminal_before_service_exit(managed_project:
     before = observe(call, first['alias'], 'running')
     assert call('interrupt', [first['alias']]) == {
         'alias': first['alias'], 'interrupt_status': 'interrupted',
+        'members': [{'alias': first['alias'], 'interrupt_status': 'interrupted'}],
     }
     status = observe(call, first['alias'], 'idle', 'interrupted')
     assert status['execution_id'] == before['execution_id']
@@ -538,7 +564,8 @@ def test_fast_completion_keeps_the_control_reply_available(
             'execution_id': observed['execution_id'], 'send_status': 'sent',
         }
     else:
-        assert result == {'alias': alias, 'interrupt_status': 'interrupted'}
+        assert result == {'alias': alias, 'interrupt_status': 'interrupted',
+                          'members': [{'alias': alias, 'interrupt_status': 'interrupted'}]}
 
 
 def test_idle_continuation_survives_predecessor_status_reply_cleanup(
@@ -599,7 +626,8 @@ def test_idle_continuation_survives_predecessor_status_reply_cleanup(
             assert current['execution_id'] == successor['execution_id']
             assert current['session'] == successor['session']
             assert current['activity'] == 'running'
-            assert call('interrupt', [alias]) == {'alias': alias, 'interrupt_status': 'interrupted'}
+            assert call('interrupt', [alias]) == {'alias': alias, 'interrupt_status': 'interrupted',
+                          'members': [{'alias': alias, 'interrupt_status': 'interrupted'}]}
             observe(call, alias, 'idle', 'interrupted')
         finally:
             release.set()
@@ -626,7 +654,8 @@ def test_permission_wait_keeps_heartbeating(managed_project: ManagedProject) -> 
     current = call('status', [alias])['aliases'][0]
     assert current['activity'] == 'running'
     assert current['waiting_for'] == 'runtime-request'
-    assert call('interrupt', [alias]) == {'alias': alias, 'interrupt_status': 'interrupted'}
+    assert call('interrupt', [alias]) == {'alias': alias, 'interrupt_status': 'interrupted',
+                          'members': [{'alias': alias, 'interrupt_status': 'interrupted'}]}
     observe(call, alias, 'idle', 'interrupted')
 
 
@@ -746,5 +775,6 @@ def test_stopped_worker_reports_lost_contact_and_recovers(
         os.kill(mapping['worker_pid'], signal.SIGCONT)
     recovered = observe(call, alias, 'running', waiting_for='runtime-request', timeout=15)
     assert recovered['session'] == launched['session']
-    assert call('interrupt', [alias]) == {'alias': alias, 'interrupt_status': 'interrupted'}
+    assert call('interrupt', [alias]) == {'alias': alias, 'interrupt_status': 'interrupted',
+                          'members': [{'alias': alias, 'interrupt_status': 'interrupted'}]}
     observe(call, alias, 'idle', 'interrupted')

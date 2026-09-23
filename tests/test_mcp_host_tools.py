@@ -622,6 +622,7 @@ def test_installed_mcp_server_dispatches_and_controls_a_managed_child(
     assert active["execution_id"] != completed["execution_id"]
     assert managed_mcp.document("interrupt", {"alias": alias}) == {
         "alias": alias, "interrupt_status": "interrupted",
+        "members": [{"alias": alias, "interrupt_status": "interrupted"}],
     }
     after = _observe(managed_mcp, alias, "idle", "interrupted")
     assert after["execution_id"] == active["execution_id"]
@@ -1220,6 +1221,7 @@ def test_real_codex_host_dispatches_and_controls_a_managed_child_offline(
         interrupted = _host_tool(host, probe, "interrupt", {"alias": alias})
         assert interrupted["structuredContent"] == {
             "alias": alias, "interrupt_status": "interrupted",
+            "members": [{"alias": alias, "interrupt_status": "interrupted"}],
         }
         after = _host_observe(host, probe, alias, "idle", "interrupted")
         assert after["execution_id"] == active["execution_id"]

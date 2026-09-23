@@ -240,6 +240,29 @@ def require_stopped_subtree(runner_directory: Path, alias: str) -> None:
         )
 
 
+def require_execution_allowed(
+    runner_directory: Path, alias: str, mapping: Mapping[str, Any],
+) -> None:
+    """Reject work in a stopped subtree, including a not-yet-created child.
+
+    The caller holds the execution startup lock until input is delivered or
+    the new native execution is recorded. A stop stays bound to the old
+    entity; replacing it never clears its descendants' prohibition.
+    """
+    current: str | None = alias
+    seen: set[str] = set()
+    while current is not None and current not in seen:
+        seen.add(current)
+        if (runner_directory / "sessions" / current / "stop.yml").exists():
+            raise RunnerError(
+                "subtree-stopped", f"{alias} belongs to stopped subtree {current}.",
+            )
+        parent = mapping.get("parent")
+        current = parent if isinstance(parent, str) else None
+        if current is not None:
+            mapping, _ = read_alias_mapping(runner_directory, current)
+
+
 def _terminal_unestablished_launch(directory: Path) -> bool:
     """Recognize a retained, terminated launch that never established a Session.
 
@@ -733,6 +756,7 @@ def read_terminal_outcome(turn_file: Path) -> str:
         not isinstance(turn, dict)
         or not isinstance(turn.get("outcome"), str)
         or turn["outcome"] not in TERMINAL_OUTCOMES
+        or turn.get("terminal_confirmed") is False
     ):
         raise _invalid_activity()
     return turn["outcome"]

@@ -78,10 +78,8 @@ def test_steering_and_refusal_keep_one_execution_for_the_session(
     running = observe(call, alias, "running", waiting_for="runtime-request")
     assert running["execution_id"] == owner["execution_id"]
 
-    assert call("interrupt", [alias]) == {
-        "alias": alias, "interrupt_status": "interrupted",
-    }
-    ended = observe(call, alias, "idle", "interrupted")
+    call("send", [alias, "finish normally", [cause]])
+    ended = observe(call, alias, "idle", "completed")
     assert ended["execution_id"] == owner["execution_id"]
 
     # The retained terminal record confirms the end, so a continuation is legal
@@ -108,6 +106,7 @@ def test_steering_and_refusal_keep_one_execution_for_the_session(
     ])
     assert call("interrupt", [alias]) == {
         "alias": alias, "interrupt_status": "interrupted",
+        "members": [{"alias": alias, "interrupt_status": "interrupted"}],
     }
     observe(call, alias, "idle", "interrupted")
 

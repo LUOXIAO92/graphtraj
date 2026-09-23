@@ -42,6 +42,7 @@ from graphtraj.execution.runner_batch import (
 )
 from graphtraj.execution.runner_capacity import capacity_positions
 from graphtraj.execution.runner_io import write_yaml_durably
+from graphtraj.execution.runner_heartbeat import execution_start_lock
 from graphtraj.execution.runner_models import (
     Batch,
     LaunchResponse,
@@ -63,6 +64,7 @@ from graphtraj.execution.runner_status import (
     read_alias_mapping,
     read_terminal_outcome,
     session_occupied,
+    require_execution_allowed,
 )
 from graphtraj.execution.runner_transport import record_runtime_identity
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
@@ -142,9 +144,14 @@ def register_child_batch(batch: Batch, cwd: Path, registration: Path) -> LaunchR
         for task in batch.tasks
     ]
     try:
-        with registration.open("x", encoding="utf-8") as stream:
-            retained = retain_batch(project.state_directory, batch)
-            yaml.safe_dump({"retained_batch_file": str(retained), "tasks": children}, stream)
+        with execution_start_lock(project.runner_directory):
+            require_execution_allowed(
+                project.runner_directory, caller,
+                read_alias_mapping(project.runner_directory, caller)[0],
+            )
+            with registration.open("x", encoding="utf-8") as stream:
+                retained = retain_batch(project.state_directory, batch)
+                yaml.safe_dump({"retained_batch_file": str(retained), "tasks": children}, stream)
     except (OSError, yaml.YAMLError) as error:
         raise RunnerError("BATCH_RETENTION_FAILED", "The parent worker could not register the child Batch.") from error
     return LaunchResponse(
@@ -2367,6 +2374,14 @@ def _execute_agent(
     wait_for_completion: bool = True,
     task_environment: dict[str, str] | None = None,
 ) -> tuple[str, str]:
+    """Prepare a permitted execution; the Worker checks again at native startup."""
+    with execution_start_lock(project.runner_directory):
+        requested = (
+            read_alias_mapping(project.runner_directory, alias)[0]
+            if alias is not None and expected_session is not None
+            else {"parent": parent_alias}
+        )
+        require_execution_allowed(project.runner_directory, alias or "new child", requested)
     generation = int(traces.parent.name) if traces.parent.name.isdigit() else 1
     if alias is None:
         alias = _agent_alias(project, task, role, generation)

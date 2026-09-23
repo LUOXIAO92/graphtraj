@@ -436,6 +436,7 @@ def test_control_entries_follow_recorded_direct_ownership(
     assert replacement["team_ordinal"] == 1
     assert children["interrupt-child-reviewer"]["document"] == {
         "alias": standards, "interrupt_status": "interrupted",
+        "members": [{"alias": standards, "interrupt_status": "interrupted"}],
     }
 
     # Main observes the Team Leader it dispatched itself in full, and a Session

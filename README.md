@@ -405,7 +405,7 @@ next Round. Main or the user can retire a Team; replacement retains the Ticket
 branch and Worktree, and reads the prior Leader's final response from its Trace.
 Replacing another member changes only that seat.
 
-Resume an interrupted Team with its original Leader Batch after deciding the
+Continue an unfinished Team with its original Leader Batch after deciding the
 next action. Runner reuses retained Sessions, the Worktree, candidate, and valid
 reports. A missing or invalid report returns to its author with the failure,
 Trace, and expected report. A Leader can request correction in `leader.md` with
@@ -517,9 +517,15 @@ terminal record is never overturned by a missing or stale heartbeat.
 running. For an idle Session it starts a Worker that restores the same native
 conversation and its resolved Context. A continuation gets a new execution ID
 and preserves the alias and Session ID. Each send must cite an existing Project
-Worldline event. `interrupt_session(alias, root)` targets the mapped execution
-and waits for native confirmation; other Sessions keep running. A race with
-native completion returns an operation error and does not silently queue input.
+Worldline event. `interrupt_session(alias, root)` stops the target and every
+recorded descendant directly, without asking intermediate Agents to relay it.
+Its `members` results distinguish `interrupted`, already `stopped`, and
+`unconfirmed` members; the overall `interrupt_status` is `incomplete` if any
+member cannot be confirmed. Other branches keep running. The stopped subtree
+cannot create or resume work, including through `send` or report collection.
+This prohibition persists on the old entities after replacement; Sessions,
+aliases and evidence remain retained. Ordinary native completion still permits
+continuation. A send racing native completion never silently queues input.
 
 The Worker closes its connection after the terminal result. A send made
 during that close waits for the prior owner to finish. The

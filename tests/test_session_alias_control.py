@@ -265,6 +265,7 @@ def test_installed_alias_control_resumes_and_interrupts_one_team_session(
     assert yaml.safe_load(interrupted.stdout) == {
         "alias": alias,
         "interrupt_status": "interrupted",
+        "members": [{"alias": alias, "interrupt_status": "interrupted"}],
     }
     wait_for_file(mapping_file.parent / "execution.yml")
     retry = run_process(

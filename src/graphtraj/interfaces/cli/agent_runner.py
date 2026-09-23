@@ -217,7 +217,7 @@ def send(
 @main.command()
 @click.argument("alias")
 def interrupt(alias: str) -> None:
-    """Interrupt one Runtime execution while preserving its Session alias."""
+    """Stop a descendant subtree and prevent further work, retaining Sessions."""
     try:
         response = interrupt_session(alias, Path.cwd().resolve())
     except RunnerError as error:

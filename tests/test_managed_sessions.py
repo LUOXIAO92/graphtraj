@@ -255,8 +255,11 @@ def test_active_input_reaches_the_same_native_execution(managed_project: Managed
     launched = call('launch', launch_document())['tasks'][0]
     alias = launched['alias']
     before = observe(call, alias, 'running')
+    # A steered execution reports the identity of the execution it reached, so
+    # a successor can deliver to or stop exactly that one.
     assert call('send', [alias, 'complete after active input', [cause]]) == {
-        'alias': alias, 'send_status': 'sent',
+        'alias': alias, 'session': before['session'],
+        'execution_id': before['execution_id'], 'send_status': 'sent',
     }
     after = observe(call, alias, 'idle', 'completed')
     assert after['session'] == before['session'] == launched['session']
@@ -326,9 +329,14 @@ def test_concurrent_idle_sends_keep_one_native_owner(managed_project: ManagedPro
     observe(call, alias, 'idle', 'completed')
     with ThreadPoolExecutor(2) as callers:
         results = list(callers.map(lambda text: call('send', [alias, text, [cause]]), ('hold', 'hold')))
-    assert results == [{'alias': alias, 'send_status': 'sent'}] * 2
+    assert [result['send_status'] for result in results] == ['sent'] * 2
+    # Both callers addressed one execution: the recorded one they leave behind.
+    assert {result['alias'] for result in results} == {alias}
+    assert len({result['execution_id'] for result in results}) == 1
+    assert {result['session'] for result in results} == {launched['session']}
     observe(call, alias, 'idle', 'completed')
     mapping, _ = read_alias_mapping(root / '.graphtraj/runner', alias)
+    assert results[-1]['execution_id'] == mapping['execution_id']
     native = root / 'native' / ('rollout-' + launched['session'] + '.jsonl')
     contexts = [json.loads(line)['payload'] for line in native.read_text().splitlines()
                 if json.loads(line)['type'] == 'turn_context']
@@ -522,12 +530,15 @@ def test_fast_completion_keeps_the_control_reply_available(
     launched = call('launch', launch_document())['tasks'][0]
     alias = launched['alias']
     arguments = [alias, 'complete immediately', [cause]] if operation == 'send' else [alias]
-    assert call(operation, arguments) == {
-        'alias': alias,
-        'send_status' if operation == 'send' else 'interrupt_status':
-            'sent' if operation == 'send' else 'interrupted',
-    }
-    observe(call, alias, 'idle', 'completed' if operation == 'send' else 'interrupted')
+    result = call(operation, arguments)
+    observed = observe(call, alias, 'idle', 'completed' if operation == 'send' else 'interrupted')
+    if operation == 'send':
+        assert result == {
+            'alias': alias, 'session': launched['session'],
+            'execution_id': observed['execution_id'], 'send_status': 'sent',
+        }
+    else:
+        assert result == {'alias': alias, 'interrupt_status': 'interrupted'}
 
 
 def test_idle_continuation_survives_predecessor_status_reply_cleanup(

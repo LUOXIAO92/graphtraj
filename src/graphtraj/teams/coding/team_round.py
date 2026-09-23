@@ -59,8 +59,10 @@ from graphtraj.workspace.runner_project import (
 from graphtraj.execution.runner_status import (
     caller_alias,
     conflicting_binding_field,
+    owning_execution,
     read_alias_mapping,
     read_terminal_outcome,
+    session_occupied,
 )
 from graphtraj.execution.runner_transport import record_runtime_identity
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
@@ -211,6 +213,11 @@ def launch_team_batch(batch: Batch, cwd: Path) -> LaunchResponse:
                     "launch_status": "launched",
                     "alias": alias,
                     "session": session,
+                    # The created execution, so a successor can deliver to or
+                    # stop exactly this one.
+                    "execution_id": read_alias_mapping(
+                        project.runner_directory, alias
+                    )[0]["execution_id"],
                 }
             )
         return LaunchResponse(
@@ -2364,7 +2371,19 @@ def _execute_agent(
     if alias is None:
         alias = _agent_alias(project, task, role, generation)
         session_directory = project.runner_directory / "sessions" / alias
-        session_directory.mkdir(parents=True, exist_ok=False)
+        # One Session directory owns one Agent Entity and at most one live
+        # execution, so this create claims a directory nothing records yet.
+        recorded = owning_execution(alias, session_directory, None)
+        if recorded is not None:
+            raise session_occupied(alias, recorded)
+        try:
+            session_directory.mkdir(parents=True, exist_ok=False)
+        except FileExistsError as error:
+            # A concurrent create claimed this alias after the scan, so this
+            # create is refused like any other request for an owned directory.
+            raise session_occupied(
+                alias, owning_execution(alias, session_directory, None)
+            ) from error
         trace_directory = traces / alias
         trace_directory.mkdir()
         # The Trace entry later reads the Runtime-owned native Session record;
@@ -2375,6 +2394,16 @@ def _execute_agent(
         session_directory = project.runner_directory / "sessions" / alias
         if not session_directory.is_dir():
             raise RunnerError("RUNTIME_WORKER_FAILED", "The mapped Session is unavailable.")
+        # A continue starts the next execution only after the retained terminal
+        # record confirms the recorded one ended; a create claims no record.
+        owning = owning_execution(
+            alias,
+            session_directory,
+            None if expected_session is None
+            else read_alias_mapping(project.runner_directory, alias)[0],
+        )
+        if owning is not None:
+            raise session_occupied(alias, owning)
     trace = traces / alias / "events.jsonl"
 
     policy_role = _task_policy(task, role)

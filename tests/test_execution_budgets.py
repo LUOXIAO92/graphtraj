@@ -1120,8 +1120,17 @@ def test_installed_send_notifies_its_caller_while_a_budgeted_resume_runs(
         )
         try:
             assert sent.wait(timeout=10) == 0
-            assert yaml.safe_load(stdout.read_text(encoding="utf-8")) == {
+            sent_document = yaml.safe_load(stdout.read_text(encoding="utf-8"))
+            resumed_mapping = yaml.safe_load(
+                (harness / ".graphtraj" / "runner" / "sessions" / mapping["alias"]
+                 / "mapping.yml").read_text(encoding="utf-8")
+            )
+            # The continuation resumes the recorded Session as a new execution
+            # and reports exactly that execution.
+            assert sent_document == {
                 "alias": mapping["alias"],
+                "session": mapping["session"],
+                "execution_id": resumed_mapping["execution_id"],
                 "send_status": "sent",
             }
             deadline = time.monotonic() + 5
@@ -1606,6 +1615,10 @@ def test_installed_send_retains_a_late_stop_without_an_awaiting_call(
     }
     send_environment.pop("FAKE_CODEX_LIFECYCLE_ACTION", None)
     stderr = tmp_path / "late-stop.stderr"
+    session_mapping_file = (
+        harness / ".graphtraj" / "runner" / "sessions" / alias / "mapping.yml"
+    )
+    completed_mapping = yaml.safe_load(session_mapping_file.read_text(encoding="utf-8"))
     with stderr.open("w+", encoding="utf-8") as err:
         sent = subprocess.Popen(
             [
@@ -1629,8 +1642,11 @@ def test_installed_send_retains_a_late_stop_without_an_awaiting_call(
         # own stdout, even though the continuation is alive with that Worker.
         document, closed = _read_pipe_to_eof(sent.stdout.fileno(), 5)
         assert closed, "the caller's stdout stayed open after send returned"
+        resumed = yaml.safe_load(session_mapping_file.read_text(encoding="utf-8"))
         assert yaml.safe_load(document) == {
             "alias": alias,
+            "session": completed_mapping["session"],
+            "execution_id": resumed["execution_id"],
             "send_status": "sent",
         }
     usage_file = (

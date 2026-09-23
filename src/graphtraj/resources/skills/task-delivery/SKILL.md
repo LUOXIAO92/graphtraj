@@ -51,12 +51,12 @@ Cross-level status queries expose summaries, not raw member reports or Sessions.
 The permitted control exception is interrupting one's own descendant subtree;
 it does not authorize cross-level messages, approvals or replacement.
 
-Formal team work uses `agent-runner --batch-input <batch.yml>`.
-This describes the existing interface. When the accepted swarm launch interface
-is implemented, use it for activation and aliases for later interaction; do not
-invent supported commands or duplicate the task DAG in launch instructions.
-Respect configured depth and concurrency. A Batch starts all selected tasks
-or none; reduce it or wait when there is insufficient capacity.
+Formal team work uses `agent-runner --swarm-input <swarm.yml>`.
+Each task supplies its role and launch instruction; Main adds the Ticket ID
+selected from the DAG. Within a Ticket, the calling Session supplies that context.
+Names and requirements come from the registered current definition. Use returned
+aliases for later interaction. Respect configured depth and concurrency: a swarm
+starts all selected tasks or none; reduce it or wait for sufficient capacity.
 
 Wait for existing completion, failure and budget notifications. Keep one
 active driver per Session; Main waits for the team's handoff while its Leader

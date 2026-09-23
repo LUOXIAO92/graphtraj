@@ -19,9 +19,10 @@ inspect code and evidence without running tests or probes. Reuse valid evidence.
 Select the coding Leader preset from the user's configured team and give it the
 accepted code Ticket and assigned Engineer preset. Apply any user-selected
 expertise mapping without hard-coding model names or role tiers; difficulty
-stays an estimation property. A Batch task uses
-its ticket_id, ticket_name, role and concise instruction; the registered current
-definition supplies the complete requirements.
+stays an estimation property. A swarm task uses its role and concise instruction;
+Main adds the ticket_id selected from the DAG, while member launches inherit
+the calling Session's Ticket. The registered current definition supplies the
+complete requirements and Ticket name.
 
 The Leader first assesses the Ticket difficulty and scope using the supplied
 investigation findings. Small fixes and test modifications do not use TDD or
@@ -41,7 +42,7 @@ returned validation evidence. Any required acceptance tests remain Leader-owned.
 For a system/provider failure that ended the Team driver, let the caller judge
 when the external cause is resolved. Main addresses the failure through its directly assigned Leader. That Leader
 resumes its own failed member using the causal Worldline event; Main does not
-send to the member. Wait for the recovered execution to finish. Then dispatch a Batch selecting only the affected Ticket
+send to the member. Wait for the recovered execution to finish. Then activate only the affected Ticket through swarm
 again to continue its current Team from retained state. A successful Runtime
 retry alone does not establish Team acceptance. Keep completed evidence and
 member Sessions; do not replay unrelated Tickets from a multi-ticket Batch.

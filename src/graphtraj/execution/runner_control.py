@@ -6,6 +6,7 @@ import fcntl
 import json
 import os
 import subprocess
+import tempfile
 import sys
 import threading
 import time
@@ -248,6 +249,75 @@ def send_instruction(
     raise _not_resumable()
 
 
+def _session_report_paths(alias: str, cwd: Path) -> tuple[Path, ...]:
+    """Resolve only report files declared by the target's current native Context."""
+    runner = discover_runner_directory(cwd)
+    mapping, directory = read_alias_mapping(runner, alias)
+    request, _, _ = _read_session_resume_request(directory, mapping)
+    environment = _team_runtime_environment(mapping, cwd)
+    request = _refresh_current_team_report_request(
+        request, mapping, Path(mapping['worktree_path']), environment,
+        session_directory=directory,
+    )
+    config = request['session_parameters']['config']
+    filesystem = config['permissions'][config['default_permissions']]['filesystem']
+    state = load_project_configuration(cwd).state
+    paths = []
+    for name, access in filesystem.items():
+        path = Path(name)
+        if access not in ('read', 'write') or path.suffix != '.md' or not path.is_relative_to(state):
+            continue
+        if path.is_symlink() or path.resolve() != path:
+            raise RunnerError('authority-denied', 'A report path changed its declared target.')
+        paths.append(path)
+    return tuple(paths)
+
+
+def read_session_reports(alias: str, cwd: Path) -> dict:
+    """Read only the target's declared current report files for its direct owner."""
+    runner = discover_runner_directory(cwd)
+    mapping, directory = read_alias_mapping(runner, alias)
+    require_direct_authority(runner, alias, mapping)
+    reports = [{'path': str(path), 'text': path.read_text(encoding='utf-8')}
+               for path in _session_report_paths(alias, cwd) if path.is_file()]
+    result = {'alias': alias, 'reports': reports}
+    terminal = directory / 'execution.yml'
+    if terminal.is_file():
+        read_terminal_outcome(terminal)
+        message = yaml.safe_load(terminal.read_text()).get('last_agent_message')
+        if isinstance(message, str):
+            result['last_agent_message'] = message
+    return result
+
+
+def submit_session_report(name: str, text: str, cwd: Path) -> dict:
+    """Write the issuing formal Session's own assigned report, never another's."""
+    from graphtraj.execution.runner_status import caller_alias
+    from graphtraj.teams.coding.team_replacement import require_active_session
+
+    alias = caller_alias(discover_runner_directory(cwd))
+    if alias is None:
+        raise RunnerError('authority-denied', 'Main has no Team report to submit.')
+    require_active_session(discover_project(cwd, require_clean_integration=False), alias)
+    paths = [path for path in _session_report_paths(alias, cwd) if path.name == name]
+    if len(paths) != 1:
+        raise RunnerError('authority-denied', 'The report is not assigned to this Session.')
+    path = paths[0]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', dir=path.parent, delete=False) as stream:
+            temporary = Path(stream.name)
+            stream.write(text)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+    return {'alias': alias, 'report': str(path)}
+
+
 def _execution_identity(alias: str, mapping: Mapping[str, Any]) -> Dict[str, str]:
     """Return the identity of the execution a successor can deliver to or stop."""
     return {
@@ -433,6 +503,7 @@ def _send_session_locked(
                 worker = subprocess.Popen(
                     [
                         sys.executable,
+                        "-I",
                         "-m",
                         "graphtraj.execution.runner_worker",
                         str(resume_file),

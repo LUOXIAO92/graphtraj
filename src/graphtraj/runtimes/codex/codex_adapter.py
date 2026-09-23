@@ -104,6 +104,10 @@ class _CodexRole:
     ) -> Dict[str, Any]:
         """Render the private request consumed by this Adapter's worker."""
 
+        # Import after Adapter initialization; all transports share the public
+        # operation schemas and validation instead of defining a second Runner.
+        from graphtraj.interfaces.mcp import native_runner_tools
+
         arguments = [
             str(executable),
             "exec",
@@ -127,25 +131,22 @@ class _CodexRole:
         filesystem = native_settings["permissions"][self.default_permissions][
             "filesystem"
         ]
-        if self.name == "team-leader":
-            # Runner retains and registers a child Batch before returning to the
-            # Leader. The native profile permits only these exact paths.
-            for path in child_batch_write_paths:
-                filesystem[str(path)] = "write"
-            # Direct control also reads causal Worldline events and takes one
-            # Runner capacity position. Later resumes inherit these exact
-            # paths from this durable request instead of re-granting them.
-            for path in leader_control_write_paths:
-                filesystem[str(path)] = "write"
-        if self.name == "merge-resolver":
-            filesystem[str(evidence)] = "read"
+        from graphtraj.runtimes.codex.access import private_filesystem
+
+        # Control now runs on the private native callback, not through files
+        # writable by an Agent or by a helper inheriting its tool permissions.
+        filesystem.update(private_filesystem(runtime_store))
+        if self.name in {'team-leader', 'temporary-role'}:
+            filesystem[':workspace_roots']['.'] = 'read'
         if self.name in {"engineer", "merge-resolver"}:
             filesystem[str(git_common_directory)] = "write"
+            filesystem[str(git_common_directory / 'config')] = "read"
+            filesystem[str(git_common_directory / 'hooks')] = "read"
         native_report_paths = _canonical_report_write_paths(
             evidence, report_files
         )
         for path in native_report_paths:
-            filesystem[str(path)] = "write"
+            filesystem[str(path)] = "read"
         for skill in effective_skills:
             if skill.enabled:
                 filesystem[str(skill.path.parent)] = "read"
@@ -179,23 +180,7 @@ class _CodexRole:
             "session_parameters": {
                 "cwd": str(worktree),
                 "model": model,
-                "dynamicTools": [{
-                    "type": "function",
-                    "name": "graphtraj_status",
-                    "description": "Read Runner status using your native Session identity.",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {
-                            "aliases": {
-                                "type": "array",
-                                "items": {"type": "string"},
-                                "minItems": 1,
-                            },
-                        },
-                        "required": ["aliases"],
-                        "additionalProperties": False,
-                    },
-                }],
+                "dynamicTools": native_runner_tools(),
                 "developerInstructions": developer_instructions,
                 "config": {
                     key: value for key, value in overrides
@@ -1227,13 +1212,20 @@ def refresh_codex_report_paths(
             )
         workspace_roots["."] = "read"
     for path, access in tuple(filesystem.items()):
-        if access == "write" and _is_prior_report_path(
+        if access in ("read", "write") and _is_prior_report_path(
             path, evidence, report_files
         ):
             del filesystem[path]
+    native_tools = {
+        tool.get('name') for tool in request.get('session_parameters', {}).get('dynamicTools', [])
+        if isinstance(tool, dict)
+    }
     for path in native_report_paths:
-        filesystem[str(path)] = "write"
-    if resolved_role == "team-leader" and session_directory is not None:
+        filesystem[str(path)] = "read" if 'graphtraj_submit_report' in native_tools else "write"
+    if (
+        resolved_role == "team-leader" and session_directory is not None
+        and 'graphtraj_swarm' not in native_tools
+    ):
         # Continuing one direct child writes its Session directory, which
         # exists only after this Session started. Every other Leader path is
         # already granted by the durable launch request.

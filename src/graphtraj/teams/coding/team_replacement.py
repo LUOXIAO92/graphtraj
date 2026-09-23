@@ -75,7 +75,7 @@ def replace_session(
         + ")), sort_keys=False))"
     )
     result = require_replacement_authority(
-        project.runner_directory, alias, mapping, [sys.executable, "-c", script]
+        project.runner_directory, alias, mapping, [sys.executable, "-I", "-c", script]
     )
     if result is not None:
         return result

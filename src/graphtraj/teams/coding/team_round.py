@@ -426,7 +426,7 @@ def _run_batch_workers(
                     if notice_fd is not None:
                         environment["GRAPHTRAJ_BUDGET_NOTICE_FD"] = str(notice_fd)
                     worker = subprocess.Popen(
-                        [sys.executable, "-m", "graphtraj.teams.coding.team_round",
+                        [sys.executable, "-I", "-m", "graphtraj.teams.coding.team_round",
                          str(retained), str(index), str(position.fileno()), parent_alias,
                          "recover-reports" if recover_reports else ""],
                         cwd=project.harness_root, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
@@ -2937,6 +2937,7 @@ def _run_session_worker(
             worker = subprocess.Popen(
                 [
                     sys.executable,
+                    "-I",
                     "-m",
                     "graphtraj.execution.runner_worker",
                     str(job_file),

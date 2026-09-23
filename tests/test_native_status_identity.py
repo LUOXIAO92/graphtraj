@@ -14,13 +14,23 @@ from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 from test_codex_app_server import context, peer
 
 
-@pytest.mark.parametrize('issuer, forged', [
-    ('thread-1', False), ('helper', False), ('helper', True), ('outsider', False),
+@pytest.mark.parametrize('issuer, forged, operation', [
+    ('thread-1', False, 'status'), ('helper', False, 'status'),
+    ('helper', True, 'status'), ('outsider', False, 'status'),
+    ('thread-1', False, 'send'), ('helper', False, 'send'),
 ])
 def test_native_status_uses_callback_identity(
-    tmp_path: Path, peer: Path, issuer: str, forged: bool,
+    tmp_path: Path,
+    peer: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    issuer: str,
+    forged: bool,
+    operation: str,
 ) -> None:
-    """Identical arguments give parent detail but helper summary through native RPC."""
+    """Native identity governs detail and control through the same public boundary."""
+    from graphtraj.execution import runner_control
+    from graphtraj.execution.runner_status import caller_alias
+    from graphtraj.teams.coding import team_replacement
     configuration = tmp_path / '.graphtraj/config.yml'
     child_directory = tmp_path / '.graphtraj/runner/sessions/probe@e1'
     child_directory.mkdir(parents=True)
@@ -41,19 +51,36 @@ def test_native_status_uses_callback_identity(
         expected.update(session='child-session', execution_id='child-turn')
     expected.update(activity='idle', last_outcome='completed')
     document = {'aliases': [expected]}
+    delivered = []
+    if operation == 'send':
+        document = {'alias': 'probe@e1', 'session': 'child-session', 'send_status': 'sent'}
+        def deliver(*args: object, **kwargs: object) -> dict:
+            """Control only native delivery after real public relationship checks."""
+            delivered.append(caller_alias(tmp_path / '.graphtraj/runner'))
+            return {'alias': 'probe@e1', 'session': 'child-session', 'send_status': 'sent'}
+        monkeypatch.setattr(runner_control, '_send_session', deliver)
+        monkeypatch.setattr(runner_control, '_require_project_events', lambda *args: None)
+        monkeypatch.setattr(runner_control, 'discover_project', lambda *args, **kwargs: None)
+        monkeypatch.setattr(team_replacement, 'require_active_session', lambda *args: None)
+        if issuer == 'helper':
+            document = {'error': {'code': 'authority-denied',
+                                 'message': 'Temporary native helpers have read-only Runner access.'}}
     if forged:
-        document = {'error': {'code': 'invalid-input', 'message': 'Supply only the target aliases.'}}
+        document = {'error': {'code': 'invalid-input', 'message': 'Supply only supported tool arguments.'}}
     elif issuer == 'outsider':
         document = {'error': {'code': 'authority-denied', 'message': 'Native caller is outside this Session subtree.'}}
     reply = {'contentItems': [{'type': 'inputText', 'text': json.dumps(document)}],
              'success': 'error' not in document}
-    arguments = {'aliases': ['probe@e1']}
+    arguments = (
+        {'aliases': ['probe@e1']} if operation == 'status'
+        else {'alias': 'probe@e1', 'instruction': 'Continue.', 'caused_by_event_ids': ['cause']}
+    )
     if forged:
         arguments['threadId'] = 'thread-1'
     exchange = {
         'method': 'item/tool/call',
         'params': {'threadId': issuer, 'turnId': 'turn-1', 'callId': 'call',
-                   'tool': 'graphtraj_status', 'arguments': arguments},
+                   'tool': 'graphtraj_' + operation, 'arguments': arguments},
         'response': reply,
     }
 
@@ -82,7 +109,14 @@ def test_native_status_uses_callback_identity(
             execution = await adapter.start_execution(session, 'configured-request')
             assert (await adapter.wait(execution, timeout=2))['last_agent_message'] == 'request accepted'
         document = json.loads(received[0]['contentItems'][0]['text'])
-        if forged or issuer == 'outsider':
+        if operation == 'send':
+            if issuer == 'helper':
+                assert document['error']['code'] == 'authority-denied'
+                assert not delivered
+            else:
+                assert document['send_status'] == 'sent'
+                assert delivered == ['probe@l1']
+        elif forged or issuer == 'outsider':
             assert document['error']['code'] == ('invalid-input' if forged else 'authority-denied')
         else:
             assert ('session' in document['aliases'][0]) == (issuer == 'thread-1')

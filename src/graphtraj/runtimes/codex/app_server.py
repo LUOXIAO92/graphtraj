@@ -564,6 +564,14 @@ class CodexAppServer:
                 return state
         raise CodexAdapterError('RUNTIME_LIFECYCLE_INVALID', 'The execution belongs to another connection.')
 
+    async def read_configuration(self, cwd: Path) -> dict[str, Any]:
+        """Read effective native configuration without changing any user setting."""
+        response = await self._call('config/read', {'cwd': str(cwd), 'includeLayers': False})
+        configuration = response.get('config')
+        if not isinstance(configuration, dict):
+            raise self._protocol_failure('Native configuration response is invalid.')
+        return configuration
+
     async def read_thread_parent(self, thread_id: str) -> str | None:
         """Read immutable native parent identity over the owned Runtime connection.
 

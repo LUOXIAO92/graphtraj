@@ -599,7 +599,7 @@ def test_each_session_projects_resolved_role_skills_and_task_access(
                 assert filesystem[':workspace_roots']['.'] == ['write', 'read'][index]
                 assert filesystem[':workspace_roots']['CONTEXT.md'] == 'read'
                 assert filesystem[':workspace_roots']['docs'] == 'read'
-                assert filesystem[str(root / 'evidence/teams/1/rounds/1/report.md')] == 'write'
+                assert filesystem[str(root / 'evidence/teams/1/rounds/1/report.md')] == 'read'
                 assert filesystem[str(root / '.agents/skills/selected')] == 'read'
                 assert (str(root / 'git-common') in filesystem) == (index == 0)
                 assert not any(str(tmp_path / ['second', 'first'][index]) in key for key in filesystem)
@@ -1139,16 +1139,16 @@ def test_harness_approvals_reviewer_reaches_create_and_resume(
     assert resumed['session_parameters']['config'].get('approvals_reviewer') == expected
 
 
-def test_team_leader_projection_shares_only_its_direct_control_paths(
+def test_team_leader_projection_keeps_control_files_private(
     tmp_path: Path, peer: Path,
 ) -> None:
-    """Direct control gains the Runner paths it writes, and nothing wider."""
+    """Callback control survives resume without writable child control records."""
     root = tmp_path / 'worktree'
     root.mkdir()
     (root / '.codex').mkdir()
     leader_alias = '144-native-dispatch-permissions@l1'
     child_alias = '144-native-dispatch-permissions@e1'
-    sessions = root / 'runner' / 'sessions'
+    sessions = root / '.graphtraj' / 'runner' / 'sessions'
     for alias, parent in [
         (leader_alias, None), (child_alias, leader_alias), ('other-ticket@e1', 'other-ticket@l1'),
     ]:
@@ -1157,17 +1157,19 @@ def test_team_leader_projection_shares_only_its_direct_control_paths(
         (directory / 'mapping.yml').write_text(
             yaml.safe_dump({'alias': alias, 'parent': parent})
         )
-    worldline_lock = root / 'state' / 'worldline' / '.lock'
-    capacity = root / 'runner' / 'capacity'
+    worldline_lock = root / '.graphtraj' / 'state' / 'worldline' / '.lock'
+    capacity = root / '.graphtraj' / 'runner' / 'capacity'
     resolved = context(
         root, peer,
         ResolvedChildRole('team-leader', 'Lead the Team.', (),
-                          RolePreset('codex', 'chosen-model', None, None, reasoning_effort='max')),
+                          RolePreset('codex', 'chosen-model', None, None,
+                                     allow_runtime_swarm=True, reasoning_effort='max')),
         leader_control_write_paths=(worldline_lock, capacity),
     )
     launch = _native_filesystem(resolved.launch_document()['adapter_request'])
-    assert launch[str(worldline_lock)] == 'write'
-    assert launch[str(capacity)] == 'write'
+    assert launch[str(root / '.graphtraj')] == 'none'
+    assert launch.get(str(worldline_lock)) != 'write'
+    assert launch.get(str(capacity)) != 'write'
     # Direct child Sessions do not exist yet when this Session is created.
     assert launch.get(str(sessions / child_alias)) != 'write'
     assert launch.get(str(sessions)) != 'write'
@@ -1180,11 +1182,12 @@ def test_team_leader_projection_shares_only_its_direct_control_paths(
         role='team-leader', session_directory=sessions / leader_alias,
     )
     filesystem = _native_filesystem(resumed)
-    assert filesystem[str(sessions / child_alias)] == 'write'
-    # The durable launch request keeps its grants across this resume.
-    assert filesystem[str(worldline_lock)] == 'write'
-    assert filesystem[str(capacity)] == 'write'
+    assert filesystem.get(str(sessions / child_alias)) != 'write'
+    assert filesystem[str(root / '.graphtraj')] == 'none'
+    assert filesystem.get(str(worldline_lock)) != 'write'
+    assert filesystem.get(str(capacity)) != 'write'
+    assert resumed['session_parameters']['config']['agents']['enabled'] is True
     # No wildcard, no shared Runner directory and no other Ticket's Session.
     assert filesystem.get(str(sessions)) != 'write'
     assert filesystem.get(str(sessions / 'other-ticket@e1')) != 'write'
-    assert filesystem[':workspace_roots']['.'] == 'write'
+    assert filesystem[':workspace_roots']['.'] == 'read'

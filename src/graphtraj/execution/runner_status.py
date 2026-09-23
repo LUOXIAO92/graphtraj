@@ -21,11 +21,11 @@ from graphtraj.execution.runner_transport import valid_terminal_launch_failure
 from graphtraj.workspace.runner_project import discover_runner_directory
 
 
-_runtime_caller: ContextVar[tuple[Path, str] | None] = ContextVar('runtime_caller', default=None)
+_runtime_caller: ContextVar[tuple[Path, str | None] | None] = ContextVar('runtime_caller', default=None)
 
 
 @contextmanager
-def runtime_caller(runner_directory: Path, identity: str) -> Iterator[None]:
+def runtime_caller(runner_directory: Path, identity: str | None) -> Iterator[None]:
     """Scope an identity received on the private Runtime callback connection.
 
     This is not a CLI/MCP identity input. Native helpers use their actual thread

@@ -219,8 +219,10 @@ class CodexManagedExecution:
 
     async def _request(self, request: CodexServerRequest) -> dict:
         """Hold one native callback until an explicit reply or native cancellation."""
-        if request.method == 'item/tool/call' and request.params.get('tool') == 'graphtraj_status':
-            return await self._native_status(request)
+        from graphtraj.interfaces.mcp import NATIVE_RUNNER_TOOLS
+
+        if request.method == 'item/tool/call' and request.params.get('tool') in NATIVE_RUNNER_TOOLS:
+            return await self._native_runner_request(request)
         if self.approval is not None and request.method.endswith("/requestApproval"):
             return await self._review_approval(request)
         token = uuid.uuid4().hex
@@ -232,49 +234,15 @@ class CodexManagedExecution:
         finally:
             self.requests.pop(token, None)
 
-    async def _native_status(self, request: CodexServerRequest) -> dict:
-        """Apply existing status visibility to the Runtime-authenticated issuer."""
-        from graphtraj.execution.runner_models import RunnerError, StatusResponse
-        from graphtraj.execution.runner_status import runtime_caller, status_aliases
-        from graphtraj.workspace.runner_project import discover_project_root, discover_runner_directory
+    async def _native_runner_request(self, request: CodexServerRequest) -> dict:
+        """Use the managed Session's bound identity for native Runner operations."""
+        from graphtraj.workspace.runner_project import discover_project_root
 
-        try:
-            thread = request.params.get('threadId')
-            arguments = request.params.get('arguments')
-            if (
-                not isinstance(thread, str) or not thread
-                or self.native_session is None or self.adapter is None
-                or not isinstance(arguments, dict) or set(arguments) != {'aliases'}
-                or not isinstance(arguments['aliases'], list) or not arguments['aliases']
-                or any(not isinstance(alias, str) for alias in arguments['aliases'])
-            ):
-                raise RunnerError('invalid-input', 'Supply only the target aliases.')
-            current: str | None = thread
-            seen: set[str] = set()
-            while current != self.native_session:
-                if current in seen:
-                    raise RunnerError('authority-denied', 'Native parent chain is cyclic.')
-                seen.add(current)
-                current = await self.adapter.read_thread_parent(current)
-                if current is None:
-                    raise RunnerError('authority-denied', 'Native caller is outside this Session subtree.')
-            identity = self.directory.name if thread == self.native_session else thread
-            cwd = Path(self.context.session_document()['adapter_request']['cwd'])
-            root = discover_project_root(cwd)
-
-            def observe() -> StatusResponse:
-                """Reuse the public operation without authorizing from process ancestry."""
-                with runtime_caller(discover_runner_directory(root), identity):
-                    return status_aliases(arguments['aliases'], root)
-
-            response = await asyncio.to_thread(observe)
-            document, success = response.document, response.succeeded
-        except (RunnerError, RuntimeAdapterError) as error:
-            document, success = {'error': {'code': error.code, 'message': error.message}}, False
-        return {
-            'contentItems': [{'type': 'inputText', 'text': json.dumps(document)}],
-            'success': success,
-        }
+        cwd = Path(self.context.session_document()['adapter_request']['cwd'])
+        return await run_native_operation(
+            self.adapter, self.native_session, self.directory.name,
+            discover_project_root(cwd), request,
+        )
 
     async def _notify_direct_parent(self, request: CodexServerRequest, token: str) -> None:
         """Tell the recorded direct parent about this request before the turn waits.
@@ -416,3 +384,60 @@ class CodexManagedExecution:
                 pass
         self.loop.call_soon_threadsafe(lambda: asyncio.create_task(interrupt()))
         return True
+
+
+async def run_native_operation(
+    adapter: CodexAppServer | None,
+    native_session: str | None,
+    root_alias: str | None,
+    root: Path,
+    request: CodexServerRequest,
+) -> dict:
+    """Route an owned native callback, preserving the Runtime's issuing identity."""
+    from graphtraj.execution.runner_models import RunnerError
+    from graphtraj.execution.runner_status import runtime_caller
+    from graphtraj.interfaces.mcp import NATIVE_RUNNER_TOOLS, TOOLS, ToolResult
+    from graphtraj.workspace.runner_project import discover_runner_directory
+
+    try:
+        thread = request.params.get('threadId')
+        arguments = request.params.get('arguments')
+        name = request.params['tool']
+        tool = TOOLS[NATIVE_RUNNER_TOOLS[name]]
+        if (
+            not isinstance(thread, str) or not thread
+            or native_session is None or adapter is None
+            or not isinstance(arguments, dict)
+            or not set(arguments) <= set(tool.input_schema['properties'])
+        ):
+            raise RunnerError('invalid-input', 'Supply only supported tool arguments.')
+        current: str | None = thread
+        seen: set[str] = set()
+        while current != native_session:
+            if current in seen:
+                raise RunnerError('authority-denied', 'Native parent chain is cyclic.')
+            seen.add(current)
+            current = await adapter.read_thread_parent(current)
+            if current is None:
+                raise RunnerError('authority-denied', 'Native caller is outside this Session subtree.')
+        if thread != native_session and name not in {'graphtraj_status', 'graphtraj_ticket_graph'}:
+            raise RunnerError('authority-denied', 'Temporary native helpers have read-only Runner access.')
+        identity = root_alias if thread == native_session else thread
+
+        def operate() -> ToolResult:
+            """Reuse public validation/control without process-based authorization."""
+            with runtime_caller(discover_runner_directory(root), identity):
+                return tool.handler(arguments, cwd=root)
+
+        response = await asyncio.to_thread(operate)
+        document, success = response.document, not response.failed
+    except (RunnerError, RuntimeAdapterError) as error:
+        document, success = {'error': {'code': error.code, 'message': error.message}}, False
+    except ValueError as error:
+        document, success = {'error': {'code': 'invalid-input', 'message': str(error)}}, False
+    except OSError as error:
+        document, success = {'error': {'code': 'operation-failed', 'message': str(error)}}, False
+    return {
+        'contentItems': [{'type': 'inputText', 'text': json.dumps(document)}],
+        'success': success,
+    }

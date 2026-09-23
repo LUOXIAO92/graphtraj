@@ -1,6 +1,8 @@
 """The Agent Runner command surface."""
 
 import json
+import asyncio
+import signal
 import os
 import sys
 from contextlib import contextmanager
@@ -110,6 +112,56 @@ def _fail(error: RunnerError, **identity: str) -> NoReturn:
     _emit_result({**identity, "error": error.as_document()})
     click.echo(error.message, err=True)
     raise click.exceptions.Exit(1)
+
+
+@main.command('main')
+@click.option('--instruction-file', required=True, type=click.Path(exists=True, path_type=Path))
+@click.option('--resume', help='Main record returned by a previous completed invocation.')
+def main_session(instruction_file: Path, resume: str | None) -> None:
+    """Run an isolated Main turn using the user's native Runtime settings.
+
+    Native user requests are printed unchanged to stderr. Reply on stdin with
+    the native JSON-RPC id and result; this entry makes no approval decision.
+    """
+    from graphtraj.runtimes.codex.main_session import run_main
+    from graphtraj.runtimes.codex.app_server import CodexServerRequest
+    from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
+
+    async def execute() -> dict:
+        """Keep native request/response correlation while the turn is active."""
+        replies = asyncio.Lock()
+
+        async def native_request(request: CodexServerRequest) -> dict:
+            """Forward the existing native request and await its exact response."""
+            async with replies:
+                click.echo(json.dumps({'id': request.request_id, 'method': request.method,
+                                       'params': request.params}), err=True)
+                line = await asyncio.to_thread(sys.stdin.readline)
+                response = json.loads(line)
+                if (
+                    not isinstance(response, dict)
+                    or response.get('id') != request.request_id
+                    or not isinstance(response.get('result'), dict)
+                ):
+                    raise RunnerError('invalid-input', 'Reply with the native request id and result.')
+                return response['result']
+
+        loop = asyncio.get_running_loop()
+        task = asyncio.current_task()
+        previous = signal.getsignal(signal.SIGTERM)
+        loop.add_signal_handler(signal.SIGTERM, task.cancel)
+        try:
+            return await run_main(Path.cwd().resolve(), instruction_file.read_text(), resume, native_request)
+        finally:
+            loop.remove_signal_handler(signal.SIGTERM)
+            signal.signal(signal.SIGTERM, previous)
+
+    try:
+        _emit_result(asyncio.run(execute()))
+    except (RunnerError, RuntimeAdapterError) as error:
+        _fail(RunnerError(error.code, error.message))
+    except (OSError, ValueError) as error:
+        _fail(RunnerError('invalid-input', str(error)))
 
 
 @main.command()

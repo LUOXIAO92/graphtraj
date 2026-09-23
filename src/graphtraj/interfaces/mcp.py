@@ -32,6 +32,8 @@ from graphtraj.execution.runner_control import (
     interrupt_session,
     pending_requests,
     reply_to_request,
+    read_session_reports,
+    submit_session_report,
     send_instruction,
 )
 from graphtraj.execution.runner_launch import launch_swarm
@@ -192,17 +194,40 @@ class Tool:
     name: str
     description: str
     input_schema: dict[str, Any]
-    handler: Callable[[Mapping[str, Any]], ToolResult]
+    handler: Callable[..., ToolResult]
 
 
 TOOLS: dict[str, Tool] = {}
+
+# The Runtime callback reuses these public handlers and argument schemas.
+# Ticket state mutation and arbitrary file operations are not Runtime tools.
+NATIVE_RUNNER_TOOLS = {
+    'graphtraj_status': 'alias_status',
+    'graphtraj_swarm': 'swarm',
+    'graphtraj_send': 'send_instruction',
+    'graphtraj_interrupt': 'interrupt',
+    'graphtraj_requests': 'pending_requests',
+    'graphtraj_reply': 'reply_to_request',
+    'graphtraj_reports': 'session_reports',
+    'graphtraj_submit_report': 'submit_report',
+    'graphtraj_ticket_graph': 'ticket_graph',
+}
+
+
+def native_runner_tools() -> list[dict[str, Any]]:
+    """Describe existing Runner operations for the native callback transport."""
+    return [
+        {'type': 'function', 'name': name, 'description': TOOLS[key].description,
+         'inputSchema': TOOLS[key].input_schema}
+        for name, key in NATIVE_RUNNER_TOOLS.items()
+    ]
 
 
 def register_tool(
     name: str,
     description: str,
     input_schema: dict[str, Any],
-    handler: Callable[[Mapping[str, Any]], ToolResult],
+    handler: Callable[..., ToolResult],
 ) -> None:
     """Register one host-callable operation on the MCP server.
 
@@ -212,10 +237,10 @@ def register_tool(
     TOOLS[name] = Tool(name, description, input_schema, handler)
 
 
-def read_current_graph(arguments: Mapping[str, Any]) -> ToolResult:
+def read_current_graph(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> ToolResult:
     """Return the current Ticket DAG and readiness view for the project."""
 
-    configuration = load_project_configuration(Path.cwd())
+    configuration = load_project_configuration(cwd or Path.cwd())
     return ToolResult(read_graph(configuration.state))
 
 
@@ -249,7 +274,9 @@ def update_current_ticket_state(arguments: Mapping[str, Any]) -> ToolResult:
     return ToolResult(recorded)
 
 
-def read_alias_status(arguments: Mapping[str, Any]) -> ToolResult:
+def read_alias_status(
+    arguments: Mapping[str, Any], *, cwd: Path | None = None,
+) -> ToolResult:
     """Report the requested Session aliases, or the visible Session tree."""
 
     aliases = arguments.get("aliases")
@@ -258,7 +285,7 @@ def read_alias_status(arguments: Mapping[str, Any]) -> ToolResult:
     candidate = arguments.get("candidate")
     if aliases is None:
         response = status_tree(
-            Path.cwd(),
+            cwd or Path.cwd(),
             operation_total=operation_total,
             baseline=baseline,
             candidate=candidate,
@@ -270,7 +297,7 @@ def read_alias_status(arguments: Mapping[str, Any]) -> ToolResult:
             raise ValueError("aliases must be a list of Session alias strings")
         response = status_aliases(
             aliases,
-            Path.cwd(),
+            cwd or Path.cwd(),
             operation_total=operation_total,
             baseline=baseline,
             candidate=candidate,
@@ -320,18 +347,22 @@ def _boolean_argument(arguments: Mapping[str, Any], name: str) -> bool:
     return value
 
 
-def launch_swarm_tool(arguments: Mapping[str, Any]) -> ToolResult:
+def launch_swarm_tool(
+    arguments: Mapping[str, Any], *, cwd: Path | None = None,
+) -> ToolResult:
     """Activate one swarm input; the returned identity stays owned.
 
     The calling Session's Ticket and the registered Ticket state supply the
     identity each task does not repeat.
     """
 
-    response = launch_swarm(dict(arguments), Path.cwd())
+    response = launch_swarm(dict(arguments), cwd or Path.cwd())
     return ToolResult(response.document, failed=not response.succeeded)
 
 
-def send_session_instruction(arguments: Mapping[str, Any]) -> ToolResult:
+def send_session_instruction(
+    arguments: Mapping[str, Any], *, cwd: Path | None = None,
+) -> ToolResult:
     """Steer an active execution or continue an idle mapped Session.
 
     ``reports_only`` resumes the Session to return evidence it already holds
@@ -343,18 +374,20 @@ def send_session_instruction(arguments: Mapping[str, Any]) -> ToolResult:
         send_instruction(
             _string_argument(arguments, "alias"),
             _string_argument(arguments, "instruction"),
-            Path.cwd(),
+            cwd or Path.cwd(),
             _string_list_argument(arguments, "caused_by_event_ids"),
             reports_only=_boolean_argument(arguments, "reports_only"),
         )
     )
 
 
-def interrupt_session_execution(arguments: Mapping[str, Any]) -> ToolResult:
+def interrupt_session_execution(
+    arguments: Mapping[str, Any], *, cwd: Path | None = None,
+) -> ToolResult:
     """Stop a descendant subtree and return each member confirmation."""
 
     return ToolResult(
-        interrupt_session(_string_argument(arguments, "alias"), Path.cwd())
+        interrupt_session(_string_argument(arguments, "alias"), cwd or Path.cwd())
     )
 
 
@@ -372,19 +405,23 @@ def continue_ticket_execution(arguments: Mapping[str, Any]) -> ToolResult:
     )
 
 
-def read_pending_requests(arguments: Mapping[str, Any]) -> ToolResult:
+def read_pending_requests(
+    arguments: Mapping[str, Any], *, cwd: Path | None = None,
+) -> ToolResult:
     """Query the mapped execution's native requests without consuming them."""
 
     return ToolResult(
         pending_requests(
             _string_argument(arguments, "alias"),
-            Path.cwd(),
+            cwd or Path.cwd(),
             execution_id=_optional_string_argument(arguments, "execution_id"),
         )
     )
 
 
-def answer_pending_request(arguments: Mapping[str, Any]) -> ToolResult:
+def answer_pending_request(
+    arguments: Mapping[str, Any], *, cwd: Path | None = None,
+) -> ToolResult:
     """Submit an explicit reply to one request returned by the query path."""
 
     request = arguments.get("request")
@@ -393,7 +430,7 @@ def answer_pending_request(arguments: Mapping[str, Any]) -> ToolResult:
         raise ValueError("request and response must be JSON objects")
     return ToolResult(
         reply_to_request(
-            _string_argument(arguments, "alias"), request, response, Path.cwd()
+            _string_argument(arguments, "alias"), request, response, cwd or Path.cwd()
         )
     )
 
@@ -488,6 +525,26 @@ register_tool(
     _REPLY_SCHEMA,
     answer_pending_request,
 )
+
+
+def read_reports(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> ToolResult:
+    """Read the declared reports of an authorized direct child."""
+    return ToolResult(read_session_reports(_string_argument(arguments, 'alias'), cwd or Path.cwd()))
+
+
+register_tool('session_reports', 'Read the declared current reports of your direct child.',
+              _ALIAS_SCHEMA, read_reports)
+
+
+def submit_report(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> ToolResult:
+    """Submit the current Session's assigned report through the shared operation."""
+    return ToolResult(submit_session_report(_string_argument(arguments, 'name'),
+                                           _string_argument(arguments, 'text'), cwd or Path.cwd()))
+
+
+register_tool('submit_report', 'Write your own assigned report by filename (for example engineer.md).',
+              {'type': 'object', 'properties': {'name': {'type': 'string'}, 'text': {'type': 'string'}},
+               'required': ['name', 'text'], 'additionalProperties': False}, submit_report)
 
 
 def _tool_document(tool: Tool) -> dict[str, Any]:

@@ -134,6 +134,9 @@ for line in sys.stdin:
     elif method == 'initialized':
         initialized = True
         continue
+    elif method == 'config/read':
+        result = {'config': json.loads(os.environ.get('PEER_CONFIG', '{}')),
+                  'origins': {}, 'layers': None}
     elif method in {'thread/start', 'thread/resume'}:
         assert initialized
         thread_id = params.get('threadId', f'thread-{len(sessions) + 1}')
@@ -145,7 +148,7 @@ for line in sys.stdin:
                 'path': str(rollout) if rollout else '/native/' + thread_id + '.jsonl',
                 'turns': [],
             },
-            'model': params['model'],
+            'model': params.get('model', 'runtime-default'),
             'cwd': params['cwd'],
         }
         emit({'method': 'thread/started', 'params': {'thread': result['thread']}})

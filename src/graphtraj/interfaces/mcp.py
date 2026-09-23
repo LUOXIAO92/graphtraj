@@ -29,6 +29,7 @@ from graphtraj.configuration.project_configuration import (
 )
 from graphtraj.execution.execution_budget import budget_notice_output, caller_notice_fd
 from graphtraj.execution.runner_control import (
+    handle_abnormal_session,
     interrupt_session,
     pending_requests,
     reply_to_request,
@@ -358,6 +359,14 @@ def interrupt_session_execution(arguments: Mapping[str, Any]) -> ToolResult:
     )
 
 
+def handle_abnormal_session_execution(arguments: Mapping[str, Any]) -> ToolResult:
+    """Notify a judged-abnormal Session's parent and stop its descendants."""
+
+    return ToolResult(
+        handle_abnormal_session(_string_argument(arguments, "alias"), Path.cwd())
+    )
+
+
 def continue_ticket_execution(arguments: Mapping[str, Any]) -> ToolResult:
     """Continue one stopped current Team through the D.3 stop/continue path."""
 
@@ -464,6 +473,15 @@ register_tool(
     "Sessions. Returns each member confirmation. Equivalent to `agent-runner interrupt`.",
     _ALIAS_SCHEMA,
     interrupt_session_execution,
+)
+register_tool(
+    "handle_abnormal",
+    "Handle one Session judged abnormal: notify its direct parent through that "
+    "parent's existing execution and stop its whole descendant subtree, "
+    "reporting each member's stop result. Leaves a normal or unconfirmed wait "
+    "untouched. Equivalent to `agent-runner handle-abnormal`.",
+    _ALIAS_SCHEMA,
+    handle_abnormal_session_execution,
 )
 register_tool(
     "continue",

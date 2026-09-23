@@ -26,6 +26,7 @@ from test_ticket_graph import _configure, _ticket, _write
 TOOL_NAMES = {
     "alias_status",
     "continue",
+    "handle_abnormal",
     "swarm",
     "interrupt",
     "pending_requests",

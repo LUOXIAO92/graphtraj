@@ -13,6 +13,7 @@ import yaml
 from graphtraj.execution.execution_budget import budget_notice_output, caller_notice_fd
 from graphtraj.execution.runner_cleanup import cleanup_ticket
 from graphtraj.execution.runner_control import (
+    handle_abnormal_session,
     interrupt_session,
     pending_requests,
     reply_to_request,
@@ -219,6 +220,17 @@ def interrupt(alias: str) -> None:
     """Stop a descendant subtree and prevent further work, retaining Sessions."""
     try:
         response = interrupt_session(alias, Path.cwd().resolve())
+    except RunnerError as error:
+        _fail(error, alias=alias)
+    _emit_result(response)
+
+
+@main.command()
+@click.argument("alias")
+def handle_abnormal(alias: str) -> None:
+    """Notify a judged-abnormal Session's parent and stop its descendants."""
+    try:
+        response = handle_abnormal_session(alias, Path.cwd().resolve())
     except RunnerError as error:
         _fail(error, alias=alias)
     _emit_result(response)

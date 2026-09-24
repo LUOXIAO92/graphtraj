@@ -61,3 +61,25 @@ def test_report_reader_rejects_a_redirected_report(
         with pytest.raises(RunnerError) as denied:
             runner_control.read_session_reports('child@e1', tmp_path)
     assert denied.value.code == 'authority-denied'
+
+
+def test_direct_parent_reads_terminal_message_without_report_files(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Temporary children expose their completed result only to their parent."""
+    config = tmp_path / '.graphtraj/config.yml'
+    directory = config.parent / 'runner/sessions/child@e1'
+    directory.mkdir(parents=True)
+    config.write_text(default_configuration_content(tmp_path, tmp_path))
+    (directory / 'execution.yml').write_text(
+        'outcome: completed\nterminal_confirmed: true\nlast_agent_message: synthetic-result\n')
+    monkeypatch.setattr(runner_control, 'read_alias_mapping',
+                        lambda *args: ({'parent': 'parent@l1'}, directory))
+    monkeypatch.setattr(runner_control, '_session_report_paths', lambda *args: ())
+    with runtime_caller(config.parent / 'runner', 'parent@l1'):
+        result = runner_control.read_session_reports('child@e1', tmp_path)
+        assert result == {'alias': 'child@e1', 'reports': [], 'last_agent_message': 'synthetic-result'}
+    with runtime_caller(config.parent / 'runner', 'sibling@e2'):
+        with pytest.raises(RunnerError) as denied:
+            runner_control.read_session_reports('child@e1', tmp_path)
+        assert denied.value.code == 'authority-denied'

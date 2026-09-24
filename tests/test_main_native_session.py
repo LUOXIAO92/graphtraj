@@ -46,9 +46,56 @@ def test_main_start_and_resume_preserve_native_configuration(
     for params in (start, resume):
         assert not {'model', 'modelProvider', 'approvalPolicy', 'approvalsReviewer'} & params.keys()
         assert params['config']['permissions']['operator'] == original['permissions']['operator']
-        selected = params['config']['permissions'][params['config']['default_permissions']]
+        assert params['permissions'] == params['config']['default_permissions']
+        selected = params['config']['permissions'][params['permissions']]
         assert selected['extends'] == 'operator'
         assert selected['filesystem'][str(config.parent)] == 'none'
         assert selected['filesystem'][str(config)] == 'read'
     assert 'graphtraj_swarm' in {tool['name'] for tool in start['dynamicTools']}
     assert 'dynamicTools' not in resume
+
+
+@pytest.mark.parametrize('issuer', ['thread-1', 'helper'])
+def test_main_summarizes_actual_native_status_callback(
+    tmp_path: Path, peer: Path, monkeypatch: pytest.MonkeyPatch, issuer: str,
+) -> None:
+    """Retain issuer classification and field presence without private identities."""
+    import yaml
+
+    config = tmp_path / '.graphtraj/config.yml'
+    directory = config.parent / 'runner/sessions/child@e1'
+    directory.mkdir(parents=True)
+    config.write_text(default_configuration_content(tmp_path, tmp_path))
+    mapping = {'alias': 'child@e1', 'parent': None, 'session': 'private-session',
+               'execution_id': 'private-turn', 'worker_pid': 1, 'runtime_pid': 1,
+               'runtime': 'codex', 'ticket_id': '133', 'team_generation': 2,
+               'role': 'engineer', 'retained_batch_file': 'batch.yml',
+               'worktree_path': str(tmp_path), 'trace_file': 'unused'}
+    (directory / 'mapping.yml').write_text(yaml.safe_dump(mapping))
+    (directory / 'execution.yml').write_text(yaml.safe_dump({
+        'outcome': 'completed', 'terminal_confirmed': True}))
+    entry = {'alias': 'child@e1'}
+    if issuer == 'thread-1':
+        entry.update(session='private-session', execution_id='private-turn')
+    entry.update(activity='idle', last_outcome='completed')
+    exchange = {'method': 'item/tool/call', 'params': {
+        'threadId': issuer, 'tool': 'graphtraj_status', 'arguments': {'aliases': ['child@e1']}},
+        'response': {'contentItems': [{'type': 'inputText', 'text': json.dumps({'aliases': [entry]})}],
+                     'success': True}}
+    monkeypatch.setattr(main_session, 'runtime_executable', lambda runtime: peer)
+    monkeypatch.setenv('PEER_REQUEST_EXCHANGE', json.dumps(exchange))
+    monkeypatch.setenv('PEER_PROTOCOL_LOG', str(tmp_path / 'protocol.jsonl'))
+    monkeypatch.setenv('PEER_THREAD_PARENTS', '{"helper":"thread-1"}')
+    monkeypatch.setenv('PEER_NATIVE_ROLLOUT', str(tmp_path / 'native'))
+
+    async def native_request(request: CodexServerRequest) -> dict:
+        """All requests in this scenario must use the native operation handler."""
+        raise AssertionError(request.method)
+
+    result = asyncio.run(main_session.run_main(tmp_path, 'configured-request', None, native_request))
+    assert result['last_agent_message'] == 'request accepted'
+    assert result['native_operations'] == [{
+        'tool': 'graphtraj_status', 'success': True, 'from_main': issuer == 'thread-1',
+        'aliases': [{'alias': 'child@e1', 'has_session': issuer == 'thread-1',
+                     'has_execution_id': issuer == 'thread-1'}]}]
+    assert 'private-session' not in json.dumps(result['native_operations'])

@@ -47,7 +47,7 @@ async def run_main(
     """Run one Main turn; native user requests keep their original response format.
 
     A formal Agent cannot become Main in its own Harness. New Main records use
-    the existing Session storage; resuming one keeps its native identity and
+    separate Main storage; resuming one keeps its native identity and
     originally registered tools. No Team or child-role preset is created.
     """
     configuration = load_project_configuration(root)
@@ -58,7 +58,9 @@ async def run_main(
         raise RunnerError('invalid-input', 'Main requires an instruction.')
     if resume is not None and re.fullmatch(r'main_[0-9a-f]{32}', resume) is None:
         raise RunnerError('invalid-input', 'Resume requires a Main record returned by this entry.')
-    record = runner / 'sessions' / (resume or ('main_' + uuid.uuid4().hex))
+    # Formal status enumeration expects an alias mapping for every sessions/
+    # entry. Main owns a native Session, but is not a formal Agent alias.
+    record = runner / 'main-sessions' / (resume or ('main_' + uuid.uuid4().hex))
     if resume is None:
         record.mkdir(parents=True, exist_ok=False)
     # Same-Session continuation cannot create a second active Main driver.

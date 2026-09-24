@@ -99,3 +99,53 @@ def test_main_summarizes_actual_native_status_callback(
         'aliases': [{'alias': 'child@e1', 'has_session': issuer == 'thread-1',
                      'has_execution_id': issuer == 'thread-1'}]}]
     assert 'private-session' not in json.dumps(result['native_operations'])
+
+
+def test_main_empty_status_start_resume_and_invalid_formal_record(
+    tmp_path: Path, peer: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Main records do not pollute status; malformed formal records still fail."""
+    from graphtraj.interfaces.mcp import read_alias_status
+
+    config = tmp_path / '.graphtraj/config.yml'
+    config.parent.mkdir()
+    config.write_text(default_configuration_content(tmp_path, tmp_path))
+    exchange = {'method': 'item/tool/call', 'params': {
+        'threadId': 'thread-1', 'tool': 'graphtraj_status', 'arguments': {}},
+        'response': {'contentItems': [{'type': 'inputText', 'text': json.dumps({'agents': []})}],
+                     'success': True}}
+    monkeypatch.setattr(main_session, 'runtime_executable', lambda runtime: peer)
+    monkeypatch.setenv('PEER_REQUEST_EXCHANGE', json.dumps(exchange))
+    monkeypatch.setenv('PEER_NATIVE_ROLLOUT', str(tmp_path / 'native'))
+
+    async def native_request(request: CodexServerRequest) -> dict:
+        """Status must be handled by the real callback, not an external reply."""
+        raise AssertionError(request.method)
+
+    async def exercise() -> None:
+        """Observe empty status during both turns of the same Main Session."""
+        first = await main_session.run_main(tmp_path, 'configured-request', None, native_request)
+        second = await main_session.run_main(
+            tmp_path, 'configured-request', first['record'], native_request,
+        )
+        assert first['session'] == second['session']
+        assert first['record'] == second['record']
+        for result in (first, second):
+            assert result['last_agent_message'] == 'request accepted'
+            assert result['native_operations'] == [{
+                'tool': 'graphtraj_status', 'success': True, 'from_main': True, 'aliases': [],
+            }]
+
+    asyncio.run(exercise())
+    clean = read_alias_status({}, cwd=tmp_path)
+    assert not clean.failed
+    assert clean.document == {'agents': []}
+
+    # Do not fix Main by suppressing unreadable or malformed formal records.
+    broken = config.parent / 'runner/sessions/broken@e1'
+    broken.mkdir(parents=True)
+    (broken / 'mapping.yml').write_text('{}\n')
+    invalid = read_alias_status({}, cwd=tmp_path)
+    assert invalid.failed
+    assert invalid.document['agents'][0]['alias'] == 'broken@e1'
+    assert invalid.document['agents'][0]['error']['code'] == 'operation-failed'

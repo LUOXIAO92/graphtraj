@@ -88,6 +88,17 @@ elif (
     (round_dir / 'spec.md').unlink()
     (Path.cwd() / '.scratch/retained-review-failed').touch()
     raise SystemExit(1)
+elif role == 'team-leader' and 'Replace the registered failed Engineer.' in prompt:
+    request = json.loads((Path.cwd() / '.scratch/replacement-request.json').read_text())
+    result = subprocess.run(
+        [os.environ['GRAPHTRAJ_AGENT_RUNNER'], 'replace', request['alias'],
+         '--caused-by-event-id', request['cause']],
+        cwd=os.environ['GRAPHTRAJ_HARNESS_ROOT'],
+        check=False, text=True, capture_output=True,
+    )
+    (Path.cwd() / '.scratch/replacement-result.json').write_text(json.dumps({
+        'returncode': result.returncode, 'stdout': result.stdout, 'stderr': result.stderr,
+    }))
 elif role == 'team-leader':
     if not (round_dir / 'engineer.md').exists():
         if target != 'dispatch' or 'Recovery required:' in prompt:
@@ -875,7 +886,7 @@ def test_access_failure_returns_to_the_responsible_operator_without_agent_reflec
     assert 'Recovery required:' not in engineer.read_text()
 
 
-def test_main_replaces_a_registered_failed_engineer_from_its_durable_alias(
+def test_parent_replaces_a_registered_failed_engineer_from_its_durable_alias(
     installed_commands, temporary_git_repository, fake_codex, tmp_path,
 ):
     harness, _, _, environment = configure_harness(
@@ -921,16 +932,27 @@ def test_main_replaces_a_registered_failed_engineer_from_its_durable_alias(
         for line in path.read_text().splitlines()
     ][-1]
 
-    replaced = run_process(
+    # Main requests the real parent; an actor label cannot grant ownership.
+    scratch = harness / '.graphtraj/.agent-worktrees/76-session-alias-control/.scratch'
+    (scratch / 'replacement-request.json').write_text(json.dumps({
+        'alias': alias, 'cause': cause,
+    }))
+    requested = run_process(
         [
-            str(installed_commands.runner), 'replace', alias, '--actor', 'main',
+            str(installed_commands.runner), 'send', mapping['parent'],
+            '--instruction', 'Replace the registered failed Engineer.',
             '--caused-by-event-id', cause,
         ],
         cwd=harness, env=runtime_environment, timeout=45,
     )
-
-    assert replaced.returncode == 0, replaced.stdout + replaced.stderr
-    replacement = yaml.safe_load(replaced.stdout)['replacement_alias']
+    assert requested.returncode == 0, requested.stdout + requested.stderr
+    result_file = scratch / 'replacement-result.json'
+    wait_for_file(result_file)
+    replaced = json.loads(result_file.read_text())
+    assert replaced['returncode'] == 0, replaced
+    response = yaml.safe_load(replaced['stdout'])
+    assert 'replacement_alias' in response, replaced
+    replacement = response['replacement_alias']
     team = yaml.safe_load(team_file.read_text())
     assert replacement != alias
     assert team['members']['engineer']['session_ref'] == replacement

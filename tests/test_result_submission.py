@@ -194,44 +194,6 @@ def test_cli_submits_versioned_code_using_real_process_ownership(tmp_path: Path)
         assert mcp.read_reports({'alias': 'research@x1'}, cwd=tmp_path).document['submissions'] == [submission]
 
 
-def test_role_assignments_survive_native_followup_permissions(tmp_path: Path) -> None:
-    """Same-role members retain distinct exact report permissions on followup."""
-    from graphtraj.configuration.project_roles import RolePreset
-    from graphtraj.configuration.role_definitions import ResolvedChildRole
-    from graphtraj.runtimes.codex.codex_adapter import preflight_runtime_context
-    from graphtraj.execution.runner_control import _refresh_current_team_report_request
-
-    runner, team, _ = result_project(tmp_path)
-    worktree = tmp_path / 'worktrees/research'
-    executable = tmp_path / 'codex-peer'
-    executable.write_text('#!/bin/sh\necho --sandbox\n')
-    executable.chmod(0o755)
-    evidence = team.parents[2]
-    requests = []
-    for alias in ('research@x1', 'research@x2'):
-        mapping = yaml.safe_load((runner / 'sessions' / alias / 'mapping.yml').read_text())
-        reports = tuple(Path(path) for path in mapping['report_files'])
-        resolved = preflight_runtime_context(
-            runtime_store=tmp_path / '.codex', executable=executable,
-            git_common_directory=worktree / '.git',
-            role=ResolvedChildRole('temporary-role', 'Research.', (),
-                                   RolePreset('codex', 'model', None, None)),
-            worktree=worktree, evidence=evidence, repository_skill_source=worktree,
-            requested_skills=(), report_files=reports,
-        ).finalize()
-        request = resolved.launch_document()['adapter_request']
-        refreshed = _refresh_current_team_report_request(
-            request, mapping, worktree, {'GRAPHTRAJ_EVIDENCE': str(evidence)},
-        )
-        config = refreshed['session_parameters']['config']
-        filesystem = config['permissions'][config['default_permissions']]['filesystem']
-        own = str(evidence / f'teams/1/rounds/1/researcher-{alias.split("@")[1]}.md')
-        assert filesystem[own] == 'read'
-        requests.append(filesystem)
-    assert str(evidence / 'teams/1/rounds/1/researcher-x2.md') not in requests[0]
-    assert str(evidence / 'teams/1/rounds/1/researcher-x1.md') not in requests[1]
-
-
 def test_new_role_aliases_get_distinct_named_reports(tmp_path: Path) -> None:
     """Native alias entities distinguish repeated role reports without a registry."""
     from graphtraj.graph.delivery_state import apply_delivery_state_request

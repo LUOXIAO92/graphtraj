@@ -1191,3 +1191,64 @@ def test_team_leader_projection_keeps_control_files_private(
     assert filesystem.get(str(sessions)) != 'write'
     assert filesystem.get(str(sessions / 'other-ticket@e1')) != 'write'
     assert filesystem[':workspace_roots']['.'] == 'read'
+
+
+def test_role_assignments_survive_native_followup_permissions(
+    tmp_path: Path, peer: Path,
+) -> None:
+    """Actual same-role Sessions retain isolated report grants across native resume."""
+    from graphtraj.execution.runner_results import assign_session_reports
+
+    async def exercise() -> None:
+        root = tmp_path / 'worktree'
+        root.mkdir()
+        evidence = tmp_path / '.graphtraj/state/tickets/149-reports'
+        role = ResolvedChildRole(
+            'engineer', 'Implement the assigned task.', (),
+            RolePreset('codex', 'chosen-model', None, None),
+        )
+        contexts = [
+            preflight_runtime_context(
+                runtime_store=tmp_path / '.codex', executable=peer,
+                git_common_directory=tmp_path / 'git-common', role=role,
+                worktree=root, evidence=evidence, repository_skill_source=root,
+                requested_skills=(), report_files=assign_session_reports(
+                    'engineer', f'149-reports-handover0-engineer@{entity}', 1, 1,
+                ),
+            ).finalize()
+            for entity in ('engineer', 'engineer_2')
+        ]
+        reports = [
+            str(evidence / 'teams/1/rounds/1' / name)
+            for name in ('engineer.md', 'engineer-engineer_2.md')
+        ]
+
+        async def observe(adapter: CodexAppServer, session: CodexSession, index: int) -> dict:
+            """Inspect the configuration received by the external native peer."""
+            turn = await adapter.start_execution(session, 'configuration')
+            observed = json.loads((await adapter.wait(turn, timeout=2))['last_agent_message'])
+            config = observed['config']
+            filesystem = config['permissions'][config['default_permissions']]['filesystem']
+            assert filesystem[reports[index]] == 'read'
+            assert reports[1 - index] not in filesystem
+            assert filesystem[str(tmp_path / '.graphtraj')] == 'none'
+            assert not any(
+                filesystem.get(str(parent)) in {'read', 'write'}
+                for parent in Path(reports[1 - index]).parents
+            )
+            assert filesystem[':workspace_roots']['.'] == 'write'
+            return filesystem
+
+        async with CodexAppServer(command=[str(peer)], cwd=tmp_path) as adapter:
+            sessions = [await adapter.create_session(value) for value in contexts]
+            assert sessions[0].thread_id != sessions[1].thread_id
+            original = [await observe(adapter, session, index)
+                        for index, session in enumerate(sessions)]
+
+        async with CodexAppServer(command=[str(peer)], cwd=tmp_path) as adapter:
+            for index, session in enumerate(sessions):
+                resumed = await adapter.resume_session(contexts[index], session.thread_id)
+                assert resumed.thread_id == session.thread_id
+                assert await observe(adapter, resumed, index) == original[index]
+
+    asyncio.run(exercise())

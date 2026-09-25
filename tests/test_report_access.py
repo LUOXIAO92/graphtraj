@@ -8,32 +8,25 @@ from graphtraj.configuration.project_configuration import default_configuration_
 from graphtraj.execution import runner_control
 from graphtraj.execution.runner_models import RunnerError
 from graphtraj.execution.runner_status import runtime_caller
-from graphtraj.teams.coding import team_replacement
+from test_result_submission import result_project
 
 
 def test_report_submission_uses_only_the_issuers_assignment(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """An assigned filename works; another report or a Main claim cannot write."""
-    config = tmp_path / '.graphtraj/config.yml'
-    config.parent.mkdir()
-    config.write_text(default_configuration_content(tmp_path, tmp_path))
-    runner = config.parent / 'runner'
-    report = config.parent / 'state/tickets/133-test/teams/1/rounds/1/engineer.md'
-    monkeypatch.setattr(runner_control, 'discover_project', lambda *args, **kwargs: None)
-    monkeypatch.setattr(team_replacement, 'require_active_session', lambda *args: None)
-    monkeypatch.setattr(runner_control, '_session_report_paths',
-                        lambda alias, cwd: (report,) if alias == 'owner@e1' else ())
-    with runtime_caller(runner, 'owner@e1'):
-        result = runner_control.submit_session_report('engineer.md', 'owned report', tmp_path)
-        assert result['alias'] == 'owner@e1'
+    runner, team, _ = result_project(tmp_path)
+    report = team.parent / 'rounds/1/researcher-x1.md'
+    with runtime_caller(runner, 'research@x1'):
+        result = runner_control.submit_session_report('researcher-x1.md', 'owned report', tmp_path)
+        assert result['alias'] == 'research@x1'
         assert report.read_text() == 'owned report'
         with pytest.raises(RunnerError) as denied:
             runner_control.submit_session_report('../leader.md', 'wrong owner', tmp_path)
         assert denied.value.code == 'authority-denied'
     with runtime_caller(runner, None):
         with pytest.raises(RunnerError) as denied:
-            runner_control.submit_session_report('engineer.md', 'not its report', tmp_path)
+            runner_control.submit_session_report('researcher-x1.md', 'not its report', tmp_path)
         assert denied.value.code == 'authority-denied'
     assert report.read_text() == 'owned report'
 
@@ -75,7 +68,7 @@ def test_direct_parent_reads_terminal_message_without_report_files(
         'outcome: completed\nterminal_confirmed: true\nlast_agent_message: synthetic-result\n')
     monkeypatch.setattr(runner_control, 'read_alias_mapping',
                         lambda *args: ({'parent': 'parent@l1'}, directory))
-    monkeypatch.setattr(runner_control, '_session_report_paths', lambda *args: ())
+    monkeypatch.setattr(runner_control, '_session_report_paths', lambda *args, **kwargs: ())
     with runtime_caller(config.parent / 'runner', 'parent@l1'):
         result = runner_control.read_session_reports('child@e1', tmp_path)
         assert result == {'alias': 'child@e1', 'reports': [], 'last_agent_message': 'synthetic-result'}

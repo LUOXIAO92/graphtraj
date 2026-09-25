@@ -2355,7 +2355,16 @@ def _execute_agent(
     budget_stage = execution_budget_stage(role)
     team_file = traces.parent / "team.yml"
     ordinal = yaml.safe_load(team_file.read_text())["current_round"] if team_file.exists() else 1
-    report_files = _role_report_files(task, policy_role, role, generation, ordinal)
+    report_files = _role_report_files(task, policy_role, role, generation, ordinal, alias)
+    if expected_session is not None:
+        from graphtraj.execution.runner_control import _session_report_paths
+
+        report_files = tuple(
+            Path('.state') / path.relative_to(evidence)
+            for path in _session_report_paths(alias, project.harness_root)
+        )
+    if task.report_file is not None:
+        task = replace(task, report_file=report_files[0])
     # The launched entity keeps its role name; the configured reference that
     # selected its Runtime settings travels with this Session's records. A seat
     # another identity occupies is selected by its own role, not by its batch's.
@@ -2409,6 +2418,7 @@ def _execute_agent(
                     "retained_batch_file": str(retained_batch),
                     "worktree_path": str(worktree),
                     "trace_file": str(trace),
+                    "report_files": [path.as_posix() for path in report_files],
                     "report_file": (
                         task.report_file.as_posix()
                         if task.report_file is not None else None
@@ -2428,6 +2438,11 @@ def _execute_agent(
     if task.instruction:
         task_prompt += "\n## Additional instruction\n\n" + task.instruction + "\n"
     round_directory = traces.parent / "rounds" / str(ordinal)
+    task_prompt += "\nAssigned report paths: " + ', '.join(map(str, report_files)) + ".\n"
+    task_prompt += (
+        "To submit a task result, use graphtraj_submit_result (or agent-runner submit-result) "
+        "including Worktree-relative result_refs, evidence_refs, completion and unresolved items.\n"
+    )
     if reports_only:
         task_prompt += (
             "\nThis continuation has read-only Worktree access. New implementation "
@@ -2437,8 +2452,8 @@ def _execute_agent(
     elif policy_role in _ENGINEER_ROLES and round_directory.stat().st_mode & 0o200:
         task_prompt += (
             "\nWrite the fixed candidate and self-review to "
-            f".state/teams/{generation}/rounds/{ordinal}/engineer.md and its test results to "
-            f".state/teams/{generation}/rounds/{ordinal}/validation.md. Include the candidate commit in both.\n"
+            f"{report_files[0]} and its test results to "
+            f"{report_files[-1]}. Include the candidate commit in both.\n"
         )
         if ordinal > 1:
             task_prompt += (
@@ -2447,7 +2462,7 @@ def _execute_agent(
             )
     elif policy_role == "team-leader" and not os.environ.get("GRAPHTRAJ_RETIRING"):
         task_prompt += (
-            f"\nCurrent Team generation: {generation}. Write the decision to .state/teams/{generation}/rounds/{ordinal}/leader.md. "
+            f"\nCurrent Team generation: {generation}. Write the decision to {report_files[0]}. "
             "Only a compliant implementation rejection may request rework: include exact lines "
             "Decision: REJECT, Diagnosis: implementation, Reviews: compliant, Action: rework "
             "and a nonempty Rationale: explaining the evidence and correction. "
@@ -2466,7 +2481,7 @@ def _execute_agent(
         if (
             report.parent.is_symlink()
             or not report.parent.is_dir()
-            or os.path.lexists(report)
+            or (expected_session is None and os.path.lexists(report))
         ):
             raise RunnerError("REPORT_FILE_INVALID", "The Reviewer report path is not new.")
         comparison = project.dev_commit
@@ -2969,15 +2984,25 @@ def _role_report_files(
     role: str,
     generation: int,
     ordinal: int,
+    alias: str,
 ) -> tuple[Path, ...]:
-    if policy_role in _ENGINEER_ROLES:
-        directory = Path(".state") / "teams" / str(generation) / "rounds" / str(ordinal)
-        return (directory / "engineer.md", directory / "validation.md")
-    if policy_role == "team-leader":
-        return (
-            Path(".state") / "teams" / str(generation) / "rounds" / str(ordinal) / "leader.md",
-        )
-    return (task.report_file,) if policy_role in _REVIEWER_ROLES and task.report_file else ()
+    """Assign role reports once, using the actual alias to avoid collisions.
+
+    Existing coding report names remain available to their task instructions;
+    they are not prerequisites for the common result submission operation.
+    """
+    from graphtraj.execution.runner_results import assign_session_reports
+
+    directory = Path('.state') / 'teams' / str(generation) / 'rounds' / str(ordinal)
+    if task.report_file is not None:
+        reports = (task.report_file,)
+    elif policy_role in _ENGINEER_ROLES:
+        reports = (directory / 'engineer.md', directory / 'validation.md')
+    elif policy_role == 'team-leader':
+        reports = (directory / 'leader.md',)
+    else:
+        reports = ()
+    return assign_session_reports(role, alias, generation, ordinal, reports)
 
 
 def _review_report_name(role: str) -> str:
@@ -3095,6 +3120,26 @@ def _validate_round(round_directory: Path, worktree: Path) -> str:
 
 
 def _candidate(round_directory: Path, worktree: Path) -> str:
+    """Read the submitted Round version, retaining historical report reads."""
+    from graphtraj.configuration.project_configuration import load_project_configuration
+    from graphtraj.workspace.runner_project import discover_project_root
+
+    harness = discover_project_root(worktree)
+    configuration = load_project_configuration(harness)
+    events = read_worldline(configuration.state, harness)
+    ticket_id = yaml.safe_load((round_directory.parents[3] / 'ticket.yml').read_text())['ticket_id']
+    submissions = [event for event in events if event['kind'] == 'result-submitted'
+                   and event.get('team_ordinal') == int(round_directory.parent.parent.name)
+                   and event.get('round') == int(round_directory.name)
+                   and event.get('ticket_id') == ticket_id]
+    if submissions:
+        candidate = submissions[-1]['candidate']
+        if run_git(worktree, 'rev-parse', 'HEAD') != candidate or not (
+            git_succeeds(worktree, 'diff', '--quiet')
+            and git_succeeds(worktree, 'diff', '--cached', '--quiet')
+        ):
+            raise RunnerError(_AGENT_EVIDENCE_ERROR, 'The submitted version differs from the Worktree.')
+        return candidate
     try:
         engineer = (round_directory / "engineer.md").read_text(encoding="utf-8")
         validation = (round_directory / "validation.md").read_text(encoding="utf-8")
@@ -3142,6 +3187,11 @@ def _collect_review_report(
 ) -> None:
     source = evidence / "reviews" / source_name
     target = round_directory / (target_name or source_name)
+    if session_directory is not None:
+        mapping, _ = read_alias_mapping(session_directory.parent.parent, session_directory.name)
+        assigned = mapping.get('report_files', [])
+        if assigned:
+            source = evidence.joinpath(*Path(assigned[0]).parts[1:])
     if source.is_symlink() or not source.is_file() or target.exists():
         command_error = (
             _current_command_parse_error(session_directory)
@@ -3156,9 +3206,9 @@ def _collect_review_report(
                 else "The Reviewer did not produce its exact report."
             ),
         )
-    source.replace(target)
-    if not any(source.parent.iterdir()):
-        source.parent.rmdir()
+    # Keep the author's assigned report readable after collecting Round evidence.
+    # A later report write cannot change the copy inspected in this Round.
+    shutil.copyfile(source, target)
 
 
 def _worker_main() -> None:

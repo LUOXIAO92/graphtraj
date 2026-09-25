@@ -338,3 +338,39 @@ def cleanup(ticket_id: str | None) -> None:
         error = response.document["error"]
         click.echo(error["message"], err=True)
         raise click.exceptions.Exit(1)
+
+
+@main.command('reports')
+@click.argument('alias')
+def reports(alias: str) -> None:
+    """Read a directly owned Session's reports and retained result submissions."""
+    from graphtraj.execution.runner_control import read_session_reports
+    from graphtraj.workspace.runner_project import discover_project_root
+
+    try:
+        _emit_result(read_session_reports(alias, discover_project_root(Path.cwd())))
+    except (RunnerError, ValueError, OSError) as error:
+        _fail(error if isinstance(error, RunnerError) else RunnerError('RESULT_INVALID', str(error)))
+
+
+@main.command('submit-result')
+@click.option('--commit', required=True)
+@click.option('--result-ref', 'result_refs', multiple=True, required=True)
+@click.option('--evidence-ref', 'evidence_refs', multiple=True)
+@click.option('--completion', required=True)
+@click.option('--unresolved', multiple=True)
+def submit_result(
+    commit: str,
+    result_refs: tuple[str, ...],
+    evidence_refs: tuple[str, ...],
+    completion: str,
+    unresolved: tuple[str, ...],
+) -> None:
+    """Submit the calling Session's committed files and retained evidence."""
+    from graphtraj.execution.runner_results import submit_session_result
+
+    try:
+        _emit_result(submit_session_result(commit, result_refs, evidence_refs, completion,
+                                         unresolved, Path.cwd()))
+    except (RunnerError, ValueError, OSError) as error:
+        _fail(error if isinstance(error, RunnerError) else RunnerError('RESULT_INVALID', str(error)))

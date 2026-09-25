@@ -174,6 +174,30 @@ def test_installed_runner_accepts_non_english_engineer_self_review(
     assert "自审：已完成。" in (
         ticket / "teams/1/rounds/1/engineer.md"
     ).read_text()
+    from graphtraj.execution.runner_control import read_session_reports
+    from graphtraj.execution.runner_status import runtime_caller
+
+    runner = harness_root / '.graphtraj/runner'
+    for path in (runner / 'sessions').glob('*/mapping.yml'):
+        mapping = yaml.safe_load(path.read_text())
+        if mapping['role'] in {'standards-reviewer', 'spec-reviewer'}:
+            with runtime_caller(runner, mapping['parent']):
+                reports = read_session_reports(mapping['alias'], harness_root)['reports']
+            assert reports and reports[0]['text']
+            # Reconstruct the retained format written before per-Session assignments.
+            # Its collector moved the source into the Round, without renaming it.
+            Path(reports[0]['path']).unlink()
+            mapping.pop('report_files')
+            path.write_text(yaml.safe_dump(mapping))
+            launch_path = path.with_name('launch.yml')
+            launch = yaml.safe_load(launch_path.read_text())
+            launch['mapping'].pop('report_files')
+            launch_path.write_text(yaml.safe_dump(launch))
+            with runtime_caller(runner, mapping['parent']):
+                historical = read_session_reports(mapping['alias'], harness_root)['reports']
+            assert historical[0]['text'] == reports[0]['text']
+            assert '/rounds/1/' in historical[0]['path']
+
 
 
 @pytest.mark.parametrize(
@@ -507,7 +531,10 @@ def test_installed_runner_obeys_the_explicit_leader_decision_for_a_run_free_team
     assert not list(ticket_directory.rglob("turn-*"))
     assert not (ticket_directory / "metadata.yml").exists()
     assert not (ticket_directory / "handoff.md").exists()
-    assert not (ticket_directory / "reviews").exists()
+    assert all(
+        (ticket_directory / 'reviews' / name).is_file()
+        for name in ('standards.md', 'spec.md')
+    )
     assert not (harness_root / ".graphtraj" / "state" / "runs").exists()
     assert not any(path.name in {"ledger.yml", "dag.md", "history.jsonl"} for path in ticket_directory.rglob("*"))
     worldline = [
@@ -1208,3 +1235,36 @@ def test_installed_runner_rejects_malformed_inline_roles_before_retaining_a_batc
     assert roles_file.read_bytes() == roles_before
     assert not (harness_root / ".graphtraj" / "state" / "batches").exists()
     assert not fake_codex.log_file.exists()
+
+
+def test_coding_candidate_consumes_the_common_result_submission(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    """Candidate registration needs the submitted version, not report prose."""
+    from graphtraj.graph.delivery_worldline import read_worldline
+
+    harness, _, _, environment = configure_harness(
+        installed_commands, temporary_git_repository, fake_codex, tmp_path,
+    )
+    _register_ready_inline_ticket(harness, installed_commands.product)
+    batch = harness / 'submission-batch.yml'
+    batch.write_text('tasks:\n  - ticket_id: "75"\n    role: team-leader\n')
+    launched = run_process(
+        [str(installed_commands.runner), '--swarm-input', str(batch)], cwd=harness,
+        env={**environment, 'FAKE_CODEX_LIFECYCLE_ACTION': 'complete-team-round',
+             'GRAPHTRAJ_AGENT_RUNNER': str(installed_commands.runner),
+             'FAKE_CODEX_SUBMIT_RESULT': '1', 'FAKE_CODEX_REPORT_WITHOUT_COMMIT': '1'},
+        timeout=45,
+    )
+    events = read_worldline(harness / '.graphtraj/state', harness)
+    submitted = [event for event in events if event['kind'] == 'result-submitted']
+    candidates = [event for event in events if event['kind'] == 'candidate-ready-for-review']
+    assert submitted and candidates, launched.stdout + launched.stderr
+    assert candidates[0]['candidate'] == submitted[0]['candidate']
+    assert submitted[0]['role'] == 'engineer'
+    assert (harness / submitted[0]['evidence_refs'][0]).read_text().startswith('Candidate commit:')
+    # D5 still owns acceptance's professional-report checks; this tests only D3.
+    assert not any(event['kind'] == 'team-accepted' for event in events)

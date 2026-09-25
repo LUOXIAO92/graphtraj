@@ -210,6 +210,7 @@ NATIVE_RUNNER_TOOLS = {
     'graphtraj_reply': 'reply_to_request',
     'graphtraj_reports': 'session_reports',
     'graphtraj_submit_report': 'submit_report',
+    'graphtraj_submit_result': 'submit_result',
     'graphtraj_ticket_graph': 'ticket_graph',
 }
 
@@ -532,7 +533,7 @@ def read_reports(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> To
     return ToolResult(read_session_reports(_string_argument(arguments, 'alias'), cwd or Path.cwd()))
 
 
-register_tool('session_reports', 'Read the declared current reports of your direct child.',
+register_tool('session_reports', "Read your or your direct child's reports and retained result submissions.",
               _ALIAS_SCHEMA, read_reports)
 
 
@@ -545,6 +546,34 @@ def submit_report(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> T
 register_tool('submit_report', 'Write your own assigned report by filename (for example engineer.md).',
               {'type': 'object', 'properties': {'name': {'type': 'string'}, 'text': {'type': 'string'}},
                'required': ['name', 'text'], 'additionalProperties': False}, submit_report)
+
+
+def submit_result(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> ToolResult:
+    """Submit a versioned result using the authenticated Session context."""
+    from graphtraj.execution.runner_results import submit_session_result
+
+    if set(arguments) - {'commit', 'result_refs', 'evidence_refs', 'completion', 'unresolved'}:
+        raise ValueError('Unknown result submission fields.')
+    return ToolResult(submit_session_result(
+        _string_argument(arguments, 'commit'),
+        _string_list_argument(arguments, 'result_refs'),
+        _string_list_argument(arguments, 'evidence_refs'),
+        _string_argument(arguments, 'completion'),
+        _string_list_argument(arguments, 'unresolved'),
+        cwd or Path.cwd(),
+    ))
+
+
+register_tool('submit_result',
+              'Submit your committed task result and retain its evidence. Equivalent to agent-runner submit-result.',
+              {'type': 'object', 'properties': {
+                  'commit': {'type': 'string'},
+                  'result_refs': {'type': 'array', 'minItems': 1, 'items': {'type': 'string'}},
+                  'evidence_refs': {'type': 'array', 'items': {'type': 'string'}},
+                  'completion': {'type': 'string'},
+                  'unresolved': {'type': 'array', 'items': {'type': 'string'}},
+              }, 'required': ['commit', 'result_refs', 'completion'], 'additionalProperties': False},
+              submit_result)
 
 
 def _tool_document(tool: Tool) -> dict[str, Any]:

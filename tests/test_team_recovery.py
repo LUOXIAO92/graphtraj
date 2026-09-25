@@ -88,11 +88,15 @@ elif (
     (round_dir / 'spec.md').unlink()
     (Path.cwd() / '.scratch/retained-review-failed').touch()
     raise SystemExit(1)
-elif role == 'team-leader' and 'Replace the registered failed Engineer.' in prompt:
+elif role == 'team-leader' and any(text in prompt for text in (
+    'Replace the registered failed Engineer.', 'Manage the registered member.',
+)):
     request = json.loads((Path.cwd() / '.scratch/replacement-request.json').read_text())
+    operation = request.get('operation', 'replace')
+    arguments = ['--instruction', 'Continue the exact current report.'] if operation == 'send' else []
     result = subprocess.run(
-        [os.environ['GRAPHTRAJ_AGENT_RUNNER'], 'replace', request['alias'],
-         '--caused-by-event-id', request['cause']],
+        [os.environ['GRAPHTRAJ_AGENT_RUNNER'], operation, request['alias'],
+         '--caused-by-event-id', request['cause'], *arguments],
         cwd=os.environ['GRAPHTRAJ_HARNESS_ROOT'],
         check=False, text=True, capture_output=True,
     )
@@ -229,7 +233,7 @@ else:
     if (
         target in {'replacement-review', 'replacement-rework'}
         and role == 'spec-reviewer'
-        and not Path(os.environ['GRAPHTRAJ_REVIEW_REPORT']).name.endswith('-replacement.md')
+        and '-replacement' not in Path(os.environ['GRAPHTRAJ_REVIEW_REPORT']).name
     ):
         raise SystemExit(1)
     if target == 'completed-access' and role == 'spec-reviewer':
@@ -1006,16 +1010,27 @@ def test_replacement_reviewer_report_continues_the_current_team_once(
         for line in path.read_text().splitlines()
     ][-1]
 
-    replaced = run_process(
-        [
-            str(installed_commands.runner), 'replace', alias, '--actor', 'main',
-            '--caused-by-event-id', cause,
-        ],
-        cwd=harness, env=runtime_environment, timeout=45,
-    )
+    scratch = harness / '.graphtraj/.agent-worktrees/76-session-alias-control/.scratch'
 
-    assert replaced.returncode == 0, replaced.stdout + replaced.stderr
-    replacement = yaml.safe_load(replaced.stdout)['replacement_alias']
+    def parent_operation(member: str, event: str, operation: str) -> dict:
+        """Ask the actual parent to control its child over the public CLI."""
+        (scratch / 'replacement-request.json').write_text(json.dumps({
+            'alias': member, 'cause': event, 'operation': operation,
+        }))
+        result_file = scratch / 'replacement-result.json'
+        result_file.unlink(missing_ok=True)
+        requested = run_process(
+            [str(installed_commands.runner), 'send', mapping['parent'],
+             '--instruction', 'Manage the registered member.', '--caused-by-event-id', event],
+            cwd=harness, env=runtime_environment, timeout=45,
+        )
+        assert requested.returncode == 0, requested.stdout + requested.stderr
+        wait_for_file(result_file)
+        result = json.loads(result_file.read_text())
+        assert result['returncode'] == 0, result
+        return yaml.safe_load(result['stdout'])
+
+    replacement = parent_operation(alias, cause, 'replace')['replacement_alias']
     assert yaml.safe_load(team_file.read_text())['members']['spec_reviewer']['session_ref'] == replacement
     target_file = (
         harness / '.graphtraj/.agent-worktrees/76-session-alias-control'
@@ -1027,18 +1042,13 @@ def test_replacement_reviewer_report_continues_the_current_team_once(
         for path in (harness / '.graphtraj/state/worldline').glob('*.jsonl')
         for line in path.read_text().splitlines()
     ][-1]
-    resumed = run_process(
-        [
-            str(installed_commands.runner), 'send', replacement,
-            '--instruction', 'Continue the exact current Spec report.',
-            '--caused-by-event-id', replacement_cause,
-        ],
-        cwd=harness, env=runtime_environment, timeout=45,
-    )
-    assert resumed.returncode == 0, resumed.stdout + resumed.stderr
+    parent_operation(replacement, replacement_cause, 'send')
     wait_for_file(target_file)
     report_target = target_file.read_text()
-    assert report_target.endswith(alias + '-replacement.md')
+    replacement_mapping = yaml.safe_load(
+        (harness / '.graphtraj/runner/sessions' / replacement / 'mapping.yml').read_text()
+    )
+    assert report_target == str(ticket.joinpath(*Path(replacement_mapping['report_file']).parts[1:]))
 
     continued = run_process(
         [str(installed_commands.runner), '--swarm-input', str(batch)],

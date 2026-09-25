@@ -487,6 +487,25 @@ candidate and the final `team-round-accepted` event. A Leader can be idle while
 its children execute; Session completion alone is not Team acceptance. Current
 Round reports remain under `tickets/<id>-<name>/teams/<generation>/rounds/<round>/`.
 
+A registered member can submit code, Markdown or LaTeX through the same operation:
+
+```sh
+agent-runner submit-result --commit <full-commit> --result-ref result.md \
+  --evidence-ref .state/teams/1/rounds/1/researcher.md --completion "Research complete"
+agent-runner reports <alias>
+```
+
+Result paths are relative to the member's Worktree and must exist at its current
+committed version. Evidence may name committed files, the member's assigned
+reports, or its Trace. `--evidence-ref` and `--unresolved` may be repeated; evidence
+and unresolved items are optional. The Runner binds the authentic Session,
+Ticket, Team and current Round, and retains evidence copies with the Worldline
+submission so subsequent edits cannot change its meaning. Submission does not
+accept the result or complete the Ticket. The member and its direct parent can
+read submissions through `reports`; original report names remain readable.
+Report assignments use role names and the existing alias to distinguish repeated
+members, and followup preserves each member's assigned names.
+
 Query `status_aliases([alias], root)` to get `session`, `execution_id`, and
 `activity`. An idle execution has `last_outcome`: `completed`, `runtime-error`,
 or `interrupted`. These describe native execution, independently of the service
@@ -791,6 +810,9 @@ The tools are the existing graph, execution, control and interaction operations:
 | `alias_status` | optionally `aliases`, `operation_total`, `baseline`, `candidate`. | Session status document, or the visible Session tree when `aliases` is omitted; the same document as `agent-runner status`. |
 | `swarm` | One structured swarm input: `tasks` with `role` (a preset reference or one inline role), optionally `instruction` and `skills`, and the `ticket_id` Main selected from the DAG. | Each activated Agent's `launch_status`, `alias` and `session`; the same document as `agent-runner --swarm-input`. The call returns while those executions stay owned, and later calls address the returned alias. |
 | `send_instruction` | `alias`, `instruction`, `caused_by_event_ids`, and optionally `reports_only`. | `send_status`; the same operation as `agent-runner send`. |
+| `session_reports` | `alias`. | Assigned reports and retained result submissions; the same operation as `agent-runner reports`. |
+| `submit_report` | `name`, `text`. | Writes only the calling Session's assigned report. |
+| `submit_result` | `commit`, `result_refs`, `completion`; optionally `evidence_refs`, `unresolved`. | A `result-submitted` Worldline event; the same operation as `agent-runner submit-result`. Native Sessions use `graphtraj_submit_result` with the same schema. |
 | `interrupt` | `alias`. | `interrupt_status`; the same operation as `agent-runner interrupt`. |
 | `continue` | `ticket_id`, `caused_by_event_ids`. | The continued Team's result and `continuation_event_id`; the same D.3 stop/continue operation as `agent-runner continue`. |
 | `pending_requests` | `alias`, and optionally `execution_id`. | The pending native approval or user-input requests, with the identity `reply_to_request` needs; the same document as `agent-runner requests`. |

@@ -37,7 +37,7 @@ from graphtraj.execution.runner_process import (
     OPERATION_TIMEOUT_SECONDS,
     stop_worker,
 )
-from graphtraj.workspace.runner_project import discover_project, discover_runner_directory
+from graphtraj.workspace.runner_project import discover_project, discover_project_root, discover_runner_directory
 from graphtraj.execution.runner_status import (
     SESSION_BINDING_FIELDS,
     is_session_mapping,
@@ -58,6 +58,7 @@ SESSION_IMMUTABLE_MAPPING_FIELDS = SESSION_BINDING_FIELDS + (
     "retained_batch_file",
     "worktree_path",
     "trace_file",
+    "report_files",
 )
 
 
@@ -249,10 +250,15 @@ def send_instruction(
     raise _not_resumable()
 
 
-def _session_report_paths(alias: str, cwd: Path) -> tuple[Path, ...]:
+def _session_report_paths(
+    alias: str, cwd: Path, *, collected: bool = False,
+) -> tuple[Path, ...]:
     """Resolve only report files declared by the target's current native Context."""
     runner = discover_runner_directory(cwd)
     mapping, directory = read_alias_mapping(runner, alias)
+    if 'report_files' in mapping:
+        from graphtraj.execution.runner_results import task_report_paths
+        return task_report_paths(mapping, cwd)
     request, _, _ = _read_session_resume_request(directory, mapping)
     environment = _team_runtime_environment(mapping, cwd)
     request = _refresh_current_team_report_request(
@@ -267,6 +273,19 @@ def _session_report_paths(alias: str, cwd: Path) -> tuple[Path, ...]:
         path = Path(name)
         if access not in ('read', 'write') or path.suffix != '.md' or not path.is_relative_to(state):
             continue
+        if collected and not path.exists() and path.parent == Path(environment['GRAPHTRAJ_EVIDENCE']) / 'reviews':
+            # Older collectors moved these files. Only the recorded member may
+            # read the matching collected report; a replacement owns its own file.
+            from graphtraj.graph.delivery_state import read_team
+
+            team_directory = Path(environment['GRAPHTRAJ_EVIDENCE']) / 'teams' / str(mapping['team_generation'])
+            team = read_team(team_directory / 'team.yml')
+            role = logical_role(mapping['role'])
+            owners = [member['session_ref'] for member in team['members'].values()
+                      if logical_role(member['role']) == role]
+            if owners == [alias] and role in {'standards-reviewer', 'spec-reviewer'}:
+                name = role.removesuffix('-reviewer') + '.md'
+                path = team_directory / 'rounds' / str(team['current_round']) / name
         if path.is_symlink() or path.resolve() != path:
             raise RunnerError('authority-denied', 'A report path changed its declared target.')
         paths.append(path)
@@ -279,8 +298,12 @@ def read_session_reports(alias: str, cwd: Path) -> dict:
     mapping, directory = read_alias_mapping(runner, alias)
     require_direct_authority(runner, alias, mapping)
     reports = [{'path': str(path), 'text': path.read_text(encoding='utf-8')}
-               for path in _session_report_paths(alias, cwd) if path.is_file()]
+               for path in _session_report_paths(alias, cwd, collected=True) if path.is_file()]
     result = {'alias': alias, 'reports': reports}
+    from graphtraj.execution.runner_results import session_submissions
+    submissions = session_submissions(mapping, cwd)
+    if submissions:
+        result['submissions'] = submissions
     terminal = directory / 'execution.yml'
     if terminal.is_file():
         read_terminal_outcome(terminal)
@@ -293,12 +316,16 @@ def read_session_reports(alias: str, cwd: Path) -> dict:
 def submit_session_report(name: str, text: str, cwd: Path) -> dict:
     """Write the issuing formal Session's own assigned report, never another's."""
     from graphtraj.execution.runner_status import caller_alias
-    from graphtraj.teams.coding.team_replacement import require_active_session
+    from graphtraj.execution.runner_status import require_task_authority
 
     alias = caller_alias(discover_runner_directory(cwd))
     if alias is None:
         raise RunnerError('authority-denied', 'Main has no Team report to submit.')
-    require_active_session(discover_project(cwd, require_clean_integration=False), alias)
+    runner = discover_runner_directory(cwd)
+    mapping, _ = read_alias_mapping(runner, alias)
+    require_task_authority(
+        load_project_configuration(cwd).state, runner, mapping['ticket_id'], alias, 'submit',
+    )
     paths = [path for path in _session_report_paths(alias, cwd) if path.name == name]
     if len(paths) != 1:
         raise RunnerError('authority-denied', 'The report is not assigned to this Session.')
@@ -761,7 +788,7 @@ def _read_session_resume_request(
         or not isinstance(launch.get("connection"), dict)
         or not isinstance(launch.get("mapping"), dict)
         or any(
-            launch["mapping"].get(field) != mapping[field]
+            launch["mapping"].get(field) != mapping.get(field)
             for field in SESSION_IMMUTABLE_MAPPING_FIELDS
         )
         or launch["adapter_request"].get("worktree_path")
@@ -925,6 +952,20 @@ def _refresh_current_team_report_request(
     session_directory: Path | None = None,
 ) -> Dict[str, Any]:
     role = logical_role(mapping["role"])
+    if 'report_files' in mapping:
+        from graphtraj.execution.runner_results import task_report_paths
+        harness = discover_project_root(worktree)
+        evidence = Path(environment['GRAPHTRAJ_EVIDENCE'])
+        report_files = tuple(Path('.state') / path.relative_to(evidence)
+                             for path in task_report_paths(mapping, harness))
+        try:
+            return refresh_codex_report_paths(
+                request, worktree=worktree, evidence=evidence,
+                report_files=report_files, role=role, reports_only=reports_only,
+                session_directory=session_directory,
+            )
+        except RuntimeAdapterError as error:
+            raise RunnerError(error.code, error.message) from error
     if role == "team-leader" and "GRAPHTRAJ_TEAM_ROUND" not in environment:
         if not reports_only:
             return request

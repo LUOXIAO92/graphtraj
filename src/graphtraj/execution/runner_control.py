@@ -329,7 +329,10 @@ def submit_session_report(name: str, text: str, cwd: Path) -> dict:
     paths = [path for path in _session_report_paths(alias, cwd) if path.name == name]
     if len(paths) != 1:
         raise RunnerError('authority-denied', 'The report is not assigned to this Session.')
-    path = paths[0]
+    from graphtraj.execution.runner_results import start_result_correction
+
+    start_result_correction(mapping, cwd)
+    path = next(path for path in _session_report_paths(alias, cwd) if path.name == name)
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = None
     try:

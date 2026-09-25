@@ -27,6 +27,7 @@ TOOL_NAMES = {
     "session_reports",
     "submit_report",
     "submit_result",
+    "decide_result",
     "alias_status",
     "continue",
     "swarm",

@@ -12,9 +12,9 @@ from graphtraj.interfaces import mcp
 from test_generic_members import _register_research_team
 
 
-def result_project(tmp_path: Path) -> tuple[Path, Path, str]:
+def result_project(tmp_path: Path, *, multiple: bool = True) -> tuple[Path, Path, str]:
     """Register actual research members and a committed document result."""
-    team = _register_research_team(tmp_path)
+    team = _register_research_team(tmp_path, multiple=multiple)
     config = tmp_path / '.graphtraj/config.yml'
     config.parent.mkdir()
     document = yaml.safe_load(default_configuration_content(tmp_path, tmp_path))

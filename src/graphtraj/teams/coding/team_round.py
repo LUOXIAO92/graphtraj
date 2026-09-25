@@ -32,7 +32,7 @@ from graphtraj.execution.execution_budget import (
 )
 from graphtraj.configuration.role_definitions import resolve_child_role
 from graphtraj.configuration.project_configuration import load_project_configuration
-from graphtraj.graph.delivery_state import apply_delivery_state_request, confirmed_rework
+from graphtraj.graph.delivery_state import apply_delivery_state_request
 from graphtraj.graph.delivery_worldline import append_project_worldline_event, read_worldline
 from graphtraj.configuration.project_roles import ProjectRolesError, logical_role
 from graphtraj.execution.runner_batch import (
@@ -873,36 +873,11 @@ def _deliver_ticket(project: Any, requested: Task, retained_batch: Path, capacit
             traces, leader_alias, leader_session, registration, retained_batch,
             allow_no_formal=True,
         )
-        try:
-            candidate = _validate_round(round_directory, worktree)
-        except RunnerError as error:
-            leader_alias, leader_session = recover_evidence(
-                task,
-                task.role,
-                leader_alias,
-                leader_session,
-                retained_batch,
-                error,
-                "write the current Round Leader decision for the fixed candidate",
-            )
-            candidate = _validate_round(round_directory, worktree)
-        decision = _leader_decision(round_directory / "leader.md")
-        if decision == "rejected" and confirmed_rework(round_directory / "leader.md"):
+        event = _round_decision(round_directory, worktree)
+        decision = event["decision"]
+        if decision == "rejected":
             decision = "implementation-rejected"
-        evidence = [
-            path.relative_to(project.harness_root).as_posix()
-            for path in sorted(round_directory.iterdir())
-        ]
-        state_alias, state_session, event = request_state(
-            project, task, worktree, ticket_directory, traces,
-            state_alias, state_session, leader_alias, retained_batch,
-            {
-                "phase": "final", "ticket_id": task.ticket_id,
-                "caused_by_event_ids": [predecessor], "evidence_refs": evidence,
-                "candidate": candidate, "decision": decision,
-            },
-            "final",
-        )
+        evidence = event["evidence_refs"]
         if decision != "implementation-rejected":
             break
         state_alias, state_session, event = request_state(
@@ -1491,42 +1466,10 @@ def _resume_active_ticket(
         traces, leader_alias, leader_session, registration, team_batch,
         capacity_fd=capacity_fd, allow_no_formal=True,
     )
-    try:
-        candidate = _validate_round(round_directory, worktree)
-    except RunnerError as error:
-        if error.code != _AGENT_EVIDENCE_ERROR:
-            raise
-        leader_alias, leader_session = run_agent(
-            project, task, task.role, worktree, ticket_directory, traces,
-            leader_alias, leader_session, registration, None, team_batch,
-            _evidence_recovery_prompt(
-                project, task, traces, leader_alias, worktree, error,
-                "write the current Round Leader decision for the fixed candidate",
-            ),
-            capacity_fd=capacity_fd,
-        )
-        candidate = _validate_round(round_directory, worktree)
-    decision = _leader_decision(round_directory / "leader.md")
-    if decision == "rejected" and confirmed_rework(round_directory / "leader.md"):
+    event = _round_decision(round_directory, worktree)
+    decision = event["decision"]
+    if decision == "rejected":
         decision = "implementation-rejected"
-    evidence = [
-        path.relative_to(project.harness_root).as_posix()
-        for path in sorted(round_directory.iterdir())
-    ]
-    state_alias, state_session, event = _request_state(
-        project, task, worktree, ticket_directory, traces,
-        state_alias, state_session, leader_alias, team_batch,
-        {
-            "phase": "final",
-            "ticket_id": task.ticket_id,
-            "caused_by_event_ids": [predecessor],
-            "evidence_refs": evidence,
-            "candidate": candidate,
-            "decision": decision,
-        },
-        "final-recovery",
-        capacity_fd=capacity_fd,
-    )
     if decision == "implementation-rejected":
         return _resume_active_ticket(
             project,
@@ -2442,6 +2385,10 @@ def _execute_agent(
     task_prompt += (
         "To submit a task result, use graphtraj_submit_result (or agent-runner submit-result) "
         "including Worktree-relative result_refs, evidence_refs, completion and unresolved items.\n"
+        "An authorized parent records its decision with graphtraj_decide_result (or agent-runner "
+        "decide-result), supplying submission_id, commit, decision (accepted or rejected), reason "
+        "and Harness-relative evidence_refs. Read the child's submission through graphtraj_reports. "
+        "A report alone does not record acceptance.\n"
     )
     if reports_only:
         task_prompt += (
@@ -2457,19 +2404,9 @@ def _execute_agent(
         )
         if ordinal > 1:
             task_prompt += (
-                f"Read the confirmed diagnosis and both Review reports in .state/teams/{generation}/rounds/{ordinal - 1}/. "
+                f"Use the retained rejection and its evidence for Round {ordinal - 1}. "
                 "Implement only that correction and preserve the closed Round evidence.\n"
             )
-    elif policy_role == "team-leader" and not os.environ.get("GRAPHTRAJ_RETIRING"):
-        task_prompt += (
-            f"\nCurrent Team generation: {generation}. Write the decision to {report_files[0]}. "
-            "Only a compliant implementation rejection may request rework: include exact lines "
-            "Decision: REJECT, Diagnosis: implementation, Reviews: compliant, Action: rework "
-            "and a nonempty Rationale: explaining the evidence and correction. "
-            "Process corrections, Main decomposition/scope errors, and user product/Spec changes "
-            "cannot authorize implementation rework. Keep a small correction with the same "
-            "Engineer; never replace or escalate from a failure count.\n"
-        )
     elif policy_role in _REVIEWER_ROLES:
         if task.report_file is None:
             raise RunnerError(
@@ -3075,48 +3012,29 @@ def _link_worktree(project: Any, worktree: Path, evidence: Path) -> None:
     ignore_worktree_documents(worktree, created_documents)
 
 
-def _validate_round(round_directory: Path, worktree: Path) -> str:
-    """Return the Round's fixed candidate once its evidence is complete.
+def _round_decision(round_directory: Path, worktree: Path) -> dict[str, Any]:
+    """Consume the authorized decision already recorded through the public operation."""
+    from graphtraj.configuration.project_configuration import load_project_configuration
+    from graphtraj.workspace.runner_project import discover_project_root
 
-    The Engineer reports and the Leader decision are always required. A Review
-    axis report is part of the Round only when the Leader ran that axis.
-    """
-    required = {"engineer.md", "validation.md", "leader.md"}
-    allowed = required | {_review_report_name(role) for role in _REVIEWER_ROLES}
-    try:
-        paths = tuple(round_directory.iterdir())
-    except OSError as error:
-        raise RunnerError(
-            _AGENT_EVIDENCE_ERROR,
-            "The Team Round evidence is missing or unreadable.",
-        ) from error
-    names = {path.name for path in paths}
-    if (
-        not required <= names
-        or not names <= allowed
-        or any(path.is_symlink() or not path.is_file() for path in paths)
-    ):
-        raise RunnerError(
-            _AGENT_EVIDENCE_ERROR,
-            "The Team Round did not produce its complete evidence.",
-        )
-    candidate = _candidate(round_directory, worktree)
-    try:
-        inspected = [
-            (round_directory / name).read_text(encoding="utf-8")
-            for name in sorted(names)
-        ]
-    except (OSError, UnicodeError) as error:
-        raise RunnerError(
-            _AGENT_EVIDENCE_ERROR,
-            "The Team Round evidence is missing or unreadable.",
-        ) from error
-    if any(candidate not in report for report in inspected):
-        raise RunnerError(
-            _AGENT_EVIDENCE_ERROR,
-            "All Team evidence must inspect the same fixed candidate.",
-        )
-    return candidate
+    harness = discover_project_root(worktree)
+    configuration = load_project_configuration(harness)
+    ticket_id = yaml.safe_load((round_directory.parents[3] / 'ticket.yml').read_text())['ticket_id']
+    events = [event for event in read_worldline(configuration.state, harness)
+              if event.get('ticket_id') == ticket_id
+              and event.get('team_ordinal') == int(round_directory.parent.parent.name)]
+    submission = next((event for event in reversed(events)
+                       if event['kind'] == 'result-submitted'
+                       and event.get('round') == int(round_directory.name)), None)
+    decision = next((event for event in reversed(events)
+                     if submission is not None
+                     and event.get('submission_id') == submission['event_id']
+                     and event.get('candidate') == submission['candidate']
+                     and event['kind'] in {'team-round-accepted', 'team-round-implementation-rejected'}), None)
+    if decision is None:
+        raise RunnerError(_AGENT_EVIDENCE_ERROR,
+                          'Record an authorized decision with decide-result for this Round submission.')
+    return decision
 
 
 def _candidate(round_directory: Path, worktree: Path) -> str:
@@ -3168,14 +3086,6 @@ def _candidate(round_directory: Path, worktree: Path) -> str:
             "Tracked project changes must be committed before the Team handoff.",
         )
     return candidate
-
-
-def _leader_decision(path: Path) -> str:
-    lines = path.read_text(encoding="utf-8").splitlines()
-    decisions = [
-        line for line in lines if line in {"Decision: ACCEPT", "Decision: REJECT"}
-    ]
-    return "accepted" if decisions == ["Decision: ACCEPT"] else "rejected"
 
 
 def _collect_review_report(

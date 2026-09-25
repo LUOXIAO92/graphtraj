@@ -17,7 +17,7 @@ from graphtraj.graph.delivery_worldline import read_worldline
 from test_ticket_graph import _ticket
 
 
-def _register_research_team(tmp_path: Path) -> Path:
+def _register_research_team(tmp_path: Path, *, multiple: bool = True) -> Path:
     """A Team needs no fixed seats and may contain repeated roles."""
     state = tmp_path / 'state'
     directory = register_ticket(state, tmp_path, _ticket('148', 'research'))
@@ -38,6 +38,8 @@ def _register_research_team(tmp_path: Path) -> Path:
     assert read_team(path)['members'] == {
         'first': {'role': 'researcher', 'session_ref': 'research@x1'},
     }
+    if not multiple:
+        return path
     for name, role, alias in [
         ('second', 'researcher', 'research@x2'),
         ('third', 'analyst', 'research@x3'),

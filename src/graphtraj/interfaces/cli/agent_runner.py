@@ -374,3 +374,26 @@ def submit_result(
                                          unresolved, Path.cwd()))
     except (RunnerError, ValueError, OSError) as error:
         _fail(error if isinstance(error, RunnerError) else RunnerError('RESULT_INVALID', str(error)))
+
+
+@main.command('decide-result')
+@click.option('--submission-id', required=True)
+@click.option('--commit', required=True)
+@click.option('--decision', type=click.Choice(['accepted', 'rejected']), required=True)
+@click.option('--reason', required=True)
+@click.option('--evidence-ref', 'evidence_refs', multiple=True, required=True)
+def decide_result(
+    submission_id: str,
+    commit: str,
+    decision: str,
+    reason: str,
+    evidence_refs: tuple[str, ...],
+) -> None:
+    """Accept or reject a submitted version using the caller's actual authority."""
+    from graphtraj.execution.runner_results import decide_session_result
+
+    try:
+        _emit_result(decide_session_result(submission_id, commit, decision, reason,
+                                         evidence_refs, Path.cwd()))
+    except (RunnerError, ValueError, OSError) as error:
+        _fail(error if isinstance(error, RunnerError) else RunnerError('RESULT_INVALID', str(error)))

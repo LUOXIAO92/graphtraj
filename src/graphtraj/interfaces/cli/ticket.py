@@ -10,6 +10,7 @@ from graphtraj.configuration.project_configuration import (
     load_project_configuration,
 )
 from graphtraj.workspace.git_repository import GitRepositoryError
+from graphtraj.execution.runner_models import RunnerError
 from graphtraj.teams.coding.ticket_integration import integrate_ticket
 from graphtraj.graph.delivery_state import apply_delivery_state_request
 from graphtraj.graph.ticket_graph import (
@@ -121,7 +122,7 @@ def update_command(state_file: Path) -> None:
 
 @click.group("delivery-state")
 def delivery_state() -> None:
-    """Apply strict requests produced by the Delivery State Agent."""
+    """Apply semantic state requests with their authoritative facts."""
 
 
 @delivery_state.command("apply")
@@ -145,7 +146,7 @@ def apply_command(request_file: Path, facts_file: Path) -> None:
         recorded = apply_delivery_state_request(
             configuration.state, configuration.harness_root, request, facts
         )
-    except (OSError, UnicodeError, ValueError, yaml.YAMLError) as error:
+    except (OSError, UnicodeError, ValueError, yaml.YAMLError, RunnerError) as error:
         raise click.ClickException(str(error)) from error
     click.echo(yaml.safe_dump(recorded, sort_keys=False), nl=False)
 

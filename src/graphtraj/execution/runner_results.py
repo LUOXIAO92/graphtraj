@@ -139,6 +139,7 @@ def submit_session_result(
             # Git supplies the submitted bytes, independent of later Worktree writes.
             content = subprocess.check_output(['git', 'show', f'{commit}:{relative}'], cwd=worktree)
         snapshots.append((path.name, content))
+    start_result_correction(mapping, cwd)
     directory, _ = _load_states(configuration.state / 'tickets')[mapping['ticket_id']]
     team = read_team(directory / 'teams' / str(mapping['team_generation']) / 'team.yml')
     ordinal = team['current_round']
@@ -157,7 +158,8 @@ def submit_session_result(
         """Recheck current ownership under the Worldline mutation lock."""
         require_task_authority(configuration.state, runner, mapping['ticket_id'], alias, 'submit')
         current = read_team(directory / 'teams' / str(mapping['team_generation']) / 'team.yml')
-        if current['current_round'] != ordinal:
+        if (_load_states(configuration.state / 'tickets')[mapping['ticket_id']][1]['status']
+                not in {'implementing', 'reviewing'} or current['current_round'] != ordinal):
             raise RunnerError('authority-denied', 'The submission Round has changed.')
         if not snapshots:
             return lambda: None
@@ -179,3 +181,56 @@ def submit_session_result(
         return lambda: shutil.rmtree(retained)
 
     return append_project_worldline_event(configuration.state, configuration.harness_root, event, retain)
+
+
+def start_result_correction(mapping: Mapping[str, Any], cwd: Path) -> None:
+    """Open the next Round when an author starts correcting a rejected result.
+
+    Both report and result submission use this transition, so closed Round
+    reports stay unchanged and correction does not need another Agent.
+    """
+    configuration = load_project_configuration(discover_project_root(cwd))
+    cwd = configuration.harness_root
+    require_task_authority(configuration.state, discover_runner_directory(cwd),
+                           mapping['ticket_id'], mapping['alias'], 'submit')
+    directory, ticket = _load_states(configuration.state / 'tickets')[mapping['ticket_id']]
+    if ticket['status'] not in {'implementing', 'reviewing', 'reworking'}:
+        raise ValueError('This task is not accepting result submissions.')
+    if ticket['status'] == 'reworking':
+        from graphtraj.graph.delivery_state import apply_delivery_state_request
+
+        rejection = next(event for event in reversed(read_worldline(configuration.state, cwd))
+                         if event.get('ticket_id') == mapping['ticket_id'])
+        request = {
+            'phase': 'rework', 'ticket_id': mapping['ticket_id'],
+            'caused_by_event_ids': [rejection['event_id']],
+            'evidence_refs': rejection['evidence_refs'],
+        }
+        apply_delivery_state_request(configuration.state, cwd, request, request)
+
+
+def decide_session_result(
+    submission_id: str,
+    commit: str,
+    decision: str,
+    reason: str,
+    evidence_refs: tuple[str, ...],
+    cwd: Path,
+) -> dict[str, Any]:
+    """Record an authorized acceptance or rejection of an existing submission."""
+    from graphtraj.graph.delivery_state import apply_delivery_state_request
+
+    configuration = load_project_configuration(discover_project_root(cwd))
+    events = read_worldline(configuration.state, configuration.harness_root)
+    submission = next((event for event in events
+                       if event["event_id"] == submission_id
+                       and event["kind"] == "result-submitted"), None)
+    if submission is None:
+        raise ValueError("Unknown result submission")
+    request = {
+        "phase": "final", "ticket_id": submission["ticket_id"],
+        "submission_id": submission_id, "candidate": commit,
+        "decision": decision, "reason": reason,
+        "caused_by_event_ids": [submission_id], "evidence_refs": list(evidence_refs),
+    }
+    return apply_delivery_state_request(configuration.state, configuration.harness_root, request, request)

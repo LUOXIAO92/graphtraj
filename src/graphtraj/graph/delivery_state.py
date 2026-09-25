@@ -4,22 +4,26 @@ from __future__ import annotations
 
 import os
 import shutil
+import subprocess
 from pathlib import Path
 from typing import Any, Mapping
 
 import yaml
 
 from graphtraj.configuration.project_roles import ROLE_REFERENCE, logical_role
-from graphtraj.graph.delivery_worldline import append_project_worldline_event, read_worldline
-from graphtraj.execution.runner_io import write_yaml_durably
+from graphtraj.graph.delivery_worldline import (
+    _read_shards,
+    _validate_evidence,
+    append_project_worldline_event,
+    read_worldline,
+)
+from graphtraj.execution.runner_io import write_yaml_durably, _sync_directory
+from graphtraj.execution.runner_status import caller_alias, read_alias_mapping, require_task_authority
+from graphtraj.workspace.runner_project import discover_runner_directory, run_git
 from graphtraj.graph.ticket_graph import _TRANSITIONS, _load_states
 
 
 _ENGINEERS = {"engineer"}
-_REVIEW_REPORTS = {
-    "standards_reviewer": "standards.md",
-    "spec_reviewer": "spec.md",
-}
 _COMMON = {"phase", "ticket_id", "caused_by_event_ids", "evidence_refs"}
 
 
@@ -43,7 +47,7 @@ def apply_delivery_state_request(
         "member": _COMMON | {"member", "role", "session_ref"},
         "candidate": _COMMON | {"candidate"},
         "correction": _COMMON | {"responsible_role", "session_ref"},
-        "final": _COMMON | {"candidate", "decision"},
+        "final": _COMMON | {"candidate", "decision", "submission_id", "reason"},
         "rework": _COMMON,
         "retiring": _COMMON | {"actor"},
         "retired": _COMMON | {"session_ref", "trace_ref"},
@@ -180,8 +184,6 @@ def apply_delivery_state_request(
             candidate = _validate_candidate(request["candidate"])
             if ticket["status"] not in {"implementing", "reviewing"} or ticket["current_candidate"] == candidate:
                 raise ValueError("Ticket cannot enter fixed-candidate Review")
-            if team_update["members"].get("engineer", {}).get("session_ref") is None:
-                raise ValueError("Candidate Review requires the Engineer Session")
             ticket_update.update(
                 status="reviewing",
                 current_candidate=candidate,
@@ -206,39 +208,22 @@ def apply_delivery_state_request(
             open_round = True
             kind = "team-round-rework-started"
         else:
-            candidate = _validate_candidate(request["candidate"])
-            if ticket["status"] != "reviewing" or ticket["current_candidate"] != candidate:
-                raise ValueError("Leader decision does not match the fixed candidate")
-            # A completed Round uses the Leader and Engineer Sessions plus the
-            # Reviewer Session of each axis that reported for it.
-            reported = {Path(ref).name for ref in request["evidence_refs"]}
-            required_sessions = {"team_leader", "engineer"} | {
-                seat
-                for seat, report in _REVIEW_REPORTS.items()
-                if report in reported
-            }
-            if any(
-                team_update["members"].get(name, {}).get("session_ref") is None
-                for name in required_sessions
-            ):
-                raise ValueError(
-                    "Leader decision requires the Sessions of the completed Team Round"
-                )
+            submission, author = _validate_result_decision(
+                state_directory, harness_root, request, ticket, team_update,
+                read_worldline(state_directory, harness_root),
+            )
+            snapshots = _decision_evidence(harness_root, submission, author, request["evidence_refs"])
+            ticket_update["current_candidate"] = submission["candidate"]
+            # Submission and acceptance can happen without a separate Review step.
+            if ticket["status"] == "implementing":
+                ticket_update["status"] = _transition(ticket, "reviewing")
+            close_round = True
             if request["decision"] == "accepted":
-                ticket_update["status"] = _transition(ticket, "awaiting-integration")
-                close_round = True
+                ticket_update["status"] = _transition(ticket_update, "awaiting-integration")
                 kind = "team-round-accepted"
-            elif request["decision"] == "rejected":
-                kind = "team-round-rejected"
-            elif request["decision"] == "implementation-rejected":
-                _validate_implementation_rejection(
-                    team_directory / "rounds" / str(round_ordinal), candidate
-                )
-                ticket_update["status"] = _transition(ticket, "reworking")
-                close_round = True
-                kind = "team-round-implementation-rejected"
             else:
-                raise ValueError("Leader decision must be accepted or rejected")
+                ticket_update["status"] = _transition(ticket_update, "reworking")
+                kind = "team-round-implementation-rejected"
 
     event = {
         "kind": kind,
@@ -251,7 +236,12 @@ def apply_delivery_state_request(
     if phase == "candidate" or phase == "final":
         event["candidate"] = request["candidate"]
     if phase == "final":
-        event["decision"] = request["decision"]
+        event.update(
+            decision=request["decision"], submission_id=request["submission_id"],
+            reason=request["reason"], alias=author,
+            session=read_alias_mapping(discover_runner_directory(harness_root), author)[0]["session"]
+            if author is not None else None,
+        )
     if phase == "correction":
         event.update(
             responsible_role=request["responsible_role"],
@@ -262,7 +252,30 @@ def apply_delivery_state_request(
     def mutation(recorded: dict[str, Any]):
         nonlocal team_update
         previous_modes: dict[Path, int] = {}
+        retained: Path | None = None
+        if phase in {"final", "rework"}:
+            if ((ticket_directory / "ticket.yml").read_bytes() != original_ticket
+                    or team_file.read_bytes() != original_team):
+                raise ValueError("The task changed before acceptance; inspect it again")
+        if phase == "final":
+            _validate_result_decision(
+                state_directory, harness_root, request, ticket, team_update,
+                _read_shards(state_directory)[1],
+            )
         try:
+            if phase == "final":
+                retained = team_directory / "traces" / submission["alias"] / recorded["event_id"]
+                retained.mkdir(parents=True)
+                recorded["evidence_refs"] = []
+                for index, (name, content) in enumerate(snapshots):
+                    path = retained / f"{index}-{name}"
+                    with path.open("xb") as stream:
+                        stream.write(content)
+                        stream.flush()
+                        os.fsync(stream.fileno())
+                    recorded["evidence_refs"].append(path.relative_to(harness_root).as_posix())
+                _sync_directory(retained)
+                _sync_directory(retained.parent)
             if phase == "start":
                 team_directory.mkdir(parents=True, exist_ok=True)
                 team_update = {
@@ -284,13 +297,15 @@ def apply_delivery_state_request(
             write_yaml_durably(ticket_directory / "ticket.yml", ticket_update)
             _load_states(tickets)
             if open_round:
-                (team_directory / "rounds" / str(round_ordinal + 1)).mkdir()
+                (team_directory / "rounds" / str(round_ordinal + 1)).mkdir(parents=True)
             if close_round:
                 round_directory = team_directory / "rounds" / str(round_ordinal)
-                for path in (*round_directory.iterdir(), round_directory):
+                for path in ((*round_directory.iterdir(), round_directory) if round_directory.exists() else ()):
                     previous_modes[path] = path.stat().st_mode & 0o777
                     path.chmod(0o444 if path != round_directory else 0o555)
         except Exception:
+            if retained is not None and retained.exists():
+                shutil.rmtree(retained)
             _restore(ticket_directory / "ticket.yml", original_ticket)
             _restore_team(
                 team_directory, team_file, original_team, team_directory_existed
@@ -299,6 +314,8 @@ def apply_delivery_state_request(
             raise
 
         def rollback() -> None:
+            if retained is not None:
+                shutil.rmtree(retained)
             if open_round:
                 (team_directory / "rounds" / str(round_ordinal + 1)).rmdir()
             _restore(ticket_directory / "ticket.yml", original_ticket)
@@ -312,6 +329,77 @@ def apply_delivery_state_request(
     return append_project_worldline_event(
         state_directory, harness_root, event, mutation
     )
+
+
+def _decision_evidence(
+    harness: Path,
+    submission: Mapping[str, Any],
+    author: str | None,
+    references: list[str],
+) -> list[tuple[str, bytes]]:
+    """Read only submitted evidence, committed files, or the caller's own reports."""
+    from graphtraj.execution.runner_results import task_report_paths
+
+    _validate_evidence(harness, references)
+    runner = discover_runner_directory(harness)
+    mapping, _ = read_alias_mapping(runner, submission["alias"])
+    worktree = Path(mapping["worktree_path"]).resolve()
+    allowed = {(harness / ref).resolve() for ref in submission["evidence_refs"]}
+    if author is not None:
+        owner, _ = read_alias_mapping(runner, author)
+        allowed.update(path.resolve() for path in task_report_paths(owner, harness))
+    snapshots = []
+    for reference in references:
+        path = (harness / reference).resolve()
+        if path in allowed or author is None:
+            content = path.read_bytes()
+        else:
+            relative = path.relative_to(worktree).as_posix()
+            # Read committed bytes, so the evidence is tied to the judged version.
+            if run_git(worktree, 'cat-file', '-t', f'{submission["candidate"]}:{relative}') != 'blob':
+                raise ValueError('Decision evidence must name committed files or assigned reports')
+            content = subprocess.check_output(
+                ['git', 'show', f'{submission["candidate"]}:{relative}'], cwd=worktree,
+            )
+        snapshots.append((path.name, content))
+    return snapshots
+
+
+def _validate_result_decision(
+    state: Path,
+    harness: Path,
+    request: Mapping[str, Any],
+    ticket: Mapping[str, Any],
+    team: Mapping[str, Any],
+    events: list[dict[str, Any]],
+) -> tuple[dict[str, Any], str | None]:
+    """Bind an authorized decision to the latest submitted version in this Round."""
+    candidate = _validate_candidate(request["candidate"])
+    if not isinstance(request["decision"], str) or request["decision"] not in {"accepted", "rejected"}:
+        raise ValueError("Result decision must be accepted or rejected")
+    if not isinstance(request["reason"], str) or not request["reason"].strip():
+        raise ValueError("Result decision requires a reason")
+    submissions = [event for event in events if event["kind"] == "result-submitted"
+                   and event.get("ticket_id") == ticket["ticket_id"]
+                   and event.get("team_ordinal") == ticket["active_team_ordinal"]
+                   and event.get("round") == team["current_round"]]
+    if not submissions or submissions[-1]["event_id"] != request["submission_id"]:
+        raise ValueError("Decision must identify the latest submission in the current Round")
+    submission = submissions[-1]
+    runner = discover_runner_directory(harness)
+    mapping = require_task_authority(state, runner, ticket["ticket_id"], submission["alias"], "accept")
+    if (mapping["session"] != submission["session"]
+            or ticket["status"] not in {"implementing", "reviewing"}
+            or candidate != submission["candidate"]
+            or request["submission_id"] not in request["caused_by_event_ids"]
+            or any(event.get("submission_id") == request["submission_id"] for event in events)):
+        raise ValueError("Decision does not match an undecided submitted version")
+    worktree = Path(mapping["worktree_path"])
+    if (run_git(worktree, "rev-parse", "HEAD") != candidate
+            or run_git(worktree, "diff", "--name-only")
+            or run_git(worktree, "diff", "--cached", "--name-only")):
+        raise ValueError("The submitted version differs from the current Worktree")
+    return submission, caller_alias(runner)
 
 
 def _validate_members(value: Any) -> dict[str, dict[str, str | None]]:
@@ -371,78 +459,6 @@ def _validate_team(team: Any) -> None:
     ):
         raise ValueError("Team retirement facts are invalid")
     _validate_members(team["members"])
-
-
-def confirmed_rework(path: Path) -> bool:
-    lines = path.read_text(encoding="utf-8").splitlines()
-    return (
-        [line for line in lines if line.startswith("Decision:")] == ["Decision: REJECT"]
-        and [line for line in lines if line.startswith("Diagnosis:")] == ["Diagnosis: implementation"]
-        and [line for line in lines if line.startswith("Reviews:")] == ["Reviews: compliant"]
-        and [line for line in lines if line.startswith("Action:")] == ["Action: rework"]
-        and any(line.startswith("Rationale:") and line.removeprefix("Rationale:").strip() for line in lines)
-    )
-
-
-def _validate_implementation_rejection(directory: Path, candidate: str) -> None:
-    """Check attributable report fields; the Leader owns their semantic diagnosis.
-
-    A Round that selected no Review axis has no report file in its directory,
-    so the confirmed rejection alone is enough. Every report that is present
-    is still validated in full.
-    """
-    if not confirmed_rework(directory / "leader.md"):
-        raise ValueError("Rework requires the Team Leader's confirmed diagnosis")
-    comparisons = []
-    findings = []
-    for axis in ("Standards", "Spec"):
-        path = directory / (axis.lower() + ".md")
-        if not path.is_file():
-            continue
-        report = path.read_text(encoding="utf-8")
-        lines = report.splitlines()
-
-        def report_error(message: str) -> ValueError:
-            return ValueError("Review report {0} (Axis: {1}) {2}".format(path, axis, message))
-
-        for prefix, expected in (("Candidate commit:", candidate), ("Axis:", axis)):
-            if [line.removeprefix(prefix).strip() for line in lines if line.startswith(prefix)] != [expected]:
-                raise report_error("is missing an attributable {0} field".format(prefix))
-        comparison = [line.removeprefix("Comparison:").strip() for line in lines if line.startswith("Comparison:")]
-        if len(comparison) != 1:
-            raise report_error("has a missing or ambiguous Comparison field")
-        try:
-            comparisons.append(_validate_candidate(comparison[0]))
-        except ValueError as error:
-            raise report_error("has an invalid Comparison field") from error
-        finding_fields = [
-            (index, line.removeprefix("Finding:").strip())
-            for index, line in enumerate(lines)
-            if line.startswith("Finding:")
-        ]
-        if not finding_fields:
-            raise report_error("must report findings or explicitly report none")
-        if any(value == "none" for _, value in finding_fields):
-            if len(finding_fields) != 1:
-                raise report_error("mixes Finding: none with another Finding")
-            continue
-        for position, (index, value) in enumerate(finding_fields):
-            if not value:
-                raise report_error("has an empty Finding field")
-            following = (
-                finding_fields[position + 1][0]
-                if position + 1 < len(finding_fields) else len(lines)
-            )
-            block = lines[index + 1:following]
-            for prefix in ("Rule:", "Input:", "Trace:", "Failure:", "Evidence:"):
-                values = [line.removeprefix(prefix).strip() for line in block if line.startswith(prefix)]
-                if len(values) != 1 or not values[0]:
-                    raise report_error("Finding lacks accepted evidence requirements")
-            findings.append(value)
-    if len(comparisons) == 2 and comparisons[0] != comparisons[1]:
-        raise ValueError("Rework requires matching Comparison fields in Standards and Spec reports")
-    if comparisons and not findings:
-        raise ValueError("Rework requires an implementation finding in the Standards or Spec report")
 
 
 def _validate_worktree(harness_root: Path, value: Any) -> str:

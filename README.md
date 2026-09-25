@@ -506,6 +506,26 @@ read submissions through `reports`; original report names remain readable.
 Report assignments use role names and the existing alias to distinguish repeated
 members, and followup preserves each member's assigned names.
 
+The submitter's actual direct parent (including a top-level caller for a
+parentless Session) records acceptance through the same operation for any task:
+
+```sh
+agent-runner decide-result --submission-id <result-submitted-event-id> \
+  --commit <full-commit> --decision accepted --reason "Meets the task criteria" \
+  --evidence-ref <retained-evidence-reference>
+```
+
+Use `rejected` to return work with a reason. Evidence references are
+Harness-relative files: use the submission's returned evidence references,
+committed Worktree files, or the deciding Session's assigned reports. At least
+one reference is required, and the decision retains its bytes. No role name or
+report format grants acceptance authority. The decision must match the latest
+submission in the current Round and its clean current Worktree version.
+Acceptance closes the Round and leaves the Ticket awaiting integration;
+rejection closes the Round for rework. The next report or result submission
+opens the correction Round and retains the earlier decision and causal history.
+Neither decision performs Git integration or marks the Ticket complete.
+
 Query `status_aliases([alias], root)` to get `session`, `execution_id`, and
 `activity`. An idle execution has `last_outcome`: `completed`, `runtime-error`,
 or `interrupted`. These describe native execution, independently of the service
@@ -813,6 +833,7 @@ The tools are the existing graph, execution, control and interaction operations:
 | `session_reports` | `alias`. | Assigned reports and retained result submissions; the same operation as `agent-runner reports`. |
 | `submit_report` | `name`, `text`. | Writes only the calling Session's assigned report. |
 | `submit_result` | `commit`, `result_refs`, `completion`; optionally `evidence_refs`, `unresolved`. | A `result-submitted` Worldline event; the same operation as `agent-runner submit-result`. Native Sessions use `graphtraj_submit_result` with the same schema. |
+| `decide_result` | `submission_id`, `commit`, `decision` (`accepted` or `rejected`), `reason`, `evidence_refs`. | Authorized, version-bound decision and state transition; the same operation as `agent-runner decide-result`. Native Sessions use `graphtraj_decide_result`. |
 | `interrupt` | `alias`. | `interrupt_status`; the same operation as `agent-runner interrupt`. |
 | `continue` | `ticket_id`, `caused_by_event_ids`. | The continued Team's result and `continuation_event_id`; the same D.3 stop/continue operation as `agent-runner continue`. |
 | `pending_requests` | `alias`, and optionally `execution_id`. | The pending native approval or user-input requests, with the identity `reply_to_request` needs; the same document as `agent-runner requests`. |

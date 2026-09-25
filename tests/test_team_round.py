@@ -262,16 +262,7 @@ def test_installed_runner_rejects_invalid_inline_reasoning_effort(
         ("accept", "awaiting-integration", True, True, None),
         ("accept", "awaiting-integration", True, True, False),
         ("accept", "awaiting-integration", True, True, True),
-        ("reject", "reviewing", False, True, None),
-        ("conflict", "reviewing", False, True, None),
-        ("tamper", "reviewing", False, False, None),
         ("rework", "awaiting-integration", True, True, None),
-        ("process", "reviewing", False, True, None),
-        ("main", "reviewing", False, True, None),
-        ("product", "reviewing", False, True, None),
-        ("invalid-evidence", "reviewing", False, False, None),
-        ("mismatched-report", "reviewing", False, False, None),
-        ("no-findings", "reviewing", False, False, None),
     ),
 )
 def test_installed_runner_obeys_the_explicit_leader_decision_for_a_run_free_team_round(
@@ -1237,13 +1228,13 @@ def test_installed_runner_rejects_malformed_inline_roles_before_retaining_a_batc
     assert not fake_codex.log_file.exists()
 
 
-def test_coding_candidate_consumes_the_common_result_submission(
+def test_coding_acceptance_consumes_submission_without_report_commit(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
     fake_codex: FakeCodex,
     tmp_path: Path,
 ) -> None:
-    """Candidate registration needs the submitted version, not report prose."""
+    """Acceptance uses a submitted version and explicit decision without parsing reports."""
     from graphtraj.graph.delivery_worldline import read_worldline
 
     harness, _, _, environment = configure_harness(
@@ -1266,5 +1257,7 @@ def test_coding_candidate_consumes_the_common_result_submission(
     assert candidates[0]['candidate'] == submitted[0]['candidate']
     assert submitted[0]['role'] == 'engineer'
     assert (harness / submitted[0]['evidence_refs'][0]).read_text().startswith('Candidate commit:')
-    # D5 still owns acceptance's professional-report checks; this tests only D3.
-    assert not any(event['kind'] == 'team-accepted' for event in events)
+    accepted = [event for event in events if event['kind'] == 'team-round-accepted']
+    assert launched.returncode == 0, launched.stdout + launched.stderr
+    assert accepted[-1]['submission_id'] == submitted[-1]['event_id']
+    assert accepted[-1]['candidate'] == submitted[-1]['candidate']

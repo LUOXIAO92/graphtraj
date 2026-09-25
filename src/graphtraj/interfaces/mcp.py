@@ -211,6 +211,7 @@ NATIVE_RUNNER_TOOLS = {
     'graphtraj_reports': 'session_reports',
     'graphtraj_submit_report': 'submit_report',
     'graphtraj_submit_result': 'submit_result',
+    'graphtraj_decide_result': 'decide_result',
     'graphtraj_ticket_graph': 'ticket_graph',
 }
 
@@ -574,6 +575,32 @@ register_tool('submit_result',
                   'unresolved': {'type': 'array', 'items': {'type': 'string'}},
               }, 'required': ['commit', 'result_refs', 'completion'], 'additionalProperties': False},
               submit_result)
+
+
+def decide_result(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> ToolResult:
+    """Accept or reject an identified submission as its authorized caller."""
+    from graphtraj.execution.runner_results import decide_session_result
+
+    if set(arguments) - {'submission_id', 'commit', 'decision', 'reason', 'evidence_refs'}:
+        raise ValueError('Unknown result decision fields.')
+    return ToolResult(decide_session_result(
+        _string_argument(arguments, 'submission_id'),
+        _string_argument(arguments, 'commit'),
+        _string_argument(arguments, 'decision'),
+        _string_argument(arguments, 'reason'),
+        _string_list_argument(arguments, 'evidence_refs'), cwd or Path.cwd(),
+    ))
+
+
+register_tool('decide_result',
+              'Accept or reject a submitted result with reasons and evidence. Equivalent to agent-runner decide-result.',
+              {'type': 'object', 'properties': {
+                  'submission_id': {'type': 'string'}, 'commit': {'type': 'string'},
+                  'decision': {'type': 'string', 'enum': ['accepted', 'rejected']},
+                  'reason': {'type': 'string'},
+                  'evidence_refs': {'type': 'array', 'minItems': 1, 'items': {'type': 'string'}},
+              }, 'required': ['submission_id', 'commit', 'decision', 'reason', 'evidence_refs'],
+               'additionalProperties': False}, decide_result)
 
 
 def _tool_document(tool: Tool) -> dict[str, Any]:

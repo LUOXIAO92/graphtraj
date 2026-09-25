@@ -802,6 +802,7 @@ def _await_session_resume(
             isinstance(mapping, dict)
             and is_session_mapping(mapping)
             and mapping.get("worker_pid") == worker.pid
+            and mapping.get("execution_id")
             and (expected_session is None or mapping.get("session") == expected_session)
         ):
             try:

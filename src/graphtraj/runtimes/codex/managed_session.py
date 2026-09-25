@@ -57,6 +57,7 @@ class CodexManagedExecution:
         context_evidence: dict,
         trace_file: Path,
         expected_session: str | None = None,
+        session_created: Callable[[str, int], None] | None = None,
     ) -> None:
         """Capture immutable task configuration for one Worker execution."""
         request = copy.deepcopy(request)
@@ -70,7 +71,9 @@ class CodexManagedExecution:
         self.directory = session_directory
         self.trace_file = trace_file
         self.started = session_started
+        self.created = session_created
         self.expected_session = expected_session
+        self.termination_requested = False
         self.execution: CodexExecution | None = None
         self.native_session: str | None = None
         self.loop: asyncio.AbstractEventLoop | None = None
@@ -106,7 +109,16 @@ class CodexManagedExecution:
                     'rollout_path': str(session.rollout_path) if session.rollout_path else None,
                 })
                 adapter.retain_native_trace(session, self.trace_file)
+                if self.created is not None:
+                    self.created(session.thread_id, adapter.service_pid)
+                if self.termination_requested:
+                    raise RuntimeAdapterError(
+                        "RUNTIME_EXECUTION_INTERRUPTED", "Stopped before native execution started.",
+                        terminal_confirmed=True,
+                    )
                 self.execution = await adapter.start_execution(session, self.prompt)
+                if self.termination_requested:
+                    self.terminate()
                 self.result = asyncio.create_task(adapter.wait(self.execution))
                 self.started(session.thread_id, adapter.service_pid)
                 try:
@@ -373,6 +385,7 @@ class CodexManagedExecution:
 
     def terminate(self) -> bool:
         """Schedule native interruption for a Worker termination/budget signal."""
+        self.termination_requested = True
         if self.loop is None or self.execution is None or self.loop.is_closed():
             return False
         async def interrupt() -> None:

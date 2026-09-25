@@ -500,7 +500,7 @@ def _registered_ticket_task(project: Any, requested: Task) -> Task:
 def _deliver_ticket(project: Any, requested: Task, retained_batch: Path, capacity_fd: int) -> dict[str, Any]:
     # The stopped Leader lends its worker-held position and resumes only after
     # the direct children have exited. PID values are never capacity positions.
-    run_agent = partial(_run_agent, capacity_fd=capacity_fd)
+    run_agent = partial(_run_agent, capacity_fd=capacity_fd, register_member=True)
     request_state = partial(_request_state, capacity_fd=capacity_fd)
     next_formal_batch = partial(_next_formal_batch, capacity_fd=capacity_fd)
     ticket_directory = project.state_directory / "tickets" / (
@@ -646,37 +646,13 @@ def _deliver_ticket(project: Any, requested: Task, retained_batch: Path, capacit
         ticket_content=ticket_content,
     )
 
-    predecessor = (next(event["event_id"] for event in reversed(read_worldline(project.state_directory, project.harness_root))
-                        if event.get("ticket_id") == task.ticket_id and event["kind"] == "team-retired")
-                   if replacing else _readiness_predecessor(project, task.ticket_id))
-    members = {
-        "team_leader": {"role": task.role, "session_ref": leader_alias},
-    }
-    state_alias, state_session, event = request_state(
-        project,
-        task,
-        worktree,
-        ticket_directory,
-        traces,
-        None,
-        None,
-        leader_alias,
-        retained_batch,
-        {
-            "phase": "start",
-            "ticket_id": task.ticket_id,
-            "caused_by_event_ids": [predecessor],
-            "evidence_refs": [retained_batch.relative_to(project.harness_root).as_posix()],
-            "worktree": worktree.relative_to(project.harness_root).as_posix(),
-            "branch": branch,
-            "members": members,
-        },
-        "start",
+    state_alias = state_session = None
+    predecessor = next(
+        event["event_id"] for event in reversed(read_worldline(project.state_directory, project.harness_root))
+        if event.get("ticket_id") == task.ticket_id
     )
-    predecessor = event["event_id"]
 
     engineer_alias = engineer_session = None
-    first_round = True
     while True:
         try:
             engineer_alias, engineer_session = run_agent(
@@ -701,20 +677,6 @@ def _deliver_ticket(project: Any, requested: Task, retained_batch: Path, capacit
                 leader_alias, leader_session, registration, retained_batch,
                 capacity_fd,
             )
-        if first_round:
-            state_alias, state_session, event = request_state(
-                project, task, worktree, ticket_directory, traces,
-                state_alias, state_session, leader_alias, engineer_batch_path,
-                {
-                    "phase": "member", "ticket_id": task.ticket_id,
-                    "caused_by_event_ids": [predecessor],
-                    "evidence_refs": [_trace_ref(project, traces, engineer_alias)],
-                    "member": "engineer", "role": engineer_task.role,
-                    "session_ref": engineer_alias,
-                },
-                "member-engineer",
-            )
-            predecessor = event["event_id"]
         try:
             candidate = _candidate(round_directory, worktree)
         except RunnerError as error:
@@ -874,24 +836,6 @@ def _deliver_ticket(project: Any, requested: Task, retained_batch: Path, capacit
                         report_name,
                         session_directory=project.runner_directory / "sessions" / alias,
                     )
-                member = (
-                    "standards_reviewer"
-                    if _task_policy(child) == "standards-reviewer"
-                    else "spec_reviewer"
-                )
-                if first_round:
-                    state_alias, state_session, event = request_state(
-                        project, task, worktree, ticket_directory, traces,
-                        state_alias, state_session, leader_alias, reviewer_batch_path,
-                        {
-                            "phase": "member", "ticket_id": task.ticket_id,
-                            "caused_by_event_ids": [predecessor],
-                            "evidence_refs": [_trace_ref(project, traces, alias)],
-                            "member": member, "role": child.role, "session_ref": alias,
-                        },
-                        "member-" + member,
-                    )
-                    predecessor = event["event_id"]
                 reviewed_axes.add(_task_policy(child))
                 child_results.append({"role": child.role, "alias": alias, "session": session,
                                       "trace": _trace_ref(project, traces, alias)})
@@ -976,7 +920,6 @@ def _deliver_ticket(project: Any, requested: Task, retained_batch: Path, capacit
         )
         if monitor is not None:
             monitor.record_correction(engineer_task.role)
-        first_round = False
         round_directory = round_directory.parent / str(int(round_directory.name) + 1)
         leader_alias, leader_session = run_agent(
             project, task, task.role, worktree, ticket_directory, traces,
@@ -1017,6 +960,7 @@ def _resume_active_ticket(
     """Continue the current Team from retained member Sessions and evidence."""
     if state.get("status") not in {"implementing", "reviewing", "reworking"}:
         raise RunnerError("TICKET_ALREADY_ACTIVE", "The active Ticket cannot continue its current Team step.")
+    run_agent = partial(_run_agent, register_member=True)
     generation = state["active_team_ordinal"]
     worktree = project.harness_root / state["worktree"]
     traces = ticket_directory / "teams" / str(generation) / "traces"
@@ -1138,7 +1082,7 @@ def _resume_active_ticket(
             ticket_content=ticket_content,
         )
         try:
-            engineer_alias, engineer_session = _run_agent(
+            engineer_alias, engineer_session = run_agent(
                 project, engineer_task, engineer_role, worktree, ticket_directory,
                 traces, None, None, None, leader_alias, engineer_batch_path,
                 capacity_fd=capacity_fd,
@@ -1199,7 +1143,7 @@ def _resume_active_ticket(
             project.runner_directory / "sessions" / leader_alias
             / "child-registration.yml"
         )
-        leader_alias, leader_session = _run_agent(
+        leader_alias, leader_session = run_agent(
             project, task, task.role, worktree, ticket_directory, traces,
             leader_alias, leader_session, registration, None, team_batch,
             "The confirmed implementation rejection is closed. Dispatch the same "
@@ -1229,7 +1173,7 @@ def _resume_active_ticket(
             ticket_content=ticket_content,
         )
         try:
-            engineer_alias, engineer_session = _run_agent(
+            engineer_alias, engineer_session = run_agent(
                 project, engineer_task, engineer_role, worktree, ticket_directory,
                 traces, engineer_alias, engineer_session, None, leader_alias,
                 engineer_batch_path, capacity_fd=capacity_fd,
@@ -1248,7 +1192,7 @@ def _resume_active_ticket(
         except RunnerError as error:
             if error.code != _AGENT_EVIDENCE_ERROR:
                 raise
-            engineer_alias, engineer_session = _run_agent(
+            engineer_alias, engineer_session = run_agent(
                 project, engineer_task, engineer_role, worktree,
                 ticket_directory, traces, engineer_alias, engineer_session,
                 None, leader_alias, engineer_batch_path,
@@ -1297,7 +1241,7 @@ def _resume_active_ticket(
                     error.message, engineer_role
                 ),
             ) from error
-        engineer_alias, engineer_session = _run_agent(
+        engineer_alias, engineer_session = run_agent(
             project, engineer_task, engineer_role, worktree, ticket_directory,
             traces, engineer_alias, engineer_session, None, leader_alias,
             engineer_batch_path,
@@ -1315,25 +1259,8 @@ def _resume_active_ticket(
         for event in reversed(read_worldline(project.state_directory, project.harness_root))
         if event.get("ticket_id") == task.ticket_id
     )
-    if team["members"].get("engineer", {}).get("session_ref") is None:
-        state_alias, state_session, event = _request_state(
-            project, task, worktree, ticket_directory, traces,
-            state_alias, state_session, leader_alias, team_batch,
-            {
-                "phase": "member",
-                "ticket_id": task.ticket_id,
-                "caused_by_event_ids": [predecessor],
-                "evidence_refs": [_trace_ref(project, traces, engineer_alias)],
-                "member": "engineer",
-                "role": engineer_role,
-                "session_ref": engineer_alias,
-            },
-            "member-engineer-recovery",
-            capacity_fd=capacity_fd,
-        )
-        predecessor = event["event_id"]
-        team["members"]["engineer"] = {"role": engineer_role, "session_ref": engineer_alias}
-    if state.get("current_candidate") != candidate:
+    candidate_changed = state.get("current_candidate") != candidate
+    if candidate_changed:
         state_alias, state_session, event = _request_state(
             project, task, worktree, ticket_directory, traces,
             state_alias, state_session, leader_alias, team_batch,
@@ -1351,7 +1278,7 @@ def _resume_active_ticket(
         state["current_candidate"] = candidate
 
     registration = project.runner_directory / "sessions" / leader_alias / "child-registration.yml"
-    remaining = set()
+    remaining = (set(_REVIEWER_ROLES) - _reviewed_axes(ticket_directory)) if candidate_changed else set()
     reviewer_results = []
     for role, report_name, seat in (
         ("standards-reviewer", "standards.md", "standards_reviewer"),
@@ -1394,24 +1321,6 @@ def _resume_active_ticket(
                 report_name,
                 project.runner_directory / "sessions" / alias,
             )
-        if team["members"].get(seat, {}).get("session_ref") is None:
-            state_alias, state_session, event = _request_state(
-                project, task, worktree, ticket_directory, traces,
-                state_alias, state_session, leader_alias, reviewer_batch_path,
-                {
-                    "phase": "member",
-                    "ticket_id": task.ticket_id,
-                    "caused_by_event_ids": [predecessor],
-                    "evidence_refs": [_trace_ref(project, traces, alias)],
-                    "member": seat,
-                    "role": role,
-                    "session_ref": alias,
-                },
-                "member-" + seat + "-recovery",
-                capacity_fd=capacity_fd,
-            )
-            predecessor = event["event_id"]
-            team["members"][seat] = {"role": role, "session_ref": alias}
         remaining.discard(role)
         reviewer_results.append(
             {"role": role, "alias": alias, "session": session,
@@ -1454,7 +1363,7 @@ def _resume_active_ticket(
     correct_process()
     reviewers_dispatched = bool(remaining)
     if remaining and not registration.exists():
-        leader_alias, leader_session = _run_agent(
+        leader_alias, leader_session = run_agent(
             project, task, task.role, worktree, ticket_directory, traces,
             leader_alias, leader_session, registration, None, team_batch,
             "Engineer completed:\n" + yaml.safe_dump(
@@ -1473,7 +1382,7 @@ def _resume_active_ticket(
         reviewer_batch, reviewer_batch_path, leader_alias, leader_session = _next_formal_batch(
             project, task, definition, ticket_content, worktree, ticket_directory,
             traces, leader_alias, leader_session, registration, team_batch,
-            capacity_fd=capacity_fd, correct_process=correct_process,
+            capacity_fd=capacity_fd, correct_process=correct_process, optional_formal=True,
         )
         if reviewer_batch is None:
             break
@@ -1514,7 +1423,7 @@ def _resume_active_ticket(
             except RunnerError as error:
                 if error.code != _AGENT_EVIDENCE_ERROR:
                     raise
-                alias, session = _run_agent(
+                alias, session = run_agent(
                     project, reviewer_task, child.role, worktree,
                     ticket_directory, traces, alias, session, None,
                     leader_alias, reviewer_batch_path,
@@ -1533,24 +1442,6 @@ def _resume_active_ticket(
                 if _task_policy(child) == "standards-reviewer"
                 else "spec_reviewer"
             )
-            if team["members"].get(seat, {}).get("session_ref") is None:
-                state_alias, state_session, event = _request_state(
-                    project, task, worktree, ticket_directory, traces,
-                    state_alias, state_session, leader_alias, reviewer_batch_path,
-                    {
-                        "phase": "member",
-                        "ticket_id": task.ticket_id,
-                        "caused_by_event_ids": [predecessor],
-                        "evidence_refs": [_trace_ref(project, traces, alias)],
-                        "member": seat,
-                        "role": child.role,
-                        "session_ref": alias,
-                    },
-                    "member-" + seat + "-recovery",
-                    capacity_fd=capacity_fd,
-                )
-                predecessor = event["event_id"]
-                team["members"][seat] = {"role": child.role, "session_ref": alias}
             remaining.remove(_task_policy(child))
             reviewer_results.append(
                 {"role": child.role, "alias": alias, "session": session,
@@ -1561,7 +1452,7 @@ def _resume_active_ticket(
             ticket_directory, task.ticket_id, task.ticket_name
         )
         if current_monitor is not None and current_monitor.is_stopped():
-            leader_alias, leader_session = _run_agent(
+            leader_alias, leader_session = run_agent(
                 project, task, task.role, worktree, ticket_directory,
                 traces, leader_alias, leader_session, registration, None,
                 team_batch,
@@ -1581,14 +1472,14 @@ def _resume_active_ticket(
                 "session": leader_session,
             }
 
-        leader_alias, leader_session = _run_agent(
+        leader_alias, leader_session = run_agent(
             project, task, task.role, worktree, ticket_directory, traces,
             leader_alias, leader_session, registration, None, team_batch,
             "Reviewers completed:\n" + yaml.safe_dump(reviewer_results, sort_keys=False),
             capacity_fd=capacity_fd,
         )
     if not reviewers_dispatched and reviewer_results:
-        leader_alias, leader_session = _run_agent(
+        leader_alias, leader_session = run_agent(
             project, task, task.role, worktree, ticket_directory, traces,
             leader_alias, leader_session, registration, None, team_batch,
             "Reviewers completed:\n" + yaml.safe_dump(reviewer_results, sort_keys=False),
@@ -1605,7 +1496,7 @@ def _resume_active_ticket(
     except RunnerError as error:
         if error.code != _AGENT_EVIDENCE_ERROR:
             raise
-        leader_alias, leader_session = _run_agent(
+        leader_alias, leader_session = run_agent(
             project, task, task.role, worktree, ticket_directory, traces,
             leader_alias, leader_session, registration, None, team_batch,
             _evidence_recovery_prompt(
@@ -2307,6 +2198,8 @@ def _run_agent(
     reports_only: bool = False,
     wait_for_completion: bool = True,
     task_environment: dict[str, str] | None = None,
+    register_member: bool = False,
+    replaces_alias: str | None = None,
 ) -> tuple[str, str]:
     team_file = traces.parent / "team.yml"
     if logical_role(role) != "delivery-state" and team_file.exists():
@@ -2323,6 +2216,7 @@ def _run_agent(
             positions[0].fileno(), reports_only,
             wait_for_completion=wait_for_completion,
             task_environment=task_environment,
+            register_member=register_member, replaces_alias=replaces_alias,
         )
 
 
@@ -2402,6 +2296,8 @@ def _execute_agent(
     input_delivered: threading.Event | None = None,
     wait_for_completion: bool = True,
     task_environment: dict[str, str] | None = None,
+    register_member: bool = False,
+    replaces_alias: str | None = None,
 ) -> tuple[str, str]:
     """Prepare a permitted execution; the Worker checks again at native startup."""
     with execution_start_lock(project.runner_directory):
@@ -2500,6 +2396,8 @@ def _execute_agent(
                 **context.launch_document(),
                 "context_evidence": context.evidence_document(),
                 "operation": "launch",
+                "member_registration": ({"member": logical_role(role).replace("-", "_"), "replaces": replaces_alias}
+                                        if register_member else None),
                 "mapping": {
                     "alias": alias,
                     "runtime": context.runtime,
@@ -2973,6 +2871,7 @@ def _run_session_worker(
                         if (
                             isinstance(current_mapping, dict)
                             and current_mapping.get("worker_pid") == worker.pid
+                            and current_mapping.get("execution_id")
                         ):
                             input_delivered.set()
                     if monitor is not None:
@@ -3311,7 +3210,7 @@ def _worker_main() -> None:
             alias, session = _run_agent(
                 project, task, task.role, worktree, evidence, traces,
                 member["session_ref"], session, None, sys.argv[4], retained,
-                recovery_prompt, capacity_fd=capacity_fd,
+                recovery_prompt, capacity_fd=capacity_fd, register_member=True,
             )
             result = {"role": task.role, "alias": alias, "session": session, "launch_status": "completed"}
     except (RunnerError, RuntimeAdapterError) as error:

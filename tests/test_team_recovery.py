@@ -74,15 +74,6 @@ target = os.environ.get('RECOVERY_TARGET', '')
 message = prompt
 if role == 'delivery-state':
     facts = json.loads(os.environ['GRAPHTRAJ_STATE_FACTS'])
-    pending = Path.cwd() / '.scratch' / 'pending-member-failed'
-    if (
-        target == 'pending-member'
-        and facts.get('phase') == 'member'
-        and facts.get('member') == 'spec_reviewer'
-        and not pending.exists()
-    ):
-        pending.write_text('failed\n')
-        raise SystemExit(1)
     if target == 'delivery-state' and not resumed:
         Path(os.environ['GRAPHTRAJ_STATE_REQUEST']).write_text('{}')
     else:
@@ -661,7 +652,7 @@ def test_preflight_failed_engineer_starts_once_from_the_leader_correction(
     team = yaml.safe_load((ticket / 'teams/1/team.yml').read_text())
     leader_alias = team['members']['team_leader']['session_ref']
     assert state['status'] == 'implementing'
-    assert team['members']['engineer']['session_ref'] is None
+    assert 'engineer' not in team['members']
     assert not [
         path for path in (harness / '.graphtraj/runner/sessions').glob('*/mapping.yml')
         if yaml.safe_load(path.read_text())['role'] == 'engineer'
@@ -679,7 +670,7 @@ def test_preflight_failed_engineer_starts_once_from_the_leader_correction(
     assert repeated_state['status'] == 'implementing'
     assert repeated_team['team_ordinal'] == 1
     assert repeated_team['members']['team_leader']['session_ref'] == leader_alias
-    assert repeated_team['members']['engineer']['session_ref'] is None
+    assert 'engineer' not in repeated_team['members']
     assert not [
         path for path in (harness / '.graphtraj/runner/sessions').glob('*/mapping.yml')
         if yaml.safe_load(path.read_text())['role'] == 'engineer'
@@ -771,11 +762,11 @@ def test_retained_tiered_seat_starts_its_engineer_from_the_retained_batch(
     team_file = ticket / 'teams/1/team.yml'
     team = yaml.safe_load(team_file.read_text())
     leader_alias = team['members']['team_leader']['session_ref']
-    assert team['members']['engineer']['session_ref'] is None
+    assert 'engineer' not in team['members']
 
     # Reuse the retained Team seat under the spelling an earlier install wrote.
     mode = team_file.stat().st_mode & 0o777
-    team['members']['engineer']['role'] = 'engineer-senior'
+    team['members']['engineer'] = {'role': 'engineer-senior', 'session_ref': None}
     team_file.chmod(0o600)
     team_file.write_text(yaml.safe_dump(team, sort_keys=False))
     team_file.chmod(mode)
@@ -884,58 +875,7 @@ def test_access_failure_returns_to_the_responsible_operator_without_agent_reflec
     assert 'Recovery required:' not in engineer.read_text()
 
 
-def test_recovery_registers_a_completed_reviewer_before_finalizing(
-    installed_commands, temporary_git_repository, fake_codex, tmp_path,
-):
-    harness, _, _, environment = configure_harness(
-        installed_commands, temporary_git_repository, fake_codex, tmp_path,
-    )
-    _register_ready_ticket(installed_commands, harness)
-    fake_codex.executable.write_text('#!' + sys.executable + '\n' + RUNTIME)
-    batch = harness / 'batch.yml'
-    batch.write_text(
-        'tasks:\n'
-        '  - ticket_id: "76"\n'
-        '    ticket_name: session-alias-control\n'
-        '    role: coding-team.team-leader\n'
-    )
-    runtime_environment = {
-        **environment,
-        'GRAPHTRAJ_AGENT_RUNNER': str(installed_commands.runner),
-        'RECOVERY_TARGET': 'pending-member',
-    }
-
-    failed = run_process(
-        [str(installed_commands.runner), '--swarm-input', str(batch)],
-        cwd=harness, env=runtime_environment, timeout=45,
-    )
-
-    assert failed.returncode == 1
-    ticket = harness / '.graphtraj/state/tickets/76-session-alias-control'
-    team_file = ticket / 'teams/1/team.yml'
-    team = yaml.safe_load(team_file.read_text())
-    assert (ticket / 'teams/1/rounds/1/spec.md').is_file()
-    assert team['members']['spec_reviewer']['session_ref'] is None
-
-    continued = run_process(
-        [str(installed_commands.runner), '--swarm-input', str(batch)],
-        cwd=harness, env=runtime_environment, timeout=45,
-    )
-
-    assert continued.returncode == 0, continued.stdout + continued.stderr
-    state = yaml.safe_load((ticket / 'ticket.yml').read_text())
-    team = yaml.safe_load(team_file.read_text())
-    assert state['status'] == 'awaiting-integration'
-    assert team['members']['spec_reviewer']['session_ref']
-    sessions = [
-        yaml.safe_load(path.read_text())
-        for path in (harness / '.graphtraj/runner/sessions').glob('*/mapping.yml')
-        if yaml.safe_load(path.read_text())['role'] == 'spec-reviewer'
-    ]
-    assert len(sessions) == 1
-
-
-def test_main_replaces_an_unregistered_failed_engineer_from_its_durable_alias(
+def test_main_replaces_a_registered_failed_engineer_from_its_durable_alias(
     installed_commands, temporary_git_repository, fake_codex, tmp_path,
 ):
     harness, _, _, environment = configure_harness(
@@ -974,7 +914,7 @@ def test_main_replaces_an_unregistered_failed_engineer_from_its_durable_alias(
     alias = mapping['alias']
     trace = ticket / 'teams/1/traces' / alias / 'events.jsonl'
     trace_before = retained_state(trace)
-    assert team['members']['engineer']['session_ref'] is None
+    assert team['members']['engineer']['session_ref'] == alias
     cause = [
         json.loads(line)['event_id']
         for path in (harness / '.graphtraj/state/worldline').glob('*.jsonl')

@@ -143,6 +143,31 @@ def run(job_file: Path) -> int:
             )
             heartbeat_thread.start()
 
+            def record_created(session: str, runtime_pid: int) -> None:
+                """Bind the native Session and register assignment before its first turn."""
+                nonlocal mapping_recorded
+                if operation == "resume" and session != expected_session:
+                    raise RuntimeAdapterError(
+                        "RUNTIME_SESSION_NOT_RESUMABLE", "The mapped Runtime session could not be resumed.",
+                    )
+                mapping = {
+                    **{key: value for key, value in base_mapping.items()
+                       if key not in {"execution_id", "last_outcome"}},
+                    "session": session, "worker_pid": os.getpid(),
+                    "runtime_pid": runtime_pid, "control_directory": control_directory,
+                }
+                write_yaml_durably(session_directory / "mapping.yml", mapping)
+                mapping_recorded = True
+                launch_file = session_directory / "launch.yml"
+                assignment = yaml.safe_load(launch_file.read_text()).get("member_registration")
+                if assignment is not None:
+                    try:
+                        _register_created_member(launch_file, mapping, created=operation == "launch")
+                    except (RunnerError, OSError, ValueError, KeyError, TypeError, yaml.YAMLError) as error:
+                        raise RuntimeAdapterError(
+                            "MEMBER_REGISTRATION_FAILED", str(error), terminal_confirmed=True,
+                        ) from error
+
             def record_session(session: str, runtime_pid: int) -> None:
                 """Persist native execution identity before acknowledging its caller."""
                 nonlocal mapping_recorded, monitor_thread
@@ -204,6 +229,7 @@ def run(job_file: Path) -> int:
                 job.get("context_evidence", {}),
                 expected_session=expected_session if operation == "resume" else None,
                 trace_file=Path(base_mapping["trace_file"]),
+                session_created=record_created,
             )
             previous_sigterm = signal.signal(signal.SIGTERM, request_termination)
             try:
@@ -240,7 +266,10 @@ def run(job_file: Path) -> int:
             if startup_lock is not None:
                 startup_lock.close()
             if mapping_recorded:
-                terminal = {"outcome": "runtime-error"}
+                terminal = {
+                    "outcome": "runtime-error",
+                    "error": {"code": "RUNTIME_WORKER_FAILED", "message": str(error)},
+                }
             else:
                 _write_worker_error(
                     session_directory,
@@ -302,6 +331,86 @@ def run(job_file: Path) -> int:
         if previous_sigterm is not None:
             signal.signal(signal.SIGTERM, previous_sigterm)
     return 1
+
+
+def _register_created_member(
+    job_file: Path, mapping: dict[str, object], *, created: bool,
+) -> None:
+    """Register only a native Session owned by this trusted Runner creation job.
+
+    Runtime files are protected from Agent writes. In addition to that boundary,
+    verify the canonical launch file, persisted native identity and live Worker
+    ownership; an Agent's request, role or environment cannot grant this path.
+    The caller holds the existing execution-start lock across this mutation.
+    """
+    from graphtraj.execution.runner_heartbeat import ownership_is_held
+    from graphtraj.execution.runner_status import read_alias_mapping
+    from graphtraj.graph.delivery_state import apply_delivery_state_request, read_team
+    from graphtraj.graph.delivery_worldline import read_worldline
+    from graphtraj.graph.ticket_graph import _load_states
+    from graphtraj.workspace.runner_project import discover_project, discover_project_root
+
+    project = discover_project(discover_project_root(job_file.parent), require_clean_integration=False)
+    directory = project.runner_directory / "sessions" / mapping["alias"]
+    recorded, _ = read_alias_mapping(project.runner_directory, mapping["alias"])
+    if (
+        job_file != directory / "launch.yml" or job_file.is_symlink()
+        or recorded != mapping or mapping["worker_pid"] != os.getpid()
+        or not ownership_is_held(directory, os.getpid())
+        or yaml.safe_load((directory / "session.yml").read_text())["session"] != mapping["session"]
+    ):
+        raise ValueError("Member registration requires the owning Runner creation job")
+    job = yaml.safe_load(job_file.read_text())
+    if job.get("operation") != "launch" or conflicting_binding_field(job["mapping"], mapping):
+        raise ValueError("Member registration conflicts with the trusted launch binding")
+    assignment = job["member_registration"]
+    if not isinstance(assignment, dict) or set(assignment) != {"member", "replaces"}:
+        raise ValueError("Invalid Runner member assignment")
+    ticket_directory, ticket = _load_states(project.state_directory / "tickets")[mapping["ticket_id"]]
+    team_file = ticket_directory / "teams" / str(mapping["team_generation"]) / "team.yml"
+    if not created:
+        if (ticket["active_team_ordinal"] != mapping["team_generation"] or not team_file.is_file()
+                or not any(member["session_ref"] == mapping["alias"]
+                           for member in read_team(team_file)["members"].values())):
+            raise ValueError("A resumed task Session must already be a registered member")
+        return
+    predecessor = next(
+        event["event_id"] for event in reversed(read_worldline(project.state_directory, project.harness_root))
+        if event.get("ticket_id") == mapping["ticket_id"]
+    )
+    request = {
+        "ticket_id": mapping["ticket_id"], "caused_by_event_ids": [predecessor],
+        "evidence_refs": [(directory / "mapping.yml").relative_to(project.harness_root).as_posix()],
+    }
+    if not team_file.exists():
+        expected = (ticket["active_team_ordinal"] or 0) + 1
+        if mapping["team_generation"] != expected or assignment["replaces"] is not None:
+            raise ValueError("The created Session does not start the next Team")
+        request.update(
+            phase="start", worktree=Path(mapping["worktree_path"]).relative_to(project.harness_root).as_posix(),
+            branch="agent/" + ticket["ticket_id"] + "-" + ticket["ticket_name"],
+            members={assignment["member"]: {"role": mapping["role"], "session_ref": mapping["alias"]}},
+        )
+    else:
+        if ticket["active_team_ordinal"] != mapping["team_generation"]:
+            raise ValueError("The created Session does not belong to the active Team")
+        team = read_team(team_file)
+        member = assignment["member"]
+        if assignment["replaces"] is not None:
+            previous, _ = read_alias_mapping(project.runner_directory, assignment["replaces"])
+            if any(previous[key] != mapping[key] for key in ("parent", "ticket_id", "team_generation", "role")):
+                raise ValueError("Replacement must retain the actual parent and task binding")
+            member = next((name for name, entry in team["members"].items()
+                           if entry["session_ref"] == assignment["replaces"]), None)
+            if member is None:
+                raise ValueError("Replacement must identify a current actual member")
+            phase = "replace-member"
+        else:
+            phase = "member"
+            if member in team["members"] and team["members"][member]["session_ref"] is not None:
+                member = mapping["alias"]
+        request.update(phase=phase, member=member, role=mapping["role"], session_ref=mapping["alias"])
+    apply_delivery_state_request(project.state_directory, project.harness_root, request, request)
 
 
 def _require_recorded_binding(

@@ -202,7 +202,7 @@ def _replace_stopped_session(
     prior_trace = _trace_ref(project, traces, alias)
     replacement, _ = _run_agent(
         project, task, task.role, worktree, directory, traces,
-        None, None, None, leader, retained,
+        None, None, None, mapping["parent"], retained,
         "Continue this Team seat from previous Session {0} and Trace {1}.\n"
         "Accepted Ticket and constraints:\n{2}\n"
         "Current commit: {3}\n"
@@ -210,6 +210,6 @@ def _replace_stopped_session(
         "Failed attempts: inspect the previous Session Trace before changing work.\n"
         "Remaining work: continue only the current {4} Team seat, preserving closed Team Round evidence."
         .format(alias, prior_trace, task.ticket_content, current_commit, task.role),
+        register_member=True, replaces_alias=alias,
     )
-    record("replace-member", [_trace_ref(project, traces, replacement)], member=seat, role=task.role, session_ref=replacement)
     return {"alias": alias, "replacement_alias": replacement, "team_ordinal": generation}

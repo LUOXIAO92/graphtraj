@@ -11,6 +11,7 @@ import yaml
 from conftest import run_process, wait_for_file
 from runner_fixtures import configure_harness, retained_state
 from test_session_alias_control import _register_ready_ticket
+from test_member_creation_order import _observed_runtime
 
 
 @pytest.mark.parametrize(("during_implementation", "delivery"), [
@@ -23,6 +24,8 @@ def test_installed_team_and_member_replacement(
     root, _, integration, environment = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path,
     )
+    _observed_runtime(fake_codex, tmp_path)
+    environment["MEMBER_OBSERVATIONS"] = str(tmp_path / "replacement-members.jsonl")
     _register_ready_ticket(installed_commands, root)
     retirement_instructions = resources.files("graphtraj.resources").joinpath(
         "roles", "retirement-instructions.md"

@@ -379,7 +379,7 @@ def test_installed_runner_obeys_the_explicit_leader_decision_for_a_run_free_team
         leader = call['role'] == 'team-leader'
         filesystem = call['settings']['permissions'][call['settings']['default_permissions']]['filesystem']
         assert filesystem[':workspace_roots']['.'] == (
-            'read' if call['role'] in {'standards-reviewer', 'spec-reviewer'} else 'write'
+            'read' if call['role'] in {'team-leader', 'standards-reviewer', 'spec-reviewer'} else 'write'
         )
         assert filesystem[':workspace_roots']['CONTEXT.md'] == 'read'
         assert filesystem[':workspace_roots']['docs'] == 'read'
@@ -396,25 +396,20 @@ def test_installed_runner_obeys_the_explicit_leader_decision_for_a_run_free_team
         } == required_skills[call['role']]
         registration = harness_root / '.graphtraj/runner/sessions/74-complete_team_round-handover0-team_leader@team_leader/child-registration.yml'
         batch_directory = harness_root / '.graphtraj/state/batches'
-        assert (filesystem.get(str(registration)) == 'write') is leader
-        assert (filesystem.get(str(batch_directory)) == 'write') is leader
-        # Direct control reads causal Worldline events and takes one Runner
-        # capacity position, at their real locations instead of the Ticket
-        # evidence directory.
-        assert (
-            filesystem.get(str(harness_root / '.graphtraj/state/worldline/.lock'))
-            == 'write'
-        ) is leader
-        assert (
-            filesystem.get(str(harness_root / '.graphtraj/runner/capacity'))
-            == 'write'
-        ) is leader
+        # Native callbacks own control writes; the Agent cannot write these paths.
+        for protected in (
+            registration, batch_directory,
+            harness_root / '.graphtraj/state/worldline/.lock',
+            harness_root / '.graphtraj/runner/capacity',
+        ):
+            assert filesystem.get(str(protected)) != 'write'
         report_names = {
             "engineer": {"engineer.md", "validation.md"},
             "standards-reviewer": {"standards.md"},
             "spec-reviewer": {"spec.md"},
             "team-leader": {"leader.md"},
-        }.get(call["role"])
+            "delivery-state": {"delivery-state.md"},
+        }[call["role"]]
         report_writes = {
             path
             for path, access in filesystem.items()
@@ -424,26 +419,20 @@ def test_installed_runner_obeys_the_explicit_leader_decision_for_a_run_free_team
                 or path.startswith(str(worktree / ".state"))
             )
         }
-        if report_names is None:
-            assert not report_writes
-        else:
-            assert len(report_writes) == len(report_names)
-            canonical = {
-                Path(path).relative_to(ticket_directory)
-                for path in report_writes
-                if path.startswith(str(ticket_directory))
+        assert not report_writes
+        # Each Session reads its assignments and submits through the native tool.
+        canonical = {
+            Path(path).relative_to(ticket_directory)
+            for path, access in filesystem.items()
+            if access == 'read' and Path(path).suffix == '.md'
+            and path.startswith(str(ticket_directory))
+        }
+        assert {path.name for path in canonical} == report_names
+        if call["role"] in {"engineer", "team-leader", "delivery-state"}:
+            assert canonical == {
+                Path("teams") / "1" / "rounds" / call["round"] / name
+                for name in report_names
             }
-            assert not {
-                path
-                for path in report_writes
-                if path.startswith(str(worktree / ".state"))
-            }
-            assert {path.name for path in canonical} == report_names
-            if call["role"] in {"engineer", "team-leader"}:
-                assert canonical == {
-                    Path("teams") / "1" / "rounds" / call["round"] / name
-                    for name in report_names
-                }
         assert "hooks" not in call["settings"]
         assert call['settings']['agents']['enabled'] is (leader and swarm is not False)
         assert 'max_concurrent_threads_per_session' not in call['settings']['agents']

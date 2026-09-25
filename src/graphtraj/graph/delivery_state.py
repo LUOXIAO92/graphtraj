@@ -400,13 +400,20 @@ def confirmed_rework(path: Path) -> bool:
 
 
 def _validate_implementation_rejection(directory: Path, candidate: str) -> None:
-    """Check attributable report fields; the Leader owns their semantic diagnosis."""
+    """Check attributable report fields; the Leader owns their semantic diagnosis.
+
+    A Round that selected no Review axis has no report file in its directory,
+    so the confirmed rejection alone is enough. Every report that is present
+    is still validated in full.
+    """
     if not confirmed_rework(directory / "leader.md"):
         raise ValueError("Rework requires the Team Leader's confirmed diagnosis")
     comparisons = []
     findings = []
     for axis in ("Standards", "Spec"):
         path = directory / (axis.lower() + ".md")
+        if not path.is_file():
+            continue
         report = path.read_text(encoding="utf-8")
         lines = report.splitlines()
 
@@ -447,9 +454,9 @@ def _validate_implementation_rejection(directory: Path, candidate: str) -> None:
                 if len(values) != 1 or not values[0]:
                     raise report_error("Finding lacks accepted evidence requirements")
             findings.append(value)
-    if comparisons[0] != comparisons[1]:
+    if len(comparisons) == 2 and comparisons[0] != comparisons[1]:
         raise ValueError("Rework requires matching Comparison fields in Standards and Spec reports")
-    if not findings:
+    if comparisons and not findings:
         raise ValueError("Rework requires an implementation finding in the Standards or Spec report")
 
 

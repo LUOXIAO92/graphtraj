@@ -83,7 +83,7 @@ def _registered_ticket_names(state_directory: Path) -> dict[str, str]:
 def launch_batch(batch: Batch, cwd: Path) -> LaunchResponse:
     """Dispatch a Batch from parse_batch/read_batch using the current authority.
 
-    A Team Leader registers direct children with its owning worker; Main
+    A calling Session registers direct children with its owning worker; Main
     dispatches the selected work. The dispatching Session is identified by the
     process tree the command runs in, so a supplied registration path cannot
     promote a caller: ``register_child_batch`` still requires it to be that

@@ -87,7 +87,7 @@ def managed_project(
     fake_codex: FakeCodex,
     tmp_path: Path,
 ) -> Iterator[ManagedProject]:
-    """Set up a project and register a bounded task without starting a Team."""
+    """Prepare an explicitly authorized, ready task for native Session checks."""
     from graphtraj.graph.ticket_graph import register_ticket
     from graphtraj.graph.delivery_worldline import append_project_worldline_event
 
@@ -96,6 +96,12 @@ def managed_project(
     )
     state = root / '.graphtraj/state'
     register_ticket(state, root, _ticket('113', 'managed-probe'))
+    from test_ticket_graph import _change_status
+    _change_status(installed_commands, root, '113', 'ready')
+    role_file = root / '.graphtraj/roles.yml'
+    roles = yaml.safe_load(role_file.read_text())
+    roles['role_tree'] = {role: {} for role in ('managed-probe', 'first-probe', 'second-probe')}
+    role_file.write_text(yaml.safe_dump(roles))
     (root / 'instruction.md').write_text('Exercise the registered Session.\n')
     cause = append_project_worldline_event(state, root, {
         'kind': 'main-decision', 'decision': 'Exercise the registered Session.',
@@ -376,6 +382,12 @@ def test_each_registered_task_keeps_its_role_context(managed_project: ManagedPro
 
     root, cause, call, _ = managed_project
     register_ticket(root / '.graphtraj/state', root, _ticket('114', 'other-probe'))
+    from graphtraj.graph.ticket_graph import update_ticket_state
+    update_ticket_state(root / '.graphtraj/state', root, {
+        'ticket_id': '114', 'status': 'ready', 'active_team_ordinal': None,
+        'worktree': None, 'branch': None, 'current_candidate': None,
+        'caused_by_event_ids': [cause], 'evidence_refs': ['instruction.md'],
+    })
     first = launch_document(role='first-probe')['tasks'][0]
     second = {
         **first, 'ticket_id': '114', 'ticket_name': 'other-probe',
@@ -406,7 +418,7 @@ def test_later_caller_can_answer_native_approval(managed_project: ManagedProject
     assert request['method'] == 'item/commandExecution/requestApproval'
     assert request['params'] == {
         'threadId': launched['session'], 'turnId': request['execution_id'],
-        'command': 'printf APPROVAL_121', 'cwd': str(root / '.graphtraj/.agent-worktrees/dev'),
+        'command': 'printf APPROVAL_121', 'cwd': launched['worktree_path'],
     }
     assert request['session'] == pending['session'] == launched['session']
     assert request['execution_id'] == pending['execution_id']

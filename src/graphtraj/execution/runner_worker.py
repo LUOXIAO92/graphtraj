@@ -568,9 +568,16 @@ def _write_worker_error(
 
 
 def main() -> None:
+    """Own a native execution and any child Batch registered during its turn."""
     if len(sys.argv) != 2:
         raise SystemExit(2)
-    raise SystemExit(run(Path(sys.argv[1])))
+    job_file = Path(sys.argv[1])
+    result = run(job_file)
+    if result == 0 and yaml.safe_load(job_file.read_text()).get("drive_children", False):
+        from graphtraj.teams.coding.team_round import run_session_children
+
+        run_session_children(job_file)
+    raise SystemExit(result)
 
 
 if __name__ == "__main__":

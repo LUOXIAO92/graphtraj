@@ -1,12 +1,10 @@
 # GraphTraj
 
 GraphTraj is a Harness for delivering a graph of accepted Tickets through
-Teams. Main manages the whole request, dependencies and integration. Each
-Team Leader coordinates one Engineer, two Reviewers and the Team's decisions.
-The installed commands provide setup, isolated execution and durable evidence.
-This coding Team protocol applies to dispatched `coding-team.*` members.
-Shared Delivery State and temporary Batch specialists retain their own duties
-and permissions.
+Teams of configured roles, including one-Agent Teams. Main manages the request,
+dependencies and integration. Coding roles carry specialist instructions;
+researchers and engineers share formal execution, workspaces and evidence.
+The installed commands provide setup, isolated execution and durable records.
 
 Main is started and configured by the user. It follows the user's instructions
 and the `AGENTS.md` files applicable to the task, reading Skills as needed.
@@ -344,13 +342,13 @@ Session continuation. Batch inline roles accept the same optional field.
 
 A task can use a preset name or a one-entry inline role with the same Runtime
 settings. Inline roles stay in their Batch and never become presets
-automatically. Fixed role instructions, file access and dispatch permissions
-are bundled policy; role settings cannot replace them. Setup does not generate
+automatically. Dispatch requires an explicit root or direct edge in `role_tree`;
+inline Runtime settings cannot add an edge. Existing role instructions and
+file restrictions remain in effect. Setup does not generate
 Runtime-specific child-role directories.
 
-Engineer child tasks select Repository Skills explicitly through their `skills`
-list. Other role tasks do not accept that field; Session resumption preserves
-the original Adapter selection.
+Any authorized role task selects Repository Skills explicitly through its
+`skills` list. Session resumption preserves the original Adapter selection.
 In the default same-directory layout, Source history distinguishes a tracked
 Repository Skill from a Harness-owned Skill at the same physical path.
 
@@ -361,13 +359,32 @@ accepted GitHub Issue definitions and dependencies, generates the current
 graph with `graphtraj ticket graph`, and selects ready Tickets.
 Only validated `dev` integration satisfies a dependency.
 
-Main activates ready Tickets' Team Leaders with a block-style YAML swarm input:
+Activate any role authorized as a root in `roles.yml`, for example:
+
+```yaml
+roles:
+  researcher:
+    runtime: codex
+    model: your-selected-model
+role_tree:
+  researcher: {}
+```
+
+A lone researcher uses the same formal Session, Ticket Worktree, Team/Round,
+Trace, report submission and versioned result submission as an engineer.
+Only actual members are registered; no Leader or Engineer seat is required.
+Task files may be committed in the Worktree; project documents and private
+control records retain their restrictions. Reports use the exact assigned
+paths through `graphtraj_submit_report`. Ending execution does not accept or
+complete the Ticket. Use ordinary `send` to continue its existing Session.
+
+Select the ready Ticket with a block-style YAML swarm input:
 
 ```yaml
 tasks:
   - ticket_id: "123"
-    role: coding-team.team-leader
-    instruction: Deliver the current accepted Ticket.
+    role: researcher
+    instruction: Produce the research document for the current Ticket.
 ```
 
 `ticket_id` is Main's own DAG selection result; the Ticket name, scope,

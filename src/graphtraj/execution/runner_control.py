@@ -483,6 +483,7 @@ def _send_session_locked(
     try:
         resume = {
             "operation": "resume",
+            "drive_children": not reports_only,
             "runtime": mapping["runtime"],
             "adapter_request": request,
             "context_evidence": context_evidence,
@@ -908,37 +909,6 @@ def _team_runtime_environment(mapping: Dict[str, Any], cwd: Path) -> Dict[str, s
     except (OSError, TypeError, ValueError, yaml.YAMLError, ProjectConfigurationError) as error:
         raise RunnerError("session-not-resumable", "Cannot restore the Team Runtime context: {0}".format(error)) from error
     environment["GRAPHTRAJ_TEAM_ROUND"] = str(round_ordinal)
-    reviewer = logical_role(mapping["role"]) in {"standards-reviewer", "spec-reviewer"}
-    if reviewer:
-        candidate = ticket.get("current_candidate")
-        if not isinstance(candidate, str) or not candidate:
-            raise _not_resumable()
-        axis = (
-            "Standards"
-            if logical_role(mapping["role"]) == "standards-reviewer"
-            else "Spec"
-        )
-        try:
-            report_path = _reviewer_report_file(mapping)
-        except ValueError:
-            raise _not_resumable() from None
-        report = evidence.joinpath(*report_path.parts[1:])
-        try:
-            if report.parent.is_symlink():
-                raise OSError("review report directory is a symlink")
-            report.parent.mkdir(exist_ok=True)
-        except OSError as error:
-            raise _not_resumable() from error
-        environment.update(
-            GRAPHTRAJ_REVIEW_CANDIDATE=candidate,
-            GRAPHTRAJ_REVIEW_COMPARISON=project.dev_commit,
-            GRAPHTRAJ_REVIEW_BRIEF=(
-                "Review only for Repository Guidance and established project standards."
-                if axis == "Standards"
-                else "Review only against the accepted Ticket and its acceptance criteria."
-            ),
-            GRAPHTRAJ_REVIEW_REPORT=str(report),
-        )
     return environment
 
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -80,6 +80,28 @@ class ProjectRoles:
 
     presets: Mapping[str, RolePreset]
     groups: frozenset[str] = frozenset()
+    roots: frozenset[str] = frozenset()
+    children: Mapping[str, frozenset[str]] = field(default_factory=dict)
+
+    def permits_dispatch(self, parent: str | None, child: str) -> bool:
+        """Check an explicit root or direct edge; role names confer no authority.
+
+        References are the exact references declared in role_tree. This checks
+        configuration only; the Runner must separately bind the actual caller.
+        """
+        return child in (self.roots if parent is None else self.children.get(parent, ()))
+
+    def dispatch_preset(self, parent: str | None, role: object) -> RolePreset:
+        """Resolve permitted execution settings, including declared inline roles."""
+        if isinstance(role, str):
+            reference = role
+            inline = None
+        else:
+            _, inline = parse_inline_role(role)
+            reference = next(iter(role))
+        if not self.permits_dispatch(parent, reference):
+            raise ProjectRolesError(("role_tree does not permit this direct dispatch.",))
+        return inline if inline is not None else self.preset(reference)
 
     def resolve(self, reference: str) -> str:
         """Return the configured reference that one role reference selects.
@@ -254,7 +276,7 @@ def _roles_from_document(document: Any) -> ProjectRoles:
     if not isinstance(document, dict):
         raise ProjectRolesError(("roles.yml must contain a roles mapping.",))
     for field in document:
-        if field != "roles":
+        if field not in {"roles", "role_tree"}:
             diagnostics.append("roles.yml.{0} is not supported.".format(field))
     entries = document.get("roles")
     if not isinstance(entries, dict):
@@ -297,7 +319,43 @@ def _roles_from_document(document: Any) -> ProjectRoles:
     if diagnostics:
         raise ProjectRolesError(tuple(diagnostics))
 
-    return ProjectRoles(presets=presets, groups=frozenset(grouped))
+    roots, children = _role_tree(document.get("role_tree", {}))
+    return ProjectRoles(
+        presets=presets, groups=frozenset(grouped), roots=roots, children=children,
+    )
+
+
+def _role_tree(value: object) -> tuple[frozenset[str], dict[str, frozenset[str]]]:
+    """Collect direct edges and reject cycles, including across repeated roles."""
+    edges: dict[str, set[str]] = {}
+
+    def collect(nodes: object, ancestors: frozenset[str]) -> None:
+        """Validate each nested mapping while collecting its declared edges."""
+        if not isinstance(nodes, dict):
+            raise ProjectRolesError(("role_tree nodes must be mappings.",))
+        for reference, children in nodes.items():
+            if not isinstance(reference, str) or ROLE_REFERENCE.fullmatch(reference) is None:
+                raise ProjectRolesError(("role_tree contains an invalid role reference.",))
+            if reference in ancestors:
+                raise ProjectRolesError(("role_tree must not contain cycles.",))
+            collect(children, ancestors | {reference})
+            edges.setdefault(reference, set()).update(children)
+
+    collect(value, frozenset())
+    visited: set[str] = set()
+
+    def visit(reference: str, ancestors: frozenset[str]) -> None:
+        """Detect cycles formed by edges declared in separate tree branches."""
+        if reference in ancestors:
+            raise ProjectRolesError(("role_tree must not contain cycles.",))
+        if reference not in visited:
+            for child in edges[reference]:
+                visit(child, ancestors | {reference})
+            visited.add(reference)
+
+    for reference in edges:
+        visit(reference, frozenset())
+    return frozenset(value), {name: frozenset(children) for name, children in edges.items()}
 
 
 def _add_preset(

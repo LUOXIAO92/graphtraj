@@ -104,8 +104,8 @@ def test_main_integrates_a_candidate_accepted_without_review_reports(
         "engineer.md", "validation.md", "leader.md"
     }
     team = yaml.safe_load((ticket / "teams/1/team.yml").read_text())
-    assert team["members"]["standards_reviewer"]["session_ref"] is None
-    assert team["members"]["spec_reviewer"]["session_ref"] is None
+    assert "standards_reviewer" not in team["members"]
+    assert "spec_reviewer" not in team["members"]
 
     result = run_process(
         [

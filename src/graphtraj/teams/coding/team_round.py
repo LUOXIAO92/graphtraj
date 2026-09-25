@@ -651,9 +651,6 @@ def _deliver_ticket(project: Any, requested: Task, retained_batch: Path, capacit
                    if replacing else _readiness_predecessor(project, task.ticket_id))
     members = {
         "team_leader": {"role": task.role, "session_ref": leader_alias},
-        "engineer": {"role": engineer_task.role, "session_ref": None},
-        "standards_reviewer": {"role": "standards-reviewer", "session_ref": None},
-        "spec_reviewer": {"role": "spec-reviewer", "session_ref": None},
     }
     state_alias, state_session, event = request_state(
         project,
@@ -1056,7 +1053,7 @@ def _resume_active_ticket(
         "team-leader", team["members"]["team_leader"]["session_ref"]
     )
     team_batch = Path(leader_mapping["retained_batch_file"])
-    engineer_role = team["members"]["engineer"]["role"]
+    engineer_role = team["members"].get("engineer", {}).get("role", "engineer")
 
     def has_member_mapping(role: str) -> bool:
         for path in (project.runner_directory / "sessions").glob("*/mapping.yml"):
@@ -1107,11 +1104,11 @@ def _resume_active_ticket(
 
     try:
         engineer_alias, engineer_session, engineer_mapping = member_session(
-            engineer_role, team["members"]["engineer"]["session_ref"]
+            engineer_role, team["members"].get("engineer", {}).get("session_ref")
         )
     except RunnerError:
         if (
-            team["members"]["engineer"]["session_ref"] is not None
+            team["members"].get("engineer", {}).get("session_ref") is not None
             or has_member_mapping(engineer_role)
         ):
             raise
@@ -1318,7 +1315,7 @@ def _resume_active_ticket(
         for event in reversed(read_worldline(project.state_directory, project.harness_root))
         if event.get("ticket_id") == task.ticket_id
     )
-    if team["members"]["engineer"]["session_ref"] is None:
+    if team["members"].get("engineer", {}).get("session_ref") is None:
         state_alias, state_session, event = _request_state(
             project, task, worktree, ticket_directory, traces,
             state_alias, state_session, leader_alias, team_batch,
@@ -1335,7 +1332,7 @@ def _resume_active_ticket(
             capacity_fd=capacity_fd,
         )
         predecessor = event["event_id"]
-        team["members"]["engineer"]["session_ref"] = engineer_alias
+        team["members"]["engineer"] = {"role": engineer_role, "session_ref": engineer_alias}
     if state.get("current_candidate") != candidate:
         state_alias, state_session, event = _request_state(
             project, task, worktree, ticket_directory, traces,
@@ -1363,7 +1360,7 @@ def _resume_active_ticket(
         target = round_directory / report_name
         try:
             alias, session, mapping = member_session(
-                role, team["members"][seat]["session_ref"]
+                role, team["members"].get(seat, {}).get("session_ref")
             )
         except RunnerError:
             if target.is_file():
@@ -1397,7 +1394,7 @@ def _resume_active_ticket(
                 report_name,
                 project.runner_directory / "sessions" / alias,
             )
-        if team["members"][seat]["session_ref"] is None:
+        if team["members"].get(seat, {}).get("session_ref") is None:
             state_alias, state_session, event = _request_state(
                 project, task, worktree, ticket_directory, traces,
                 state_alias, state_session, leader_alias, reviewer_batch_path,
@@ -1414,7 +1411,7 @@ def _resume_active_ticket(
                 capacity_fd=capacity_fd,
             )
             predecessor = event["event_id"]
-            team["members"][seat]["session_ref"] = alias
+            team["members"][seat] = {"role": role, "session_ref": alias}
         remaining.discard(role)
         reviewer_results.append(
             {"role": role, "alias": alias, "session": session,
@@ -1536,7 +1533,7 @@ def _resume_active_ticket(
                 if _task_policy(child) == "standards-reviewer"
                 else "spec_reviewer"
             )
-            if team["members"][seat]["session_ref"] is None:
+            if team["members"].get(seat, {}).get("session_ref") is None:
                 state_alias, state_session, event = _request_state(
                     project, task, worktree, ticket_directory, traces,
                     state_alias, state_session, leader_alias, reviewer_batch_path,
@@ -1553,7 +1550,7 @@ def _resume_active_ticket(
                     capacity_fd=capacity_fd,
                 )
                 predecessor = event["event_id"]
-                team["members"][seat]["session_ref"] = alias
+                team["members"][seat] = {"role": child.role, "session_ref": alias}
             remaining.remove(_task_policy(child))
             reviewer_results.append(
                 {"role": child.role, "alias": alias, "session": session,
@@ -3288,7 +3285,7 @@ def _worker_main() -> None:
                 if _task_policy(task) == "standards-reviewer"
                 else "spec_reviewer"
             )
-            member = team["members"][seat]
+            member = team["members"].get(seat, {"session_ref": None})
             session = None
             report_file = Path(".state") / "reviews" / _review_report_name(task.role)
             if member["session_ref"]:

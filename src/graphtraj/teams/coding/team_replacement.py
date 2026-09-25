@@ -16,7 +16,7 @@ from graphtraj.configuration.project_roles import logical_role
 from graphtraj.execution.runner_batch import read_batch
 from graphtraj.execution.runner_capacity import capacity_positions
 from graphtraj.execution.runner_control import _require_project_events, interrupt_session
-from graphtraj.execution.runner_models import RunnerError
+from graphtraj.execution.runner_models import Project, RunnerError
 from graphtraj.execution.runner_process import OPERATION_TIMEOUT_SECONDS
 from graphtraj.workspace.runner_project import discover_project, run_git
 from graphtraj.execution.runner_status import (
@@ -31,16 +31,18 @@ from graphtraj.teams.coding.team_round import (
     _trace_ref,
 )
 from graphtraj.graph.ticket_graph import _load_states
+from graphtraj.graph.delivery_state import read_team
 
 
-def require_active_session(project, alias):
+def require_active_session(project: Project, alias: str) -> dict | None:
+    """Read the active Team without confusing members that share a role."""
     mapping, _ = read_alias_mapping(project.runner_directory, alias)
     directory, ticket = _load_states(project.state_directory / "tickets")[mapping["ticket_id"]]
     team_file = directory / "teams" / str(mapping["team_generation"]) / "team.yml"
     # A newly launched Leader registers its first Batch before Team start.
     if not team_file.exists():
         return
-    team = yaml.safe_load(team_file.read_text())
+    team = read_team(team_file)
     if team["status"] != "active" or ticket["active_team_ordinal"] != mapping["team_generation"]:
         raise RunnerError("team-not-active", "The Team has stopped starting new work.")
     seats = [
@@ -48,7 +50,7 @@ def require_active_session(project, alias):
         for seat in team["members"].values()
         if logical_role(seat["role"]) == logical_role(mapping["role"])
     ]
-    if seats and seats[0]["session_ref"] not in {None, alias}:
+    if seats and all(seat["session_ref"] not in {None, alias} for seat in seats):
         raise RunnerError("seat-replaced", "This Session no longer occupies its Team seat.")
     return team
 
@@ -95,7 +97,7 @@ def _replace_stopped_session(
     directory, ticket = _load_states(project.state_directory / "tickets")[mapping["ticket_id"]]
     generation = mapping["team_generation"]
     team_file = directory / "teams" / str(generation) / "team.yml"
-    team = yaml.safe_load(team_file.read_text())
+    team = read_team(team_file)
     seats = [
         name
         for name, member in team["members"].items()

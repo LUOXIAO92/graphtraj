@@ -166,7 +166,7 @@ configured_events =""", 1)
     team_file = ticket_dir / "teams/1/team.yml"
     team = yaml.safe_load(team_file.read_text())
     leader = team["members"]["team_leader"]["session_ref"]
-    reviewer = team["members"]["spec_reviewer"]["session_ref"] or (
+    reviewer = team["members"].get("spec_reviewer", {}).get("session_ref") or (
         "76-session_alias_control-handover0-spec_reviewer@spec_reviewer"
         if during_implementation == "reviewing"
         else "76-session_alias_control-handover0-engineer@engineer"

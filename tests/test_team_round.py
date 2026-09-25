@@ -638,9 +638,9 @@ def test_installed_runner_accepts_the_review_axes_the_leader_selects(
         ("standards_reviewer", "standards-reviewer"),
         ("spec_reviewer", "spec-reviewer"),
     ):
-        session_ref = team["members"][seat]["session_ref"]
+        session_ref = team["members"].get(seat, {}).get("session_ref")
         if role not in axes:
-            assert session_ref is None
+            assert seat not in team["members"]
             continue
         assert session_ref
         records = (

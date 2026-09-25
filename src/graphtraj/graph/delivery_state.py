@@ -9,18 +9,12 @@ from typing import Any, Mapping
 
 import yaml
 
-from graphtraj.configuration.project_roles import logical_role
+from graphtraj.configuration.project_roles import ROLE_REFERENCE, logical_role
 from graphtraj.graph.delivery_worldline import append_project_worldline_event, read_worldline
 from graphtraj.execution.runner_io import write_yaml_durably
 from graphtraj.graph.ticket_graph import _TRANSITIONS, _load_states
 
 
-_MEMBER_KEYS = {
-    "team_leader",
-    "engineer",
-    "standards_reviewer",
-    "spec_reviewer",
-}
 _ENGINEERS = {"engineer"}
 _REVIEW_REPORTS = {
     "standards_reviewer": "standards.md",
@@ -73,7 +67,7 @@ def apply_delivery_state_request(
     ordinal = ticket["active_team_ordinal"] or 1
     replacing = False
     if phase == "start" and ticket["active_team_ordinal"] is not None:
-        previous = _read_team(ticket_directory / "teams" / str(ordinal) / "team.yml")
+        previous = read_team(ticket_directory / "teams" / str(ordinal) / "team.yml")
         if previous["status"] != "retired":
             raise ValueError("The previous Team must be retired before replacement")
         ordinal += 1
@@ -97,15 +91,13 @@ def apply_delivery_state_request(
             or team_file.exists()
         ):
             raise ValueError("Ticket cannot start Team generation 1")
-        members = _validate_members(request["members"])
-        if (
-            members["team_leader"]["session_ref"] is None
-            or any(
-                members[name]["session_ref"] is not None
-                for name in ("engineer", "standards_reviewer", "spec_reviewer")
-            )
-        ):
-            raise ValueError("Team start must identify only the Team Leader Session")
+        # Retained callers may still supply empty seats. Persist actual members only.
+        members = {
+            name: member for name, member in _validate_members(request["members"]).items()
+            if member["session_ref"] is not None
+        }
+        if not members:
+            raise ValueError("Team start must identify at least one actual Session")
         worktree = _validate_worktree(harness_root, request["worktree"])
         if request["branch"] != "agent/{0}-{1}".format(
             ticket_id, ticket["ticket_name"]
@@ -124,7 +116,7 @@ def apply_delivery_state_request(
     else:
         if not team_file.is_file():
             raise ValueError("Team generation 1 does not exist")
-        team_update = _read_team(team_file)
+        team_update = read_team(team_file)
         round_ordinal = team_update["current_round"]
         if team_update["status"] != "active" and phase != "retired":
             raise ValueError("The Team has stopped starting new work")
@@ -136,17 +128,19 @@ def apply_delivery_state_request(
         elif phase == "retired":
             if team_update["status"] != "retiring":
                 raise ValueError("The Team is not retiring")
-            if request["session_ref"] != team_update["members"]["team_leader"]["session_ref"]:
-                raise ValueError("Retirement must retain the current Leader Session")
+            if request["session_ref"] not in {
+                member["session_ref"] for member in team_update["members"].values()
+            }:
+                raise ValueError("Retirement must retain a current member Session")
             expected_trace = (team_directory / "traces" / request["session_ref"] / "events.jsonl").relative_to(harness_root).as_posix()
             if request["trace_ref"] != expected_trace or expected_trace not in request["evidence_refs"]:
-                raise ValueError("Retirement must retain the Leader Trace")
+                raise ValueError("Retirement must retain the member Trace")
             team_update.update(status="retired", final_session_ref=request["session_ref"], final_trace_ref=expected_trace)
             kind = "team-retired"
         elif phase == "replace-member":
             member = request["member"]
-            if member not in _MEMBER_KEYS - {"team_leader"}:
-                raise ValueError("Replacing the Leader requires Team retirement")
+            if not isinstance(member, str) or member not in team_update["members"]:
+                raise ValueError("Replacement names an unknown Team member")
             configured = team_update["members"][member]
             if configured["role"] != request["role"] or not request["session_ref"] or configured["session_ref"] == request["session_ref"]:
                 raise ValueError("Replacement must identify a fresh Session for the seat")
@@ -154,34 +148,26 @@ def apply_delivery_state_request(
             kind = "team-member-replaced"
         elif phase == "member":
             member = request["member"]
-            if not isinstance(member, str) or member not in _MEMBER_KEYS:
+            if not isinstance(member, str):
                 raise ValueError("Delivery State request names an invalid Team member")
-            configured = team_update["members"][member]
-            if (
-                configured["role"] != request["role"]
-                or configured["session_ref"] is not None
-                or not isinstance(request["session_ref"], str)
-                or not request["session_ref"]
+            registered = _validate_members({
+                member: {"role": request["role"], "session_ref": request["session_ref"]},
+            })
+            configured = team_update["members"].get(member)
+            if request["session_ref"] is None or (
+                configured is not None
+                and (configured["role"] != request["role"] or configured["session_ref"] is not None)
             ):
                 raise ValueError("Delivery State member request conflicts with the Team")
-            if (
-                (member == "engineer" and ticket["status"] != "implementing")
-                or (
-                    member in {"standards_reviewer", "spec_reviewer"}
-                    and ticket["status"] != "reviewing"
-                )
-                or member == "team_leader"
-            ):
-                raise ValueError("Team member request is outside its delivery phase")
-            configured["session_ref"] = request["session_ref"]
+            team_update["members"].update(registered)
             kind = "team-member-started"
         elif phase == "correction":
             if ticket["status"] != "reviewing":
                 raise ValueError("Process correction requires an open Team Round")
             responsible_role = logical_role(request["responsible_role"])
             responsible = next(
-                (member for seat, member in team_update["members"].items()
-                 if seat != "team_leader"
+                (member for member in team_update["members"].values()
+                 if member["session_ref"] == request["session_ref"]
                  and logical_role(member["role"]) == responsible_role),
                 None,
             )
@@ -194,7 +180,7 @@ def apply_delivery_state_request(
             candidate = _validate_candidate(request["candidate"])
             if ticket["status"] not in {"implementing", "reviewing"} or ticket["current_candidate"] == candidate:
                 raise ValueError("Ticket cannot enter fixed-candidate Review")
-            if team_update["members"]["engineer"]["session_ref"] is None:
+            if team_update["members"].get("engineer", {}).get("session_ref") is None:
                 raise ValueError("Candidate Review requires the Engineer Session")
             ticket_update.update(
                 status="reviewing",
@@ -232,7 +218,7 @@ def apply_delivery_state_request(
                 if report in reported
             }
             if any(
-                team_update["members"][name]["session_ref"] is None
+                team_update["members"].get(name, {}).get("session_ref") is None
                 for name in required_sessions
             ):
                 raise ValueError(
@@ -329,33 +315,32 @@ def apply_delivery_state_request(
 
 
 def _validate_members(value: Any) -> dict[str, dict[str, str | None]]:
-    if not isinstance(value, dict) or set(value) != _MEMBER_KEYS:
+    """Validate actual members; null Sessions remain readable in historical records."""
+    if not isinstance(value, dict) or not value:
         raise ValueError("Delivery State request has invalid Team members")
-    expected = {
-        "team_leader": {"team-leader"},
-        "engineer": _ENGINEERS,
-        "standards_reviewer": {"standards-reviewer"},
-        "spec_reviewer": {"spec-reviewer"},
-    }
     members: dict[str, dict[str, str | None]] = {}
+    sessions: set[str] = set()
     for name, member in value.items():
-        seat_role = member.get("role") if isinstance(member, dict) else None
+        role = member.get("role") if isinstance(member, dict) else None
         if (
-            not isinstance(member, dict)
+            not isinstance(name, str) or not name.strip()
+            or not isinstance(member, dict)
             or set(member) != {"role", "session_ref"}
-            or not isinstance(seat_role, str)
-            or logical_role(seat_role) not in expected[name]
-            or (
-                member.get("session_ref") is not None
-                and (not isinstance(member["session_ref"], str) or not member["session_ref"])
-            )
+            or not isinstance(role, str) or ROLE_REFERENCE.fullmatch(role) is None
+            or (member.get("session_ref") is not None and (
+                not isinstance(member["session_ref"], str) or not member["session_ref"]
+                or member["session_ref"] in sessions
+            ))
         ):
             raise ValueError("Delivery State request has invalid Team members")
+        if member["session_ref"] is not None:
+            sessions.add(member["session_ref"])
         members[name] = dict(member)
     return members
 
 
-def _read_team(path: Path) -> dict[str, Any]:
+def read_team(path: Path) -> dict[str, Any]:
+    """Read a Team, including retained records with the former four seats."""
     document = yaml.safe_load(path.read_text(encoding="utf-8"))
     _validate_team(document)
     return document

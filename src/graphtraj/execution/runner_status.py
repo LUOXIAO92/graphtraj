@@ -189,6 +189,47 @@ def require_direct_authority(
     raise _authority_denied()
 
 
+def require_task_authority(
+    state_directory: Path,
+    runner_directory: Path,
+    ticket_id: str,
+    alias: str,
+    operation: str,
+) -> dict[str, Any]:
+    """Authorize a task operation against the actual Session and current Team.
+
+    Submission belongs to the member itself; acceptance and member registration
+    belong to its real direct parent (including a top-level caller). Registration
+    may precede membership, but never the Runner's Session binding. This is the
+    common authorization check, not a submission or acceptance state transition.
+    Role names and caller-supplied identity fields confer no authority.
+    """
+    from graphtraj.graph.delivery_state import read_team
+    from graphtraj.graph.ticket_graph import _load_states
+
+    mapping, _ = read_alias_mapping(runner_directory, alias)
+    if mapping["ticket_id"] != ticket_id:
+        raise _authority_denied()
+    record = _load_states(state_directory / "tickets").get(ticket_id)
+    if record is None:
+        raise _authority_denied()
+    directory, ticket = record
+    if ticket["active_team_ordinal"] != mapping["team_generation"]:
+        raise _authority_denied()
+    team = read_team(directory / "teams" / str(mapping["team_generation"]) / "team.yml")
+    if team["status"] != "active":
+        raise _authority_denied()
+    members = {member["session_ref"] for member in team["members"].values()}
+    if operation != "register-member" and alias not in members:
+        raise _authority_denied()
+    caller = caller_alias(runner_directory)
+    if operation == "submit" and caller == alias:
+        return mapping
+    if operation in {"accept", "register-member"} and is_direct_owner(caller, mapping):
+        return mapping
+    raise _authority_denied()
+
+
 def require_descendant_authority(
     runner_directory: Path, alias: str, mapping: Mapping[str, Any]
 ) -> None:

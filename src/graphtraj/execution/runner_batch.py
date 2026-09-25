@@ -19,7 +19,6 @@ from graphtraj.configuration.project_roles import (
     parse_inline_role,
     retained_role_reference,
 )
-from graphtraj.configuration.role_definitions import has_packaged_role
 from graphtraj.execution.runner_models import Batch, RunnerError, Task
 
 
@@ -266,7 +265,7 @@ def _read_task(
                 ),
             ) from error
         role_reference = next(iter(role_value))
-        policy_role = role if has_packaged_role(role) else "temporary-role"
+        policy_role = role
     else:
         raise RunnerError(
             "ROLE_NOT_CONFIGURED",
@@ -277,11 +276,10 @@ def _read_task(
         not isinstance(requested_skills, list)
         or any(not isinstance(name, str) or not name.strip() for name in requested_skills)
         or len(requested_skills) != len(set(requested_skills))
-        or ("skills" in task_document and policy_role != "engineer")
     ):
         raise RunnerError(
             "SKILL_SELECTION_INVALID",
-            "Engineer skills must be unique non-empty Repository Skill names.",
+            "Selected skills must be unique non-empty Repository Skill names.",
         )
     instruction = task_document.get("instruction")
     if instruction is not None and (

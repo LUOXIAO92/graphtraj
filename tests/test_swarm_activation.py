@@ -26,7 +26,7 @@ def _swarm_input(root: Path, tasks: list[dict]) -> Path:
 
 
 def _inline_task(name: str, instruction: str, ticket_id: str | None = None) -> dict:
-    """Select one inline temporary role and, for Main, its DAG selection."""
+    """Select an inline role and, for Main, its DAG selection."""
 
     task = {
         "role": {name: {"runtime": "codex", "model": "gpt-5.6-luna"}},
@@ -73,7 +73,12 @@ def test_swarm_input_starts_each_selected_agent_from_the_registered_ticket(
         installed_commands, temporary_git_repository, fake_codex, tmp_path,
     )
     register_ticket(root / ".graphtraj/state", root, _ticket(TICKET_ID, TICKET_NAME))
-    ticket_state = (_ticket_directory(root) / "ticket.yml").read_bytes()
+    from test_ticket_graph import _change_status
+    _change_status(installed_commands, root, TICKET_ID, 'ready')
+    role_file = root / '.graphtraj/roles.yml'
+    roles = yaml.safe_load(role_file.read_text())
+    roles['role_tree'] = {'probe-one': {}, 'probe-two': {}}
+    role_file.write_text(yaml.safe_dump(roles))
 
     swarm = _swarm_input(
         root,
@@ -111,6 +116,11 @@ def test_swarm_input_starts_each_selected_agent_from_the_registered_ticket(
     assert "ticket_name" in Path(document["retained_batch_file"]).read_text(
         encoding="utf-8"
     )
+
+    team = yaml.safe_load((_ticket_directory(root) / 'teams/1/team.yml').read_text())
+    assert {member['role'] for member in team['members'].values()} == {'probe-one', 'probe-two'}
+    assert len(team['members']) == 2
+    ticket_state = (_ticket_directory(root) / 'ticket.yml').read_bytes()
 
     # Later interaction addresses the alias alone, and the ordinary message
     # does not rewrite the current Ticket definition.

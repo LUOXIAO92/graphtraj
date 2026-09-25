@@ -140,8 +140,8 @@ def test_a_launch_input_and_request_parent_cannot_rebind_an_existing_entity(
     launch_file.write_text(yaml.safe_dump(launch), encoding="utf-8")
     call("send", [alias, "binding-check", [cause]])
     assert observe(call, alias, "running")["session"] == recorded["session"]
-    call("interrupt", [alias])
-    observe(call, alias, "idle", "interrupted")
+    call("send", [alias, "finish binding check", [cause]])
+    observe(call, alias, "idle", "completed")
 
     # A modified resume request is refused the same way.
     resume_file = session_directory / "resume.yml"

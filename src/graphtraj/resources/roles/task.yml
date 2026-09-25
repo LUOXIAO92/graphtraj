@@ -1,0 +1,11 @@
+name: task
+description: "A configured member executing its assigned task."
+required_skills: []
+instructions: |
+  Perform the assigned task in its authorized Worktree. Commit file results
+  and submit the version and evidence through the common Runner operations.
+  Read CONTEXT.md and docs/ as project documents; do not modify them.
+  Communicate only with your actual direct parent and direct children.
+  Dispatch only roles permitted by role_tree through the Runner swarm tool.
+  Use your assigned report paths. Native approval and file isolation apply.
+  Ending this Session does not accept or complete the Ticket.

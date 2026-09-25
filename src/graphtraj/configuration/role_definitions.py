@@ -49,10 +49,10 @@ def resolve_child_role(name: str, settings: RolePreset) -> ResolvedChildRole:
     """Resolve one configured role's responsibilities from its templates.
 
     A role name without its own installed template keeps its actual name and
-    uses the generic temporary-role responsibilities.
+    uses the common task responsibilities.
     """
 
-    template = packaged_role_name(name) if has_packaged_role(name) else "temporary-role"
+    template = packaged_role_name(name) if has_packaged_role(name) else "task"
     try:
         document = yaml.safe_load(resources.files("graphtraj.resources").joinpath(
             "roles", template + ".yml"
@@ -77,8 +77,7 @@ def resolve_child_role(name: str, settings: RolePreset) -> ResolvedChildRole:
         if name == "team-leader" and settings.allow_runtime_swarm else
         "\nDo not use Runtime-native swarm or dispatch native helpers.\n"
     ) + (
-        "Do not invoke agent-runner or start an Agent Runtime directly.\n"
-        if name != "team-leader" else
-        "Never start an Agent Runtime directly; formal work uses agent-runner.\n"
+        "Never start an Agent Runtime directly; formal dispatch uses Runner "
+        "and the configured role_tree.\n"
     )
     return ResolvedChildRole(name, instructions, tuple(required_skills), settings)

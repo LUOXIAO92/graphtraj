@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from conftest import InstalledCommands, run_process, wait_for_file
+from conftest import FakeCodex, InstalledCommands, run_process, wait_for_file
 from test_existing_repository_setup import run_setup
 from runner_fixtures import configure_harness, retained_state
 from test_ticket_graph import _change_status, _register, _ticket
@@ -581,7 +581,12 @@ def test_shared_integration_enforces_main_and_returns_retained_outcome(
 
 
 @pytest.fixture
-def stopped_committed_integration(installed_commands, accepted_ticket, fake_codex, monkeypatch):
+def stopped_committed_integration(
+    installed_commands: InstalledCommands,
+    accepted_ticket: tuple[Path, Path, Path, str],
+    fake_codex: FakeCodex,
+    monkeypatch: pytest.MonkeyPatch,
+) -> tuple[Path, Path, Path, str, list[str]]:
     """Retain a public conflict escalation, sampled stop and committed resolution."""
     from graphtraj.execution import execution_budget
 
@@ -624,8 +629,10 @@ def stopped_committed_integration(installed_commands, accepted_ticket, fake_code
 
 
 def test_public_recovery_adopts_committed_merge_and_preserves_history(
-    installed_commands, stopped_committed_integration, fake_codex,
-):
+    installed_commands: InstalledCommands,
+    stopped_committed_integration: tuple[Path, Path, Path, str, list[str]],
+    fake_codex: FakeCodex,
+) -> None:
     """Recovery validates the committed merge without new work, Round or budget."""
     from graphtraj.graph.delivery_worldline import read_worldline
 
@@ -657,8 +664,11 @@ def test_public_recovery_adopts_committed_merge_and_preserves_history(
 
 @pytest.mark.parametrize('invalid', ['candidate', 'unrelated-head', 'retained-dev', 'validation-command', 'failed-validation', 'caller'])
 def test_public_recovery_rejects_invalid_adoption(
-    installed_commands, stopped_committed_integration, fake_codex, invalid,
-):
+    installed_commands: InstalledCommands,
+    stopped_committed_integration: tuple[Path, Path, Path, str, list[str]],
+    fake_codex: FakeCodex,
+    invalid: str,
+) -> None:
     """Invalid identity/version/history or failed validation never unlocks work."""
     from graphtraj.execution.runner_heartbeat import hold_ownership
     from graphtraj.graph.delivery_worldline import read_worldline

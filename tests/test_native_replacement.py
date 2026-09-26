@@ -100,11 +100,17 @@ def test_recorded_runtime_controls_native_stage(tmp_path: Path, monkeypatch, run
     assert runner_status.require_replacement_authority(root, parent, target) is None
 
 
-@pytest.mark.parametrize("child_activity", ["idle", "running"])
+@pytest.mark.parametrize("residue", [
+    "terminal", "empty", "events", "mapping", "launch", "owner", "nonempty-events",
+])
+@pytest.mark.parametrize("child_activity", ["idle", "running", "unreachable"])
 def test_public_replacement_checks_descendants_with_failed_launch_residue(
-    tmp_path: Path, monkeypatch, child_activity: str
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    child_activity: str,
+    residue: str,
 ) -> None:
-    """Terminal unrelated startup residue neither blocks nor hides a live descendant."""
+    """Only unstarted residue is exempt; live or uncertain descendants still block."""
     root = tmp_path / "runner"
     parent = "132-ticket-handover0-team_leader@leader"
     child = "132-ticket-handover0-engineer@child"
@@ -126,14 +132,30 @@ def test_public_replacement_checks_descendants_with_failed_launch_residue(
         terminal_confirmed=True,
     ))
     (failed / "launch-error.yml").write_text(failure)
-    monkeypatch.setattr(runner_status, "session_operation", lambda *a: {"activity": "running"})
+    if residue != "terminal":
+        (failed / "launch-error.yml").unlink()
+        if residue != "launch":
+            (failed / "launch.yml").unlink()
+        if residue == "events":
+            (failed / "events.jsonl").touch()
+        elif residue == "mapping":
+            # An established identity with incomplete ownership must fail closed.
+            (failed / "mapping.yml").write_text("session: uncertain-native-session\n")
+        elif residue == "owner":
+            (failed / "owner-4242.lock").touch()
+        elif residue == "nonempty-events":
+            (failed / "events.jsonl").write_text('{"type": "runner-execution-start"}\n')
+    retained = {path.name: path.read_bytes() for path in failed.iterdir()}
+    monkeypatch.setattr(runner_status, "session_operation", lambda *a: {"activity": child_activity})
     with pytest.raises(RunnerError) as error:
         # Missing causes deliberately stop at the next public validation step,
         # after the stopped-subtree check, without creating a replacement.
         team_replacement.replace_session(parent, "user", (), tmp_path)
     expected = "invalid-input" if child_activity == "idle" else "replacement-not-stopped"
+    if residue in {"mapping", "launch", "owner", "nonempty-events"}:
+        expected = "operation-failed"
     assert error.value.code == expected
-    assert (failed / "launch-error.yml").read_text() == failure
+    assert {path.name: path.read_bytes() for path in failed.iterdir()} == retained
 
 
 def test_external_runtime_uses_executable_not_environment(monkeypatch) -> None:

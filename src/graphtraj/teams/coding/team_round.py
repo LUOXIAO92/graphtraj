@@ -863,28 +863,9 @@ def _execute_agent(
         )
         require_execution_allowed(project.runner_directory, alias or "new child", requested)
     generation = int(traces.parent.name) if traces.parent.name.isdigit() else 1
-    if alias is None:
+    new_session = alias is None
+    if new_session:
         alias = _agent_alias(project, task, role, generation)
-        session_directory = project.runner_directory / "sessions" / alias
-        # One Session directory owns one Agent Entity and at most one live
-        # execution, so this create claims a directory nothing records yet.
-        recorded = owning_execution(alias, session_directory, None)
-        if recorded is not None:
-            raise session_occupied(alias, recorded)
-        try:
-            session_directory.mkdir(parents=True, exist_ok=False)
-        except FileExistsError as error:
-            # A concurrent create claimed this alias after the scan, so this
-            # create is refused like any other request for an owned directory.
-            raise session_occupied(
-                alias, owning_execution(alias, session_directory, None)
-            ) from error
-        trace_directory = traces / alias
-        trace_directory.mkdir()
-        # The Trace entry later reads the Runtime-owned native Session record;
-        # this Session keeps the Runner's own records for the same execution.
-        (trace_directory / "events.jsonl").touch()
-        (session_directory / "events.jsonl").touch()
     else:
         session_directory = project.runner_directory / "sessions" / alias
         if not session_directory.is_dir():
@@ -899,6 +880,7 @@ def _execute_agent(
         )
         if owning is not None:
             raise session_occupied(alias, owning)
+
     trace = traces / alias / "events.jsonl"
 
     policy_role = _task_policy(task, role)
@@ -952,6 +934,32 @@ def _execute_agent(
                 project.runner_directory / "capacity",
             ) if policy_role == "team-leader" else (),
         ).finalize()
+
+    # Validate Runtime inputs before publishing an allocation. Native creation
+    # still follows the atomic directory reservation and durable launch request.
+    if new_session:
+        session_directory = project.runner_directory / "sessions" / alias
+        # One Session directory owns one Agent Entity and at most one live
+        # execution, so this create claims a directory nothing records yet.
+        recorded = owning_execution(alias, session_directory, None)
+        if recorded is not None:
+            raise session_occupied(alias, recorded)
+        try:
+            session_directory.mkdir(parents=True, exist_ok=False)
+        except FileExistsError as error:
+            # A concurrent create claimed this alias after the scan, so this
+            # create is refused like any other request for an owned directory.
+            raise session_occupied(
+                alias, owning_execution(alias, session_directory, None)
+            ) from error
+        trace_directory = traces / alias
+        trace_directory.mkdir()
+        # The Trace entry later reads the Runtime-owned native Session record;
+        # this Session keeps the Runner's own records for the same execution.
+        (trace_directory / "events.jsonl").touch()
+        (session_directory / "events.jsonl").touch()
+
+    if expected_session is None:
         launch_file = session_directory / "launch.yml"
         write_yaml_durably(
             launch_file,

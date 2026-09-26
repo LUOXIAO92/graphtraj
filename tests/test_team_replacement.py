@@ -21,7 +21,8 @@ def test_replacing_parent_keeps_old_descendants_stopped_and_bound_to_old_session
 ) -> None:
     """A new parent cannot inherit control of the original parent's children."""
     root, env, task = prepare(
-        installed_commands, temporary_git_repository, fake_codex, tmp_path, 'researcher', child=True,
+        installed_commands, temporary_git_repository, fake_codex, tmp_path,
+        'researcher', child=True, preflight_failure=True,
     )
     alias = task['alias']
     child = json.loads((Path(task['worktree_path']) / 'child.json').read_text())['alias']
@@ -39,6 +40,10 @@ def test_replacing_parent_keeps_old_descendants_stopped_and_bound_to_old_session
         original_child = yaml.safe_load((runner / child / 'mapping.yml').read_text())
         marker = (runner / alias / 'stop.yml').read_bytes()
         assert yaml.safe_load((runner / child / 'execution.yml').read_text())['outcome'] == 'interrupted'
+        # Historical preflight allocation has no launch, identity or owner.
+        residue = runner / '154-recovery-handover0-researcher@unstarted'
+        residue.mkdir()
+        (residue / 'events.jsonl').touch()
         Path(env['RECOVERY_RELEASE']).touch()
         replaced = command(installed_commands, root, env, 'replace', alias, '--actor', 'user',
                            '--caused-by-event-id', cause)
@@ -46,6 +51,8 @@ def test_replacing_parent_keeps_old_descendants_stopped_and_bound_to_old_session
         successor = yaml.safe_load(replaced.stdout)['replacement_alias']
         wait_for_file(runner / successor / 'execution.yml')
         assert successor != alias
+        assert list(residue.iterdir()) == [residue / 'events.jsonl']
+        assert (residue / 'events.jsonl').read_bytes() == b''
         assert yaml.safe_load((runner / child / 'mapping.yml').read_text()) == original_child
         assert original_child['parent'] == alias
         assert (runner / alias / 'stop.yml').read_bytes() == marker

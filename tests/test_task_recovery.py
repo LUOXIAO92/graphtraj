@@ -44,6 +44,7 @@ def prepare(
     role: str,
     child: bool = False,
     replacement_child: bool = False,
+    preflight_failure: bool = False,
 ) -> tuple[Path, dict, dict]:
     """Start one real managed Session whose model work waits for test release."""
     root, _, _, env = configure_harness(commands, repository, fake_codex, tmp_path)
@@ -67,6 +68,19 @@ def prepare(
         '#!' + sys.executable + '\nimport runpy\nrunpy.run_path(' + repr(str(scenario)) + ')\n',
         "os.environ['GRAPHTRAJ_PARENT_ALIAS']",
     ))
+    if preflight_failure:
+        invalid = tmp_path / 'invalid-swarm.yml'
+        invalid.write_text(yaml.safe_dump({'tasks': [
+            {'role': role, 'ticket_id': '154', 'skills': ['missing-repository-skill']},
+        ]}))
+        failed = command(commands, root, env, '--swarm-input', str(invalid))
+        assert failed.returncode == 1, failed.stdout + failed.stderr
+        assert 'missing-repository-skill' in failed.stdout + failed.stderr
+        sessions = root / '.graphtraj/runner/sessions'
+        assert not sessions.exists() or not list(sessions.iterdir())
+        traces = root / '.graphtraj/state/tickets/154-recovery/teams/1/traces'
+        assert not traces.exists() or not list(traces.iterdir())
+
     result = subprocess.run(
         [str(commands.runner.with_name('graphtraj-mcp'))], cwd=root, env=env,
         input=json.dumps({'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call',

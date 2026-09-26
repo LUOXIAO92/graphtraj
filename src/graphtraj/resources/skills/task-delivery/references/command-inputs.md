@@ -41,25 +41,40 @@ Tickets. Include dependent definitions whose edges change. Deactivate removed
 or superseded Tickets and identify replacements where applicable. Preserve
 accepted behavior and acceptance coverage across the complete correction.
 
-## Finish retained delivery
+## Submit and decide a result
 
-Use `graphtraj delivery-state apply --request-file <request.yml>
---facts-file <facts.yml>` for missing registration after the Leader's handoff.
-Both documents describe the same authoritative facts. Read current Ticket and
-Team state first and apply only missing phases; a tool return is not a Leader
-decision. Main can register the facts supplied by its direct Leader without
-reading the members' private reports or repeating their work.
+The executing Session commits its file results, then records the exact version:
 
-Each request contains `phase`, `ticket_id`, `caused_by_event_ids` and
-`evidence_refs`. Add the fields for its phase:
+```text
+agent-runner submit-result --commit <commit> --result-ref <result-path> --completion <statement> [--evidence-ref <evidence-path>] [--unresolved <remaining-work>]
+```
 
-- `member`: `member: engineer`, the configured `role`, and the existing alias
-  as `session_ref`; this records the original member, not a replacement.
-- `candidate`: the Leader's exact 40-character `candidate` commit.
-- `final`: that `candidate` and the Leader's `decision: accepted` or `rejected`.
+Use the Session's assigned report/result destinations and actual task binding.
+Keep unresolved work explicit. A report does not substitute for the submission.
 
-Reference the direct Leader's report and the actual causal event; use the event
-returned by each applied phase for the next dependent phase. An accepted final
-records the Team decision and moves the Ticket to integration. A generic rejected
-final does not start rework; for an implementation rejection that requires
-another Round, follow [Round handling](recovery.md#choose-the-round-before-continuing).
+The authorized caller assesses that submitted version and records its decision:
+
+```text
+agent-runner decide-result --submission-id <submission-event> --commit <commit> --decision accepted|rejected --reason <reason> --evidence-ref <evidence-path>
+```
+
+Use the returned submission identity and real caller authority; a role name or
+report filename grants neither authority nor completion. Preserve previous
+submissions, decisions and evidence. A missing acceptance fact must come from
+its authorized owner, not inferred text or direct state-file edits.
+
+## Integrate accepted files
+
+```text
+graphtraj ticket integrate --ticket-id <id> -- <validation-command> <arguments>
+```
+
+Use the task's necessary validation and the project's assigned executor. For a
+retained committed integration escalation, the existing operation validates the
+accepted candidate, retained ancestry and original validation command before
+adopting the result. Keep the original argv and causal/stop history; it is not a
+shortcut for missing acceptance or failed validation. Use `--resolve-conflict`
+only for an actual conflict requiring a specialist.
+
+After successful integration use `agent-runner cleanup --ticket-id <id>` and
+regenerate the task graph. These operations retain the original task evidence.

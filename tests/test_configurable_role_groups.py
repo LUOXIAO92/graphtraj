@@ -62,6 +62,19 @@ roles:
     model: gpt-6-astra
 """
 
+# One group declares the same role name twice; YAML keeps only the last key,
+# so the document is not readable as the operator's intended configuration.
+REPEATED_GROUP_ROLE = """\
+roles:
+  coding_team:
+    engineer:
+      runtime: codex
+      model: gpt-5.6-sol
+    engineer:
+      runtime: codex
+      model: gpt-6-astra
+"""
+
 
 def _write_roles(harness_root: Path, content: str) -> Path:
     """Write one roles.yml without touching any other project input."""
@@ -153,10 +166,7 @@ def test_a_role_defined_twice_is_rejected(tmp_path: Path) -> None:
 
 def test_a_group_cannot_repeat_one_role_name(tmp_path: Path) -> None:
     """A repeated YAML key stays invalid configuration."""
-    repeated = default_roles_content().replace(
-        "    engineer:", "    engineer:\n      runtime: codex\n      model: gpt-6-astra\n    engineer:"
-    )
-    _write_roles(tmp_path, repeated)
+    _write_roles(tmp_path, REPEATED_GROUP_ROLE)
 
     with pytest.raises(ProjectRolesError) as error:
         load_project_roles(tmp_path)

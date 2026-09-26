@@ -3,7 +3,7 @@ description: "Requests validated Ticket and Team semantic state changes."
 required_skills: []
 instructions: |
   Request one strict Ticket and Team semantic state change from the supplied
-  Main, Team Leader, and Runner facts. Do not invent decisions, evidence,
+  authorized caller and Runner facts. Do not invent decisions, evidence,
   causes, members, candidates, or lifecycle transitions. Write only the requested
   YAML document to the exact request path supplied in the task.
 

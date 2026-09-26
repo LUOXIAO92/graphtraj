@@ -31,7 +31,7 @@ child, or asks for an explicit choice when there are zero or several candidates.
 Later commands use the recorded paths.
 
 `uv tool install` builds and installs this distribution's wheel, which carries
-the core Skills, role definitions and Codex resources. To check a local
+the bundled Skills, role definitions and Codex resources. To check a local
 candidate, build that wheel and install the artifact. The documented flags skip
 pip's build isolation, so the declared build requirement (`setuptools>=61`,
 from `pyproject.toml`) must already be installed in the invoking environment,
@@ -49,10 +49,15 @@ Worldline history.
 
 Setup is interactive and checks conflicts before writing. It preserves
 project-owned content and valid operator configuration, creates or registers
-the `dev` Integration Worktree, and installs every missing core Skill into the Harness Project Root’s
+the `dev` Integration Worktree, and installs every missing bundled Skill into the Harness Project Root’s
 `.agents/skills` after confirmation, even when a user-global copy exists.
 Existing project Skills are preserved; project-local copies take precedence
-over user-global Skills. It does not clone a repository, configure credentials,
+over user-global Skills. Setup writes an empty role selection and requires only
+the Skills every task needs: the professional coding methods (`implement`,
+`tdd`, `code-review`, `ponytail`, `ponytail-review`,
+`resolving-merge-conflicts`) are installed when the operator confirms but
+their absence does not stop setup, and a task that selects none of them runs
+without them. It does not clone a repository, configure credentials,
 modify Runtime-global settings or promote `dev` to `main`.
 
 The default layout is:
@@ -223,9 +228,9 @@ used. Preserve the host's existing configuration and permissions; the delivery
 adds no role or Skill discovery configuration. The delivered fields and the
 late-stop boundary are in the Codex-only recovery reference.
 
-## Core Skills and their sources
+## Bundled Skills and their sources
 
-After `graphtraj setup` installs the core Skills, invoke `$setup-project` to
+After `graphtraj setup` installs the bundled Skills, invoke `$setup-project` to
 configure task tracking and domain documents. It explicitly asks whether the
 project includes work needing software engineering delivery. Small helper
 scripts remain direct work with proportionate validation, even in a project
@@ -234,7 +239,7 @@ that also has engineering tasks.
 `setup-matt-pocock-skills`. `graphtraj setup` prepares the Harness; the Skill
 guides the project-document configuration.
 
-The release bundles these 18 core Skills. The table describes the bundled
+The release bundles these 18 Skills. The table describes the bundled
 workflows and their GraphTraj adaptations; user-installed Skills outside this
 set are managed separately. Matt Pocock sources are from
 [mattpocock/skills](https://github.com/mattpocock/skills).
@@ -266,12 +271,15 @@ before choosing. Software-specific Skills remain independent and are selected
 for the coding role's work. Existing explicit-only invocation policies are
 preserved; a returned Skill name is not assumed to activate another Skill.
 
-When Main or the user retires a Team, Runner reads the packaged retirement
-instructions as an ordinary Team Leader role resource and injects them only
-into that Leader's final Session request. Normal Team completion and other
-roles do not receive them. The final response remains in the Leader's Session
-Trace for the successor, while a user-installed Matt Pocock `handoff` Skill
-remains independent.
+A stopped Team member is replaced with `agent-runner replace <member-alias>
+--caused-by-event-id <event-id>`; the Runner's recorded direct parent or the
+user supplies the authority. The replacement starts a new Session for that
+seat and receives the replaced Session's retained reports, Trace and remaining
+work; the stopped Session stays retained and is never executed again, and
+replacing a parent does not promote that member's old children. An unfinished
+Team continues through `agent-runner continue --ticket-id <id>
+--caused-by-event-id <event-id>`, which resumes the original root Session. A
+user-installed Matt Pocock `handoff` Skill remains independent.
 
 ## Configuration and roles
 
@@ -308,19 +316,48 @@ descendants below Main; a Team Leader is depth 1 and its children depth 2.
 `max_concurrency` limits executing Agents across the project. Operating-system
 locks enforce capacity; lock-file presence is not occupancy. A normal Batch
 starts all its tasks or none. Team delivery also works at capacity one, with
-the two Reviewers running sequentially in the same Round. A child Batch beyond
+a coding Team's two Reviewers running sequentially in the same Round. A child Batch beyond
 `dispatch_depth` returns `authority-denied` before registration. Runner counts
 the retained parent Session chain; resuming a Leader adds no depth. Delegated
 roles other than the Leader cannot launch Batches through Main's entry point.
 
-`.graphtraj/roles.yml` groups coding presets under `roles.coding-team`; shared
-`delivery-state` remains directly under `roles`. Batch references use names such
-as `coding-team.team-leader` or `coding-team.spec-reviewer`. Each preset selects `runtime`
+Setup writes an empty `roles` mapping in `.graphtraj/roles.yml`: a project
+declares the roles its own work uses, and no coding arrangement is selected for
+it. A project that selects coding work adds the coding presets under
+`roles.coding-team`, with shared `delivery-state` directly under `roles`:
+
+```yaml
+roles:
+  coding-team:
+    team_leader:
+      runtime: codex
+      model: gpt-5.6-sol
+    engineer:
+      runtime: codex
+      model: gpt-5.6-sol
+    standards_reviewer:
+      runtime: codex
+      model: gpt-5.6-sol
+    spec_reviewer:
+      runtime: codex
+      model: gpt-5.6-sol
+    merge_resolver:
+      runtime: codex
+      model: gpt-5.6-sol
+  delivery-state:
+    runtime: codex
+    model: gpt-5.6-luna
+```
+
+A coding Team that uses these presets has a Team Leader, one unified Engineer,
+both Reviewer axes, Delivery State and Merge Resolver; a task that needs none
+of them declares a different selection, such as the researcher below. Batch
+references use names such as `coding-team.team-leader` or
+`coding-team.spec-reviewer`. Each preset selects `runtime`
 and `model`, with optional `reasoning_effort`, `base_url` and `api_key_env`. The latter names an
 environment variable, never stores the credential. Omitted settings use the
 Runtime's defaults. Team Leader additionally supports `allow_runtime_swarm`,
-which defaults to true. Presets include Team Leader, one unified Engineer, both
-Reviewer axes, Delivery State and Merge Resolver. Main's already selected
+which defaults to true. Main's already selected
 Runtime is outside these presets.
 
 Set `reasoning_effort` on a role when its model needs a different reasoning
@@ -418,25 +455,28 @@ graphtraj ticket integrate --ticket-id <id> -- <validation-command> <arguments>
 agent-runner cleanup --ticket-id <id>
 ```
 
-Each coding Team Leader schedules its Engineer and both Reviewers through the same
-Runner, against a fixed candidate and comparison point, then makes the final
-adversarial decision. Process corrections stay in the current Team Round.
-Only a compliant implementation rejection confirmed by the Leader opens the
-next Round. Main or the user can retire a Team; replacement retains the Ticket
-branch and Worktree, and reads the prior Leader's final response from its Trace.
-Replacing another member changes only that seat, and the Runner's recorded
-direct parent decides who may replace it.
+Each coding Team Leader schedules its Engineer and the Review axes it selects
+through the same Runner, against a fixed candidate and comparison point, then
+makes the final adversarial decision. A Review axis runs at most once per
+Ticket. Process corrections stay in the current Team Round. Only a compliant
+implementation rejection confirmed by the Leader opens the next Round. Main or
+the user can retire a Team; replacement retains the Ticket branch and Worktree,
+and reads the replaced member's retained reports and Trace. Replacing a member
+changes only that seat, and the Runner's recorded direct parent decides who may
+replace it.
 
-Continue an unfinished Team with its original Leader launch after deciding the
-next action. Runner reuses retained Sessions, the Worktree, candidate, and valid
-reports. A missing or invalid report returns to its author with the failure,
-Trace, and expected report. A Leader can request correction in `leader.md` with
-`Decision: CORRECT`, `Responsible: coding-team.spec-reviewer` (or the responsible
-member), `Rule:`, `Reason:`, and `Candidate commit:`. A retained remaining-axis
-Batch takes precedence over an older correction judgment; it needs no second
-registration. Completing the last missing report needs no additional Review
-Batch. System/provider failures return to the caller for an explicit later
-retry through `send`; `status` reports the existing Session and last outcome.
+Continue an unfinished Team through `agent-runner continue` after deciding the
+next action. Runner reuses the retained original Sessions, the Worktree,
+candidate, and valid reports. A missing or invalid report returns to its author
+with the failure, Trace, and assigned report path. The executing member commits
+its result and records it with `submit-result`: version, result references,
+completion statement, evidence and unresolved work. The authorized parent
+answers with `decide-result`, which retains the exact submission, decision,
+reason and evidence. No role-specific report filename or prose format is a
+universal submission or acceptance condition. Completing the last missing
+report needs no additional Review Batch. System/provider failures return to the
+caller for an explicit later retry through `send`; `status` reports the existing
+Session and last outcome.
 
 After a sampled budget stop, Main analyzes the cause and records its chosen
 action in the existing Worldline. Apply any required corrections or accepted

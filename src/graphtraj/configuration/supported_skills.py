@@ -1,4 +1,4 @@
-"""Install the release-supported core Skill resources in the Runtime Store."""
+"""Install the release-bundled Skill resources in the Runtime Store."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Callable, Dict, Iterable, Mapping, Optional, Set
 
 from graphtraj.workspace.path_safety import relative_parent_paths
-from graphtraj.configuration.skill_check import CORE_SKILL_NAMES, harness_skill_root
+from graphtraj.configuration.skill_check import BUNDLED_SKILL_NAMES, harness_skill_root
 
 
 class SupportedSkillsError(Exception):
@@ -67,7 +67,7 @@ def _existing_kind(path: Path) -> str:
 
 @dataclass(frozen=True)
 class SupportedSkills:
-    """The fixed release-supported copies of every required core Skill."""
+    """The fixed release-supported copies of every bundled Skill."""
 
     resources_by_name: Dict[str, Traversable]
 
@@ -89,7 +89,7 @@ class SupportedSkills:
         root = resources.files("graphtraj.resources")
         resources_by_name = {
             name: root.joinpath("skills").joinpath(name)
-            for name in CORE_SKILL_NAMES
+            for name in BUNDLED_SKILL_NAMES
         }
         missing_resources = tuple(
             name

@@ -12,7 +12,7 @@ import pytest
 import yaml
 
 from conftest import FakeCodex, InstalledCommands, run_process, wait_for_file
-from runner_fixtures import engineer_probe
+from runner_fixtures import configure_coding_roles, engineer_probe
 from test_project_setup import (
     CORE_SKILL_NAMES,
     install_skills,
@@ -100,6 +100,7 @@ def test_installed_runtime_projects_enabled_external_skill_directories(
         fake_codex=fake_codex, answers='y\n',
     )
     assert setup.returncode == 0, setup.stderr
+    configure_coding_roles(harness)
     environment = dict(os.environ, HOME=str(user_home), FAKE_CODEX_LOG=str(fake_codex.log_file))
     environment['PATH'] = str(fake_codex.executable.parent) + os.pathsep + environment['PATH']
     user_skills = Path(environment['HOME']) / '.agents' / 'skills'

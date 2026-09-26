@@ -90,7 +90,7 @@ def test_setup_initializes_the_current_git_repository(
     assert not (repository / ".graphtraj" / "runner" / "config.yml").exists()
 
 
-def test_setup_creates_grouped_coding_presets_and_shared_delivery_state(
+def test_setup_writes_an_empty_role_selection(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
 ) -> None:
@@ -102,46 +102,34 @@ def test_setup_creates_grouped_coding_presets_and_shared_delivery_state(
             encoding="utf-8"
         )
     )
-    assert set(role_config) == {"roles"}
-    assert set(role_config["roles"]) == {"coding_team", "delivery_state"}
-    roles = role_config["roles"]["coding_team"]
-    assert set(roles) == {
-        "team_leader",
-        "engineer",
-        "standards_reviewer",
-        "spec_reviewer",
-        "merge_resolver",
-    }
-    assert "main" not in roles
-    for name, preset in roles.items():
-        assert isinstance(preset["runtime"], str) and preset["runtime"]
-        assert isinstance(preset["model"], str) and preset["model"]
-        assert set(preset).issubset(
-            {"runtime", "model", "base_url", "api_key_env", "allow_runtime_swarm"}
-        )
-        if name != "team_leader":
-            assert "allow_runtime_swarm" not in preset
-    assert roles["team_leader"]["allow_runtime_swarm"] is True
-    assert role_config["roles"]["delivery_state"]["runtime"] == "codex"
+    # Setup selects no role; the operator declares the roles this project uses.
+    assert role_config == {"roles": {}}
     assert not (temporary_git_repository / ".codex" / "agents").exists()
 
 
-def test_setup_preserves_valid_operator_role_edits(
+def test_setup_preserves_the_operator_role_selection(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
 ) -> None:
-    first = run_setup(installed_commands, temporary_git_repository)
     roles_path = temporary_git_repository / ".graphtraj" / "roles.yml"
-    edited = roles_path.read_bytes().replace(
-        b"model: gpt-5.6-luna", b"model: operator-selected-model", 1
+    roles_path.parent.mkdir()
+    roles_path.write_text(
+        "roles:\n"
+        "  researcher:\n"
+        "    runtime: codex\n"
+        "    model: operator-selected-model\n"
+        "role_tree:\n"
+        "  researcher: {}\n",
+        encoding="utf-8",
     )
-    roles_path.write_bytes(edited)
+    selected = roles_path.read_bytes()
 
+    first = run_setup(installed_commands, temporary_git_repository)
     second = run_setup(installed_commands, temporary_git_repository, answers="")
 
     assert first.returncode == 0, first.stderr
     assert second.returncode == 0, second.stderr
-    assert roles_path.read_bytes() == edited
+    assert roles_path.read_bytes() == selected
 
 
 def test_setup_leaves_legacy_runtime_role_files_unmanaged(

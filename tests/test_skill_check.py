@@ -30,6 +30,19 @@ CORE_SKILL_NAMES = (
     "ponytail-review",
 )
 
+# Professional methods a task selects when its own work needs them.
+CODING_METHOD_SKILL_NAMES = (
+    "implement",
+    "ponytail",
+    "ponytail-review",
+    "tdd",
+    "code-review",
+    "resolving-merge-conflicts",
+)
+REQUIRED_SKILL_NAMES = tuple(
+    name for name in CORE_SKILL_NAMES if name not in CODING_METHOD_SKILL_NAMES
+)
+
 
 def install_skill(
     skill_root: Path,
@@ -77,7 +90,7 @@ def test_doctor_finds_core_skills_in_project_and_user_scopes(
     assert result.returncode == 0, result.stderr
     assert result.stderr == ""
     assert result.stdout.splitlines() == [
-        "{0}: OK".format(name) for name in CORE_SKILL_NAMES
+        "{0}: OK".format(name) for name in REQUIRED_SKILL_NAMES
     ]
 
 
@@ -142,7 +155,7 @@ agent_runner:
     assert not (repository / ".codex" / "agents").exists()
 
 
-def test_doctor_reports_one_and_multiple_missing_core_skills(
+def test_doctor_reports_one_and_multiple_missing_required_skills(
     installed_commands: InstalledCommands,
     tmp_path: Path,
 ) -> None:
@@ -180,7 +193,7 @@ def test_doctor_reports_one_and_multiple_missing_core_skills(
                 name,
                 "MISSING" if name in missing_names else "OK",
             )
-            for name in CORE_SKILL_NAMES
+            for name in REQUIRED_SKILL_NAMES
         ]
 
 
@@ -207,7 +220,7 @@ def test_doctor_excludes_primary_worktree_and_neighboring_projects(
     assert result.returncode == 1
     assert result.stderr == ""
     assert result.stdout.splitlines() == [
-        "{0}: MISSING".format(name) for name in CORE_SKILL_NAMES
+        "{0}: MISSING".format(name) for name in REQUIRED_SKILL_NAMES
     ]
 
 
@@ -255,15 +268,15 @@ def test_doctor_ignores_a_tracked_same_root_core_skill(
     tmp_path: Path,
 ) -> None:
     repository = temporary_git_repository
-    source_skill = repository / ".agents" / "skills" / "implement" / "SKILL.md"
+    source_skill = repository / ".agents" / "skills" / "task-delivery" / "SKILL.md"
     source_skill.parent.mkdir(parents=True)
     source_skill.write_text(
-        "---\nname: implement\ndescription: Repository Skill.\n---\n",
+        "---\nname: task-delivery\ndescription: Repository Skill.\n---\n",
         encoding="utf-8",
     )
     run_process(["git", "add", ".agents"], cwd=repository).check_returncode()
     run_process(
-        ["git", "commit", "-m", "Add repository implement Skill"], cwd=repository
+        ["git", "commit", "-m", "Add repository task-delivery Skill"], cwd=repository
     ).check_returncode()
     config = repository / ".graphtraj" / "config.yml"
     config.parent.mkdir()
@@ -282,7 +295,7 @@ agent_runner:
     )
     user_home = tmp_path / "operator-home"
     for name in CORE_SKILL_NAMES:
-        if name != "implement":
+        if name != "task-delivery":
             install_skill(user_home / ".agents" / "skills", name)
 
     result = run_process(
@@ -296,9 +309,9 @@ agent_runner:
     assert result.stdout.splitlines() == [
         "{0}: {1}".format(
             name,
-            "MISSING" if name == "implement" else "OK",
+            "MISSING" if name == "task-delivery" else "OK",
         )
-        for name in CORE_SKILL_NAMES
+        for name in REQUIRED_SKILL_NAMES
     ] + [
         "GraphTraj Roles is invalid.",
         "- roles.yml was not found at {0}.".format(
@@ -313,19 +326,19 @@ def test_doctor_ignores_a_tracked_same_root_core_skill_before_setup(
     tmp_path: Path,
 ) -> None:
     repository = temporary_git_repository
-    source_skill = repository / ".agents" / "skills" / "implement" / "SKILL.md"
+    source_skill = repository / ".agents" / "skills" / "task-delivery" / "SKILL.md"
     source_skill.parent.mkdir(parents=True)
     source_skill.write_text(
-        "---\nname: implement\ndescription: Repository Skill.\n---\n",
+        "---\nname: task-delivery\ndescription: Repository Skill.\n---\n",
         encoding="utf-8",
     )
     run_process(["git", "add", ".agents"], cwd=repository).check_returncode()
     run_process(
-        ["git", "commit", "-m", "Add repository implement Skill"], cwd=repository
+        ["git", "commit", "-m", "Add repository task-delivery Skill"], cwd=repository
     ).check_returncode()
     user_home = tmp_path / "operator-home"
     for name in CORE_SKILL_NAMES:
-        if name != "implement":
+        if name != "task-delivery":
             install_skill(user_home / ".agents" / "skills", name)
 
     result = run_process(
@@ -340,9 +353,9 @@ def test_doctor_ignores_a_tracked_same_root_core_skill_before_setup(
     assert result.stdout.splitlines() == [
         "{0}: {1}".format(
             name,
-            "MISSING" if name == "implement" else "OK",
+            "MISSING" if name == "task-delivery" else "OK",
         )
-        for name in CORE_SKILL_NAMES
+        for name in REQUIRED_SKILL_NAMES
     ]
 
 
@@ -418,7 +431,7 @@ def test_doctor_uses_only_valid_top_level_yaml_names(
             name,
             "MISSING" if name in {"task-delivery", "grilling"} else "OK",
         )
-        for name in CORE_SKILL_NAMES
+        for name in REQUIRED_SKILL_NAMES
     ]
 
 
@@ -431,20 +444,20 @@ def test_doctor_finds_a_linked_harness_core_skill(
     harness_root = tmp_path / "harness-project"
     harness_skills = harness_root / ".agents" / "skills"
     user_home = tmp_path / "operator-home"
-    target = tmp_path / "external-implement"
+    target = tmp_path / "external-task-delivery"
     harness_root.mkdir()
-    install_skill(tmp_path, "implement", directory_name=target.name)
+    install_skill(tmp_path, "task-delivery", directory_name=target.name)
     for name in CORE_SKILL_NAMES:
-        if name != "implement":
+        if name != "task-delivery":
             install_skill(user_home / ".agents" / "skills", name)
 
     if link_kind == "directory":
         harness_skills.mkdir(parents=True)
-        (harness_skills / "linked-implement").symlink_to(
+        (harness_skills / "linked-task-delivery").symlink_to(
             target, target_is_directory=True
         )
     else:
-        linked_skill = harness_skills / "linked-implement" / "SKILL.md"
+        linked_skill = harness_skills / "linked-task-delivery" / "SKILL.md"
         linked_skill.parent.mkdir(parents=True)
         linked_skill.symlink_to(target / "SKILL.md")
 
@@ -456,5 +469,5 @@ def test_doctor_finds_a_linked_harness_core_skill(
 
     assert result.returncode == 0, result.stderr
     assert result.stdout.splitlines() == [
-        "{0}: OK".format(name) for name in CORE_SKILL_NAMES
+        "{0}: OK".format(name) for name in REQUIRED_SKILL_NAMES
     ]

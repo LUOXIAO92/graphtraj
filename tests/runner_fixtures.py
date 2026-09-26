@@ -16,6 +16,44 @@ from conftest import FakeCodex, InstalledCommands, run_process, wait_for_file
 from test_project_setup import install_user_skills, run_ready_setup as run_setup
 
 
+def coding_roles() -> dict:
+    """Return one configured coding Team arrangement for dispatch tests.
+
+    Setup writes an empty role selection, so a project that selects coding
+    work declares these presets itself.
+    """
+    return {"roles": {
+        "coding_team": {
+            "team_leader": {
+                "runtime": "codex",
+                "model": "gpt-5.6-sol",
+                "allow_runtime_swarm": True,
+            },
+            "engineer": {"runtime": "codex", "model": "gpt-5.6-sol"},
+            "standards_reviewer": {"runtime": "codex", "model": "gpt-5.6-sol"},
+            "spec_reviewer": {"runtime": "codex", "model": "gpt-5.6-sol"},
+            "merge_resolver": {"runtime": "codex", "model": "gpt-5.6-sol"},
+        },
+        "delivery_state": {"runtime": "codex", "model": "gpt-5.6-luna"},
+    }}
+
+
+def configure_coding_roles(harness_root: Path) -> None:
+    """Declare the coding Team presets and their dispatch tree in roles.yml."""
+    roles_file = harness_root / ".graphtraj/roles.yml"
+    roles = coding_roles()
+    # Test task dispatch explicitly authorizes its configured direct children.
+    children = {name: {} for name in (
+        "coding-team.engineer", "coding_team.engineer", "engineer",
+        "coding-team.standards-reviewer", "coding-team.spec-reviewer",
+    )}
+    roles["role_tree"] = {
+        **{name: children for name in ("coding-team.team-leader", "coding_team.team_leader", "team-leader")},
+        "coding_team.merge_resolver": {}, "merge-resolver": {}, "delivery_state": {},
+    }
+    roles_file.write_text(yaml.safe_dump(roles))
+
+
 def configure_harness(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
@@ -35,18 +73,7 @@ def configure_harness(
         answers="y\n",
     )
     assert setup_result.returncode == 0, setup_result.stderr
-    # Test task dispatch explicitly authorizes its configured direct children.
-    roles_file = harness_root / ".graphtraj/roles.yml"
-    roles = yaml.safe_load(roles_file.read_text())
-    children = {name: {} for name in (
-        "coding-team.engineer", "coding_team.engineer", "engineer",
-        "coding-team.standards-reviewer", "coding-team.spec-reviewer",
-    )}
-    roles["role_tree"] = {
-        **{name: children for name in ("coding-team.team-leader", "coding_team.team_leader", "team-leader")},
-        "coding_team.merge_resolver": {}, "merge-resolver": {}, "delivery_state": {},
-    }
-    roles_file.write_text(yaml.safe_dump(roles))
+    configure_coding_roles(harness_root)
     environment = os.environ.copy()
     environment.update(
         {

@@ -1,122 +1,73 @@
 # Recovery decisions
 
-Identify the failing action and who can change its cause before assigning work.
-Return an Agent-correctable error through its direct parent with the concrete
-failure, evidence and expected result. Communicate only with your own direct
-parent and children; Main does not contact a Team member to recover it. A dispatch
-mistake belongs to the dispatcher. System/provider outages or throttling return
-to the superior for a later retry; permission/configuration failures go to the
-role authorized to correct that configuration. Do not treat them as bad work.
+Identify the failing action, its concrete cause and the direct parent able to
+address it. A dispatcher corrects its own scope/input errors. The responsible
+executor handles implementation defects through its parent. A provider failure
+is not failed work; normal tool, watchdog and approval waits are not failures.
 
-## Choose the Round before continuing
+Keep one existing execution. Send changed instructions through its live channel;
+after an actual failure ends execution, use the supported public continuation
+operation with the causal event. Public `agent-runner status` supplies summaries;
+`reports` exposes only directly owned reports. Apply the project's shared polling
+limit. A send acknowledgement is not completion. Never wake a second Driver to
+collect status or fill a missing report.
 
-Use the Leader's diagnosis, not the choice to resume an existing Agent:
+Preserve the candidate, author-attributed reports, original inputs, Session and
+Trace references, and still-valid validation. A missing report copy calls for
+report delivery through the direct relationship, not repeated implementation or
+Review. Read the current state before requesting a transition; Runtime recovery
+or scope correction alone does not establish an implementation rejection or
+require another Round. Use the public operation that admits the retained state.
+If none does, return the exact unsupported transition and retained evidence to
+the parent rather than manufacturing a Round or editing private state files.
 
-- Process corrections, such as scope expansion or unsupported Review findings,
-  stay in the current Round.
-- Runtime recovery or delivery of a missing report resumes the interrupted work;
-  neither alone opens a Round.
-- A supported implementation defect that the Leader confirms requires rework
-  closes the current Round and opens the next Round in the same Team. The same
-  Agents may continue; their Session identity does not determine the Round.
+For a confirmed implementation defect, cite its accepted requirement and actual
+violation. Keep the correction with its responsible executor. Reuse unchanged
+checks and reviews, verify only the affected correction and submit the new
+version through the common result protocol. A new Round or Session does not
+reset a once-per-Ticket Review axis or expand the task's budget.
 
-The Leader records the rework through the existing delivery-state workflow.
-Before the implementation follow-up, Main and Leader use the registered new
-Round and its report destinations. A send, resume or budget restart alone does
-not record this transition. Keep the existing budget and Review-axis limits.
+## Budget stops
 
-Read still-valid evidence from previous Rounds and reference it where needed.
-Write the new candidate's implementation, validation and Leader decision in the
-new Round; do not copy old reports or append new-round results to a closed Round.
-Each new report covers that Round's work and result, with references to reused
-evidence rather than a running history of all attempts. Reusing earlier Review
-reports does not require another Review or writing back into their Round.
+Honor Runner's enforced stop. The task's actual parent receives its budget
+notice and coordinates the children; physical stopping does not wait for the
+parent to process a notice. Retain elapsed accounting, allowance, stop history,
+files and evidence. A stored flag or log line alone does not demonstrate actual
+interruption or timely notification delivery.
 
-## Recover the execution
+Use the delivered stop and limited wrap-up for a project-authorized recovery
+assessment. When the user has explicitly authorized a named retro, apply it
+within that scope; preserve explicit-only Skill discovery. A notice, recovery,
+report collection or replacement does not authorize extra execution time.
 
-Permission requests notify the direct parent immediately through its existing
-execution; notification does not approve them. Use actual available capabilities
-and report a missing delivery path instead of creating a second execution.
-Normal watchdog, member, tool and approval waits are not failures. State queries
-return summaries; lack of output or a stale heartbeat alone is not proof of death.
+After actual authorization, the supported sampled-stop continuation is:
 
-Keep the candidate, author-attributed reports, tests and completed steps when
-still valid. Report transport failure calls for report delivery, not a new
-implementation or unchanged review. Check that the actual continuation input
-contains the failed step and reusable evidence, not merely a generic handoff.
+```text
+agent-runner continue --ticket-id <id> --caused-by-event-id <authorization-or-decision-event>
+```
 
-When the same defect recurs at another entrypoint, inspect the shared cause
-and the adequacy of the existing check before assigning another isolated fix.
-Judge Session health from evidence. Repeated same-kind errors, expanding repair
-scope or demonstrated context decay may justify a fresh member Session.
-Preserve the previous scene and provide accepted goals/constraints, current
-commit, valid checks/reports, attempted fixes and remaining work. Reuse only
-still-applicable evidence. A changed candidate needs proportionate checks, but
-does not reset the once-per-Ticket Review-axis limit. The Leader verifies later
-corrections and owns test acceptance. Whole-Team replacement is a last resort when local
-continuation cannot recover; explain why. A failure count does not select a
-model, replacement or escalation by itself.
+Check that it admits the task's current state, preserve original accounting and
+handle its actual return. Do not repeatedly invoke continuation to manufacture
+acceptance. For an already committed integration escalation, use the retained
+candidate and unchanged validation through the public integration entry as
+specified in [command inputs](command-inputs.md).
 
-Replacement belongs to the target's direct parent or the user. Prefer a stop
-request, using interrupt when needed or immediately for an out-of-control child.
-Confirm the target and all descendants have stopped before replacing any of
-them. Use Runner's descendant-stop capability when available; a single-Agent
-stop receipt does not prove a subtree stopped. A legacy Main-only gate does not
-authorize cross-level recovery. On a confirmed abnormality, notify its direct
-parent and stop its descendants through the supported control interface; do not
-automatically replace Agents or increase budgets.
+When no implementation is authorized, `agent-runner send <alias> --reports-only`
+with the instruction and causal event can collect retained reports. It grants no
+new implementation window. For Codex-specific delivery concerns read
+[Codex recovery delivery](codex-recovery.md).
 
-An enforced execution-budget stop is delivered by the timer to the Leader and
-the calling Main. Under the user's explicit standing authorization, Main runs
-the named retro from that event and the limited wrap-up; it does not require
-a fresh user input for each stop. Keep explicit-only Skill discovery and the
-scope of the user's authorization. Ordinary reminders do not trigger retro.
-Handle each stop once using its event and retained decision. For a Codex Main,
-use [Codex recovery delivery](codex-recovery.md). Return the event through the
-active tool call; a log entry or accepted queue row is not delivered recovery.
+## Stop and replace
 
-Read retained reports returned by your direct child. Missing member evidence
-is handled through that child, not by contacting its members. Do not wake a
-Leader again while the Ticket execution is running merely to collect reports.
-After an execution has ended, use report-only collection through the same
-hierarchy when necessary; it must not start another work-budget sampler or new
-implementation.
+Ask the direct child to stop when possible; interrupt an out-of-control
+descendant subtree through Runner when needed. That control exception does not
+permit cross-level messages, approvals or replacement. Confirm the target and
+all descendants have stopped before replacing it. Replacement requires the
+actual direct parent or user; preserve the Runtime's native approval mechanism
+when the requested relationship requires it. An actor flag grants no authority.
 
-Reuse existing findings and inspect only missing decision evidence.
-Separate necessary implementation/review from avoidable scheduling, repeated
-polling, evidence replay and dispatcher errors. If a concrete code defect needs
-diagnosis, use the relevant debugging Skill for that defect, not another full
-delivery replay.
-
-Choose a response supported by that analysis: repair the Harness or dispatch,
-replace a damaged Session, revise task boundaries, or continue. Apply warranted
-corrections within existing authorization before resuming; do not invent a
-Harness change just because a stop occurred. Record the cause, correction or
-reason none is warranted, remaining work and estimate, and next decision event
-in the existing Worldline. Any fallback polling follows Harness Guidance.
-Continue only when authorized with `agent-runner continue --ticket-id <id>
---caused-by-event-id <decision-event-id>`. Preserve original accounting and stop
-history; budget edits alone do not resume work, and a user pause stays in effect.
-
-That command accepts only a sampled-stopped Ticket. Its return may report missing
-Engineer evidence or `not-accepted` without running a new Leader turn. When a
-stopped implementation needs a new Round, finish this retained-evidence recovery
-in the old Round first, then register the new Round before sending implementation
-work. Otherwise recovery can copy the old incomplete result into the new Round. After the
-Driver ends, send the remaining implementation or acceptance work to the same
-Leader through the causal event; use the existing execution while it is active.
-An old stopped-before-acceptance report supplies neither acceptance nor rejection.
-Once the Leader has delivered a decision, finish missing registration through
-[the semantic state commands](command-inputs.md#finish-retained-delivery), rather
-than invoking `continue` again on a Ticket whose stop has already been cleared.
-
-An external observer timeout is not necessarily a stopped Team. Retain the
-timeout, hand off that event and inspect the owned execution as needed; do not
-suspend the observer to evade its deadline or start a duplicate driver.
-
-Before ending a modifying turn or handing off, commit authorized changes to
-tracked project files of every type. Mark unfinished or failed work honestly.
-Continuous user-interactive drafting may batch adjacent turns, with a commit
-before that editing segment ends or ownership changes. Preserve untracked
-Harness state and traces outside Git; do not initialize a repository or
-force-add ignored records to satisfy this rule. Commit does not mean acceptance.
+Use public control/replacement operations and report a missing capability through
+the direct parent. Retain prior Sessions and useful evidence and give the new
+executor the accepted scope, committed candidate and concrete remaining work.
+Commit authorized tracked changes before handoff or turn end; mark unfinished
+work honestly. A commit is neither acceptance nor permission for more time.

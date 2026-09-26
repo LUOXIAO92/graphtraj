@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Iterable
 
 import pytest
+import yaml
 
 from conftest import FakeCodex, InstalledCommands, run_process
 
@@ -31,6 +32,19 @@ CORE_SKILL_NAMES = (
     "wayfinder",
     "prototype",
     "ponytail-review",
+)
+
+# Professional methods a task selects when its own work needs them.
+CODING_METHOD_SKILL_NAMES = (
+    "implement",
+    "ponytail",
+    "ponytail-review",
+    "tdd",
+    "code-review",
+    "resolving-merge-conflicts",
+)
+REQUIRED_SKILL_NAMES = tuple(
+    name for name in CORE_SKILL_NAMES if name not in CODING_METHOD_SKILL_NAMES
 )
 
 
@@ -184,7 +198,7 @@ def test_setup_refuses_missing_core_skills_without_mutating_either_scope(
     )
 
     assert result.returncode == 1
-    assert "Missing required core Skills:" in result.stdout
+    assert "Missing bundled Skills:" in result.stdout
     assert "implement" in result.stdout
     assert "Setup stopped before any setup mutation." in result.stderr
     assert not (harness_root / ".graphtraj").exists()
@@ -194,6 +208,45 @@ def test_setup_refuses_missing_core_skills_without_mutating_either_scope(
     assert git_output(
         temporary_git_repository, "worktree", "list", "--porcelain"
     ) == worktrees_before
+
+
+def test_a_project_without_coding_methods_prepares_and_diagnoses_cleanly(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    """Declining the coding methods leaves a project that never selects them valid."""
+    harness_root = temporary_git_repository.parent
+    user_home = tmp_path / "operator-home"
+    user_home.mkdir()
+    harness_skills = harness_root / ".agents" / "skills"
+    install_skills(harness_skills, REQUIRED_SKILL_NAMES)
+
+    result = run_setup(
+        installed_commands,
+        harness_root=harness_root,
+        user_home=user_home,
+        fake_codex=fake_codex,
+        answers="n\ny\n",
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert sorted(path.name for path in harness_skills.iterdir()) == sorted(
+        REQUIRED_SKILL_NAMES
+    )
+    roles = yaml.safe_load(
+        (harness_root / ".graphtraj" / "roles.yml").read_text(encoding="utf-8")
+    )
+    assert roles == {"roles": {}}
+
+    diagnosed = run_process(
+        [str(installed_commands.product), "doctor"],
+        cwd=harness_root,
+        env=setup_environment(user_home, fake_codex),
+    )
+
+    assert diagnosed.returncode == 0, diagnosed.stdout + diagnosed.stderr
 
 
 def test_setup_installs_only_missing_core_skills_at_the_harness_root(
@@ -464,7 +517,7 @@ def test_same_root_setup_rejects_a_tracked_core_skill_before_mutating(
     )
 
     assert result.returncode == 1
-    assert "Missing required core Skills:" in result.stdout
+    assert "Missing bundled Skills:" in result.stdout
     assert "implement" in result.stdout
     assert "Source Repository history" in result.stderr
     assert source_skill.read_bytes() == source_before

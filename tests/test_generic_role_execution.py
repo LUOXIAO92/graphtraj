@@ -1,6 +1,7 @@
 """Configured roles execute through the same public task launch interface."""
 
 import json
+import shutil
 import time
 import tomllib
 from pathlib import Path
@@ -10,7 +11,15 @@ import yaml
 
 from conftest import FakeCodex, InstalledCommands, run_process
 from runner_fixtures import configure_harness
+from test_project_setup import CODING_METHOD_SKILL_NAMES
 from test_ticket_graph import _change_status, _register, _ticket
+
+
+def remove_coding_method_skills(root: Path, user_home: Path) -> None:
+    """Leave a project whose work selected none of the coding methods."""
+    for name in CODING_METHOD_SKILL_NAMES:
+        shutil.rmtree(root / '.agents' / 'skills' / name)
+        shutil.rmtree(user_home / '.agents' / 'skills' / name)
 
 
 def wait_for_idle(commands: InstalledCommands, root: Path, env: dict, alias: str) -> dict:
@@ -26,15 +35,22 @@ def wait_for_idle(commands: InstalledCommands, root: Path, env: dict, alias: str
     raise AssertionError(status)
 
 
-@pytest.mark.parametrize('role', ['researcher', 'engineer'])
+@pytest.mark.parametrize('role, coding_methods', [
+    ('researcher', True), ('engineer', True), ('researcher', False),
+])
 def test_single_role_launch_registers_and_executes_without_placeholder_members(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
     fake_codex: FakeCodex,
     tmp_path: Path,
     role: str,
+    coding_methods: bool,
 ) -> None:
-    """An authorized lone author runs, with its real membership and own Trace."""
+    """An authorized lone author runs, with its real membership and own Trace.
+
+    The last case installs no coding method: an author that selects none of
+    them still runs, and its launch resolves only the Skills it selected.
+    """
     skill = temporary_git_repository / '.agents/skills/selected/SKILL.md'
     skill.parent.mkdir(parents=True)
     skill.write_text('---\nname: selected\ndescription: Task-selected method.\n---\n')
@@ -43,6 +59,8 @@ def test_single_role_launch_registers_and_executes_without_placeholder_members(
     root, _, _, env = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path,
     )
+    if not coding_methods:
+        remove_coding_method_skills(root, tmp_path / 'operator-home')
     (root / '.graphtraj/roles.yml').write_text(yaml.safe_dump({
         'roles': {role: {'runtime': 'codex', 'model': 'configured-author'}},
         'role_tree': {role: {}},
@@ -205,6 +223,44 @@ def test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority(
     assert len(team['members']) == 3
     assert sum(member['role'] == 'analyst' for member in team['members'].values()) == 2
     assert all(member['session_ref'] for member in team['members'].values())
+
+
+def test_a_selected_coding_role_reports_its_absent_method_skill(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    """A selected coding role still fails loudly when its method is absent."""
+    root, _, _, env = configure_harness(
+        installed_commands, temporary_git_repository, fake_codex, tmp_path,
+    )
+    remove_coding_method_skills(root, tmp_path / 'operator-home')
+    (root / '.graphtraj/roles.yml').write_text(yaml.safe_dump({
+        'roles': {'coding_team': {
+            'engineer': {'runtime': 'codex', 'model': 'selected-author'},
+        }},
+        'role_tree': {'coding_team.engineer': {}},
+    }))
+    _register(installed_commands, root, _ticket('150', 'absent-method'))
+    _change_status(installed_commands, root, '150', 'ready')
+    batch = root / 'batch.yml'
+    batch.write_text(yaml.safe_dump({'tasks': [{
+        'role': 'coding_team.engineer', 'ticket_id': '150',
+    }]}))
+
+    result = run_process(
+        [str(installed_commands.runner), '--swarm-input', str(batch)],
+        cwd=root, env=env,
+    )
+
+    assert result.returncode == 1
+    document = yaml.safe_load(result.stdout)
+    task = document['tasks'][0]
+    assert task['launch_status'] == 'failed'
+    assert task['error']['code'] == 'invalid-config'
+    assert 'implement' in task['error']['message']
+    assert not list((root / '.graphtraj/runner/sessions').glob('*/mapping.yml'))
 
 
 @pytest.mark.parametrize('tree, task', [

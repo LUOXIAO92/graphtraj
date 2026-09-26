@@ -18,26 +18,33 @@ from graphtraj.execution.runner_batch import parse_batch, read_batch
 from graphtraj.execution.runner_models import RunnerError
 
 
-def test_default_presets_expose_one_engineer_role() -> None:
-    """Setup writes one Engineer preset beside the Team Leader and Reviewers."""
-    document = yaml.safe_load(default_roles_content())
+def test_default_role_selection_names_no_role() -> None:
+    """Setup selects no role, including no coding Team arrangement."""
+    assert yaml.safe_load(default_roles_content()) == {"roles": {}}
+    assert default_project_roles().presets == {}
 
-    assert set(document["roles"]["coding_team"]) == {
-        "team_leader",
-        "engineer",
-        "standards_reviewer",
-        "spec_reviewer",
-        "merge_resolver",
-    }
-    assert document["roles"]["delivery_state"]["runtime"] == "codex"
+
+def _selected_coding_roles() -> dict:
+    """Return the coding selection a project declares for the Engineer seat."""
+    return {"roles": {"coding_team": {
+        "team_leader": {
+            "runtime": "codex",
+            "model": "gpt-5.6-sol",
+            "allow_runtime_swarm": True,
+        },
+        "engineer": {"runtime": "codex", "model": "gpt-5.6-sol"},
+        "standards_reviewer": {"runtime": "codex", "model": "gpt-5.6-sol"},
+        "spec_reviewer": {"runtime": "codex", "model": "gpt-5.6-sol"},
+        "merge_resolver": {"runtime": "codex", "model": "gpt-5.6-sol"},
+        "delivery_state": {"runtime": "codex", "model": "gpt-5.6-luna"},
+    }}}
 
 
 def test_configured_engineer_preset_serves_the_engineer_seat(tmp_path: Path) -> None:
     """Operator Runtime, model and connection settings reach the Engineer seat."""
     path = tmp_path / ".graphtraj" / "roles.yml"
     path.parent.mkdir()
-    path.write_text(default_roles_content())
-    document = yaml.safe_load(path.read_text())
+    document = _selected_coding_roles()
     document["roles"]["coding_team"]["engineer"] = {
         "runtime": "codex",
         "model": "operator-selected-model",
@@ -80,9 +87,10 @@ def test_a_tier_named_group_role_keeps_its_own_reference(tmp_path: Path) -> None
     """A tier is one configured role instead of silently serving the Engineer seat."""
     path = tmp_path / ".graphtraj" / "roles.yml"
     path.parent.mkdir()
-    path.write_text(
-        default_roles_content().replace("  engineer:", "  engineer-senior:")
-    )
+    document = _selected_coding_roles()
+    engineer = document["roles"]["coding_team"].pop("engineer")
+    document["roles"]["coding_team"]["engineer-senior"] = engineer
+    path.write_text(yaml.safe_dump(document))
 
     roles = load_project_roles(tmp_path)
 
@@ -105,15 +113,15 @@ def test_inline_engineer_role_resolves_without_a_tier() -> None:
     assert preset.model == "gpt-5.6-terra"
 
 
-def test_only_the_engineer_task_selects_repository_skills() -> None:
-    """Repository Skill selection stays a unified-Engineer input."""
-    with pytest.raises(RunnerError) as error:
-        parse_batch({"tasks": [{
-            "ticket_id": "73", "ticket_name": "shared-graph",
-            "role": "team-leader", "skills": ["implement"],
-        }]})
+def test_non_engineer_task_retains_selected_repository_skills() -> None:
+    """A non-Engineer task retains its selected repository Skills."""
+    batch = parse_batch({"tasks": [{
+        "ticket_id": "73", "ticket_name": "shared-graph",
+        "role": "team-leader", "skills": ["implement"],
+    }]})
 
-    assert error.value.code == "SKILL_SELECTION_INVALID"
+    assert batch.tasks[0].role == "team-leader"
+    assert batch.tasks[0].requested_skills == ("implement",)
 
 
 def test_retained_tiered_batch_still_resolves_for_recovery(tmp_path: Path) -> None:
@@ -130,8 +138,11 @@ def test_retained_tiered_batch_still_resolves_for_recovery(tmp_path: Path) -> No
     original = retained.read_bytes()
 
     task = read_batch(retained, tmp_path).tasks[0]
+    _, selected = parse_inline_role(
+        {"engineer": {"runtime": "codex", "model": "gpt-5.6-sol"}}
+    )
     role = resolve_child_role(
-        task.policy_role, default_project_roles().presets["coding_team.engineer"]
+        task.policy_role, selected
     )
 
     assert retained.read_bytes() == original

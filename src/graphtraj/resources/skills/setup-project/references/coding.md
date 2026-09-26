@@ -1,59 +1,34 @@
 # Coding setup
 
-Use this reference only when the project includes programming work.
+Use this reference when the project selects programming methods. Inspect the
+existing codebase guidance, package structure and validation commands; preserve
+agreed role assignments, Runtime settings and project documents.
 
-Record that maintained modules, interfaces and cross-module changes use the
-project's coding team. Main gives each Ticket a scope and its investigation
-findings; the Leader assesses difficulty and scope before choosing methods.
-Small fixes and test modifications do not use TDD or code-review Skills; each
-Review axis runs at most once per Ticket. Auxiliary data conversion,
-plotting and one-off calculations can be done directly; writing a function or
-using a programming language does not call for a Team. This does not change
-who executes tests.
+Select implementation, testing and code review according to the task. Record
+who implements, who provides validation and who is authorized to accept the
+result. One engineer can execute a task through the common task protocol.
+Selecting a programming language does not require a Team Leader or Reviewers.
 
-Write the following rule into the project's `AGENTS.md` (or its existing
-`CLAUDE.md` guidance), rather than leaving it only in this setup procedure:
+If the project explicitly selects the coding-team method, its coordinator
+assigns scoped work and acceptance responsibilities to the configured members.
+A project may assign development tests to the Engineer, test acceptance to the
+Leader and read-only code inspection to Reviewers. Write that arrangement only
+when selected; retain this project's existing accepted responsibilities.
+Use the configured role_tree and actual parent bindings for dispatch/control.
 
-> Main does not run tests. Engineers may run development tests and report the
-> candidate, environment, commands and results. The Leader is the sole
-> test-acceptance role and executes any acceptance checks still needed, reusing
-> valid development evidence. Code Reviewers must not run tests or probes,
-> including through wrappers or temporary installations.
-> Reviewers use controlled read-only queries and write their evidence reports;
-> they do not execute project code, builds or installs or modify candidates.
-> Every Agent communicates only with its direct parent and direct children.
-> Cross-level observation is limited to status summaries. The control exception
-> is interruption of one's own descendant subtree, not messages or approvals.
-> Only a target's direct parent or the user may replace it, after that target
-> and all descendants are confirmed stopped.
-> Do not wake or relaunch a Leader while its Ticket execution is running.
-> Instruction-only changes to prompts, Skills and guidance end with consistency
-> checking and a commit where tracked, without tests or Reviewers.
+Instruction-only changes need consistency checking and a commit where tracked.
+Small fixes and test changes do not call for TDD or code-review Skills. For
+other changes choose only needed Review axes, each at most once per Ticket;
+reuse reports when verifying corrections. Professional checks supply evidence
+for the same versioned submission, authorized decision and integration used by
+other tasks. They do not establish a second task lifecycle.
 
-Within a Harness Project, put this rule directly in the Source Repository's
-`AGENTS.md` and the `AGENTS.md` of the Integration and existing Ticket Worktrees
-as well as the Harness-root guidance. Preserve their other instructions. New
-Worktrees inherit the repository file; existing Worktrees need the same update.
-Inspect these local files rather than assuming access to a parent directory.
+Keep shared documents in their established project-owned location. Expose
+project guidance read-only to delegated Worktrees and ensure each executor can
+read its actual responsibilities. Preserve user content and settings.
 
-Inspect the software's existing guidance and package structure. Keep one
-context unless genuinely separate domain vocabularies warrant a context map.
-A monorepo is evidence to inspect, not a requirement for multiple contexts.
-Within a Harness Project, all shared context files and ADRs remain owned by
-Main at its root, even when the source has several packages.
-
-Point engineering work to the relevant codebase guidance and validation
-commands. Use `to-spec` for an agreed software design and `to-tickets` to turn
-its task nodes into deliverable code tickets. The coding team's Leader owns
-its Engineer, the necessary one-time Review axes and test acceptance. Configure the installed role
-presets through their documented interface, preserving user Runtime settings.
-
-Keep the setup procedure in this reference. Add the test-execution rule above
-and the project-specific pointers to guidance. Shared tracker and triage
-configuration remains in the parent skill. Keep pull requests out of the request
-queue unless the project has explicitly selected them as a request surface.
-
-For coding projects, retain the provider's request-surface setting. Read only
-the configured provider's instructions: [GitHub](github-requests.md) or
-[GitLab](gitlab-requests.md). Include its default-off flag in the tracker
-binding; include the operational details only when that surface is enabled.
+Tracker configuration stays in the parent Skill. Pull requests enter the
+request queue only when explicitly selected. For that request surface read the
+configured provider reference: [GitHub](github-requests.md) or
+[GitLab](gitlab-requests.md). Keep the provider's default-off setting in the
+tracker binding and add operational detail only when enabled.

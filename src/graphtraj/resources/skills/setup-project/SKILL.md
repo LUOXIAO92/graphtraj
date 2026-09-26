@@ -13,23 +13,20 @@ the Harness Project Root; delegated Worktree views remain read-only.
 
 ## Establish the work
 
-Unless the current conversation already answers it, explicitly ask:
+Use the conversation and existing project guidance to identify the work,
+selected roles, professional Skills and validation responsibilities. Ask only
+for an actual missing choice. Git and a repository do not imply coding work;
+Markdown, LaTeX and software can use the same task lifecycle.
 
-> Does this project include programming work, whether maintained software or
-> auxiliary scripts?
+Select resources for the actual task through the existing project setup and
+role/Skill selection interfaces. Preserve existing models, connections and
+role definitions. A task can use one researcher or engineer; its content does
+not require a coordinator, reviewer or state-maintenance role.
 
-A repository alone does not answer this question.
-Small helper scripts can stay with the current Agent; test execution follows
-the project's responsibility rule below. A project-wide yes still requires
-choosing the workflow for each task. Record the answer in the project guidance's
-Agent skills section.
-
-When the project includes programming work, Main does not run tests. Engineers
-may run development tests; the Leader alone owns test acceptance and any
-still-needed acceptance checks. Reviewers never run tests or probes. Record
-these responsibilities in the project guidance using
-[coding setup](references/coding.md), before any setup baseline or validation
-probe. Read that reference only when the answer is affirmative.
+For programming work, offer the relevant implementation, test and review
+methods. Read [coding setup](references/coding.md) when configuring a selected
+coding method. Record agreed responsibilities; programming alone does not
+select the coding-team arrangement.
 
 ## Configure shared conventions
 
@@ -55,8 +52,7 @@ Present the concrete configuration and resolve missing choices before writing.
 Apply authorized edits; existing authorization needs no second confirmation.
 Within a Harness Project update its root `AGENTS.md`. Else update the existing
 `CLAUDE.md` or `AGENTS.md`; if neither exists, ask which guidance file to create.
-For programming projects, also place the test-execution rule in the Source
-Repository and existing Worktrees as described in the coding reference; do not
+Make the project-selected responsibilities accessible to their executors; do not
 assume a delegated Agent can read guidance above its working directory.
 
 Keep one Agent skills section with brief pointers to the tracker, domain

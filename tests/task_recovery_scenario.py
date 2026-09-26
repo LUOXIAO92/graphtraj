@@ -24,14 +24,15 @@ if entity != role.replace('-', '_'):
         assert 'Retained work by ' in prompt
     stem += '-' + entity
 owned = mcp.submit_report({'name': stem + '.md', 'text': 'Retained work by ' + alias}, cwd=root).document
-if os.environ.get('RECOVERY_CHILD') and role == 'researcher':
+if (os.environ.get('RECOVERY_CHILD') and role == 'researcher'
+        and (os.environ['RECOVERY_CHILD'] != 'replacement' or entity != 'researcher')):
     child = Path('child.json')
     if not child.exists():
         response = mcp.launch_swarm_tool({'tasks': [{'role': 'analyst'}]}, cwd=root)
         child.write_text(json.dumps(response.document['tasks'][0]))
         print(json.dumps({'type': 'item.completed', 'item': {'type': 'agent_message', 'text': 'Child registered'}}))
         raise SystemExit(0)
-    if entity != role.replace('-', '_'):
+    if entity != role.replace('-', '_') and os.environ['RECOVERY_CHILD'] != 'replacement':
         from graphtraj.execution.runner_models import RunnerError
         shard = next((root / '.graphtraj/state/worldline').glob('*.jsonl'))
         cause = json.loads(shard.read_text().splitlines()[0])['event_id']

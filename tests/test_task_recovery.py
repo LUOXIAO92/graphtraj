@@ -43,13 +43,14 @@ def prepare(
     tmp_path: Path,
     role: str,
     child: bool = False,
+    replacement_child: bool = False,
 ) -> tuple[Path, dict, dict]:
     """Start one real managed Session whose model work waits for test release."""
     root, _, _, env = configure_harness(commands, repository, fake_codex, tmp_path)
     (root / '.graphtraj/roles.yml').write_text(yaml.safe_dump({
         'roles': {name: {'runtime': 'codex', 'model': 'selected'}
-                  for name in ([role, 'analyst'] if child else [role])},
-        'role_tree': {role: {'analyst': {}}} if child else {role: {}},
+                  for name in ([role, 'analyst'] if child or replacement_child else [role])},
+        'role_tree': {role: {'analyst': {}}} if child or replacement_child else {role: {}},
     }))
     ticket = _ticket('154', 'recovery')
     ticket['body'] = BODY + ticket['body']
@@ -59,6 +60,8 @@ def prepare(
     env['RECOVERY_STARTED'] = str(tmp_path / 'started')
     if child:
         env['RECOVERY_CHILD'] = '1'
+    if replacement_child:
+        env['RECOVERY_CHILD'] = 'replacement'
     scenario = Path(__file__).with_name('task_recovery_scenario.py')
     fake_codex.executable.write_text(app_server_peer(
         '#!' + sys.executable + '\nimport runpy\nrunpy.run_path(' + repr(str(scenario)) + ')\n',
@@ -105,6 +108,7 @@ def test_explicitly_stopped_member_is_replaced_without_executing_old_session(
         replaced = command(installed_commands, root, env, 'replace', alias, '--caused-by-event-id', cause)
         assert replaced.returncode == 0, replaced.stdout + replaced.stderr
         replacement = yaml.safe_load(replaced.stdout)['replacement_alias']
+        wait_for_file(runner / replacement / 'execution.yml')
         current = yaml.safe_load((runner / replacement / 'mapping.yml').read_text())
         assert current['session'] != original['session']
         assert current['parent'] == original['parent'] is None

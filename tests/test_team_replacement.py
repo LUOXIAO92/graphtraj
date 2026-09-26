@@ -44,6 +44,7 @@ def test_replacing_parent_keeps_old_descendants_stopped_and_bound_to_old_session
                            '--caused-by-event-id', cause)
         assert replaced.returncode == 0, replaced.stdout + replaced.stderr
         successor = yaml.safe_load(replaced.stdout)['replacement_alias']
+        wait_for_file(runner / successor / 'execution.yml')
         assert successor != alias
         assert yaml.safe_load((runner / child / 'mapping.yml').read_text()) == original_child
         assert original_child['parent'] == alias
@@ -76,3 +77,42 @@ def test_replacing_parent_keeps_old_descendants_stopped_and_bound_to_old_session
     finally:
         Path(env['RECOVERY_RELEASE']).touch()
         command(installed_commands, root, env, 'interrupt', alias)
+
+
+def test_replacement_drives_registered_child_without_send(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    """The replacement's Worker executes its retained Batch after registration."""
+    root, env, task = prepare(
+        installed_commands, temporary_git_repository, fake_codex, tmp_path,
+        'researcher', replacement_child=True,
+    )
+    alias = task['alias']
+    successor = None
+    runner = root / '.graphtraj/runner/sessions'
+    try:
+        stopped = command(installed_commands, root, env, 'interrupt', alias)
+        assert stopped.returncode == 0, stopped.stdout + stopped.stderr
+        cause = events(root)[-1]['event_id']
+        Path(env['RECOVERY_RELEASE']).touch()
+        replaced = command(installed_commands, root, env, 'replace', alias,
+                           '--caused-by-event-id', cause)
+        assert replaced.returncode == 0, replaced.stdout + replaced.stderr
+        successor = yaml.safe_load(replaced.stdout)['replacement_alias']
+        child_file = Path(task['worktree_path']) / 'child.json'
+        wait_for_file(child_file)
+        registered = json.loads(child_file.read_text())
+        assert registered['launch_status'] == 'registered'
+        child = registered['alias']
+        wait_for_file(runner / child / 'mapping.yml')
+        mapping = yaml.safe_load((runner / child / 'mapping.yml').read_text())
+        assert mapping['parent'] == successor
+        assert mapping['session']
+        wait_for_file(runner / child / 'execution.yml')
+        assert yaml.safe_load((runner / child / 'execution.yml').read_text())['outcome'] == 'completed'
+    finally:
+        Path(env['RECOVERY_RELEASE']).touch()
+        command(installed_commands, root, env, 'interrupt', successor or alias)

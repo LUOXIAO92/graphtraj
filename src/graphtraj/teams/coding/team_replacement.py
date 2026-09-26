@@ -125,6 +125,6 @@ def _replace_stopped_session(
         "Previous Session reports supplied by the authorized replacement:\n{5}\n"
         "Remaining work: continue only the current {4} Team seat, preserving closed Team Round evidence."
         .format(alias, prior_trace, task.ticket_content, current_commit, task.role, reports),
-        register_member=True, replaces_alias=alias,
+        register_member=True, replaces_alias=alias, wait_for_completion=False,
     )
     return {"alias": alias, "replacement_alias": replacement, "team_ordinal": generation}

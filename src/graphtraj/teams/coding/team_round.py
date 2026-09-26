@@ -1182,6 +1182,12 @@ def _run_session_worker(
     input_delivered: threading.Event | None,
     wait_for_completion: bool = True,
 ) -> tuple[str, str]:
+    """Run a native Worker, retaining any caller notice channel until it exits.
+
+    A root Worker still drives its own registered children. Waiting here keeps
+    the original CLI/MCP reader alive through that execution, without waiting
+    for task acceptance, which belongs to the caller after this call returns.
+    """
     if not isinstance(runtime_environment, dict):
         raise RunnerError("RUNTIME_WORKER_FAILED", "The Runtime Session could not be started.")
     execution = session_directory / "execution.yml"
@@ -1219,7 +1225,7 @@ def _run_session_worker(
             assert worker.stdin is not None
             worker.stdin.write(prompt)
             worker.stdin.close()
-            if not wait_for_completion:
+            if not wait_for_completion and notice_fd is None:
                 from graphtraj.execution.runner_control import _await_session_resume
 
                 _await_session_resume(worker, session_directory, error, None)

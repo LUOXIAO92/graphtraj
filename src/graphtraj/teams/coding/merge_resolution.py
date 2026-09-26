@@ -12,7 +12,7 @@ from graphtraj.execution.runner_batch import retain_batch
 from graphtraj.execution.runner_models import Batch, LaunchResponse, RunnerError
 from graphtraj.workspace.runner_project import discover_project, run_git
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
-from graphtraj.teams.coding.team_round import _agent_alias, _run_agent
+from graphtraj.teams.coding.team_round import _run_agent
 from graphtraj.graph.ticket_graph import _load_states
 
 
@@ -39,22 +39,6 @@ def launch_merge_resolver(batch: Batch, cwd: Path) -> LaunchResponse:
     retained = retain_batch(project.state_directory, batch)
     generation = int(record["active_team_ordinal"])
     traces = directory / "teams" / str(generation) / "traces"
-    for _ in range(10000):
-        alias = _agent_alias(project, task, task.role, generation)
-        session_directory = project.runner_directory / "sessions" / alias
-        try:
-            session_directory.mkdir()
-        except FileExistsError:
-            continue
-        break
-    else:
-        raise RunnerError("ALIAS_ALLOCATION_FAILED", "No fresh Merge Resolver Session alias is available.")
-    trace = traces / alias / "events.jsonl"
-    trace.parent.mkdir()
-    # The Trace entry later reads the Runtime-owned native Session record;
-    # this Session keeps the Runner's own records for the same execution.
-    trace.touch()
-    (session_directory / "events.jsonl").touch()
     prompt = (
         task.ticket_content
         + f"\nFixed incoming candidate: {conflict['candidate']}\nExisting dev state: {conflict['dev_before']}"
@@ -63,14 +47,18 @@ def launch_merge_resolver(batch: Batch, cwd: Path) -> LaunchResponse:
         + "\n".join((project.harness_root / ref).read_text() for ref in conflict["evidence_refs"])
     )
     result = {
-        "ticket_id": task.ticket_id, "role": task.role, "alias": alias,
+        "ticket_id": task.ticket_id, "role": task.role,
         "worktree_path": str(project.integration_worktree),
-        "trace": trace.relative_to(project.harness_root).as_posix(),
-        "launch_status": "failed",
+        "alias": None, "trace": None, "launch_status": "failed",
     }
     try:
-        _run_agent(project, task, task.role, project.integration_worktree, directory, traces,
-                   alias, None, None, None, retained, prompt)
+        # A create passes no alias so the shared startup allocates the alias and
+        # owns the Session directory, mapping and Trace for this execution.
+        alias, _ = _run_agent(project, task, task.role, project.integration_worktree,
+                              directory, traces, None, None, None, None, retained, prompt)
+        result["alias"] = alias
+        trace = traces / alias / "events.jsonl"
+        result["trace"] = trace.relative_to(project.harness_root).as_posix()
         message = read_codex_last_agent_message(trace)
         decisions = [line for line in (message.splitlines() if message else [])
                      if line in {"Decision: RESOLVED", "Decision: ESCALATE"}]

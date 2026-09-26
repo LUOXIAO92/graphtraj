@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 import tomllib
 from pathlib import Path
 
@@ -325,9 +326,57 @@ def test_main_resolves_observed_textual_conflict_then_validates_dev(
     interrupted = run_process(command + ["--resolve-conflict", "Preserve both accepted lines", "--", *validator], cwd=root, env={**environment, "FAKE_CODEX_EXIT_CODE": "1"})
     assert interrupted.returncode == 1
     assert yaml.safe_load(interrupted.stdout).get("status") == "integrating", interrupted.stdout + interrupted.stderr
-    result = run_process(command + ["--resolve-conflict", "Preserve both accepted lines", "--", *validator], cwd=root, env=environment)
-    output = yaml.safe_load(result.stdout)
-    assert result.returncode == 0, result.stdout + result.stderr + (root / output["evidence"]).read_text()
+    sessions = root / ".graphtraj/runner/sessions"
+    # The interrupted attempt is a retained shared-startup allocation: its
+    # Session directory, launch record and Runner Trace entry exist, and no
+    # later launch may claim that occupied alias again.
+    retained = sorted(path.name for path in sessions.glob("*merge_resolver@*"))
+    assert len(retained) == 1, retained
+    occupied = retained[0]
+    occupied_launch = yaml.safe_load((sessions / occupied / "launch.yml").read_text())
+    assert occupied_launch["operation"] == "launch"
+    assert occupied_launch["mapping"]["alias"] == occupied
+    retained_records = (sessions / occupied / "events.jsonl").read_bytes()
+    assert b'runner-execution-start' in retained_records
+    occupied_trace = state / "tickets/83-integration/teams/1/traces" / occupied / "events.jsonl"
+    assert occupied_trace.is_file()
+    release = root / "release-merge-resolver"
+    resolving = subprocess.Popen(
+        command + ["--resolve-conflict", "Preserve both accepted lines", "--", *validator],
+        cwd=root, env={**environment, "FAKE_CODEX_RELEASE_FILE": str(release)},
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+    )
+    try:
+        # Only the shared startup allocates and binds the new Session, so the
+        # occupied alias is never reopened and a fresh one is created instead.
+        deadline = time.monotonic() + 20
+        while True:
+            created = sorted(set(path.name for path in sessions.glob("*merge_resolver@*")) - set(retained))
+            bound = created and (sessions / created[0] / "mapping.yml").is_file()
+            if bound or time.monotonic() >= deadline:
+                break
+            time.sleep(0.01)
+        assert bound, created
+        resolver = created[0]
+        assert resolver != occupied
+        resolver_directory = sessions / resolver
+        assert (resolver_directory / "launch.yml").is_file()
+        assert (sessions / occupied / "events.jsonl").read_bytes() == retained_records
+        # A duplicate resolve launch while that Session owns the integration is
+        # refused, and the occupied alias keeps its own single retained record.
+        duplicate = run_process(
+            command + ["--resolve-conflict", "Preserve both accepted lines", "--", *validator],
+            cwd=root, env=environment, timeout=30,
+        )
+        assert duplicate.returncode == 1, duplicate.stdout
+        assert "in progress" in yaml.safe_load(duplicate.stdout)["error"]
+        assert sorted(path.name for path in sessions.glob("*merge_resolver@*")) == sorted(retained + [resolver])
+        assert (sessions / occupied / "events.jsonl").read_bytes() == retained_records
+    finally:
+        release.touch()
+    stdout, stderr = resolving.communicate(timeout=30)
+    assert resolving.returncode == 0, stdout + stderr
+    output = yaml.safe_load(stdout)
     assert output["status"] == "integrated"
     request = json.loads(fake_codex.log_file.read_text())
     assert fake_codex.log_file.read_bytes() != previous_runtime
@@ -341,16 +390,36 @@ def test_main_resolves_observed_textual_conflict_then_validates_dev(
             settings.update(tomllib.loads(request["argv"][index + 1]))
     assert settings["agents"]["enabled"] is False
     permissions = settings["permissions"][settings["default_permissions"]]["filesystem"]
-    assert permissions[str(state / "tickets/83-integration")] == "read"
+    # The isolated resolver reads only its own assigned Round report; the
+    # retained conflict travels in its prompt instead of a Ticket directory read.
+    assert permissions.get(str(state / "tickets/83-integration")) is None
+    resolver_reports = [
+        Path(path) for path, access in permissions.items()
+        if access == "read" and path.startswith(str(state / "tickets/83-integration"))
+    ]
+    assert [
+        path.parent.relative_to(state / "tickets/83-integration").as_posix()
+        for path in resolver_reports
+    ] == ["teams/1/rounds/1"]
+    assert resolver_reports[0].name.startswith("merge-resolver")
     assert permissions[":workspace_roots"]["docs"] == "read"
     assert "hooks" not in settings
     assert run_process(["git", "rev-parse", "HEAD^1"], cwd=dev).stdout.strip() == before
     assert run_process(["git", "rev-parse", "HEAD^2"], cwd=dev).stdout.strip() == candidate
     events = [json.loads(line) for shard in (state / "worldline").glob("*.jsonl") for line in shard.read_text().splitlines()]
     resolved = next(event for event in events if event["kind"] == "ticket-integration-conflict-resolved")
-    assert resolved["session_ref"]
+    assert resolved["session_ref"] == resolver
     trace = next(root / ref for ref in resolved["evidence_refs"] if ref.endswith("events.jsonl"))
     assert "Decision: RESOLVED" in trace.read_text()
+    # The completion names the accepted version and the Session the shared
+    # startup created, so the outcome stays traceable to that evidence.
+    assert resolved["candidate"] == candidate
+    launch = yaml.safe_load((resolver_directory / "launch.yml").read_text())
+    mapping = yaml.safe_load((resolver_directory / "mapping.yml").read_text())
+    assert mapping["alias"] == resolver and mapping["role"] == "merge-resolver"
+    assert Path(mapping["trace_file"]) == trace
+    assert launch["mapping"]["worktree_path"] == str(dev)
+    assert occupied_trace != trace
     assert yaml.safe_load((state / "tickets/83-integration/ticket.yml").read_text())["status"] == "integrated"
 
 

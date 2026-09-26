@@ -279,3 +279,153 @@ def test_cancelled_task_is_neither_recoverable_nor_cleanable(
     finally:
         Path(env['RECOVERY_RELEASE']).touch()
         command(installed_commands, root, env, 'interrupt', alias)
+
+
+def test_failed_first_creation_can_continue_budget_before_ordinary_launch(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Task continuation clears permission without inventing a Team or Session."""
+    from graphtraj.execution import execution_budget as budgets
+    from graphtraj.execution.runner_models import RunnerError
+    from graphtraj.execution.runner_status import runtime_caller
+    from graphtraj.teams.coding.team_round import continue_stopped_ticket
+
+    root, _, _, env = configure_harness(
+        installed_commands, temporary_git_repository, fake_codex, tmp_path,
+    )
+    (root / '.graphtraj/roles.yml').write_text(yaml.safe_dump({
+        'roles': {'researcher': {'runtime': 'codex', 'model': 'selected'}},
+        'role_tree': {'researcher': {}},
+    }))
+    definition = _ticket('160', 'first-session')
+    definition['body'] = BODY + definition['body']
+    _register(installed_commands, root, definition)
+    _change_status(installed_commands, root, '160', 'ready')
+    batch = root / 'batch.yml'
+    batch.write_text(yaml.safe_dump({'tasks': [{'role': 'researcher', 'ticket_id': '160'}]}))
+    ticket = root / '.graphtraj/state/tickets/160-first-session'
+    runner = root / '.graphtraj/runner'
+    env['FAKE_CODEX_EVENTS'] = '[]'
+    failed = command(installed_commands, root, env, '--swarm-input', str(batch))
+    assert failed.returncode == 1, failed.stdout + failed.stderr
+    failures = {path: path.read_bytes() for path in (runner / 'sessions').glob('*/launch-error.yml')}
+    assert failures
+    assert not list((runner / 'sessions').glob('*/mapping.yml'))
+    assert yaml.safe_load((ticket / 'ticket.yml').read_text())['active_team_ordinal'] is None
+    monitor = budgets.execution_budget_monitor(ticket, '160', 'first-session')
+    cause = events(root)[-1]['event_id']
+    refused = command(installed_commands, root, env, 'continue', '--ticket-id', '160',
+                      '--caused-by-event-id', cause)
+    assert refused.returncode == 1 and 'sampled stopped Ticket' in refused.stdout
+    sample_stop(monitor, monkeypatch)
+    before = yaml.safe_load((ticket / 'execution-budget.yml').read_text())
+    assert before['stopped'] and sum(before['sessions'].values()) == 0
+
+    definition.update(active=True, replaced_by=[])
+    definition['body'] = definition['body'].replace('total: 10', 'total: 35').replace(
+        'execution_budget:\n',
+        'execution_budget:\n  revision_reason: Authorized recovery after failed creation\n',
+    )
+    revision = root / 'revision.yml'
+    revision.write_text(yaml.safe_dump({
+        'product_preserving': True, 'tickets': [definition],
+        'caused_by_event_ids': [cause], 'evidence_refs': ['delivery-evidence.md'],
+    }))
+    revised = run_process([str(installed_commands.product), 'ticket', 'revise',
+                           '--revision-file', str(revision)], cwd=root, env=env)
+    assert revised.returncode == 0, revised.stdout + revised.stderr
+    cause = yaml.safe_load(revised.stdout)['event_id']
+    blocked = command(installed_commands, root, env, '--swarm-input', str(batch))
+    assert blocked.returncode == 1
+    assert yaml.safe_load(blocked.stdout)['tasks'][0]['launch_status'] == 'stopped', blocked.stdout
+    assert monitor.is_stopped()
+    revised_budget = yaml.safe_load((ticket / 'execution-budget.yml').read_text())
+    assert revised_budget['budget']['execution_budget']['estimated_minutes']['total'] == 35
+    for field in ('started_at', 'allowance_minutes', 'stopping_checks', 'sessions', 'notifications'):
+        assert revised_budget[field] == before[field]
+    retained = (ticket / 'execution-budget.yml').read_bytes()
+    history = events(root)
+    with runtime_caller(runner, 'unrelated-native-session'):
+        with pytest.raises(RunnerError, match='Only the root caller'):
+            continue_stopped_ticket('160', (cause,), root)
+    for causes in ((), ('missing-event',), (cause, cause)):
+        with pytest.raises(RunnerError):
+            continue_stopped_ticket('160', causes, root)
+    assert (ticket / 'execution-budget.yml').read_bytes() == retained
+    assert events(root) == history
+
+    continued = command(installed_commands, root, env, 'continue', '--ticket-id', '160',
+                        '--caused-by-event-id', cause)
+    assert continued.returncode == 0, continued.stdout + continued.stderr
+    result = yaml.safe_load(continued.stdout)
+    assert result['tasks'] == []
+    after = yaml.safe_load((ticket / 'execution-budget.yml').read_text())
+    assert after == dict(revised_budget, stopped=False)
+    assert yaml.safe_load((ticket / 'ticket.yml').read_text())['active_team_ordinal'] is None
+    assert not list(ticket.glob('teams/*/team.yml'))
+    continuation = next(e for e in events(root) if e['event_id'] == result['continuation_event_id'])
+    assert continuation['caused_by_event_ids'] == [cause]
+    assert 'team_ordinal' not in continuation and 'team_round' not in continuation
+
+    del env['FAKE_CODEX_EVENTS']
+    launched = command(installed_commands, root, env, '--swarm-input', str(batch))
+    assert launched.returncode == 0, launched.stdout + launched.stderr
+    task = yaml.safe_load(launched.stdout)['tasks'][0]
+    directory = runner / 'sessions' / task['alias']
+    wait_for_file(directory / 'execution.yml')
+    mapping = yaml.safe_load((directory / 'mapping.yml').read_text())
+    assert mapping['session'] == task['session'] and mapping['parent'] is None
+    team = yaml.safe_load((ticket / 'teams/1/team.yml').read_text())
+    assert [member['session_ref'] for member in team['members'].values()] == [task['alias']]
+    final_budget = yaml.safe_load((ticket / 'execution-budget.yml').read_text())
+    for field in ('started_at', 'allowance_minutes', 'stopping_checks', 'notifications'):
+        assert final_budget[field] == after[field]
+    assert final_budget['sessions'] == {'researcher': 1}
+    assert all(path.read_bytes() == content for path, content in failures.items())
+
+
+@pytest.mark.parametrize('cancelled', [False, True])
+def test_task_continuation_requires_active_ready_task_before_first_session(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    cancelled: bool,
+) -> None:
+    """Neither pending nor cancelled work gains permission from a budget stop."""
+    from graphtraj.execution import execution_budget as budgets
+
+    root, _, _, env = configure_harness(
+        installed_commands, temporary_git_repository, fake_codex, tmp_path,
+    )
+    definition = _ticket('160', 'first-session')
+    definition['body'] = BODY + definition['body']
+    _register(installed_commands, root, definition)
+    if cancelled:
+        _change_status(installed_commands, root, '160', 'ready')
+        definition.update(active=False, replaced_by=[])
+        revision = root / 'cancel.yml'
+        revision.write_text(yaml.safe_dump({
+            'product_preserving': True, 'tickets': [definition],
+            'caused_by_event_ids': [events(root)[-1]['event_id']],
+            'evidence_refs': ['delivery-evidence.md'],
+        }))
+        result = run_process([str(installed_commands.product), 'ticket', 'revise',
+                              '--revision-file', str(revision)], cwd=root, env=env)
+        assert result.returncode == 0, result.stdout + result.stderr
+    ticket = root / '.graphtraj/state/tickets/160-first-session'
+    monitor = budgets.execution_budget_monitor(ticket, '160', 'first-session')
+    assert not monitor.is_stopped()
+    sample_stop(monitor, monkeypatch)
+    retained = (ticket / 'execution-budget.yml').read_bytes()
+    history = events(root)
+    result = command(installed_commands, root, env, 'continue', '--ticket-id', '160',
+                     '--caused-by-event-id', history[-1]['event_id'])
+    assert result.returncode == 1 and 'invalid-input' in result.stdout
+    assert (ticket / 'execution-budget.yml').read_bytes() == retained
+    assert events(root) == history

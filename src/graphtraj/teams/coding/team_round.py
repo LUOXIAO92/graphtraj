@@ -176,7 +176,7 @@ def continue_stopped_ticket(
     caused_by_event_ids: tuple[str, ...],
     cwd: Path,
 ) -> dict[str, Any]:
-    """Continue one stopped current Team from its retained Batch and Sessions."""
+    """Restore a stopped task's budget permission and resume any actual members."""
 
     if not valid_ticket_id(ticket_id):
         raise RunnerError("invalid-input", "Ticket identity is invalid.")
@@ -191,9 +191,8 @@ def continue_stopped_ticket(
         )
     project = discover_project(cwd, require_clean_integration=False)
     try:
-        ticket_directory, state = _load_states(project.state_directory / "tickets")[
-            ticket_id
-        ]
+        states = _load_states(project.state_directory / "tickets")
+        ticket_directory, state = states[ticket_id]
     except KeyError:
         raise RunnerError("invalid-input", "The supplied Ticket is not registered.") from None
     except (OSError, UnicodeError, ValueError, yaml.YAMLError) as error:
@@ -201,56 +200,67 @@ def continue_stopped_ticket(
             "TICKET_FILE_INVALID", "The selected registered Ticket is invalid."
         ) from error
     generation = state["active_team_ordinal"]
-    if (
-        not state["active"]
-        or state["status"] not in {"implementing", "reviewing", "reworking"}
-        or not isinstance(generation, int)
-    ):
+    roots = {}
+    team_context = {}
+    if not state["active"]:
+        raise RunnerError("invalid-input", "Explicit continuation requires an active Ticket.")
+    if generation is None:
+        # Before native creation there is no member whose parent can authorize
+        # recovery. Use the same actual root caller identity as root dispatch.
+        if caller_alias(project.runner_directory) is not None:
+            raise RunnerError("authority-denied", "Only the root caller may continue this Ticket.")
+        if state["status"] != "ready" or any(
+            states[dependency][1]["status"] != "integrated"
+            for dependency in state["dependencies"]
+        ):
+            raise RunnerError("invalid-input", "Explicit continuation requires a ready Ticket.")
+    elif state["status"] not in {"implementing", "reviewing", "reworking"}:
         raise RunnerError(
             "invalid-input", "Explicit continuation requires the current active Team."
         )
-    try:
-        team = yaml.safe_load(
-            (ticket_directory / "teams" / str(generation) / "team.yml").read_text(
-                encoding="utf-8"
+    if generation is not None:
+        try:
+            team = yaml.safe_load(
+                (ticket_directory / "teams" / str(generation) / "team.yml").read_text(
+                    encoding="utf-8"
+                )
             )
-        )
-        if team["status"] != "active":
-            raise ValueError("Team is not active")
-        members = {}
-        for member in team["members"].values():
-            alias = member.get("session_ref")
-            if isinstance(alias, str):
-                mapping, _ = read_alias_mapping(project.runner_directory, alias)
-                if (mapping["ticket_id"] != ticket_id
-                        or mapping["team_generation"] != generation):
-                    raise ValueError("Member mapping does not match the current Team")
-                members[alias] = mapping
-        roots = {}
-        for alias, mapping in members.items():
-            parent = mapping["parent"]
-            if parent is not None:
-                parent_mapping, _ = read_alias_mapping(project.runner_directory, parent)
-                # Replacing a parent does not promote its retained children to
-                # task roots or transfer their control to the replacement.
-                if (parent_mapping["ticket_id"] == ticket_id
-                        and parent_mapping["team_generation"] == generation):
-                    continue
-            roots[alias] = mapping
-        if not roots:
-            raise ValueError("The Team has no actual root Sessions")
-        # Validate the whole operation before clearing its sampled stop. Explicit
-        # subtree stops stay bound to the old entities and require replacement.
-        for alias, mapping in roots.items():
-            require_direct_authority(project.runner_directory, alias, mapping)
-            require_stopped_subtree(project.runner_directory, alias)
-            require_execution_allowed(project.runner_directory, alias, mapping)
-    except (OSError, TypeError, ValueError, yaml.YAMLError, RunnerError) as error:
-        if isinstance(error, RunnerError):
-            raise
-        raise RunnerError(
-            "operation-failed", "The stopped Team cannot resume its retained lifecycle."
-        ) from error
+            if team["status"] != "active":
+                raise ValueError("Team is not active")
+            members = {}
+            for member in team["members"].values():
+                alias = member.get("session_ref")
+                if isinstance(alias, str):
+                    mapping, _ = read_alias_mapping(project.runner_directory, alias)
+                    if (mapping["ticket_id"] != ticket_id
+                            or mapping["team_generation"] != generation):
+                        raise ValueError("Member mapping does not match the current Team")
+                    members[alias] = mapping
+            team_context = {"team_ordinal": generation, "team_round": team["current_round"]}
+            for alias, mapping in members.items():
+                parent = mapping["parent"]
+                if parent is not None:
+                    parent_mapping, _ = read_alias_mapping(project.runner_directory, parent)
+                    # Replacing a parent does not promote its retained children to
+                    # task roots or transfer their control to the replacement.
+                    if (parent_mapping["ticket_id"] == ticket_id
+                            and parent_mapping["team_generation"] == generation):
+                        continue
+                roots[alias] = mapping
+            if not roots:
+                raise ValueError("The Team has no actual root Sessions")
+            # Validate the whole operation before clearing its sampled stop. Explicit
+            # subtree stops stay bound to the old entities and require replacement.
+            for alias, mapping in roots.items():
+                require_direct_authority(project.runner_directory, alias, mapping)
+                require_stopped_subtree(project.runner_directory, alias)
+                require_execution_allowed(project.runner_directory, alias, mapping)
+        except (OSError, TypeError, ValueError, yaml.YAMLError, RunnerError) as error:
+            if isinstance(error, RunnerError):
+                raise
+            raise RunnerError(
+                "operation-failed", "The stopped Team cannot resume its retained lifecycle."
+            ) from error
     monitor = execution_budget_monitor(ticket_directory, ticket_id, state["ticket_name"])
     if monitor is None or not monitor.is_stopped():
         raise RunnerError(
@@ -285,8 +295,7 @@ def continue_stopped_ticket(
                     )
                 ),
                 "ticket_id": ticket_id,
-                "team_ordinal": generation,
-                "team_round": team["current_round"],
+                **team_context,
             },
         )
     except (OSError, ValueError) as error:

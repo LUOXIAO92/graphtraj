@@ -3,9 +3,12 @@
 import json
 from pathlib import Path
 
+import pytest
 import yaml
 
 from conftest import FakeCodex, InstalledCommands, wait_for_file
+from graphtraj.execution import execution_budget as budgets
+from test_task_budget_control import sample_stop
 from test_task_recovery import command, events, installed_commands, prepare
 
 
@@ -14,6 +17,7 @@ def test_replacing_parent_keeps_old_descendants_stopped_and_bound_to_old_session
     temporary_git_repository: Path,
     fake_codex: FakeCodex,
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A new parent cannot inherit control of the original parent's children."""
     root, env, task = prepare(
@@ -48,6 +52,27 @@ def test_replacing_parent_keeps_old_descendants_stopped_and_bound_to_old_session
         assert reports['submissions']  # model-side ownership assertion completed
         team = yaml.safe_load((root / '.graphtraj/state/tickets/154-recovery/teams/1/team.yml').read_text())
         assert {member['session_ref'] for member in team['members'].values()} == {successor, child}
+
+        ticket = root / '.graphtraj/state/tickets/154-recovery'
+        monitor = budgets.execution_budget_monitor(ticket, '154', 'recovery')
+        sample_stop(monitor, monkeypatch)
+        accounting = yaml.safe_load((ticket / 'execution-budget.yml').read_text())
+        original_successor = yaml.safe_load((runner / successor / 'mapping.yml').read_text())
+        continued = command(installed_commands, root, env, 'continue', '--ticket-id', '154',
+                            '--caused-by-event-id', events(root)[-1]['event_id'])
+        assert continued.returncode == 0, continued.stdout + continued.stderr
+        assert [item['alias'] for item in yaml.safe_load(continued.stdout)['tasks']] == [successor]
+        wait_for_file(runner / successor / 'execution.yml')
+        assert yaml.safe_load((runner / successor / 'execution.yml').read_text())['outcome'] == 'completed'
+        current_successor = yaml.safe_load((runner / successor / 'mapping.yml').read_text())
+        assert current_successor['session'] == original_successor['session']
+        assert current_successor['execution_id'] != original_successor['execution_id']
+        assert yaml.safe_load((runner / child / 'mapping.yml').read_text()) == original_child
+        assert (runner / alias / 'stop.yml').read_bytes() == marker
+        after = yaml.safe_load((ticket / 'execution-budget.yml').read_text())
+        assert not after['stopped']
+        for field in ('started_at', 'allowance_minutes', 'sessions', 'stopping_checks'):
+            assert after[field] == accounting[field]
     finally:
         Path(env['RECOVERY_RELEASE']).touch()
         command(installed_commands, root, env, 'interrupt', alias)

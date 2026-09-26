@@ -226,8 +226,17 @@ def continue_stopped_ticket(
                         or mapping["team_generation"] != generation):
                     raise ValueError("Member mapping does not match the current Team")
                 members[alias] = mapping
-        roots = {alias: mapping for alias, mapping in members.items()
-                 if mapping["parent"] not in members}
+        roots = {}
+        for alias, mapping in members.items():
+            parent = mapping["parent"]
+            if parent is not None:
+                parent_mapping, _ = read_alias_mapping(project.runner_directory, parent)
+                # Replacing a parent does not promote its retained children to
+                # task roots or transfer their control to the replacement.
+                if (parent_mapping["ticket_id"] == ticket_id
+                        and parent_mapping["team_generation"] == generation):
+                    continue
+            roots[alias] = mapping
         if not roots:
             raise ValueError("The Team has no actual root Sessions")
         # Validate the whole operation before clearing its sampled stop. Explicit

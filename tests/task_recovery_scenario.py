@@ -20,7 +20,8 @@ alias = os.environ['GRAPHTRAJ_PARENT_ALIAS']
 entity = alias.partition('@')[2]
 stem = 'leader' if role == 'team-leader' else role
 if entity != role.replace('-', '_'):
-    assert 'Retained work by ' in prompt
+    if not Path('result.md').exists():
+        assert 'Retained work by ' in prompt
     stem += '-' + entity
 owned = mcp.submit_report({'name': stem + '.md', 'text': 'Retained work by ' + alias}, cwd=root).document
 if os.environ.get('RECOVERY_CHILD') and role == 'researcher':

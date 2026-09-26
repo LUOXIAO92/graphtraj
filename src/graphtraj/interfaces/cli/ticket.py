@@ -168,15 +168,18 @@ def integrate_command(
     After escalation, COMMAND (after --) must match the retained validation.
     """
 
-    try:
-        configuration = load_project_configuration(Path.cwd())
-        result = integrate_ticket(
-            configuration, ticket_id, validation_command, resolve_conflict
-        )
-    except (OSError, ValueError, GitRepositoryError, ProjectConfigurationError, yaml.YAMLError, RunnerError) as error:
-        click.echo(yaml.safe_dump({"error": str(error)}, sort_keys=False), nl=False)
-        raise click.ClickException(str(error)) from error
-    click.echo(yaml.safe_dump(result, sort_keys=False), nl=False)
+    from graphtraj.interfaces.cli.agent_runner import _budget_notices, _emit_result
+
+    with _budget_notices():
+        try:
+            configuration = load_project_configuration(Path.cwd())
+            result = integrate_ticket(
+                configuration, ticket_id, validation_command, resolve_conflict
+            )
+        except (OSError, ValueError, GitRepositoryError, ProjectConfigurationError, yaml.YAMLError, RunnerError) as error:
+            _emit_result({"error": str(error)})
+            raise click.ClickException(str(error)) from error
+        _emit_result(result)
     if result["status"] != "integrated":
         raise click.ClickException("Integration failed; see retained evidence")
 

@@ -9,10 +9,9 @@ import signal
 import subprocess
 import sys
 import threading
-from contextvars import copy_context
 from dataclasses import replace
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 import yaml
 
@@ -23,10 +22,8 @@ from graphtraj.runtimes.codex.codex_adapter import (
     refresh_codex_report_paths,
 )
 from graphtraj.execution.execution_budget import (
-    ExecutionBudgetMonitor,
     caller_notice_fd,
     execution_budget_monitor,
-    execution_budget_stage,
 )
 from graphtraj.configuration.role_definitions import resolve_child_role
 from graphtraj.configuration.project_configuration import load_project_configuration
@@ -899,7 +896,6 @@ def _execute_agent(
         if reports_only
         else execution_budget_monitor(evidence, task.ticket_id, task.ticket_name)
     )
-    budget_stage = execution_budget_stage(role)
     team_file = traces.parent / "team.yml"
     ordinal = yaml.safe_load(team_file.read_text())["current_round"] if team_file.exists() else 1
     report_files = _role_report_files(task, policy_role, role, generation, ordinal, alias)
@@ -953,7 +949,7 @@ def _execute_agent(
                 "context_evidence": context.evidence_document(),
                 "operation": "launch",
                 "drive_children": not wait_for_completion,
-                "monitor_execution_budget": monitor is not None and not wait_for_completion,
+                "monitor_execution_budget": monitor is not None,
                 "member_registration": ({"member": logical_role(role).replace("-", "_"), "replaces": replaces_alias}
                                         if register_member else None),
                 "mapping": {
@@ -1032,140 +1028,16 @@ def _execute_agent(
     # The recorded entity, never its role spelling, identifies the caller.
     environment["GRAPHTRAJ_PARENT_ALIAS"] = alias
     environment["GRAPHTRAJ_PARENT_REGISTRATION"] = str(session_directory / "child-registration.yml")
-    notice_threads: list[threading.Thread] = []
-    notice_failures: list[BaseException] = []
-    try:
-        def deliver_budget_notices() -> None:
-            if monitor is None or parent_alias is None:
-                return
-            def deliver(messages: list[str]) -> None:
-                for prior in notice_threads:
-                    prior.join()
-                if notice_failures:
-                    raise notice_failures[0]
-                notice_threads.clear()
-                leader_directory = project.runner_directory / "sessions" / parent_alias
-                try:
-                    leader_mapping = yaml.safe_load(
-                        (leader_directory / "mapping.yml").read_text(encoding="utf-8")
-                    )
-                    leader_session = leader_mapping["session"]
-                    leader_role = leader_mapping["role"]
-                except (KeyError, OSError, TypeError, yaml.YAMLError) as error:
-                    raise RunnerError(
-                        "RUNTIME_WORKER_FAILED",
-                        "The Team Leader Session could not receive an execution budget notice.",
-                    ) from error
-                delivered = threading.Event()
-
-                def resume_leader() -> None:
-                    try:
-                        # The notice wakes the Leader under its own role, not the
-                        # notifying child's, so its identity and settings hold.
-                        _execute_agent(
-                            project, task, leader_role, worktree, evidence, traces,
-                            parent_alias, leader_session,
-                            leader_directory / "child-registration.yml", None,
-                            retained_batch,
-                            "\n".join(messages)
-                            + "\nReceive these system notices. Do not dispatch work or make a Team decision.",
-                            capacity_fd,
-                            reports_only=True,
-                            input_delivered=delivered,
-                        )
-                        delivered.set()
-                    except BaseException as error:
-                        notice_failures.append(error)
-
-                thread = threading.Thread(target=copy_context().run, args=(resume_leader,))
-                thread.start()
-                notice_threads.append(thread)
-                while not delivered.wait(0.05):
-                    if not thread.is_alive():
-                        thread.join()
-                        raise notice_failures[-1]
-
-            monitor.deliver_leader_notices(deliver)
-
-        session_id, outcome = _run_session_worker(
-            session_directory,
-            job_file,
-            worktree,
-            task_prompt,
-            environment,
-            capacity_fd,
-            monitor,
-            role,
-            budget_stage,
-            expected_session is None,
-            deliver_budget_notices,
-            input_delivered,
-            wait_for_completion,
-        )
-        for thread in notice_threads:
-            thread.join()
-        if notice_failures:
-            raise notice_failures[0]
-        if (
-            outcome == "completed"
-            and policy_role == "team-leader"
-            and parent_alias is None
-            and monitor is not None
-        ):
-            notices = monitor.pending_leader_notices()
-            if notices:
-                delivered = threading.Event()
-                failure: list[BaseException] = []
-
-                def finish_leader() -> None:
-                    try:
-                        _execute_agent(
-                            project, task, role, worktree, evidence, traces, alias,
-                            session_id, registration, None, retained_batch,
-                            "\n".join(notice["message"] for notice in notices)
-                            + "\nReceive these system notices, then finish the "
-                            "current Leader work.",
-                            capacity_fd,
-                            input_delivered=delivered,
-                        )
-                    except BaseException as error:
-                        failure.append(error)
-
-                thread = threading.Thread(target=copy_context().run, args=(finish_leader,))
-                thread.start()
-                while not delivered.wait(0.05):
-                    if not thread.is_alive():
-                        thread.join()
-                        raise failure[-1]
-                monitor.mark_leader_notices_delivered(
-                    [notice["key"] for notice in notices]
-                )
-                thread.join()
-                if failure:
-                    raise failure[0]
-    finally:
-        for thread in notice_threads:
-            thread.join()
+    session_id, outcome = _run_session_worker(
+        session_directory, job_file, worktree, task_prompt, environment,
+        capacity_fd, input_delivered, wait_for_completion,
+    )
     if not wait_for_completion:
         return alias, session_id
     diagnostic = _current_runtime_diagnostic(
         session_directory, trace, stderr_offset, trace_offset
     )
     if outcome == "budget-stopped":
-        if policy_role == "team-leader" and monitor is not None:
-            def report_stop(messages: list[str]) -> None:
-                _execute_agent(
-                    project, task, role, worktree, evidence, traces, alias,
-                    session_id, registration, None, retained_batch,
-                    "\n".join(messages)
-                    + "\nExecution has stopped. Freeze the current scene and report "
-                    "the current result and remaining work. Do not dispatch or decide "
-                    "acceptance.",
-                    capacity_fd,
-                    reports_only=True,
-                )
-
-            monitor.deliver_leader_notices(report_stop)
         raise RunnerError(
             "EXECUTION_BUDGET_STOPPED",
             "Runner selected stopping for the Ticket execution budget.",
@@ -1285,6 +1157,7 @@ def _resume_job(
             "adapter_request": adapter_request,
             "context_evidence": launch.get("context_evidence", {}),
             "expected_session": expected_session,
+            "monitor_execution_budget": not reports_only,
             "mapping": {
                 key: value
                 for key, value in mapping.items()
@@ -1306,11 +1179,6 @@ def _run_session_worker(
     prompt: str,
     runtime_environment: object,
     capacity_fd: int,
-    monitor: ExecutionBudgetMonitor | None,
-    role: str,
-    stage: str,
-    new_session: bool,
-    deliver_budget_notices: Callable[[], None],
     input_delivered: threading.Event | None,
     wait_for_completion: bool = True,
 ) -> tuple[str, str]:
@@ -1324,7 +1192,9 @@ def _run_session_worker(
     worker_environment = dict(os.environ)
     worker_environment.update(runtime_environment)
     worker_environment["GRAPHTRAJ_CAPACITY_FD"] = str(capacity_fd)
-    notice_fd = worker_environment.get("GRAPHTRAJ_BUDGET_NOTICE_FD")
+    notice_fd, close_notice_fd = caller_notice_fd()
+    if notice_fd is not None:
+        worker_environment["GRAPHTRAJ_BUDGET_NOTICE_FD"] = str(notice_fd)
     try:
         with (session_directory / "worker-stderr.log").open(
             "w", encoding="utf-8"
@@ -1356,8 +1226,6 @@ def _run_session_worker(
                 mapping, _ = read_alias_mapping(session_directory.parent.parent, session_directory.name)
                 return mapping["session"], "running"
             try:
-                session_recorded = not new_session
-                budget_stopped = False
                 while worker.poll() is None:
                     if input_delivered is not None and not input_delivered.is_set():
                         try:
@@ -1374,34 +1242,10 @@ def _run_session_worker(
                             and current_mapping.get("execution_id")
                         ):
                             input_delivered.set()
-                    if monitor is not None:
-                        if not session_recorded and (session_directory / "mapping.yml").is_file():
-                            monitor.record_session(role, stage)
-                            session_recorded = True
-                        stopped = monitor.check(role, stage)
-                        deliver_budget_notices()
-                        if stopped and (
-                            stage == "implementation"
-                            or logical_role(role) == "team-leader"
-                        ):
-                            budget_stopped = True
-                            worker.terminate()
                     try:
                         worker.wait(timeout=0.05)
                     except subprocess.TimeoutExpired:
                         pass
-                if monitor is not None:
-                    if not session_recorded and (session_directory / "mapping.yml").is_file():
-                        monitor.record_session(role, stage)
-                    stopped = monitor.check(role, stage)
-                    deliver_budget_notices()
-                    budget_stopped = budget_stopped or (
-                        stopped
-                        and (
-                            stage == "implementation"
-                            or logical_role(role) == "team-leader"
-                        )
-                    )
                 if input_delivered is not None and not input_delivered.is_set():
                     try:
                         final_mapping = yaml.safe_load(
@@ -1422,6 +1266,9 @@ def _run_session_worker(
                 worker.wait()
                 raise
         if exit_code != 0:
+            if error.is_file():
+                failure = yaml.safe_load(error.read_text())
+                raise RunnerError(failure["code"], failure["message"])
             raise OSError("Session worker failed")
         mapping = yaml.safe_load(
             (session_directory / "mapping.yml").read_text(encoding="utf-8")
@@ -1429,6 +1276,9 @@ def _run_session_worker(
         terminal = yaml.safe_load(execution.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, yaml.YAMLError) as failure:
         raise RunnerError("RUNTIME_WORKER_FAILED", "The Runtime Session could not be started.") from failure
+    finally:
+        if close_notice_fd and notice_fd is not None:
+            os.close(notice_fd)
     if (
         not isinstance(mapping, dict)
         or not isinstance(mapping.get("session"), str)
@@ -1438,7 +1288,7 @@ def _run_session_worker(
     ):
         raise RunnerError("RUNTIME_WORKER_FAILED", "The Runtime Session could not be started.")
     return mapping["session"], (
-        "budget-stopped" if budget_stopped else terminal["outcome"]
+        "budget-stopped" if terminal.get("budget_stopped") else terminal["outcome"]
     )
 
 
@@ -1527,34 +1377,9 @@ def _worker_main() -> None:
         capacity_fd = int(sys.argv[3])
         result = _deliver_ticket(project, task, retained, capacity_fd, sys.argv[4] or None)
     except (RunnerError, RuntimeAdapterError) as error:
-        if (
-            error.code == "EXECUTION_BUDGET_STOPPED"
-            and _task_policy(task) == "team-leader"
-        ):
-            mappings = [
-                yaml.safe_load(path.read_text(encoding="utf-8"))
-                for path in project.runner_directory.glob("sessions/*/mapping.yml")
-                if yaml.safe_load(path.read_text(encoding="utf-8")).get("ticket_id")
-                == task.ticket_id
-                and logical_role(
-                    yaml.safe_load(path.read_text(encoding="utf-8")).get("role", "")
-                )
-                == "team-leader"
-            ]
-            mapping = max(
-                mappings, key=lambda value: value.get("team_generation", 0)
-            )
-            result = {
-                "ticket_id": task.ticket_id,
-                "ticket_name": task.ticket_name,
-                "role": task.role,
-                "launch_status": "stopped",
-                "worktree_path": mapping["worktree_path"],
-                "alias": mapping["alias"],
-                "session": mapping["session"],
-            }
-        else:
-            result = _failed_task(task, RunnerError(error.code, error.message))
+        result = _failed_task(task, RunnerError(error.code, error.message))
+        if error.code == "EXECUTION_BUDGET_STOPPED":
+            result["launch_status"] = "stopped"
     print(yaml.safe_dump(result, sort_keys=False), end="")
 
 

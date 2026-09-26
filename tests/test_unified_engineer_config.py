@@ -144,6 +144,6 @@ def test_retained_tiered_batch_still_resolves_for_recovery(tmp_path: Path) -> No
 @pytest.mark.parametrize(
     "role", ("engineer", "engineer-junior", "engineer-senior", "engineer-expert")
 )
-def test_retained_engineer_session_keeps_its_budget_stage(role: str) -> None:
-    """A retained Engineer Session identity keeps Engineer time accounting."""
-    assert execution_budget_stage(role) == "implementation"
+def test_retained_engineer_session_labels_its_actual_budget_work(role: str) -> None:
+    """A retained Session labels observations without implying a programming phase."""
+    assert execution_budget_stage(role) == role

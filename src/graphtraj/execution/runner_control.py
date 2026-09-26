@@ -365,8 +365,6 @@ def _send_session(
     caused_by_event_ids: tuple[str, ...],
     cwd: Path,
     *,
-    budget_notice: bool = False,
-    leader_notice_keys: tuple[str, ...] = (),
     capacity_fd: int | None = None,
     reports_only: bool = False,
 ) -> Dict[str, str]:
@@ -381,7 +379,6 @@ def _send_session(
             require_execution_allowed(session_directory.parent.parent, alias, mapping)
         return _send_session_locked(
             alias, instruction, session_directory, mapping, caused_by_event_ids, cwd,
-            budget_notice=budget_notice, leader_notice_keys=leader_notice_keys,
             capacity_fd=capacity_fd, reports_only=reports_only,
         )
 
@@ -394,8 +391,6 @@ def _send_session_locked(
     caused_by_event_ids: tuple[str, ...],
     cwd: Path,
     *,
-    budget_notice: bool = False,
-    leader_notice_keys: tuple[str, ...] = (),
     capacity_fd: int | None = None,
     reports_only: bool = False,
 ) -> Dict[str, str]:
@@ -442,21 +437,7 @@ def _send_session_locked(
         if isinstance(evidence, str) and isinstance(ticket_name, str)
         else None
     )
-    stopped = budget_notice or (monitor is not None and monitor.is_stopped())
-    pending_notices = (
-        monitor.pending_leader_notices()
-        if stopped
-        and not budget_notice
-        and logical_role(mapping["role"]) == "team-leader"
-        and monitor is not None
-        else []
-    )
-    notice_monitor = monitor
-    if stopped and logical_role(mapping["role"]) not in {"engineer", "team-leader"}:
-        raise RunnerError(
-            "EXECUTION_BUDGET_STOPPED",
-            "Runner selected stopping; this Session cannot start new work.",
-        )
+    stopped = monitor is not None and monitor.is_stopped()
     request = _refresh_current_team_report_request(
         request, mapping, worktree, team_environment,
         reports_only=stopped or reports_only,
@@ -464,16 +445,9 @@ def _send_session_locked(
     )
     if stopped:
         instruction = (
-            (
-                "This continuation has read-only Worktree access and can only "
-                "receive the system notices below.\n"
-                if budget_notice
-                else "Execution was stopped by Runner. Ordinary implementation and "
-                "new dispatch are prohibited. Report only the existing result and "
-                "commit only already-made authorized changes.\n"
-            )
-            + "".join(notice["message"] + "\n" for notice in pending_notices)
-            + instruction
+            "Execution was stopped by Runner. New task work and dispatch are "
+            "prohibited. Report only the existing result and commit only "
+            "already-made authorized changes.\n" + instruction
         )
         monitor = None
     elif reports_only:
@@ -486,7 +460,7 @@ def _send_session_locked(
     try:
         resume = {
             "operation": "resume",
-            "drive_children": not reports_only,
+            "drive_children": not (reports_only or stopped),
             "runtime": mapping["runtime"],
             "adapter_request": request,
             "context_evidence": context_evidence,
@@ -500,10 +474,6 @@ def _send_session_locked(
         }
         if monitor is not None:
             resume["monitor_execution_budget"] = True
-            if logical_role(mapping["role"]) == "team-leader":
-                resume["deliver_parentless_leader_notices"] = True
-            if leader_notice_keys:
-                resume["leader_notice_keys"] = list(leader_notice_keys)
         write_yaml_durably(
             resume_file,
             resume,
@@ -554,10 +524,6 @@ def _send_session_locked(
                 worker.stdin.write(instruction)
                 worker.stdin.close()
         _await_session_resume(worker, session_directory, error_file, mapping["session"])
-        if pending_notices and notice_monitor is not None:
-            notice_monitor.mark_leader_notices_delivered(
-                [notice["key"] for notice in pending_notices]
-            )
     except RunnerError:
         if "worker" in locals():
             stop_worker(worker.pid)
@@ -845,6 +811,13 @@ def _await_session_resume(
                 ) from error
             return
         if worker.poll() is not None:
+            terminal_file = session_directory / "execution.yml"
+            if terminal_file.is_file():
+                terminal = yaml.safe_load(terminal_file.read_text())
+                if terminal.get("budget_stopped"):
+                    raise RunnerError(
+                        "EXECUTION_BUDGET_STOPPED", "Runner stopped execution during Session creation.",
+                    )
             raise _not_resumable()
         time.sleep(0.01)
     raise _not_resumable()

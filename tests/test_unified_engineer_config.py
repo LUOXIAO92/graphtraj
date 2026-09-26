@@ -113,15 +113,15 @@ def test_inline_engineer_role_resolves_without_a_tier() -> None:
     assert preset.model == "gpt-5.6-terra"
 
 
-def test_only_the_engineer_task_selects_repository_skills() -> None:
-    """Repository Skill selection stays a unified-Engineer input."""
-    with pytest.raises(RunnerError) as error:
-        parse_batch({"tasks": [{
-            "ticket_id": "73", "ticket_name": "shared-graph",
-            "role": "team-leader", "skills": ["implement"],
-        }]})
+def test_non_engineer_task_retains_selected_repository_skills() -> None:
+    """A non-Engineer task retains its selected repository Skills."""
+    batch = parse_batch({"tasks": [{
+        "ticket_id": "73", "ticket_name": "shared-graph",
+        "role": "team-leader", "skills": ["implement"],
+    }]})
 
-    assert error.value.code == "SKILL_SELECTION_INVALID"
+    assert batch.tasks[0].role == "team-leader"
+    assert batch.tasks[0].requested_skills == ("implement",)
 
 
 def test_retained_tiered_batch_still_resolves_for_recovery(tmp_path: Path) -> None:

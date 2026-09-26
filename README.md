@@ -271,12 +271,15 @@ before choosing. Software-specific Skills remain independent and are selected
 for the coding role's work. Existing explicit-only invocation policies are
 preserved; a returned Skill name is not assumed to activate another Skill.
 
-When Main or the user retires a Team, Runner reads the packaged retirement
-instructions as an ordinary Team Leader role resource and injects them only
-into that Leader's final Session request. Normal Team completion and other
-roles do not receive them. The final response remains in the Leader's Session
-Trace for the successor, while a user-installed Matt Pocock `handoff` Skill
-remains independent.
+A stopped Team member is replaced with `agent-runner replace <member-alias>
+--caused-by-event-id <event-id>`; the Runner's recorded direct parent or the
+user supplies the authority. The replacement starts a new Session for that
+seat and receives the replaced Session's retained reports, Trace and remaining
+work; the stopped Session stays retained and is never executed again, and
+replacing a parent does not promote that member's old children. An unfinished
+Team continues through `agent-runner continue --ticket-id <id>
+--caused-by-event-id <event-id>`, which resumes the original root Session. A
+user-installed Matt Pocock `handoff` Skill remains independent.
 
 ## Configuration and roles
 
@@ -452,25 +455,28 @@ graphtraj ticket integrate --ticket-id <id> -- <validation-command> <arguments>
 agent-runner cleanup --ticket-id <id>
 ```
 
-Each coding Team Leader schedules its Engineer and both Reviewers through the same
-Runner, against a fixed candidate and comparison point, then makes the final
-adversarial decision. Process corrections stay in the current Team Round.
-Only a compliant implementation rejection confirmed by the Leader opens the
-next Round. Main or the user can retire a Team; replacement retains the Ticket
-branch and Worktree, and reads the prior Leader's final response from its Trace.
-Replacing another member changes only that seat, and the Runner's recorded
-direct parent decides who may replace it.
+Each coding Team Leader schedules its Engineer and the Review axes it selects
+through the same Runner, against a fixed candidate and comparison point, then
+makes the final adversarial decision. A Review axis runs at most once per
+Ticket. Process corrections stay in the current Team Round. Only a compliant
+implementation rejection confirmed by the Leader opens the next Round. Main or
+the user can retire a Team; replacement retains the Ticket branch and Worktree,
+and reads the replaced member's retained reports and Trace. Replacing a member
+changes only that seat, and the Runner's recorded direct parent decides who may
+replace it.
 
-Continue an unfinished Team with its original Leader launch after deciding the
-next action. Runner reuses retained Sessions, the Worktree, candidate, and valid
-reports. A missing or invalid report returns to its author with the failure,
-Trace, and expected report. A Leader can request correction in `leader.md` with
-`Decision: CORRECT`, `Responsible: coding-team.spec-reviewer` (or the responsible
-member), `Rule:`, `Reason:`, and `Candidate commit:`. A retained remaining-axis
-Batch takes precedence over an older correction judgment; it needs no second
-registration. Completing the last missing report needs no additional Review
-Batch. System/provider failures return to the caller for an explicit later
-retry through `send`; `status` reports the existing Session and last outcome.
+Continue an unfinished Team through `agent-runner continue` after deciding the
+next action. Runner reuses the retained original Sessions, the Worktree,
+candidate, and valid reports. A missing or invalid report returns to its author
+with the failure, Trace, and assigned report path. The executing member commits
+its result and records it with `submit-result`: version, result references,
+completion statement, evidence and unresolved work. The authorized parent
+answers with `decide-result`, which retains the exact submission, decision,
+reason and evidence. No role-specific report filename or prose format is a
+universal submission or acceptance condition. Completing the last missing
+report needs no additional Review Batch. System/provider failures return to the
+caller for an explicit later retry through `send`; `status` reports the existing
+Session and last outcome.
 
 After a sampled budget stop, Main analyzes the cause and records its chosen
 action in the existing Worldline. Apply any required corrections or accepted

@@ -199,7 +199,6 @@ def _integrate(
 
 def _resolve(configuration: ProjectConfiguration, record: dict, log: TextIO) -> dict:
     """Run the selected conflict through the same structured Runner entry point."""
-    from graphtraj.execution.execution_budget import budget_notice_output
     from graphtraj.execution.runner_batch import parse_batch
     from graphtraj.execution.runner_launch import launch_batch
     from graphtraj.execution.runner_models import RunnerError
@@ -210,8 +209,7 @@ def _resolve(configuration: ProjectConfiguration, record: dict, log: TextIO) -> 
     }]})
     log.flush()
     try:
-        with budget_notice_output(log.fileno()):
-            response = launch_batch(batch, configuration.harness_root)
+        response = launch_batch(batch, configuration.harness_root)
     except RunnerError as error:
         log.write(yaml.safe_dump({"error": error.as_document()}, sort_keys=False))
         log.write(error.message + "\n")

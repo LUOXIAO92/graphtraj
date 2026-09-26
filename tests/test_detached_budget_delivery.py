@@ -1,0 +1,136 @@
+"""The original CLI/MCP call retains budget notices through native execution."""
+
+import fcntl
+import json
+import subprocess
+import sys
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+
+import pytest
+import yaml
+
+from conftest import FakeCodex, InstalledCommands, app_server_peer, wait_for_file
+from graphtraj.execution import execution_budget as budgets
+from graphtraj.execution.runner_process import process_is_alive
+from runner_fixtures import configure_harness
+from test_task_budget_control import BODY, commands, sample_stop
+from test_ticket_graph import _change_status, _register, _ticket
+
+
+@pytest.mark.parametrize('surface', ['cli', 'mcp'])
+@pytest.mark.parametrize('stop', [True, False], ids=['budget-stop', 'completed'])
+def test_bound_top_level_transport_lasts_until_execution_ends(
+    commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    surface: str,
+    stop: bool,
+) -> None:
+    """Return late stop evidence, or normal completion, before task acceptance."""
+    root, worktrees, _, env = configure_harness(
+        commands, temporary_git_repository, fake_codex, tmp_path,
+    )
+    (root / '.graphtraj/roles.yml').write_text(yaml.safe_dump({
+        'roles': {'researcher': {'runtime': 'codex', 'model': 'selected'}},
+        'role_tree': {'researcher': {}},
+    }))
+    ticket = _ticket('153', 'research')
+    ticket['body'] = BODY + ticket['body']
+    _register(commands, root, ticket)
+    _change_status(commands, root, '153', 'ready')
+    release = tmp_path / 'release'
+    scenario = '''
+import json, os, sys, time
+from pathlib import Path
+if sys.argv[1:3] == ['exec', '--help']:
+    print('--sandbox')
+    raise SystemExit(0)
+sys.stdin.read()
+Path('result.md').write_text('Retained research')
+Path('running.txt').write_text(os.environ['GRAPHTRAJ_PARENT_ALIAS'])
+while not Path(os.environ['PROBE_RELEASE']).exists():
+    time.sleep(.02)
+print(json.dumps({'type': 'item.completed', 'item': {'type': 'agent_message', 'text': 'done'}}))
+'''
+    fake_codex.executable.write_text(app_server_peer(
+        '#!' + sys.executable + '\n' + scenario, "os.environ['GRAPHTRAJ_PARENT_ALIAS']",
+    ))
+    env.update(CODEX_THREAD_ID='existing-external-caller', PROBE_RELEASE=str(release))
+    tasks = {'tasks': [{'role': 'researcher', 'ticket_id': '153'}]}
+    if surface == 'cli':
+        batch = root / 'batch.yml'
+        batch.write_text(yaml.safe_dump(tasks))
+        command = [str(commands.runner), '--swarm-input', str(batch)]
+        request = None
+    else:
+        # MCP binds the request's caller, never the server's environment thread.
+        env.pop('CODEX_THREAD_ID')
+        command = [str(commands.runner.with_name('graphtraj-mcp'))]
+        request = json.dumps({
+            'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call',
+            'params': {'name': 'swarm', 'arguments': tasks,
+                       '_meta': {'threadId': 'existing-external-caller'}},
+        }) + '\n'
+
+    worktree = worktrees / '153-research'
+    evidence = root / '.graphtraj/state/tickets/153-research'
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        launched = executor.submit(
+            subprocess.run, command, cwd=root, env=env, input=request,
+            text=True, capture_output=True, timeout=45,
+        )
+        try:
+            wait_for_file(worktree / 'running.txt', timeout=15)
+            alias = (worktree / 'running.txt').read_text()
+            directory = root / '.graphtraj/runner/sessions' / alias
+            mapping = yaml.safe_load((directory / 'mapping.yml').read_text())
+            assert not launched.done(), 'Original caller returned during native execution'
+            before = yaml.safe_load((evidence / 'execution-budget.yml').read_text())
+            if stop:
+                monitor = budgets.execution_budget_monitor(evidence, '153', 'research')
+                with (evidence / '.execution-budget-notices.lock').open('a+') as lock:
+                    fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+                    sample_stop(monitor, monkeypatch)
+                    wait_for_file(directory / 'execution.yml', timeout=10)
+                    terminal = yaml.safe_load((directory / 'execution.yml').read_text())
+                    assert terminal['outcome'] == 'interrupted' and terminal['budget_stopped']
+                    # Stop is physical even while notification delivery is blocked.
+                    assert not process_is_alive(mapping['runtime_pid'])
+                    assert not launched.done()
+                    fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+            else:
+                release.touch()
+            result = launched.result(timeout=20)
+            assert result.returncode == 0, result.stdout + result.stderr
+            if surface == 'cli':
+                document = yaml.safe_load(result.stdout)
+            else:
+                response = json.loads(result.stdout)['result']
+                assert not response['isError'], response
+                document = response['structuredContent']
+            assert document['tasks'][0]['alias'] == alias
+            assert not process_is_alive(mapping['worker_pid'])
+            assert (worktree / 'result.md').read_text() == 'Retained research'
+            assert (evidence / 'teams/1/traces' / alias / 'events.jsonl').read_text()
+            state = yaml.safe_load((evidence / 'ticket.yml').read_text())
+            assert state['current_candidate'] is None and state['status'] != 'integrated'
+            usage = yaml.safe_load((evidence / 'execution-budget.yml').read_text())
+            for field in ('started_at', 'allowance_minutes', 'sessions'):
+                assert usage[field] == before[field]
+            if stop:
+                assert len(usage['leader_notices']) == 3
+                assert all(n.get('channel_written') for n in usage['leader_notices'])
+                assert all(not n['delivered'] for n in usage['leader_notices'])
+                deliveries = document['stop_deliveries']
+                assert len(deliveries) == 1
+                assert deliveries[0]['ticket'] == {'ticket_id': '153', 'ticket_name': 'research'}
+                assert deliveries[0]['triggered_at'] and deliveries[0]['delivered_at']
+                print(surface, 'physical stop, three channel writes, one caller stop, no native receipt claim')
+            else:
+                assert 'stop_deliveries' not in document
+                assert yaml.safe_load((directory / 'execution.yml').read_text())['outcome'] == 'completed'
+        finally:
+            release.touch()

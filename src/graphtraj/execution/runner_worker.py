@@ -7,13 +7,12 @@ import os
 import signal
 import sys
 import threading
-import time
 from pathlib import Path
+from typing import Callable
 
 import yaml
 
 from graphtraj.runtimes.codex.managed_session import CodexManagedExecution
-from graphtraj.configuration.project_roles import logical_role
 from graphtraj.execution.runner_connection import worker_connection
 from graphtraj.execution.execution_budget import (
     ExecutionBudgetMonitor,
@@ -32,6 +31,7 @@ from graphtraj.execution.runner_status import (
     require_execution_allowed,
 )
 from graphtraj.execution.runner_models import RunnerError
+from graphtraj.execution.runner_process import OPERATION_TIMEOUT_SECONDS
 from graphtraj.execution.runner_transport import runtime_launch_failure
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 
@@ -49,8 +49,7 @@ def run(job_file: Path) -> int:
     budget_monitor: ExecutionBudgetMonitor | None = None
     monitor_stop: threading.Event | None = None
     monitor_thread: threading.Thread | None = None
-    deliver_parentless_leader_notices = False
-    leader_notice_keys: list[str] = []
+    budget_stopped = threading.Event()
     startup_lock = None
 
     def request_termination(signum: int, frame: object) -> None:
@@ -78,21 +77,6 @@ def run(job_file: Path) -> int:
             monitor_execution_budget = job.get("monitor_execution_budget", False)
             if not isinstance(monitor_execution_budget, bool):
                 raise ValueError("budget monitor request is invalid")
-            deliver_parentless_leader_notices = job.get(
-                "deliver_parentless_leader_notices", False
-            )
-            if not isinstance(deliver_parentless_leader_notices, bool):
-                raise ValueError("Leader budget notice request is invalid")
-            leader_notice_keys = job.get("leader_notice_keys", [])
-            if (
-                not isinstance(leader_notice_keys, list)
-                or len(leader_notice_keys) != len(set(leader_notice_keys))
-                or any(
-                    not isinstance(key, str) or not key
-                    for key in leader_notice_keys
-                )
-            ):
-                raise ValueError("Leader budget notice keys are invalid")
             if monitor_execution_budget:
                 budget_monitor = execution_budget_monitor_from_environment(
                     base_mapping
@@ -102,6 +86,12 @@ def run(job_file: Path) -> int:
                     if not isinstance(role, str) or not role:
                         raise ValueError("session role is invalid")
                     monitor_stop = threading.Event()
+                    if budget_monitor.check(role, execution_budget_stage(role)):
+                        budget_monitor.deliver_parent_notices(session_directory)
+                        raise RuntimeAdapterError(
+                            "EXECUTION_BUDGET_STOPPED", "Runner selected stopping before Session creation.",
+                            terminal_confirmed=True,
+                        )
             prompt = sys.stdin.read()
             expected_session = job.get("expected_session")
             if operation == "resume" and (
@@ -168,9 +158,17 @@ def run(job_file: Path) -> int:
                             "MEMBER_REGISTRATION_FAILED", str(error), terminal_confirmed=True,
                         ) from error
 
+                if budget_monitor is not None:
+                    if operation == "launch":
+                        budget_monitor.record_session(role, execution_budget_stage(role))
+                    if budget_monitor.check(role, execution_budget_stage(role)):
+                        budget_stopped.set()
+                        assert turn_handle is not None
+                        turn_handle.terminate()
+
             def record_session(session: str, runtime_pid: int) -> None:
                 """Persist native execution identity before acknowledging its caller."""
-                nonlocal mapping_recorded, monitor_thread
+                nonlocal mapping_recorded
                 if operation == "resume" and session != expected_session:
                     raise RuntimeAdapterError(
                         "RUNTIME_SESSION_NOT_RESUMABLE",
@@ -202,27 +200,6 @@ def run(job_file: Path) -> int:
                 heartbeat["execution_id"] = mapping["execution_id"]
                 write_heartbeat(session_directory, heartbeat)
                 startup_lock.close()
-                if budget_monitor is not None and leader_notice_keys:
-                    budget_monitor.mark_leader_notices_delivered(
-                        leader_notice_keys
-                    )
-                if (
-                    budget_monitor is not None
-                    and monitor_stop is not None
-                    and monitor_thread is None
-                ):
-                    monitor_thread = threading.Thread(
-                        target=_monitor_execution_budget,
-                        args=(
-                            budget_monitor,
-                            mapping,
-                            session_directory,
-                            monitor_stop,
-                            deliver_parentless_leader_notices,
-                        ),
-                        daemon=True,
-                    )
-                    monitor_thread.start()
 
             turn_handle = CodexManagedExecution(
                 request, prompt, session_directory, record_session,
@@ -232,10 +209,20 @@ def run(job_file: Path) -> int:
                 session_created=record_created,
             )
             previous_sigterm = signal.signal(signal.SIGTERM, request_termination)
+            if budget_monitor is not None and monitor_stop is not None:
+                monitor_thread = threading.Thread(
+                    target=_monitor_execution_budget,
+                    args=(budget_monitor, base_mapping, session_directory, monitor_stop,
+                          budget_stopped, turn_handle.terminate),
+                    daemon=True,
+                )
+                monitor_thread.start()
             try:
                 with worker_connection(session_directory, turn_handle.operate) as control_directory:
                     result = turn_handle.run()
                     terminal = _terminal_turn(result)
+                    if budget_stopped.is_set() and terminal["outcome"] == "interrupted":
+                        terminal["budget_stopped"] = True
                     write_yaml_durably(session_directory / "execution.yml", terminal)
                     terminal_published = True
             finally:
@@ -254,6 +241,8 @@ def run(job_file: Path) -> int:
                     "terminal_confirmed": error.terminal_confirmed,
                     "error": {"code": error.code, "message": error.message},
                 }
+                if budget_stopped.is_set() and error.code == "RUNTIME_EXECUTION_INTERRUPTED":
+                    terminal.update(outcome="interrupted", terminal_confirmed=True, budget_stopped=True)
             else:
                 _write_worker_error(
                     session_directory,
@@ -283,47 +272,6 @@ def run(job_file: Path) -> int:
             # Reply cleanup may have allowed a successor to take ownership.
             if not terminal_published:
                 write_yaml_durably(session_directory / "execution.yml", terminal)
-            if (
-                budget_monitor is not None
-                and deliver_parentless_leader_notices
-                and logical_role(base_mapping.get("role", "")) == "team-leader"
-                and base_mapping.get("parent") is None
-            ):
-                notices = budget_monitor.pending_leader_notices()
-                if notices:
-                    from graphtraj.execution.runner_control import _send_session
-
-                    mapping = yaml.safe_load(
-                        (session_directory / "mapping.yml").read_text(
-                            encoding="utf-8"
-                        )
-                    )
-                    stopped = budget_monitor.is_stopped()
-                    _send_session(
-                        mapping["alias"],
-                        (
-                            "Execution has stopped. Freeze the current scene and "
-                            "report the current result and remaining work. Do not "
-                            "dispatch or decide acceptance."
-                            if stopped
-                            else "\n".join(
-                                notice["message"] for notice in notices
-                            )
-                            + "\nReceive these system notices, then continue the "
-                            "interrupted instruction below.\n"
-                            + prompt
-                        ),
-                        session_directory,
-                        mapping,
-                        (),
-                        Path(os.environ["GRAPHTRAJ_HARNESS_ROOT"]),
-                        leader_notice_keys=(
-                            ()
-                            if stopped
-                            else tuple(notice["key"] for notice in notices)
-                        ),
-                        capacity_fd=int(os.environ["GRAPHTRAJ_CAPACITY_FD"]),
-                    )
             return 0
     finally:
         if startup_lock is not None:
@@ -475,53 +423,43 @@ def _monitor_execution_budget(
     mapping: dict[str, object],
     session_directory: Path,
     stop: threading.Event,
-    deliver_parentless_leader_notices: bool,
+    budget_stopped: threading.Event,
+    terminate: Callable[[], bool],
 ) -> None:
+    """Enforce stops independently of parent notice transport or handling."""
     role = mapping["role"]
     assert isinstance(role, str)
-    stage = execution_budget_stage(role)
+    delivery: threading.Thread | None = None
+    attempted: set[str] = set()
 
-    def deliver(messages: list[str]) -> None:
-        parent = mapping.get("parent")
-        harness_root = os.environ.get("GRAPHTRAJ_HARNESS_ROOT")
-        if not isinstance(parent, str) or not isinstance(harness_root, str):
-            return
-        from graphtraj.execution.runner_control import _send_session
-
-        parent_directory = session_directory.parent / parent
-        parent_mapping = yaml.safe_load(
-            (parent_directory / "mapping.yml").read_text(encoding="utf-8")
-        )
-        while not (parent_directory / "execution.yml").is_file():
-            time.sleep(0.05)
-        _send_session(
-            parent,
-            "\n".join(messages)
-            + "\nReceive these system notices. Do not dispatch work or make a Team decision.",
-            parent_directory,
-            parent_mapping,
-            (),
-            Path(harness_root),
-            budget_notice=True,
-        )
+    def deliver() -> None:
+        """Keep failed transport pending without failing or delaying execution."""
+        try:
+            monitor.deliver_parent_notices(session_directory)
+        except (RunnerError, OSError, ValueError, yaml.YAMLError):
+            pass
 
     while not stop.is_set():
-        stopped = monitor.check(role, stage)
-        if isinstance(mapping.get("parent"), str):
-            monitor.deliver_leader_notices(deliver)
-        elif (
-            deliver_parentless_leader_notices
-            and logical_role(role) == "team-leader"
-            and monitor.pending_leader_notices()
-        ):
-            os.kill(os.getpid(), signal.SIGTERM)
-            return
-        if stopped and (
-            stage == "implementation" or logical_role(role) == "team-leader"
-        ):
-            os.kill(os.getpid(), signal.SIGTERM)
-            return
+        stopped = monitor.check(role, execution_budget_stage(role))
+        # Termination is requested before any notice lock or transport. The
+        # managed execution retains this request even before thread/start ends.
+        if stopped:
+            budget_stopped.set()
+            terminate()
+        if (session_directory / "launch.yml").is_file():
+            pending = {notice["key"] for notice in monitor.pending_parent_notices()}
+            if pending - attempted and (delivery is None or not delivery.is_alive()):
+                attempted.update(pending)
+                delivery = threading.Thread(target=deliver, daemon=True)
+                delivery.start()
+        if stopped:
+            break
         stop.wait(0.05)
+    # The native execution has already received interruption independently.
+    # Allow its outstanding transport to finish, bounded by the existing
+    # operation timeout; an unavailable parent cannot retain the Worker forever.
+    if delivery is not None:
+        delivery.join(timeout=OPERATION_TIMEOUT_SECONDS)
 
 
 def _previous_outcome(execution_file: Path) -> str | None:

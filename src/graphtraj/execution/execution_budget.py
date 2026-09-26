@@ -1,4 +1,4 @@
-"""Coding-ticket execution budget parsing and live accounting."""
+"""Task execution budget parsing and live accounting."""
 
 from __future__ import annotations
 
@@ -29,16 +29,6 @@ ALLOWANCE_UNIFORM_UPPER_BOUND = 0.5
 STOPPING_LAMBDA_PER_MINUTE = 0.25
 STOPPING_INTERVAL_MINUTES = 2
 
-_MINUTE_FIELDS = frozenset({"implementation", "validation", "review", "total"})
-_SESSION_FIELDS = frozenset(
-    {
-        "team_leader",
-        "engineer",
-        "standards_reviewer",
-        "spec_reviewer",
-        "delivery_state",
-    }
-)
 _BUDGET_FIELDS = frozenset(
     {
         "estimated_minutes",
@@ -53,7 +43,7 @@ _LEGACY_BUDGET_FIELDS = frozenset({"engineer_tier", "tier_reason"})
 
 
 class ExecutionBudgetError(ValueError):
-    """The coding-ticket execution budget is invalid."""
+    """The task execution budget is invalid."""
 
 
 @dataclass(frozen=True)
@@ -85,7 +75,7 @@ def split_execution_budget_front_matter(
 
 
 def read_execution_budget(body: str) -> ExecutionBudget | None:
-    """Read the optional coding budget at the very beginning of a Ticket body."""
+    """Read the optional task budget at the very beginning of a Ticket body."""
 
     front_matter = split_execution_budget_front_matter(body)
     if front_matter is None:
@@ -104,7 +94,7 @@ def read_execution_budget(body: str) -> ExecutionBudget | None:
 def execution_budget_monitor(
     ticket_directory: Path, ticket_id: str, ticket_name: str
 ) -> "ExecutionBudgetMonitor | None":
-    """Return a monitor only for a registered coding Ticket with a budget."""
+    """Return a monitor only for a registered Ticket with a budget."""
 
     if not (ticket_directory / "ticket.yml").is_file():
         return None
@@ -147,7 +137,7 @@ def budget_notice_output(descriptor: int) -> Iterator[None]:
     """Route live budget JSONL to a caller-owned descriptor for this operation.
 
     The caller keeps the descriptor open for the operation's lifetime. Without
-    a selected or inherited channel, accounting and Leader notices are still
+    a selected or inherited channel, accounting and parent notices are still
     retained, but no terminal output is produced. CLI callers select stderr.
     """
     os.fstat(descriptor)
@@ -175,23 +165,14 @@ def caller_notice_fd() -> tuple[int | None, bool]:
 
 
 def execution_budget_stage(role: str) -> str:
-    """Return the stage that owns one role's elapsed-time accounting."""
+    """Label elapsed-time observations with the actual execution role."""
 
-    name = logical_role(role)
-    if name == "engineer":
-        return "implementation"
-    if name in {"standards-reviewer", "spec-reviewer"}:
-        return "review"
-    if name == "delivery-state":
-        return "delivery-state"
-    return "team-lead"
+    return role
 
 
-def _session_key(role: str) -> str | None:
-    """Return the session counter that owns one role, if it has a seat."""
-
-    name = logical_role(role)
-    return None if name == "temporary-role" else name.replace("-", "_")
+def _session_key(role: str) -> str:
+    """Use the actual role reference for Session accounting."""
+    return logical_role(role).replace("-", "_")
 
 
 class ExecutionBudgetMonitor:
@@ -203,12 +184,14 @@ class ExecutionBudgetMonitor:
         self.ticket_name = ticket_name
 
     def record_session(self, role: str, stage: str) -> None:
+        """Count one created Session against the shared Ticket budget."""
         self._observe(role, stage, session=True)
 
     def record_correction(self, role: str) -> None:
         self._observe(role, "correction", correction=True)
 
     def check(self, role: str, stage: str) -> bool:
+        """Observe elapsed time and return whether Runner selected stopping."""
         return self._observe(role, stage)
 
     def is_stopped(self) -> bool:
@@ -255,8 +238,68 @@ class ExecutionBudgetMonitor:
             finally:
                 fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
 
-    def deliver_leader_notices(
-        self, deliver: Callable[[list[str]], None]
+    def deliver_parent_notices(self, session_directory: Path) -> None:
+        """Deliver once to the task's recorded parent, outside the budget lock.
+
+        Members of the same Ticket share their root assignment's recipient.
+        The historical queue name is retained; a caller-channel write records
+        transport only and never claims that an Agent received the notice.
+        """
+        from graphtraj.execution.runner_control import notify_direct_parent
+        from graphtraj.execution.runner_status import read_alias_mapping
+
+        runner = session_directory.parent.parent
+        if (session_directory / "mapping.yml").is_file():
+            mapping, directory = read_alias_mapping(runner, session_directory.name)
+        else:
+            # Runner wrote this launch after binding the trusted creator. It is
+            # also available when admission stops before a native Session exists.
+            mapping = yaml.safe_load((session_directory / "launch.yml").read_text())["mapping"]
+            directory = session_directory
+        while isinstance(mapping.get("parent"), str):
+            parent, parent_directory = read_alias_mapping(runner, mapping["parent"])
+            if parent["ticket_id"] != mapping["ticket_id"]:
+                break
+            mapping, directory = parent, parent_directory
+
+        def deliver(pending: list[dict[str, Any]]) -> list[str]:
+            """Return only notice keys acknowledged by the actual parent."""
+            received = []
+            for notice in pending:
+                if isinstance(mapping.get("parent"), str):
+                    receipt = notify_direct_parent(
+                        directory, notice["message"],
+                        {"type": "execution-budget-exceeded", "key": notice["key"]},
+                        before_creation=True,
+                    )
+                    if receipt["delivery"] == "received":
+                        received.append(notice["key"])
+                elif not notice.get("channel_written", False):
+                    event = notice.get("event", {"message": notice["message"]})
+                    if _emit_notice(json.dumps(event, sort_keys=True) + "\n"):
+                        self._mark_channel_written(notice["key"])
+            return received
+
+        self.deliver_notices(deliver)
+
+    def _mark_channel_written(self, key: str) -> None:
+        """Retain a caller-channel write without asserting native receipt."""
+        with (self.ticket_directory / ".execution-budget.lock").open("a+") as lock:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+            try:
+                budget = _current_budget(self.ticket_directory)
+                if budget is None:
+                    return
+                state, _ = _read_usage(self.ticket_directory, budget)
+                for notice in state["leader_notices"]:
+                    if notice["key"] == key:
+                        notice["channel_written"] = True
+                write_yaml_durably(self.ticket_directory / "execution-budget.yml", state)
+            finally:
+                fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+
+    def deliver_notices(
+        self, deliver: Callable[[list[dict[str, Any]]], list[str]]
     ) -> None:
         """Serialize delivery without holding the budget lock across the callback."""
         # Session recovery reads the budget while holding its launch lock.
@@ -265,17 +308,17 @@ class ExecutionBudgetMonitor:
         with lock_path.open("a+", encoding="utf-8") as lock:
             fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
             try:
-                pending = self.pending_leader_notices()
+                pending = self.pending_parent_notices()
                 if not pending:
                     return
-                deliver([notice["message"] for notice in pending])
-                self.mark_leader_notices_delivered(
-                    [notice["key"] for notice in pending]
-                )
+                received = deliver(pending)
+                if received:
+                    self.mark_parent_notices_delivered(received)
             finally:
                 fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
 
-    def pending_leader_notices(self) -> list[dict[str, str]]:
+    def pending_parent_notices(self) -> list[dict[str, Any]]:
+        """Return retained notices without confirmed parent receipt."""
         lock_path = self.ticket_directory / ".execution-budget.lock"
         with lock_path.open("a+", encoding="utf-8") as lock:
             fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
@@ -285,14 +328,15 @@ class ExecutionBudgetMonitor:
                     return []
                 state, _ = _read_usage(self.ticket_directory, budget)
                 return [
-                    {"key": notice["key"], "message": notice["message"]}
+                    dict(notice)
                     for notice in state["leader_notices"]
                     if not notice["delivered"]
                 ]
             finally:
                 fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
 
-    def mark_leader_notices_delivered(self, keys: list[str]) -> None:
+    def mark_parent_notices_delivered(self, keys: list[str]) -> None:
+        """Record only keys acknowledged by the bound parent transport."""
         lock_path = self.ticket_directory / ".execution-budget.lock"
         with lock_path.open("a+", encoding="utf-8") as lock:
             fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
@@ -337,7 +381,7 @@ class ExecutionBudgetMonitor:
                 if changed:
                     state["budget"] = budget.definition
                 session_key = _session_key(role)
-                if session and session_key is not None:
+                if session:
                     state["sessions"].setdefault(session_key, 0)
                     state["sessions"][session_key] += 1
                     changed = True
@@ -362,9 +406,10 @@ class ExecutionBudgetMonitor:
                             "key": notice["notification_key"],
                             "message": notice["message"],
                             "delivered": False,
+                            "event": {key: value for key, value in notice.items()
+                                      if key != "notification_key"},
                         }
                         for notice in notices
-                        if "message" in notice
                     )
                     changed = True
                 if changed:
@@ -373,9 +418,6 @@ class ExecutionBudgetMonitor:
                     )
             finally:
                 fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
-        for notice in notices:
-            notice.pop("notification_key")
-            _emit_notice(json.dumps(notice, sort_keys=True) + "\n")
         return state["stopped"]
 
 
@@ -389,15 +431,16 @@ def _current_budget(ticket_directory: Path) -> ExecutionBudget | None:
     return read_execution_budget(body)
 
 
-def _emit_notice(output: str) -> None:
+def _emit_notice(output: str) -> bool:
     """Send an already retained notice over the selected execution channel."""
     descriptor, owned = caller_notice_fd()
     if descriptor is None:
-        return
+        return False
     try:
         os.write(descriptor, output.encode())
+        return True
     except OSError:
-        pass
+        return False
     finally:
         if owned:
             os.close(descriptor)
@@ -471,7 +514,6 @@ def _read_usage(
         or not _nonnegative_number(state["started_at"])
         or not isinstance(state["budget"], dict)
         or not isinstance(state["sessions"], dict)
-        or not _SESSION_FIELDS <= set(state["sessions"])
         or any(not isinstance(name, str) for name in state["sessions"])
         or any(type(value) is not int or value < 0 for value in state["sessions"].values())
         or type(state["corrections"]) is not int
@@ -485,7 +527,11 @@ def _read_usage(
         or not isinstance(state["leader_notices"], list)
         or any(
             not isinstance(value, dict)
-            or set(value) != {"key", "message", "delivered"}
+            or not {"key", "message", "delivered"} <= set(value) <= {
+                "key", "message", "delivered", "event", "channel_written",
+            }
+            or ("event" in value and not isinstance(value["event"], dict))
+            or ("channel_written" in value and type(value["channel_written"]) is not bool)
             or not _text(value["key"])
             or not _text(value["message"])
             or type(value["delivered"]) is not bool
@@ -573,8 +619,9 @@ def _new_notices(
                     "responsible_role": role,
                     "notification_key": key,
                 }
-            if message is not None:
-                notice["message"] = message
+            notice["message"] = message or (
+                f"System notice: Ticket {ticket_id} exceeded {kind} ({limit})."
+            )
             notices.append(notice)
     return notices
 
@@ -613,10 +660,10 @@ def _validate_budget(value: Any) -> None:
         not _text(budget["estimation_note"])
         or not _text(budget["on_exceed"])
         or not isinstance(budget["estimated_minutes"], dict)
-        or set(budget["estimated_minutes"]) != _MINUTE_FIELDS
+        or "total" not in budget["estimated_minutes"]
+        or any(not _text(name) for name in budget["estimated_minutes"])
         or any(not _positive_number(item) for item in budget["estimated_minutes"].values())
         or not isinstance(budget["planned_sessions"], dict)
-        or not _SESSION_FIELDS <= set(budget["planned_sessions"])
         or any(not _text(name) for name in budget["planned_sessions"])
         or any(not _positive_number(item) for item in budget["planned_sessions"].values())
         or not _nonnegative_number(budget["correction_rounds"])

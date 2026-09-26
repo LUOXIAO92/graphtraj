@@ -281,16 +281,14 @@ def interrupt(alias: str) -> None:
 @click.option(
     "--actor",
     type=click.Choice(["main", "user"]),
-    help="Names the Main or user who retires the Team in a whole-Team handover.",
+    help="Retained caller label; this option grants no replacement authority.",
 )
 @click.option("--caused-by-event-id", multiple=True, required=True)
 def replace(alias: str, actor: str | None, caused_by_event_id: tuple[str, ...]) -> None:
-    """Replace a seat; replacing the Leader retires the whole Team.
+    """Replace one stopped actual member while preserving its Team and evidence.
 
-    The Runner's recorded direct relation decides who may replace the target:
-    a Session manages the seats it directly parented and Main or the user
-    manages the Sessions the Runner recorded without a parent. A carried actor
-    name grants no authority and is recorded only for a whole-Team handover.
+    The recorded direct parent or native user approval authorizes replacement.
+    The target and all descendants must already be stopped.
     """
     from graphtraj.teams.coding.team_replacement import replace_session
 
@@ -307,7 +305,7 @@ def replace(alias: str, actor: str | None, caused_by_event_id: tuple[str, ...]) 
 @click.option("--ticket-id", required=True)
 @click.option("--caused-by-event-id", multiple=True, required=True)
 def continue_ticket(ticket_id: str, caused_by_event_id: tuple[str, ...]) -> None:
-    """Continue a stopped Team after Main records a causal decision."""
+    """Resume original task roots after their authorized parent records a decision."""
     from graphtraj.teams.coding.team_round import continue_stopped_ticket
 
     try:

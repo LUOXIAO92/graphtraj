@@ -199,6 +199,8 @@ def test_a_configured_group_reaches_a_real_launch(
     }
     document["role_tree"]["coding_team_experiment.team_leader"] = {
         "coding-team.engineer": {},
+        "coding-team.standards-reviewer": {},
+        "coding-team.spec-reviewer": {},
     }
     _write_roles(harness_root, yaml.safe_dump(document, sort_keys=False))
 

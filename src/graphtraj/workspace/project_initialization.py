@@ -32,8 +32,9 @@ from graphtraj.configuration.project_roles import (
     roles_file,
 )
 from graphtraj.configuration.skill_check import (
-    CORE_SKILL_NAMES,
-    check_core_skills,
+    BUNDLED_SKILL_NAMES,
+    REQUIRED_SKILL_NAMES,
+    check_skills,
     harness_skill_root,
     source_history_skill_paths,
 )
@@ -197,7 +198,8 @@ class ProjectSetupPlan:
     roles: ProjectRoles
     codex_files: CodexProjectFiles
     supported_skills: SupportedSkills
-    missing_skills: Tuple[str, ...]
+    missing_required_skills: Tuple[str, ...]
+    missing_bundled_skills: Tuple[str, ...]
     source_history_paths: frozenset[str]
     write_default_configuration: bool
     write_default_roles: bool
@@ -226,7 +228,7 @@ class ProjectSetupPlan:
     ) -> Tuple[str, ...]:
         if not install_missing_skills:
             return ()
-        return self.missing_skills
+        return self.missing_bundled_skills
 
     def preflight(
         self,
@@ -700,17 +702,21 @@ def plan_project_setup(
             if configuration.project_root == root
             else frozenset()
         )
-        skill_statuses = check_core_skills(
+        skill_statuses = check_skills(
             root / ".codex",
             Path.home() / ".agents" / "skills",
+            BUNDLED_SKILL_NAMES,
             source_history_paths=source_paths,
             include_user_skills=False,
         )
         discovered_skills = {
             status.name for status in skill_statuses if status.discovered
         }
-        missing_skills = tuple(
-            name for name in CORE_SKILL_NAMES if name not in discovered_skills
+        missing_required_skills = tuple(
+            name for name in REQUIRED_SKILL_NAMES if name not in discovered_skills
+        )
+        missing_bundled_skills = tuple(
+            name for name in BUNDLED_SKILL_NAMES if name not in discovered_skills
         )
     except (
         CodexProjectError,
@@ -728,7 +734,8 @@ def plan_project_setup(
         roles=roles,
         codex_files=codex_files,
         supported_skills=supported_skills,
-        missing_skills=missing_skills,
+        missing_required_skills=missing_required_skills,
+        missing_bundled_skills=missing_bundled_skills,
         source_history_paths=source_paths,
         write_default_configuration=write_default_configuration,
         write_default_roles=write_default_roles,

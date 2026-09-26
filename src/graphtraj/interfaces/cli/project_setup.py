@@ -54,12 +54,12 @@ def _select_source_repository(harness_root: Path) -> Path:
 
 
 def _confirm_missing_skill_installation(missing_skills: tuple[str, ...]) -> bool:
-    """Ask the operator whether to install the listed missing Skills."""
+    """Ask the operator whether to install the listed missing bundled Skills."""
     click.echo(
-        "Missing required core Skills: {0}".format(", ".join(missing_skills))
+        "Missing bundled Skills: {0}".format(", ".join(missing_skills))
     )
     return click.confirm(
-        "Install the missing Skills into this Harness Project?",
+        "Install the missing bundled Skills into this Harness Project?",
         default=True,
     )
 
@@ -80,13 +80,16 @@ def setup() -> None:
         raise click.ClickException(str(error)) from error
 
     install_missing_skills = False
-    if plan.missing_skills:
-        if not _confirm_missing_skill_installation(plan.missing_skills):
+    if plan.missing_bundled_skills:
+        if _confirm_missing_skill_installation(plan.missing_bundled_skills):
+            install_missing_skills = True
+        elif plan.missing_required_skills:
             raise click.ClickException(
                 "Setup stopped before any setup mutation. Install the missing "
                 "Skills independently and rerun setup."
             )
-        install_missing_skills = True
+        else:
+            click.echo("Continuing without the missing bundled Skills.")
     else:
         click.echo("Core Skills: OK")
 
@@ -123,7 +126,7 @@ def setup() -> None:
 
 @click.command()
 def doctor() -> None:
-    """Report required core Skills from the active Harness Project context."""
+    """Report required Skills and roles from the active Harness Project context."""
     try:
         result = diagnose_project(Path.cwd(), Path.home() / ".agents" / "skills")
     except DoctorError as error:

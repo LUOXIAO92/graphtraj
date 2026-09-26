@@ -31,20 +31,6 @@ _REQUIRED_FIELDS = frozenset({"runtime", "model"})
 _CONNECTION_FIELDS = frozenset({"base_url", "api_key_env"})
 _ENVIRONMENT_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
-_DEFAULT_PRESETS: dict[str, dict[str, object]] = {
-    "team_leader": {
-        "runtime": "codex",
-        "model": "gpt-5.6-sol",
-        "allow_runtime_swarm": True,
-    },
-    "engineer": {"runtime": "codex", "model": "gpt-5.6-sol"},
-    "standards_reviewer": {"runtime": "codex", "model": "gpt-5.6-sol"},
-    "spec_reviewer": {"runtime": "codex", "model": "gpt-5.6-sol"},
-    "delivery_state": {"runtime": "codex", "model": "gpt-5.6-luna"},
-    "merge_resolver": {"runtime": "codex", "model": "gpt-5.6-sol"},
-}
-
-
 class ProjectRolesError(Exception):
     """The reusable child-role configuration is missing or invalid."""
 
@@ -214,18 +200,16 @@ def roles_exist(harness_root: Path) -> bool:
 
 
 def default_roles_content() -> str:
-    """Render the established reusable coding-role presets."""
-    return yaml.safe_dump({"roles": {
-        "coding_team": {
-            name: preset for name, preset in _DEFAULT_PRESETS.items()
-            if name != "delivery_state"
-        },
-        "delivery_state": _DEFAULT_PRESETS["delivery_state"],
-    }}, sort_keys=False)
+    """Render the empty role selection an operator fills in for this project.
+
+    No role is preselected: a project declares only the roles its own work
+    uses, and coding presets are one such selection rather than a default.
+    """
+    return yaml.safe_dump({"roles": {}})
 
 
 def default_project_roles() -> ProjectRoles:
-    """Return the validated established reusable coding-role presets."""
+    """Return the validated default role selection, which selects no role."""
     return _roles_from_document(yaml.safe_load(default_roles_content()))
 
 

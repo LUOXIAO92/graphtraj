@@ -1,4 +1,4 @@
-"""Discover the core Skills required by a Harness Project."""
+"""Discover the Skills a Harness Project bundles and requires."""
 
 from __future__ import annotations
 
@@ -17,7 +17,8 @@ from graphtraj.configuration.project_configuration import (
 from graphtraj.configuration.project_roles import ProjectRolesError, load_project_roles, roles_exist
 
 
-CORE_SKILL_NAMES = (
+# Every Skill the release bundles and can install into the Harness Project.
+BUNDLED_SKILL_NAMES = (
     "setup-project",
     "grill-with-docs",
     "grilling",
@@ -36,6 +37,22 @@ CORE_SKILL_NAMES = (
     "wayfinder",
     "prototype",
     "ponytail-review",
+)
+
+# Professional methods that a task selects when its own work needs them. A
+# project that never selects them prepares and runs without them.
+CODING_METHOD_SKILL_NAMES = (
+    "implement",
+    "ponytail",
+    "ponytail-review",
+    "tdd",
+    "code-review",
+    "resolving-merge-conflicts",
+)
+
+# Skills every project needs before any task can run.
+REQUIRED_SKILL_NAMES = tuple(
+    name for name in BUNDLED_SKILL_NAMES if name not in CODING_METHOD_SKILL_NAMES
 )
 
 
@@ -132,42 +149,26 @@ def required_skill_paths(
     return resolved
 
 
-def core_skill_paths(
+def check_skills(
     runtime_store: Path,
     user_skill_root: Path,
-    *,
-    source_history_paths: frozenset[str] = frozenset(),
-    include_user_skills: bool = True,
-) -> Dict[str, Path]:
-    """Resolve each core Skill to its Harness-root or Runtime-user file path."""
-
-    return required_skill_paths(
-        runtime_store,
-        user_skill_root,
-        CORE_SKILL_NAMES,
-        source_history_paths=source_history_paths,
-        include_user_skills=include_user_skills,
-    )
-
-
-def check_core_skills(
-    runtime_store: Path,
-    user_skill_root: Path,
+    names: Tuple[str, ...],
     *,
     source_history_paths: frozenset[str] = frozenset(),
     include_user_skills: bool = True,
 ) -> Tuple[SkillStatus, ...]:
-    """Check core names in the Harness-root and Runtime user scopes."""
+    """Check the named Skills in the Harness-root and Runtime user scopes."""
 
-    discovered = core_skill_paths(
+    discovered = required_skill_paths(
         runtime_store,
         user_skill_root,
+        names,
         source_history_paths=source_history_paths,
         include_user_skills=include_user_skills,
     )
     return tuple(
         SkillStatus(name=name, discovered=name in discovered)
-        for name in CORE_SKILL_NAMES
+        for name in names
     )
 
 
@@ -237,9 +238,10 @@ def diagnose_project(cwd: Path, user_skill_root: Path) -> ProjectDiagnosis:
     Harness context raises DoctorError. The caller selects the user Skill scope.
     """
     runtime_store = _doctor_runtime_store(cwd.resolve())
-    statuses = check_core_skills(
+    statuses = check_skills(
         runtime_store,
         user_skill_root,
+        REQUIRED_SKILL_NAMES,
         source_history_paths=_doctor_source_history_paths(runtime_store),
     )
     roles_checked = configuration_exists(runtime_store.parent) or roles_exist(runtime_store.parent)

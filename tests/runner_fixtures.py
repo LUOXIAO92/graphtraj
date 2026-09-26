@@ -35,6 +35,18 @@ def configure_harness(
         answers="y\n",
     )
     assert setup_result.returncode == 0, setup_result.stderr
+    # Test task dispatch explicitly authorizes its configured direct children.
+    roles_file = harness_root / ".graphtraj/roles.yml"
+    roles = yaml.safe_load(roles_file.read_text())
+    children = {name: {} for name in (
+        "coding-team.engineer", "coding_team.engineer", "engineer",
+        "coding-team.standards-reviewer", "coding-team.spec-reviewer",
+    )}
+    roles["role_tree"] = {
+        **{name: children for name in ("coding-team.team-leader", "coding_team.team_leader", "team-leader")},
+        "coding_team.merge_resolver": {}, "merge-resolver": {}, "delivery_state": {},
+    }
+    roles_file.write_text(yaml.safe_dump(roles))
     environment = os.environ.copy()
     environment.update(
         {
@@ -130,3 +142,17 @@ def engineer_probe(commands, harness, fake_codex, environment, *, body="Probe th
                         observed = run_process([str(commands.runner), "status", alias], cwd=harness, env=env)
                         assert yaml.safe_load(observed.stdout)["aliases"][0].get("activity") == "idle"
             process.wait(timeout=60)
+
+
+def wait_for_ticket_status(commands: InstalledCommands, root: Path, ticket_id: str, status: str) -> None:
+    """Wait for this controlled asynchronous task's public delivery outcome."""
+    deadline = time.monotonic() + 20
+    while time.monotonic() < deadline:
+        result = run_process([str(commands.product), 'ticket', 'graph'], cwd=root)
+        result.check_returncode()
+        tickets = yaml.safe_load(result.stdout)['tickets']
+        current = next(ticket for ticket in tickets if ticket['ticket_id'] == ticket_id)
+        if current['status'] == status:
+            return
+        time.sleep(.05)
+    raise AssertionError(current)

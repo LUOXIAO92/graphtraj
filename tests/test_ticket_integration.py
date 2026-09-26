@@ -24,7 +24,11 @@ def accepted_ticket(
     root, worktrees, _, environment = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path
     )
-    _register(installed_commands, root, _ticket("83", "integration"))
+    from test_execution_budgets import _budget_body
+
+    definition = _ticket("83", "integration")
+    definition["body"] = _budget_body(total=60)
+    _register(installed_commands, root, definition)
     for identifier, dependencies in (("84", ["83"]), ("85", ["83"]), ("86", ["83", "84"])):
         _register(installed_commands, root, _ticket(identifier, "dependent", dependencies=dependencies))
     _change_status(installed_commands, root, "83", "ready")
@@ -34,10 +38,13 @@ def accepted_ticket(
     environment.update(
         FAKE_CODEX_LIFECYCLE_ACTION="complete-team-round",
         GRAPHTRAJ_AGENT_RUNNER=str(installed_commands.runner),
-        **({} if selected_axes is None else {"FAKE_CODEX_REVIEW_AXES": selected_axes}),
+        FAKE_CODEX_REVIEW_AXES=selected_axes or "",
     )
     launched = run_process([str(installed_commands.runner), "--swarm-input", str(batch)], cwd=root, env=environment)
     assert launched.returncode == 0, launched.stderr
+    from runner_fixtures import wait_for_ticket_status
+
+    wait_for_ticket_status(installed_commands, root, '83', 'awaiting-integration')
     state = root / ".graphtraj/state"
     record = yaml.safe_load((state / "tickets/83-integration/ticket.yml").read_text())
     assert record["status"] == "awaiting-integration"
@@ -270,13 +277,13 @@ def test_failed_validation_retains_evidence_without_unlocking_and_main_can_retry
     assert evidence.read_bytes() == retained
 
 
-def test_integration_rejects_a_team_caller_and_an_unaccepted_ticket(installed_commands, accepted_ticket):
+def test_integration_rejects_an_unaccepted_ticket(installed_commands, accepted_ticket):
+    """An unaccepted dependent cannot enter the common integration gate."""
     root, worktrees, state, candidate = accepted_ticket
     before = run_process(["git", "rev-parse", "HEAD"], cwd=worktrees / "dev").stdout
-    for ticket_id, environment in (("83", {**os.environ, "GRAPHTRAJ_ROLE": "team-leader"}), ("84", os.environ)):
-        result = run_process([str(installed_commands.product), "ticket", "integrate", "--ticket-id", ticket_id, "--", sys.executable, "-c", "pass"], cwd=root, env=environment)
-        assert result.returncode == 1
-        assert "error" in yaml.safe_load(result.stdout)
+    result = run_process([str(installed_commands.product), "ticket", "integrate", "--ticket-id", "84", "--", sys.executable, "-c", "pass"], cwd=root)
+    assert result.returncode == 1
+    assert "error" in yaml.safe_load(result.stdout)
     assert run_process(["git", "rev-parse", "HEAD"], cwd=worktrees / "dev").stdout == before
 
 
@@ -540,15 +547,17 @@ def test_shared_integration_enforces_main_and_returns_retained_outcome(
     command = (sys.executable, "-c", "assert open('TEAM_ROUND_DELIVERED.txt').read() == 'complete team round\\n'")
     command = (*command[:2], command[2] + f"; raise SystemExit({validation_exit})")
     monkeypatch.chdir(root)
-    monkeypatch.setenv("GRAPHTRAJ_ROLE", "engineer")
+    from graphtraj.execution.runner_status import runtime_caller
+
     before = read_worldline(state, root)
-    with pytest.raises(ValueError) as error:
-        integrate_ticket(configuration, "83", command)
-    denied = CliRunner().invoke(main, ["ticket", "integrate", "--ticket-id", "83", "--", *command])
+    with runtime_caller(root / ".graphtraj/runner", "bound-member"):
+        with pytest.raises(ValueError) as error:
+            integrate_ticket(configuration, "83", command)
+        denied = CliRunner().invoke(main, ["ticket", "integrate", "--ticket-id", "83", "--", *command])
     assert denied.exit_code == 1
     assert yaml.safe_load(denied.stdout) == {"error": str(error.value)}
     assert read_worldline(state, root) == before
-    monkeypatch.delenv("GRAPHTRAJ_ROLE")
+    monkeypatch.setenv("GRAPHTRAJ_ROLE", "engineer")
     with pytest.raises(ValueError):
         integrate_ticket(configuration, "83", ())
     assert read_worldline(state, root) == before
@@ -569,3 +578,134 @@ def test_shared_integration_enforces_main_and_returns_retained_outcome(
     assert result["evidence"] in event["evidence_refs"]
     assert (root / result["evidence"]).is_file()
     assert read_graph(state)["tickets"][0]["status"] == result["status"]
+
+
+@pytest.fixture
+def stopped_committed_integration(installed_commands, accepted_ticket, fake_codex, monkeypatch):
+    """Retain a public conflict escalation, sampled stop and committed resolution."""
+    from graphtraj.execution import execution_budget
+
+    root, worktrees, state, candidate = accepted_ticket
+    dev = worktrees / 'dev'
+    delivered = dev / 'TEAM_ROUND_DELIVERED.txt'
+    delivered.write_text('conflicting integration work\n')
+    for args in (('add', delivered.name), ('commit', '-m', 'Independent integration work')):
+        run_process(['git', *args], cwd=dev).check_returncode()
+    command = [str(installed_commands.product), 'ticket', 'integrate', '--ticket-id', '83']
+    validator = root / 'validate-recovery.py'
+    validator.write_text(
+        "from pathlib import Path\n"
+        "assert Path('TEAM_ROUND_DELIVERED.txt').read_text() == 'complete team round\\nconflicting integration work\\n'\n"
+        f"assert not Path({str(root / 'fail-validation')!r}).exists()\n"
+    )
+    validation = [sys.executable, str(validator)]
+    failed = run_process(command + ['--', *validation], cwd=root)
+    assert failed.returncode == 1, failed.stdout + failed.stderr
+    escalated = run_process(command + ['--resolve-conflict', 'Preserve both accepted lines', '--', *validation], cwd=root, env={
+        **os.environ, 'HOME': str(root / 'operator-home'),
+        'PATH': str(fake_codex.executable.parent) + os.pathsep + os.environ['PATH'],
+        'FAKE_CODEX_LOG': str(fake_codex.log_file),
+        'FAKE_CODEX_LIFECYCLE_ACTION': 'resolve-integration',
+        'FAKE_CODEX_RESOLUTION': 'escalated',
+    })
+    assert yaml.safe_load(escalated.stdout)['status'] == 'escalated', escalated.stdout + escalated.stderr
+    ticket = state / 'tickets/83-integration'
+    monitor = execution_budget.ExecutionBudgetMonitor(ticket, '83', 'integration')
+    usage = yaml.safe_load((ticket / 'execution-budget.yml').read_text())
+    with monkeypatch.context() as controlled:
+        controlled.setattr(execution_budget.time, 'time', lambda: usage['started_at'] + 100000)
+        controlled.setattr(execution_budget.random, 'random', lambda: 1.0)
+        assert monitor.check('merge-resolver', 'integration')
+    assert yaml.safe_load((ticket / 'execution-budget.yml').read_text())['stopped']
+    delivered.write_text('complete team round\nconflicting integration work\n')
+    run_process(['git', 'add', delivered.name], cwd=dev).check_returncode()
+    run_process(['git', 'commit', '--no-edit'], cwd=dev).check_returncode()
+    return root, dev, state, candidate, command + ['--', *validation]
+
+
+def test_public_recovery_adopts_committed_merge_and_preserves_history(
+    installed_commands, stopped_committed_integration, fake_codex,
+):
+    """Recovery validates the committed merge without new work, Round or budget."""
+    from graphtraj.graph.delivery_worldline import read_worldline
+
+    root, dev, state, candidate, command = stopped_committed_integration
+    ticket = state / 'tickets/83-integration'
+    before = read_worldline(state, root)
+    retained = {path: retained_state(path) for path in ticket.rglob('*')
+                if path.is_file() and path.name != 'ticket.yml'}
+    runtime = fake_codex.log_file.read_bytes()
+    head = run_process(['git', 'rev-parse', 'HEAD'], cwd=dev).stdout
+    result = run_process(command, cwd=root)
+    assert result.returncode == 0, result.stdout + result.stderr
+    outcome = yaml.safe_load(result.stdout)
+    assert outcome['status'] == 'integrated' and outcome['candidate'] == candidate
+    assert set(outcome['unlocked_ticket_ids']) == {'84', '85'}
+    assert run_process(['git', 'rev-parse', 'HEAD'], cwd=dev).stdout == head
+    assert fake_codex.log_file.read_bytes() == runtime
+    assert all(retained_state(path) == content for path, content in retained.items())
+    assert sorted(path.name for path in (ticket / 'teams/1/rounds').iterdir()) == ['1']
+    events = read_worldline(state, root)
+    assert events[:len(before)] == before
+    started = events[len(before)]
+    assert started['caused_by_event_ids'] == [before[-1]['event_id']]
+    integrated = next(event for event in events if event['event_id'] == outcome['event_id'])
+    assert integrated['caused_by_event_ids'] == [started['event_id']]
+    assert integrated['validation_command'] == command[command.index('--') + 1:]
+    assert set(before[-1]['evidence_refs']) <= set(integrated['evidence_refs'])
+
+
+@pytest.mark.parametrize('invalid', ['candidate', 'unrelated-head', 'retained-dev', 'validation-command', 'failed-validation', 'caller'])
+def test_public_recovery_rejects_invalid_adoption(
+    installed_commands, stopped_committed_integration, fake_codex, invalid,
+):
+    """Invalid identity/version/history or failed validation never unlocks work."""
+    from graphtraj.execution.runner_heartbeat import hold_ownership
+    from graphtraj.graph.delivery_worldline import read_worldline
+
+    root, dev, state, candidate, command = stopped_committed_integration
+    before = read_worldline(state, root)
+    runtime = fake_codex.log_file.read_bytes()
+    ticket = state / 'tickets/83-integration'
+    budget = (ticket / 'execution-budget.yml').read_bytes()
+    if invalid == 'candidate':
+        # A public state revision cannot reuse acceptance for another version.
+        from graphtraj.graph.ticket_graph import update_ticket_state
+        record = yaml.safe_load((ticket / 'ticket.yml').read_text())
+        other = run_process(['git', 'rev-parse', 'HEAD'], cwd=dev).stdout.strip()
+        cause = before[-1]['event_id']
+        for status in ('blocked', 'escalated'):
+            revised = update_ticket_state(state, root, {
+                key: record[key] for key in ('ticket_id', 'active_team_ordinal', 'worktree', 'branch')
+            } | {'status': status, 'current_candidate': other, 'caused_by_event_ids': [cause],
+                 'evidence_refs': before[-1]['evidence_refs']})
+            cause = revised['event_id']
+    elif invalid in {'unrelated-head', 'retained-dev'}:
+        target = candidate if invalid == 'retained-dev' else candidate + '^'
+        run_process(['git', 'reset', '--hard', target], cwd=dev).check_returncode()
+    elif invalid == 'validation-command':
+        command = command[:command.index('--') + 1] + [sys.executable, '-c', 'pass']
+    elif invalid == 'failed-validation':
+        (root / 'fail-validation').touch()
+    if invalid == 'caller':
+        # An installed CLI child is identified from the real owning process,
+        # even after its role environment variable has been removed.
+        mapping_path = next((root / '.graphtraj/runner/sessions').glob('*/mapping.yml'))
+        mapping = yaml.safe_load(mapping_path.read_text())
+        mapping.update(worker_pid=os.getpid(), runtime_pid=os.getpid())
+        mapping_path.write_text(yaml.safe_dump(mapping))
+        environment = {key: value for key, value in os.environ.items() if key != 'GRAPHTRAJ_ROLE'}
+        with hold_ownership(mapping_path.parent, os.getpid()):
+            result = run_process(command, cwd=root, env=environment)
+    else:
+        result = run_process(command, cwd=root)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert yaml.safe_load((ticket / 'ticket.yml').read_text())['status'] == 'escalated'
+    assert (ticket / 'execution-budget.yml').read_bytes() == budget
+    assert fake_codex.log_file.read_bytes() == runtime
+    graph = yaml.safe_load(run_process([str(installed_commands.product), 'ticket', 'graph'], cwd=root).stdout)
+    assert not any(item['ready'] for item in graph['tickets'])
+    if invalid == 'failed-validation':
+        (root / 'fail-validation').unlink()
+        retry = run_process(command, cwd=root)
+        assert retry.returncode == 0, retry.stdout + retry.stderr

@@ -163,14 +163,17 @@ def integrate_command(
     resolve_conflict: str | None,
     validation_command: tuple[str, ...],
 ) -> None:
-    """Main: merge the accepted Ticket, then run COMMAND in dev (after --)."""
+    """Main: merge or recover a committed accepted Ticket, then validate dev.
+
+    After escalation, COMMAND (after --) must match the retained validation.
+    """
 
     try:
         configuration = load_project_configuration(Path.cwd())
         result = integrate_ticket(
             configuration, ticket_id, validation_command, resolve_conflict
         )
-    except (OSError, ValueError, GitRepositoryError, ProjectConfigurationError, yaml.YAMLError) as error:
+    except (OSError, ValueError, GitRepositoryError, ProjectConfigurationError, yaml.YAMLError, RunnerError) as error:
         click.echo(yaml.safe_dump({"error": str(error)}, sort_keys=False), nl=False)
         raise click.ClickException(str(error)) from error
     click.echo(yaml.safe_dump(result, sort_keys=False), nl=False)

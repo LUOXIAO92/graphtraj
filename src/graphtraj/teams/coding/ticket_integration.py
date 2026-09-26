@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import fcntl
-import os
 import subprocess
 from pathlib import Path
 from typing import TextIO
 
 import yaml
 
+from graphtraj.execution.runner_status import caller_alias
 from graphtraj.graph.delivery_worldline import append_project_worldline_event, read_worldline
 from graphtraj.workspace.git_repository import GitRepositoryError, SourceRepository, _git
 from graphtraj.configuration.project_configuration import ProjectConfiguration
@@ -27,9 +27,10 @@ def integrate_ticket(
     Run validation_command as argv in dev after merging the Team-accepted
     candidate. A failed merge or validation returns a non-integrated status and
     retained evidence. Authority, lock and readiness failures raise ValueError;
-    configuration and filesystem errors retain their existing exception types.
+    Caller verification, configuration and filesystem errors retain their existing
+    exception types.
     """
-    if os.environ.get("GRAPHTRAJ_ROLE"):
+    if caller_alias(configuration.harness_root / ".graphtraj/runner") is not None:
         raise ValueError("Only Main may integrate a Ticket")
     if (
         not isinstance(validation_command, tuple)
@@ -46,7 +47,13 @@ def integrate_ticket(
         return _integrate(configuration, ticket_id, validation_command, diagnosis)
 
 
-def _integrate(configuration: ProjectConfiguration, ticket_id: str, validation_command: tuple[str, ...], diagnosis: str | None = None) -> dict:
+def _integrate(
+    configuration: ProjectConfiguration,
+    ticket_id: str,
+    validation_command: tuple[str, ...],
+    diagnosis: str | None = None,
+) -> dict:
+    """Merge or adopt the retained accepted version, then validate completion."""
     root, state = configuration.harness_root, configuration.state
     current = _load_states(state / "tickets")
     if ticket_id not in current:
@@ -60,8 +67,9 @@ def _integrate(configuration: ProjectConfiguration, ticket_id: str, validation_c
         and event.get("candidate") == candidate
         and event.get("team_ordinal") == record["active_team_ordinal"]
     )), None)
-    if not record["active"] or record["status"] not in {"awaiting-integration", "integrating"} or acceptance is None:
-        raise ValueError("Integration requires the current candidate accepted by its Team Leader")
+    recovering = record["status"] == "escalated"
+    if not record["active"] or record["status"] not in {"awaiting-integration", "integrating", "escalated"} or acceptance is None:
+        raise ValueError("Integration requires acceptance of the current candidate")
     escalated_integrations = {
         event.get("ticket_id") for event in events
         if event["kind"] == "ticket-integration-escalated"
@@ -79,6 +87,18 @@ def _integrate(configuration: ProjectConfiguration, ticket_id: str, validation_c
         raise ValueError("The dev Integration Worktree must be clean")
     before = _git(dev, "rev-parse", "HEAD")
     predecessor = next((event for event in reversed(events) if event.get("ticket_id") == ticket_id and event["kind"].startswith("ticket-integration-")), acceptance)
+    if recovering:
+        if (diagnosis is not None or predecessor["kind"] != "ticket-integration-escalated"
+            or predecessor.get("candidate") != candidate
+            or predecessor.get("validation_command") != list(validation_command)):
+            raise ValueError("Recovery requires the retained accepted candidate and the same integration validation")
+        # A committed resolution must contain both sides of the retained attempt.
+        # Adoption runs no specialist and never resets the stopped task budget.
+        try:
+            _git(dev, "merge-base", "--is-ancestor", candidate, before)
+            _git(dev, "merge-base", "--is-ancestor", predecessor["dev_commit"], before)
+        except GitRepositoryError as error:
+            raise ValueError("Recovery requires the accepted candidate and retained dev commit in HEAD") from error
     if diagnosis is not None:
         if (not diagnosis.strip() or predecessor["kind"] != "ticket-integration-failed"
             or predecessor.get("conflict_kind") not in {"textual", "semantic"}
@@ -102,7 +122,7 @@ def _integrate(configuration: ProjectConfiguration, ticket_id: str, validation_c
     resolution = None
     with evidence.open("x", encoding="utf-8") as log:
         log.write(f"Candidate: {candidate}\nIntegration Worktree: {dev.relative_to(root)}\nDev before: {before}\n")
-        commands = [("git", "merge", "--no-edit", candidate), validation_command]
+        commands = [validation_command] if recovering else [("git", "merge", "--no-edit", candidate), validation_command]
         if diagnosis is not None:
             resolution = _resolve(configuration, record, log)
             if resolution.get("launch_status") == "resolved":
@@ -134,6 +154,8 @@ def _integrate(configuration: ProjectConfiguration, ticket_id: str, validation_c
         else:
             try:
                 _git(dev, "merge-base", "--is-ancestor", candidate, "refs/heads/dev")
+                if recovering and _git(dev, "rev-parse", "HEAD") != before:
+                    raise ValueError("Recovery validation changed the retained committed resolution")
                 if _git(dev, "branch", "--show-current") != "dev":
                     raise ValueError("Integration validation must leave dev checked out")
                 if _git(dev, "status", "--porcelain"):
@@ -145,9 +167,9 @@ def _integrate(configuration: ProjectConfiguration, ticket_id: str, validation_c
     evidence_refs = [evidence.relative_to(root).as_posix()]
     if resolution and resolution.get("trace"):
         evidence_refs.append(resolution["trace"])
-    if diagnosis is not None:
+    if diagnosis is not None or recovering:
         evidence_refs.extend(ref for ref in predecessor["evidence_refs"] if ref not in evidence_refs)
-    status = "integrated" if succeeded else "escalated" if resolution and resolution.get("launch_status") == "escalated" else "integrating"
+    status = "integrated" if succeeded else "escalated" if recovering or resolution and resolution.get("launch_status") == "escalated" else "integrating"
     integrated = _record(configuration, directory, record, status, {
         "kind": ("ticket-integration-conflict-resolved" if diagnosis is not None else "ticket-integrated") if succeeded else "ticket-integration-escalated" if status == "escalated" else "ticket-integration-failed",
         "caused_by_event_ids": [started["event_id"]],

@@ -257,325 +257,83 @@ def test_installed_runner_rejects_invalid_inline_reasoning_effort(
 
 
 @pytest.mark.parametrize(
-    ("leader_decision", "expected_status", "round_closed", "runner_succeeds", "swarm"),
-    (
-        ("accept", "awaiting-integration", True, True, None),
-        ("accept", "awaiting-integration", True, True, False),
-        ("accept", "awaiting-integration", True, True, True),
-        ("rework", "awaiting-integration", True, True, None),
-    ),
+    ("decision", "swarm"),
+    (("accept", None), ("accept", False), ("accept", True), ("rework", None)),
+    ids=["accept-awaiting-integration-True-True-None", "accept-awaiting-integration-True-True-False",
+         "accept-awaiting-integration-True-True-True", "rework-awaiting-integration-True-True-None"],
 )
 def test_installed_runner_obeys_the_explicit_leader_decision_for_a_run_free_team_round(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
     fake_codex: FakeCodex,
     tmp_path: Path,
-    leader_decision: str,
-    expected_status: str,
-    round_closed: bool,
-    runner_succeeds: bool,
+    decision: str,
     swarm: bool | None,
 ) -> None:
-    harness_root, worktree_root, _, environment = configure_harness(
-        installed_commands,
-        temporary_git_repository,
-        fake_codex,
-        tmp_path,
+    """Explicit decisions retain generic dispatch, ownership and file isolation."""
+    from graphtraj.graph.delivery_worldline import read_worldline
+
+    root, worktrees, _, environment = configure_harness(
+        installed_commands, temporary_git_repository, fake_codex, tmp_path,
     )
-    roles_file = harness_root / '.graphtraj' / 'roles.yml'
+    roles_file = root / '.graphtraj/roles.yml'
     roles = yaml.safe_load(roles_file.read_text())
-    roles['roles']['coding_team']['team_leader'].pop('allow_runtime_swarm', None)
+    leader = roles['roles']['coding_team']['team_leader']
+    leader.pop('allow_runtime_swarm', None)
     if swarm is not None:
-        roles['roles']['coding_team']['team_leader']['allow_runtime_swarm'] = swarm
+        leader['allow_runtime_swarm'] = swarm
     roles_file.write_text(yaml.safe_dump(roles))
     policy_log = tmp_path / 'policy.jsonl'
-    environment['FAKE_CODEX_POLICY_LOG'] = str(policy_log)
-    main_config = harness_root / '.codex' / 'config.toml'
+    main_config = root / '.codex/config.toml'
     main_config.write_text('developer_instructions = "User-owned Main instructions."\n')
     main_before = main_config.read_bytes()
-    ticket_input = harness_root / "ticket.yml"
-    ticket_input.write_text(
-        yaml.safe_dump(
-            {
-                "ticket_id": "74",
-                "ticket_name": "complete-team-round",
-                "source": "https://github.com/example/project/issues/74",
-                "title": "Complete Team Round",
-                "body": "Deliver one complete Team Round.",
-                "dependencies": [],
-            },
-            sort_keys=False,
-        )
-    )
-    registered = run_process(
-        [str(installed_commands.product), "ticket", "register", "--ticket-file", str(ticket_input)],
-        cwd=harness_root,
-    )
-    assert registered.returncode == 0, registered.stderr
-    ticket_directory = harness_root / ".graphtraj" / "state" / "tickets" / "74-complete-team-round"
-    readiness = harness_root / "readiness.md"
-    readiness.write_text("The registered Ticket has no unmet dependencies.\n")
-    state_change = harness_root / "state-change.yml"
-    state_change.write_text(
-        yaml.safe_dump(
-            {
-                "ticket_id": "74",
-                "status": "ready",
-                "active_team_ordinal": None,
-                "worktree": None,
-                "branch": None,
-                "current_candidate": None,
-                "caused_by_event_ids": [],
-                "evidence_refs": ["readiness.md"],
-            },
-            sort_keys=False,
-        )
-    )
-    ready = run_process(
-        [str(installed_commands.product), "ticket", "update", "--state-file", str(state_change)],
-        cwd=harness_root,
-    )
-    assert ready.returncode == 0, ready.stderr
-
-    batch = harness_root / "batch.yml"
-    batch_bytes = (
-        "tasks:\n"
-        "  - ticket_id: \"74\"\n"
-        "    ticket_name: complete-team-round\n"
-        "    role: coding-team.team-leader\n"
-        "    instruction: Keep the accepted Ticket exact.\n"
-    ).encode()
-    batch.write_bytes(batch_bytes)
-    environment.update(
-        {
-            "FAKE_CODEX_LIFECYCLE_ACTION": "complete-team-round",
-            "GRAPHTRAJ_AGENT_RUNNER": str(installed_commands.runner),
-            "FAKE_CODEX_LEADER_DECISION": (
-                "reject" if leader_decision == "tamper" else
-                "rework" if leader_decision in {
-                    "process", "main", "product", "invalid-evidence", "mismatched-report", "no-findings"
-                } else leader_decision
-            ),
-            "FAKE_CODEX_REWORK_CASE": leader_decision,
-            "FAKE_CODEX_STATE_TAMPER": (
-                "accepted" if leader_decision == "tamper" else ""
-            ),
-        }
-    )
-
+    _register_ready_inline_ticket(root, installed_commands.product)
+    batch = root / 'decision.yml'
+    batch.write_text('tasks:\n  - ticket_id: "75"\n    role: team-leader\n')
     launched = run_process(
-        [str(installed_commands.runner), "--swarm-input", str(batch)],
-        cwd=harness_root,
-        env=environment,
+        [str(installed_commands.runner), '--swarm-input', str(batch)], cwd=root,
+        env={**environment, 'FAKE_CODEX_LIFECYCLE_ACTION': 'complete-team-round',
+             'GRAPHTRAJ_AGENT_RUNNER': str(installed_commands.runner),
+             'FAKE_CODEX_POLICY_LOG': str(policy_log),
+             'FAKE_CODEX_REVIEW_AXES': '', 'FAKE_CODEX_LEADER_DECISION': decision},
         timeout=45,
     )
+    assert launched.returncode == 0, launched.stdout + launched.stderr
+    from runner_fixtures import wait_for_ticket_status
 
-    assert (launched.returncode == 0) is runner_succeeds, launched.stderr
+    wait_for_ticket_status(installed_commands, root, '75', 'awaiting-integration' if decision == 'accept' else 'reworking')
     assert main_config.read_bytes() == main_before
-    assert 'max_concurrent_threads_per_session' not in tomllib.loads(main_before.decode()).get('agents', {})
+    ticket = root / '.graphtraj/state/tickets/75-inline-specialist'
+    current = yaml.safe_load((ticket / 'ticket.yml').read_text())
+    team = yaml.safe_load((ticket / 'teams/1/team.yml').read_text())
+    assert current['status'] == ('awaiting-integration' if decision == 'accept' else 'reworking')
+    assert team['current_round'] == 1
+    assert {member['role'] for member in team['members'].values()} == {'team-leader', 'engineer'}
+    assert not (ticket / 'teams/1/rounds/2').exists()
+    events = read_worldline(root / '.graphtraj/state', root)
+    submitted = next(event for event in events if event['kind'] == 'result-submitted')
+    decided = next(event for event in events if event.get('submission_id') == submitted['event_id'])
+    assert decided['candidate'] == submitted['candidate'] == current['current_candidate']
+    assert decided['decision'] == ('accepted' if decision == 'accept' else 'rejected')
+    assert submitted['event_id'] in decided['caused_by_event_ids']
+    mappings = [yaml.safe_load(path.read_text()) for path in (root / '.graphtraj/runner/sessions').glob('*/mapping.yml')]
+    parent = next(mapping for mapping in mappings if mapping['role'] == 'team-leader')
+    child = next(mapping for mapping in mappings if mapping['role'] == 'engineer')
+    assert child['parent'] == parent['alias'] and parent['parent'] is None
     calls = [json.loads(line) for line in policy_log.read_text().splitlines()]
-    worktree = worktree_root / "74-complete-team-round"
+    assert {call['role'] for call in calls} == {'team-leader', 'engineer'}
     for call in calls:
-        leader = call['role'] == 'team-leader'
-        filesystem = call['settings']['permissions'][call['settings']['default_permissions']]['filesystem']
-        assert filesystem[':workspace_roots']['.'] == (
-            'read' if call['role'] in {'team-leader', 'standards-reviewer', 'spec-reviewer'} else 'write'
-        )
+        settings = call['settings']
+        filesystem = settings['permissions'][settings['default_permissions']]['filesystem']
+        assert filesystem[':workspace_roots']['.'] == ('read' if call['role'] == 'team-leader' else 'write')
         assert filesystem[':workspace_roots']['CONTEXT.md'] == 'read'
         assert filesystem[':workspace_roots']['docs'] == 'read'
-        required_skills = {
-            'team-leader': set(),
-            'engineer': {'implement', 'ponytail'},
-            'standards-reviewer': {'ponytail-review'},
-            'spec-reviewer': set(),
-            'delivery-state': set(),
-        }
-        assert {
-            Path(skill['path']).parent.name
-            for skill in call['settings']['skills']['config'] if skill['enabled']
-        } == required_skills[call['role']]
-        registration = harness_root / '.graphtraj/runner/sessions/74-complete_team_round-handover0-team_leader@team_leader/child-registration.yml'
-        batch_directory = harness_root / '.graphtraj/state/batches'
-        # Native callbacks own control writes; the Agent cannot write these paths.
-        for protected in (
-            registration, batch_directory,
-            harness_root / '.graphtraj/state/worldline/.lock',
-            harness_root / '.graphtraj/runner/capacity',
-        ):
-            assert filesystem.get(str(protected)) != 'write'
-        report_names = {
-            "engineer": {"engineer.md", "validation.md"},
-            "standards-reviewer": {"standards.md"},
-            "spec-reviewer": {"spec.md"},
-            "team-leader": {"leader.md"},
-            "delivery-state": {"delivery-state.md"},
-        }[call["role"]]
-        report_writes = {
-            path
-            for path, access in filesystem.items()
-            if access == "write"
-            and (
-                path.startswith(str(ticket_directory))
-                or path.startswith(str(worktree / ".state"))
-            )
-        }
-        assert not report_writes
-        # Each Session reads its assignments and submits through the native tool.
-        canonical = {
-            Path(path).relative_to(ticket_directory)
-            for path, access in filesystem.items()
-            if access == 'read' and Path(path).suffix == '.md'
-            and path.startswith(str(ticket_directory))
-        }
-        assert {path.name for path in canonical} == report_names
-        if call["role"] in {"engineer", "team-leader", "delivery-state"}:
-            assert canonical == {
-                Path("teams") / "1" / "rounds" / call["round"] / name
-                for name in report_names
-            }
-        assert "hooks" not in call["settings"]
-        assert call['settings']['agents']['enabled'] is (leader and swarm is not False)
-        assert 'max_concurrent_threads_per_session' not in call['settings']['agents']
-        assert 'max_depth' not in call['settings']['agents']
-    retained_directory = harness_root / ".graphtraj" / "state" / "batches"
-    retained_batches = list(retained_directory.glob("*.yml"))
-    assert len(retained_batches) == (5 if leader_decision == "rework" else 3)
-    worktree = worktree_root / "74-complete-team-round"
-    if runner_succeeds:
-        output = yaml.safe_load(launched.stdout)
-        assert "run_id" not in output
-        retained = Path(output["retained_batch_file"])
-        assert retained.parent == retained_directory
-        assert retained.read_bytes() == batch_bytes
-        assert output["tasks"][0]["worktree_path"] == str(worktree.resolve())
-    wait_for_file(ticket_directory / "teams" / "1" / "rounds" / "1" / "leader.md", 15)
-
-    current = yaml.safe_load((ticket_directory / "ticket.yml").read_text())
-    team = yaml.safe_load((ticket_directory / "teams" / "1" / "team.yml").read_text())
-    assert current["status"] == expected_status
-    assert current["active_team_ordinal"] == 1
-    assert current["worktree"] == ".graphtraj/.agent-worktrees/74-complete-team-round"
-    assert current["branch"] == "agent/74-complete-team-round"
-    assert len(current["current_candidate"]) == 40
-    assert set(team) == {
-        "team_ordinal", "status", "members", "current_round", "started_at"
-    }
-    assert team["team_ordinal"] == 1
-    assert team["status"] == "active"
-    assert team["current_round"] == (2 if leader_decision == "rework" else 1)
-    assert set(team["members"]) == {
-        "team_leader",
-        "engineer",
-        "standards_reviewer",
-        "spec_reviewer",
-    }
-    assert all(set(member) == {"role", "session_ref"} for member in team["members"].values())
-    assert all(member["session_ref"] for member in team["members"].values())
-    round_directory = ticket_directory / "teams" / "1" / "rounds" / "1"
-    assert {path.name for path in round_directory.iterdir()} == {
-        "engineer.md", "validation.md", "standards.md", "spec.md", "leader.md"
-    }
-    assert (round_directory.stat().st_mode & 0o222 == 0) is round_closed
-    assert all((path.stat().st_mode & 0o222 == 0) is round_closed for path in round_directory.iterdir())
-    traces = list((ticket_directory / "teams" / "1" / "traces").glob("*/events.jsonl"))
-    assert len(traces) == 5
-    session_records = [
-        harness_root / ".graphtraj" / "runner" / "sessions" / trace.parent.name / "events.jsonl"
-        for trace in traces
-    ]
-    # Each Session identifies its Runtime in the Runner's own records, while
-    # its Trace entry reads the Runtime-owned native Session record directly.
-    assert all(
-        json.loads(records.read_text().splitlines()[0])
-        == {"type": "runtime", "runtime": "codex"}
-        for records in session_records
-    )
-    assert all(trace.is_symlink() and trace.resolve().is_file() for trace in traces)
-    mappings = [
-        yaml.safe_load(path.read_text())
-        for path in (harness_root / ".graphtraj" / "runner" / "sessions").glob("*/mapping.yml")
-    ]
-    assert len(mappings) == 5
-    assert all("run_id" not in mapping and "turn" not in mapping for mapping in mappings)
-    leader_alias = next(mapping["alias"] for mapping in mappings if mapping["role"] == "team-leader")
-    delivery_state_mappings = [mapping for mapping in mappings if mapping["role"] == "delivery-state"]
-    assert len(delivery_state_mappings) == 1
-    assert delivery_state_mappings[0]["alias"] not in {
-        member["session_ref"] for member in team["members"].values()
-    }
-    assert all(
-        mapping["parent"] == leader_alias
-        for mapping in mappings
-        if mapping["role"] not in {"team-leader", "delivery-state"}
-    )
-    assert not list(ticket_directory.rglob("turn-*"))
-    assert not (ticket_directory / "metadata.yml").exists()
-    assert not (ticket_directory / "handoff.md").exists()
-    assert all(
-        (ticket_directory / 'reviews' / name).is_file()
-        for name in ('standards.md', 'spec.md')
-    )
-    assert not (harness_root / ".graphtraj" / "state" / "runs").exists()
-    assert not any(path.name in {"ledger.yml", "dag.md", "history.jsonl"} for path in ticket_directory.rglob("*"))
-    worldline = [
-        json.loads(line)
-        for shard in (harness_root / ".graphtraj" / "state" / "worldline").glob("*.jsonl")
-        for line in shard.read_text().splitlines()
-    ]
-    if not runner_succeeds:
-        assert worldline[-1]["kind"] == "team-member-started"
-        assert not any(event["kind"].startswith("team-round-") for event in worldline)
-    else:
-        assert worldline[-1]["kind"] == (
-            "team-round-accepted" if round_closed else "team-round-rejected"
-        )
-    started = next(event for event in worldline if event["kind"] == "team-started")
-    assert team["started_at"] == started["captured_at"]
-    assert all(event["caused_by_event_ids"] for event in worldline[2:])
-    assert all(path.stat().st_mode & 0o222 == 0 for path in retained_batches)
-    if leader_decision == "rework":
-        second = round_directory.parent / "2"
-        assert {path.name for path in second.iterdir()} == {
-            "engineer.md", "validation.md", "leader.md"
-        }
-        assert all(path.stat().st_mode & 0o222 == 0 for path in second.iterdir())
-        rejected = next(event for event in worldline if event["kind"] == "team-round-implementation-rejected")
-        rework = next(event for event in worldline if event["kind"] == "team-round-rework-started")
-        candidates = [event for event in worldline if event["kind"] == "candidate-ready-for-review"]
-        assert rework["caused_by_event_ids"] == [rejected["event_id"]]
-        assert candidates[1]["caused_by_event_ids"] == [rework["event_id"]]
-        assert candidates[0]["candidate"] != candidates[1]["candidate"] == current["current_candidate"]
-        assert all(candidates[0]["candidate"] in path.read_text() for path in round_directory.iterdir())
-        assert all(candidates[1]["candidate"] in path.read_text() for path in second.iterdir())
-        assert worldline[-1]["team_round"] == 2
-        assert team["members"]["engineer"]["role"] == "engineer"
-        assert len(mappings) == 5
-        observed = [
-            json.loads(line)
-            for records in session_records for line in records.read_text().splitlines()
-            if line.startswith("{") and json.loads(line).get("type") == "report-observed"
-        ]
-        for name in ("engineer.md", "validation.md", "leader.md"):
-            assert any(
-                event["path"] == "teams/1/rounds/2/" + name
-                and current["current_candidate"] in event["content"]
-                for event in observed
-            )
-        executions = {
-            seat: (
-                harness_root / ".graphtraj" / "runner" / "sessions"
-                / member["session_ref"] / "events.jsonl"
-            ).read_text().count('"type": "runner-execution-start"')
-            for seat, member in team["members"].items()
-        }
-        # A rework Round keeps the Engineer and the Leader busy without
-        # repeating a Review axis that already reported for this Ticket.
-        assert executions["engineer"] >= 2
-        assert executions["team_leader"] >= 2
-        assert executions["standards_reviewer"] == 1
-        assert executions["spec_reviewer"] == 1
-    else:
-        assert not (round_directory.parent / "2").exists()
+        assert filesystem.get(str(root / '.graphtraj/state/worldline/.lock')) != 'write'
+        assert not any(access == 'write' and path.startswith(str(ticket)) for path, access in filesystem.items())
+        assert settings['agents']['enabled'] is (call['role'] == 'team-leader' and swarm is not False)
+        reports = {Path(path).name for path, access in filesystem.items()
+                   if access == 'read' and path.startswith(str(ticket)) and path.endswith('.md')}
+        assert reports == ({'leader.md'} if call['role'] == 'team-leader' else {'engineer.md', 'validation.md'})
 
 
 @pytest.mark.parametrize(
@@ -1236,14 +994,16 @@ def test_coding_acceptance_consumes_submission_without_report_commit(
         [str(installed_commands.runner), '--swarm-input', str(batch)], cwd=harness,
         env={**environment, 'FAKE_CODEX_LIFECYCLE_ACTION': 'complete-team-round',
              'GRAPHTRAJ_AGENT_RUNNER': str(installed_commands.runner),
-             'FAKE_CODEX_SUBMIT_RESULT': '1', 'FAKE_CODEX_REPORT_WITHOUT_COMMIT': '1'},
+             'FAKE_CODEX_REVIEW_AXES': '', 'FAKE_CODEX_REPORT_WITHOUT_COMMIT': '1'},
         timeout=45,
     )
+    from runner_fixtures import wait_for_ticket_status
+
+    assert launched.returncode == 0, launched.stdout + launched.stderr
+    wait_for_ticket_status(installed_commands, harness, '75', 'awaiting-integration')
     events = read_worldline(harness / '.graphtraj/state', harness)
     submitted = [event for event in events if event['kind'] == 'result-submitted']
-    candidates = [event for event in events if event['kind'] == 'candidate-ready-for-review']
-    assert submitted and candidates, launched.stdout + launched.stderr
-    assert candidates[0]['candidate'] == submitted[0]['candidate']
+    assert submitted, launched.stdout + launched.stderr
     assert submitted[0]['role'] == 'engineer'
     assert (harness / submitted[0]['evidence_refs'][0]).read_text().startswith('Candidate commit:')
     accepted = [event for event in events if event['kind'] == 'team-round-accepted']

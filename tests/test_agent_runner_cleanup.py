@@ -76,10 +76,20 @@ def _deliver_ticket(
             timeout=15,
         )
         assert failed.returncode == 1
+        sessions = root / ".graphtraj" / "runner" / "sessions"
+        if failed_start:
+            assert not sessions.exists() or not list(sessions.iterdir())
+            # Preserve coverage for historical allocations from before preflight
+            # moved ahead of reservation; new unsupported Runtimes leave none.
+            historical = sessions / "85-cleanup_integrated_ticket-handover0-team_leader@unstarted"
+            historical.mkdir(parents=True)
+            (historical / "events.jsonl").touch()
+            traces = (root / ".graphtraj/state/tickets/85-cleanup-integrated-ticket"
+                      / "teams/1/traces" / historical.name)
+            traces.mkdir(parents=True)
+            (traces / "events.jsonl").touch()
         failed_start_aliases = tuple(
-            directory.name
-            for directory in (root / ".graphtraj" / "runner" / "sessions").iterdir()
-            if directory.is_dir()
+            directory.name for directory in sessions.iterdir() if directory.is_dir()
         )
         assert failed_start_aliases
         if failed_start:
@@ -300,7 +310,7 @@ def test_installed_cleanup_allows_missing_worldline_evidence(
     ]
 
 
-def test_installed_cleanup_removes_a_preflight_failed_team_session_after_integration(
+def test_installed_cleanup_removes_historical_preflight_allocation_after_integration(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
     fake_codex: FakeCodex,
@@ -328,8 +338,7 @@ def test_installed_cleanup_removes_a_preflight_failed_team_session_after_integra
         / "events.jsonl"
     )
     assert not (failed_session / "mapping.yml").exists()
-    # A preflight failure leaves an allocation whose Session record and Trace
-    # entry are both still empty, so nothing is removed but empty records.
+    # Historical preflight residue has empty Session and Trace entries.
     assert events.is_file() and events.read_bytes() == b""
     assert trace.is_file() and not trace.is_symlink()
     assert trace.read_bytes() == b""

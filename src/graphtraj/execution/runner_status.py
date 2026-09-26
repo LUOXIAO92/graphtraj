@@ -285,14 +285,14 @@ def require_replacement_authority(
 def require_stopped_subtree(runner_directory: Path, alias: str) -> None:
     """Require terminal execution for the target and every recorded descendant."""
     # The target must always be an established, valid Session. Other allocated
-    # directories may retain a confirmed startup failure without any Session.
+    # directories may precede launch or retain a confirmed startup failure.
     mappings = {alias: read_alias_mapping(runner_directory, alias)}
     for path in (runner_directory / "sessions").iterdir():
         if path.name == alias:
             continue
         if not path.is_dir() and not path.is_symlink():
             continue
-        if _terminal_unestablished_launch(path):
+        if _unstarted_allocation(path) or _terminal_unestablished_launch(path):
             continue
         mappings[path.name] = read_alias_mapping(runner_directory, path.name)
     pending = [alias]
@@ -335,6 +335,24 @@ def require_execution_allowed(
         current = parent if isinstance(parent, str) else None
         if current is not None:
             mapping, _ = read_alias_mapping(runner_directory, current)
+
+
+def _unstarted_allocation(directory: Path) -> bool:
+    """Recognize only the empty records written before a launch request existed.
+
+    Runner writes launch.yml before starting a Worker. Any other entry, link,
+    or nonempty event record makes ownership uncertain and needs validation.
+    """
+    if directory.is_symlink():
+        return False
+    entries = list(directory.iterdir())
+    return not entries or (
+        len(entries) == 1
+        and entries[0].name == "events.jsonl"
+        and not entries[0].is_symlink()
+        and entries[0].is_file()
+        and entries[0].stat().st_size == 0
+    )
 
 
 def _terminal_unestablished_launch(directory: Path) -> bool:

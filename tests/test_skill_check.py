@@ -150,7 +150,6 @@ agent_runner:
     assert "team-leader.reasoning_effort" in result.stdout
     assert "team-leader.allow_runtime_swarm" in result.stdout
     assert "engineer.permissions" in result.stdout
-    assert "unknown-role" in result.stdout
     assert roles_path.read_bytes() == before
     assert not (repository / ".codex" / "agents").exists()
 

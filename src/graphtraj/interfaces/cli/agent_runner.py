@@ -74,7 +74,9 @@ def _budget_notices() -> Iterator[None]:
 @click.pass_context
 def main(context: click.Context, swarm_input: Path | None) -> None:
     """Launch formal GraphTraj roles and control their Sessions; no compatibility commands."""
-    context.with_resource(_budget_notices())
+    # Queries do not sample execution budgets or need a caller notice channel.
+    if context.invoked_subcommand not in {"status", "requests", "reports"}:
+        context.with_resource(_budget_notices())
     if context.invoked_subcommand is None:
         if swarm_input is None:
             error = RunnerError(

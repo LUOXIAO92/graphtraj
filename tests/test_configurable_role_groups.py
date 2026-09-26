@@ -11,7 +11,6 @@ import yaml
 from conftest import FakeCodex, InstalledCommands, run_process
 from graphtraj.configuration.project_roles import (
     ProjectRolesError,
-    default_roles_content,
     load_project_roles,
 )
 from graphtraj.execution.runner_batch import read_batch
@@ -189,7 +188,7 @@ def test_a_configured_group_reaches_a_real_launch(
     _register(installed_commands, harness_root, _ticket("143", "configurable-role-dispatch"))
     _change_status(installed_commands, harness_root, "143", "ready")
 
-    document = yaml.safe_load(default_roles_content())
+    document = yaml.safe_load((harness_root / ".graphtraj/roles.yml").read_text())
     document["roles"]["coding_team_experiment"] = {
         "team_leader": {
             "runtime": "codex",
@@ -197,6 +196,9 @@ def test_a_configured_group_reaches_a_real_launch(
             "reasoning_effort": "low",
             "allow_runtime_swarm": False,
         },
+    }
+    document["role_tree"]["coding_team_experiment.team_leader"] = {
+        "coding-team.engineer": {},
     }
     _write_roles(harness_root, yaml.safe_dump(document, sort_keys=False))
 

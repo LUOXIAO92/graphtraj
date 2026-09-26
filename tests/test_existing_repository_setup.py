@@ -422,7 +422,9 @@ def test_setup_rejects_configured_paths_outside_the_harness_root(
 def test_setup_and_runner_reject_a_nested_configured_source_repository(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """A Codex query reports invalid config without a recovery Skill binding."""
     harness_root = temporary_git_repository.parent
     nested_source = harness_root / "nested" / "source"
     nested_source.parent.mkdir()
@@ -444,6 +446,8 @@ def test_setup_and_runner_reject_a_nested_configured_source_repository(
     worktrees_before = git_output(nested_source, "worktree", "list", "--porcelain")
 
     setup = run_setup(installed_commands, harness_root, answers="")
+    monkeypatch.setenv("CODEX_THREAD_ID", "query-without-recovery-skill")
+    assert not (harness_root / ".agents/skills/retro/SKILL.md").exists()
     status = run_process(
         [str(installed_commands.runner), "status", "missing@e1"],
         cwd=harness_root,
@@ -477,15 +481,21 @@ def test_same_root_setup_rejects_a_primary_worktree_not_on_main(
     assert git_output(repository, "worktree", "list", "--porcelain") == worktrees_before
 
 
+@pytest.mark.parametrize("command", ["status", "requests", "reports"])
 def test_runner_status_discovers_the_graphtraj_configuration(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    command: str,
 ) -> None:
+    """Queries reach configured Runner results without execution recovery setup."""
     repository = temporary_git_repository
     setup = run_setup(installed_commands, repository)
+    monkeypatch.setenv("CODEX_THREAD_ID", "query-without-recovery-skill")
+    assert not (repository / ".agents/skills/retro/SKILL.md").exists()
 
     status = run_process(
-        [str(installed_commands.runner), "status", "missing@e1"],
+        [str(installed_commands.runner), command, "missing@e1"],
         cwd=repository,
     )
 

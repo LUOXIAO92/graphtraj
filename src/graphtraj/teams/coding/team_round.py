@@ -59,6 +59,8 @@ from graphtraj.execution.runner_status import (
     read_terminal_outcome,
     session_occupied,
     require_execution_allowed,
+    require_direct_authority,
+    require_stopped_subtree,
 )
 from graphtraj.execution.runner_transport import record_runtime_identity
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
@@ -176,11 +178,6 @@ def continue_stopped_ticket(
 ) -> dict[str, Any]:
     """Continue one stopped current Team from its retained Batch and Sessions."""
 
-    if os.environ.get("GRAPHTRAJ_ROLE") or os.environ.get("GRAPHTRAJ_PARENT_ALIAS"):
-        raise RunnerError(
-            "authority-denied",
-            "Only Main or the user may continue a stopped Team.",
-        )
     if not valid_ticket_id(ticket_id):
         raise RunnerError("invalid-input", "Ticket identity is invalid.")
     if (
@@ -218,33 +215,27 @@ def continue_stopped_ticket(
                 encoding="utf-8"
             )
         )
-        leader_alias = team["members"]["team_leader"]["session_ref"]
-        if team["status"] != "active" or not isinstance(leader_alias, str):
+        if team["status"] != "active":
             raise ValueError("Team is not active")
-        leader_mapping, _ = read_alias_mapping(
-            project.runner_directory, leader_alias
-        )
-        if (
-            leader_mapping["ticket_id"] != ticket_id
-            or leader_mapping["team_generation"] != generation
-            or logical_role(leader_mapping["role"]) != "team-leader"
-        ):
-            raise ValueError("Leader mapping does not match the current Team")
+        members = {}
         for member in team["members"].values():
             alias = member.get("session_ref")
             if isinstance(alias, str):
-                _, session_directory = read_alias_mapping(project.runner_directory, alias)
-                read_terminal_outcome(session_directory / "execution.yml")
-        retained_batch = Path(leader_mapping["retained_batch_file"])
-        retained_tasks = [
-            task
-            for task in read_batch(retained_batch, cwd).tasks
-            if task.ticket_id == ticket_id
-            and task.ticket_name == state["ticket_name"]
-            and _task_policy(task) == "team-leader"
-        ]
-        if len(retained_tasks) != 1:
-            raise ValueError("Retained Team Batch is invalid")
+                mapping, _ = read_alias_mapping(project.runner_directory, alias)
+                if (mapping["ticket_id"] != ticket_id
+                        or mapping["team_generation"] != generation):
+                    raise ValueError("Member mapping does not match the current Team")
+                members[alias] = mapping
+        roots = {alias: mapping for alias, mapping in members.items()
+                 if mapping["parent"] not in members}
+        if not roots:
+            raise ValueError("The Team has no actual root Sessions")
+        # Validate the whole operation before clearing its sampled stop. Explicit
+        # subtree stops stay bound to the old entities and require replacement.
+        for alias, mapping in roots.items():
+            require_direct_authority(project.runner_directory, alias, mapping)
+            require_stopped_subtree(project.runner_directory, alias)
+            require_execution_allowed(project.runner_directory, alias, mapping)
     except (OSError, TypeError, ValueError, yaml.YAMLError, RunnerError) as error:
         if isinstance(error, RunnerError):
             raise
@@ -294,17 +285,19 @@ def continue_stopped_ticket(
             "operation-failed", "The continuation could not be recorded in the Project Worldline."
         ) from error
     monitor.continue_after_stop()
-    try:
-        with capacity_positions(project, 1) as positions:
-            result = _deliver_ticket(
-                project,
-                retained_tasks[0],
-                retained_batch,
-                positions[0].fileno(),
-            )
-    except RuntimeAdapterError as error:
-        raise RunnerError(error.code, error.message) from error
-    return {**result, "continuation_event_id": continuation["event_id"]}
+    from graphtraj.execution.runner_control import send_instruction
+
+    resumed = [
+        send_instruction(
+            alias,
+            "Continue the accepted task in this original Session within its retained "
+            "budget and permissions. Preserve prior reports, results and Trace evidence.",
+            cwd, (continuation["event_id"],),
+        )
+        for alias in roots
+    ]
+    return {"ticket_id": ticket_id, "continuation_event_id": continuation["event_id"],
+            "tasks": resumed}
 
 
 def _run_batch_workers(

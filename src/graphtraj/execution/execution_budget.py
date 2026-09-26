@@ -270,6 +270,7 @@ class ExecutionBudgetMonitor:
                     receipt = notify_direct_parent(
                         directory, notice["message"],
                         {"type": "execution-budget-exceeded", "key": notice["key"]},
+                        before_creation=True,
                     )
                     if receipt["delivery"] == "received":
                         received.append(notice["key"])

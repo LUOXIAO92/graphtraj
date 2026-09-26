@@ -147,13 +147,20 @@ print(json.dumps({'type': 'item.completed', 'item': {'type': 'agent_message', 't
         # Only the parent is live; retained child mappings are controlled inputs
         # to the public notice seam, and native turn/steer supplies the receipt.
         parent_mapping = yaml.safe_load((directory / 'mapping.yml').read_text())
-        for nested in (False, True):
-            other = monitor_at(tmp_path / ('nested-budget' if nested else 'direct-budget'))
+        for mode in ("direct", "nested", "admission"):
+            nested = mode == "nested"
+            other = monitor_at(tmp_path / (mode + '-budget'))
             other.record_session('author', 'author')
-            root_child = directory.parent / ('nested@x1' if nested else 'direct@x1')
+            root_child = directory.parent / (mode + '@x1')
             root_child.mkdir()
             child_mapping = dict(parent_mapping, alias=root_child.name, ticket_id='other', parent=alias)
-            (root_child / 'mapping.yml').write_text(yaml.safe_dump(child_mapping))
+            if mode == 'admission':
+                launch = yaml.safe_load((directory / 'launch.yml').read_text())
+                launch['mapping'] = {key: value for key, value in child_mapping.items()
+                                     if key not in {'session', 'execution_id', 'worker_pid', 'runtime_pid'}}
+                (root_child / 'launch.yml').write_text(yaml.safe_dump(launch))
+            else:
+                (root_child / 'mapping.yml').write_text(yaml.safe_dump(child_mapping))
             sender = root_child
             if nested:
                 sender = directory.parent / 'nested@x2'
@@ -162,6 +169,19 @@ print(json.dumps({'type': 'item.completed', 'item': {'type': 'agent_message', 't
                     child_mapping, alias=sender.name, parent=root_child.name,
                 )))
             sample_stop(other, monkeypatch)
+            if mode == 'admission':
+                stopped = run_process(
+                    [str(commands.runner.with_name('python')), '-I', '-m',
+                     'graphtraj.execution.runner_worker', str(root_child / 'launch.yml')],
+                    cwd=root, env={**env, 'GRAPHTRAJ_EVIDENCE': str(other.ticket_directory),
+                                   'GRAPHTRAJ_TICKET_NAME': 'research'}, timeout=10,
+                )
+                assert stopped.returncode == 1, stopped.stdout + stopped.stderr
+                failure = yaml.safe_load((root_child / 'launch-error.yml').read_text())
+                assert failure['code'] == 'EXECUTION_BUDGET_STOPPED'
+                assert failure['terminal_confirmed']
+                assert not (root_child / 'mapping.yml').exists()
+                assert not (root_child / 'session.yml').exists()
             read_fd, write_fd = os.pipe()
             try:
                 with budgets.budget_notice_output(write_fd):
@@ -174,7 +194,7 @@ print(json.dumps({'type': 'item.completed', 'item': {'type': 'agent_message', 't
             retained = yaml.safe_load((other.ticket_directory / 'execution-budget.yml').read_text())
             assert all(notice['delivered'] for notice in retained['leader_notices'])
         native = [json.loads(line) for line in protocol.read_text().splitlines()]
-        assert len([request for request in native if request['method'] == 'turn/steer']) == 6
+        assert len([request for request in native if request['method'] == 'turn/steer']) == 9
         assert len([request for request in native if request['method'] == 'turn/start']) == 1
         monitor = budgets.execution_budget_monitor(evidence, '153', 'research')
         with (evidence / '.execution-budget-notices.lock').open('a+') as notice_lock:

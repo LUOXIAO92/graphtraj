@@ -66,6 +66,8 @@ def notify_direct_parent(
     session_directory: Path,
     notice: str,
     identity: Mapping[str, Any] | None = None,
+    *,
+    before_creation: bool = False,
 ) -> Dict[str, Any]:
     """Deliver one notice into the recorded direct parent's existing execution.
 
@@ -86,6 +88,10 @@ def notify_direct_parent(
         Plain-text input delivered to the parent's execution.
     identity
         Optional facts of what produced the notice, retained in the record.
+    before_creation
+        Admission may use the Runner-owned launch binding when no Session
+        mapping exists yet. This reports to its creator without creating a
+        Session or granting the uncreated child any control authority.
 
     Returns
     -------
@@ -103,7 +109,19 @@ def notify_direct_parent(
         record["identity"] = dict(identity)
     try:
         runner_directory = session_directory.parent.parent
-        mapping, _ = read_alias_mapping(runner_directory, session_directory.name)
+        if before_creation and not os.path.lexists(session_directory / "mapping.yml"):
+            try:
+                launch = yaml.safe_load((session_directory / "launch.yml").read_text())
+                mapping = launch["mapping"]
+                if (
+                    launch.get("operation") != "launch"
+                    or mapping.get("alias") != session_directory.name
+                ):
+                    raise ValueError("Invalid admission binding")
+            except (OSError, ValueError, KeyError, TypeError, AttributeError, yaml.YAMLError) as error:
+                raise RunnerError("invalid-mapping", "The Runner admission binding is unreadable.") from error
+        else:
+            mapping, _ = read_alias_mapping(runner_directory, session_directory.name)
         parent = mapping.get("parent")
         if isinstance(parent, str):
             record["parent"] = parent

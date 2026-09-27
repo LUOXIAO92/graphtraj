@@ -877,19 +877,19 @@ def _replacement_denied() -> RunnerError:
 
 
 def _alias_not_found() -> RunnerError:
-    return RunnerError("alias-not-found", "The requested Engineer alias was not found.")
+    return RunnerError("alias-not-found", "The requested Agent alias was not found.")
 
 
 def _invalid_mapping() -> RunnerError:
     return RunnerError(
-        "operation-failed", "The requested Engineer alias mapping is invalid."
+        "operation-failed", "The requested Agent alias mapping is invalid."
     )
 
 
 def _invalid_activity() -> RunnerError:
     return RunnerError(
         "operation-failed",
-        "The requested Engineer alias has no valid Runtime execution or terminal outcome.",
+        "The requested Agent alias has no valid Runtime execution or terminal outcome.",
     )
 
 

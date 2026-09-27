@@ -993,11 +993,11 @@ def _read_resume_error(error_file: Path) -> RunnerError:
         return _not_resumable()
     return RunnerError(
         "operation-failed",
-        "The mapped Engineer session could not be resumed.",
+        "The mapped Runtime Session could not be resumed.",
     )
 
 
 def _invalid_mapping() -> RunnerError:
     return RunnerError(
-        "operation-failed", "The requested Engineer alias mapping is invalid."
+        "operation-failed", "The requested Agent alias mapping is invalid."
     )

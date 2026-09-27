@@ -499,7 +499,7 @@ def _run_registered_children(
 
 def _registered_batch(registration: Path, worktree: Path) -> tuple[Batch, Path]:
     if not registration.is_file():
-        raise RunnerError("BATCH_SCHEMA_INVALID", "The Team Leader did not register its required direct child Batch.")
+        raise RunnerError("BATCH_SCHEMA_INVALID", "The parent did not register its required direct child Batch.")
     document = yaml.safe_load(registration.read_text(encoding="utf-8"))
     registration.unlink()
     retained = Path(document["retained_batch_file"])

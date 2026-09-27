@@ -85,6 +85,7 @@ def app_server_peer(script: str, identity: str = "'fake-thread'") -> str:
 @pytest.fixture(autouse=True)
 def isolated_runner_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test Harnesses must not inherit the invoking Agent's role or Session."""
+    monkeypatch.delenv("CODEX_THREAD_ID", raising=False)
     for name in tuple(os.environ):
         if name.startswith("GRAPHTRAJ_"):
             monkeypatch.delenv(name)

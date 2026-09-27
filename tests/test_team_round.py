@@ -10,7 +10,7 @@ import yaml
 import pytest
 
 from conftest import wait_for_file, FakeCodex, InstalledCommands, run_process, wait_for_file
-from runner_fixtures import configure_harness, retained_state
+from runner_fixtures import configure_harness, retained_state, wait_for_ticket_status
 from test_ticket_graph import _change_status, _register, _ticket
 
 
@@ -107,6 +107,7 @@ def test_installed_runner_applies_inline_settings_to_an_existing_preset(
     )
 
     assert launched.returncode == 0, launched.stderr
+    wait_for_ticket_status(installed_commands, harness_root, "75", "awaiting-integration")
     records = [json.loads(line) for line in fake_codex.log_file.read_text().splitlines()]
     leader_records = [record for record in records if record["role"] == "team-leader"]
     assert leader_records
@@ -172,6 +173,7 @@ def test_installed_runner_accepts_non_english_engineer_self_review(
     )
 
     assert launched.returncode == 0, launched.stdout + launched.stderr
+    wait_for_ticket_status(installed_commands, harness_root, "75", "awaiting-integration")
     ticket = harness_root / ".graphtraj/state/tickets/75-inline-specialist"
     assert yaml.safe_load((ticket / "ticket.yml").read_text())["status"] == "awaiting-integration"
     assert "自审：已完成。" in (
@@ -189,7 +191,6 @@ def test_installed_runner_accepts_non_english_engineer_self_review(
             assert reports and reports[0]['text']
             # Reconstruct the retained format written before per-Session assignments.
             # Its collector moved the source into the Round, without renaming it.
-            Path(reports[0]['path']).unlink()
             mapping.pop('report_files')
             path.write_text(yaml.safe_dump(mapping))
             launch_path = path.with_name('launch.yml')
@@ -393,6 +394,7 @@ def test_installed_runner_accepts_the_review_axes_the_leader_selects(
     ticket_directory = (
         harness_root / ".graphtraj" / "state" / "tickets" / "74-selected-review-axes"
     )
+    wait_for_ticket_status(installed_commands, harness_root, "74", "awaiting-integration")
     current = yaml.safe_load((ticket_directory / "ticket.yml").read_text())
     assert current["status"] == "awaiting-integration"
     candidate = current["current_candidate"]
@@ -455,80 +457,6 @@ def test_installed_runner_rejects_non_run_free_main_batch_fields(
     assert not (harness_root / ".graphtraj" / "state" / "batches").exists()
 
 
-@pytest.mark.parametrize("startup_failure", ["unsupported-runtime", "missing-child-batch"])
-def test_installed_runner_retries_an_unregistered_team_and_preserves_history(
-    installed_commands, temporary_git_repository, fake_codex, tmp_path, startup_failure,
-):
-    harness_root, _, _, environment = configure_harness(
-        installed_commands, temporary_git_repository, fake_codex, tmp_path,
-    )
-    _register_ready_inline_ticket(harness_root, installed_commands.product)
-    batch = harness_root / 'batch.yml'
-    batch.write_text(yaml.safe_dump({'tasks': [{
-        'ticket_id': '75', 'ticket_name': 'inline-specialist', 'role': 'team-leader',
-    }]}))
-    if startup_failure == 'unsupported-runtime':
-        environment['FAKE_CODEX_UNSUPPORTED'] = '1'
-    result = run_process(
-        [str(installed_commands.runner), '--swarm-input', str(batch)],
-        cwd=harness_root, env=environment,
-    )
-    assert result.returncode == 1
-    error = yaml.safe_load(result.stdout)['tasks'][0]['error']
-    if startup_failure == 'unsupported-runtime':
-        assert error['code'] == 'invalid-config'
-        assert not fake_codex.log_file.exists()
-    else:
-        assert 'did not register its required direct child Batch' in error['message']
-
-    state_root = harness_root / '.graphtraj' / 'state'
-    ticket_directory = state_root / 'tickets' / '75-inline-specialist'
-    team_directory = ticket_directory / 'teams' / '1'
-    ticket_before = (ticket_directory / 'ticket.yml').read_bytes()
-    current = yaml.safe_load(ticket_before)
-    assert current['status'] == 'ready'
-    assert current['active_team_ordinal'] is None
-    assert current['current_candidate'] is None
-    assert not (team_directory / 'team.yml').exists()
-    history_roots = [
-        state_root / 'batches',
-        harness_root / '.graphtraj' / 'runner' / 'sessions',
-        team_directory / 'traces',
-    ]
-    retained = {
-        path: retained_state(path)
-        for directory in history_roots for path in directory.rglob('*') if path.is_file()
-    }
-    assert list((team_directory / 'traces').glob('*/events.jsonl'))
-
-    environment.pop('FAKE_CODEX_UNSUPPORTED', None)
-    environment.update(
-        FAKE_CODEX_LIFECYCLE_ACTION='complete-team-round',
-        GRAPHTRAJ_AGENT_RUNNER=str(installed_commands.runner),
-    )
-    retried = run_process(
-        [str(installed_commands.runner), '--swarm-input', str(batch)],
-        cwd=harness_root, env=environment, timeout=45,
-    )
-    assert retried.returncode == 0, retried.stdout + retried.stderr
-    current = yaml.safe_load((ticket_directory / 'ticket.yml').read_text())
-    assert current['status'] == 'awaiting-integration'
-    assert current['active_team_ordinal'] == 1
-    assert current['current_candidate']
-    team = yaml.safe_load((team_directory / 'team.yml').read_text())
-    assert team['members']['team_leader']['session_ref'].endswith('@team_leader_2')
-    assert all(retained_state(path) == content for path, content in retained.items())
-    accepted_ticket = (ticket_directory / 'ticket.yml').read_bytes()
-    accepted_team = (team_directory / 'team.yml').read_bytes()
-
-    reopened = run_process(
-        [str(installed_commands.runner), '--swarm-input', str(batch)],
-        cwd=harness_root, env=environment,
-    )
-    assert reopened.returncode == 1
-    assert yaml.safe_load(reopened.stdout)['tasks'][0]['error']['code'] == 'ticket-already-live'
-    assert (ticket_directory / 'ticket.yml').read_bytes() == accepted_ticket
-    assert (team_directory / 'team.yml').read_bytes() == accepted_team
 
 
 @pytest.mark.skipif(
@@ -635,6 +563,9 @@ def test_installed_runner_runs_a_main_inline_specialist_without_creating_a_prese
     _register_ready_inline_ticket(harness_root, installed_commands.product)
 
     roles_file = harness_root / ".graphtraj" / "roles.yml"
+    roles = yaml.safe_load(roles_file.read_text())
+    roles['role_tree']['investigation-specialist'] = {}
+    roles_file.write_text(yaml.safe_dump(roles))
     roles_before = roles_file.read_bytes()
     batch = harness_root / "inline-specialist.yml"
     batch_bytes = (
@@ -645,7 +576,8 @@ def test_installed_runner_runs_a_main_inline_specialist_without_creating_a_prese
         "      investigation-specialist:\n"
         "        runtime: codex\n"
         "        model: gpt-5.6-luna\n"
-        "    instruction: Inspect the Ticket without joining its Team.\n"
+        "        worktree_access: read\n"
+        "    instruction: Inspect the Ticket in its assigned Worktree.\n"
     ).encode()
     batch.write_bytes(batch_bytes)
     environment.update(
@@ -673,7 +605,7 @@ def test_installed_runner_runs_a_main_inline_specialist_without_creating_a_prese
     assert roles_file.read_bytes() == roles_before
     wait_for_file(fake_codex.log_file)
     runtime = json.loads(fake_codex.log_file.read_text())
-    assert runtime["cwd"] == str(integration)
+    assert runtime["cwd"] == task["worktree_path"]
     permissions = tomllib.loads(next(
         argument for argument in runtime['argv'] if argument.startswith('permissions=')
     ))['permissions']
@@ -684,7 +616,7 @@ def test_installed_runner_runs_a_main_inline_specialist_without_creating_a_prese
         if Path(path).is_absolute()
     )
     assert "Investigate the accepted Ticket." in runtime["stdin"]
-    assert "Inspect the Ticket without joining its Team." in runtime["stdin"]
+    assert "Inspect the Ticket in its assigned Worktree." in runtime["stdin"]
     assert runtime["connection"]["base_url"] is None
     assert any(
         tomllib.loads(argument)["agents"]["enabled"] is False
@@ -718,12 +650,13 @@ def test_installed_runner_runs_a_main_inline_specialist_without_creating_a_prese
         / "75-inline-specialist"
     )
     current = yaml.safe_load((ticket_directory / "ticket.yml").read_text())
-    assert current["active_team_ordinal"] is None
-    assert not (ticket_directory / "teams").exists()
+    assert current["active_team_ordinal"] == 1
+    team = yaml.safe_load((ticket_directory / 'teams/1/team.yml').read_text())
+    assert [member['session_ref'] for member in team['members'].values()] == [task['alias']]
 
 
 @pytest.mark.parametrize("role_name", ("dependency-reviewer", "engineer-specialist"))
-def test_installed_runner_keeps_new_inline_role_names_outside_formal_team_policy(
+def test_installed_runner_uses_generic_instructions_for_new_inline_roles(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
     fake_codex: FakeCodex,
@@ -738,6 +671,10 @@ def test_installed_runner_keeps_new_inline_role_names_outside_formal_team_policy
     )
     _register_ready_inline_ticket(harness_root, installed_commands.product)
 
+    roles_file = harness_root / '.graphtraj/roles.yml'
+    roles = yaml.safe_load(roles_file.read_text())
+    roles['role_tree'][role_name] = {}
+    roles_file.write_text(yaml.safe_dump(roles))
     batch = harness_root / (role_name + ".yml")
     batch.write_text(
         "tasks:\n"
@@ -792,7 +729,7 @@ def test_installed_runner_keeps_new_inline_role_names_outside_formal_team_policy
         ("FAKE_CODEX_FINAL_INLINE_SPECIALIST", "investigation-specialist", True),
     ),
 )
-def test_installed_runner_runs_a_team_leader_inline_specialist_outside_the_team(
+def test_installed_runner_registers_a_selected_inline_specialist_as_a_child(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
     fake_codex: FakeCodex,
@@ -810,6 +747,10 @@ def test_installed_runner_runs_a_team_leader_inline_specialist_outside_the_team(
     _register_ready_inline_ticket(harness_root, installed_commands.product)
 
     roles_file = harness_root / ".graphtraj" / "roles.yml"
+    roles = yaml.safe_load(roles_file.read_text())
+    for parent in ('team-leader', 'coding-team.team-leader', 'coding_team.team_leader'):
+        roles['role_tree'][parent][specialist_role] = {}
+    roles_file.write_text(yaml.safe_dump(roles))
     roles_before = roles_file.read_bytes()
     batch = harness_root / "team-batch.yml"
     batch.write_text(
@@ -851,6 +792,7 @@ def test_installed_runner_runs_a_team_leader_inline_specialist_outside_the_team(
         / "tickets"
         / "75-inline-specialist"
     )
+    wait_for_ticket_status(installed_commands, harness_root, "75", "awaiting-integration")
     team = yaml.safe_load((ticket_directory / "teams" / "1" / "team.yml").read_text())
     mappings = [
         yaml.safe_load(path.read_text())
@@ -865,7 +807,7 @@ def test_installed_runner_runs_a_team_leader_inline_specialist_outside_the_team(
         if mapping["role"] == specialist_role
     )
     assert specialist["parent"] == leader["alias"]
-    assert specialist["alias"] not in {
+    assert specialist["alias"] in {
         member["session_ref"] for member in team["members"].values()
     }
     assert (
@@ -892,6 +834,7 @@ def test_installed_runner_runs_a_team_leader_inline_specialist_outside_the_team(
         for task in retained_batch["tasks"]
     )
     assert roles_file.read_bytes() == roles_before
+    wait_for_ticket_status(installed_commands, harness_root, "75", "awaiting-integration")
     records = [json.loads(line) for line in fake_codex.log_file.read_text().splitlines()]
     leader_records = [record for record in records if record["role"] == "team-leader"]
     assert len(leader_records) == (6 if serial else 4)

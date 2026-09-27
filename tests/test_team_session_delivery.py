@@ -12,7 +12,7 @@ import pytest
 import yaml
 
 from conftest import FakeCodex, InstalledCommands, run_process, wait_for_file
-from runner_fixtures import configure_harness
+from runner_fixtures import configure_harness, wait_for_ticket_status
 from test_managed_sessions import CALL
 
 
@@ -62,8 +62,15 @@ def test_dispatch_depth_one_stops_before_registering_team_children(
         }]}]),
     ], cwd=root, env=environment, timeout=30)
     task = json.loads(result.stdout)["tasks"][0]
-    assert task["launch_status"] == "failed", task
-    assert "dispatch_depth" in task["error"]["message"]
+    assert task["launch_status"] == "launched", task
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        status = run_process([str(installed_commands.runner), 'status', task['alias']], cwd=root, env=environment)
+        observed = yaml.safe_load(status.stdout)['aliases'][0]
+        if observed['activity'] == 'idle':
+            break
+        time.sleep(.05)
+    assert observed['last_outcome'] == 'runtime-error', observed
     assert len(list((root / ".graphtraj/state/batches").glob("*.yml"))) == 1
     mappings = [yaml.safe_load(path.read_text()) for path in
                 (root / ".graphtraj/runner/sessions").glob("*/mapping.yml")]
@@ -100,7 +107,8 @@ def test_a_projected_role_cannot_choose_the_launch_entry(
     ], cwd=root, env=environment, timeout=30)
     document = json.loads(result.stdout)
     assert "error" not in document, result.stdout
-    assert document["tasks"][0]["launch_status"] == "accepted", document
+    assert document["tasks"][0]["launch_status"] == "launched", document
+    wait_for_ticket_status(installed_commands, root, "114", "awaiting-integration")
     assert list((root / ".graphtraj/state/batches").glob("*.yml"))
 
 
@@ -186,7 +194,8 @@ def test_public_team_phases_and_parent_capacity_transfer(
         review_release.touch()
         stdout, stderr = process.communicate(timeout=45)
     assert process.returncode == 0, stdout + stderr
-    assert json.loads(stdout)["tasks"][0]["launch_status"] == "accepted"
+    assert json.loads(stdout)["tasks"][0]["launch_status"] == "launched"
+    wait_for_ticket_status(installed_commands, root, "114", "awaiting-integration")
     accepted = read_graph(state)["tickets"][0]
     assert accepted["status"] == "awaiting-integration"
     assert read_worldline(state, root)[-1]["candidate"] == candidate
@@ -196,7 +205,7 @@ def test_public_team_phases_and_parent_capacity_transfer(
     }
     assert all(candidate in path.read_text() for path in reports.iterdir())
     aliases = [path.parent.name for path in (runner / "sessions").glob("*/mapping.yml")]
-    assert len(aliases) == 5
+    assert len(aliases) == 4
     assert all(item["activity"] == "idle" and item["last_outcome"] == "completed"
                for item in status_aliases(aliases, root).document["aliases"])
     active = set()

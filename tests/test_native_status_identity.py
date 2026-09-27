@@ -61,7 +61,7 @@ def test_native_status_uses_callback_identity(
         monkeypatch.setattr(runner_control, '_send_session', deliver)
         monkeypatch.setattr(runner_control, '_require_project_events', lambda *args: None)
         monkeypatch.setattr(runner_control, 'discover_project', lambda *args, **kwargs: None)
-        monkeypatch.setattr(team_replacement, 'require_active_session', lambda *args: None)
+        monkeypatch.setattr(team_replacement, 'require_active_session', lambda *args, **kwargs: None)
         if issuer == 'helper':
             document = {'error': {'code': 'authority-denied',
                                  'message': 'Temporary native helpers have read-only Runner access.'}}

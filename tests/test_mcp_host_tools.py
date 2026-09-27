@@ -500,6 +500,12 @@ def managed_mcp(
     )
     state = root / ".graphtraj/state"
     register_ticket(state, root, _ticket("113", "managed-probe"))
+    from test_ticket_graph import _change_status
+    _change_status(installed_commands, root, '113', 'ready')
+    roles_file = root / '.graphtraj/roles.yml'
+    roles = yaml.safe_load(roles_file.read_text())
+    roles['role_tree']['managed-probe'] = {}
+    roles_file.write_text(yaml.safe_dump(roles))
     (root / "instruction.md").write_text(
         "Exercise the dispatched child.\n", encoding="utf-8"
     )

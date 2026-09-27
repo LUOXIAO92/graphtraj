@@ -38,7 +38,11 @@ def test_setup_installs_all_core_skills_and_their_readable_references(
 
     doctor = run_process([str(installed_commands.product), "doctor"], cwd=root)
     assert doctor.returncode == 0, doctor.stdout + doctor.stderr
-    assert len(doctor.stdout.splitlines()) == 19  # 18 Skills and reusable roles.
+    assert {line.split(':')[0] for line in doctor.stdout.splitlines()} == {
+        'setup-project', 'grill-with-docs', 'grilling', 'domain-modeling',
+        'to-spec', 'to-tickets', 'task-delivery', 'task-breakdown', 'research',
+        'retro', 'wayfinder', 'prototype', 'roles',
+    }
 
 
 def installed_python(installed_commands: InstalledCommands) -> Path:

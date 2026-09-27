@@ -732,6 +732,7 @@ def test_installed_runner_uses_runtime_user_core_skill_when_source_tracks_it(
         timeout=60,
     )
     assert setup.returncode == 0, setup.stderr
+    configure_coding_roles(repository)
     # An existing project may lose its local copy; Runner still resolves the user Skill.
     shutil.rmtree(repository / ".agents/skills/implement")
 
@@ -802,6 +803,7 @@ def test_installed_runner_uses_runtime_user_skill_from_newer_primary_history(
         timeout=60,
     )
     assert setup.returncode == 0, setup.stderr
+    configure_coding_roles(repository)
     # An existing project may lose its local copy; Runner still resolves the user Skill.
     shutil.rmtree(repository / ".agents/skills/implement")
 

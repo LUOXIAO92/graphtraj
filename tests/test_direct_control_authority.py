@@ -132,6 +132,10 @@ def _temporary_specialist(
     commands: InstalledCommands, root: Path, environment: dict
 ) -> str:
     """Dispatch one Main-owned temporary Session outside the Team's branch."""
+    roles_file = root / '.graphtraj/roles.yml'
+    roles = yaml.safe_load(roles_file.read_text())
+    roles['role_tree']['investigation-specialist'] = {}
+    roles_file.write_text(yaml.safe_dump(roles))
     batch = root / "authority-specialist.yml"
     batch.write_text(
         yaml.safe_dump(

@@ -72,7 +72,7 @@ def test_native_creation_registers_members_before_execution(
         [str(installed_commands.runner), '--swarm-input', str(batch)],
         cwd=root, env=env, timeout=45,
     )
-    assert result.returncode == (1 if failure else 0), result.stderr
+    assert result.returncode == (1 if failure in {'engineer', 'registration'} else 0), result.stderr
     ticket = root / '.graphtraj/state/tickets/148-creation-order'
     mappings = [yaml.safe_load(path.read_text()) for path in (root / '.graphtraj/runner/sessions').glob('*/mapping.yml')]
     if failure == 'registration':

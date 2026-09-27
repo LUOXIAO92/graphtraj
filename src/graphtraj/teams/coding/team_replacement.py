@@ -24,10 +24,15 @@ from graphtraj.graph.ticket_graph import _load_states
 from graphtraj.graph.delivery_state import read_team
 
 
-def require_active_session(project: Project, alias: str) -> dict | None:
+def require_active_session(
+    project: Project, alias: str, *, reports_only: bool = False,
+) -> dict | None:
     """Read the active Team without confusing members that share a role."""
     mapping, _ = read_alias_mapping(project.runner_directory, alias)
     directory, ticket = _load_states(project.state_directory / "tickets")[mapping["ticket_id"]]
+    if (Path(mapping["worktree_path"]) == project.integration_worktree
+            and ticket["status"] != "resolving-integration" and not reports_only):
+        raise RunnerError("authority-denied", "Integration Worktree work requires an active conflict assignment.")
     team_file = directory / "teams" / str(mapping["team_generation"]) / "team.yml"
     # A newly launched Leader registers its first Batch before Team start.
     if not team_file.exists():

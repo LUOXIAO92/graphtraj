@@ -304,199 +304,200 @@ def test_failed_merge_retains_conflict_evidence_and_does_not_run_validation(inst
     assert not any(item["ready"] for item in graph["tickets"])
 
 
-def test_main_resolves_observed_textual_conflict_then_validates_dev(
-    installed_commands, accepted_ticket, fake_codex
-):
-    root, worktrees, state, candidate = accepted_ticket
-    roles_file = root / ".graphtraj/roles.yml"
-    roles = yaml.safe_load(roles_file.read_text())
-    roles["roles"]["coding_team"]["merge_resolver"]["model"] = "gpt-5.6-luna"
-    roles_file.write_text(yaml.safe_dump(roles))
-    dev = worktrees / "dev"
-    (dev / "TEAM_ROUND_DELIVERED.txt").write_text("conflicting integration work\n")
-    for arguments in (("add", "TEAM_ROUND_DELIVERED.txt"), ("commit", "-m", "Independent dev change")):
-        run_process(["git", *arguments], cwd=dev).check_returncode()
-    before = run_process(["git", "rev-parse", "HEAD"], cwd=dev).stdout.strip()
-    command = [str(installed_commands.product), "ticket", "integrate", "--ticket-id", "83"]
-    validator = [sys.executable, "-c", "from pathlib import Path; assert Path('TEAM_ROUND_DELIVERED.txt').read_text() == 'complete team round\\nconflicting integration work\\n'"]
-    failed = run_process(command + ["--", *validator], cwd=root)
-    assert failed.returncode == 1
-    previous_runtime = fake_codex.log_file.read_bytes()
-    environment = {
-        **os.environ,
-        "HOME": str(root / "operator-home"),
-        "PATH": str(fake_codex.executable.parent) + os.pathsep + os.environ["PATH"],
-        "FAKE_CODEX_LOG": str(fake_codex.log_file),
-        "FAKE_CODEX_CAPTURE_STDIN": "1",
-        "FAKE_CODEX_LIFECYCLE_ACTION": "resolve-integration",
-    }
-    interrupted = run_process(command + ["--resolve-conflict", "Preserve both accepted lines", "--", *validator], cwd=root, env={**environment, "FAKE_CODEX_EXIT_CODE": "1"})
-    assert interrupted.returncode == 1
-    assert yaml.safe_load(interrupted.stdout).get("status") == "integrating", interrupted.stdout + interrupted.stderr
-    sessions = root / ".graphtraj/runner/sessions"
-    # The interrupted attempt is a retained shared-startup allocation: its
-    # Session directory, launch record and Runner Trace entry exist, and no
-    # later launch may claim that occupied alias again.
-    retained = sorted(path.name for path in sessions.glob("*merge_resolver@*"))
-    assert len(retained) == 1, retained
-    occupied = retained[0]
-    occupied_launch = yaml.safe_load((sessions / occupied / "launch.yml").read_text())
-    assert occupied_launch["operation"] == "launch"
-    assert occupied_launch["mapping"]["alias"] == occupied
-    retained_records = (sessions / occupied / "events.jsonl").read_bytes()
-    assert b'runner-execution-start' in retained_records
-    occupied_trace = state / "tickets/83-integration/teams/1/traces" / occupied / "events.jsonl"
-    assert occupied_trace.is_file()
-    release = root / "release-merge-resolver"
-    resolving = subprocess.Popen(
-        command + ["--resolve-conflict", "Preserve both accepted lines", "--", *validator],
-        cwd=root, env={**environment, "FAKE_CODEX_RELEASE_FILE": str(release)},
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+@pytest.fixture
+def accepted_document(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> tuple[Path, Path, Path, str, dict[str, str]]:
+    """Deliver and accept Markdown through an ordinary configured root Session."""
+    from test_generic_role_execution import wait_for_idle
+    root, worktrees, _, environment = configure_harness(
+        installed_commands, temporary_git_repository, fake_codex, tmp_path,
     )
-    try:
-        # Only the shared startup allocates and binds the new Session, so the
-        # occupied alias is never reopened and a fresh one is created instead.
-        deadline = time.monotonic() + 20
-        while True:
-            created = sorted(set(path.name for path in sessions.glob("*merge_resolver@*")) - set(retained))
-            bound = created and (sessions / created[0] / "mapping.yml").is_file()
-            if bound or time.monotonic() >= deadline:
-                break
-            time.sleep(0.01)
-        assert bound, created
-        resolver = created[0]
-        assert resolver != occupied
-        resolver_directory = sessions / resolver
-        assert (resolver_directory / "launch.yml").is_file()
-        assert (sessions / occupied / "events.jsonl").read_bytes() == retained_records
-        # A duplicate resolve launch while that Session owns the integration is
-        # refused, and the occupied alias keeps its own single retained record.
-        duplicate = run_process(
-            command + ["--resolve-conflict", "Preserve both accepted lines", "--", *validator],
-            cwd=root, env=environment, timeout=30,
-        )
-        assert duplicate.returncode == 1, duplicate.stdout
-        assert "in progress" in yaml.safe_load(duplicate.stdout)["error"]
-        assert sorted(path.name for path in sessions.glob("*merge_resolver@*")) == sorted(retained + [resolver])
-        assert (sessions / occupied / "events.jsonl").read_bytes() == retained_records
-    finally:
-        release.touch()
-    stdout, stderr = resolving.communicate(timeout=30)
-    assert resolving.returncode == 0, stdout + stderr
-    output = yaml.safe_load(stdout)
-    assert output["status"] == "integrated"
-    request = json.loads(fake_codex.log_file.read_text())
-    assert fake_codex.log_file.read_bytes() != previous_runtime
-    assert request["cwd"] == str(dev)
-    assert request["argv"][request["argv"].index("--model") + 1] == "gpt-5.6-luna"
-    assert candidate in request["stdin"] and before in request["stdin"]
-    assert "CONFLICT" in request["stdin"]
-    settings = {}
-    for index, argument in enumerate(request["argv"]):
-        if argument == "-c":
-            settings.update(tomllib.loads(request["argv"][index + 1]))
-    assert settings["agents"]["enabled"] is False
-    permissions = settings["permissions"][settings["default_permissions"]]["filesystem"]
-    # The isolated resolver reads only its own assigned Round report; the
-    # retained conflict travels in its prompt instead of a Ticket directory read.
-    assert permissions.get(str(state / "tickets/83-integration")) is None
-    resolver_reports = [
-        Path(path) for path, access in permissions.items()
-        if access == "read" and path.startswith(str(state / "tickets/83-integration"))
-    ]
-    assert [
-        path.parent.relative_to(state / "tickets/83-integration").as_posix()
-        for path in resolver_reports
-    ] == ["teams/1/rounds/1"]
-    assert resolver_reports[0].name.startswith("merge-resolver")
-    assert permissions[":workspace_roots"]["docs"] == "read"
-    assert "hooks" not in settings
-    assert run_process(["git", "rev-parse", "HEAD^1"], cwd=dev).stdout.strip() == before
-    assert run_process(["git", "rev-parse", "HEAD^2"], cwd=dev).stdout.strip() == candidate
-    events = [json.loads(line) for shard in (state / "worldline").glob("*.jsonl") for line in shard.read_text().splitlines()]
-    resolved = next(event for event in events if event["kind"] == "ticket-integration-conflict-resolved")
-    assert resolved["session_ref"] == resolver
-    trace = next(root / ref for ref in resolved["evidence_refs"] if ref.endswith("events.jsonl"))
-    assert "Decision: RESOLVED" in trace.read_text()
-    # The completion names the accepted version and the Session the shared
-    # startup created, so the outcome stays traceable to that evidence.
-    assert resolved["candidate"] == candidate
-    launch = yaml.safe_load((resolver_directory / "launch.yml").read_text())
-    mapping = yaml.safe_load((resolver_directory / "mapping.yml").read_text())
-    assert mapping["alias"] == resolver and mapping["role"] == "merge-resolver"
-    assert Path(mapping["trace_file"]) == trace
-    assert launch["mapping"]["worktree_path"] == str(dev)
-    assert occupied_trace != trace
-    assert yaml.safe_load((state / "tickets/83-integration/ticket.yml").read_text())["status"] == "integrated"
+    roles_file = root / '.graphtraj/roles.yml'
+    roles = yaml.safe_load(roles_file.read_text())
+    roles['roles']['editor'] = {'runtime': 'codex', 'model': 'document-model',
+                                'instructions': 'task', 'reports': ['sources.md']}
+    roles['role_tree']['editor'] = {}
+    roles_file.write_text(yaml.safe_dump(roles))
+    _register(installed_commands, root, _ticket('83', 'integration'))
+    _register(installed_commands, root, _ticket('84', 'dependent', dependencies=['83']))
+    _change_status(installed_commands, root, '83', 'ready')
+    batch = root / 'document.yml'
+    batch.write_text(yaml.safe_dump({'tasks': [{'ticket_id': '83', 'role': 'editor'}]}))
+    environment.update(FAKE_CODEX_LIFECYCLE_ACTION='deliver-document',
+                       FAKE_CODEX_RESULT_FILE='article.md',
+                       GRAPHTRAJ_AGENT_RUNNER=str(installed_commands.runner))
+    launched = run_process([str(installed_commands.runner), '--swarm-input', str(batch)], cwd=root, env=environment)
+    assert launched.returncode == 0, launched.stdout + launched.stderr
+    alias = yaml.safe_load(launched.stdout)['tasks'][0]['alias']
+    wait_for_idle(installed_commands, root, environment, alias)
+    submission = _accept_resolution(installed_commands, root, alias)
+    return root, worktrees, root / '.graphtraj/state', submission['candidate'], environment
 
 
-@pytest.mark.parametrize("outcome", ["resolved", "escalated", "invalid-resolution", "unrelated-history"])
-def test_semantic_conflict_returns_to_main_and_requires_passing_validation(
-    installed_commands, accepted_ticket, fake_codex, outcome
-):
-    root, worktrees, state, candidate = accepted_ticket
-    if outcome == "escalated":
-        _register(installed_commands, root, _ticket("88", "independent"))
-        _change_status(installed_commands, root, "88", "ready")
-        batch = root / "independent.yml"
-        batch.write_text(yaml.safe_dump({"tasks": [{"ticket_id": "88", "ticket_name": "independent", "role": "team-leader"}]}))
-        launched = run_process([str(installed_commands.runner), "--swarm-input", str(batch)], cwd=root, env={
-            **os.environ, "HOME": str(root / "operator-home"),
-            "PATH": str(fake_codex.executable.parent) + os.pathsep + os.environ["PATH"],
-            "FAKE_CODEX_LOG": str(fake_codex.log_file),
-            "FAKE_CODEX_LIFECYCLE_ACTION": "complete-team-round",
-            "GRAPHTRAJ_AGENT_RUNNER": str(installed_commands.runner),
-        })
-        assert launched.returncode == 0, launched.stderr
-    command = [str(installed_commands.product), "ticket", "integrate", "--ticket-id", "83"]
-    validator = [sys.executable, "-c", "from pathlib import Path; assert Path('TEAM_ROUND_DELIVERED.txt').read_text() == 'complete team round\\nconflicting integration work\\n', 'semantic incompatibility: missing existing dev behavior'"]
-    failed = run_process(command + ["--", *validator], cwd=root)
-    assert failed.returncode == 1
-    environment = {
-        **os.environ, "HOME": str(root / "operator-home"),
-        "PATH": str(fake_codex.executable.parent) + os.pathsep + os.environ["PATH"],
-        "FAKE_CODEX_LOG": str(fake_codex.log_file),
-        "FAKE_CODEX_CAPTURE_STDIN": "1",
-        "FAKE_CODEX_LIFECYCLE_ACTION": "resolve-integration",
-        "FAKE_CODEX_RESOLUTION": outcome,
-    }
-    previous_runtime = fake_codex.log_file.read_bytes()
-    weaker = run_process(command + ["--resolve-conflict", "Preserve accepted behavior", "--", sys.executable, "-c", "pass"], cwd=root, env=environment)
-    assert weaker.returncode == 1
-    assert fake_codex.log_file.read_bytes() == previous_runtime
-    result = run_process(command + ["--resolve-conflict", "Preserve accepted behavior", "--", *validator], cwd=root, env=environment)
+def _accept_resolution(commands: InstalledCommands, root: Path, alias: str) -> dict:
+    """Decide the member's actual public submission from the top-level parent."""
+    reports = run_process([str(commands.runner), 'reports', alias], cwd=root)
+    assert reports.returncode == 0, reports.stdout + reports.stderr
+    document = yaml.safe_load(reports.stdout)
+    submission = document['submissions'][-1]
+    arguments = [str(commands.runner), 'decide-result', '--submission-id', submission['event_id'],
+                 '--commit', submission['candidate'], '--decision', 'accepted', '--reason', 'Both document requirements hold']
+    for ref in submission['evidence_refs']:
+        arguments.extend(['--evidence-ref', ref])
+    decision = run_process(arguments, cwd=root)
+    assert decision.returncode == 0, decision.stdout + decision.stderr
+    return submission
+
+
+@pytest.mark.parametrize('conflict', ['textual', 'semantic'])
+@pytest.mark.parametrize('outcome', ['resolved', 'invalid-resolution', 'prose-only'])
+def test_configured_document_conflict_requires_common_result_and_validation(
+    installed_commands: InstalledCommands,
+    accepted_document: tuple,
+    fake_codex: FakeCodex,
+    conflict: str,
+    outcome: str,
+) -> None:
+    """Real member/Session/result/Git facts, not final prose, govern completion."""
+    root, worktrees, state, candidate, environment = accepted_document
+    dev = worktrees / 'dev'
+    if conflict == 'textual':
+        (dev / 'article.md').write_text('conflicting integration work\n')
+        run_process(['git', 'add', 'article.md'], cwd=dev).check_returncode()
+        run_process(['git', 'commit', '-m', 'Existing document requirement'], cwd=dev).check_returncode()
+    command = [str(installed_commands.product), 'ticket', 'integrate', '--ticket-id', '83']
+    validator = [sys.executable, '-c', "from pathlib import Path; assert Path('article.md').read_text() == 'complete team round\\nconflicting integration work\\n'"]
+    failed = run_process(command + ['--', *validator], cwd=root)
+    assert failed.returncode == 1, failed.stdout
+    original_round = {path: path.read_bytes() for path in (state / 'tickets/83-integration/teams/1/rounds/1').glob('*')}
+    assert original_round
+    environment.update(FAKE_CODEX_LIFECYCLE_ACTION='resolve-integration', FAKE_CODEX_RESOLUTION=outcome,
+                       FAKE_CODEX_CAPTURE_STDIN='1')
+    selection = 'editor' if conflict == 'textual' else yaml.safe_dump({'editor': {'runtime': 'codex', 'model': 'inline-document-model', 'instructions': 'task', 'reports': ['sources.md']}})
+    result = run_process(command + ['--resolve-conflict', 'Preserve both document requirements', '--role', selection, '--', *validator], cwd=root, env=environment)
+    assert result.returncode == (1 if outcome == 'prose-only' else 0), result.stdout + result.stderr
     output = yaml.safe_load(result.stdout)
-    assert output["status"] == {"resolved": "integrated", "escalated": "escalated", "invalid-resolution": "integrating", "unrelated-history": "escalated"}[outcome], (root / output["evidence"]).read_text()
-    assert result.returncode == (0 if outcome == "resolved" else 1)
-    events = [json.loads(line) for shard in (state / "worldline").glob("*.jsonl") for line in shard.read_text().splitlines()]
-    final = next(event for event in events if event["event_id"] == output["event_id"])
-    assert final["session_ref"]
-    assert "semantic incompatibility" in json.loads(fake_codex.log_file.read_text())["stdin"]
-    graph = yaml.safe_load(run_process([str(installed_commands.product), "ticket", "graph"], cwd=root).stdout)
-    assert any(item["ready"] for item in graph["tickets"]) == (outcome == "resolved")
-    if outcome == "unrelated-history":
-        assert "changed dev history" in (root / output["evidence"]).read_text()
-    if outcome == "escalated":
-        assert run_process(["git", "rev-parse", "HEAD"], cwd=worktrees / "dev").stdout.strip() == candidate
-        trace = next(root / ref for ref in final["evidence_refs"] if ref.endswith("events.jsonl"))
-        assert "incompatible accepted requirements" in trace.read_text()
-        other = run_process([str(installed_commands.product), "ticket", "integrate", "--ticket-id", "88", "--", sys.executable, "-c", "pass"], cwd=root)
-        assert other.returncode == 1
-        assert "unfinished integration" in yaml.safe_load(other.stdout)["error"]
+    assert output['status'] == ('escalated' if outcome == 'prose-only' else 'resolving-integration'), (root / output['evidence']).read_text()
+    alias = output['resolution']['alias']
+    mapping = yaml.safe_load((root / '.graphtraj/runner/sessions' / alias / 'mapping.yml').read_text())
+    team = yaml.safe_load((state / 'tickets/83-integration/teams/1/team.yml').read_text())
+    assert any(member['session_ref'] == alias for member in team['members'].values())
+    assert mapping['parent'] is None and mapping['role_reference'] == 'editor'
+    assert mapping['worktree_path'] == str(dev) and team['current_round'] == 2
+    assert all(path.read_bytes() == content for path, content in original_round.items())
+    native = json.loads(fake_codex.log_file.read_text())
+    settings = {}
+    for index, argument in enumerate(native['argv'][:-1]):
+        if argument == '-c':
+            settings.update(tomllib.loads(native['argv'][index + 1]))
+    permissions = settings['permissions'][settings['default_permissions']]['filesystem']
+    assert native['cwd'] == str(dev)
+    assert permissions[':workspace_roots']['.'] == 'write'
+    assert permissions[str(state)] == 'none'
+    assert permissions[':workspace_roots']['docs'] == 'read'
+    assert permissions.get(str(state / 'tickets/83-integration')) is None
+    assigned_reports = [Path(path) for path, access in permissions.items()
+                        if access == 'read' and path.startswith(str(state / 'tickets/83-integration'))]
+    assert len(assigned_reports) == 1 and assigned_reports[0].parent.name == '2'
+    assert native['argv'][native['argv'].index('--model') + 1] == ('document-model' if conflict == 'textual' else 'inline-document-model')
+    trace = Path(mapping['trace_file']).read_text()
+    if outcome == 'prose-only':
+        assert 'Decision: RESOLVED' in trace
+    else:
+        if conflict == 'textual' and outcome == 'resolved':
+            from graphtraj.execution.runner_models import RunnerError
+            from graphtraj.execution.runner_status import runtime_caller
+            from graphtraj.interfaces import mcp
+
+            original = team['members']['editor']['session_ref']
+            with runtime_caller(root / '.graphtraj/runner', original):
+                report = mcp.submit_report({'name': 'sources.md', 'text': 'Original scope checked.'}, cwd=root)
+                assert '/rounds/2/' in report.document['report']
+                with pytest.raises(RunnerError, match='Integration Worktree'):
+                    mcp.submit_result({'commit': candidate, 'result_refs': ['article.md'],
+                                       'completion': 'Original result is not a resolution'}, cwd=root)
+                submitted = output['resolution']['submissions'][-1]
+                with pytest.raises(RunnerError):
+                    mcp.decide_result({'submission_id': submitted['event_id'], 'commit': submitted['candidate'],
+                                       'decision': 'accepted', 'reason': 'Same role is not the parent',
+                                       'evidence_refs': submitted['evidence_refs']}, cwd=root)
+
+        assert 'Decision: RESOLVED' not in trace
+        pending = run_process(command + ['--', *validator], cwd=root)
+        assert pending.returncode == 1 and 'acceptance' in pending.stdout
+        submission = _accept_resolution(installed_commands, root, alias)
+        assert submission['candidate'] == run_process(['git', 'rev-parse', 'HEAD'], cwd=dev).stdout.strip()
+        if conflict == 'textual' and outcome == 'resolved':
+            # A newer rejected submission of the same commit supersedes the old
+            # acceptance; version equality alone cannot manufacture acceptance.
+            with runtime_caller(root / '.graphtraj/runner', alias):
+                newer = mcp.submit_result({'commit': submission['candidate'], 'result_refs': ['article.md'],
+                                           'evidence_refs': ['article.md'], 'completion': 'Reassessed document'}, cwd=root).document
+            mcp.decide_result({'submission_id': newer['event_id'], 'commit': newer['candidate'],
+                               'decision': 'rejected', 'reason': 'Reconfirm the document evidence',
+                               'evidence_refs': newer['evidence_refs']}, cwd=root)
+            pending = run_process(command + ['--', *validator], cwd=root)
+            assert pending.returncode == 1 and 'acceptance' in pending.stdout
+            with runtime_caller(root / '.graphtraj/runner', alias):
+                corrected = mcp.submit_result({'commit': submission['candidate'], 'result_refs': ['article.md'],
+                                               'evidence_refs': ['article.md'], 'completion': 'Evidence reconfirmed'}, cwd=root).document
+            assert corrected['round'] == 3
+            _accept_resolution(installed_commands, root, alias)
+        checked = run_process(command + ['--', *validator], cwd=root)
+        assert checked.returncode == (0 if outcome == 'resolved' else 1), checked.stdout + checked.stderr
+        assert yaml.safe_load(checked.stdout)['status'] == ('integrated' if outcome == 'resolved' else 'resolving-integration')
+        if outcome == 'resolved':
+            from graphtraj.execution.runner_models import RunnerError
+            from graphtraj.interfaces import mcp
+
+            with pytest.raises(RunnerError, match='active conflict assignment'):
+                mcp.send_session_instruction({'alias': alias, 'instruction': 'More work',
+                                             'caused_by_event_ids': [yaml.safe_load(checked.stdout)['event_id']]}, cwd=root)
+
+    graph = yaml.safe_load(run_process([str(installed_commands.product), 'ticket', 'graph'], cwd=root).stdout)
+    assert any(item['ready'] for item in graph['tickets']) == (outcome == 'resolved')
+    assert run_process(['git', 'merge-base', '--is-ancestor', candidate, 'HEAD'], cwd=dev).returncode == (1 if conflict == 'textual' and outcome == 'prose-only' else 0)
 
 
-def test_resolver_requires_mains_observed_conflict(installed_commands, accepted_ticket, fake_codex):
-    root, worktrees, state, candidate = accepted_ticket
-    previous_runtime = fake_codex.log_file.read_bytes()
-    command = [str(installed_commands.product), "ticket", "integrate", "--ticket-id", "83", "--resolve-conflict", "No observed conflict", "--", sys.executable, "-c", "pass"]
-    rejected = run_process(command, cwd=root)
-    assert rejected.returncode == 1
-    batch = root / "resolver.yml"
-    batch.write_text(yaml.safe_dump({"tasks": [{"ticket_id": "83", "ticket_name": "integration", "role": "merge-resolver"}]}))
-    rejected = run_process([str(installed_commands.runner), "--swarm-input", str(batch)], cwd=root)
-    assert rejected.returncode == 1
-    assert "conflict" in yaml.safe_load(rejected.stdout)["error"]["message"]
-    assert fake_codex.log_file.read_bytes() == previous_runtime
+def test_conflict_selection_rejects_missing_role_and_unauthorized_tree(
+    installed_commands: InstalledCommands, accepted_document: tuple, fake_codex: FakeCodex,
+) -> None:
+    """No implicit role or denied tree edge starts integration work."""
+    root, _, _, _, environment = accepted_document
+    command = [str(installed_commands.product), 'ticket', 'integrate', '--ticket-id', '83']
+    validator = [sys.executable, '-c', 'raise SystemExit(1)']
+    assert run_process(command + ['--', *validator], cwd=root).returncode == 1
+    before = fake_codex.log_file.read_bytes()
+    for selection in ([], ['--role', 'unconfigured'], ['--role', 'coding-team.engineer']):
+        result = run_process(command + ['--resolve-conflict', 'Reconcile document', *selection, '--', *validator], cwd=root, env=environment)
+        assert result.returncode == 1, result.stdout
+    assert fake_codex.log_file.read_bytes() == before
+
+
+def test_role_named_merge_resolver_is_an_ordinary_swarm_member(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    """A name neither grants Integration Worktree access nor needs a conflict."""
+    root, worktrees, _, environment = configure_harness(installed_commands, temporary_git_repository, fake_codex, tmp_path)
+    _register(installed_commands, root, _ticket('91', 'ordinary'))
+    _change_status(installed_commands, root, '91', 'ready')
+    batch = root / 'ordinary.yml'
+    batch.write_text(yaml.safe_dump({'tasks': [{'ticket_id': '91', 'role': 'merge-resolver'}]}))
+    launched = run_process([str(installed_commands.runner), '--swarm-input', str(batch)], cwd=root, env=environment)
+    assert launched.returncode == 0, launched.stdout + launched.stderr
+    member = yaml.safe_load(launched.stdout)['tasks'][0]
+    assert member['worktree_path'] == str(worktrees / '91-ordinary')
+    from test_generic_role_execution import wait_for_idle
+    wait_for_idle(installed_commands, root, environment, member['alias'])
+    team = yaml.safe_load((root / '.graphtraj/state/tickets/91-ordinary/teams/1/team.yml').read_text())
+    assert any(item['session_ref'] == member['alias'] for item in team['members'].values())
 
 
 def test_main_integration_is_serialized_until_validation_finishes(installed_commands, accepted_ticket):
@@ -526,7 +527,7 @@ def test_main_integration_is_serialized_until_validation_finishes(installed_comm
 
 @pytest.mark.parametrize("entrypoint", ["python", "cli"])
 @pytest.mark.parametrize("validation_exit", [0, 1])
-def test_shared_integration_enforces_main_and_returns_retained_outcome(
+def test_shared_integration_enforces_task_authority_and_returns_retained_outcome(
     installed_commands: InstalledCommands,
     accepted_ticket: tuple[Path, Path, Path, str],
     monkeypatch: pytest.MonkeyPatch,
@@ -551,7 +552,8 @@ def test_shared_integration_enforces_main_and_returns_retained_outcome(
 
     before = read_worldline(state, root)
     with runtime_caller(root / ".graphtraj/runner", "bound-member"):
-        with pytest.raises(ValueError) as error:
+        from graphtraj.execution.runner_models import RunnerError
+        with pytest.raises((ValueError, RunnerError)) as error:
             integrate_ticket(configuration, "83", command)
         denied = CliRunner().invoke(main, ["ticket", "integrate", "--ticket-id", "83", "--", *command])
     assert denied.exit_code == 1
@@ -606,7 +608,7 @@ def stopped_committed_integration(
     validation = [sys.executable, str(validator)]
     failed = run_process(command + ['--', *validation], cwd=root)
     assert failed.returncode == 1, failed.stdout + failed.stderr
-    escalated = run_process(command + ['--resolve-conflict', 'Preserve both accepted lines', '--', *validation], cwd=root, env={
+    escalated = run_process(command + ['--resolve-conflict', 'Preserve both accepted lines', '--role', 'coding_team.merge_resolver', '--', *validation], cwd=root, env={
         **os.environ, 'HOME': str(root / 'operator-home'),
         'PATH': str(fake_codex.executable.parent) + os.pathsep + os.environ['PATH'],
         'FAKE_CODEX_LOG': str(fake_codex.log_file),
@@ -625,7 +627,8 @@ def stopped_committed_integration(
     delivered.write_text('complete team round\nconflicting integration work\n')
     run_process(['git', 'add', delivered.name], cwd=dev).check_returncode()
     run_process(['git', 'commit', '--no-edit'], cwd=dev).check_returncode()
-    return root, dev, state, candidate, command + ['--', *validation]
+    confirmed = run_process(['git', 'rev-parse', 'HEAD'], cwd=dev).stdout.strip()
+    return root, dev, state, candidate, command + ['--confirm-resolution', confirmed, '--', *validation]
 
 
 def test_public_recovery_adopts_committed_merge_and_preserves_history(
@@ -651,7 +654,7 @@ def test_public_recovery_adopts_committed_merge_and_preserves_history(
     assert run_process(['git', 'rev-parse', 'HEAD'], cwd=dev).stdout == head
     assert fake_codex.log_file.read_bytes() == runtime
     assert all(retained_state(path) == content for path, content in retained.items())
-    assert sorted(path.name for path in (ticket / 'teams/1/rounds').iterdir()) == ['1']
+    assert sorted(path.name for path in (ticket / 'teams/1/rounds').iterdir()) == ['1', '2']
     events = read_worldline(state, root)
     assert events[:len(before)] == before
     started = events[len(before)]
@@ -662,7 +665,7 @@ def test_public_recovery_adopts_committed_merge_and_preserves_history(
     assert set(before[-1]['evidence_refs']) <= set(integrated['evidence_refs'])
 
 
-@pytest.mark.parametrize('invalid', ['candidate', 'unrelated-head', 'retained-dev', 'validation-command', 'failed-validation', 'caller'])
+@pytest.mark.parametrize('invalid', ['candidate', 'unrelated-head', 'retained-dev', 'validation-command', 'failed-validation', 'caller', 'unconfirmed'])
 def test_public_recovery_rejects_invalid_adoption(
     installed_commands: InstalledCommands,
     stopped_committed_integration: tuple[Path, Path, Path, str, list[str]],
@@ -678,7 +681,10 @@ def test_public_recovery_rejects_invalid_adoption(
     runtime = fake_codex.log_file.read_bytes()
     ticket = state / 'tickets/83-integration'
     budget = (ticket / 'execution-budget.yml').read_bytes()
-    if invalid == 'candidate':
+    if invalid == 'unconfirmed':
+        index = command.index('--confirm-resolution')
+        command = command[:index] + command[index + 2:]
+    elif invalid == 'candidate':
         # A public state revision cannot reuse acceptance for another version.
         from graphtraj.graph.ticket_graph import update_ticket_state
         record = yaml.safe_load((ticket / 'ticket.yml').read_text())
@@ -700,7 +706,8 @@ def test_public_recovery_rejects_invalid_adoption(
     if invalid == 'caller':
         # An installed CLI child is identified from the real owning process,
         # even after its role environment variable has been removed.
-        mapping_path = next((root / '.graphtraj/runner/sessions').glob('*/mapping.yml'))
+        mapping_path = next(path for path in (root / '.graphtraj/runner/sessions').glob('*/mapping.yml')
+                            if yaml.safe_load(path.read_text())['role'] == 'engineer')
         mapping = yaml.safe_load(mapping_path.read_text())
         mapping.update(worker_pid=os.getpid(), runtime_pid=os.getpid())
         mapping_path.write_text(yaml.safe_dump(mapping))
@@ -719,3 +726,23 @@ def test_public_recovery_rejects_invalid_adoption(
         (root / 'fail-validation').unlink()
         retry = run_process(command, cwd=root)
         assert retry.returncode == 0, retry.stdout + retry.stderr
+
+
+def test_actual_result_parent_can_integrate_without_role_name_authority(
+    installed_commands: InstalledCommands, accepted_ticket: tuple,
+) -> None:
+    """A bound direct parent may integrate the result it actually accepted."""
+    from graphtraj.configuration.project_configuration import load_project_configuration
+    from graphtraj.execution.runner_status import runtime_caller
+    from graphtraj.graph.delivery_worldline import read_worldline
+    from graphtraj.teams.coding.ticket_integration import integrate_ticket
+
+    root, _, state, candidate = accepted_ticket
+    events = read_worldline(state, root)
+    accepted = next(event for event in reversed(events) if event['kind'] == 'team-round-accepted')
+    submitted = next(event for event in events if event['event_id'] == accepted['submission_id'])
+    mapping = yaml.safe_load((root / '.graphtraj/runner/sessions' / submitted['alias'] / 'mapping.yml').read_text())
+    assert mapping['parent'] is not None
+    with runtime_caller(root / '.graphtraj/runner', mapping['parent']):
+        result = integrate_ticket(load_project_configuration(root), '83', (sys.executable, '-c', 'pass'))
+    assert result['candidate'] == candidate and result['status'] == 'integrated'

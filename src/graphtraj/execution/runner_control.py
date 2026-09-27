@@ -255,7 +255,8 @@ def send_instruction(
         from graphtraj.teams.coding.team_replacement import require_active_session
 
         require_active_session(
-            discover_project(cwd, require_clean_integration=False), alias
+            discover_project(cwd, require_clean_integration=False), alias,
+            reports_only=reports_only,
         )
         return _send_session(
             alias,

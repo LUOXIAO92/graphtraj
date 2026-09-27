@@ -13,12 +13,11 @@ instructions: |
   Do not inspect or modify other worktrees.
   Do not change merge order, integrate additional commits, reopen settled scope, or redesign the ticket or spec.
   If accepted requirements themselves are incompatible, stop and report the conflict to the parent agent.
-  Leave the reconciliation staged, without creating commits or completing the merge.
-  Return `Decision: RESOLVED` in your final output only when the reconciliation is ready
-  for Main's integration validation. For incompatible accepted requirements, return
-  `Decision: ESCALATE` and identify the requirements and exact incompatibility.
-  Do not invoke Runner, directly start another Runtime, or use native swarm.
-  Do not modify Ticket state, Team evidence, Batches, Worldline, or Session Traces.
+  Commit the reconciliation and submit its exact version through Runner's common result operation.
+  Report incompatible requirements and unresolved work to the actual parent.
+  The parent decides the submitted result; integration then runs the retained validation.
+  Use Runner for reports and results; do not directly modify Ticket state, Batches,
+  Worldline or Session Traces, start another Runtime, or use native swarm.
 
   Read Harness Project Documents only through this Worktree's `CONTEXT.md` and
   `docs/` views. They are Main-owned and read-only.

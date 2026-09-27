@@ -108,6 +108,9 @@ def submit_session_result(
     if len(set(evidence_refs)) != len(evidence_refs):
         raise ValueError('Evidence references must be distinct.')
     worktree = Path(mapping['worktree_path'])
+    directory, ticket = _load_states(configuration.state / 'tickets')[mapping['ticket_id']]
+    if ticket['status'] == 'resolving-integration' and worktree != configuration.integration_worktree:
+        raise RunnerError('authority-denied', 'Integration results must belong to the assigned Integration Worktree.')
     if run_git(worktree, 'rev-parse', 'HEAD') != commit:
         raise ValueError('The result commit must be the current Worktree version.')
     if run_git(worktree, 'diff', '--name-only') or run_git(worktree, 'diff', '--cached', '--name-only'):
@@ -130,6 +133,9 @@ def submit_session_result(
     for reference in evidence_refs:
         supplied = Path(reference)
         path = supplied if supplied.is_absolute() else worktree / supplied
+        if supplied.parts and supplied.parts[0] == '.state':
+            directory, _ = _load_states(configuration.state / 'tickets')[mapping['ticket_id']]
+            path = directory.joinpath(*supplied.parts[1:])
         resolved = path.resolve()
         if resolved in assigned or (trace.is_absolute() and resolved == trace.resolve()):
             content = resolved.read_bytes()
@@ -159,7 +165,7 @@ def submit_session_result(
         require_task_authority(configuration.state, runner, mapping['ticket_id'], alias, 'submit')
         current = read_team(directory / 'teams' / str(mapping['team_generation']) / 'team.yml')
         if (_load_states(configuration.state / 'tickets')[mapping['ticket_id']][1]['status']
-                not in {'implementing', 'reviewing'} or current['current_round'] != ordinal):
+                not in {'implementing', 'reviewing', 'resolving-integration'} or current['current_round'] != ordinal):
             raise RunnerError('authority-denied', 'The submission Round has changed.')
         if not snapshots:
             return lambda: None
@@ -194,13 +200,17 @@ def start_result_correction(mapping: Mapping[str, Any], cwd: Path) -> None:
     require_task_authority(configuration.state, discover_runner_directory(cwd),
                            mapping['ticket_id'], mapping['alias'], 'submit')
     directory, ticket = _load_states(configuration.state / 'tickets')[mapping['ticket_id']]
-    if ticket['status'] not in {'implementing', 'reviewing', 'reworking'}:
+    if ticket['status'] not in {'implementing', 'reviewing', 'reworking', 'resolving-integration'}:
         raise ValueError('This task is not accepting result submissions.')
-    if ticket['status'] == 'reworking':
+    latest = next((event for event in reversed(read_worldline(configuration.state, cwd))
+                   if event.get('ticket_id') == mapping['ticket_id']), {})
+    if ticket['status'] == 'reworking' or (
+        ticket['status'] == 'resolving-integration'
+        and latest.get('kind') == 'team-round-implementation-rejected'
+    ):
         from graphtraj.graph.delivery_state import apply_delivery_state_request
 
-        rejection = next(event for event in reversed(read_worldline(configuration.state, cwd))
-                         if event.get('ticket_id') == mapping['ticket_id'])
+        rejection = latest
         request = {
             'phase': 'rework', 'ticket_id': mapping['ticket_id'],
             'caused_by_event_ids': [rejection['event_id']],

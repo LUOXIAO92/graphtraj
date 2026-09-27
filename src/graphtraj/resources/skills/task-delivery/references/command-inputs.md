@@ -78,3 +78,20 @@ only for an actual conflict requiring a specialist.
 
 After successful integration use `agent-runner cleanup --ticket-id <id>` and
 regenerate the task graph. These operations retain the original task evidence.
+
+For a retained integration conflict, select the permitted role explicitly:
+
+```bash
+graphtraj ticket integrate --ticket-id <id> --resolve-conflict '<diagnosis>' --role <role-reference> -- <validation-command> <arguments>
+```
+
+`--role` also accepts the same inline YAML role definition as swarm. The role's
+configured instructions, Skills, reports and access apply. The selected member
+commits and submits its result, its actual parent uses `decide-result`, and the
+integrator repeats the original validation command to complete integration. A
+Session's final message cannot accept a result.
+
+To adopt an already committed escalated integration without starting work, inspect
+the changed contents and supply `--confirm-resolution <full-commit>` with the
+original validation command. This confirms that exact version under the caller's
+task authority; it does not resume or reset a stopped execution budget.

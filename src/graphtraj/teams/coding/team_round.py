@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 import signal
 import subprocess
 import sys
@@ -27,7 +26,6 @@ from graphtraj.execution.execution_budget import (
 )
 from graphtraj.configuration.role_definitions import resolve_child_role
 from graphtraj.configuration.project_configuration import load_project_configuration
-from graphtraj.graph.delivery_state import apply_delivery_state_request
 from graphtraj.graph.delivery_worldline import append_project_worldline_event, read_worldline
 from graphtraj.configuration.project_roles import ProjectRolesError, logical_role
 from graphtraj.execution.runner_batch import (
@@ -431,13 +429,19 @@ def _deliver_ticket(
                 _require_dispatch_roles(project, Batch((task,), b""), parent)
                 if parent["ticket_id"] != task.ticket_id or parent["team_generation"] != generation:
                     raise RunnerError("authority-denied", "Child must retain its parent's active task.")
+    if state["status"] == "resolving-integration":
+        from graphtraj.teams.coding.merge_resolution import integration_assignment
+
+        worktree, prompt = integration_assignment(project, task, parent_alias)
+    else:
+        prompt = None
     traces = evidence / "teams" / str(generation) / "traces"
     traces.mkdir(parents=True, exist_ok=True)
     (traces.parent / "rounds/1").mkdir(parents=True, exist_ok=True)
     alias, session = _run_agent(
         project, task, task.role, worktree, evidence, traces, None, None,
-        None, parent_alias, retained_batch, capacity_fd=capacity_fd,
-        register_member=True, wait_for_completion=parent_alias is not None,
+        None, parent_alias, retained_batch, prompt, capacity_fd=capacity_fd,
+        register_member=True, wait_for_completion=parent_alias is not None or prompt is not None,
     )
     if parent_alias is not None:
         _run_registered_children(project, task, alias, session, retained_batch, capacity_fd)
@@ -445,7 +449,7 @@ def _deliver_ticket(
             "role": task.role, "alias": alias, "session": session,
             "execution_id": read_alias_mapping(project.runner_directory, alias)[0]["execution_id"],
             "worktree_path": str(worktree),
-            "launch_status": "completed" if parent_alias is not None else "launched"}
+            "launch_status": "completed" if parent_alias is not None or prompt is not None else "launched"}
 
 
 def run_session_children(job_file: Path) -> None:
@@ -498,144 +502,8 @@ def _registered_batch(registration: Path, worktree: Path) -> tuple[Batch, Path]:
     return read_batch(retained, worktree), retained
 
 
-def _request_state(
-    project: Any,
-    task: Task,
-    worktree: Path,
-    evidence: Path,
-    traces: Path,
-    alias: str | None,
-    session: str | None,
-    parent_alias: str,
-    retained_batch: Path,
-    facts: dict[str, Any],
-    request_name: str,
-    *,
-    capacity_fd: int | None = None,
-) -> tuple[str, str, dict[str, Any]]:
-    runtime_request = worktree / ".scratch" / "delivery-state" / (request_name + ".yml")
-    runtime_request.parent.mkdir(parents=True, exist_ok=True)
-    environment = {
-        "GRAPHTRAJ_STATE_FACTS": json.dumps(facts, separators=(",", ":")),
-        "GRAPHTRAJ_STATE_REQUEST": str(runtime_request),
-    }
-    alias, session = _run_agent(
-        project, task, "delivery-state", worktree, evidence, traces,
-        alias, session, None, parent_alias, retained_batch,
-        "Request the strict Delivery State change for these supplied facts:\n"
-        + yaml.safe_dump(facts, sort_keys=False)
-        + "\nWrite only that request to {0}.\n".format(runtime_request),
-        capacity_fd=capacity_fd,
-        task_environment=environment,
-    )
-    requests = project.runner_directory / "sessions" / alias / "requests"
-    requests.mkdir(exist_ok=True)
-    for attempt in range(2):
-        failure = None
-        request_file = _next_request_file(
-            requests,
-            request_name if not attempt else request_name + "-recovered",
-        )
-        if runtime_request.is_symlink() or not runtime_request.is_file():
-            failure = RunnerError(
-                _AGENT_EVIDENCE_ERROR,
-                "Delivery State did not produce its requested state change.",
-            )
-        else:
-            shutil.move(runtime_request, request_file)
-            try:
-                request = yaml.safe_load(request_file.read_text(encoding="utf-8"))
-            except (OSError, yaml.YAMLError):
-                failure = RunnerError(
-                    _AGENT_EVIDENCE_ERROR,
-                    "Delivery State produced an invalid state change.",
-                )
-            else:
-                if request != facts:
-                    failure = RunnerError(
-                        _AGENT_EVIDENCE_ERROR,
-                        "Delivery State produced an invalid state change.",
-                    )
-                else:
-                    try:
-                        event = apply_delivery_state_request(
-                            project.state_directory, project.harness_root,
-                            request, facts,
-                        )
-                    except (OSError, ValueError) as error:
-                        raise RunnerError(
-                            _AGENT_EVIDENCE_ERROR,
-                            "Delivery State could not apply its requested state change: "
-                            + str(error),
-                        ) from error
-                    return alias, session, event
-        assert failure is not None
-        if attempt:
-            raise failure
-        alias, session = _run_agent(
-            project,
-            task,
-            "delivery-state",
-            worktree,
-            evidence,
-            traces,
-            alias,
-            session,
-            None,
-            parent_alias,
-            retained_batch,
-            _evidence_recovery_prompt(
-                project,
-                task,
-                traces,
-                alias,
-                worktree,
-                failure,
-                "write exactly the supplied Delivery State request",
-            ),
-            capacity_fd=capacity_fd,
-            task_environment=environment,
-        )
-    raise AssertionError("Delivery State recovery did not return")
-
-
-def _next_request_file(directory: Path, name: str) -> Path:
-    target = directory / (name + ".yml")
-    suffix = 2
-    while os.path.lexists(target):
-        target = directory / (name + "-" + str(suffix) + ".yml")
-        suffix += 1
-    return target
-
-
 def _trace_ref(project: Any, traces: Path, alias: str) -> str:
     return (traces / alias / "events.jsonl").relative_to(project.harness_root).as_posix()
-
-
-def _evidence_recovery_prompt(
-    project: Any,
-    task: Task,
-    traces: Path,
-    alias: str,
-    worktree: Path,
-    error: RunnerError,
-    expected: str,
-) -> str:
-    return (
-        "Recovery required: correct your current Team step.\n"
-        "Failure: {0}: {1}\n"
-        "Evidence: {2}\n"
-        "Expected result: {3}\n"
-        "Current commit: {4}\n"
-        "Preserve the accepted Ticket, current candidate, and valid completed evidence. "
-        "Correct only this failed step; do not repeat completed Team work."
-    ).format(
-        error.code,
-        error.message,
-        _trace_ref(project, traces, alias),
-        expected,
-        run_git(worktree, "rev-parse", "HEAD"),
-    )
 
 
 def _current_runtime_diagnostic(
@@ -814,7 +682,7 @@ def _run_agent(
     replaces_alias: str | None = None,
 ) -> tuple[str, str]:
     team_file = traces.parent / "team.yml"
-    if logical_role(role) != "delivery-state" and team_file.exists():
+    if team_file.exists():
         team = yaml.safe_load(team_file.read_text())
         if team["status"] != "active" and not (
             retiring and logical_role(role) == "team-leader"
@@ -890,6 +758,10 @@ def _execute_agent(
     )
     team_file = traces.parent / "team.yml"
     ordinal = yaml.safe_load(team_file.read_text())["current_round"] if team_file.exists() else 1
+    if (new_session and team_file.exists()
+            and yaml.safe_load((evidence / "ticket.yml").read_text())["status"] == "resolving-integration"
+            and not (traces.parent / "rounds" / str(ordinal)).stat().st_mode & 0o200):
+        ordinal += 1
     report_files: tuple[Path, ...] = ()
     if expected_session is not None:
         from graphtraj.execution.runner_control import _session_report_paths

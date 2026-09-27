@@ -1,4 +1,4 @@
-"""Main's serialized integration of a Team-accepted candidate into dev."""
+"""Serialized integration of an accepted task result into dev."""
 
 from __future__ import annotations
 
@@ -9,7 +9,8 @@ from typing import TextIO
 
 import yaml
 
-from graphtraj.execution.runner_status import caller_alias
+from graphtraj.execution.runner_models import Batch
+from graphtraj.execution.runner_status import caller_alias, read_alias_mapping, require_task_authority
 from graphtraj.graph.delivery_worldline import append_project_worldline_event, read_worldline
 from graphtraj.workspace.git_repository import GitRepositoryError, SourceRepository, _git
 from graphtraj.configuration.project_configuration import ProjectConfiguration
@@ -21,8 +22,10 @@ def integrate_ticket(
     ticket_id: str,
     validation_command: tuple[str, ...],
     diagnosis: str | None = None,
+    role: str | dict | None = None,
+    confirmed_commit: str | None = None,
 ) -> dict:
-    """Serialize Main's integration and return the retained candidate outcome.
+    """Integrate under the actual task authority and retain its version evidence.
 
     Run validation_command as argv in dev after merging the Team-accepted
     candidate. A failed merge or validation returns a non-integrated status and
@@ -30,8 +33,6 @@ def integrate_ticket(
     Caller verification, configuration and filesystem errors retain their existing
     exception types.
     """
-    if caller_alias(configuration.harness_root / ".graphtraj/runner") is not None:
-        raise ValueError("Only Main may integrate a Ticket")
     if (
         not isinstance(validation_command, tuple)
         or not validation_command
@@ -43,8 +44,8 @@ def integrate_ticket(
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as error:
-            raise ValueError("Another Main integration is in progress") from error
-        return _integrate(configuration, ticket_id, validation_command, diagnosis)
+            raise ValueError("Another integration is in progress") from error
+        return _integrate(configuration, ticket_id, validation_command, diagnosis, role, confirmed_commit)
 
 
 def _integrate(
@@ -52,6 +53,8 @@ def _integrate(
     ticket_id: str,
     validation_command: tuple[str, ...],
     diagnosis: str | None = None,
+    role: str | dict | None = None,
+    confirmed_commit: str | None = None,
 ) -> dict:
     """Merge or adopt the retained accepted version, then validate completion."""
     root, state = configuration.harness_root, configuration.state
@@ -67,8 +70,29 @@ def _integrate(
         and event.get("candidate") == candidate
         and event.get("team_ordinal") == record["active_team_ordinal"]
     )), None)
+    runner = root / ".graphtraj/runner"
+    caller = caller_alias(runner)
+    if caller is not None:
+        submission = next((event for event in events if acceptance is not None
+                           and event['event_id'] == acceptance.get('submission_id')), None)
+        if submission is None:
+            raise ValueError("Integration requires the actual accepted result's parent")
+        require_task_authority(state, runner, ticket_id, submission['alias'], 'integrate')
+    if (diagnosis is None) != (role is None):
+        raise ValueError("Conflict resolution requires an explicitly selected role and diagnosis")
+    batch = None
+    if diagnosis is not None:
+        from graphtraj.execution.runner_batch import parse_batch
+        from graphtraj.teams.coding.team_round import _require_dispatch_roles
+        from graphtraj.workspace.runner_project import discover_project
+
+        batch = parse_batch({"tasks": [{"ticket_id": ticket_id, "ticket_name": record["ticket_name"],
+                                       "role": role, "instruction": diagnosis}]})
+        parent = read_alias_mapping(runner, caller)[0] if caller is not None else None
+        _require_dispatch_roles(discover_project(root, require_clean_integration=False), batch, parent)
+    resolving = record["status"] == "resolving-integration"
     recovering = record["status"] == "escalated"
-    if not record["active"] or record["status"] not in {"awaiting-integration", "integrating", "escalated"} or acceptance is None:
+    if not record["active"] or record["status"] not in {"awaiting-integration", "integrating", "escalated", "resolving-integration"} or acceptance is None:
         raise ValueError("Integration requires acceptance of the current candidate")
     escalated_integrations = {
         event.get("ticket_id") for event in events
@@ -83,11 +107,35 @@ def _integrate(
     dev = configuration.integration_worktree
     if repository.worktree_for_branch("dev") != dev or _git(dev, "branch", "--show-current") != "dev":
         raise ValueError("Integration requires the configured dev Integration Worktree")
-    if diagnosis is None and _git(dev, "status", "--porcelain"):
+    if diagnosis is None and (_git(dev, "status", "--porcelain")
+                              or (dev / _git(dev, "rev-parse", "--git-path", "MERGE_HEAD")).exists()):
         raise ValueError("The dev Integration Worktree must be clean")
     before = _git(dev, "rev-parse", "HEAD")
     predecessor = next((event for event in reversed(events) if event.get("ticket_id") == ticket_id and event["kind"].startswith("ticket-integration-")), acceptance)
+    if resolving and diagnosis is None:
+        conflict = next(event for event in reversed(events)
+                        if event.get('ticket_id') == ticket_id
+                        and event['kind'] == 'ticket-integration-conflict-started')
+        submitted = next((event for event in reversed(events)
+                          if event['kind'] == 'result-submitted' and event.get('ticket_id') == ticket_id
+                          and event.get('team_ordinal') == record['active_team_ordinal']
+                          and event['event_id'] > conflict['event_id']), None)
+        decision = next((event for event in reversed(events)
+                         if submitted is not None and event.get('submission_id') == submitted['event_id']
+                         and event['kind'] == 'team-round-accepted'), None)
+        if decision is None or submitted['candidate'] != before:
+            raise ValueError("Integration requires acceptance of the latest committed resolution")
+        mapping = read_alias_mapping(runner, submitted['alias'])[0]
+        if (Path(mapping['worktree_path']) != dev
+                or predecessor.get('validation_command') != list(validation_command)):
+            raise ValueError("Resolution acceptance must match this retained integration")
+        _git(dev, 'merge-base', '--is-ancestor', candidate, before)
+        _git(dev, 'merge-base', '--is-ancestor', predecessor['dev_commit'], before)
+    if confirmed_commit is not None and (not recovering or confirmed_commit != before):
+        raise ValueError("Confirmation must name the current committed escalated integration")
     if recovering:
+        if confirmed_commit != before:
+            raise ValueError("Recovery requires explicit confirmation of the committed resolution")
         if (diagnosis is not None or predecessor["kind"] != "ticket-integration-escalated"
             or predecessor.get("candidate") != candidate
             or predecessor.get("validation_command") != list(validation_command)):
@@ -109,34 +157,33 @@ def _integrate(
             raise ValueError("The retained merge must still target the fixed candidate")
     started = _record(configuration, directory, record, "integrating" if diagnosis is None else "resolving-integration", {
         "kind": "ticket-integration-started" if diagnosis is None else "ticket-integration-conflict-started",
-        "caused_by_event_ids": [predecessor["event_id"]],
+        "caused_by_event_ids": [predecessor["event_id"]] + ([decision["event_id"]] if resolving and diagnosis is None else []),
+        "alias": caller,
+        "session": read_alias_mapping(runner, caller)[0]["session"] if caller is not None else None,
         "evidence_refs": acceptance["evidence_refs"] if diagnosis is None else predecessor["evidence_refs"],
         "candidate": candidate,
+        **({"confirmed_commit": confirmed_commit} if recovering else {}),
         "dev_before": before if diagnosis is None else predecessor["dev_before"],
-        **({"dev_commit": before, "diagnosis": diagnosis} if diagnosis is not None else {}),
+        **({"dev_commit": before, "diagnosis": diagnosis,
+            "role_reference": batch.tasks[0].role_reference or batch.tasks[0].role,
+            "instruction": batch.tasks[0].instruction, "parent": caller,
+            "validation_command": list(validation_command)} if diagnosis is not None else {}),
     })
     evidence = directory / "integration" / (started["event_id"] + ".log")
     evidence.parent.mkdir(exist_ok=True)
     succeeded = False
     conflict_kind = predecessor["conflict_kind"] if diagnosis is not None else None
     resolution = None
+    validated_commit = None
     with evidence.open("x", encoding="utf-8") as log:
         log.write(f"Candidate: {candidate}\nIntegration Worktree: {dev.relative_to(root)}\nDev before: {before}\n")
-        commands = [validation_command] if recovering else [("git", "merge", "--no-edit", candidate), validation_command]
+        commands = [validation_command] if recovering or resolving else [("git", "merge", "--no-edit", candidate), validation_command]
         if diagnosis is not None:
-            resolution = _resolve(configuration, record, log)
-            if resolution.get("launch_status") == "resolved":
-                if _git(dev, "rev-parse", "HEAD") != before:
-                    log.write("Merge Resolver changed dev history; Main must inspect the retained Trace.\n")
-                    resolution["launch_status"] = "escalated"
-                elif predecessor["conflict_kind"] == "textual" and _git(dev, "rev-parse", "MERGE_HEAD") != candidate:
-                    log.write("Merge Resolver changed the incoming merge; Main must inspect the retained Trace.\n")
-                    resolution["launch_status"] = "escalated"
-            commands = [("git", "commit", "--no-edit") if predecessor["conflict_kind"] == "textual"
-                        else ("git", "commit", "-m", f"Reconcile Ticket {ticket_id} integration"), validation_command]
-            if resolution.get("launch_status") != "resolved":
-                commands = []
+            resolution = _resolve(configuration, batch, log)
+            commands = []
         for command in commands:
+            if command == validation_command:
+                validated_commit = _git(dev, "rev-parse", "HEAD")
             log.write("Command: " + yaml.safe_dump(list(command), default_flow_style=True).strip() + "\n")
             log.flush()
             try:
@@ -154,29 +201,39 @@ def _integrate(
         else:
             try:
                 _git(dev, "merge-base", "--is-ancestor", candidate, "refs/heads/dev")
-                if recovering and _git(dev, "rev-parse", "HEAD") != before:
-                    raise ValueError("Recovery validation changed the retained committed resolution")
+                if validated_commit is not None and _git(dev, "rev-parse", "HEAD") != validated_commit:
+                    raise ValueError("Integration validation changed the committed version")
                 if _git(dev, "branch", "--show-current") != "dev":
                     raise ValueError("Integration validation must leave dev checked out")
-                if _git(dev, "status", "--porcelain"):
+                if (_git(dev, "status", "--porcelain")
+                        or (dev / _git(dev, "rev-parse", "--git-path", "MERGE_HEAD")).exists()):
                     raise ValueError("Integration validation left dev dirty")
                 succeeded = bool(commands)
             except (GitRepositoryError, ValueError) as error:
                 log.write(str(error) + "\n")
     evidence.chmod(0o444)
     evidence_refs = [evidence.relative_to(root).as_posix()]
-    if resolution and resolution.get("trace"):
-        evidence_refs.append(resolution["trace"])
+    if resolution and resolution.get("alias") and resolution.get("launch_status") != "registered":
+        mapping, _ = read_alias_mapping(runner, resolution["alias"])
+        evidence_refs.append(Path(mapping["trace_file"]).relative_to(root).as_posix())
+        resolution["submissions"] = [event for event in read_worldline(state, root)
+                                     if event['kind'] == 'result-submitted'
+                                     and event.get('alias') == resolution['alias']
+                                     and event['event_id'] > started['event_id']]
+    if resolving and diagnosis is None:
+        evidence_refs.extend(decision['evidence_refs'])
     if diagnosis is not None or recovering:
         evidence_refs.extend(ref for ref in predecessor["evidence_refs"] if ref not in evidence_refs)
-    status = "integrated" if succeeded else "escalated" if recovering or resolution and resolution.get("launch_status") == "escalated" else "integrating"
+    status = ("integrated" if succeeded else "escalated" if recovering or (
+        resolution and resolution.get('launch_status') != 'registered' and not resolution.get('submissions')
+    ) else "resolving-integration" if resolution or resolving else "integrating")
     integrated = _record(configuration, directory, record, status, {
-        "kind": ("ticket-integration-conflict-resolved" if diagnosis is not None else "ticket-integrated") if succeeded else "ticket-integration-escalated" if status == "escalated" else "ticket-integration-failed",
+        "kind": ("ticket-integration-conflict-resolved" if resolving else "ticket-integrated") if succeeded else "ticket-integration-escalated" if status == "escalated" else "ticket-integration-conflict-dispatched" if resolution else "ticket-integration-failed",
         "caused_by_event_ids": [started["event_id"]],
         "evidence_refs": evidence_refs,
         "candidate": candidate,
         "dev_before": started["dev_before"],
-        "dev_commit": _git(dev, "rev-parse", "HEAD"),
+        "dev_commit": before if resolution else _git(dev, "rev-parse", "HEAD"),
         "validation_command": list(validation_command),
         **({"conflict_kind": conflict_kind} if conflict_kind else {}),
         **({"session_ref": resolution["alias"]} if resolution and resolution.get("alias") else {}),
@@ -194,30 +251,21 @@ def _integrate(
                     "evidence_refs": integrated["evidence_refs"],
                 })
                 unlocked.append(dependent_id)
-    return {"ticket_id": ticket_id, "candidate": candidate, "status": status, "event_id": integrated["event_id"], "evidence": evidence.relative_to(root).as_posix(), "unlocked_ticket_ids": unlocked}
+    return {"ticket_id": ticket_id, "candidate": candidate, "status": status, **({"resolution": resolution} if resolution else {}), "event_id": integrated["event_id"], "evidence": evidence.relative_to(root).as_posix(), "unlocked_ticket_ids": unlocked}
 
 
-def _resolve(configuration: ProjectConfiguration, record: dict, log: TextIO) -> dict:
-    """Run the selected conflict through the same structured Runner entry point."""
-    from graphtraj.execution.runner_batch import parse_batch
+def _resolve(configuration: ProjectConfiguration, batch: Batch, log: TextIO) -> dict:
+    """Dispatch the explicitly selected role through ordinary Runner execution."""
     from graphtraj.execution.runner_launch import launch_batch
     from graphtraj.execution.runner_models import RunnerError
 
-    batch = parse_batch({"tasks": [{
-        "ticket_id": record["ticket_id"], "ticket_name": record["ticket_name"],
-        "role": "coding_team.merge_resolver",
-    }]})
     log.flush()
     try:
         response = launch_batch(batch, configuration.harness_root)
     except RunnerError as error:
         log.write(yaml.safe_dump({"error": error.as_document()}, sort_keys=False))
-        log.write(error.message + "\n")
         return {"launch_status": "failed"}
     log.write(yaml.safe_dump(response.document, sort_keys=False))
-    for task in response.document["tasks"]:
-        if task.get("error"):
-            log.write(task["error"]["message"] + "\n")
     return response.document["tasks"][0]
 
 

@@ -258,17 +258,34 @@ def fake_codex(tmp_path: Path) -> FakeCodex:
         "    names = ('engineer.md', 'validation.md') if os.environ['GRAPHTRAJ_ROLE'] == 'engineer' else ('leader.md',)\n"
         "    for name in names:\n"
         "        (round_dir / name).write_text('Stopped result.\\nCandidate commit: ' + candidate + '\\n')\n"
-        "elif lifecycle_action == 'resolve-integration':\n"
+        "elif lifecycle_action in {'resolve-integration', 'deliver-document'}:\n"
+        '    import yaml\n'
         "    resolution = os.environ.get('FAKE_CODEX_RESOLUTION', 'resolved')\n"
-        "    if resolution == 'escalated':\n"
-        "        text = 'Decision: ESCALATE\\nMain: incompatible accepted requirements need a decision.'\n"
-        "    else:\n"
+        "    name = os.environ.get('FAKE_CODEX_RESULT_FILE', 'TEAM_ROUND_DELIVERED.txt')\n"
+        "    if resolution in {'escalated', 'prose-only'}:\n"
+        "        text = 'Decision: RESOLVED' if resolution == 'prose-only' else 'Incompatible accepted requirements'\n"
+        '    else:\n'
         "        content = 'invalid reconciliation\\n' if resolution == 'invalid-resolution' else 'complete team round\\nconflicting integration work\\n'\n"
-        "        Path('TEAM_ROUND_DELIVERED.txt').write_text(content)\n"
-        "        subprocess.run(['git', 'add', 'TEAM_ROUND_DELIVERED.txt'], check=True, capture_output=True)\n"
-        "        if resolution == 'unrelated-history':\n"
-        "            subprocess.run(['git', 'commit', '-m', 'Unrelated history'], check=True, capture_output=True)\n"
-        "        text = 'Decision: RESOLVED'\n"
+        "        if lifecycle_action == 'deliver-document':\n"
+        "            content = 'complete team round\\n'\n"
+        '        Path(name).write_text(content)\n'
+        "        subprocess.run(['git', 'add', name], check=True, capture_output=True)\n"
+        "        subprocess.run(['git', 'commit', '-m', 'Deliver document'], check=True, capture_output=True)\n"
+        "        commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()\n"
+        '        evidence_args = []\n'
+        "        if name == 'article.md':\n"
+        '            from graphtraj.interfaces import mcp\n'
+        "            reports = mcp.read_reports({'alias': os.environ['GRAPHTRAJ_PARENT_ALIAS']}, cwd=Path(os.environ['GRAPHTRAJ_HARNESS_ROOT'])).document\n"
+        "            report = Path(reports['missing_reports'][0])\n"
+        "            mcp.submit_report({'name': report.name, 'text': 'Both document requirements inspected.'}, cwd=Path(os.environ['GRAPHTRAJ_HARNESS_ROOT']))\n"
+        "            relative = Path('.state') / report.relative_to(Path(os.environ['GRAPHTRAJ_EVIDENCE']))\n"
+        "            evidence_args = ['--evidence-ref', str(relative)]\n"
+        "        submitted = subprocess.run([os.environ['GRAPHTRAJ_AGENT_RUNNER'], 'submit-result', '--commit', commit,\n"
+        "                                    '--result-ref', name, '--evidence-ref', name, '--completion', 'Document reconciled', *evidence_args],\n"
+        '                                   text=True, capture_output=True)\n'
+        '        if submitted.returncode:\n'
+        '            raise RuntimeError(submitted.stdout + submitted.stderr)\n'
+        "        text = 'Committed document submitted for the parent decision.'\n"
         "    emit({'type': 'item.completed', 'item': {'type': 'agent_message', 'text': text}})\n"
         "elif lifecycle_action == 'complete-team-round':\n"
         "    role = os.environ['GRAPHTRAJ_ROLE']\n"

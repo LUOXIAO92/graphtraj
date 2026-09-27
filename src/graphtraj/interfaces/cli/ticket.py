@@ -155,15 +155,25 @@ def apply_command(request_file: Path, facts_file: Path) -> None:
 @click.option("--ticket-id", required=True)
 @click.option(
     "--resolve-conflict", metavar="DIAGNOSIS",
-    help="Main: delegate a retained textual or semantic conflict, then validate it.",
+    help="Dispatch an explicitly selected role for a retained conflict.",
+)
+@click.option(
+    "--confirm-resolution", "confirmed_commit",
+    help="Confirm the exact committed resolution when adopting an escalated integration.",
+)
+@click.option(
+    "--role",
+    help="Explicit configured role reference or inline YAML role definition for conflict work.",
 )
 @click.argument("validation_command", nargs=-1, required=True, type=click.UNPROCESSED)
 def integrate_command(
     ticket_id: str,
     resolve_conflict: str | None,
+    role: str | None,
+    confirmed_commit: str | None,
     validation_command: tuple[str, ...],
 ) -> None:
-    """Main: merge or recover a committed accepted Ticket, then validate dev.
+    """Merge or recover an accepted Ticket under its actual task authority.
 
     After escalation, COMMAND (after --) must match the retained validation.
     """
@@ -174,13 +184,16 @@ def integrate_command(
         try:
             configuration = load_project_configuration(Path.cwd())
             result = integrate_ticket(
-                configuration, ticket_id, validation_command, resolve_conflict
+                configuration, ticket_id, validation_command, resolve_conflict,
+                yaml.safe_load(role) if role is not None else None, confirmed_commit
             )
         except (OSError, ValueError, GitRepositoryError, ProjectConfigurationError, yaml.YAMLError, RunnerError) as error:
             _emit_result({"error": str(error)})
             raise click.ClickException(str(error)) from error
         _emit_result(result)
-    if result["status"] != "integrated":
+    if result["status"] != "integrated" and not (
+        result["status"] == "resolving-integration" and result.get("resolution")
+    ):
         raise click.ClickException("Integration failed; see retained evidence")
 
 

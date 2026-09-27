@@ -359,10 +359,11 @@ def test_integration_helper_stops_and_returns_notice_to_its_caller(
         'PATH': str(fake_codex.executable.parent) + os.pathsep + os.environ['PATH'],
         'FAKE_CODEX_LOG': str(fake_codex.log_file),
         'FAKE_CODEX_LIFECYCLE_ACTION': 'resolve-integration',
+        'GRAPHTRAJ_AGENT_RUNNER': str(commands.runner),
         'FAKE_CODEX_RELEASE_FILE': str(release),
         'CODEX_THREAD_ID': 'bound-caller' if caller == 'codex-binding' else '',
     }
-    process = subprocess.Popen(command + ['--resolve-conflict', 'Preserve both lines', '--', *validation],
+    process = subprocess.Popen(command + ['--resolve-conflict', 'Preserve both lines', '--role', 'coding_team.merge_resolver', '--', *validation],
                                cwd=root, env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     try:
         sessions = root / '.graphtraj/runner/sessions'

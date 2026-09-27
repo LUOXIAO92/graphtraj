@@ -160,6 +160,12 @@ def apply_delivery_state_request(
                 and (configured["role"] != request["role"] or configured["session_ref"] is not None)
             ):
                 raise ValueError("Delivery State member request conflicts with the Team")
+            # A conflict starts actual work after the accepted Round closed.
+            # Open its next Round once, preserving all original reports.
+            round_directory = team_directory / "rounds" / str(round_ordinal)
+            if ticket["status"] == "resolving-integration" and not round_directory.stat().st_mode & 0o200:
+                team_update["current_round"] += 1
+                open_round = True
             team_update["members"].update(registered)
             kind = "team-member-started"
         elif phase == "rework":
@@ -169,7 +175,7 @@ def apply_delivery_state_request(
                 {},
             )
             if (
-                ticket["status"] != "reworking"
+                ticket["status"] not in {"reworking", "resolving-integration"}
                 or previous.get("kind") != "team-round-implementation-rejected"
                 or previous.get("ticket_id") != ticket_id
                 or previous.get("team_round") != round_ordinal
@@ -181,7 +187,8 @@ def apply_delivery_state_request(
             if author is None:
                 raise ValueError("Result correction requires its own Session")
             require_task_authority(state_directory, runner, ticket_id, author, "submit")
-            ticket_update.update(status=_transition(ticket, "implementing"), current_candidate=None)
+            if ticket["status"] != "resolving-integration":
+                ticket_update.update(status=_transition(ticket, "implementing"), current_candidate=None)
             team_update["current_round"] += 1
             open_round = True
             kind = "team-round-rework-started"
@@ -191,16 +198,20 @@ def apply_delivery_state_request(
                 read_worldline(state_directory, harness_root),
             )
             snapshots = _decision_evidence(harness_root, submission, author, request["evidence_refs"])
-            ticket_update["current_candidate"] = submission["candidate"]
+            integration = ticket["status"] == "resolving-integration"
+            if not integration:
+                ticket_update["current_candidate"] = submission["candidate"]
             # Submission and acceptance can happen without a separate Review step.
             if ticket["status"] == "implementing":
                 ticket_update["status"] = _transition(ticket, "reviewing")
             close_round = True
             if request["decision"] == "accepted":
-                ticket_update["status"] = _transition(ticket_update, "awaiting-integration")
+                if not integration:
+                    ticket_update["status"] = _transition(ticket_update, "awaiting-integration")
                 kind = "team-round-accepted"
             else:
-                ticket_update["status"] = _transition(ticket_update, "reworking")
+                if not integration:
+                    ticket_update["status"] = _transition(ticket_update, "reworking")
                 # Retain the existing event kind for all rejected task results.
                 kind = "team-round-implementation-rejected"
 
@@ -361,12 +372,17 @@ def _validate_result_decision(
     runner = discover_runner_directory(harness)
     mapping = require_task_authority(state, runner, ticket["ticket_id"], submission["alias"], "accept")
     if (mapping["session"] != submission["session"]
-            or ticket["status"] not in {"implementing", "reviewing"}
+            or ticket["status"] not in {"implementing", "reviewing", "resolving-integration"}
             or candidate != submission["candidate"]
             or request["submission_id"] not in request["caused_by_event_ids"]
             or any(event.get("submission_id") == request["submission_id"] for event in events)):
         raise ValueError("Decision does not match an undecided submitted version")
     worktree = Path(mapping["worktree_path"])
+    if ticket["status"] == "resolving-integration":
+        from graphtraj.configuration.project_configuration import load_project_configuration
+
+        if worktree != load_project_configuration(harness).integration_worktree:
+            raise ValueError("Integration decisions require an Integration Worktree result")
     if (run_git(worktree, "rev-parse", "HEAD") != candidate
             or run_git(worktree, "diff", "--name-only")
             or run_git(worktree, "diff", "--cached", "--name-only")):

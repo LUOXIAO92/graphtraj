@@ -225,7 +225,7 @@ def require_task_authority(
     caller = caller_alias(runner_directory)
     if operation == "submit" and caller == alias:
         return mapping
-    if operation in {"accept", "register-member"} and is_direct_owner(caller, mapping):
+    if operation in {"accept", "integrate", "register-member"} and is_direct_owner(caller, mapping):
         return mapping
     raise _authority_denied()
 

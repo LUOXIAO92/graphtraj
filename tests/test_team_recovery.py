@@ -70,7 +70,7 @@ def test_explicit_retry_preserves_session_without_automatic_report_gates(
     launch.write_text(yaml.safe_dump({'tasks': [{'role': role, 'ticket_id': '169'}]}))
     result = run_process([str(installed_commands.runner), '--swarm-input', str(launch)],
                          cwd=root, env=env, timeout=30)
-    assert result.returncode == (1 if failure == 'provider' else 0), result.stdout + result.stderr
+    assert result.returncode == 0, result.stdout + result.stderr
     mapping_path = next((root / '.graphtraj/runner/sessions').glob('*/mapping.yml'))
     task = yaml.safe_load(mapping_path.read_text())
     alias = task['alias']

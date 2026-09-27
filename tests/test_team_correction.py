@@ -498,16 +498,13 @@ def test_interrupted_candidate_correction_resumes_only_stale_reviews(
 
 @pytest.mark.parametrize('role', ['engineer', 'researcher'])
 def test_public_state_rejects_obsolete_candidate_and_correction(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, role: str,
+    tmp_path: Path, installed_commands: InstalledCommands, role: str,
 ) -> None:
     """Old state requests cannot replace the common submission/decision protocol."""
-    from click.testing import CliRunner
     from graphtraj.graph.delivery_worldline import read_worldline
-    from graphtraj.interfaces.cli.graphtraj import main
     from test_result_submission import result_project
 
     _, team, commit = result_project(tmp_path)
-    monkeypatch.chdir(tmp_path)
     before = read_worldline(tmp_path / 'state', tmp_path)
     original = (team.parents[2] / 'ticket.yml').read_bytes()
     request_file = tmp_path / 'request.yml'
@@ -518,12 +515,12 @@ def test_public_state_rejects_obsolete_candidate_and_correction(
             **fields, 'ticket_id': '148', 'evidence_refs': ['evidence.md'],
             'caused_by_event_ids': [before[-1]['event_id']],
         }))
-        result = CliRunner().invoke(main, [
-            'delivery-state', 'apply', '--request-file', str(request_file),
+        result = run_process([
+            str(installed_commands.product), 'delivery-state', 'apply', '--request-file', str(request_file),
             '--facts-file', str(request_file),
-        ])
-        assert result.exit_code == 1, result.output
-        assert 'invalid schema' in result.output
+        ], cwd=tmp_path)
+        assert result.returncode == 1, result.stdout + result.stderr
+        assert 'invalid schema' in result.stderr
     assert (team.parents[2] / 'ticket.yml').read_bytes() == original
     assert read_worldline(tmp_path / 'state', tmp_path) == before
 

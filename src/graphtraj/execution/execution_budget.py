@@ -17,7 +17,7 @@ from typing import Any, Callable, Iterator, Mapping
 
 import yaml
 
-from graphtraj.configuration.project_roles import logical_role
+from graphtraj.configuration.project_roles import configured_role_name
 from graphtraj.execution.runner_io import write_yaml_durably
 from graphtraj.execution.runner_models import RunnerError
 
@@ -172,7 +172,7 @@ def execution_budget_stage(role: str) -> str:
 
 def _session_key(role: str) -> str:
     """Use the actual role reference for Session accounting."""
-    return logical_role(role).replace("-", "_")
+    return configured_role_name(role).replace("-", "_")
 
 
 class ExecutionBudgetMonitor:

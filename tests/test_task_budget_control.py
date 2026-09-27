@@ -84,6 +84,29 @@ def test_budget_accepts_actual_work_and_keeps_allowance_across_roles_and_resume(
     assert len(after['leader_notices']) == 3
 
 
+def test_distinct_configured_roles_keep_independent_budget_counts(tmp_path: Path) -> None:
+    """Each actual role crosses only its own configured Session threshold."""
+    monitor = monitor_at(tmp_path / 'ticket')
+    definition = monitor.ticket_directory / 'ticket.md'
+    definition.write_text(BODY.replace(
+        'planned_sessions: {researcher: 1}',
+        'planned_sessions: {researcher: 1, engineer: 1, engineer_expert: 1}',
+    ))
+    for role in ('engineer', 'engineer-expert', 'researcher'):
+        monitor.record_session(role, role)
+    usage = monitor.ticket_directory / 'execution-budget.yml'
+    before = yaml.safe_load(usage.read_text())
+    assert before['sessions'] == {'engineer': 1, 'engineer_expert': 1, 'researcher': 1}
+    assert not before['notifications']
+    for role, key in (('engineer-expert', 'engineer_expert'), ('engineer', 'engineer'),
+                      ('researcher', 'researcher')):
+        monitor.record_session(role, role)
+        after = yaml.safe_load(usage.read_text())
+        assert after['sessions'][key] == 2
+        assert after['notifications'][-1] == 'planned_sessions.' + key + ':1'
+    assert after['sessions'] == {'engineer': 2, 'engineer_expert': 2, 'researcher': 2}
+
+
 @pytest.mark.parametrize('role', ['researcher', 'analyst'])
 def test_runner_physically_interrupts_any_role_and_retains_trace_and_result(
     commands: InstalledCommands,

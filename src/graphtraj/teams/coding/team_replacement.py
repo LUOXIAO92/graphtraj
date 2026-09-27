@@ -7,7 +7,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from graphtraj.configuration.project_roles import configured_role_name
-from graphtraj.execution.runner_batch import read_batch
+from graphtraj.execution.runner_batch import read_session_task
 from graphtraj.execution.runner_control import _require_project_events, _session_report_paths
 from graphtraj.execution.runner_models import Project, RunnerError
 from graphtraj.workspace.runner_project import discover_project, run_git
@@ -109,8 +109,7 @@ def _replace_stopped_session(
     worktree = project.harness_root / ticket["worktree"]
     traces = team_file.parent / "traces"
     retained = Path(mapping["retained_batch_file"])
-    batch = read_batch(retained, cwd)
-    task = next(task for task in batch.tasks if task.ticket_id == ticket["ticket_id"] and task.role == mapping["role"])
+    task = read_session_task(mapping, cwd)
     definition = directory / ticket["current_definition"]
     task = replace(task, ticket_file=definition, ticket_content=definition.read_text())
     require_active_session(project, alias)

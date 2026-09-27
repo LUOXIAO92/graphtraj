@@ -34,6 +34,7 @@ from graphtraj.configuration.project_roles import (
 )
 from graphtraj.execution.runner_batch import (
     read_batch,
+    read_session_task,
     retain_batch,
     valid_ticket_id,
 )
@@ -466,8 +467,7 @@ def run_session_children(job_file: Path) -> None:
     project = discover_project(discover_project_root(job_file), require_clean_integration=False)
     mapping, _ = read_alias_mapping(project.runner_directory, job_file.parent.name)
     retained = Path(mapping["retained_batch_file"])
-    task = next(task for task in read_batch(retained, project.harness_root).tasks
-                if task.ticket_id == mapping["ticket_id"] and task.role == mapping["role"])
+    task = read_session_task(mapping, project.harness_root)
     _run_registered_children(
         project, _registered_ticket_task(project, task), mapping["alias"],
         mapping["session"], retained, int(os.environ["GRAPHTRAJ_CAPACITY_FD"]),

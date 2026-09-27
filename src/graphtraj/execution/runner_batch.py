@@ -61,6 +61,23 @@ def read_batch(
     )
 
 
+def read_session_task(mapping: Mapping[str, Any], cwd: Path) -> Task:
+    """Read the Batch task using the Session's actual retained identity.
+
+    Current records keep their configured roles. Historical interpretation is
+    used only when it agrees with the role and reference stored at launch.
+    """
+    batch_file = Path(mapping["retained_batch_file"])
+    for historical in (False, True):
+        batch = read_batch(batch_file, cwd, retained=historical)
+        for task in batch.tasks:
+            if (task.ticket_id == mapping["ticket_id"]
+                    and task.role == mapping["role"]
+                    and task.role_reference == mapping.get("role_reference", task.role_reference)):
+                return task
+    raise RunnerError("BATCH_TASK_MISSING", "The retained Batch does not match this Session's identity.")
+
+
 def read_swarm(
     swarm_file: Path,
     cwd: Path,

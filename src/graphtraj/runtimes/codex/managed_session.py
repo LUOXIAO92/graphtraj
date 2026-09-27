@@ -13,9 +13,14 @@ from typing import Callable
 
 import yaml
 
+from graphtraj.configuration.project_configuration import (
+    configuration_exists,
+    load_project_configuration,
+)
 from graphtraj.configuration.project_roles import load_project_roles
 from graphtraj.runtimes.codex.approval import approval_route, review_request
 
+from graphtraj.execution.runner_batch import read_session_task
 from graphtraj.execution.runner_control import notify_direct_parent
 from graphtraj.execution.runner_io import write_yaml_durably
 from graphtraj.runtimes.codex.app_server import CodexAppServer, CodexExecution, CodexServerRequest
@@ -26,16 +31,31 @@ from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 def refresh_approval_route(request: dict, session_directory: Path) -> None:
     """Reload only approval routing for the mapped role, preserving work settings."""
     config = request.get('session_parameters', {}).get('config', {})
-    if config.get('model_provider', 'openai') == 'openai':
-        request.pop('approval', None)
-        return
     root = os.environ.get('GRAPHTRAJ_HARNESS_ROOT')
     if not root:
         raise RuntimeAdapterError('ROLE_CONFIG_INVALID', 'Harness root is required to refresh codex.approval.')
+
+    harness_root = Path(root)
     mapping = yaml.safe_load((session_directory / 'mapping.yml').read_text(encoding='utf-8'))
-    roles = load_project_roles(Path(root))
-    settings = roles.presets[roles.resolve(mapping.get('role_reference') or mapping['role'])]
-    request['approval'] = approval_route(settings.codex, custom=True)
+    task = read_session_task(mapping, harness_root)
+    # Inline roles live in their retained Batch, not in the reusable presets.
+    settings = (
+        task.inline_preset or
+        load_project_roles(harness_root).preset(mapping.get('role_reference') or mapping['role'])
+    )
+    defaults = (
+        load_project_configuration(harness_root).codex
+        if configuration_exists(harness_root) else None
+    )
+    route = approval_route(
+        settings.codex,
+        custom=config.get('model_provider', 'openai') != 'openai',
+        defaults=defaults,
+    )
+    if route is None:
+        request.pop('approval', None)
+        return
+    request['approval'] = route
     config['approvals_reviewer'] = 'user'
     request['session_parameters']['approvalsReviewer'] = 'user'
     arguments = request['arguments']

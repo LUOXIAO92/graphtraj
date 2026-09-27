@@ -164,7 +164,7 @@ capacity, recovery, candidate and integration rules. Live budget JSONL can be
 routed to an open descriptor with
 `execution.execution_budget.budget_notice_output(descriptor)` around an
 operation. Without a selected or inherited channel, budget accounting and
-Leader notices remain retained and Python produces no terminal output; the
+parent notices remain retained and Python produces no terminal output; the
 CLI selects stderr. Conflict integration retains notices in its evidence log.
 
 For a Codex Main, `agent-runner` and the MCP server automatically bind that same
@@ -192,8 +192,8 @@ inherited-channel or stderr behavior.
 A stop sampled after the call that was awaiting it has already returned has no
 in-band carrier: the resumed Worker keeps the caller channel, but that call
 cannot be answered twice. Such a stop is retained in the Ticket's
-`execution-budget.yml` and reported to the Team Leader; it is not placed in
-Main's input box.
+`execution-budget.yml` and reported to the Session's recorded parent; it is not
+placed in Main's input box.
 
 `agent-runner send --reports-only` collects a report a Session already holds.
 It resumes that Session read-only without attaching the budget monitor, so
@@ -254,7 +254,7 @@ set are managed separately. Matt Pocock sources are from
 | `to-tickets` | Matt Pocock: same name | Code tickets preserve accepted task nodes, acceptance and dependencies; add justified difficulty and execution budgets as YAML front matter. |
 | `implement` | Matt Pocock: same name | Team Engineers self-review and return evidence to their Leader, who schedules Reviewers; standalone work retains the code-review step. |
 | `code-review` | Matt Pocock: same name | Distinguishes Leader-owned Team Review from standalone review orchestration; assigned Reviewers perform only their supplied axis. |
-| `resolving-merge-conflicts` | Matt Pocock: same name | A dispatched Resolver stages the result for Main to commit and validate; incompatible accepted requirements return to Main. |
+| `resolving-merge-conflicts` | Matt Pocock: same name | The selected member commits the reconciliation and submits its exact version through the common result operation; the actual parent decides that submitted version, and the caller's integration then runs the retained validation. |
 | `tdd` | Matt Pocock: same name | Retains the upstream test-driven development workflow. |
 | `ponytail` | [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail) | Bundled minimal-implementation guidance, with no GraphTraj-specific changes to its instructions. |
 | `ponytail-review` | [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail) | Bundled over-engineering review guidance, with no GraphTraj-specific changes to its instructions. |
@@ -322,10 +322,14 @@ descendants below Main; a Team Leader is depth 1 and its children depth 2.
 `max_concurrency` limits executing Agents across the project. Operating-system
 locks enforce capacity; lock-file presence is not occupancy. A normal Batch
 starts all its tasks or none. Team delivery also works at capacity one, with
-a coding Team's two Reviewers running sequentially in the same Round. A child Batch beyond
-`dispatch_depth` returns `authority-denied` before registration. Runner counts
-the retained parent Session chain; resuming a Leader adds no depth. Delegated
-roles other than the Leader cannot launch Batches through Main's entry point.
+the coding Team's selected Review axes running sequentially in the same Round;
+that Leader selects only the necessary axes, each at most once per Ticket. A
+child Batch beyond `dispatch_depth` returns `authority-denied` before
+registration. Runner counts the retained parent Session chain; resuming a
+Leader adds no depth. Dispatch permission comes from explicit `role_tree`
+edges and `dispatch_depth`, not from being the Leader: a registered member
+registers the direct children its `role_tree` permits, and a child Batch must
+belong to the parent's Ticket.
 
 Setup writes an empty `roles` mapping in `.graphtraj/roles.yml`: a project
 declares the roles its own work uses, and no coding arrangement is selected for
@@ -355,15 +359,15 @@ roles:
     model: gpt-5.6-luna
 ```
 
-A coding Team that uses these presets has a Team Leader, one unified Engineer,
-both Reviewer axes, Delivery State and Merge Resolver; a task that needs none
-of them declares a different selection, such as the researcher below. Batch
+The presets offer that role content; a Team uses only the members and Review
+axes its work needs (one-person Teams are allowed), and a task that needs none
+declares a different selection, such as the researcher below. Batch
 references use names such as `coding-team.team-leader` or
 `coding-team.spec-reviewer`. Each preset selects `runtime`
 and `model`, with optional `reasoning_effort`, `base_url` and `api_key_env`. The latter names an
 environment variable, never stores the credential. Omitted settings use the
 Runtime's defaults. Team Leader additionally supports `allow_runtime_swarm`,
-which defaults to true. Main's already selected
+which defaults to false. Main's already selected
 Runtime is outside these presets.
 
 Set `reasoning_effort` on a role when its model needs a different reasoning
@@ -523,7 +527,8 @@ records only the execution facts it observes.
 Main integrates accepted candidates serially into `dev` and supplies the
 project's validation command. For an actual textual or semantic conflict,
 the integration command accepts `--resolve-conflict <diagnosis>` to dispatch
-a Merge Resolver. Successful Team Review alone does not merge a candidate.
+an explicitly selected role (`--role <configured role reference or inline
+role>`). Successful Team Review alone does not merge a candidate.
 Cleanup verifies integration and a clean disposable Worktree, removes safe
 live mappings and the Ticket Worktree/branch, and preserves durable evidence.
 
@@ -536,13 +541,14 @@ returns. The existing registered-task inline-role launch returns `launched` with
 an alias and native `session`; coding Team scheduling still follows its existing
 workflow.
 
-For a coding Team, `launch_batch(parse_batch(document), root)` runs the selected
-Leader's normal Round through the same Worker and Adapter. The Leader registers
-one Engineer, then both Reviewers for the fixed candidate, and makes the final
-decision after collecting their reports. A two-Reviewer Batch that cannot fit
-starts neither Reviewer and returns `insufficient-capacity` to the same Leader
-Session. The Leader registers the Reviewers separately to proceed at capacity
-one; the stopped parent's position transfers to each child in turn.
+`launch_batch(parse_batch(document), root)` dispatches a Batch through the same
+Worker and Adapter. A calling Session registers the direct children its
+`role_tree` permits; a Batch that cannot fit starts none of its tasks and
+returns `insufficient-capacity` to the caller Session. In the optional coding
+method, a Leader registers its Engineer and selected Review axes for the fixed
+candidate and makes the final decision after collecting their reports; when a
+Batch cannot fit, the Leader registers its axes separately to proceed at
+capacity one, and the stopped parent's position transfers to each child in turn.
 
 `read_graph(state)` exposes the Ticket's `implementing`, `reviewing`, and
 `awaiting-integration` states. `read_worldline(state, root)` supplies the fixed
@@ -921,9 +927,9 @@ reminders stay ordinary notices. Without that request metadata, or without the
 installed Skill at `.agents/skills/retro/SKILL.md` in the server's working
 directory, the tools keep their generic behaviour and run without a caller
 notice channel; such a stop is only retained in the Ticket's
-`execution-budget.yml` and reported to the Team Leader. Nothing here writes Main
-developer instructions or user Runtime configuration, and no stop is queued into
-the host's native input.
+`execution-budget.yml` and reported to the Session's recorded parent. Nothing
+here writes Main developer instructions or user Runtime configuration, and no
+stop is queued into the host's native input.
 
 A host can run the whole loop from tools alone: `swarm` a launch input, read
 identity, activity and outcome with `alias_status`, steer the owned execution
@@ -999,10 +1005,11 @@ GraphTraj does not migrate them, read them as fallback or offer compatibility
 for the old project command, Run-based Batch syntax or configuration sources.
 
 The current Adapter supports Codex. Dispatched coding Teams use Runner for
-formal implementation and Review. Permitted Team Leaders may use Runtime-native
-helpers only for temporary read-only investigation; those helpers have no
-independent GraphTraj Trace and cannot occupy a Team seat. Engineers and
-Reviewers cannot dispatch child Agents or start another Runtime. Main's
+formal implementation and Review. A role configured with `allow_runtime_swarm`
+may use Runtime-native helpers only for temporary read-only investigation;
+those helpers cannot occupy a Team seat, have no independent GraphTraj Trace,
+and do not authorize any formal Runner dispatch edge. No Session starts another
+Agent Runtime directly; formal dispatch uses Runner and `role_tree`. Main's
 Runtime and helper settings remain under user control.
 
 GraphTraj has no queue, daemon, automatic crash-recovery service or automatic

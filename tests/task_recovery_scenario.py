@@ -18,7 +18,7 @@ root = Path(os.environ['GRAPHTRAJ_HARNESS_ROOT'])
 role = os.environ['GRAPHTRAJ_ROLE']
 alias = os.environ['GRAPHTRAJ_PARENT_ALIAS']
 entity = alias.partition('@')[2]
-stem = 'leader' if role == 'team-leader' else role
+stem = role
 if entity != role.replace('-', '_'):
     if not Path('result.md').exists():
         assert 'Retained work by ' in prompt

@@ -164,9 +164,14 @@ def test_public_team_phases_and_parent_capacity_transfer(
         assert mapping["parent"] == leader
         assert mapping["worktree_path"] == str(worktrees / "114-small-team")
         assert mapping["ticket_id"] == "114" and mapping["team_generation"] == 1
-        observed = status_aliases([alias, leader], root)
-        assert observed.succeeded, observed.document
-        child, parent = observed.document["aliases"]
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            observed = status_aliases([alias, leader], root)
+            assert observed.succeeded, observed.document
+            child, parent = observed.document["aliases"]
+            if child['activity'] == 'running':
+                break
+            time.sleep(.05)
         assert child["activity"] == "running"
         assert child["session"] == mapping["session"] and child["execution_id"] == mapping["execution_id"]
         assert parent["activity"] == "idle" and parent["last_outcome"] == "completed"

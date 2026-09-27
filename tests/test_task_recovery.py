@@ -128,7 +128,9 @@ def test_explicitly_stopped_member_is_replaced_without_executing_old_session(
             batch_file = Path(original['retained_batch_file'])
             batch = yaml.safe_load(batch_file.read_text())
             batch['tasks'][0]['role'] = 'coding-team.engineer-expert'
+            batch_file.chmod(0o644)
             batch_file.write_text(yaml.safe_dump(batch))
+            batch_file.chmod(0o444)
         retained_batch = Path(original['retained_batch_file']).read_bytes()
 
         marker = (runner / alias / 'stop.yml').read_bytes()

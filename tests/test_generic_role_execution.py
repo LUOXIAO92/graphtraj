@@ -248,7 +248,9 @@ def test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority(
         retained = Path(parent_mapping['retained_batch_file'])
         batch = yaml.safe_load(retained.read_text())
         batch['tasks'][0]['role'] = 'coding-team.engineer-expert'
+        retained.chmod(0o644)
         retained.write_text(yaml.safe_dump(batch))
+        retained.chmod(0o444)
         original_batch = retained.read_bytes()
     sent = run_process([str(installed_commands.runner), 'send', parent['alias'],
                         '--instruction', 'Dispatch again', '--caused-by-event-id', events[-1]['event_id']],

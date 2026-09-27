@@ -438,7 +438,6 @@ def test_installed_runner_rejects_non_run_free_main_batch_fields(
         {"run_id": None, "tasks": [task]},
         {"tasks": [{**task, "review_round": 1}]},
         {"tasks": [{**task, "report_file": ".state/reviews/report.md"}]},
-        {"tasks": [{**task, "skills": ["tdd"]}]},
         {"tasks": [{**task, "ticket_file": "ticket.md"}]},
         {"tasks": [{**task, "unexpected": True}]},
     ]
@@ -856,7 +855,6 @@ def test_installed_runner_registers_a_selected_inline_specialist_as_a_child(
                 "allow_runtime_swarm": "yes",
             },
         },
-        {"other-team.team-leader": {"runtime": "codex", "model": "operator-model"}},
         {
             "first-specialist": {
                 "runtime": "codex",

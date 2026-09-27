@@ -283,6 +283,13 @@ def test_python_and_cli_launch_the_same_structured_batch_and_errors(
     monkeypatch.setenv("PYTHONPATH", str(PROJECT_ROOT / "src"))
     monkeypatch.chdir(root)
     register_ticket(root / ".graphtraj/state", root, _ticket("73", "shared-runner"))
+    from test_ticket_graph import _change_status
+    _change_status(installed_commands, root, '73', 'ready')
+    roles_file = root / '.graphtraj/roles.yml'
+    roles = yaml.safe_load(roles_file.read_text())
+    roles['role_tree']['investigation-specialist'] = {}
+    roles_file.write_text(yaml.safe_dump(roles))
+
     document = {"tasks": [{
         "ticket_id": "73", "ticket_name": "shared-runner",
         "role": {"investigation-specialist": {"runtime": "codex", "model": "gpt-5.6-luna"}},
@@ -373,14 +380,16 @@ def test_python_budgeted_launch_preserves_notices_without_writing_to_terminal(
             }]}), root)
     assert response.succeeded, response.document
     assert capfd.readouterr() == ("", "")
+    from runner_fixtures import wait_for_ticket_status
+    wait_for_ticket_status(installed_commands, root, "73", "awaiting-integration")
     budget = yaml.safe_load((directory / "execution-budget.yml").read_text())
     assert budget["notifications"]
-    assert budget["sessions"]["delivery_state"] == 1
+    assert budget["sessions"]["team_leader"] == 1
     events = [json.loads(line) for line in notices.read_text().splitlines()]
     if capture_notices:
         assert len(events) == 1
         assert events[0]["type"] == "execution-budget-exceeded"
-        assert events[0]["threshold"] == {"kind": "planned_sessions.delivery_state", "limit": 0.5}
+        assert events[0]["threshold"] == {"kind": "planned_sessions.team_leader", "limit": 0.5}
     else:
         assert events == []
 

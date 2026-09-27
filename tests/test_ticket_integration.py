@@ -221,7 +221,7 @@ def test_grouped_presets_apply_operator_settings_and_preserve_existing_history(
     assert launched.returncode == 0, launched.stderr
     records = [json.loads(line) for line in fake_codex.log_file.read_text().splitlines()]
     assert {record["role"] for record in records} == {
-        "team-leader", "engineer", "standards-reviewer", "spec-reviewer", "delivery-state",
+        "team-leader", "engineer", "standards-reviewer", "spec-reviewer",
     }
     for record in records:
         if record["role"] == "delivery-state":

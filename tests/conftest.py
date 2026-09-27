@@ -529,6 +529,21 @@ def _install_commands(environment: Path, wheel: Path) -> InstalledCommands:
         cwd=wheel.parent,
     )
     result.check_returncode()
+    # Worker uses Python -I; install an explicit test clock hook instead of
+    # relying on PYTHONPATH leaking into an isolated interpreter.
+    site = run_process([str(python), '-c',
+                        "import sysconfig; print(sysconfig.get_path('purelib'))"], cwd=environment)
+    site.check_returncode()
+    Path(site.stdout.strip(), 'sitecustomize.py').write_text(
+        "import os, runpy\n"
+        "from pathlib import Path\n"
+        "if os.environ.get('BUDGET_CLOCK'):\n"
+        "    for directory in os.environ.get('PYTHONPATH', '').split(os.pathsep):\n"
+        "        script = Path(directory) / 'sitecustomize.py'\n"
+        "        if directory and script.is_file() and script.resolve() != Path(__file__).resolve():\n"
+        "            runpy.run_path(str(script))\n"
+        "            break\n"
+    )
     bin_directory = environment / "bin"
     assert {
         path.name for path in bin_directory.iterdir()

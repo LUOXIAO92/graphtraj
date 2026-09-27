@@ -32,6 +32,7 @@ PUBLIC_ERROR_CODES = frozenset(
         "turn-running",
         "live-input-unsupported",
         "operation-failed",
+        "EXECUTION_BUDGET_STOPPED",
         "subtree-stopped",
         "cleanup-not-integrated",
         "cleanup-not-merged",

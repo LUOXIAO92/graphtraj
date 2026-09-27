@@ -157,7 +157,8 @@ def test_single_role_launch_registers_and_executes_without_placeholder_members(
 
 @pytest.mark.parametrize('surface', ['cli', 'mcp'])
 @pytest.mark.parametrize('parent_role, child_role, historical', [
-    ('researcher', 'analyst', False), ('engineer-expert', 'engineer-junior', False),
+    ('researcher', 'analyst', False), ('team-leader', 'analyst', False),
+    ('engineer', 'analyst', False), ('engineer-expert', 'engineer-junior', False),
     ('coding-team.engineer', 'analyst', True),
 ])
 def test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority(

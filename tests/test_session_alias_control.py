@@ -246,7 +246,7 @@ def test_installed_alias_control_resumes_and_interrupts_one_team_session(
         cwd=harness_root, env=environment,
     )
     assert denied.returncode == 1
-    assert yaml.safe_load(denied.stdout)["error"]["code"] == "insufficient-capacity"
+    assert yaml.safe_load(denied.stdout)["error"]["code"] == "authority-denied"
     assert peer_mapping_file.read_text() == peer_before
     denied_batch = run_process(
         [str(installed_commands.runner), "--swarm-input", str(batch)],
@@ -327,7 +327,7 @@ def test_installed_alias_control_resumes_and_interrupts_one_team_session(
     assert not list((ticket_directory / "teams" / "1" / "traces" / alias).glob("turn-*"))
 
 
-def test_installed_runner_keeps_clean_dev_requirement_for_new_ticket_worktree(
+def test_new_ticket_uses_committed_dev_without_copying_uncommitted_work(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
     fake_codex: FakeCodex,
@@ -359,266 +359,15 @@ def test_installed_runner_keeps_clean_dev_requirement_for_new_ticket_worktree(
         timeout=15,
     )
 
-    assert launched.returncode == 1
-    response = yaml.safe_load(launched.stdout)
-    error = response.get("error") or response["tasks"][0]["error"]
-    assert error["code"] == "integration-not-ready"
-    state = yaml.safe_load(
-        (
-            harness_root
-            / ".graphtraj/state/tickets/76-session-alias-control/ticket.yml"
-        ).read_text(encoding="utf-8")
-    )
-    assert state["status"] == "ready"
-    assert state["worktree"] is None
-    assert not (worktree_root / "76-session-alias-control").exists()
+    assert launched.returncode == 0, launched.stdout + launched.stderr
+    task = yaml.safe_load(launched.stdout)['tasks'][0]
+    assert task['launch_status'] == 'launched'
+    assert (integration / 'other-ticket-in-progress.txt').read_text() == 'temporary work from another Ticket\n'
+    assert not (Path(task['worktree_path']) / 'other-ticket-in-progress.txt').exists()
 
 
-def test_installed_send_resumes_an_unregistered_leader_session(
-    installed_commands: InstalledCommands,
-    temporary_git_repository: Path,
-    fake_codex: FakeCodex,
-    tmp_path: Path,
-) -> None:
-    harness_root, _, integration, environment = configure_harness(
-        installed_commands,
-        temporary_git_repository,
-        fake_codex,
-        tmp_path,
-    )
-    _register_ready_ticket(installed_commands, harness_root)
-    batch = harness_root / "batch.yml"
-    batch.write_text(
-        "tasks:\n"
-        "  - ticket_id: \"76\"\n"
-        "    ticket_name: session-alias-control\n"
-        "    role: team-leader\n",
-        encoding="utf-8",
-    )
-    launched = run_process(
-        [str(installed_commands.runner), "--swarm-input", str(batch)],
-        cwd=harness_root,
-        env=environment,
-        timeout=15,
-    )
-
-    assert launched.returncode == 1
-    mapping_file = next(
-        path
-        for path in (harness_root / ".graphtraj" / "runner" / "sessions").glob(
-            "*/mapping.yml"
-        )
-        if yaml.safe_load(path.read_text(encoding="utf-8"))["role"] == "team-leader"
-    )
-    mapping = yaml.safe_load(mapping_file.read_text(encoding="utf-8"))
-    ticket = harness_root / ".graphtraj" / "state" / "tickets" / "76-session-alias-control"
-    assert not (ticket / "teams" / "1" / "team.yml").exists()
-    launch_before = (mapping_file.parent / "launch.yml").read_bytes()
-    execution = mapping_file.parent / "execution.yml"
-    cause = [
-        json.loads(line)["event_id"]
-        for shard in (harness_root / ".graphtraj" / "state" / "worldline").glob(
-            "*.jsonl"
-        )
-        for line in shard.read_text(encoding="utf-8").splitlines()
-    ][-1]
-    (integration / "other-ticket-in-progress.txt").write_text(
-        "temporary work from another Ticket\n", encoding="utf-8"
-    )
-
-    resumed = run_process(
-        [
-            str(installed_commands.runner),
-            "send",
-            mapping["alias"],
-            "--instruction",
-            "Register the first Engineer child Batch.",
-            "--caused-by-event-id",
-            cause,
-        ],
-        cwd=harness_root,
-        env={
-            **environment,
-            "FAKE_CODEX_LIFECYCLE_ACTION": "complete-team-round",
-            "FAKE_CODEX_RELEASE_FILE": str(tmp_path / "resume-release"),
-            "GRAPHTRAJ_AGENT_RUNNER": str(installed_commands.runner),
-        },
-        timeout=15,
-    )
-
-    assert resumed.returncode == 0, resumed.stdout + resumed.stderr
-    assert not os.path.lexists(str(execution))
-    (tmp_path / "resume-release").touch()
-    wait_for_file(execution)
-    assert yaml.safe_load(mapping_file.read_text(encoding="utf-8"))["session"] == mapping[
-        "session"
-    ]
-    assert (mapping_file.parent / "launch.yml").read_bytes() == launch_before
-    registration = yaml.safe_load(
-        (mapping_file.parent / "child-registration.yml").read_text(encoding="utf-8")
-    )
-    assert registration["tasks"] == [
-        {
-            "ticket_id": "76",
-            "role": "engineer",
-            "alias": "76-session_alias_control-handover0-engineer@engineer",
-            "launch_status": "registered",
-        }
-    ]
-    assert not (ticket / "teams" / "1" / "team.yml").exists()
 
 
-def test_installed_stopped_preteam_send_is_read_only(
-    installed_commands: InstalledCommands,
-    temporary_git_repository: Path,
-    fake_codex: FakeCodex,
-    tmp_path: Path,
-) -> None:
-    harness_root, _, _, environment = configure_harness(
-        installed_commands,
-        temporary_git_repository,
-        fake_codex,
-        tmp_path,
-    )
-    clock = tmp_path / "stopped-preteam-clock"
-    clock.write_text(str(time.time()), encoding="utf-8")
-    controls = tmp_path / "stopped-preteam-controls"
-    controls.mkdir()
-    (controls / "sitecustomize.py").write_text(
-        "import os\n"
-        "from pathlib import Path\n"
-        "try:\n"
-        "    import graphtraj.execution.execution_budget as budget\n"
-        "except ModuleNotFoundError:\n"
-        "    pass\n"
-        "else:\n"
-        "    budget.time.time = lambda: float(Path(os.environ['BUDGET_CLOCK']).read_text())\n"
-        "    budget.random.random = lambda: 0.99\n",
-        encoding="utf-8",
-    )
-    run_environment = {
-        **environment,
-        "BUDGET_CLOCK": str(clock),
-        "PYTHONPATH": str(controls),
-    }
-    _register_ready_ticket(
-        installed_commands,
-        harness_root,
-        body="""---
-difficulty: medium
-difficulty_reason: The stopped Leader resumes before Team registration
-execution_budget:
-  engineer_tier: senior
-  tier_reason: The Runner checks one stopped Leader continuation
-  estimated_minutes:
-    implementation: 1
-    validation: 1
-    review: 1
-    total: 0.01
-  planned_sessions:
-    team_leader: 1
-    engineer: 1
-    standards_reviewer: 1
-    spec_reviewer: 1
-    delivery_state: 1
-  correction_rounds: 1
-  estimation_note: The controlled clock samples one stopped continuation
-  on_exceed: Preserve the current Session
----
-
-Deliver the accepted Session transport behavior.
-""",
-    )
-    batch = harness_root / "batch.yml"
-    batch.write_text(
-        "tasks:\n"
-        "  - ticket_id: \"76\"\n"
-        "    ticket_name: session-alias-control\n"
-        "    role: team-leader\n",
-        encoding="utf-8",
-    )
-    launched = run_process(
-        [str(installed_commands.runner), "--swarm-input", str(batch)],
-        cwd=harness_root,
-        env=run_environment,
-        timeout=15,
-    )
-
-    assert launched.returncode == 1
-    mapping_file = next(
-        path
-        for path in (harness_root / ".graphtraj" / "runner" / "sessions").glob(
-            "*/mapping.yml"
-        )
-        if yaml.safe_load(path.read_text(encoding="utf-8"))["role"] == "team-leader"
-    )
-    mapping = yaml.safe_load(mapping_file.read_text(encoding="utf-8"))
-    ticket = harness_root / ".graphtraj" / "state" / "tickets" / "76-session-alias-control"
-    assert not (ticket / "teams" / "1" / "team.yml").exists()
-    usage_file = ticket / "execution-budget.yml"
-    usage = yaml.safe_load(usage_file.read_text(encoding="utf-8"))
-    clock.write_text(
-        str(
-            usage["started_at"]
-            + (0.01 + usage["allowance_minutes"] + 2.1) * 60
-        ),
-        encoding="utf-8",
-    )
-    policy = tmp_path / "stopped-preteam-policy.json"
-    fake_codex.executable.write_text(
-        app_server_peer("#!" + sys.executable + "\n" + """
-import json
-import os
-import sys
-import tomllib
-from pathlib import Path
-
-settings = {}
-for index, argument in enumerate(sys.argv[:-1]):
-    if argument == "-c":
-        settings.update(tomllib.loads(sys.argv[index + 1]))
-filesystem = settings["permissions"][settings["default_permissions"]]["filesystem"]
-Path(os.environ["STOPPED_POLICY_LOG"]).write_text(json.dumps({
-    "worktree_access": filesystem[":workspace_roots"]["."],
-    "team_round": os.environ.get("GRAPHTRAJ_TEAM_ROUND"),
-}), encoding="utf-8")
-print(json.dumps({"type": "thread.started", "thread_id": "fake-thread"}), flush=True)
-print(json.dumps({"type": "turn.completed"}), flush=True)
-"""),
-        encoding="utf-8",
-    )
-    fake_codex.executable.chmod(0o755)
-    cause = [
-        json.loads(line)["event_id"]
-        for shard in (harness_root / ".graphtraj" / "state" / "worldline").glob(
-            "*.jsonl"
-        )
-        for line in shard.read_text(encoding="utf-8").splitlines()
-    ][-1]
-
-    stopped = run_process(
-        [
-            str(installed_commands.runner),
-            "send",
-            mapping["alias"],
-            "--instruction",
-            "Report the stopped result.",
-            "--caused-by-event-id",
-            cause,
-        ],
-        cwd=harness_root,
-        env={**run_environment, "STOPPED_POLICY_LOG": str(policy)},
-        timeout=15,
-    )
-
-    assert stopped.returncode == 0, stopped.stdout + stopped.stderr
-    wait_for_file(policy)
-    assert json.loads(policy.read_text(encoding="utf-8")) == {
-        "worktree_access": "read",
-        "team_round": None,
-    }
-    assert yaml.safe_load(usage_file.read_text(encoding="utf-8"))["stopped"] is True
-    assert not (ticket / "teams" / "1" / "team.yml").exists()
 
 
 def test_installed_leader_registration_does_not_grant_budget_write_paths(

@@ -157,8 +157,10 @@ def _temporary_specialist(
         ),
         encoding="utf-8",
     )
+    from test_managed_sessions import CALL
     completed = run_process(
-        [str(commands.runner), "--swarm-input", str(batch)],
+        [str(commands.runner.with_name("python")), "-c", CALL, str(root),
+         json.dumps(["launch", yaml.safe_load(batch.read_text())])],
         cwd=root, env=environment, timeout=30,
     )
     assert completed.returncode == 0, completed.stdout + completed.stderr

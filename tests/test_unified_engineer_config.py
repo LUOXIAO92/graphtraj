@@ -213,3 +213,34 @@ def test_retained_tiered_batch_still_resolves_for_recovery(tmp_path: Path) -> No
 def test_retained_engineer_session_labels_its_actual_budget_work(role: str) -> None:
     """A retained Session labels observations without implying a programming phase."""
     assert execution_budget_stage(role) == role
+
+
+@pytest.mark.parametrize('reference, roles, succeeds', [
+    ('writing.author', ['writing.author', 'research.scribe'], True),
+    (None, ['writing.author'], True),
+    (None, ['writing.author', 'research.scribe'], False),
+    ('missing.author', ['writing.author'], False),
+])
+def test_retained_session_binding_requires_unique_actual_facts(
+    tmp_path: Path, reference: str | None, roles: list[str], succeeds: bool,
+) -> None:
+    """An old identity is preserved without guessing from role names or models."""
+    from graphtraj.execution.runner_batch import read_session_task
+    from graphtraj.execution.runner_models import RunnerError
+
+    retained = tmp_path / 'batch.yml'
+    retained.write_text(yaml.safe_dump({'tasks': [
+        {'ticket_id': '169', 'ticket_name': 'binding', 'role': role} for role in roles
+    ]}))
+    original = retained.read_bytes()
+    mapping = {'ticket_id': '169', 'role': 'editor', 'retained_batch_file': str(retained)}
+    if reference is not None:
+        mapping['role_reference'] = reference
+    if succeeds:
+        task = read_session_task(mapping, tmp_path)
+        assert task.role == task.policy_role == 'editor'
+        assert task.role_reference == (reference or roles[0])
+    else:
+        with pytest.raises(RunnerError, match='uniquely identify'):
+            read_session_task(mapping, tmp_path)
+    assert retained.read_bytes() == original

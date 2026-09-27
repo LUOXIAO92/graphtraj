@@ -1166,7 +1166,7 @@ def test_parent_projection_keeps_control_files_private(
         root, peer,
         ResolvedChildRole(role, 'Lead the Team.', (),
                           RolePreset('codex', 'chosen-model', None, None,
-                                     allow_runtime_swarm=True, reasoning_effort='max', worktree_access='read')),
+                                     allow_runtime_swarm=True, reasoning_effort='max', worktree_access='write')),
         leader_control_write_paths=(worldline_lock, capacity),
     )
     launch = _native_filesystem(resolved.launch_document()['adapter_request'])
@@ -1205,7 +1205,7 @@ def test_parent_projection_keeps_control_files_private(
     # No wildcard, no shared Runner directory and no other Ticket's Session.
     assert filesystem.get(str(sessions)) != 'write'
     assert filesystem.get(str(sessions / 'other-ticket@e1')) != 'write'
-    assert filesystem[':workspace_roots']['.'] == 'read'
+    assert filesystem[':workspace_roots']['.'] == 'write'
 
 
 def test_role_assignments_survive_native_followup_permissions(

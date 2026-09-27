@@ -69,7 +69,7 @@ def _budget_notices() -> Iterator[None]:
     "--swarm-input",
     metavar="YAML_FILE",
     type=click.Path(path_type=Path),
-    help="Activate the roles selected by Main or a Team Leader.",
+    help="Activate the roles selected in the launch input.",
 )
 @click.pass_context
 def main(context: click.Context, swarm_input: Path | None) -> None:

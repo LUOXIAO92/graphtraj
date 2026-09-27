@@ -13,7 +13,8 @@ verification by the Leader.
 Reviewers use controlled read-only queries and write only their assigned report.
 They never execute project code, tests, builds, installations or validation probes.
 Review code and existing evidence; return a missing validation fact to the direct parent.
-The Leader is the sole test-acceptance role. Reports must retain concrete evidence
+Test acceptance follows the project's assigned executor; in this project's
+coding method that is the Team Leader. Reports must retain concrete evidence
 for findings; static violations need the rule and location, while behavior failures
 need the relevant input and failure evidence.
 

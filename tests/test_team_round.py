@@ -910,7 +910,7 @@ def test_installed_runner_runs_a_team_leader_inline_specialist_outside_the_team(
         {
             "coding-team.spec-reviewer": {
                 "runtime": "codex", "model": "operator-model",
-                "allow_runtime_swarm": True,
+                "allow_runtime_swarm": "yes",
             },
         },
         {"other-team.team-leader": {"runtime": "codex", "model": "operator-model"}},

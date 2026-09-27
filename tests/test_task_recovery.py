@@ -492,11 +492,26 @@ def test_budget_only_continuation_leaves_old_subtree_for_new_configured_root(
         }
         history = events(root)
         with runtime_caller(runner, originals[1]['session']):
-            with pytest.raises(RunnerError, match='authority'):
+            with pytest.raises(RunnerError) as refused:
                 continue_stopped_ticket('154', (cause,), root, budget_only=True)
+            assert refused.value.code == 'authority-denied'
         for causes in ((), ('missing-event',), (cause, cause)):
             with pytest.raises(RunnerError):
                 continue_stopped_ticket('154', causes, root, budget_only=True)
+
+        # A resolved member from another Team must fail before permission changes.
+        from graphtraj.teams.coding import team_round
+        read_mapping = team_round.read_alias_mapping
+
+        def mismatched_member(directory: Path, member: str) -> tuple[dict, Path]:
+            """Supply a mismatched resolved mapping at the storage boundary."""
+            mapping, location = read_mapping(directory, member)
+            return dict(mapping, team_generation=mapping['team_generation'] + 1), location
+
+        with monkeypatch.context() as patch:
+            patch.setattr(team_round, 'read_alias_mapping', mismatched_member)
+            with pytest.raises(RunnerError, match='retained lifecycle'):
+                continue_stopped_ticket('154', (cause,), root, budget_only=True)
         assert yaml.safe_load((ticket / 'execution-budget.yml').read_text()) == before
         assert events(root) == history
 

@@ -121,7 +121,7 @@ def test_public_team_phases_and_parent_capacity_transfer(
     capacity: int,
 ) -> None:
     """Observe implementation, fixed Review and acceptance while roles use shared capacity."""
-    from graphtraj.execution.runner_status import read_alias_mapping, status_aliases
+    from graphtraj.execution.runner_status import read_alias_mapping
     from graphtraj.graph.delivery_worldline import read_worldline
     from graphtraj.graph.ticket_graph import read_graph
     from test_project_concurrency import observe_runtime, starts
@@ -157,6 +157,13 @@ def test_public_team_phases_and_parent_capacity_transfer(
     runner = root / ".graphtraj/runner"
     leader = "114-small_team-handover0-team_leader@team_leader"
 
+    def statuses(aliases: list[str]) -> list[dict]:
+        """Query through the installed Runner with this test's Runtime environment."""
+        result = run_process([str(installed_commands.runner), 'status', *aliases],
+                             cwd=root, env=environment)
+        assert result.returncode == 0, result.stdout + result.stderr
+        return yaml.safe_load(result.stdout)['aliases']
+
     def running_child(alias: str) -> dict:
         """Read a child's public identity and status while its model work is held."""
         wait_for_file(runner / "sessions" / alias / "mapping.yml", timeout=20)
@@ -166,9 +173,7 @@ def test_public_team_phases_and_parent_capacity_transfer(
         assert mapping["ticket_id"] == "114" and mapping["team_generation"] == 1
         deadline = time.monotonic() + 10
         while time.monotonic() < deadline:
-            observed = status_aliases([alias, leader], root)
-            assert observed.succeeded, observed.document
-            child, parent = observed.document["aliases"]
+            child, parent = statuses([alias, leader])
             if child['activity'] == 'running':
                 break
             time.sleep(.05)
@@ -212,7 +217,7 @@ def test_public_team_phases_and_parent_capacity_transfer(
     aliases = [path.parent.name for path in (runner / "sessions").glob("*/mapping.yml")]
     assert len(aliases) == 4
     assert all(item["activity"] == "idle" and item["last_outcome"] == "completed"
-               for item in status_aliases(aliases, root).document["aliases"])
+               for item in statuses(aliases))
     active = set()
     peak = 0
     for event in starts(root, 1):

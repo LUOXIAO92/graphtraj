@@ -174,8 +174,10 @@ def continue_stopped_ticket(
     ticket_id: str,
     caused_by_event_ids: tuple[str, ...],
     cwd: Path,
+    *,
+    budget_only: bool = False,
 ) -> dict[str, Any]:
-    """Restore a stopped task's budget permission and resume any actual members."""
+    """Restore budget permission, optionally leaving all original Sessions stopped."""
 
     if not valid_ticket_id(ticket_id):
         raise RunnerError("invalid-input", "Ticket identity is invalid.")
@@ -311,7 +313,7 @@ def continue_stopped_ticket(
             "budget and permissions. Preserve prior reports, results and Trace evidence.",
             cwd, (continuation["event_id"],),
         )
-        for alias in roots
+        for alias in roots if not budget_only
     ]
     return {"ticket_id": ticket_id, "continuation_event_id": continuation["event_id"],
             "tasks": resumed}

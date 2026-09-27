@@ -443,3 +443,118 @@ def test_task_continuation_requires_active_ready_task_before_first_session(
     assert result.returncode == 1 and 'invalid-input' in result.stdout
     assert (ticket / 'execution-budget.yml').read_bytes() == retained
     assert events(root) == history
+
+
+@pytest.mark.parametrize('surface', ['cli', 'mcp'])
+def test_budget_only_continuation_leaves_old_subtree_for_new_configured_root(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    surface: str,
+) -> None:
+    """Restore permission without running old entities, then dispatch a new root."""
+    from graphtraj.execution import execution_budget as budgets
+    from graphtraj.execution.runner_models import RunnerError
+    from graphtraj.execution.runner_status import runtime_caller
+    from graphtraj.teams.coding.team_round import continue_stopped_ticket
+
+    root, env, task = prepare(
+        installed_commands, temporary_git_repository, fake_codex, tmp_path,
+        'researcher', child=True,
+    )
+    alias = task['alias']
+    runner = root / '.graphtraj/runner'
+    ticket = root / '.graphtraj/state/tickets/154-recovery'
+    child = json.loads((Path(task['worktree_path']) / 'child.json').read_text())['alias']
+    directories = [runner / 'sessions' / member for member in (alias, child)]
+    cause = events(root)[-1]['event_id']
+    try:
+        # The child is really executing; budget-only must not bypass subtree checks.
+        busy = command(installed_commands, root, env, 'continue', '--ticket-id', '154',
+                       '--budget-only', '--caused-by-event-id', cause)
+        assert busy.returncode == 1 and 'replacement-not-stopped' in busy.stdout
+        monitor = budgets.execution_budget_monitor(ticket, '154', 'recovery')
+        sample_stop(monitor, monkeypatch)
+        for directory in directories:
+            wait_for_file(directory / 'execution.yml')
+        before = yaml.safe_load((ticket / 'execution-budget.yml').read_text())
+        assert before['stopped']
+        originals = [yaml.safe_load((directory / 'mapping.yml').read_text())
+                     for directory in directories]
+        assert originals[1]['parent'] == alias
+        retained = {
+            path: path.read_bytes()
+            for directory, mapping in zip(directories, originals)
+            for path in (directory / 'mapping.yml', directory / 'execution.yml',
+                         Path(mapping['trace_file']))
+        }
+        history = events(root)
+        with runtime_caller(runner, originals[1]['session']):
+            with pytest.raises(RunnerError, match='authority'):
+                continue_stopped_ticket('154', (cause,), root, budget_only=True)
+        for causes in ((), ('missing-event',), (cause, cause)):
+            with pytest.raises(RunnerError):
+                continue_stopped_ticket('154', causes, root, budget_only=True)
+        assert yaml.safe_load((ticket / 'execution-budget.yml').read_text()) == before
+        assert events(root) == history
+
+        if surface == 'cli':
+            continued = command(installed_commands, root, env, 'continue', '--ticket-id', '154',
+                                '--budget-only', '--caused-by-event-id', cause)
+            assert continued.returncode == 0, continued.stdout + continued.stderr
+            result = yaml.safe_load(continued.stdout)
+        else:
+            continued = subprocess.run(
+                [str(installed_commands.runner.with_name('graphtraj-mcp'))], cwd=root, env=env,
+                input=json.dumps({'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call',
+                                  'params': {'name': 'continue', 'arguments': {
+                                      'ticket_id': '154', 'caused_by_event_ids': [cause],
+                                      'budget_only': True}}}) + '\n',
+                text=True, capture_output=True, timeout=20,
+            )
+            assert continued.returncode == 0, continued.stdout + continued.stderr
+            document = json.loads(continued.stdout)['result']
+            assert not document['isError'], document
+            result = document['structuredContent']
+        assert result['tasks'] == []
+        after = yaml.safe_load((ticket / 'execution-budget.yml').read_text())
+        assert after == dict(before, stopped=False)
+        assert all(path.read_bytes() == content for path, content in retained.items())
+        continuation = next(e for e in events(root) if e['event_id'] == result['continuation_event_id'])
+        assert continuation['caused_by_event_ids'] == [cause]
+        repeated = command(installed_commands, root, env, 'continue', '--ticket-id', '154',
+                           '--budget-only', '--caused-by-event-id', cause)
+        assert repeated.returncode == 1 and 'sampled stopped Ticket' in repeated.stdout
+
+        roles_path = root / '.graphtraj/roles.yml'
+        roles = yaml.safe_load(roles_path.read_text())
+        roles['roles']['expert'] = {'runtime': 'codex', 'model': 'expert-selected'}
+        roles['role_tree']['expert'] = {}
+        roles_path.write_text(yaml.safe_dump(roles))
+        batch = root / 'expert.yml'
+        batch.write_text(yaml.safe_dump({'tasks': [{'role': 'expert', 'ticket_id': '154'}]}))
+        Path(env['RECOVERY_RELEASE']).touch()
+        launched = command(installed_commands, root, env, '--swarm-input', str(batch))
+        assert launched.returncode == 0, launched.stdout + launched.stderr
+        new = yaml.safe_load(launched.stdout)['tasks'][0]
+        directory = runner / 'sessions' / new['alias']
+        wait_for_file(directory / 'execution.yml')
+        mapping = yaml.safe_load((directory / 'mapping.yml').read_text())
+        assert mapping['session'] == new['session']
+        assert mapping['session'] not in {old['session'] for old in originals}
+        assert mapping['parent'] is None and mapping['role'] == 'expert'
+        assert Path(mapping['trace_file']).is_file()
+        team = yaml.safe_load((ticket / 'teams/1/team.yml').read_text())
+        assert {member['session_ref'] for member in team['members'].values()} == {
+            alias, child, new['alias'],
+        }
+        assert all(path.read_bytes() == content for path, content in retained.items())
+        final = yaml.safe_load((ticket / 'execution-budget.yml').read_text())
+        for field in ('started_at', 'allowance_minutes', 'stopping_checks', 'notifications'):
+            assert final[field] == after[field]
+        assert final['sessions'] == dict(after['sessions'], expert=1)
+    finally:
+        Path(env['RECOVERY_RELEASE']).touch()
+        command(installed_commands, root, env, 'interrupt', alias)

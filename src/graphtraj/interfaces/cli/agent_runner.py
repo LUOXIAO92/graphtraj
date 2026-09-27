@@ -306,13 +306,16 @@ def replace(alias: str, actor: str | None, caused_by_event_id: tuple[str, ...]) 
 @main.command("continue")
 @click.option("--ticket-id", required=True)
 @click.option("--caused-by-event-id", multiple=True, required=True)
-def continue_ticket(ticket_id: str, caused_by_event_id: tuple[str, ...]) -> None:
-    """Resume original task roots after their authorized parent records a decision."""
+@click.option("--budget-only", is_flag=True, help="Restore budget permission without executing old Sessions.")
+def continue_ticket(
+    ticket_id: str, caused_by_event_id: tuple[str, ...], budget_only: bool,
+) -> None:
+    """Restore an authorized task budget and, by default, resume original roots."""
     from graphtraj.teams.coding.team_round import continue_stopped_ticket
 
     try:
         response = continue_stopped_ticket(
-            ticket_id, caused_by_event_id, Path.cwd().resolve()
+            ticket_id, caused_by_event_id, Path.cwd().resolve(), budget_only=budget_only
         )
     except RunnerError as error:
         _fail(error, ticket_id=ticket_id)

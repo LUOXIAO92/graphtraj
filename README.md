@@ -125,7 +125,7 @@ All module names in this table are beneath `graphtraj`.
 | `execution.runner_status` | `status_aliases(aliases, cwd, operation_total=False, baseline=None, candidate=None)`; `status_tree(cwd, operation_total=False, baseline=None, candidate=None)` | Existing `StatusResponse` with `document`, `succeeded` and `errors`. The tree operation returns one `agents` document without an alias list. |
 | `execution.runner_control` | `send_instruction(alias, instruction, cwd, caused_by_event_ids)`; `interrupt_session(alias, cwd)` | Session operation result dictionary. |
 | `execution.runner_cleanup` | `cleanup_ticket(cwd, ticket_id)` | Existing `CleanupResponse` with `document` and `succeeded`. |
-| `teams.coding.team_round` | `continue_stopped_ticket(ticket_id, caused_by_event_ids, cwd)` | Continuation result and its causal event ID. |
+| `teams.coding.team_round` | `continue_stopped_ticket(ticket_id, caused_by_event_ids, cwd, *, budget_only=False)` | Continuation result and its causal event ID. |
 | `teams.coding.team_replacement` | `replace_session(alias, actor, caused_by_event_ids, cwd)` | Replacement result dictionary. |
 | `teams.coding.ticket_integration` | `integrate_ticket(configuration, ticket_id, validation_command, diagnosis=None)` | Candidate, integration status, event ID, evidence path and unlocked Ticket IDs. Validation argv is a tuple; failure retains evidence and a non-integrated status. |
 
@@ -278,7 +278,13 @@ seat and receives the replaced Session's retained reports, Trace and remaining
 work; the stopped Session stays retained and is never executed again, and
 replacing a parent does not promote that member's old children. An unfinished
 Team continues through `agent-runner continue --ticket-id <id>
---caused-by-event-id <event-id>`, which resumes the original root Session. A
+--caused-by-event-id <event-id>`, which resumes the original root Sessions.
+Add `--budget-only` (MCP `continue`: `budget_only: true`) to restore budget
+permission without executing any old Session, then use ordinary configured
+swarm dispatch to select the next participant. Both modes require authorized
+control of the actual roots and a stopped subtree. Continuation retains elapsed
+accounting, parents and stop history; it does not grant additional time. A
+Ticket stopped before its first Team can also continue without creating a Team. A
 user-installed Matt Pocock `handoff` Skill remains independent.
 
 ## Configuration and roles

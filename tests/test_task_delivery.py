@@ -177,7 +177,6 @@ def test_installed_delivery_corrects_a_split_and_delivers_the_current_graph(
     assert [item["ticket_id"] for item in product("ticket", "graph")["tickets"] if item["ready"]] == ["3"]
     runner("cleanup", "--ticket-id", "1")
     batch.write_text(yaml.safe_dump({"tasks": [{"ticket_id": "3", "ticket_name": "cli", "role": "engineer"}]}))
-    _change_status(installed_commands, root, "3", "ready")
     delivered = runner("--swarm-input", str(batch))
     decide(delivered["tasks"][0]["alias"], "accepted")
     product("ticket", "integrate", "--ticket-id", "3", "--", sys.executable, "-c", "import subprocess, sys; assert subprocess.check_output([sys.executable, 'cli.py'], text=True) == 'hello world\\n'")

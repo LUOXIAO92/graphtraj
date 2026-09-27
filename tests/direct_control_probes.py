@@ -120,6 +120,8 @@ def main() -> None:
         **json.loads(os.environ["DIRECT_CONTROL_TARGETS"]),
     }
     log = Path(os.environ["DIRECT_CONTROL_PROBE_LOG"])
+    issuer = yaml.safe_load((Path(harness_root) / '.graphtraj/runner/sessions'
+                             / values['self'] / 'mapping.yml').read_text())
     # One fabricated native request: the approval entry judges its caller's
     # authority before it compares this request with the mapped execution.
     reply_request = log.with_name(log.stem + "-reply.yml")
@@ -160,6 +162,7 @@ def main() -> None:
                 json.dumps(
                     {
                         "probe": name,
+                        "issuer_execution_id": issuer["execution_id"],
                         "arguments": argv[1:2],
                         "returncode": completed.returncode,
                         "document": document,

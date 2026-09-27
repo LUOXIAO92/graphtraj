@@ -440,7 +440,7 @@ def test_control_entries_follow_recorded_direct_ownership(
     # interruption. Its direct child seat is replaced outright, while a target
     # outside that relation yields the Leader's own Runtime approval request.
     _assert_full(children["status-self"], leader)
-    assert children["status-self"]["document"]["aliases"][0]["execution_id"] == _mapping(root, leader)["execution_id"]
+    assert children["status-self"]["document"]["aliases"][0]["execution_id"] == children["status-self"]["issuer_execution_id"]
     _assert_full(children["status-child-engineer"], engineer)
     _assert_full(children["status-child-reviewer"], standards)
     _assert_summary(children["status-other-branch"], other, "running")

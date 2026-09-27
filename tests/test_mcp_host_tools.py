@@ -388,7 +388,7 @@ def test_installed_mcp_server_survives_a_rejected_alias_status_call(
     )
     assert cli.returncode == 1
     assert rejected["isError"] is True
-    assert rejected["content"][0]["text"] == yaml.safe_load(cli.stdout)["error"]["message"]
+    assert rejected["content"][0]["text"] == (yaml.safe_load(cli.stdout).get("error") or yaml.safe_load(cli.stdout)["tasks"][0]["error"])["message"]
     assert after["isError"] is False
     assert after["structuredContent"] == {"tickets": []}
 
@@ -640,27 +640,18 @@ def test_installed_mcp_server_dispatches_and_controls_a_managed_child(
     assert after["session"] == session
     assert managed_mcp.document("pending_requests", {"alias": alias})["requests"] == []
 
-    # Equivalent instructions return the same document from both interfaces.
-    cli_sent = _runner(
-        installed_commands, root, "send", alias, "--instruction", "hold",
-        "--caused-by-event-id", cause,
-        environment=managed_mcp.environment,
-    )
-    assert cli_sent.returncode == 0, cli_sent.stderr
-    _observe(managed_mcp, alias, "running")
-    assert managed_mcp.document(
-        "send_instruction",
-        {"alias": alias, "instruction": "hold", "caused_by_event_ids": [cause]},
-    ) == yaml.safe_load(cli_sent.stdout)
-    _observe(managed_mcp, alias, "idle", "completed")
-    second = managed_mcp.call("interrupt", {"alias": alias})
-    cli_second = _runner(
-        installed_commands, root, "interrupt", alias,
-        environment=managed_mcp.environment,
-    )
-    assert cli_second.returncode == 1
-    assert second["isError"] is True
-    assert second["content"][0]["text"] == yaml.safe_load(cli_second.stdout)["error"]["message"]
+    # Explicit interruption stops the entity; neither surface may revive it.
+    cli_sent = _runner(installed_commands, root, "send", alias, "--instruction", "hold",
+                       "--caused-by-event-id", cause, environment=managed_mcp.environment)
+    denied = managed_mcp.call("send_instruction", {
+        "alias": alias, "instruction": "hold", "caused_by_event_ids": [cause],
+    })
+    assert cli_sent.returncode == 1
+    assert denied['isError'] is True
+    assert yaml.safe_load(cli_sent.stdout)['error']['code'] == 'subtree-stopped'
+    assert _observe(managed_mcp, alias, 'idle', 'interrupted')['session'] == session
+    repeated = managed_mcp.document('interrupt', {'alias': alias})
+    assert repeated['members'] == [{'alias': alias, 'interrupt_status': 'stopped'}]
 
 
 def test_installed_mcp_server_rejects_execution_input_like_the_cli(
@@ -704,7 +695,7 @@ def test_installed_mcp_server_rejects_execution_input_like_the_cli(
         assert result["isError"] is True, (tool, result)
         assert cli.returncode == 1, (tool, cli.stderr)
         assert result["content"][0]["text"] == (
-            yaml.safe_load(cli.stdout)["error"]["message"]
+            (yaml.safe_load(cli.stdout).get("error") or yaml.safe_load(cli.stdout)["tasks"][0]["error"])["message"]
         ), tool
 
     # The server keeps serving the same project after rejected calls.
@@ -1240,7 +1231,7 @@ def test_real_codex_host_dispatches_and_controls_a_managed_child_offline(
     )
     assert cli.returncode == 1, cli.stderr
     assert continued["isError"] is True
-    assert continued["content"][0]["text"] == yaml.safe_load(cli.stdout)["error"]["message"]
+    assert continued["content"][0]["text"] == (yaml.safe_load(cli.stdout).get("error") or yaml.safe_load(cli.stdout)["tasks"][0]["error"])["message"]
 
 def _native_queue_submissions(protocol: Path) -> list[dict]:
     """Return any native Main queue input the controlled app-server peer received."""

@@ -836,7 +836,7 @@ def test_installed_runner_registers_a_selected_inline_specialist_as_a_child(
     wait_for_ticket_status(installed_commands, harness_root, "75", "awaiting-integration")
     records = [json.loads(line) for line in fake_codex.log_file.read_text().splitlines()]
     leader_records = [record for record in records if record["role"] == "team-leader"]
-    assert len(leader_records) == (6 if serial else 4)
+    assert len(leader_records) == (5 if serial else 4)
     assert all("resume" in record["argv"] for record in leader_records[1:])
 
 

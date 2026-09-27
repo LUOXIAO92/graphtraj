@@ -417,7 +417,6 @@ def test_python_budgeted_launch_preserves_notices_without_writing_to_terminal(
 
     for operation, arguments, cli_arguments, identity in (
         (send_instruction, (alias, " ", root, ()), ["send", alias, "--instruction", " "], {"alias": alias}),
-        (interrupt_session, (alias, root), ["interrupt", alias], {"alias": alias}),
         (continue_stopped_ticket, ("73", ("",), root), ["continue", "--ticket-id", "73", "--caused-by-event-id", ""], {"ticket_id": "73"}),
         (replace_session, (alias, "main", ("",), root), ["replace", alias, "--actor", "main", "--caused-by-event-id", ""], {"alias": alias}),
     ):
@@ -426,6 +425,10 @@ def test_python_budgeted_launch_preserves_notices_without_writing_to_terminal(
         rendered = runner.invoke(runner_main, cli_arguments)
         assert rendered.exit_code == 1
         assert yaml.safe_load(rendered.stdout) == {**identity, "error": error.value.as_document()}
+    stopped = interrupt_session(alias, root)
+    rendered = runner.invoke(runner_main, ['interrupt', alias])
+    assert rendered.exit_code == 0, rendered.output
+    assert yaml.safe_load(rendered.stdout) == stopped
     refused = cleanup_ticket(root, "73")
     assert not refused.succeeded
     rendered = runner.invoke(runner_main, ["cleanup", "--ticket-id", "73"])

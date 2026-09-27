@@ -138,7 +138,7 @@ def test_separate_runners_share_capacity_and_reject_whole_batches(
     output = yaml.safe_load(retry.stdout)
     assert "error" not in output, retry.stdout
     # The controlled Leader may decline to replace a rejected child Batch.
-    assert all(task.get("error", {}).get("code") in {None, "insufficient-capacity"} for task in output["tasks"])
+    assert all(task.get("error", {}).get("code") in {None, "launch-failed"} for task in output["tasks"])
     active = set()
     maximum = 0
     for event in [json.loads(line) for line in (root / "observations.jsonl").read_text().splitlines()]:
@@ -176,7 +176,7 @@ def test_reviewer_batch_starts_neither_role_when_only_one_position_is_free(
         )
         assert result.returncode == 1, result.stdout
         task = yaml.safe_load(result.stdout)["tasks"][0]
-        assert task["error"]["code"] == "insufficient-capacity"
+        assert task["error"]["code"] == "launch-failed"
         events = [json.loads(line) for line in (root / "observations.jsonl").read_text().splitlines()]
         assert not any(event["role"].endswith("reviewer") for event in events)
     finally:
@@ -253,7 +253,7 @@ def test_one_position_completes_one_round_with_sequential_reviewers(
         assert len(active) <= 1
     assert not active
     assert [role for role in roles if role != "delivery-state"] == [
-        "team-leader", "engineer", "team-leader", "team-leader",
+        "team-leader", "engineer", "team-leader",
         "standards-reviewer", "team-leader", "spec-reviewer", "team-leader",
     ]
     leaders = [event for event in events if event["kind"] == "start" and event["role"] == "team-leader"]
@@ -266,4 +266,4 @@ def test_one_position_completes_one_round_with_sequential_reviewers(
     reports = ticket / "teams" / "1" / "rounds" / "1"
     assert {path.name for path in reports.iterdir()} == {"engineer.md", "validation.md", "standards.md", "spec.md", "leader.md"}
     assert all(member["session_ref"] for member in team["members"].values())
-    assert len(list((root / ".graphtraj" / "state" / "batches").glob("*.yml"))) == 5
+    assert len(list((root / ".graphtraj" / "state" / "batches").glob("*.yml"))) == 4

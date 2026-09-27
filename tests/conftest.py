@@ -230,7 +230,7 @@ def fake_codex(tmp_path: Path) -> FakeCodex:
         "            settings.update(tomllib.loads(sys.argv[index + 1]))\n"
         "    if os.environ['GRAPHTRAJ_ROLE'] == 'team-leader':\n"
         "        emit(events.pop(0))\n"
-        "        mapping = Path(os.environ['GRAPHTRAJ_PARENT_REGISTRATION']).parent / 'mapping.yml'\n"
+        "        mapping = Path(os.environ['GRAPHTRAJ_HARNESS_ROOT']) / '.graphtraj/runner/sessions' / os.environ['GRAPHTRAJ_PARENT_ALIAS'] / 'mapping.yml'\n"
         "        while not mapping.exists():\n"
         "            time.sleep(0.01)\n"
         "    with Path(policy_log).open('a') as stream:\n"
@@ -303,6 +303,10 @@ def fake_codex(tmp_path: Path) -> FakeCodex:
         "            json.dumps(facts, sort_keys=True) + '\\n'\n"
         "        )\n"
         "    elif role == 'team-leader':\n"
+        "        from graphtraj.interfaces import mcp\n"
+        "        assigned = mcp.read_reports({'alias': os.environ['GRAPHTRAJ_PARENT_ALIAS']}, cwd=Path(os.environ['GRAPHTRAJ_HARNESS_ROOT'])).document\n"
+        "        paths = [item['path'] for item in assigned['reports']] + assigned['missing_reports']\n"
+        "        leader_report = Path(paths[0])\n"
         "        counter = Path.cwd() / '.scratch' / ('leader-stage-' + ordinal)\n"
         "        stage = int(counter.read_text()) if counter.exists() else 0\n"
         "        counter.write_text(str(stage + 1))\n"
@@ -319,16 +323,16 @@ def fake_codex(tmp_path: Path) -> FakeCodex:
         "            if selected is not None else ['standards-reviewer', 'spec-reviewer'])\n"
         "        engineer_stage = 1 if inline_specialist else 0\n"
         "        reviewer_stage = engineer_stage + 1\n"
-        "        final_specialist_stage = reviewer_stage + (3 if serial else 1)\n"
+        "        final_specialist_stage = reviewer_stage + (2 if serial else 1)\n"
         "        if stage == 0 and inline_specialist:\n"
         "            roles = [inline_role]\n"
         "        elif stage == engineer_stage:\n"
         "            roles = ['engineer']\n"
+        "        elif serial and stage in {reviewer_stage, reviewer_stage + 1}:\n"
+        "            axis = 'standards-reviewer' if stage == reviewer_stage else 'spec-reviewer'\n"
+        "            roles = [axis] if axis in review_axes else None\n"
         "        elif stage == reviewer_stage:\n"
         "            roles = review_axes or None\n"
-        "        elif serial and stage in {reviewer_stage + 1, reviewer_stage + 2}:\n"
-        "            axis = 'standards-reviewer' if stage == reviewer_stage + 1 else 'spec-reviewer'\n"
-        "            roles = [axis] if axis in review_axes else None\n"
         "        elif final_inline_specialist and stage == final_specialist_stage:\n"
         "            roles = [inline_role]\n"
         "        else:\n"
@@ -384,10 +388,10 @@ def fake_codex(tmp_path: Path) -> FakeCodex:
         "+ 'Candidate commit: %s\\n' % candidate)\n"
         "            else:\n"
         "                decision = 'Decision: ACCEPT\\nCandidate commit: %s\\n' % candidate\n"
-        "            (round_dir / 'leader.md').write_text(decision)\n"
+        "            leader_report.write_text(decision)\n"
         "            diagnosis = os.environ.get('FAKE_CODEX_REWORK_CASE')\n"
         "            if diagnosis in {'process', 'main', 'product'}:\n"
-        "                (round_dir / 'leader.md').write_text(decision.replace('Diagnosis: implementation', 'Diagnosis: ' + diagnosis))\n"
+        "                leader_report.write_text(decision.replace('Diagnosis: implementation', 'Diagnosis: ' + diagnosis))\n"
         "            import yaml\n"
         "            team = yaml.safe_load((round_dir.parent.parent / 'team.yml').read_text())\n"
         "            author = team['members']['engineer']['session_ref']\n"
@@ -395,7 +399,7 @@ def fake_codex(tmp_path: Path) -> FakeCodex:
         "                                  capture_output=True, text=True, check=True)\n"
         "            submitted = yaml.safe_load(read.stdout)['submissions'][-1]\n"
         "            accepted = decision.startswith('Decision: ACCEPT\\n') and 'Decision: REJECT' not in decision\n"
-        "            reference = str((round_dir / 'leader.md').relative_to(Path(os.environ['GRAPHTRAJ_HARNESS_ROOT'])))\n"
+        "            reference = str(leader_report.relative_to(Path(os.environ['GRAPHTRAJ_HARNESS_ROOT'])))\n"
         "            judged = subprocess.run([os.environ['GRAPHTRAJ_AGENT_RUNNER'], 'decide-result',\n"
         "                '--submission-id', submitted['event_id'], '--commit', candidate,\n"
         "                '--decision', 'accepted' if accepted else 'rejected',\n"
@@ -534,7 +538,7 @@ def _install_commands(environment: Path, wheel: Path) -> InstalledCommands:
     site = run_process([str(python), '-c',
                         "import sysconfig; print(sysconfig.get_path('purelib'))"], cwd=environment)
     site.check_returncode()
-    Path(site.stdout.strip(), 'sitecustomize.py').write_text(
+    Path(site.stdout.strip(), 'graphtraj_test_clock.py').write_text(
         "import os, runpy\n"
         "from pathlib import Path\n"
         "if os.environ.get('BUDGET_CLOCK'):\n"
@@ -544,6 +548,7 @@ def _install_commands(environment: Path, wheel: Path) -> InstalledCommands:
         "            runpy.run_path(str(script))\n"
         "            break\n"
     )
+    Path(site.stdout.strip(), 'graphtraj_test_clock.pth').write_text('import graphtraj_test_clock\n')
     bin_directory = environment / "bin"
     assert {
         path.name for path in bin_directory.iterdir()

@@ -100,8 +100,11 @@ def managed_project(
     _change_status(installed_commands, root, '113', 'ready')
     role_file = root / '.graphtraj/roles.yml'
     roles = yaml.safe_load(role_file.read_text())
-    roles['role_tree'] = {role: {} for role in ('managed-probe', 'first-probe', 'second-probe', 'waiting-probe',
-                                                              'outer-probe', 'inner-probe', 'branch-probe', 'other-probe')}
+    roles['role_tree'] = {role: {} for role in (
+        'managed-probe', 'first-probe', 'second-probe', 'waiting-probe',
+        'outer-probe', 'middle-probe', 'inner-probe', 'branch-probe',
+        'other-probe', 'finished-probe', 'lost-probe',
+    )}
     role_file.write_text(yaml.safe_dump(roles))
     (root / 'instruction.md').write_text('Exercise the registered Session.\n')
     cause = append_project_worldline_event(state, root, {

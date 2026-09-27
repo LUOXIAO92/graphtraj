@@ -295,12 +295,14 @@ def test_cancelled_task_is_neither_recoverable_nor_cleanable(
         command(installed_commands, root, env, 'interrupt', alias)
 
 
+@pytest.mark.parametrize('budget_only', [False, True])
 def test_failed_first_creation_can_continue_budget_before_ordinary_launch(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
     fake_codex: FakeCodex,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    budget_only: bool,
 ) -> None:
     """Task continuation clears permission without inventing a Team or Session."""
     from graphtraj.execution import execution_budget as budgets
@@ -373,7 +375,7 @@ def test_failed_first_creation_can_continue_budget_before_ordinary_launch(
     assert events(root) == history
 
     continued = command(installed_commands, root, env, 'continue', '--ticket-id', '160',
-                        '--caused-by-event-id', cause)
+                        '--caused-by-event-id', cause, *(['--budget-only'] if budget_only else []))
     assert continued.returncode == 0, continued.stdout + continued.stderr
     result = yaml.safe_load(continued.stdout)
     assert result['tasks'] == []

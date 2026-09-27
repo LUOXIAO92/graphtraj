@@ -101,9 +101,9 @@ def test_custom_stop_text_is_delivered_verbatim_beside_unchanged_facts() -> None
     default = one_delivery(None)
     assert custom["instruction"] == CUSTOM_TEXT
     assert set(custom) == set(default)
-    assert {key: value for key, value in custom.items() if key != "instruction"} == {
-        key: value for key, value in default.items() if key != "instruction"
-    }
+    # delivered_at is stamped at each return, so only the stable facts compare.
+    for key in ("stop_id", "stop", "ticket", "triggered_at", "elapsed"):
+        assert custom[key] == default[key]
 
 
 def test_empty_stop_text_delivers_only_the_stop_facts() -> None:

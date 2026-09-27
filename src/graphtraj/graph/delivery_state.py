@@ -193,7 +193,7 @@ def apply_delivery_state_request(
             open_round = True
             kind = "team-round-rework-started"
         else:
-            submission, author = _validate_result_decision(
+            submission, author, prior_acceptance = _validate_result_decision(
                 state_directory, harness_root, request, ticket, team_update,
                 read_worldline(state_directory, harness_root),
             )
@@ -224,6 +224,8 @@ def apply_delivery_state_request(
         "team_round": round_ordinal + 1 if open_round else round_ordinal,
     }
     if phase == "final":
+        if prior_acceptance is not None and prior_acceptance["event_id"] not in event["caused_by_event_ids"]:
+            event["caused_by_event_ids"].append(prior_acceptance["event_id"])
         event["candidate"] = request["candidate"]
         event.update(
             decision=request["decision"], submission_id=request["submission_id"],
@@ -355,7 +357,7 @@ def _validate_result_decision(
     ticket: Mapping[str, Any],
     team: Mapping[str, Any],
     events: list[dict[str, Any]],
-) -> tuple[dict[str, Any], str | None]:
+) -> tuple[dict[str, Any], str | None, dict[str, Any] | None]:
     """Bind an authorized decision to the latest submitted version in this Round."""
     candidate = _validate_candidate(request["candidate"])
     if not isinstance(request["decision"], str) or request["decision"] not in {"accepted", "rejected"}:
@@ -371,12 +373,25 @@ def _validate_result_decision(
     submission = submissions[-1]
     runner = discover_runner_directory(harness)
     mapping = require_task_authority(state, runner, ticket["ticket_id"], submission["alias"], "accept")
+    author = caller_alias(runner)
+    decisions = [event for event in events
+                 if event.get("submission_id") == request["submission_id"]]
+    returning = ticket["status"] == "awaiting-integration"
     if (mapping["session"] != submission["session"]
-            or ticket["status"] not in {"implementing", "reviewing", "resolving-integration"}
+            or ticket["status"] not in {"implementing", "reviewing", "resolving-integration", "awaiting-integration"}
             or candidate != submission["candidate"]
             or request["submission_id"] not in request["caused_by_event_ids"]
-            or any(event.get("submission_id") == request["submission_id"] for event in events)):
+            or (decisions and not returning)):
         raise ValueError("Decision does not match an undecided submitted version")
+    if returning:
+        session = read_alias_mapping(runner, author)[0]["session"] if author is not None else None
+        if (request["decision"] != "rejected" or candidate != ticket["current_candidate"]
+                or len(decisions) != 1 or decisions[0]["kind"] != "team-round-accepted"
+                or decisions[0].get("alias") != author or decisions[0].get("session") != session):
+            raise ValueError("Only the accepting parent may return the current accepted result for correction")
+        # The author may already have committed a correction. Return the retained
+        # accepted version; its replacement still needs a fresh submission/decision.
+        return submission, author, decisions[0]
     worktree = Path(mapping["worktree_path"])
     if ticket["status"] == "resolving-integration":
         from graphtraj.configuration.project_configuration import load_project_configuration
@@ -387,7 +402,7 @@ def _validate_result_decision(
             or run_git(worktree, "diff", "--name-only")
             or run_git(worktree, "diff", "--cached", "--name-only")):
         raise ValueError("The submitted version differs from the current Worktree")
-    return submission, caller_alias(runner)
+    return submission, author, None
 
 
 def _validate_members(value: Any) -> dict[str, dict[str, str | None]]:

@@ -47,12 +47,13 @@ def read_batch(
 ) -> Batch:
     """Read a Batch without rewriting its role identities.
 
-    Retained Session bindings are matched separately by read_session_task.
+    Historical Skill selections remain readable. New launch uses read_swarm;
+    retained Session bindings are matched separately by read_session_task.
     """
 
     document, source_bytes = _read_document(batch_file, cwd)
     return replace(
-        parse_batch(document), source_bytes=source_bytes
+        parse_batch(document, retained=True), source_bytes=source_bytes
     )
 
 
@@ -191,7 +192,7 @@ def _resolve_swarm_task(
         raise RunnerError(
             "TASK_SCHEMA_INVALID",
             "A swarm task must contain a role and only supported instruction, "
-            "Repository Skill selection or Ticket selection.",
+            "or Ticket selection.",
         )
     ticket_id = task.get("ticket_id", caller_ticket_id)
     if ticket_id is None:
@@ -210,17 +211,18 @@ def _resolve_swarm_task(
     return {**task, "ticket_id": ticket_id, "ticket_name": ticket_name}
 
 
-def parse_batch(document: object) -> Batch:
+def parse_batch(document: object, *, retained: bool = False) -> Batch:
     """Validate a structured Batch document and retain its YAML representation.
 
-    Uses the same schema and RunnerError codes as read_batch and parse_swarm.
+    New selections use the same schema as parse_swarm. ``retained`` permits
+    historical task Skill-name fields without interpreting them as paths.
     File input keeps its original bytes; Python mappings retain an equivalent
     YAML document. Neither path provisions resources or launches a Runtime.
     Role references remain exactly as supplied; Session recovery uses its stored bindings.
     """
     tasks = _launch_input_tasks(document)
     validated_tasks = tuple(
-        _read_task(task_document)
+        _read_task(task_document, retained=retained)
         for task_document in tasks
     )
     identities = [(task.ticket_id, task.role) for task in validated_tasks]
@@ -237,6 +239,8 @@ def parse_batch(document: object) -> Batch:
 
 def _read_task(
     task_document: object,
+    *,
+    retained: bool = False,
 ) -> Task:
     """Validate and resolve one task without changing the supplied choices."""
 
@@ -249,7 +253,13 @@ def _read_task(
     ):
         raise RunnerError(
             "TASK_SCHEMA_INVALID",
-            "A task must contain ticket identity, role, and only supported instruction or Repository Skill selection.",
+            "A task must contain ticket identity, role, and only supported instruction.",
+        )
+    if "skills" in task_document and not retained:
+        raise RunnerError(
+            "SKILL_SELECTION_UNSUPPORTED",
+            "Task skills is no longer supported; use Runtime native Skill selection "
+            "or explicit external resource references in the instruction.",
         )
     ticket_id = task_document["ticket_id"]
     if not valid_ticket_id(ticket_id):

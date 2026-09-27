@@ -110,6 +110,10 @@ def test_installed_runtime_projects_enabled_external_skill_directories(
     unselected.parent.mkdir()
     unselected.write_text('---\nname: unselected\ndescription: Unselected.\n---\n')
     reference = harness_skill.parent.parent / 'ponytail' / 'tests.md'
+    (harness / '.codex/config.toml').write_text(
+        '\n'.join('[[skills.config]]\npath = ' + json.dumps(str(path)) + '\nenabled = true'
+                  for path in (harness_skill, reference.parent / 'SKILL.md'))
+    )
     with engineer_probe(installed_commands, harness, fake_codex, environment):
         records = [json.loads(line) for line in fake_codex.log_file.read_text().splitlines()]
         arguments = next(record['argv'] for record in records if record['role'] == 'engineer')
@@ -140,7 +144,7 @@ def _engineer_role(
 
     return resolve_child_role(
         "engineer",
-        RolePreset("codex", model, None, None, harness_skills=("implement", "ponytail"),
+        RolePreset("codex", model, None, None,
                    reasoning_effort=reasoning_effort or "max"),
         Path.cwd(),
     )
@@ -168,7 +172,7 @@ def _runtime_executable(tmp_path: Path) -> Path:
     return executable
 
 
-def test_preflight_selects_the_first_duplicate_harness_skill(
+def test_preflight_leaves_duplicate_harness_skills_to_native_discovery(
     monkeypatch: pytest.MonkeyPatch,
     temporary_git_repository: Path,
     tmp_path: Path,
@@ -205,14 +209,9 @@ def test_preflight_selects_the_first_duplicate_harness_skill(
         requested_skills=(),
     ).finalize()
 
-    assert context.evidence_document()["effective_skills"] == [
-        {
-            "name": "role-only",
-            "path": str(first.resolve()),
-            "enabled": True,
-            "source": "harness",
-        }
-    ]
+    assert context.evidence_document()["native_skills"] is None
+    assert "skills" not in context.session_document()["adapter_request"]["config"]
+    assert "Use $role-only." == context.session_document()["adapter_request"]["developerInstructions"]
 
 
 @pytest.mark.parametrize("link_kind", ("directory", "skill-file"))
@@ -252,6 +251,10 @@ def test_preflight_projects_a_linked_harness_skill_at_its_canonical_path(
     worktree.mkdir()
     evidence.mkdir()
 
+    (harness_root / ".codex").mkdir()
+    (harness_root / ".codex/config.toml").write_text(
+        '[[skills.config]]\npath = "../.agents/skills/linked-skill/SKILL.md"\nenabled = true\n'
+    )
     context = preflight_runtime_context(
         runtime_store=harness_root / ".codex",
         executable=_runtime_executable(tmp_path),
@@ -277,14 +280,7 @@ def test_preflight_projects_a_linked_harness_skill_at_its_canonical_path(
     ]
     assert filesystem[str(expected_skill.parent)] == "read"
     assert reference.is_relative_to(expected_skill.parent)
-    assert context.evidence_document()["effective_skills"] == [
-        {
-            "name": "role-only",
-            "path": str(expected_skill),
-            "enabled": True,
-            "source": "harness",
-        }
-    ]
+    assert context.evidence_document()["native_skills"] == settings["skills"]
 
 
 def test_setup_creates_a_root_owned_runtime_and_runner_discovers_it(
@@ -447,20 +443,18 @@ def test_engineer_runtime_context_preflight_validates_without_launch_artifacts(
 
     (user_home / ".agents" / "skills" / "implement" / "SKILL.md").unlink()
 
-    with pytest.raises(CodexAdapterError) as unavailable:
-        preflight_runtime_context(
-            runtime_store=runtime_store,
-            executable=fake_codex.executable,
-            git_common_directory=temporary_git_repository / ".git",
-            role=_engineer_role(),
-            worktree=target_worktree,
-            evidence=evidence,
-            repository_skill_source=(
-                harness_root / ".graphtraj" / ".agent-worktrees" / "dev"
-            ),
-            requested_skills=(),
-        )
-    assert unavailable.value.code == "HARNESS_SKILL_NOT_FOUND"
+    preflight_runtime_context(
+        runtime_store=runtime_store,
+        executable=fake_codex.executable,
+        git_common_directory=temporary_git_repository / ".git",
+        role=_engineer_role(),
+        worktree=target_worktree,
+        evidence=evidence,
+        repository_skill_source=(
+            harness_root / ".graphtraj" / ".agent-worktrees" / "dev"
+        ),
+        requested_skills=(),
+    )
     assert not target_worktree.exists()
     assert not evidence.exists()
     assert not fake_codex.log_file.exists()
@@ -516,11 +510,11 @@ def test_runtime_preflight_uses_fixed_policy_and_selected_model(
 @pytest.mark.parametrize(
     ("skill_directories", "requested_skill", "expected_code"),
     (
-        ((), "missing", "REPOSITORY_SKILL_NOT_FOUND"),
+        ((), "missing", "SKILL_SELECTION_UNSUPPORTED"),
         (
             (("duplicate-one", "duplicate"), ("duplicate-two", "duplicate")),
             "duplicate",
-            "REPOSITORY_SKILL_AMBIGUOUS",
+            "SKILL_SELECTION_UNSUPPORTED",
         ),
     ),
 )
@@ -632,7 +626,7 @@ def test_engineer_runtime_context_finalizes_worktree_facts_once(
         git_common_directory=git_common,
         role=_engineer_role(reasoning_effort=reasoning_effort),
         repository_skill_source=source,
-        requested_skills=("repo-selected",),
+        requested_skills=(),
     )
 
     context = preflight.finalize()
@@ -648,21 +642,7 @@ def test_engineer_runtime_context_finalizes_worktree_facts_once(
     assert 'model_reasoning_effort="{0}"'.format(expected_effort) in launch[
         "adapter_request"
     ]["arguments"]
-    assert {
-        skill["name"]
-        for skill in evidence_document["effective_skills"]
-        if skill["source"] == "runtime-user"
-    } == {"implement", "ponytail"}
-    repository_skills = {
-        skill["name"]: skill
-        for skill in evidence_document["effective_skills"]
-        if skill["source"] == "repository"
-    }
-    assert repository_skills["repo-selected"]["enabled"]
-    assert not repository_skills["repo-disabled"]["enabled"]
-    assert Path(repository_skills["repo-selected"]["path"]) == (
-        ticket / ".agents" / "skills" / "repo-selected" / "SKILL.md"
-    )
+    assert evidence_document["native_skills"] is None
     settings = {}
     arguments = launch["adapter_request"]["arguments"]
     for index, argument in enumerate(arguments[:-1]):
@@ -676,22 +656,14 @@ def test_engineer_runtime_context_finalizes_worktree_facts_once(
     assert workspace_roots["CONTEXT.md"] == "read"
     assert workspace_roots["docs"] == "read"
     assert "README.md" not in workspace_roots
-    assert all(
-        filesystem[str(Path(skill["path"]).parent)] == "read"
-        for skill in settings["skills"]["config"]
-        if skill["enabled"]
-    )
+    assert "skills" not in settings
     assert str(ticket / ".agents" / "skills" / "repo-disabled") not in filesystem
     launch["adapter_request"].clear()
     assert context.launch_document()["adapter_request"]["worktree_path"] == str(
         ticket
     )
-    evidence_document["effective_skills"].clear()
-    assert {
-        skill["name"]
-        for skill in context.evidence_document()["effective_skills"]
-        if skill["source"] == "runtime-user"
-    } == {"implement", "ponytail"}
+    evidence_document["native_skills"] = {"config": []}
+    assert context.evidence_document()["native_skills"] is None
 
 
 def test_installed_runner_uses_runtime_user_core_skill_when_source_tracks_it(
@@ -741,23 +713,7 @@ def test_installed_runner_uses_runtime_user_core_skill_when_source_tracks_it(
         records = [json.loads(line) for line in fake_codex.log_file.read_text().splitlines()]
         arguments = next(record["argv"] for record in records if record["role"] == "engineer")
     task = {"alias": alias, "worktree_path": str(worktree)}
-    skills_argument = next(
-        argument for argument in arguments if argument.startswith("skills=")
-    )
-    configured_skills = tomllib.loads(
-        "value = {0}".format(skills_argument.removeprefix("skills="))
-    )["value"]["config"]
-    runtime_user_skill = runtime_user / ".agents" / "skills" / "implement" / "SKILL.md"
-    ticket_source_skill = (
-        Path(task["worktree_path"])
-        / ".agents"
-        / "skills"
-        / "repository-implement"
-        / "SKILL.md"
-    )
-    assert {"path": str(runtime_user_skill.resolve()), "enabled": True} in configured_skills
-    assert {"path": str(ticket_source_skill.resolve()), "enabled": False} in configured_skills
-    assert {"path": str(source_skill.resolve()), "enabled": True} not in configured_skills
+    assert not any(argument.startswith("skills=") for argument in arguments)
 
 
 def test_installed_runner_uses_runtime_user_skill_from_newer_primary_history(
@@ -812,15 +768,7 @@ def test_installed_runner_uses_runtime_user_skill_from_newer_primary_history(
         records = [json.loads(line) for line in fake_codex.log_file.read_text().splitlines()]
         arguments = next(record["argv"] for record in records if record["role"] == "engineer")
     task = {"alias": alias, "worktree_path": str(worktree)}
-    skills_argument = next(
-        argument for argument in arguments if argument.startswith("skills=")
-    )
-    configured_skills = tomllib.loads(
-        "value = {0}".format(skills_argument.removeprefix("skills="))
-    )["value"]["config"]
-    runtime_user_skill = runtime_user / ".agents" / "skills" / "implement" / "SKILL.md"
-    assert {"path": str(runtime_user_skill.resolve()), "enabled": True} in configured_skills
-    assert {"path": str(source_skill.resolve()), "enabled": True} not in configured_skills
+    assert not any(argument.startswith("skills=") for argument in arguments)
 
 
 @pytest.mark.skipif(
@@ -939,7 +887,9 @@ def test_real_codex_uses_native_permissions_and_explicit_skill_configuration(
         "`ROOT_RUNTIME_OK`.\n",
         encoding="utf-8",
     )
-    runtime_environment["FAKE_CODEX_ENGINEER_SKILLS"] = '["repository-selected"]'
+    (harness_root / '.codex/config.toml').write_text(
+        '[[skills.config]]\npath = ' + json.dumps(str(harness_skill)) + '\nenabled = true\n'
+    )
     real_codex = shutil.which("codex")
     assert real_codex is not None
     with engineer_probe(

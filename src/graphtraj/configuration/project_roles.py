@@ -46,7 +46,6 @@ class RolePreset:
     reasoning_effort: str | None = None
     codex: Mapping[str, object] | None = None
     instructions: str | None = None
-    harness_skills: tuple[str, ...] = ()
     worktree_access: str = "write"
     reports: tuple[str, ...] = ()
 
@@ -355,7 +354,7 @@ def _role_preset(
     initial_count = len(diagnostics)
     allowed = _REQUIRED_FIELDS | _CONNECTION_FIELDS | {
         "reasoning_effort", "codex", "allow_runtime_swarm", "instructions",
-        "harness_skills", "worktree_access", "reports",
+        "worktree_access", "reports",
     }
     if "instructions" in entry and (
         not isinstance(entry["instructions"], str)
@@ -365,23 +364,27 @@ def _role_preset(
         diagnostics.append(f"{name}.instructions must reference a UTF-8 instruction file.")
     if entry.get("worktree_access", "write") not in ("read", "write"):
         diagnostics.append(f"{name}.worktree_access must be read or write.")
-    for field in ("harness_skills", "reports"):
-        values = entry.get(field, [])
-        if (
-            not isinstance(values, list)
-            or any(not isinstance(value, str) or not value for value in values)
-        ):
-            diagnostics.append(f"{name}.{field} must be a list of names.")
-        elif len(set(values)) != len(values) or any(
-            ROLE_NAME.fullmatch(value.removesuffix(".md") if field == "reports" else value) is None
-            or (field == "reports" and not value.endswith(".md"))
-            for value in values
-        ):
-            diagnostics.append(f"{name}.{field} must contain distinct safe names.")
+    reports = entry.get("reports", [])
+    if (
+        not isinstance(reports, list)
+        or any(not isinstance(value, str) or not value for value in reports)
+    ):
+        diagnostics.append(f"{name}.reports must be a list of names.")
+    elif len(set(reports)) != len(reports) or any(
+        ROLE_NAME.fullmatch(value.removesuffix(".md")) is None
+        or not value.endswith(".md")
+        for value in reports
+    ):
+        diagnostics.append(f"{name}.reports must contain distinct safe names.")
     if "codex" in entry and not isinstance(entry["codex"], dict):
         diagnostics.append("{0}.codex must be a mapping.".format(name))
     for field in entry:
-        if field not in allowed:
+        if field in {"skills", "harness_skills", "required_skills"}:
+            diagnostics.append(
+                f"{name}.{field} is no longer supported; use Runtime native Skill "
+                "selection or explicit external resource references."
+            )
+        elif field not in allowed:
             diagnostics.append("{0}.{1} is not supported.".format(name, field))
     for field in _REQUIRED_FIELDS:
         value = entry.get(field)
@@ -431,7 +434,6 @@ def _role_preset(
         ),
         allow_runtime_swarm=entry.get("allow_runtime_swarm", False),
         instructions=entry.get("instructions"),
-        harness_skills=tuple(entry.get("harness_skills", [])),
         worktree_access=entry.get("worktree_access", "write"),
         reports=tuple(entry.get("reports", [])),
         reasoning_effort=(

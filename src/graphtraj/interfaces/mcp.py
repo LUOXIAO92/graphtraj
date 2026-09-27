@@ -127,7 +127,6 @@ _SWARM_TASK_SCHEMA = {
         "ticket_name": {"type": "string"},
         "role":        {"type": ["string", "object"]},
         "instruction": {"type": "string"},
-        "skills":      {"type": "array", "items": {"type": "string"}},
     },
     "required":             ["role"],
     "additionalProperties": False,

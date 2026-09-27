@@ -53,15 +53,17 @@ def test_installed_setup_leaves_main_configuration_to_the_user(
     assert not (harness / ".codex" / "hooks" / "worktree_guard.py").exists()
 
 
+@pytest.mark.parametrize('missing_reference', [False, True])
 @pytest.mark.parametrize('role_name, access', [
     ('engineer', 'write'), ('auditor', 'read'),
 ])
-def test_runtime_executes_the_resolved_responsibility_and_required_skill(
+def test_runtime_executes_explicit_native_resource_outside_worktree(
     monkeypatch: pytest.MonkeyPatch,
     temporary_git_repository: Path,
     tmp_path: Path,
     role_name: str,
     access: str,
+    missing_reference: bool,
 ) -> None:
     monkeypatch.syspath_prepend(str(PROJECT_ROOT / "src"))
     from graphtraj.runtimes.codex.codex_adapter import create_codex_turn, preflight_runtime_context
@@ -72,6 +74,9 @@ def test_runtime_executes_the_resolved_responsibility_and_required_skill(
     harness = temporary_git_repository.parent
     monkeypatch.setenv("HOME", str(tmp_path / "operator-home"))
     plan_project_setup(harness, temporary_git_repository).apply(install_missing_skills=True)
+    (harness / ".codex/config.toml").write_text(
+        '[[skills.config]]\npath = "../.agents/skills/research/SKILL.md"\nenabled = true\n'
+    )
     worktree = harness / ".graphtraj" / ".agent-worktrees" / "dev"
     session = tmp_path / "session"
     session.mkdir()
@@ -82,7 +87,7 @@ def test_runtime_executes_the_resolved_responsibility_and_required_skill(
             role_name,
             RolePreset(
                 "codex", "operator-model", None, None,
-                reasoning_effort="high", harness_skills=("research",),
+                reasoning_effort="high",
                 worktree_access=access,
             ),
             harness,
@@ -135,12 +140,20 @@ print(json.dumps({'type': 'turn.completed'}), flush=True)
         role=role, worktree=worktree, evidence=session,
         repository_skill_source=worktree, requested_skills=(),
     ).finalize()
+    if missing_reference:
+        (harness / '.agents/skills/research/references/coding.md').unlink()
     started = []
-    create_codex_turn(
+    outcome = create_codex_turn(
         context.launch_document()["adapter_request"], "Execute the resolved task.",
         session, lambda identity, pid: started.append(identity),
     ).run()
     assert started == ["resolved-role"]
+    if missing_reference:
+        assert outcome['runtime_exit_code'] != 0
+        diagnostic = (session / 'stderr.log').read_text()
+        assert 'FileNotFoundError' in diagnostic and 'references/coding.md' in diagnostic
+        return
+    assert outcome['runtime_exit_code'] == 0
     events = [json.loads(line) for line in (session / "events.jsonl").read_text().splitlines()]
     result = next(event["payload"] for event in events if event["type"] == "response_item")
     assert result["text"] == (harness / ".agents/skills/research/references/coding.md").read_text()
@@ -655,3 +668,71 @@ print('candidate/report writes and foreign report read denied')
         pytest.skip('Host prohibits nested Seatbelt sandbox creation')
     assert result.returncode == 0, result.stdout + result.stderr
     assert (root / 'candidate.txt').read_text() == 'unchanged'
+
+
+@pytest.mark.parametrize('configuration', [
+    '[[skills.config]]\npath = "../external/one/SKILL.md"\nenabled = true\n'
+    '[[skills.config]]\npath = "../external/two/SKILL.md"\nenabled = false\n',
+    '',
+])
+def test_native_resource_configuration_is_forwarded_without_name_selection(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, configuration: str,
+) -> None:
+    """Forward explicit choices while letting native discovery see duplicates."""
+    from graphtraj.configuration.project_roles import RolePreset
+    from graphtraj.configuration.role_definitions import resolve_child_role
+    from graphtraj.runtimes.codex.codex_adapter import preflight_runtime_context
+    from test_harness_root_runtime import _runtime_executable
+
+    monkeypatch.setenv('CODEX_HOME', str(tmp_path / 'user-codex'))
+    harness = tmp_path / 'harness'
+    runtime = harness / '.codex'
+    runtime.mkdir(parents=True)
+    config = runtime / 'config.toml'
+    config.write_text(configuration)
+    for name in ('one', 'two'):
+        skill = harness / 'external' / name / 'SKILL.md'
+        skill.parent.mkdir(parents=True)
+        skill.write_text('---\nname: same-name\ndescription: Native choice.\n---\n')
+    role = resolve_child_role('author', RolePreset('codex', 'chosen', None, None), harness)
+    context = preflight_runtime_context(
+        runtime_store=runtime, executable=_runtime_executable(tmp_path),
+        git_common_directory=tmp_path / 'git', role=role,
+        worktree=tmp_path / 'separate-worktree', evidence=tmp_path / 'evidence',
+        repository_skill_source=tmp_path / 'source', requested_skills=(),
+    ).finalize()
+    settings = context.session_document()['adapter_request']['config']
+    if configuration:
+        assert settings['skills']['config'] == [
+            {'path': str(harness / 'external/one/SKILL.md'), 'enabled': True},
+            {'path': str(harness / 'external/two/SKILL.md'), 'enabled': False},
+        ]
+        filesystem = settings['permissions'][settings['default_permissions']]['filesystem']
+        assert filesystem[str(harness / 'external/one')] == 'read'
+        assert str(harness / 'external/two') not in filesystem
+        assert filesystem[str(harness / '.graphtraj')] == 'none'
+    else:
+        assert 'skills' not in settings
+    assert config.read_text() == configuration
+
+
+@pytest.mark.parametrize('content', ['skills = [', 'skills.config = "invalid"'])
+def test_invalid_explicit_native_config_fails_at_preflight(tmp_path: Path, content: str) -> None:
+    """A real native configuration error is not mistaken for missing Skills."""
+    from graphtraj.configuration.project_roles import RolePreset
+    from graphtraj.configuration.role_definitions import resolve_child_role
+    from graphtraj.runtimes.codex.codex_adapter import CodexAdapterError, preflight_runtime_context
+    from test_harness_root_runtime import _runtime_executable
+
+    runtime = tmp_path / '.codex'
+    runtime.mkdir()
+    (runtime / 'config.toml').write_text(content)
+    role = resolve_child_role('author', RolePreset('codex', 'chosen', None, None), tmp_path)
+    with pytest.raises(CodexAdapterError, match='configuration') as error:
+        preflight_runtime_context(
+            runtime_store=runtime, executable=_runtime_executable(tmp_path),
+            git_common_directory=tmp_path / 'git', role=role,
+            worktree=tmp_path / 'worktree', evidence=tmp_path / 'evidence',
+            repository_skill_source=tmp_path, requested_skills=(),
+        )
+    assert error.value.code == 'RUNTIME_CONFIG_INVALID'

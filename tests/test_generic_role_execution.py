@@ -59,11 +59,14 @@ def test_single_role_launch_registers_and_executes_without_placeholder_members(
     """An authorized lone author runs, with its real membership and own Trace.
 
     The last case installs no coding method: an author that selects none of
-    them still runs, and its launch resolves only the Skills it selected.
+    them still runs, leaving discovery of same-name Skills to its Runtime.
     """
     skill = temporary_git_repository / '.agents/skills/selected/SKILL.md'
     skill.parent.mkdir(parents=True)
     skill.write_text('---\nname: selected\ndescription: Task-selected method.\n---\n')
+    duplicate = temporary_git_repository / '.agents/skills/duplicate/SKILL.md'
+    duplicate.parent.mkdir(parents=True)
+    duplicate.write_text('---\nname: selected\ndescription: Another native choice.\n---\n')
     run_process(['git', 'add', '.agents'], cwd=temporary_git_repository).check_returncode()
     run_process(['git', 'commit', '-m', 'Task Skill'], cwd=temporary_git_repository).check_returncode()
     root, _, _, env = configure_harness(
@@ -108,7 +111,7 @@ def test_single_role_launch_registers_and_executes_without_placeholder_members(
     fake_codex.executable.write_text(code)
     env['FAKE_CODEX_APPEND_LOG'] = '1'
     batch = root / 'batch.yml'
-    batch.write_text(yaml.safe_dump({'tasks': [{'role': role, 'ticket_id': '150', 'skills': ['selected']}]}))
+    batch.write_text(yaml.safe_dump({'tasks': [{'role': role, 'ticket_id': '150'}]}))
     result = run_process([str(installed_commands.runner), '--swarm-input', str(batch)],
                          cwd=root, env=env, timeout=30)
     assert result.returncode == 0, result.stdout + result.stderr
@@ -137,11 +140,11 @@ def test_single_role_launch_registers_and_executes_without_placeholder_members(
             settings.update(tomllib.loads(records[0]['argv'][index + 1]))
     if instruction_file:
         assert settings['developer_instructions'].startswith(external_text)
-    selected = [entry for entry in settings['skills']['config'] if entry['enabled']]
-    assert any('/selected/SKILL.md' in entry['path'] for entry in selected)
+    assert 'skills' not in settings
+    assert (worktree / '.agents/skills/selected/SKILL.md').is_file()
+    assert (worktree / '.agents/skills/duplicate/SKILL.md').is_file()
     permission = settings['permissions'][settings['default_permissions']]['filesystem']
     assert permission[':workspace_roots']['.'] == 'write'
-    assert len(selected) == 1
     mapping = yaml.safe_load((root / '.graphtraj/runner/sessions' / task['alias'] / 'mapping.yml').read_text())
     assert mapping['role_reference'] == role
     launch = yaml.safe_load((root / '.graphtraj/runner/sessions' / task['alias'] / 'launch.yml').read_text())
@@ -300,7 +303,6 @@ def test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority(
     ({'instructions': 'missing-resource'}, 'missing-resource'),
     ({'instructions': 'unreadable.txt'}, 'Permission denied'),
     ({'instructions': 'invalid-utf8.txt'}, 'utf-8'),
-    ({'harness_skills': ['missing-skill']}, 'missing-skill'),
 ])
 def test_selected_resources_fail_clearly_when_absent(
     installed_commands: InstalledCommands,
@@ -377,4 +379,43 @@ def test_unpermitted_root_does_not_start_a_session(
     result = run_process([str(installed_commands.runner), '--swarm-input', str(batch)], cwd=root, env=env)
     assert result.returncode == 1
     assert yaml.safe_load(result.stdout)['error']['code'] == 'authority-denied'
+    assert not list((root / '.graphtraj/runner/sessions').glob('*/mapping.yml'))
+
+
+@pytest.mark.parametrize('surface', ['cli', 'mcp'])
+@pytest.mark.parametrize('skills', [[], ['uninstalled-method']])
+def test_public_launch_rejects_retired_skill_selection(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    surface: str,
+    skills: list[str],
+) -> None:
+    """CLI and MCP reject new name selections through their shared service."""
+    from graphtraj.interfaces import mcp
+
+    root, _, _, env = configure_harness(
+        installed_commands, temporary_git_repository, fake_codex, tmp_path,
+    )
+    _register(installed_commands, root, _ticket('176', 'native-selection'))
+    _change_status(installed_commands, root, '176', 'ready')
+    request = {'tasks': [{'role': 'coding_team.engineer', 'ticket_id': '176', 'skills': skills}]}
+    if surface == 'cli':
+        batch = root / 'input.yml'
+        batch.write_text(yaml.safe_dump(request))
+        result = run_process([str(installed_commands.runner), '--swarm-input', str(batch)],
+                             cwd=root, env=env)
+        assert result.returncode == 1
+        document = yaml.safe_load(result.stdout)
+    else:
+        with monkeypatch.context() as patch:
+            for key, value in env.items():
+                patch.setenv(key, value)
+            result = mcp.launch_swarm_tool(request, cwd=root)
+        assert result.failed
+        document = result.document
+    assert document['error']['code'] == 'invalid-input'
+    assert 'Runtime native Skill selection' in document['error']['message']
     assert not list((root / '.graphtraj/runner/sessions').glob('*/mapping.yml'))

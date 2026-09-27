@@ -577,7 +577,7 @@ def test_each_session_projects_resolved_role_skills_and_task_access(
             role = ResolvedChildRole(role_name, f'Role {name}.', (),
                                      RolePreset('codex', model, None, None, reasoning_effort=effort,
                                                 worktree_access='read' if name == 'second' else 'write'))
-            contexts.append(context(root, peer, role, ('selected',),
+            contexts.append(context(root, peer, role, (),
                                     (Path('.state/teams/1/rounds/1/report.md'),)))
         async with CodexAppServer(command=[str(peer)], cwd=tmp_path) as adapter:
             sessions = await asyncio.gather(*(adapter.create_session(value) for value in contexts))
@@ -592,16 +592,12 @@ def test_each_session_projects_resolved_role_skills_and_task_access(
                 config = observed['config']
                 assert config['model_reasoning_effort'] == ['low', 'high'][index]
                 assert config['agents'] == {'enabled': False}
-                assert config['skills']['config'] == [
-                    {'path': str(root / '.agents/skills/disabled/SKILL.md'), 'enabled': False},
-                    {'path': str(root / '.agents/skills/selected/SKILL.md'), 'enabled': True},
-                ]
+                assert 'skills' not in config
                 filesystem = config['permissions'][config['default_permissions']]['filesystem']
                 assert filesystem[':workspace_roots']['.'] == ['write', 'read'][index]
                 assert filesystem[':workspace_roots']['CONTEXT.md'] == 'read'
                 assert filesystem[':workspace_roots']['docs'] == 'read'
                 assert filesystem[str(root / 'evidence/teams/1/rounds/1/report.md')] == 'read'
-                assert filesystem[str(root / '.agents/skills/selected')] == 'read'
                 assert (str(root / 'git-common') in filesystem) == (index == 0)
                 assert not any(str(tmp_path / ['second', 'first'][index]) in key for key in filesystem)
             different_connection = context(tmp_path / 'third', peer, replace(

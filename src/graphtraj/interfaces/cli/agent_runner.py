@@ -41,7 +41,7 @@ def _budget_notices() -> Iterator[None]:
     if descriptor is None:
         from graphtraj.runtimes.codex.app_server import CodexMainRecovery
 
-        recovery = CodexMainRecovery.from_environment(Path.cwd().resolve())
+        recovery = CodexMainRecovery.from_environment()
         if recovery is not None:
             with recovery:
                 _MAIN_RECOVERY = recovery

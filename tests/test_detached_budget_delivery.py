@@ -2,6 +2,7 @@
 
 import fcntl
 import json
+import os
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
@@ -18,6 +19,7 @@ from test_task_budget_control import BODY, commands, sample_stop
 from test_ticket_graph import _change_status, _register, _ticket
 
 
+@pytest.mark.parametrize('inherited', [False, True], ids=['caller-binding', 'inherited-fd'])
 @pytest.mark.parametrize('surface', ['cli', 'mcp'])
 @pytest.mark.parametrize('stop', [True, False], ids=['budget-stop', 'completed'])
 def test_bound_top_level_transport_lasts_until_execution_ends(
@@ -28,11 +30,13 @@ def test_bound_top_level_transport_lasts_until_execution_ends(
     monkeypatch: pytest.MonkeyPatch,
     surface: str,
     stop: bool,
+    inherited: bool,
 ) -> None:
     """Return late stop evidence, or normal completion, before task acceptance."""
     root, worktrees, _, env = configure_harness(
         commands, temporary_git_repository, fake_codex, tmp_path,
     )
+    (root / '.agents/skills/retro/SKILL.md').unlink()
     (root / '.graphtraj/roles.yml').write_text(yaml.safe_dump({
         'roles': {'researcher': {'runtime': 'codex', 'model': 'selected'}},
         'role_tree': {'researcher': {}},
@@ -75,12 +79,17 @@ print(json.dumps({'type': 'item.completed', 'item': {'type': 'agent_message', 't
                        '_meta': {'threadId': 'existing-external-caller'}},
         }) + '\n'
 
+    read_fd, write_fd = os.pipe() if inherited else (None, None)
+    if inherited:
+        env['GRAPHTRAJ_BUDGET_NOTICE_FD'] = str(write_fd)
+
     worktree = worktrees / '153-research'
     evidence = root / '.graphtraj/state/tickets/153-research'
     with ThreadPoolExecutor(max_workers=1) as executor:
         launched = executor.submit(
             subprocess.run, command, cwd=root, env=env, input=request,
             text=True, capture_output=True, timeout=45,
+            pass_fds=(write_fd,) if inherited else (),
         )
         try:
             wait_for_file(worktree / 'running.txt', timeout=15)
@@ -104,14 +113,18 @@ print(json.dumps({'type': 'item.completed', 'item': {'type': 'agent_message', 't
             else:
                 release.touch()
             result = launched.result(timeout=20)
-            assert result.returncode == 0, result.stdout + result.stderr
+            assert result.returncode == (int(stop) if surface == 'cli' else 0), result.stdout + result.stderr
             if surface == 'cli':
                 document = yaml.safe_load(result.stdout)
             else:
                 response = json.loads(result.stdout)['result']
-                assert not response['isError'], response
+                assert response['isError'] is stop, response
                 document = response['structuredContent']
-            assert document['tasks'][0]['alias'] == alias
+            if stop:
+                assert document['tasks'][0]['launch_status'] == 'stopped'
+                assert document['tasks'][0]['error']['code'] == 'EXECUTION_BUDGET_STOPPED'
+            else:
+                assert document['tasks'][0]['alias'] == alias
             assert not process_is_alive(mapping['worker_pid'])
             assert (worktree / 'result.md').read_text() == 'Retained research'
             assert (evidence / 'teams/1/traces' / alias / 'events.jsonl').read_text()
@@ -124,13 +137,22 @@ print(json.dumps({'type': 'item.completed', 'item': {'type': 'agent_message', 't
                 assert len(usage['leader_notices']) == 3
                 assert all(n.get('channel_written') for n in usage['leader_notices'])
                 assert all(not n['delivered'] for n in usage['leader_notices'])
-                deliveries = document['stop_deliveries']
-                assert len(deliveries) == 1
-                assert deliveries[0]['ticket'] == {'ticket_id': '153', 'ticket_name': 'research'}
-                assert deliveries[0]['triggered_at'] and deliveries[0]['delivered_at']
-                print(surface, 'physical stop, three channel writes, one caller stop, no native receipt claim')
+                if inherited:
+                    notices = [json.loads(line) for line in os.read(read_fd, 10000).splitlines()]
+                    assert len(notices) == 3
+                    assert notices[-1]['threshold']['kind'] == 'stochastic_stop'
+                    assert notices[-1]['ticket'] == {'ticket_id': '153', 'ticket_name': 'research'}
+                    assert 'stop_deliveries' not in document
+                else:
+                    deliveries = document['stop_deliveries']
+                    assert len(deliveries) == 1
+                    assert deliveries[0]['ticket'] == {'ticket_id': '153', 'ticket_name': 'research'}
+                    assert deliveries[0]['triggered_at'] and deliveries[0]['delivered_at']
             else:
                 assert 'stop_deliveries' not in document
                 assert yaml.safe_load((directory / 'execution.yml').read_text())['outcome'] == 'completed'
         finally:
             release.touch()
+            if inherited:
+                os.close(write_fd)
+                os.close(read_fd)

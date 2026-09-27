@@ -426,7 +426,8 @@ class ManagedMcp:
     def call(self, name: str, arguments: dict) -> dict:
         """Call one execution or interaction tool and return its MCP result."""
 
-        return self.server.call(name, arguments)["result"]
+        thread_id = None if name in {"swarm", "send_instruction"} else "managed-main"
+        return self.server.call(name, arguments, thread_id=thread_id)["result"]
 
     def document(self, name: str, arguments: dict) -> dict:
         """Call one tool that must succeed and return its structured document."""
@@ -546,6 +547,8 @@ def test_installed_mcp_server_dispatches_and_controls_a_managed_child(
     """A host dispatches one managed child and controls it by its identity."""
 
     root, cause = managed_mcp.root, managed_mcp.cause
+    (root / ".agents/skills/retro/SKILL.md").unlink()
+    managed_mcp.environment["CODEX_THREAD_ID"] = "managed-main"
     dispatched = managed_mcp.document("swarm", {"tasks": [_inline_task()]})
     assert set(dispatched) == {"retained_batch_file", "tasks"}
     task, = dispatched["tasks"]
@@ -660,6 +663,8 @@ def test_installed_mcp_server_rejects_execution_input_like_the_cli(
     """Rejected dispatch, control and interaction calls keep the CLI's message."""
 
     root, cause = managed_mcp.root, managed_mcp.cause
+    (root / ".agents/skills/retro/SKILL.md").unlink()
+    managed_mcp.environment["CODEX_THREAD_ID"] = "managed-main"
     empty_batch = _write(root / "empty-batch.yml", {"tasks": []})
     unregistered = _write(
         root / "unregistered-batch.yml", {"tasks": [_inline_task() | {"ticket_id": "999"}]}
@@ -1330,6 +1335,7 @@ def test_installed_mcp_server_returns_a_budget_stop_to_the_request_caller(
     harness, _, _, environment = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path,
     )
+    (harness / ".agents/skills/retro/SKILL.md").unlink()
     _register_ready_ticket(installed_commands, harness, body=_budget_body(total=1))
     clock = tmp_path / "mcp-caller-clock"
     clock.write_text(str(time.time()), encoding="utf-8")
@@ -1366,17 +1372,12 @@ def test_installed_mcp_server_returns_a_budget_stop_to_the_request_caller(
 
         # The awaited call returns the enforced stop itself: identity, both
         # actual instants with their offsets, separate elapsed duration and the
-        # explicit Skill reference. Ordinary reminders carry none of it.
+        # status guidance. Ordinary reminders carry none of it.
         delivery = stopped["structuredContent"]["stop_deliveries"][0]
         assert delivery["stop_id"] == "71034556-830a-5f40-8ec6-80c65b263a52"
         assert delivery["stop"] == "stochastic_stop:2"
         assert delivery["ticket"] == {
             "ticket_id": "76", "ticket_name": "session-alias-control",
-        }
-        assert delivery["instruction"].startswith("$retro ")
-        assert delivery["skill"] == {
-            "name": "retro",
-            "path": str((harness / ".agents/skills/retro/SKILL.md").resolve()),
         }
         triggered_at = datetime.fromisoformat(delivery["triggered_at"])
         delivered_at = datetime.fromisoformat(delivery["delivered_at"])
@@ -1410,6 +1411,7 @@ def test_installed_runner_returns_a_budget_stop_with_the_awaiting_call(
     harness, _, _, environment = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path,
     )
+    (harness / ".agents/skills/retro/SKILL.md").unlink()
     _register_ready_ticket(installed_commands, harness, body=_budget_body(total=1))
     clock = tmp_path / "cli-caller-clock"
     clock.write_text(str(time.time()), encoding="utf-8")
@@ -1446,11 +1448,6 @@ def test_installed_runner_returns_a_budget_stop_with_the_awaiting_call(
     assert delivery["ticket"] == {
         "ticket_id": "76", "ticket_name": "session-alias-control",
     }
-    assert delivery["instruction"].startswith("$retro ")
-    assert delivery["skill"] == {
-        "name": "retro",
-        "path": str((harness / ".agents/skills/retro/SKILL.md").resolve()),
-    }
     triggered_at = datetime.fromisoformat(delivery["triggered_at"])
     delivered_at = datetime.fromisoformat(delivery["delivered_at"])
     assert triggered_at.utcoffset() is not None
@@ -1475,6 +1472,7 @@ def test_installed_mcp_server_returns_each_caller_its_own_stop(
     harness, _, _, environment = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path,
     )
+    (harness / ".agents/skills/retro/SKILL.md").unlink()
     _register_ready_ticket(installed_commands, harness, body=_budget_body(total=1))
     _register(
         installed_commands,
@@ -1528,9 +1526,9 @@ def test_installed_mcp_server_does_not_queue_a_late_stop_without_a_waiting_call(
 ) -> None:
     """A stop sampled after the tool call returned has no in-band carrier.
 
-    The resumed Worker keeps the caller's channel open, but the call it would
-    return through has already answered, so this stop only stays retained in
-    the Ticket's budget state. It is not queued into Main's native input.
+    A generic request resumes detached work without a caller channel. Its later
+    stop stays retained in the Ticket's budget state and is not attached to a
+    different caller's next request or queued into Main's native input.
     """
 
     from test_execution_budgets import _budget_body
@@ -1539,6 +1537,7 @@ def test_installed_mcp_server_does_not_queue_a_late_stop_without_a_waiting_call(
     harness, _, _, environment = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path,
     )
+    (harness / ".agents/skills/retro/SKILL.md").unlink()
     _register_ready_ticket(installed_commands, harness, body=_budget_body(total=0.01))
     started = time.time()
     clock = tmp_path / "mcp-late-clock"
@@ -1586,7 +1585,6 @@ def test_installed_mcp_server_does_not_queue_a_late_stop_without_a_waiting_call(
                     "instruction":         "Inspect the retained result.",
                     "caused_by_event_ids": [cause],
                 },
-                thread_id="thread-main",
             )["result"]
             assert sent["isError"] is False, sent
             sent_task = sent['structuredContent']
@@ -1604,6 +1602,11 @@ def test_installed_mcp_server_does_not_queue_a_late_stop_without_a_waiting_call(
         finally:
             release.touch()
 
+        observed = server.call(
+            "alias_status", {"aliases": [alias]}, thread_id="other-caller"
+        )["result"]
+        assert observed["isError"] is False
+        assert "stop_deliveries" not in observed["structuredContent"]
         assert _native_queue_submissions(protocol) == []
 
     usage = yaml.safe_load((ticket / "execution-budget.yml").read_text(encoding="utf-8"))
@@ -1626,6 +1629,7 @@ def test_installed_mcp_server_keeps_the_continue_path_on_the_request_caller(
     harness, _, _, environment = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path,
     )
+    (harness / ".agents/skills/retro/SKILL.md").unlink()
     _register_ready_ticket(installed_commands, harness, body=_budget_body(total=1))
     clock = tmp_path / "mcp-continue-clock"
     clock.write_text(str(time.time()), encoding="utf-8")

@@ -94,55 +94,62 @@ class ProjectRoles:
         return inline if inline is not None else self.preset(reference)
 
     def resolve(self, reference: str) -> str:
-        """Return the configured reference that one role reference selects.
+        """Resolve current configuration without inferring historical role aliases.
 
-        A named group selects exactly that group role, a top-level preset name
-        selects itself, and a bare role name selects a group role only when
-        exactly one configured group declares it. A flat roles.yml declares no
-        group, so its former group token is read as part of the role name.
+        Exact configured spellings win. A bare name may select the sole group
+        declaring that name; a qualified name must select its declared group.
         """
         for candidate in _reference_spellings(reference):
             if candidate in self.presets:
                 return candidate
-        retained = retained_role_reference(reference)
-        group, _, _ = retained.rpartition(".")
-        if group and self.groups:
-            raise ProjectRolesError((
-                "roles.{0} is not a configured preset reference.".format(retained),
-            ))
-        name = logical_role(retained)
-        matches = sorted(
-            candidate
-            for candidate in self.presets
-            if logical_role(candidate) == name
-        )
-        if len(matches) == 1:
-            return matches[0]
-        if matches:
-            raise ProjectRolesError((
-                "roles.{0} is declared by more than one group: {1}.".format(
-                    name, ", ".join(matches)
-                ),
-            ))
+        group, _, _ = reference.rpartition(".")
+        if not (group and self.groups):
+            name = configured_role_name(reference)
+            matches = sorted(
+                candidate for candidate in self.presets
+                if configured_role_name(candidate) == name
+            )
+            if len(matches) == 1:
+                return matches[0]
+            if matches:
+                raise ProjectRolesError((
+                    "roles.{0} is declared by more than one group: {1}.".format(
+                        name, ", ".join(matches)
+                    ),
+                ))
         raise ProjectRolesError((
-            "roles.{0} is not a configured preset reference.".format(retained),
+            "roles.{0} is not a configured preset reference.".format(reference),
         ))
 
     def preset(self, reference: str) -> RolePreset:
-        """Return the Runtime settings that one role reference selects."""
+        """Return the Runtime settings declared for the selected current role."""
         return self.presets[self.resolve(reference)]
 
 
 def logical_role(reference: str) -> str:
-    """Return the role name one configured or retained reference selects.
+    """Return the role name one retained reference selects.
 
     The group of a '<group>.<role>' reference only selects Runtime settings;
     the role name after the last dot keeps the packaged responsibility, one
     word group per '-', so a configured '_' spelling and an installed
-    hyphenated template name the same role.
+    hyphenated template name the same role. A retained Batch, Session or Team
+    record that names a former Engineer tier reads the unified Engineer seat.
+    Apply this where retained records are read; new dispatch uses
+    configured_role_name.
     """
     retained = _RETAINED_ENGINEER_REFERENCES.get(reference, reference)
     return retained.rpartition(".")[2].replace("_", "-")
+
+
+def configured_role_name(reference: str) -> str:
+    """Return the role name one current configured reference declares.
+
+    The group of a '<group>.<role>' reference only selects Runtime settings;
+    the name after the last dot is the role's own identity, one word group per
+    '-'. A former Engineer tier spelling stays a distinct role name here
+    instead of being rewritten to the unified Engineer seat.
+    """
+    return reference.rpartition(".")[2].replace("_", "-")
 
 
 def retained_role_reference(reference: str) -> str:
@@ -153,15 +160,17 @@ def retained_role_reference(reference: str) -> str:
 def _reference_spellings(reference: str) -> tuple[str, ...]:
     """Return the spellings one supplied reference may use for the configured roles.
 
-    Retained Batch, Session and Team records may name a former Engineer tier,
-    and either side of a rename may spell a group or role word group with '_'
+    Either side of a word group may spell a group or role word group with '_'
     or '-'. The configured spelling is the one roles.yml declares.
     """
     spellings: list[str] = []
-    for candidate in (retained_role_reference(reference), reference):
-        for spelling in (candidate, candidate.replace("-", "_"), candidate.replace("_", "-")):
-            if spelling not in spellings:
-                spellings.append(spelling)
+    for spelling in (
+        reference,
+        reference.replace("-", "_"),
+        reference.replace("_", "-"),
+    ):
+        if spelling not in spellings:
+            spellings.append(spelling)
     return tuple(spellings)
 
 
@@ -251,7 +260,7 @@ def parse_inline_role(value: object) -> tuple[str, RolePreset]:
         raise ProjectRolesError(
             ("An inline Batch role must use a preset reference or lowercase kebab-case name.",)
         )
-    name = logical_role(name)
+    name = configured_role_name(name)
     diagnostics: list[str] = []
     preset = _role_preset(name, settings, diagnostics)
     if diagnostics or preset is None:

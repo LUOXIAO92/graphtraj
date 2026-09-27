@@ -27,7 +27,11 @@ from graphtraj.execution.execution_budget import (
 from graphtraj.configuration.role_definitions import resolve_child_role
 from graphtraj.configuration.project_configuration import load_project_configuration
 from graphtraj.graph.delivery_worldline import append_project_worldline_event, read_worldline
-from graphtraj.configuration.project_roles import ProjectRolesError, logical_role
+from graphtraj.configuration.project_roles import (
+    ProjectRolesError,
+    configured_role_name,
+    logical_role,
+)
 from graphtraj.execution.runner_batch import (
     read_batch,
     retain_batch,
@@ -836,7 +840,7 @@ def _execute_agent(
                 "operation": "launch",
                 "drive_children": not wait_for_completion,
                 "monitor_execution_budget": monitor is not None,
-                "member_registration": ({"member": logical_role(role).replace("-", "_"), "replaces": replaces_alias}
+                "member_registration": ({"member": configured_role_name(role).replace("-", "_"), "replaces": replaces_alias}
                                         if register_member else None),
                 "mapping": {
                     "alias": alias,
@@ -1192,7 +1196,7 @@ def _agent_alias(project: Any, task: Task, role: str, generation: int = 1) -> st
     use '_'; the entity starts as the role name and takes a numbered successor
     when that name is occupied, so no existing Session is overwritten.
     """
-    role_name = logical_role(role).replace("-", "_")
+    role_name = configured_role_name(role).replace("-", "_")
     prefix = "{0}-{1}-handover{2}-{3}@".format(
         task.ticket_id, task.ticket_name.replace("-", "_"), generation - 1, role_name
     )

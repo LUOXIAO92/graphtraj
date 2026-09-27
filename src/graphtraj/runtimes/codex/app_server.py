@@ -28,6 +28,37 @@ from graphtraj.runtimes.runtime_adapter import RuntimeContext, RuntimeExecutionR
 _DEFAULT_TIMEOUT = object()
 
 
+_DEFAULT_STOP_INSTRUCTION = (
+    "The task has stopped because of its execution budget. "
+    "Use retained results and unfinished work to explain its current "
+    "status and next steps. Resuming still requires existing authorization."
+)
+
+
+def _configured_stop_instruction() -> str | None:
+    """Return the stop text configured for the project around this process.
+
+    The value is ``None`` when no readable configuration sets the setting, so a
+    caller outside a project keeps the generic guidance. A missing or invalid
+    configuration never turns a stop delivery into a failure.
+    """
+    from graphtraj.configuration.project_configuration import (
+        ProjectConfigurationError,
+        load_project_configuration,
+    )
+
+    try:
+        current = Path.cwd().resolve()
+    except OSError:
+        return None
+    for candidate in (current, *current.parents):
+        try:
+            return load_project_configuration(candidate).stop_instruction
+        except (ProjectConfigurationError, OSError):
+            continue
+    return None
+
+
 def _native_id(value: Any) -> str:
     """Validate a nonempty native Session or execution identifier."""
     if not isinstance(value, str) or not value:
@@ -843,8 +874,13 @@ class CodexMainRecovery:
     native input, and no second Main or Driver is created.
     """
 
-    def __init__(self) -> None:
-        """Bind one caller channel without requiring an installed Skill."""
+    def __init__(self, stop_instruction: str | None = None) -> None:
+        """Bind one caller channel without requiring an installed Skill.
+
+        ``stop_instruction`` is the configured text carried by a delivered stop:
+        ``None`` selects the generic guidance, while an empty string delivers
+        only the stop facts.
+        """
         self._read_fd: int | None = None
         self._notice_fd: int | None = None
         self._reader: threading.Thread | None = None
@@ -855,6 +891,7 @@ class CodexMainRecovery:
         self._stops: set[str] = set()
         self._deliveries: list[dict[str, Any]] = []
         self._error: CodexAdapterError | None = None
+        self._stop_instruction = stop_instruction
         self._opened = False
         self._closed = False
 
@@ -863,7 +900,7 @@ class CodexMainRecovery:
         """Return the caller binding when this process owns a Codex Main."""
         if not os.environ.get("CODEX_THREAD_ID") or os.environ.get("GRAPHTRAJ_ROLE"):
             return None
-        return cls()
+        return cls(_configured_stop_instruction())
 
     @classmethod
     def from_request(
@@ -881,7 +918,7 @@ class CodexMainRecovery:
         )
         if not isinstance(thread_id, str) or not thread_id:
             return None
-        return cls()
+        return cls(_configured_stop_instruction())
 
     def __enter__(self) -> "CodexMainRecovery":
         """Start the narrow notice reader before the wrapped Runner operation."""
@@ -1009,18 +1046,21 @@ class CodexMainRecovery:
             uuid.NAMESPACE_URL,
             "graphtraj:budget-stop:{0}:{1}:{2}".format(ticket_id, ticket_name, limit),
         ))
-        return {
+        delivery = {
             "stop_id": stop_id,
             "stop": "stochastic_stop:{0}".format(limit),
             "ticket": {"ticket_id": ticket_id, "ticket_name": ticket_name},
             "triggered_at": triggered_at,
             "elapsed": elapsed,
-            "instruction": (
-                "The task has stopped because of its execution budget. "
-                "Use retained results and unfinished work to explain its current "
-                "status and next steps. Resuming still requires existing authorization."
-            ),
         }
+        instruction = (
+            _DEFAULT_STOP_INSTRUCTION
+            if self._stop_instruction is None
+            else self._stop_instruction
+        )
+        if instruction:
+            delivery["instruction"] = instruction
+        return delivery
 
     def _record_error(self, error: CodexAdapterError) -> None:
         """Keep the first concrete delivery failure for every close caller."""

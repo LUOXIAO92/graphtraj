@@ -287,7 +287,7 @@ def _read_task(
         policy_role = role
     elif isinstance(role_value, dict):
         try:
-            role, inline_preset = parse_inline_role(role_value)
+            role, inline_preset = parse_inline_role(role_value, retained=retained)
         except ProjectRolesError as error:
             raise RunnerError(
                 "ROLE_NOT_CONFIGURED",

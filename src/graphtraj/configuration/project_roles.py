@@ -218,8 +218,8 @@ def load_project_roles(harness_root: Path) -> ProjectRoles:
     return _roles_from_document(document)
 
 
-def parse_inline_role(value: object) -> tuple[str, RolePreset]:
-    """Validate one temporary Batch role with the reusable role schema."""
+def parse_inline_role(value: object, *, retained: bool = False) -> tuple[str, RolePreset]:
+    """Validate an inline role, leaving retired resource selections in history."""
 
     if not isinstance(value, dict) or len(value) != 1:
         raise ProjectRolesError(
@@ -231,6 +231,10 @@ def parse_inline_role(value: object) -> tuple[str, RolePreset]:
             ("An inline Batch role must use a preset reference or lowercase kebab-case name.",)
         )
     name = configured_role_name(name)
+    if retained and isinstance(settings, dict):
+        # Old names are historical input, not selections for a new Runtime.
+        settings = {key: item for key, item in settings.items()
+                    if key not in {"skills", "harness_skills", "required_skills"}}
     diagnostics: list[str] = []
     preset = _role_preset(name, settings, diagnostics)
     if diagnostics or preset is None:

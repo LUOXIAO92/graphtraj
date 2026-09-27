@@ -2,6 +2,7 @@
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -45,11 +46,24 @@ def prepare(
     child: bool = False,
     replacement_child: bool = False,
     preflight_failure: bool = False,
+    external_inline: bool = False,
 ) -> tuple[Path, dict, dict]:
     """Start one real managed Session whose model work waits for test release."""
     root, _, _, env = configure_harness(commands, repository, fake_codex, tmp_path)
     roles = {name: {'runtime': 'codex', 'model': 'selected'}
              for name in ([role, 'analyst'] if child or replacement_child else [role])}
+    selection = role
+    if external_inline:
+        shutil.rmtree(root / '.agents/skills')
+        shutil.rmtree(tmp_path / 'operator-home/.agents/skills')
+        (root / 'role.txt').write_text('Use the selected external method.\n')
+        skill = root / 'external-method'
+        skill.mkdir()
+        (skill / 'SKILL.md').write_text('---\nname: external-method\ndescription: Research.\n---\n')
+        config = root / '.codex/config.toml'
+        with config.open('a') as stream:
+            stream.write('\n[[skills.config]]\npath = "../external-method"\nenabled = true\n')
+        selection = {role: {**roles[role], 'instructions': 'role.txt'}}
     if '.' in role:
         group, _, name = role.rpartition('.')
         roles[group] = {name: roles.pop(role)}
@@ -90,13 +104,106 @@ def prepare(
         [str(commands.runner.with_name('graphtraj-mcp'))], cwd=root, env=env,
         input=json.dumps({'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call',
                           'params': {'name': 'swarm', 'arguments': {
-                              'tasks': [{'role': role, 'ticket_id': '154'}]}}}) + '\n',
+                              'tasks': [{'role': selection, 'ticket_id': '154'}]}}}) + '\n',
         text=True, capture_output=True, timeout=20,
     )
     assert result.returncode == 0, result.stdout + result.stderr
     task = json.loads(result.stdout)['result']['structuredContent']['tasks'][0]
+    assert task['launch_status'] in {'launched', 'completed'}, json.dumps(task)
     wait_for_file(Path(env['RECOVERY_STARTED']))
     return root, env, task
+
+
+@pytest.mark.parametrize('operation', ['send', 'replace'])
+@pytest.mark.parametrize('historical', [False, True])
+def test_external_inline_resources_survive_recovery(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+    operation: str,
+    historical: bool,
+) -> None:
+    """Recovery uses captured resources; replacement selects current native config."""
+    root, env, task = prepare(installed_commands, temporary_git_repository, fake_codex,
+                              tmp_path, 'researcher', external_inline=True)
+    alias = task['alias']
+    sessions = root / '.graphtraj/runner/sessions'
+    directory = sessions / alias
+    ticket = root / '.graphtraj/state/tickets/154-recovery'
+    try:
+        if operation == 'send':
+            Path(env['RECOVERY_RELEASE']).touch()
+            wait_for_file(directory / 'execution.yml')
+        else:
+            stopped = command(installed_commands, root, env, 'interrupt', alias)
+            assert stopped.returncode == 0, stopped.stdout + stopped.stderr
+        original = yaml.safe_load((directory / 'mapping.yml').read_text())
+        batch_file = Path(original['retained_batch_file'])
+        if historical:
+            batch = yaml.safe_load(batch_file.read_text())
+            batch['tasks'][0]['skills'] = ['uninstalled-old-method']
+            preset = batch['tasks'][0]['role']['researcher']
+            for field in ('skills', 'harness_skills', 'required_skills'):
+                preset[field] = ['uninstalled-old-method']
+            batch_file.chmod(0o644)
+            batch_file.write_text(yaml.safe_dump(batch))
+            batch_file.chmod(0o444)
+            launch = yaml.safe_load((directory / 'launch.yml').read_text())
+            launch['context_evidence']['effective_skills'] = [{
+                'name': 'captured-method', 'path': str(root / 'external-method'),
+            }]
+            (directory / 'launch.yml').write_text(yaml.safe_dump(launch))
+        batch_before = batch_file.read_bytes()
+        launch_before = (directory / 'launch.yml').read_bytes()
+        launch = yaml.safe_load(launch_before)
+        before = yaml.safe_load((ticket / 'execution-budget.yml').read_text())
+        captured = launch['adapter_request']['session_parameters']
+        assert captured['config']['skills']['config'] == [
+            {'path': str(root / 'external-method'), 'enabled': True},
+        ]
+        config = root / '.codex/config.toml'
+        config.write_text(config.read_text().replace('enabled = true', 'enabled = false'))
+        if operation == 'send':
+            # Resume must not reload the role body or recreate captured resources.
+            (root / 'role.txt').unlink()
+        Path(env['RECOVERY_RELEASE']).touch()
+        args = (['send', alias, '--instruction', 'Continue the retained work.']
+                if operation == 'send' else ['replace', alias])
+        result = command(installed_commands, root, env, *args,
+                         '--caused-by-event-id', events(root)[-1]['event_id'])
+        assert result.returncode == 0, result.stdout + result.stderr
+        current_alias = alias if operation == 'send' else yaml.safe_load(result.stdout)['replacement_alias']
+        current_directory = sessions / current_alias
+        wait_for_file(current_directory / 'execution.yml')
+        assert yaml.safe_load((current_directory / 'execution.yml').read_text())['outcome'] == 'completed'
+        current = yaml.safe_load((current_directory / 'mapping.yml').read_text())
+        record = yaml.safe_load((current_directory / ('resume.yml' if operation == 'send' else 'launch.yml')).read_text())
+        params = record['adapter_request']['session_parameters']
+        assert current['parent'] == original['parent']
+        assert current['role_reference'] == original['role_reference'] == 'researcher'
+        assert batch_file.read_bytes() == batch_before
+        assert (directory / 'launch.yml').read_bytes() == launch_before
+        assert current['retained_batch_file'] == str(batch_file)
+        if operation == 'send':
+            assert current['session'] == original['session']
+            assert current['report_files'] == original['report_files']
+            assert params == captured
+            assert record['context_evidence'] == launch['context_evidence']
+        else:
+            assert current['session'] != original['session']
+            assert current['report_files'] != original['report_files']
+            assert params['config']['skills']['config'] == [
+                {'path': str(root / 'external-method'), 'enabled': False},
+            ]
+        after = yaml.safe_load((ticket / 'execution-budget.yml').read_text())
+        for field in ('started_at', 'allowance_minutes'):
+            assert after[field] == before[field]
+        assert after['sessions']['researcher'] == (1 if operation == 'send' else 2)
+        assert not (root / '.agents/skills').exists()
+    finally:
+        Path(env['RECOVERY_RELEASE']).touch()
+        command(installed_commands, root, env, 'interrupt', alias)
 
 
 @pytest.mark.parametrize('role, historical', [
@@ -128,6 +235,7 @@ def test_explicitly_stopped_member_is_replaced_without_executing_old_session(
             batch_file = Path(original['retained_batch_file'])
             batch = yaml.safe_load(batch_file.read_text())
             batch['tasks'][0]['role'] = 'coding-team.engineer-expert'
+            batch['tasks'][0]['skills'] = ['uninstalled-old-method']
             batch_file.chmod(0o644)
             batch_file.write_text(yaml.safe_dump(batch))
             batch_file.chmod(0o444)
@@ -213,12 +321,15 @@ def test_sampled_stop_continues_original_researcher_with_unchanged_accounting(
     """D7's physical stop feeds authorized continuation without another member."""
     from graphtraj.execution import execution_budget as budgets
 
-    root, env, task = prepare(installed_commands, temporary_git_repository, fake_codex, tmp_path, 'researcher')
+    root, env, task = prepare(installed_commands, temporary_git_repository, fake_codex,
+                              tmp_path, 'researcher', external_inline=True)
     alias = task['alias']
     directory = root / '.graphtraj/runner/sessions' / alias
     ticket = root / '.graphtraj/state/tickets/154-recovery'
     cause = events(root)[-1]['event_id']
     original = yaml.safe_load((directory / 'mapping.yml').read_text())
+    original_launch = (directory / 'launch.yml').read_bytes()
+    original_batch = Path(original['retained_batch_file']).read_bytes()
     try:
         busy = command(installed_commands, root, env, 'continue', '--ticket-id', '154',
                        '--caused-by-event-id', cause)
@@ -231,6 +342,7 @@ def test_sampled_stop_continues_original_researcher_with_unchanged_accounting(
         assert terminal['outcome'] == 'interrupted' and terminal['budget_stopped']
         before = yaml.safe_load((ticket / 'execution-budget.yml').read_text())
         assert before['stopped']
+        (root / 'role.txt').unlink()
         trace = Path(original['trace_file']).read_bytes()
         decision = root / 'continue.yml'
         decision.write_text(yaml.safe_dump({
@@ -275,6 +387,10 @@ def test_sampled_stop_continues_original_researcher_with_unchanged_accounting(
         assert len(after['leader_notices']) == len(before['leader_notices'])
         context = yaml.safe_load((directory / 'resume.yml').read_text())
         assert context['monitor_execution_budget'] and context['drive_children']
+        assert (directory / 'launch.yml').read_bytes() == original_launch
+        assert Path(original['retained_batch_file']).read_bytes() == original_batch
+        assert context['adapter_request']['session_parameters'] == yaml.safe_load(
+            original_launch)['adapter_request']['session_parameters']
         result = yaml.safe_load(command(installed_commands, root, env, 'reports', alias).stdout)
         assert len(result['submissions']) == 1
         continuation = next(event for event in events(root) if event['kind'] == 'team-continuation-started')

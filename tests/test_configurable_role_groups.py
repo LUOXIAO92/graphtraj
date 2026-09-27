@@ -313,12 +313,24 @@ def test_role_names_do_not_select_content_or_access(tmp_path: Path, reference: s
 
 
 @pytest.mark.parametrize('field', ['skills', 'required_skills', 'harness_skills'])
-def test_new_role_name_selection_directs_caller_to_native_resources(field: str) -> None:
-    """Removed role fields fail with an actionable replacement."""
+def test_new_role_name_selection_directs_caller_to_native_resources(
+    field: str, tmp_path: Path,
+) -> None:
+    """New role fields fail; retained inline input stays readable without mutation."""
     from graphtraj.configuration.project_roles import ProjectRolesError, parse_inline_role
 
+    selection = {'author': {'runtime': 'codex', 'model': 'chosen', field: ['old-method']}}
     with pytest.raises(ProjectRolesError, match='Runtime native Skill selection'):
-        parse_inline_role({'author': {'runtime': 'codex', 'model': 'chosen', field: []}})
+        parse_inline_role(selection)
+    retained = tmp_path / 'retained.yml'
+    content = yaml.safe_dump({'tasks': [{
+        'ticket_id': '177', 'ticket_name': 'retained-inline', 'role': selection,
+    }]}).encode()
+    retained.write_bytes(content)
+    batch = read_batch(retained, tmp_path)
+    assert batch.tasks[0].inline_preset.model == 'chosen'
+    assert batch.source_bytes == retained.read_bytes() == content
+    assert selection['author'][field] == ['old-method']
 
 
 @pytest.mark.parametrize('skills', [[], ['missing'], ['duplicate', 'duplicate']])

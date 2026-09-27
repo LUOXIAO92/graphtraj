@@ -111,7 +111,10 @@ def _replace_stopped_session(
     retained = Path(mapping["retained_batch_file"])
     task = read_session_task(mapping, cwd)
     definition = directory / ticket["current_definition"]
-    task = replace(task, ticket_file=definition, ticket_content=definition.read_text())
+    # Replacement selects current explicit resources; old Skill names stay in
+    # the retained Batch and must not become a fresh preflight selection.
+    task = replace(task, ticket_file=definition, ticket_content=definition.read_text(),
+                   requested_skills=())
     require_active_session(project, alias)
     current_commit = run_git(worktree, "rev-parse", "HEAD")
     prior_trace = _trace_ref(project, traces, alias)

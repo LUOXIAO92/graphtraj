@@ -156,8 +156,9 @@ def test_single_role_launch_registers_and_executes_without_placeholder_members(
 
 
 @pytest.mark.parametrize('surface', ['cli', 'mcp'])
-@pytest.mark.parametrize('parent_role, child_role', [
-    ('researcher', 'analyst'), ('engineer-expert', 'engineer-junior'),
+@pytest.mark.parametrize('parent_role, child_role, historical', [
+    ('researcher', 'analyst', False), ('engineer-expert', 'engineer-junior', False),
+    ('engineer', 'analyst', True),
 ])
 def test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority(
     installed_commands: InstalledCommands,
@@ -168,6 +169,7 @@ def test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority(
     surface: str,
     parent_role: str,
     child_role: str,
+    historical: bool,
 ) -> None:
     """Role-tree edges grant dispatch, while same-role peers cannot control instances."""
     import sys
@@ -235,6 +237,14 @@ def test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority(
         assert (worktree / 'child-work.txt').read_text() == 'Formal child executed'
         events = [json.loads(line) for shard in (root / '.graphtraj/state/worldline').glob('*.jsonl')
                   for line in shard.read_text().splitlines()]
+    if historical:
+        # The saved input predates distinct configured tier roles; mapping is fact.
+        parent_mapping = yaml.safe_load((root / '.graphtraj/runner/sessions' / parent['alias'] / 'mapping.yml').read_text())
+        retained = Path(parent_mapping['retained_batch_file'])
+        batch = yaml.safe_load(retained.read_text())
+        batch['tasks'][0]['role'] = 'engineer-expert'
+        retained.write_text(yaml.safe_dump(batch))
+        original_batch = retained.read_bytes()
     sent = run_process([str(installed_commands.runner), 'send', parent['alias'],
                         '--instruction', 'Dispatch again', '--caused-by-event-id', events[-1]['event_id']],
                        cwd=root, env=env, timeout=20)
@@ -249,6 +259,9 @@ def test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority(
     assert len(team['members']) == 3
     assert sum(member['role'] == child_role for member in team['members'].values()) == 2
     assert all(member['session_ref'] for member in team['members'].values())
+    if historical:
+        assert retained.read_bytes() == original_batch
+        assert parent_mapping['role'] == 'engineer'
 
 
 @pytest.mark.parametrize('selection, missing', [

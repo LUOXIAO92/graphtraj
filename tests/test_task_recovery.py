@@ -94,13 +94,17 @@ def prepare(
     return root, env, task
 
 
-@pytest.mark.parametrize('role', ['researcher', 'team-leader', 'engineer-expert'])
+@pytest.mark.parametrize('role, historical', [
+    ('researcher', False), ('team-leader', False), ('engineer-expert', False),
+    ('engineer', True),
+])
 def test_explicitly_stopped_member_is_replaced_without_executing_old_session(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
     fake_codex: FakeCodex,
     tmp_path: Path,
     role: str,
+    historical: bool,
 ) -> None:
     """Replacement needs a stopped target, retains its evidence and uses no fixed seat."""
     root, env, task = prepare(installed_commands, temporary_git_repository, fake_codex, tmp_path, role)
@@ -114,6 +118,14 @@ def test_explicitly_stopped_member_is_replaced_without_executing_old_session(
         stopped = command(installed_commands, root, env, 'interrupt', alias)
         assert stopped.returncode == 0, stopped.stdout + stopped.stderr
         original = yaml.safe_load((runner / alias / 'mapping.yml').read_text())
+        if historical:
+            # Reproduce an old Batch whose actual registered identity was engineer.
+            batch_file = Path(original['retained_batch_file'])
+            batch = yaml.safe_load(batch_file.read_text())
+            batch['tasks'][0]['role'] = 'engineer-expert'
+            batch_file.write_text(yaml.safe_dump(batch))
+        retained_batch = Path(original['retained_batch_file']).read_bytes()
+
         marker = (runner / alias / 'stop.yml').read_bytes()
         trace = Path(original['trace_file']).read_bytes()
         reports = yaml.safe_load(command(installed_commands, root, env, 'reports', alias).stdout)['reports']
@@ -124,6 +136,8 @@ def test_explicitly_stopped_member_is_replaced_without_executing_old_session(
         replacement = yaml.safe_load(replaced.stdout)['replacement_alias']
         wait_for_file(runner / replacement / 'execution.yml')
         current = yaml.safe_load((runner / replacement / 'mapping.yml').read_text())
+        assert current['role'] == original['role'] == role
+        assert Path(original['retained_batch_file']).read_bytes() == retained_batch
         assert current['session'] != original['session']
         assert current['parent'] == original['parent'] is None
         assert current['retained_batch_file'] == original['retained_batch_file']

@@ -44,6 +44,8 @@ def coding_roles() -> dict:
             preset["reports"] = ["engineer.md", "validation.md"]
         elif name == "team_leader":
             preset["reports"] = ["leader.md"]
+        elif name in {"standards_reviewer", "spec_reviewer"}:
+            preset["reports"] = [name.split("_")[0] + ".md"]
     document["roles"]["delivery_state"]["instructions"] = "delivery-state"
     return document
 

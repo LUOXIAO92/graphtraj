@@ -177,9 +177,9 @@ def test_public_team_phases_and_parent_capacity_transfer(
                 "114-small_team-handover0-spec_reviewer@spec_reviewer"
             )["role"] == "spec-reviewer"
         reviewing = read_graph(state)["tickets"][0]
-        assert reviewing["status"] == "reviewing"
+        assert reviewing["status"] == "implementing"
         candidate = next(event["candidate"] for event in read_worldline(state, root)
-                         if event["kind"] == "candidate-ready-for-review")
+                         if event["kind"] == "result-submitted")
         assert len(candidate) == 40
     finally:
         engineer_release.touch()

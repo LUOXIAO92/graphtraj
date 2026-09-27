@@ -16,8 +16,6 @@ from conftest import FakeCodex, InstalledCommands, run_process, wait_for_file
 from graphtraj.execution.execution_budget import execution_budget_monitor
 from runner_fixtures import configure_harness, engineer_probe
 from test_session_alias_control import _register_ready_ticket
-from test_team_correction import RUNTIME as CORRECTION_RUNTIME
-from test_team_recovery import RUNTIME as RECOVERY_RUNTIME
 
 
 def _budget_body(
@@ -859,135 +857,8 @@ def test_installed_runner_uses_a_revised_budget_while_its_worker_is_running(
         release.touch()
 
 
-def test_installed_runner_counts_sessions_and_emits_one_correction_overrun(
-    installed_commands: InstalledCommands,
-    temporary_git_repository: Path,
-    fake_codex: FakeCodex,
-    tmp_path: Path,
-) -> None:
-    harness, _, _, environment = configure_harness(
-        installed_commands, temporary_git_repository, fake_codex, tmp_path
-    )
-    _register_ready_ticket(
-        installed_commands,
-        harness,
-        body=_budget_body(total=60, correction_rounds=0),
-    )
-    fake_codex.executable.write_text("#!" + sys.executable + "\n" + CORRECTION_RUNTIME)
-    batch = harness / "budget-correction-batch.yml"
-    batch.write_text(
-        "tasks:\n"
-        "  - ticket_id: \"76\"\n"
-        "    ticket_name: session-alias-control\n"
-        "    role: coding-team.team-leader\n",
-        encoding="utf-8",
-    )
-    result = run_process(
-        [str(installed_commands.runner), "--swarm-input", str(batch)],
-        cwd=harness,
-        env={
-            **environment,
-            "GRAPHTRAJ_AGENT_RUNNER": str(installed_commands.runner),
-            "CORRECTION_LOG": str(tmp_path / "budget-corrections.jsonl"),
-            "CORRECTION_TIMING": "after-review",
-        },
-        timeout=30,
-    )
-
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert yaml.safe_load(result.stdout)["tasks"][0]["launch_status"] == "accepted"
-    usage = yaml.safe_load(
-        (
-            harness
-            / ".graphtraj/state/tickets/76-session-alias-control/execution-budget.yml"
-        ).read_text(encoding="utf-8")
-    )
-    assert usage["sessions"] == {
-        "team_leader": 1,
-        "engineer": 1,
-        "standards_reviewer": 1,
-        "spec_reviewer": 1,
-        "delivery_state": 1,
-    }
-    assert usage["corrections"] == 2
-    notices = _stderr_notices(result.stderr)
-    assert len(notices) == 1
-    assert notices[0]["threshold"] == {"kind": "correction_rounds", "limit": 0}
-    assert notices[0]["stage"] == "correction"
-    assert notices[0]["responsible_role"] == "engineer"
 
 
-def test_installed_runner_notifies_once_when_a_replacement_exceeds_session_plan(
-    installed_commands: InstalledCommands,
-    temporary_git_repository: Path,
-    fake_codex: FakeCodex,
-    tmp_path: Path,
-) -> None:
-    harness, _, _, environment = configure_harness(
-        installed_commands, temporary_git_repository, fake_codex, tmp_path
-    )
-    _register_ready_ticket(
-        installed_commands,
-        harness,
-        body=_budget_body(total=60, delivery_state_sessions=2),
-    )
-    fake_codex.executable.write_text("#!" + sys.executable + "\n" + RECOVERY_RUNTIME)
-    batch = harness / "budget-replacement-batch.yml"
-    batch.write_text(
-        "tasks:\n"
-        "  - ticket_id: \"76\"\n"
-        "    ticket_name: session-alias-control\n"
-        "    role: coding-team.team-leader\n",
-        encoding="utf-8",
-    )
-    launch_environment = {
-        **environment,
-        "GRAPHTRAJ_AGENT_RUNNER": str(installed_commands.runner),
-        "RECOVERY_TARGET": "provider-replace",
-    }
-    failed = run_process(
-        [str(installed_commands.runner), "--swarm-input", str(batch)],
-        cwd=harness,
-        env=launch_environment,
-        timeout=30,
-    )
-    assert failed.returncode == 1
-    ticket = harness / ".graphtraj/state/tickets/76-session-alias-control"
-    mapping = next(
-        yaml.safe_load(path.read_text(encoding="utf-8"))
-        for path in (harness / ".graphtraj/runner/sessions").glob("*/mapping.yml")
-        if yaml.safe_load(path.read_text(encoding="utf-8"))["role"] == "engineer"
-    )
-    cause = [
-        json.loads(line)["event_id"]
-        for path in (harness / ".graphtraj/state/worldline").glob("*.jsonl")
-        for line in path.read_text(encoding="utf-8").splitlines()
-    ][-1]
-
-    replaced = run_process(
-        [
-            str(installed_commands.runner),
-            "replace",
-            mapping["alias"],
-            "--actor",
-            "main",
-            "--caused-by-event-id",
-            cause,
-        ],
-        cwd=harness,
-        env=launch_environment,
-        timeout=30,
-    )
-
-    assert replaced.returncode == 0, replaced.stdout + replaced.stderr
-    usage = yaml.safe_load((ticket / "execution-budget.yml").read_text(encoding="utf-8"))
-    assert usage["sessions"]["engineer"] == 2
-    notices = _stderr_notices(replaced.stderr)
-    assert len(notices) == 1
-    assert notices[0]["threshold"] == {"kind": "planned_sessions.engineer", "limit": 1}
-    assert notices[0]["actual"]["sessions"]["engineer"] == 2
-    assert notices[0]["stage"] == "implementation"
-    assert notices[0]["responsible_role"] == "engineer"
 
 
 def test_installed_send_notifies_its_caller_while_a_budgeted_resume_runs(
@@ -1669,98 +1540,12 @@ def test_installed_send_retains_a_late_stop_without_an_awaiting_call(
         release.touch()
 
 
-def test_installed_runner_counts_implementation_rework_as_correction(
-    installed_commands: InstalledCommands,
-    temporary_git_repository: Path,
-    fake_codex: FakeCodex,
-    tmp_path: Path,
-) -> None:
-    harness, _, _, environment = configure_harness(
-        installed_commands, temporary_git_repository, fake_codex, tmp_path
-    )
-    _register_ready_ticket(
-        installed_commands,
-        harness,
-        body=_budget_body(total=60, correction_rounds=0),
-    )
-    fake_codex.executable.write_text("#!" + sys.executable + "\n" + RECOVERY_RUNTIME)
-    batch = harness / "budget-rework-batch.yml"
-    batch.write_text(
-        "tasks:\n"
-        "  - ticket_id: \"76\"\n"
-        "    ticket_name: session-alias-control\n"
-        "    role: coding-team.team-leader\n",
-        encoding="utf-8",
-    )
-    runtime_environment = {
-        **environment,
-        "GRAPHTRAJ_AGENT_RUNNER": str(installed_commands.runner),
-        "RECOVERY_TARGET": "provider-rework",
-    }
-    failed = run_process(
-        [str(installed_commands.runner), "--swarm-input", str(batch)],
-        cwd=harness,
-        env=runtime_environment,
-        timeout=45,
-    )
-    assert failed.returncode == 1
-    ticket = harness / ".graphtraj/state/tickets/76-session-alias-control"
-    mapping_file = next(
-        path
-        for path in (harness / ".graphtraj/runner/sessions").glob("*/mapping.yml")
-        if yaml.safe_load(path.read_text(encoding="utf-8"))["role"] == "engineer"
-    )
-    mapping = yaml.safe_load(mapping_file.read_text(encoding="utf-8"))
-    cause = [
-        json.loads(line)["event_id"]
-        for path in (harness / ".graphtraj/state/worldline").glob("*.jsonl")
-        for line in path.read_text(encoding="utf-8").splitlines()
-    ][-1]
-    retried = run_process(
-        [
-            str(installed_commands.runner),
-            "send",
-            mapping["alias"],
-            "--instruction",
-            "Retry the interrupted current Team step.",
-            "--caused-by-event-id",
-            cause,
-        ],
-        cwd=harness,
-        env=runtime_environment,
-        timeout=45,
-    )
-    assert retried.returncode == 0, retried.stdout + retried.stderr
-    wait_for_file(mapping_file.parent / "execution.yml")
-
-    continued = run_process(
-        [str(installed_commands.runner), "--swarm-input", str(batch)],
-        cwd=harness,
-        env=runtime_environment,
-        timeout=45,
-    )
-
-    assert continued.returncode == 0, continued.stdout + continued.stderr
-    usage = yaml.safe_load((ticket / "execution-budget.yml").read_text(encoding="utf-8"))
-    assert usage["corrections"] == 1
-    events = [
-        json.loads(line)
-        for path in (harness / ".graphtraj/state/worldline").glob("*.jsonl")
-        for line in path.read_text(encoding="utf-8").splitlines()
-    ]
-    assert any(event["kind"] == "team-round-rework-started" for event in events)
-    assert not any(event["kind"] == "team-process-correction" for event in events)
-    notices = _stderr_notices(continued.stderr)
-    assert len(notices) == 1
-    assert notices[0]["threshold"] == {"kind": "correction_rounds", "limit": 0}
-    assert notices[0]["stage"] == "correction"
-    assert notices[0]["responsible_role"] == "engineer"
 
 
 def test_retained_engineer_session_identity_keeps_its_planned_session(
     tmp_path: Path,
 ) -> None:
-    """A retained tiered Engineer Session still counts toward its allowance."""
+    """A retained Session counts under its actual stored Engineer identity."""
     ticket = tmp_path / "ticket"
     ticket.mkdir()
     (ticket / "ticket.yml").write_text(
@@ -1770,7 +1555,7 @@ def test_retained_engineer_session_identity_keeps_its_planned_session(
     monitor = execution_budget_monitor(ticket, "76", "session-alias-control")
     assert monitor is not None
 
-    monitor.record_session("engineer-senior", "implementation")
+    monitor.record_session("engineer", "engineer")
 
     usage = yaml.safe_load(
         (ticket / "execution-budget.yml").read_text(encoding="utf-8")

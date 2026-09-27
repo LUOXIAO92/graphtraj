@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 import yaml
 
@@ -42,6 +42,7 @@ class ProjectConfiguration:
     state: Path
     dispatch_depth: int
     max_concurrency: int
+    codex: Mapping[str, Any] | None = None
 
     @property
     def integration_worktree(self) -> Path:
@@ -126,12 +127,14 @@ def _configuration_from_document(
     document: Any,
 ) -> ProjectConfiguration:
     invalid = "GraphTraj Config is invalid."
-    if not isinstance(document, dict) or set(document) != {
+    if not isinstance(document, dict) or set(document) - {"codex"} != {
         "version",
         "paths",
         "agent_runner",
     }:
         raise ProjectConfigurationError(invalid)
+    if "codex" in document and not isinstance(document["codex"], dict):
+        raise ProjectConfigurationError("GraphTraj Config codex must be a mapping.")
     paths = document.get("paths")
     limits = document.get("agent_runner")
     if (
@@ -179,6 +182,7 @@ def _configuration_from_document(
         state=state,
         dispatch_depth=dispatch_depth,
         max_concurrency=max_concurrency,
+        codex=document.get("codex"),
     )
 
 

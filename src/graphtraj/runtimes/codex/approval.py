@@ -14,14 +14,25 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 
 
-def approval_route(settings: Mapping[str, Any] | None, *, custom: bool) -> dict | None:
-    """Validate the adapter-only route; hosted Sessions keep native Guardian."""
-    if not custom:
+def approval_route(
+    settings: Mapping[str, Any] | None,
+    *,
+    custom: bool,
+    defaults: Mapping[str, Any] | None = None,
+) -> dict | None:
+    """Select role then project approval settings, otherwise retain legal native review.
+
+    A present route must validate; invalid settings never select another reviewer.
+    Custom work providers require an explicit route. Hosted providers may retain
+    their existing native approval configuration when neither route is set.
+    """
+    selected = settings if 'approval' in (settings or {}) else defaults
+    if 'approval' not in (selected or {}) and not custom:
         return None
-    route = (settings or {}).get('approval')
+    route = (selected or {}).get('approval')
     for field in ('model', 'base_url', 'api_key_env'):
         if not isinstance(route, dict) or not isinstance(route.get(field), str) or not route[field].strip():
-            raise RuntimeAdapterError('ROLE_CONFIG_INVALID', f'codex.approval.{field} is required for a custom provider.')
+            raise RuntimeAdapterError('ROLE_CONFIG_INVALID', f'codex.approval.{field} is required for an approval route.')
     if set(route) != {'model', 'base_url', 'api_key_env'}:
         raise RuntimeAdapterError('ROLE_CONFIG_INVALID', 'Unsupported codex.approval field.')
     url = urlsplit(route['base_url'])

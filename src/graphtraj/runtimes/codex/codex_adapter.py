@@ -28,6 +28,7 @@ from graphtraj.runtimes.runtime_adapter import (
 from graphtraj.execution.runner_transport import record_runtime_identity, runtime_turn_outcome
 from graphtraj.execution.runner_io import write_yaml_durably
 from graphtraj.runtimes.codex.approval import approval_route
+from graphtraj.configuration.project_configuration import configuration_exists, load_project_configuration
 from graphtraj.configuration.role_definitions import ResolvedChildRole
 from graphtraj.workspace.git_repository import GitRepositoryError, SourceRepository
 from graphtraj.configuration.skill_check import (
@@ -310,7 +311,7 @@ def preflight_runtime_context(
 
     _reject_legacy_user_sandbox_config()
     _require_codex_permissions(executable)
-    resolved_role = _resolve_codex_role(role)
+    resolved_role = _resolve_codex_role(role, runtime_store.parent)
     settings = role.settings
     harness_skills = _resolve_harness_skills(
         runtime_store, role.required_skills, repository_skill_source,
@@ -911,7 +912,7 @@ def _process_group_is_alive(process_group: int) -> bool:
     return True
 
 
-def _resolve_codex_role(role: ResolvedChildRole) -> _CodexRole:
+def _resolve_codex_role(role: ResolvedChildRole, harness_root: Path) -> _CodexRole:
     """Translate a resolved child role using its fixed native permissions."""
 
     document = _packaged_role("task")
@@ -938,9 +939,17 @@ def _resolve_codex_role(role: ResolvedChildRole) -> _CodexRole:
     ):
         raise _invalid_role_value("reasoning_effort")
 
+    defaults = (
+        load_project_configuration(harness_root).codex
+        if configuration_exists(harness_root) else None
+    )
     return _CodexRole(
         name=role.name,
-        approval=approval_route(role.settings.codex, custom=role.settings.base_url is not None),
+        approval=approval_route(
+            role.settings.codex,
+            custom=role.settings.base_url is not None,
+            defaults=defaults,
+        ),
         reasoning_effort=reasoning_effort,
         developer_instructions=role.instructions,
         required_skills=role.required_skills,

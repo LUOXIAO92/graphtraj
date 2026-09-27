@@ -8,7 +8,7 @@ from pathlib import Path
 import yaml
 
 from conftest import run_process
-from runner_fixtures import configure_harness
+from runner_fixtures import configure_harness, wait_for_ticket_status
 
 
 def ready_batch(commands, root, ids, name):
@@ -93,7 +93,9 @@ def test_more_than_four_teams_execute_concurrently(
         (root / "release").touch()
         stdout, stderr = worker.communicate(timeout=60)
     assert worker.returncode == 0, stderr + stdout
-    assert [task["launch_status"] for task in yaml.safe_load(stdout)["tasks"]] == ["accepted"] * 5
+    assert [task["launch_status"] for task in yaml.safe_load(stdout)["tasks"]] == ["launched"] * 5
+    for ticket_id in map(str, range(101, 106)):
+        wait_for_ticket_status(installed_commands, root, ticket_id, "awaiting-integration")
 
 
 def test_separate_runners_share_capacity_and_reject_whole_batches(
@@ -195,13 +197,15 @@ def test_startup_failure_does_not_erase_a_peer_that_started(
     finally:
         (root / "release").touch()
         stdout, stderr = worker.communicate(timeout=60)
-    assert worker.returncode == 1, stdout
+    assert worker.returncode == 0, stdout
     failed, completed = yaml.safe_load(stdout)["tasks"]
     assert failed["ticket_id"] == "401"
-    assert failed["launch_status"] == "failed"
-    assert failed["error"]["code"] == "launch-failed"
+    assert failed["launch_status"] == "launched"
+    status = run_process([str(installed_commands.runner), 'status', failed['alias']], cwd=root, env=environment)
+    assert yaml.safe_load(status.stdout)['aliases'][0]['last_outcome'] == 'runtime-error' 
     assert completed["ticket_id"] == "402"
-    assert completed["launch_status"] == "accepted"
+    assert completed["launch_status"] == "launched"
+    wait_for_ticket_status(installed_commands, root, "402", "awaiting-integration")
     assert completed["alias"]
 
 
@@ -235,7 +239,8 @@ def test_one_position_completes_one_round_with_sequential_reviewers(
     (root / "release").touch()
     result = run_process([str(installed_commands.runner), "--swarm-input", str(batch)], cwd=root, env=environment, timeout=60)
     assert result.returncode == 0, result.stdout + result.stderr
-    assert yaml.safe_load(result.stdout)["tasks"][0]["launch_status"] == "accepted"
+    assert yaml.safe_load(result.stdout)["tasks"][0]["launch_status"] == "launched"
+    wait_for_ticket_status(installed_commands, root, "78", "awaiting-integration")
     active = set()
     roles = []
     events = starts(root, 1)

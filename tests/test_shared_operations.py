@@ -363,7 +363,7 @@ def test_python_budgeted_launch_preserves_notices_without_writing_to_terminal(
     monkeypatch.setenv("GRAPHTRAJ_AGENT_RUNNER", str(installed_commands.runner))
     state = root / ".graphtraj/state"
     directory = register_ticket(state, root, {
-        **_ticket("73", "shared-budget"), "body": _budget_body(total=1000, delivery_state_sessions=0.5),
+        **_ticket("73", "shared-budget"), "body": _budget_body(total=1000).replace('team_leader: 1', 'team_leader: 0.5'),
     })
     (root / "evidence.md").write_text("Main selected this Team.\n")
     update_ticket_state(state, root, {

@@ -1606,9 +1606,10 @@ def test_installed_mcp_server_does_not_queue_a_late_stop_without_a_waiting_call(
                 thread_id="thread-main",
             )["result"]
             assert sent["isError"] is False, sent
-            assert sent["structuredContent"] == {
-                "alias": alias, "send_status": "sent",
-            }
+            sent_task = sent['structuredContent']
+            assert sent_task['alias'] == alias and sent_task['send_status'] == 'sent'
+            assert sent_task['session'] == launched['structuredContent']['tasks'][0]['session']
+            assert sent_task['execution_id']
             clock.write_text(str(started + 260), encoding="utf-8")
             deadline = time.monotonic() + 20
             while time.monotonic() < deadline:

@@ -62,25 +62,64 @@ def test_configured_engineer_preset_serves_the_engineer_seat(tmp_path: Path) -> 
     assert preset.api_key_env == "DEEPSEEK_API_KEY"
 
 
-@pytest.mark.parametrize(
-    "role",
-    (
-        "coding-team.engineer",
-        "coding-team.engineer-junior",
-        "coding-team.engineer-senior",
-        "coding-team.engineer-expert",
-    ),
-)
-def test_engineer_batch_reference_resolves_to_the_unified_role(role: str) -> None:
-    """Retained Engineer spellings select the same configured Engineer preset."""
+def test_engineer_batch_reference_keeps_the_supplied_reference() -> None:
+    """A new Batch keeps the role reference its caller named."""
     task = parse_batch({"tasks": [{
-        "ticket_id": "73", "ticket_name": "shared-graph", "role": role,
-        "skills": ["implement"],
+        "ticket_id": "73", "ticket_name": "shared-graph",
+        "role": "coding-team.engineer-junior", "skills": ["implement"],
     }]}).tasks[0]
 
-    assert task.role == "engineer"
-    assert task.policy_role == "engineer"
+    assert task.role == "engineer-junior"
+    assert task.policy_role == "engineer-junior"
+    assert task.role_reference == "coding-team.engineer-junior"
     assert task.requested_skills == ("implement",)
+
+
+def test_a_configured_tier_role_keeps_its_own_identity_and_edge(
+    tmp_path: Path,
+) -> None:
+    """A configured tier name dispatches its own preset and role-tree edge."""
+    path = tmp_path / ".graphtraj" / "roles.yml"
+    path.parent.mkdir()
+    document = _selected_coding_roles()
+    document["roles"]["custom_team"] = {
+        "engineer-expert": {"runtime": "codex", "model": "expert-model"},
+    }
+    document["role_tree"] = {"engineer-expert": {}}
+    path.write_text(yaml.safe_dump(document))
+    roles = load_project_roles(tmp_path)
+
+    # A bare name exactly one configured group declares selects that role.
+    assert roles.preset("engineer-expert").model == "expert-model"
+    assert roles.dispatch_preset(None, "engineer-expert").model == "expert-model"
+    # The unified Engineer seat keeps its own settings.
+    assert roles.preset("coding_team.engineer").model == "gpt-5.6-sol"
+
+    task = parse_batch({"tasks": [{
+        "ticket_id": "73", "ticket_name": "shared-graph",
+        "role": "engineer-expert",
+    }]}).tasks[0]
+
+    assert task.role == "engineer-expert"
+    assert task.role_reference == "engineer-expert"
+    assert roles.preset(task.role_reference).model == "expert-model"
+
+
+def test_an_unconfigured_tier_reference_fails_by_name(tmp_path: Path) -> None:
+    """No preset serves a tier spelling that current configuration omits."""
+    path = tmp_path / ".graphtraj" / "roles.yml"
+    path.parent.mkdir()
+    document = _selected_coding_roles()
+    document["role_tree"] = {"team-leader": {"engineer-expert": {}}}
+    path.write_text(yaml.safe_dump(document))
+    roles = load_project_roles(tmp_path)
+
+    # The tree permits this edge, but no configuration preset declares it.
+    with pytest.raises(ProjectRolesError) as error:
+        roles.dispatch_preset("team-leader", "engineer-expert")
+
+    assert "engineer-expert" in str(error.value)
+    assert roles.preset("coding_team.engineer").model == "gpt-5.6-sol"
 
 
 def test_a_tier_named_group_role_keeps_its_own_reference(tmp_path: Path) -> None:

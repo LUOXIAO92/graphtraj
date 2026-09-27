@@ -6,7 +6,7 @@ from pathlib import Path
 import yaml
 
 from graphtraj.configuration.project_configuration import load_project_configuration
-from graphtraj.configuration.project_roles import logical_role
+from graphtraj.configuration.project_roles import configured_role_name
 from graphtraj.execution.runner_batch import parse_swarm, read_swarm
 from graphtraj.execution.runner_models import Batch, LaunchResponse, RunnerError
 from graphtraj.execution.runner_status import caller_alias, read_alias_mapping
@@ -104,7 +104,7 @@ def launch_batch(batch: Batch, cwd: Path) -> LaunchResponse:
             Path(registration) if registration else
             runner_directory / "sessions" / caller / "child-registration.yml",
         )
-    if any(logical_role(task.role) == "merge-resolver" for task in batch.tasks):
+    if any(configured_role_name(task.role) == "merge-resolver" for task in batch.tasks):
         from graphtraj.teams.coding.merge_resolution import launch_merge_resolver
 
         return launch_merge_resolver(batch, cwd)

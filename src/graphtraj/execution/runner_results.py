@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 
 from graphtraj.configuration.project_configuration import load_project_configuration
-from graphtraj.configuration.project_roles import logical_role
+from graphtraj.configuration.project_roles import configured_role_name
 from graphtraj.execution.runner_models import RunnerError
 from graphtraj.execution.runner_io import _sync_directory
 from graphtraj.execution.runner_status import caller_alias, read_alias_mapping, require_task_authority
@@ -32,7 +32,7 @@ def assign_session_reports(
     Alias allocation already distinguishes repeated roles. Use that same entity
     component rather than reserving report names or introducing another identity.
     """
-    role_name = logical_role(role)
+    role_name = configured_role_name(role)
     directory = Path('.state') / 'teams' / str(generation) / 'rounds' / str(ordinal)
     reports = reports or (directory / f'{role_name}.md',)
     entity = alias.partition('@')[2]

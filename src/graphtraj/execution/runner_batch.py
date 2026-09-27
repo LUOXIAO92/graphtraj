@@ -15,6 +15,7 @@ from graphtraj.configuration.project_roles import (
     ROLE_REFERENCE,
     ProjectRolesError,
     _UniqueKeyLoader,
+    configured_role_name,
     logical_role,
     parse_inline_role,
     retained_role_reference,
@@ -45,11 +46,21 @@ def valid_ticket_name(value: object) -> bool:
 def read_batch(
     batch_file: Path,
     cwd: Path,
+    *,
+    retained: bool = True,
 ) -> Batch:
-    """Read and strictly validate one complete YAML batch input."""
+    """Read and strictly validate one retained YAML batch input.
+
+    A retained Batch keeps its historical Engineer-tier interpretation so an
+    earlier record still names the seat that ran it. The launch path reads its
+    own retained input with retained=False, so it keeps the caller's current
+    role reference.
+    """
 
     document, source_bytes = _read_document(batch_file, cwd)
-    return replace(parse_batch(document), source_bytes=source_bytes)
+    return replace(
+        parse_batch(document, retained=retained), source_bytes=source_bytes
+    )
 
 
 def read_swarm(
@@ -190,16 +201,18 @@ def _resolve_swarm_task(
     return {**task, "ticket_id": ticket_id, "ticket_name": ticket_name}
 
 
-def parse_batch(document: object) -> Batch:
+def parse_batch(document: object, *, retained: bool = False) -> Batch:
     """Validate a structured Batch document and retain its YAML representation.
 
     Uses the same schema and RunnerError codes as read_batch and parse_swarm.
     File input keeps its original bytes; Python mappings retain an equivalent
     YAML document. Neither path provisions resources or launches a Runtime.
+    New dispatch keeps the caller's own role reference; a retained record reads
+    the former Engineer tier through the historical interpretation.
     """
     tasks = _launch_input_tasks(document)
     validated_tasks = tuple(
-        _read_task(task_document)
+        _read_task(task_document, retained=retained)
         for task_document in tasks
     )
     identities = [(task.ticket_id, task.role) for task in validated_tasks]
@@ -216,6 +229,8 @@ def parse_batch(document: object) -> Batch:
 
 def _read_task(
     task_document: object,
+    *,
+    retained: bool = False,
 ) -> Task:
     """Validate and resolve one task without changing the supplied choices."""
 
@@ -246,13 +261,19 @@ def _read_task(
     inline_preset = None
     role_reference = None
     if isinstance(role_value, str):
-        role_reference = retained_role_reference(role_value)
+        role_reference = (
+            retained_role_reference(role_value) if retained else role_value
+        )
         if ROLE_REFERENCE.fullmatch(role_reference) is None:
             raise RunnerError(
                 "ROLE_NOT_CONFIGURED",
                 "The selected role reference is not a configured preset reference.",
             )
-        role = logical_role(role_reference)
+        role = (
+            logical_role(role_reference)
+            if retained
+            else configured_role_name(role_reference)
+        )
         policy_role = role
     elif isinstance(role_value, dict):
         try:

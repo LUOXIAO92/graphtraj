@@ -191,11 +191,11 @@ def test_installed_runner_accepts_non_english_engineer_self_review(
             assert reports and reports[0]['text']
             # Reconstruct the retained format written before per-Session assignments.
             # Its collector moved the source into the Round, without renaming it.
-            mapping.pop('report_files')
+            mapping['report_file'] = mapping.pop('report_files')[0]
             path.write_text(yaml.safe_dump(mapping))
             launch_path = path.with_name('launch.yml')
             launch = yaml.safe_load(launch_path.read_text())
-            launch['mapping'].pop('report_files')
+            launch['mapping']['report_file'] = launch['mapping'].pop('report_files')[0]
             launch_path.write_text(yaml.safe_dump(launch))
             with runtime_caller(runner, mapping['parent']):
                 historical = read_session_reports(mapping['alias'], harness_root)['reports']

@@ -178,7 +178,8 @@ def test_public_team_phases_and_parent_capacity_transfer(
                 break
             time.sleep(.05)
         assert child["activity"] == "running"
-        assert child["session"] == mapping["session"] and child["execution_id"] == mapping["execution_id"]
+        assert child["alias"] == mapping["alias"]
+        assert "session" not in child and "execution_id" not in child
         assert parent["activity"] == "idle" and parent["last_outcome"] == "completed"
         return mapping
 

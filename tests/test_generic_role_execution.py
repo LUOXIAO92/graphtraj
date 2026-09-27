@@ -184,6 +184,7 @@ def test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority(
     if '.' in parent_role:
         group, _, name = parent_role.rpartition('.')
         roles[group] = {name: roles.pop(parent_role)}
+        roles.pop(actual_parent, None)
     (root / '.graphtraj/roles.yml').write_text(yaml.safe_dump({
         'roles': roles,
         'role_tree': {parent_role: {child_role: {}}},

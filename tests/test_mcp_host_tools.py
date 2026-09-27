@@ -574,7 +574,8 @@ def test_installed_mcp_server_dispatches_and_controls_a_managed_child(
         {"alias": alias, "instruction": "unhandled request",
          "caused_by_event_ids": [cause]},
     )
-    assert sent == {"alias": alias, "send_status": "sent"}
+    assert sent == {"alias": alias, "send_status": "sent",
+                    "session": session, "execution_id": running["execution_id"]}
 
     # The native approval request returns through the one interaction path.
     _observe(managed_mcp, alias, "running", waiting_for="runtime-request")

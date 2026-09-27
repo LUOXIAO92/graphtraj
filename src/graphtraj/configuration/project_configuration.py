@@ -33,7 +33,12 @@ class ProjectConfigurationError(Exception):
 
 @dataclass(frozen=True)
 class ProjectConfiguration:
-    """The configured project paths, resolved from the Harness Project Root."""
+    """The configured project paths, resolved from the Harness Project Root.
+
+    ``stop_instruction`` is the optional text delivered with an enforced stop.
+    ``None`` means the setting was omitted, so the generic guidance applies; an
+    empty string is an explicit choice to deliver only the stop facts.
+    """
 
     harness_root: Path
     project_root: Path
@@ -43,6 +48,7 @@ class ProjectConfiguration:
     dispatch_depth: int
     max_concurrency: int
     codex: Mapping[str, Any] | None = None
+    stop_instruction: str | None = None
 
     @property
     def integration_worktree(self) -> Path:
@@ -142,8 +148,14 @@ def _configuration_from_document(
         or not isinstance(paths, dict)
         or set(paths) != {"project_root", "docs", "agent_worktrees", "state"}
         or not isinstance(limits, dict)
-        or set(limits) != {"dispatch_depth", "max_concurrency"}
+        or set(limits) - {"stop_instruction"} != {"dispatch_depth", "max_concurrency"}
     ):
+        raise ProjectConfigurationError(invalid)
+
+    # An omitted instruction keeps the generic stop guidance; an empty string is
+    # a deliberate request to deliver only the stop facts, so the two stay apart.
+    stop_instruction = limits.get("stop_instruction")
+    if stop_instruction is not None and not isinstance(stop_instruction, str):
         raise ProjectConfigurationError(invalid)
 
     try:
@@ -183,6 +195,7 @@ def _configuration_from_document(
         dispatch_depth=dispatch_depth,
         max_concurrency=max_concurrency,
         codex=document.get("codex"),
+        stop_instruction=stop_instruction,
     )
 
 

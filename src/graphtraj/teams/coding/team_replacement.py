@@ -113,7 +113,7 @@ def _replace_stopped_session(
     prior_trace = _trace_ref(project, traces, alias)
     reports = "\n\n".join(
         f"{path.name}:\n{path.read_text(encoding='utf-8')}"
-        for path in _session_report_paths(alias, cwd, collected=True) if path.is_file()
+        for path in _session_report_paths(alias, cwd) if path.is_file()
     )
     replacement, _ = _run_agent(
         project, task, task.role, worktree, directory, traces,

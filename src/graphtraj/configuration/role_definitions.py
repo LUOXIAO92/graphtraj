@@ -22,11 +22,12 @@ class ResolvedChildRole:
 
     @property
     def allow_runtime_swarm(self) -> bool:
-        return self.name == "team-leader" and self.settings.allow_runtime_swarm
+        """Return the explicitly configured native helper capability."""
+        return self.settings.allow_runtime_swarm
 
 
 def packaged_role_name(name: str) -> str:
-    """Return the installed template name for one configured role name.
+    """Return the installed filename for an explicitly selected resource.
 
     Installed templates keep their hyphenated file names, so a configured
     underscore name selects the same template.
@@ -46,13 +47,13 @@ def has_packaged_role(name: str) -> bool:
 
 
 def resolve_child_role(name: str, settings: RolePreset) -> ResolvedChildRole:
-    """Resolve one configured role's responsibilities from its templates.
+    """Load explicitly selected instructions and Skills, preserving actual identity."""
 
-    A role name without its own installed template keeps its actual name and
-    uses the common task responsibilities.
-    """
-
-    template = packaged_role_name(name) if has_packaged_role(name) else "task"
+    template = packaged_role_name(settings.instructions)
+    if not has_packaged_role(template):
+        raise RuntimeAdapterError(
+            "PACKAGED_ROLE_INVALID", f"Selected role resource {settings.instructions!r} was not found."
+        )
     try:
         document = yaml.safe_load(resources.files("graphtraj.resources").joinpath(
             "roles", template + ".yml"
@@ -70,14 +71,16 @@ def resolve_child_role(name: str, settings: RolePreset) -> ResolvedChildRole:
 
     instructions += (
         "\nNative helpers are permitted only for temporary read-only investigation. "
-        "They cannot implement, Review, own a Team seat, or replace formal "
+        "They cannot own a Team seat or replace formal "
         "agent-runner dispatch. They are excluded from Team state and Runner "
         "concurrency and have no independent GraphTraj Session Trace guarantee. "
         "Use agent-runner for work requiring an independent Trace.\n"
-        if name == "team-leader" and settings.allow_runtime_swarm else
+        if settings.allow_runtime_swarm else
         "\nDo not use Runtime-native swarm or dispatch native helpers.\n"
     ) + (
         "Never start an Agent Runtime directly; formal dispatch uses Runner "
         "and the configured role_tree.\n"
     )
-    return ResolvedChildRole(name, instructions, tuple(required_skills), settings)
+    return ResolvedChildRole(
+        name, instructions, tuple(dict.fromkeys((*required_skills, *settings.harness_skills))), settings,
+    )

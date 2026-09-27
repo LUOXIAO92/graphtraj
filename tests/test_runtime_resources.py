@@ -53,10 +53,16 @@ def test_installed_setup_leaves_main_configuration_to_the_user(
     assert not (harness / ".codex" / "hooks" / "worktree_guard.py").exists()
 
 
+@pytest.mark.parametrize('role_name, instructions, access', [
+    ('engineer', 'task', 'write'), ('auditor', 'spec-reviewer', 'read'),
+])
 def test_runtime_executes_the_resolved_responsibility_and_required_skill(
     monkeypatch: pytest.MonkeyPatch,
     temporary_git_repository: Path,
     tmp_path: Path,
+    role_name: str,
+    instructions: str,
+    access: str,
 ) -> None:
     monkeypatch.syspath_prepend(str(PROJECT_ROOT / "src"))
     from graphtraj.runtimes.codex.codex_adapter import create_codex_turn, preflight_runtime_context
@@ -74,14 +80,14 @@ def test_runtime_executes_the_resolved_responsibility_and_required_skill(
     # boundary. Its output requires both the supplied instruction and Skill.
     role = replace(
         resolve_child_role(
-            "engineer",
+            role_name,
             RolePreset(
                 "codex", "operator-model", None, None,
-                reasoning_effort="high",
+                reasoning_effort="high", harness_skills=("research",),
+                instructions=instructions, worktree_access=access,
             ),
         ),
         instructions=json.dumps({"skill": "research", "reference": "references/coding.md"}),
-        required_skills=("research",),
     )
     executable = tmp_path / "controlled-runtime"
     executable.write_text("#!" + sys.executable + "\n" + r'''
@@ -139,7 +145,7 @@ print(json.dumps({'type': 'turn.completed'}), flush=True)
     result = next(event["payload"] for event in events if event["type"] == "response_item")
     assert result["text"] == (harness / ".agents/skills/research/references/coding.md").read_text()
     assert result["model"] == "operator-model"
-    assert result["filesystem"]["."] == "write"
+    assert result["filesystem"]["."] == access
     assert result["filesystem"]["CONTEXT.md"] == "read"
     assert result["skill_directory"] == "read"
     assert {
@@ -442,17 +448,22 @@ def test_current_runtime_diagnostic_uses_only_current_error_events(
     )
 
 
+@pytest.mark.parametrize("role", ("spec-reviewer", "researcher"))
+@pytest.mark.parametrize("report_name", ("reviews/r1-replacement.md", "notes/findings.md"))
 def test_reviewer_send_refreshes_exact_replacement_report_permissions(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    role: str,
+    report_name: str,
 ) -> None:
+    """A retained report reference works independently of role and directory."""
     monkeypatch.syspath_prepend(str(PROJECT_ROOT / "src"))
     from graphtraj.execution.runner_control import _refresh_current_team_report_request
+    from test_result_submission import result_project
 
-    worktree = tmp_path / "worktree"
-    evidence = tmp_path / "evidence"
-    worktree.mkdir()
-    evidence.mkdir()
+    _, team, _ = result_project(tmp_path)
+    worktree = tmp_path / "worktrees/research"
+    evidence = team.parents[2]
     request = {
         "arguments": [
             "/tmp/codex",
@@ -472,11 +483,11 @@ def test_reviewer_send_refreshes_exact_replacement_report_permissions(
         "worktree_path": str(worktree),
     }
     original = copy.deepcopy(request)
-    report = Path(".state") / "reviews" / "r1-replacement.md"
+    report = Path(".state") / report_name
 
     refreshed = _refresh_current_team_report_request(
         request,
-        {"role": "spec-reviewer", "report_file": report.as_posix()},
+        {"role": role, "report_file": report.as_posix(), "ticket_id": "148", "team_generation": 1},
         worktree,
         {
             "GRAPHTRAJ_EVIDENCE": str(evidence),
@@ -492,7 +503,7 @@ def test_reviewer_send_refreshes_exact_replacement_report_permissions(
         next(argument for argument in arguments if argument.startswith("permissions="))
     )["permissions"]
     filesystem = permissions["restricted"]["filesystem"]
-    canonical = evidence / "reviews" / report.name
+    canonical = evidence / report_name
     view = worktree / report
     assert filesystem[str(canonical)] == "write"
     assert str(view) not in filesystem
@@ -511,11 +522,11 @@ def test_engineer_resume_drops_only_the_predecessor_readme_override(
 ) -> None:
     monkeypatch.syspath_prepend(str(PROJECT_ROOT / "src"))
     from graphtraj.execution.runner_control import _refresh_current_team_report_request
+    from test_result_submission import result_project
 
-    worktree = tmp_path / "worktree"
-    evidence = tmp_path / "evidence"
-    worktree.mkdir()
-    evidence.mkdir()
+    _, team, _ = result_project(tmp_path)
+    worktree = tmp_path / "worktrees/research"
+    evidence = team.parents[2]
     request = {
         "arguments": [
             "/tmp/codex",
@@ -538,7 +549,8 @@ def test_engineer_resume_drops_only_the_predecessor_readme_override(
 
     refreshed = _refresh_current_team_report_request(
         request,
-        {"role": role},
+        {"role": role, "ticket_id": "148", "team_generation": 1,
+         "report_file": ".state/teams/1/rounds/1/retained.md"},
         worktree,
         {
             "GRAPHTRAJ_EVIDENCE": str(evidence),
@@ -569,14 +581,77 @@ def test_engineer_resume_drops_only_the_predecessor_readme_override(
         "docs": "read",
     }
     assert filesystem["/saved-setting"] == "read"
-    report_directory = evidence / "teams" / "3" / "rounds" / "7"
+    report_directory = evidence / "teams" / "1" / "rounds" / "1"
     assert {
         path
         for path, access in filesystem.items()
         if access == "write"
     } == {
-        str(report_directory / "engineer.md"),
-        str(report_directory / "validation.md"),
+        str(report_directory / "retained.md"),
     }
     assert not any(argument.startswith("hooks=") for argument in arguments)
     assert "--dangerously-bypass-hook-trust" not in arguments
+
+
+def test_explicit_read_access_is_enforced_by_native_sandbox(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Selected professional content retains real read-only file/report boundaries."""
+    import shutil
+    import subprocess
+    from graphtraj.configuration.project_roles import parse_inline_role
+    from graphtraj.configuration.role_definitions import resolve_child_role
+    from graphtraj.runtimes.codex.codex_adapter import preflight_runtime_context
+
+    executable = shutil.which('codex')
+    if sys.platform != 'darwin' or executable is None:
+        pytest.skip('Native macOS Codex sandbox is not available')
+    (tmp_path / 'native-home').mkdir()
+    monkeypatch.setenv('CODEX_HOME', str(tmp_path / 'native-home'))
+    root = tmp_path / 'worktree'
+    root.mkdir()
+    evidence = root / '.graphtraj/state/tickets/task'
+    evidence.mkdir(parents=True)
+    (root / 'candidate.txt').write_text('unchanged')
+    report = evidence / 'teams/1/rounds/1/findings.md'
+    report.parent.mkdir(parents=True)
+    report.write_text('owned evidence')
+    foreign = evidence / 'foreign.md'
+    foreign.write_text('private evidence')
+    name, preset = parse_inline_role({'auditor': {
+        'runtime': 'codex', 'model': 'unused', 'instructions': 'spec-reviewer',
+        'worktree_access': 'read', 'reports': ['findings.md'],
+    }})
+    role = resolve_child_role(name, preset)
+    context = preflight_runtime_context(
+        runtime_store=root / '.codex', executable=Path(executable),
+        git_common_directory=root / 'git-common', role=role, worktree=root,
+        evidence=evidence, repository_skill_source=root, requested_skills=(),
+        report_files=(Path('.state/teams/1/rounds/1/findings.md'),),
+    ).finalize()
+    arguments = context.launch_document()['adapter_request']['arguments']
+    profile = next(tomllib.loads(arg)['default_permissions'] for arg in arguments
+                   if arg.startswith('default_permissions='))
+    command = [executable, 'sandbox', '-P', profile, '-C', str(root)]
+    for index, argument in enumerate(arguments[:-1]):
+        if argument == '-c' and arguments[index + 1].startswith(('permissions=', 'default_permissions=')):
+            command.extend(['-c', arguments[index + 1]])
+    command.extend([sys.executable, '-c', '''
+from pathlib import Path
+import sys
+root, report, foreign = map(Path, sys.argv[1:])
+assert (root / 'candidate.txt').read_text() == 'unchanged'
+assert report.read_text() == 'owned evidence'
+for path, action in [(root / 'candidate.txt', 'write'), (report, 'write'), (foreign, 'read')]:
+    try:
+        path.write_text('forbidden') if action == 'write' else path.read_text()
+    except PermissionError:
+        continue
+    raise AssertionError(f'{action} unexpectedly permitted for {path}')
+print('candidate/report writes and foreign report read denied')
+''', str(root), str(report), str(foreign)])
+    result = subprocess.run(command, text=True, capture_output=True)
+    if 'sandbox_apply: Operation not permitted' in result.stderr:
+        pytest.skip('Host prohibits nested Seatbelt sandbox creation')
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (root / 'candidate.txt').read_text() == 'unchanged'

@@ -154,6 +154,7 @@ _CONTINUE_SCHEMA = {
     "properties": {
         "ticket_id":           {"type": "string"},
         "caused_by_event_ids": {"type": "array", "items": {"type": "string"}},
+        "budget_only":         {"type": "boolean"},
     },
     "required":             ["ticket_id", "caused_by_event_ids"],
     "additionalProperties": False,
@@ -394,7 +395,7 @@ def interrupt_session_execution(
 
 
 def continue_ticket_execution(arguments: Mapping[str, Any]) -> ToolResult:
-    """Continue one stopped current Team through the D.3 stop/continue path."""
+    """Restore task budget permission, optionally without executing old Sessions."""
 
     from graphtraj.teams.coding.team_round import continue_stopped_ticket
 
@@ -403,6 +404,7 @@ def continue_ticket_execution(arguments: Mapping[str, Any]) -> ToolResult:
             _string_argument(arguments, "ticket_id"),
             _string_list_argument(arguments, "caused_by_event_ids"),
             Path.cwd(),
+            budget_only=_boolean_argument(arguments, "budget_only"),
         )
     )
 
@@ -506,8 +508,8 @@ register_tool(
 )
 register_tool(
     "continue",
-    "Continue one stopped current Team from its retained Batch and Sessions; the "
-    "existing stop, budget and accounting semantics are unchanged. Equivalent to "
+    "Restore a sampled stopped task budget and resume original roots by default; "
+    "budget_only leaves old Sessions stopped for a later ordinary swarm dispatch. Equivalent to "
     "`agent-runner continue`.",
     _CONTINUE_SCHEMA,
     continue_ticket_execution,

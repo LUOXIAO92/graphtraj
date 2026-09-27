@@ -11,6 +11,11 @@ from pathlib import Path
 import pytest
 import yaml
 
+from graphtraj.configuration.project_configuration import (
+    DEFAULT_CONFIG_CONTENT,
+    ProjectConfigurationError,
+    load_project_configuration,
+)
 from graphtraj.configuration.project_roles import RolePreset, load_project_roles
 from graphtraj.configuration.role_definitions import ResolvedChildRole
 from graphtraj.runtimes.codex import approval
@@ -21,19 +26,38 @@ from test_codex_app_server import context, peer
 
 ROUTE = {'model': 'deepseek-flash', 'base_url': 'https://api.deepseek.com',
          'api_key_env': 'DEEPSEEK_API_KEY'}
+DEFAULT_ROUTE = {'model': 'default-review', 'base_url': 'https://default.example/v1',
+                 'api_key_env': 'DEFAULT_REVIEW_KEY'}
 
 
-def custom_context(tmp_path: Path, peer: Path):
+def project_defaults(root: Path, codex: object) -> None:
+    """Write project settings through the supported general configuration file."""
+    directory = root / '.graphtraj'
+    directory.mkdir(parents=True)
+    document = yaml.safe_load(DEFAULT_CONFIG_CONTENT)
+    document['codex'] = codex
+    (directory / 'config.yml').write_text(yaml.safe_dump(document))
+
+
+def custom_context(tmp_path: Path, peer: Path, route_source: str = 'role'):
     """Resolve production permissions and a distinct approval route."""
+    root = tmp_path / 'worktree'
+    project_defaults(root, {'approval': DEFAULT_ROUTE})
     role = ResolvedChildRole('temporary-role', 'Do not delete files.', (),
-        RolePreset('codex', 'work-model', 'https://work.example/v1', 'WORK_KEY',
-                   codex={'approval': ROUTE}))
-    return context(tmp_path / 'worktree', peer, role)
+        RolePreset('codex', 'work-model',
+                   None if route_source.startswith('hosted-') else 'https://work.example/v1',
+                   'WORK_KEY', codex={'approval': ROUTE} if route_source.endswith('role') else None))
+    return context(root, peer, role)
 
 
-def managed(tmp_path: Path, peer: Path, monkeypatch: pytest.MonkeyPatch):
+def managed(
+    tmp_path: Path,
+    peer: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    route_source: str = 'role',
+):
     """Use the controlled external peer with the real managed adapter."""
-    resolved = custom_context(tmp_path, peer)
+    resolved = custom_context(tmp_path, peer, route_source)
     executable = tmp_path / 'managed-peer'
     executable.write_text('#!' + sys.executable + '\n' +
                           Path(__file__).with_name('managed_codex_peer.py').read_text())
@@ -46,6 +70,7 @@ def managed(tmp_path: Path, peer: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv('GRAPHTRAJ_TICKET_ID', '145')
     monkeypatch.setenv('GRAPHTRAJ_ROLE', 'temporary-role')
     monkeypatch.setenv('DEEPSEEK_API_KEY', 'test-key')
+    monkeypatch.setenv('DEFAULT_REVIEW_KEY', 'default-key')
     return request, directory
 
 
@@ -71,16 +96,22 @@ def completion_stub(
     monkeypatch.setattr(approval, 'build_opener', lambda *args: Provider())
 
 
+@pytest.mark.parametrize('route_source', ['role', 'default', 'hosted-role', 'hosted-default'])
 @pytest.mark.parametrize('decision,expected', [
     ('accept', 'accept'), ('decline', 'decline'), ('acceptForSession', 'error'),
     ('wrong-request', 'error'), ('malformed', 'error'),
     ('timeout', 'error'), ('error', 'error'),
 ])
 def test_model_decision_reaches_only_native_request(
-    tmp_path: Path, peer: Path, monkeypatch: pytest.MonkeyPatch, decision: str, expected: str,
+    tmp_path: Path,
+    peer: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    decision: str,
+    expected: str,
+    route_source: str,
 ) -> None:
     """Allow/deny/error results cross the native reply seam with exact context and route."""
-    request, directory = managed(tmp_path, peer, monkeypatch)
+    request, directory = managed(tmp_path, peer, monkeypatch, route_source)
     calls = []
     completion_stub(monkeypatch, decision, calls)
     worker = CodexManagedExecution(request, 'request: authorize printf APPROVAL_121 only',
@@ -95,10 +126,13 @@ def test_model_decision_reaches_only_native_request(
         assert 'RUNTIME_REQUEST_FAILED' == result['error']['code']
     else:
         assert reply == {'id': 'approval', 'result': {'decision': expected}}
+    assert len(calls) == 1
+    route = ROUTE if route_source.endswith('role') else DEFAULT_ROUTE
     http, body = calls[0]
-    assert http.full_url == 'https://api.deepseek.com/chat/completions'
-    assert http.get_header('Authorization') == 'Bearer test-key'
-    assert body['model'] == 'deepseek-flash'
+    assert http.full_url == route['base_url'] + '/chat/completions'
+    key = 'test-key' if route_source.endswith('role') else 'default-key'
+    assert http.get_header('Authorization') == 'Bearer ' + key
+    assert body['model'] == route['model']
     reviewed = json.loads(body['messages'][1]['content'])
     assert reviewed['request']['command'] == 'printf APPROVAL_121'
     assert reviewed['authorization'] == 'request: authorize printf APPROVAL_121 only'
@@ -106,6 +140,13 @@ def test_model_decision_reaches_only_native_request(
     assert reviewed['permissions']
     assert reviewed['allowed_decisions'] == ['accept', 'decline']
     assert worker.context.session_document()['adapter_request']['model'] == 'work-model'
+    config = worker.context.session_document()['adapter_request']['config']
+    if not route_source.startswith('hosted-'):
+        assert config['model_provider'] == 'graphtraj-role'
+        assert config['model_providers']['graphtraj-role']['base_url'] == 'https://work.example/v1'
+        assert config['model_providers']['graphtraj-role']['env_key'] == 'WORK_KEY'
+    else:
+        assert config.get('model_provider', 'openai') == 'openai'
     assert request['session_parameters']['config']['approvals_reviewer'] == 'user'
     assert 'test-key' not in json.dumps(reply)
 
@@ -165,9 +206,64 @@ def test_missing_custom_route_reports_field_and_hosted_keeps_guardian(tmp_path: 
     hosted = tmp_path / 'hosted'
     (hosted / '.codex').mkdir(parents=True)
     (hosted / '.codex/config.toml').write_text('approvals_reviewer = "auto_review"\n')
-    request = context(hosted, peer, replace(role, settings=replace(settings, base_url=None))).launch_document()['adapter_request']
+    request = context(hosted, peer, replace(role, settings=replace(settings, base_url=None, codex=None))).launch_document()['adapter_request']
     assert 'approval' not in request
     assert request['session_parameters']['config']['approvals_reviewer'] == 'auto_review'
+
+
+@pytest.mark.parametrize('custom', [False, True])
+@pytest.mark.parametrize('invalid', [
+    None, {}, 'invalid',
+    {**ROUTE, 'base_url': 'http://review.example'},
+    {**ROUTE, 'api_key_env': 'not-an-env-name'},
+    {**ROUTE, 'extra': 'unsupported'},
+])
+def test_invalid_present_role_never_uses_project_default(
+    tmp_path: Path,
+    peer: Path,
+    custom: bool,
+    invalid: object,
+) -> None:
+    """A configured but invalid role route fails before any approval request."""
+    root = tmp_path / 'worktree'
+    project_defaults(root, {'approval': DEFAULT_ROUTE})
+    role = ResolvedChildRole('temporary-role', 'restrictions', (),
+        RolePreset('codex', 'work-model', 'https://work.example' if custom else None,
+                   None, codex={'approval': invalid}))
+    with pytest.raises(RuntimeAdapterError, match='codex.approval'):
+        context(root, peer, role)
+
+
+@pytest.mark.parametrize('codex', [None, {}, {'approval': None}, {'approval': {}}])
+def test_custom_provider_without_usable_route_fails(
+    tmp_path: Path, peer: Path, codex: dict | None,
+) -> None:
+    """Missing defaults and invalid present defaults cannot permit custom work."""
+    root = tmp_path / 'worktree'
+    if codex is not None:
+        project_defaults(root, codex)
+    role = ResolvedChildRole('temporary-role', 'restrictions', (),
+        RolePreset('codex', 'work-model', 'https://work.example', None))
+    with pytest.raises(RuntimeAdapterError, match='codex.approval.model'):
+        context(root, peer, role)
+
+
+def test_role_route_precedes_invalid_default(tmp_path: Path, peer: Path) -> None:
+    """Only the selected route is validated by the Codex adapter."""
+    root = tmp_path / 'worktree'
+    project_defaults(root, {'approval': None})
+    role = ResolvedChildRole('temporary-role', 'restrictions', (),
+        RolePreset('codex', 'work-model', None, None, codex={'approval': ROUTE}))
+    request = context(root, peer, role).launch_document()['adapter_request']
+    assert request['approval'] == ROUTE
+
+
+@pytest.mark.parametrize('codex', [None, [], 'invalid'])
+def test_project_codex_requires_mapping(tmp_path: Path, codex: object) -> None:
+    """The project config rejects malformed adapter settings at its public loader."""
+    project_defaults(tmp_path, codex)
+    with pytest.raises(ProjectConfigurationError, match='codex must be a mapping'):
+        load_project_configuration(tmp_path)
 
 
 @pytest.mark.parametrize('decision', ['accept', 'decline'])

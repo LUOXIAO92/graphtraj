@@ -589,6 +589,16 @@ rejection closes the Round for rework. The next report or result submission
 opens the correction Round and retains the earlier decision and causal history.
 Neither decision performs Git integration or marks the Ticket complete.
 
+Before integration starts, the original accepting parent may use `decide-result`
+with `rejected`, the accepted submission ID and commit, and a concrete reason
+and evidence for a necessary correction discovered after acceptance. This retains
+the earlier acceptance and returns the Ticket to rework. The accepted commit
+must still be the current candidate, but the author's Worktree may already
+contain its correction. The same member can submit its report or corrected
+committed result to open the next Round; the replacement requires fresh parent
+acceptance before integration. Results already integrating or integrated cannot
+be returned this way.
+
 Query `status_aliases([alias], root)` to get `session`, `execution_id`, and
 `activity`. An idle execution has `last_outcome`: `completed`, `runtime-error`,
 or `interrupted`. These describe native execution, independently of the service

@@ -81,7 +81,7 @@ _TRANSITIONS = {
     "implementing": {"reviewing", "blocked", "escalated"},
     "reviewing": {"reworking", "awaiting-integration", "blocked", "escalated"},
     "reworking": {"implementing", "reviewing", "blocked", "escalated"},
-    "awaiting-integration": {"integrating", "blocked", "escalated"},
+    "awaiting-integration": {"reworking", "integrating", "blocked", "escalated"},
     "integrating": {"integrated", "resolving-integration", "blocked", "escalated"},
     "resolving-integration": {"integrating", "blocked", "escalated"},
     "integrated": set(),
@@ -483,6 +483,8 @@ def update_ticket_state(
         old_status = record["status"]
         if change["status"] in {"integrating", "integrated"}:
             raise ValueError("Integration state requires Main's ticket integrate command")
+        if old_status == "awaiting-integration" and change["status"] == "reworking":
+            raise ValueError("Returning an accepted result requires its parent's result decision")
         if change["status"] not in _TRANSITIONS[old_status]:
             raise ValueError(
                 "Ticket transition from {0} to {1} is invalid".format(

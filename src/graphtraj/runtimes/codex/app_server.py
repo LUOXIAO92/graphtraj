@@ -837,25 +837,14 @@ class CodexMainRecovery:
     The binding owns the neutral caller-notice channel of one Runner
     operation. A sampled stochastic stop that arrives on that channel is
     retained as a delivery - stop identity, the stop's own absolute instant,
-    the elapsed work duration and the explicit ``retro`` Skill reference - so
+    the elapsed work duration and status guidance - so
     the document this call returns carries it to the active Main. Ordinary
     estimate and allowance notices stay inert. Nothing is queued into Main's
     native input, and no second Main or Driver is created.
     """
 
-    def __init__(self, retro_skill_path: Path) -> None:
-        """Bind one caller channel to an existing absolute ``retro`` Skill path."""
-        if (
-            not isinstance(retro_skill_path, Path)
-            or not retro_skill_path.is_absolute()
-            or retro_skill_path.name != "SKILL.md"
-            or not retro_skill_path.is_file()
-        ):
-            raise CodexAdapterError(
-                "RUNTIME_REQUEST_INVALID",
-                "Codex Main recovery requires an existing absolute SKILL.md path.",
-            )
-        self._retro_skill_path = retro_skill_path.resolve()
+    def __init__(self) -> None:
+        """Bind one caller channel without requiring an installed Skill."""
         self._read_fd: int | None = None
         self._notice_fd: int | None = None
         self._reader: threading.Thread | None = None
@@ -870,31 +859,29 @@ class CodexMainRecovery:
         self._closed = False
 
     @classmethod
-    def from_environment(cls, cwd: Path) -> "CodexMainRecovery | None":
-        """Return the installed caller binding when this process owns a Codex Main."""
+    def from_environment(cls) -> "CodexMainRecovery | None":
+        """Return the caller binding when this process owns a Codex Main."""
         if not os.environ.get("CODEX_THREAD_ID") or os.environ.get("GRAPHTRAJ_ROLE"):
             return None
-        return cls(cwd / ".agents/skills/retro/SKILL.md")
+        return cls()
 
     @classmethod
     def from_request(
-        cls, cwd: Path, metadata: object
+        cls, metadata: object
     ) -> "CodexMainRecovery | None":
         """Return the caller binding for one request's own Codex metadata.
 
         The caller sends the identity of the Codex thread that made the request,
         so a host-serving process selects the right Main without guessing from
-        its own environment. A request without that metadata, or a Harness
-        Project Root without the installed ``retro`` Skill, keeps the generic
+        its own environment. A request without that metadata keeps the generic
         behaviour of no notice channel instead of failing its operation.
         """
         thread_id = (
             metadata.get("threadId") if isinstance(metadata, Mapping) else None
         )
-        skill_path = cwd / ".agents/skills/retro/SKILL.md"
-        if not isinstance(thread_id, str) or not thread_id or not skill_path.is_file():
+        if not isinstance(thread_id, str) or not thread_id:
             return None
-        return cls(skill_path)
+        return cls()
 
     def __enter__(self) -> "CodexMainRecovery":
         """Start the narrow notice reader before the wrapped Runner operation."""
@@ -1016,12 +1003,7 @@ class CodexMainRecovery:
         triggered_at: str,
         elapsed_minutes: float,
     ) -> dict[str, Any]:
-        """Describe one enforced stop for the Runner call that returns it.
-
-        The instruction is the user's standing explicit ``retro`` input: Main
-        executes that named Skill from this evidence without another approval,
-        while ordinary reminders never carry it.
-        """
+        """Describe one enforced stop for the Runner call that returns it."""
         elapsed = _duration(elapsed_minutes)
         stop_id = str(uuid.uuid5(
             uuid.NAMESPACE_URL,
@@ -1034,13 +1016,10 @@ class CodexMainRecovery:
             "triggered_at": triggered_at,
             "elapsed": elapsed,
             "instruction": (
-                "$retro Analyze the enforced stochastic stop stochastic_stop:{0} "
-                "for Ticket {1} using the retained wrap-up and evidence. Stop time: "
-                "{2}. Elapsed work: {3}. Execute the retro Skill now for this stop, "
-                "identify scheduling corrections before deciding continuation, "
-                "reuse existing findings and do not restart work."
-            ).format(limit, ticket_id, triggered_at, elapsed),
-            "skill": {"name": "retro", "path": str(self._retro_skill_path)},
+                "The task has stopped because of its execution budget. "
+                "Use retained results and unfinished work to explain its current "
+                "status and next steps. Resuming still requires existing authorization."
+            ),
         }
 
     def _record_error(self, error: CodexAdapterError) -> None:

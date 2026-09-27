@@ -259,13 +259,6 @@ def _controlled_stop_ticket(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     return monitor, now
 
 
-def _retro_skill(tmp_path: Path) -> Path:
-    skill = tmp_path / "harness/.agents/skills/retro/SKILL.md"
-    skill.parent.mkdir(parents=True)
-    skill.write_text("name: retro\n", encoding="utf-8")
-    return skill
-
-
 def test_budget_stop_returns_one_in_band_delivery_to_the_awaiting_call(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -275,7 +268,6 @@ def test_budget_stop_returns_one_in_band_delivery_to_the_awaiting_call(
     from graphtraj.execution.execution_budget import budget_notice_output
 
     monitor, now = _controlled_stop_ticket(monkeypatch, tmp_path)
-    skill = _retro_skill(tmp_path)
     bin_directory = tmp_path / "bin"
     bin_directory.mkdir()
     native_client_log = tmp_path / "native-client.log"
@@ -298,7 +290,7 @@ def test_budget_stop_returns_one_in_band_delivery_to_the_awaiting_call(
         "message": "System reminder: Elapsed time: 00:00:30.",
     }
 
-    with CodexMainRecovery(skill) as recovery:
+    with CodexMainRecovery() as recovery:
         with budget_notice_output(recovery.notice_fd):
             # The monitor's own checks raise the ordinary reminder and then the
             # enforced stop, exactly as a live Runner operation would.
@@ -323,14 +315,17 @@ def test_budget_stop_returns_one_in_band_delivery_to_the_awaiting_call(
     deliveries = document["stop_deliveries"]
     assert len(deliveries) == 1
     delivery = deliveries[0]
+    assert set(delivery) == {
+        "stop_id", "stop", "ticket", "triggered_at", "delivered_at",
+        "elapsed", "instruction",
+    }
+    assert isinstance(delivery["instruction"], str) and delivery["instruction"]
     assert delivery["stop_id"] == "fd403ef4-1047-54e3-9eb3-ec71c26912eb"
     assert delivery["stop"] == "stochastic_stop:2"
     assert delivery["ticket"] == {
         "ticket_id": "116", "ticket_name": "session-budget-control",
     }
     assert delivery["elapsed"] == "00:02:00"
-    assert delivery["instruction"].startswith("$retro ")
-    assert delivery["skill"] == {"name": "retro", "path": str(skill.resolve())}
     triggered_at = datetime.fromisoformat(delivery["triggered_at"])
     delivered_at = datetime.fromisoformat(delivery["delivered_at"])
     assert delivery["triggered_at"] == (
@@ -352,7 +347,7 @@ def test_main_recovery_surfaces_caller_notice_errors(
     tmp_path: Path,
 ) -> None:
     """Malformed caller-channel input remains visible to the owning host."""
-    recovery = CodexMainRecovery(_retro_skill(tmp_path))
+    recovery = CodexMainRecovery()
 
     with pytest.raises(RuntimeAdapterError) as caught:
         with recovery:
@@ -376,7 +371,7 @@ def test_main_recovery_keeps_delivery_error_visible_when_runner_fails(
     }
 
     with pytest.raises(RuntimeAdapterError) as caught:
-        with CodexMainRecovery(_retro_skill(tmp_path)) as recovery:
+        with CodexMainRecovery() as recovery:
             os.write(recovery.notice_fd, (json.dumps(stop) + "\n").encode())
             raise RuntimeError("Runner operation failed")
     assert caught.value.code == "RUNTIME_REQUEST_INVALID"
@@ -385,7 +380,7 @@ def test_main_recovery_keeps_delivery_error_visible_when_runner_fails(
 
 def test_main_recovery_close_releases_the_caller_channel_once(tmp_path: Path) -> None:
     """Repeated closes stay safe and keep the delivered stop identity."""
-    recovery = CodexMainRecovery(_retro_skill(tmp_path))
+    recovery = CodexMainRecovery()
     stop = {
         "type": "execution-budget-exceeded",
         "occurred_at": datetime.now().astimezone().isoformat(timespec="seconds"),
@@ -414,9 +409,6 @@ def test_agent_runner_returns_the_delivered_stop_with_its_result(
     from graphtraj.execution.execution_budget import caller_notice_fd
     from graphtraj.interfaces.cli import agent_runner
 
-    skill = tmp_path / ".agents/skills/retro/SKILL.md"
-    skill.parent.mkdir(parents=True)
-    skill.write_text("name: retro\n", encoding="utf-8")
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("CODEX_THREAD_ID", "thread-main")
     monkeypatch.delenv("GRAPHTRAJ_BUDGET_NOTICE_FD", raising=False)
@@ -451,8 +443,6 @@ def test_agent_runner_returns_the_delivered_stop_with_its_result(
     delivery = document["stop_deliveries"][0]
     assert delivery["stop_id"] == "fd403ef4-1047-54e3-9eb3-ec71c26912eb"
     assert delivery["stop"] == "stochastic_stop:2"
-    assert delivery["instruction"].startswith("$retro ")
-    assert delivery["skill"]["path"] == str(skill.resolve())
     assert delivery["elapsed"] == "00:02:00"
 
 

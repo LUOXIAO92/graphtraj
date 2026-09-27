@@ -654,7 +654,7 @@ def _caller_notices(
     descriptor, owned = caller_notice_fd()
     if descriptor is None:
         recovery = CodexMainRecovery.from_request(
-            Path.cwd().resolve(), params.get("_meta")
+            params.get("_meta")
         )
         if recovery is not None:
             with recovery:

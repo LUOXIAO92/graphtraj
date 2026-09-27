@@ -1140,8 +1140,10 @@ def test_harness_approvals_reviewer_reaches_create_and_resume(
     assert resumed['session_parameters']['config'].get('approvals_reviewer') == expected
 
 
-def test_team_leader_projection_keeps_control_files_private(
-    tmp_path: Path, peer: Path,
+@pytest.mark.parametrize('role', ['team-leader', 'engineer', 'researcher'])
+@pytest.mark.parametrize('legacy', [False, True])
+def test_parent_projection_keeps_control_files_private(
+    tmp_path: Path, peer: Path, role: str, legacy: bool,
 ) -> None:
     """Callback control survives resume without writable child control records."""
     root = tmp_path / 'worktree'
@@ -1162,7 +1164,7 @@ def test_team_leader_projection_keeps_control_files_private(
     capacity = root / '.graphtraj' / 'runner' / 'capacity'
     resolved = context(
         root, peer,
-        ResolvedChildRole('team-leader', 'Lead the Team.', (),
+        ResolvedChildRole(role, 'Lead the Team.', (),
                           RolePreset('codex', 'chosen-model', None, None,
                                      allow_runtime_swarm=True, reasoning_effort='max', worktree_access='read')),
         leader_control_write_paths=(worldline_lock, capacity),
@@ -1176,14 +1178,26 @@ def test_team_leader_projection_keeps_control_files_private(
     assert launch.get(str(sessions)) != 'write'
     assert launch.get(str(worldline_lock.parent)) != 'write'
 
+    from graphtraj.runtimes.codex.codex_adapter import _toml_value
+    request = resolved.launch_document()['adapter_request']
+    settings = _native_settings_of_arguments(request['arguments'])
+    permissions = settings['permissions']
+    permissions[settings['default_permissions']]['filesystem'][':workspace_roots']['README.md'] = 'read'
+    for index, argument in enumerate(request['arguments']):
+        if argument.startswith('permissions='):
+            request['arguments'][index] = 'permissions=' + _toml_value(permissions)
+    request['session_parameters']['config']['permissions'] = permissions
+    if legacy:
+        request['session_parameters']['dynamicTools'] = []
     resumed = refresh_codex_report_paths(
-        resolved.launch_document()['adapter_request'],
+        request,
         worktree=root, evidence=root / 'evidence',
         report_files=(Path('.state/teams/1/rounds/1/leader.md'),),
-        role='team-leader', session_directory=sessions / leader_alias,
+        role=role, session_directory=sessions / leader_alias,
     )
     filesystem = _native_filesystem(resumed)
-    assert filesystem.get(str(sessions / child_alias)) != 'write'
+    assert (filesystem.get(str(sessions / child_alias)) == 'write') is legacy
+    assert filesystem[':workspace_roots']['README.md'] == 'read'
     assert filesystem[str(root / '.graphtraj')] == 'none'
     assert filesystem.get(str(worldline_lock)) != 'write'
     assert filesystem.get(str(capacity)) != 'write'

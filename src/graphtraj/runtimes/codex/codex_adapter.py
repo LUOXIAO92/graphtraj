@@ -28,7 +28,6 @@ from graphtraj.runtimes.runtime_adapter import (
 from graphtraj.execution.runner_transport import record_runtime_identity, runtime_turn_outcome
 from graphtraj.execution.runner_io import write_yaml_durably
 from graphtraj.runtimes.codex.approval import approval_route
-from graphtraj.configuration.project_roles import logical_role
 from graphtraj.configuration.role_definitions import ResolvedChildRole
 from graphtraj.workspace.git_repository import GitRepositoryError, SourceRepository
 from graphtraj.configuration.skill_check import (
@@ -1154,7 +1153,6 @@ def refresh_codex_report_paths(
 ) -> Dict[str, Any]:
     """Refresh only exact report and direct-control permissions in one resume."""
 
-    resolved_role = logical_role(role)
     arguments, request_worktree = _validate_launch_request(request)
     if request_worktree != worktree:
         raise CodexAdapterError(
@@ -1198,13 +1196,6 @@ def refresh_codex_report_paths(
         )
     filesystem = profile["filesystem"]
     workspace_roots = filesystem.get(":workspace_roots")
-    if (
-        resolved_role == "engineer"
-        and isinstance(workspace_roots, dict)
-        and workspace_roots.get(".") == "write"
-        and workspace_roots.get("README.md") == "read"
-    ):
-        del workspace_roots["README.md"]
     if reports_only:
         if not isinstance(workspace_roots, dict) or "." not in workspace_roots:
             raise CodexAdapterError(
@@ -1224,13 +1215,13 @@ def refresh_codex_report_paths(
     for path in native_report_paths:
         filesystem[str(path)] = "read" if 'graphtraj_submit_report' in native_tools else "write"
     if (
-        resolved_role == "team-leader" and session_directory is not None
+        session_directory is not None
         and 'graphtraj_swarm' not in native_tools
     ):
         # Continuing one direct child writes its Session directory, which
-        # exists only after this Session started. Every other Leader path is
+        # exists only after this Session started. Every other Session path is
         # already granted by the durable launch request.
-        for path in _leader_child_session_directories(session_directory):
+        for path in _direct_child_session_directories(session_directory):
             filesystem[str(path)] = "write"
     refreshed[permissions_index + 1] = "permissions={0}".format(
         _toml_value(permissions)
@@ -1243,10 +1234,10 @@ def refresh_codex_report_paths(
     return result
 
 
-def _leader_child_session_directories(
+def _direct_child_session_directories(
     session_directory: Path,
 ) -> Tuple[Path, ...]:
-    """Return the registered direct child Session directories of one Leader."""
+    """Return the registered direct child Session directories of one parent."""
     directories: list[Path] = []
     for mapping_file in sorted(session_directory.parent.glob("*/mapping.yml")):
         try:

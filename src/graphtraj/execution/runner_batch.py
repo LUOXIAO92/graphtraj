@@ -16,9 +16,7 @@ from graphtraj.configuration.project_roles import (
     ProjectRolesError,
     _UniqueKeyLoader,
     configured_role_name,
-    logical_role,
     parse_inline_role,
-    retained_role_reference,
 )
 from graphtraj.execution.runner_models import Batch, RunnerError, Task
 
@@ -46,36 +44,32 @@ def valid_ticket_name(value: object) -> bool:
 def read_batch(
     batch_file: Path,
     cwd: Path,
-    *,
-    retained: bool = False,
 ) -> Batch:
     """Read a Batch without rewriting its role identities.
 
-    Explicit historical interpretation is available to readers of old records;
-    a file retained by a current launch remains current input when reread.
+    Retained Session bindings are matched separately by read_session_task.
     """
 
     document, source_bytes = _read_document(batch_file, cwd)
     return replace(
-        parse_batch(document, retained=retained), source_bytes=source_bytes
+        parse_batch(document), source_bytes=source_bytes
     )
 
 
 def read_session_task(mapping: Mapping[str, Any], cwd: Path) -> Task:
-    """Read the Batch task using the Session's actual retained identity.
-
-    Current records keep their configured roles. Historical interpretation is
-    used only when it agrees with the role and reference stored at launch.
-    """
-    batch_file = Path(mapping["retained_batch_file"])
-    for historical in (False, True):
-        batch = read_batch(batch_file, cwd, retained=historical)
-        for task in batch.tasks:
-            if (task.ticket_id == mapping["ticket_id"]
-                    and task.role == mapping["role"]
-                    and task.role_reference == mapping.get("role_reference", task.role_reference)):
-                return task
-    raise RunnerError("BATCH_TASK_MISSING", "The retained Batch does not match this Session's identity.")
+    """Match retained input against actual Session bindings without role inference."""
+    tasks = [task for task in read_batch(Path(mapping["retained_batch_file"]), cwd).tasks
+             if task.ticket_id == mapping["ticket_id"]]
+    reference = mapping.get("role_reference")
+    if reference is not None:
+        tasks = [task for task in tasks if task.role_reference == reference]
+    else:
+        matching_roles = [task for task in tasks if task.role == mapping["role"]]
+        if matching_roles:
+            tasks = matching_roles
+    if len(tasks) != 1:
+        raise RunnerError("BATCH_TASK_AMBIGUOUS", "The retained Batch does not uniquely identify this Session's task.")
+    return replace(tasks[0], role=mapping["role"], policy_role=mapping["role"])
 
 
 def read_swarm(
@@ -216,18 +210,17 @@ def _resolve_swarm_task(
     return {**task, "ticket_id": ticket_id, "ticket_name": ticket_name}
 
 
-def parse_batch(document: object, *, retained: bool = False) -> Batch:
+def parse_batch(document: object) -> Batch:
     """Validate a structured Batch document and retain its YAML representation.
 
     Uses the same schema and RunnerError codes as read_batch and parse_swarm.
     File input keeps its original bytes; Python mappings retain an equivalent
     YAML document. Neither path provisions resources or launches a Runtime.
-    New dispatch keeps the caller's own role reference; a retained record reads
-    the former Engineer tier through the historical interpretation.
+    Role references remain exactly as supplied; Session recovery uses its stored bindings.
     """
     tasks = _launch_input_tasks(document)
     validated_tasks = tuple(
-        _read_task(task_document, retained=retained)
+        _read_task(task_document)
         for task_document in tasks
     )
     identities = [(task.ticket_id, task.role) for task in validated_tasks]
@@ -244,8 +237,6 @@ def parse_batch(document: object, *, retained: bool = False) -> Batch:
 
 def _read_task(
     task_document: object,
-    *,
-    retained: bool = False,
 ) -> Task:
     """Validate and resolve one task without changing the supplied choices."""
 
@@ -276,19 +267,13 @@ def _read_task(
     inline_preset = None
     role_reference = None
     if isinstance(role_value, str):
-        role_reference = (
-            retained_role_reference(role_value) if retained else role_value
-        )
+        role_reference = role_value
         if ROLE_REFERENCE.fullmatch(role_reference) is None:
             raise RunnerError(
                 "ROLE_NOT_CONFIGURED",
                 "The selected role reference is not a configured preset reference.",
             )
-        role = (
-            logical_role(role_reference)
-            if retained
-            else configured_role_name(role_reference)
-        )
+        role = configured_role_name(role_reference)
         policy_role = role
     elif isinstance(role_value, dict):
         try:

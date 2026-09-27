@@ -252,6 +252,14 @@ def test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority(
         retained.chmod(0o644)
         retained.write_text(yaml.safe_dump(batch))
         retained.chmod(0o444)
+        parent_mapping['role_reference'] = 'coding-team.engineer-expert'
+        (root / '.graphtraj/runner/sessions' / parent['alias'] / 'mapping.yml').write_text(yaml.safe_dump(parent_mapping))
+        roles_file = root / '.graphtraj/roles.yml'
+        roles = yaml.safe_load(roles_file.read_text())
+        roles['roles']['coding-team']['engineer-expert'] = dict(roles['roles']['coding-team']['engineer'])
+        roles['role_tree']['coding-team.engineer-expert'] = {child_role: {}}
+        roles_file.write_text(yaml.safe_dump(roles))
+
         original_batch = retained.read_bytes()
     sent = run_process([str(installed_commands.runner), 'send', parent['alias'],
                         '--instruction', 'Dispatch again', '--caused-by-event-id', events[-1]['event_id']],

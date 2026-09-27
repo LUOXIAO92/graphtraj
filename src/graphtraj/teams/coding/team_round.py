@@ -30,7 +30,6 @@ from graphtraj.graph.delivery_worldline import append_project_worldline_event, r
 from graphtraj.configuration.project_roles import (
     ProjectRolesError,
     configured_role_name,
-    logical_role,
 )
 from graphtraj.execution.runner_batch import (
     read_batch,
@@ -148,8 +147,7 @@ def _task_policy(task: Task, role: str | None = None) -> str:
 
     if role is None or task.role == role:
         return task.policy_role or task.role
-    # A retained Team seat keeps its original identity; its policy is the unified role.
-    return logical_role(role)
+    return role
 
 
 def _require_dispatch_roles(project: Any, batch: Batch, parent: dict | None) -> None:
@@ -680,7 +678,6 @@ def _run_agent(
     prompt: str | None = None,
     *,
     capacity_fd: int | None = None,
-    retiring: bool = False,
     reports_only: bool = False,
     wait_for_completion: bool = True,
     task_environment: dict[str, str] | None = None,
@@ -690,10 +687,7 @@ def _run_agent(
     team_file = traces.parent / "team.yml"
     if team_file.exists():
         team = yaml.safe_load(team_file.read_text())
-        if team["status"] != "active" and not (
-            retiring and logical_role(role) == "team-leader"
-            and team["status"] == "retiring"
-        ):
+        if team["status"] != "active":
             raise RunnerError("team-not-active", "The Team has stopped starting new work.")
     with capacity_positions(project, 1, capacity_fd) as positions:
         return _execute_agent(

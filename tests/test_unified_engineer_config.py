@@ -192,7 +192,7 @@ def test_retained_tiered_batch_still_resolves_for_recovery(tmp_path: Path) -> No
     )
     original = retained.read_bytes()
 
-    task = read_batch(retained, tmp_path, retained=True).tasks[0]
+    task = read_batch(retained, tmp_path).tasks[0]
     _, selected = parse_inline_role(
         {"engineer": {"runtime": "codex", "model": "gpt-5.6-sol"}}
     )
@@ -201,8 +201,8 @@ def test_retained_tiered_batch_still_resolves_for_recovery(tmp_path: Path) -> No
     )
 
     assert retained.read_bytes() == original
-    assert task.role == "engineer"
-    assert role.name == "engineer"
+    assert task.role == "engineer-senior"
+    assert role.name == "engineer-senior"
     # A retained identity does not implicitly select a professional resource.
     assert role.required_skills == ()
 

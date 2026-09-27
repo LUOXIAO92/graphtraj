@@ -131,6 +131,13 @@ def test_explicitly_stopped_member_is_replaced_without_executing_old_session(
             batch_file.chmod(0o644)
             batch_file.write_text(yaml.safe_dump(batch))
             batch_file.chmod(0o444)
+            original['role_reference'] = 'coding-team.engineer-expert'
+            (runner / alias / 'mapping.yml').write_text(yaml.safe_dump(original))
+            roles_file = root / '.graphtraj/roles.yml'
+            roles = yaml.safe_load(roles_file.read_text())
+            roles['roles']['coding-team']['engineer-expert'] = dict(roles['roles']['coding-team']['engineer'])
+            roles_file.write_text(yaml.safe_dump(roles))
+
         retained_batch = Path(original['retained_batch_file']).read_bytes()
 
         marker = (runner / alias / 'stop.yml').read_bytes()

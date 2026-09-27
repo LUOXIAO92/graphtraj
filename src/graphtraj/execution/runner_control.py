@@ -22,7 +22,6 @@ from graphtraj.runtimes.codex.codex_adapter import (
     refresh_codex_report_paths,
     _resume_request_setting,
 )
-from graphtraj.configuration.project_roles import logical_role
 from graphtraj.graph.delivery_worldline import read_worldline
 from graphtraj.execution.execution_budget import caller_notice_fd, execution_budget_monitor
 from graphtraj.configuration.project_configuration import (
@@ -483,10 +482,6 @@ def _send_session_locked(
             notice_fd, close_notice_fd = caller_notice_fd()
             if notice_fd is not None:
                 worker_environment["GRAPHTRAJ_BUDGET_NOTICE_FD"] = str(notice_fd)
-        if logical_role(mapping["role"]) == "team-leader":
-            worker_environment["GRAPHTRAJ_PARENT_REGISTRATION"] = str(
-                session_directory / "child-registration.yml"
-            )
         with capacity_positions(
             load_project_configuration(cwd), 1, capacity_fd
         ) as positions:
@@ -902,7 +897,7 @@ def _refresh_current_team_report_request(
     try:
         return refresh_codex_report_paths(
             request, worktree=worktree, evidence=evidence,
-            report_files=report_files, role=logical_role(mapping['role']),
+            report_files=report_files, role=mapping['role'],
             reports_only=reports_only, session_directory=session_directory,
         )
     except RuntimeAdapterError as error:

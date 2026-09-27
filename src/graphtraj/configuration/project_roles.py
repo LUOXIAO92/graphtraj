@@ -18,15 +18,6 @@ ROLE_NAME = re.compile(r"^[a-z0-9]+(?:[_-][a-z0-9]+)*$")
 ROLE_REFERENCE = re.compile(
     r"^[a-z0-9]+(?:[_-][a-z0-9]+)*(?:\.[a-z0-9]+(?:[_-][a-z0-9]+)*)?$"
 )
-# Retained Batch, Session and Team records may still name a former Engineer tier.
-_RETAINED_ENGINEER_REFERENCES = {
-    "engineer-junior": "coding-team.engineer",
-    "engineer-senior": "coding-team.engineer",
-    "engineer-expert": "coding-team.engineer",
-    "coding-team.engineer-junior": "coding-team.engineer",
-    "coding-team.engineer-senior": "coding-team.engineer",
-    "coding-team.engineer-expert": "coding-team.engineer",
-}
 _REQUIRED_FIELDS = frozenset({"runtime", "model"})
 _CONNECTION_FIELDS = frozenset({"base_url", "api_key_env"})
 _ENVIRONMENT_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
@@ -126,21 +117,6 @@ class ProjectRoles:
         return self.presets[self.resolve(reference)]
 
 
-def logical_role(reference: str) -> str:
-    """Return the role name one retained reference selects.
-
-    The group of a '<group>.<role>' reference only selects Runtime settings;
-    the role name after the last dot keeps the packaged responsibility, one
-    word group per '-', so a configured '_' spelling and an installed
-    hyphenated template name the same role. A retained Batch, Session or Team
-    record that names a former Engineer tier reads the unified Engineer seat.
-    Apply this where retained records are read; new dispatch uses
-    configured_role_name.
-    """
-    retained = _RETAINED_ENGINEER_REFERENCES.get(reference, reference)
-    return retained.rpartition(".")[2].replace("_", "-")
-
-
 def configured_role_name(reference: str) -> str:
     """Return the role name one current configured reference declares.
 
@@ -150,11 +126,6 @@ def configured_role_name(reference: str) -> str:
     instead of being rewritten to the unified Engineer seat.
     """
     return reference.rpartition(".")[2].replace("_", "-")
-
-
-def retained_role_reference(reference: str) -> str:
-    """Return the configured reference spelling for one supplied reference."""
-    return _RETAINED_ENGINEER_REFERENCES.get(reference, reference)
 
 
 def _reference_spellings(reference: str) -> tuple[str, ...]:

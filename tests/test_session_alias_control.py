@@ -262,10 +262,14 @@ def test_installed_alias_control_resumes_and_interrupts_one_team_session(
         timeout=10,
     )
     assert interrupted.returncode == 0, interrupted.stderr
-    assert yaml.safe_load(interrupted.stdout) == {
-        "alias": alias,
-        "interrupt_status": "interrupted",
-        "members": [{"alias": alias, "interrupt_status": "interrupted"}],
+    interruption = yaml.safe_load(interrupted.stdout)
+    assert interruption["alias"] == alias
+    assert interruption["interrupt_status"] == "interrupted"
+    assert {member["alias"]: member["interrupt_status"] for member in interruption["members"]} == {
+        alias: "interrupted",
+        "76-session_alias_control-handover0-engineer@engineer": "stopped",
+        "76-session_alias_control-handover0-standards_reviewer@standards_reviewer": "stopped",
+        "76-session_alias_control-handover0-spec_reviewer@spec_reviewer": "stopped",
     }
     wait_for_file(mapping_file.parent / "execution.yml")
     retry = run_process(

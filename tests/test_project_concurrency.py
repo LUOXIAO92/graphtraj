@@ -202,7 +202,7 @@ def test_startup_failure_does_not_erase_a_peer_that_started(
     assert failed["ticket_id"] == "401"
     assert failed["launch_status"] == "launched"
     status = run_process([str(installed_commands.runner), 'status', failed['alias']], cwd=root, env=environment)
-    assert yaml.safe_load(status.stdout)['aliases'][0]['last_outcome'] == 'runtime-error' 
+    assert yaml.safe_load(status.stdout)['aliases'][0]['last_outcome'] == 'runtime-error'
     assert completed["ticket_id"] == "402"
     assert completed["launch_status"] == "launched"
     wait_for_ticket_status(installed_commands, root, "402", "awaiting-integration")

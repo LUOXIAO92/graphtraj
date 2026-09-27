@@ -449,9 +449,9 @@ def test_control_entries_follow_recorded_direct_ownership(
     # The approval entry admits the direct parent and then refuses the
     # fabricated request it was given, so the caller never reaches the reply.
     _assert_denied_after_authority(children["reply-child-reviewer"])
-    # The Leader's own child-registration entry is admitted, so only the Batch
-    # rules refuse the Leader-shaped Batch it was handed.
-    _assert_denied_after_authority(children["register-own-registration"])
+    # Self-registration passes ownership validation, but the role tree does
+    # not allow this parent to dispatch another instance of its own role.
+    _assert_denied(children["register-own-registration"])
     # The send reaches the running child execution and reports that execution.
     sent_to_child = children["send-child-reviewer"]["document"]
     assert sent_to_child["alias"] == standards

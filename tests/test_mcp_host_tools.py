@@ -694,9 +694,14 @@ def test_installed_mcp_server_rejects_execution_input_like_the_cli(
         )
         assert result["isError"] is True, (tool, result)
         assert cli.returncode == 1, (tool, cli.stderr)
-        assert result["content"][0]["text"] == (
-            (yaml.safe_load(cli.stdout).get("error") or yaml.safe_load(cli.stdout)["tasks"][0]["error"])["message"]
-        ), tool
+        cli_document = yaml.safe_load(cli.stdout)
+        cli_error = cli_document.get("error") or cli_document["tasks"][0]["error"]
+        if "structuredContent" in result:
+            document = result["structuredContent"]
+            error = document.get("error") or document["tasks"][0]["error"]
+            assert error == cli_error, tool
+        else:
+            assert result["content"][0]["text"] == cli_error["message"], tool
 
     # The server keeps serving the same project after rejected calls.
     cli_missing = _runner(

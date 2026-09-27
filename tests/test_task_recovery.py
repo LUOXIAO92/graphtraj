@@ -48,13 +48,18 @@ def prepare(
 ) -> tuple[Path, dict, dict]:
     """Start one real managed Session whose model work waits for test release."""
     root, _, _, env = configure_harness(commands, repository, fake_codex, tmp_path)
+    roles = {name: {'runtime': 'codex', 'model': 'selected'}
+             for name in ([role, 'analyst'] if child or replacement_child else [role])}
+    if '.' in role:
+        group, _, name = role.rpartition('.')
+        roles[group] = {name: roles.pop(role)}
     (root / '.graphtraj/roles.yml').write_text(yaml.safe_dump({
-        'roles': {name: {'runtime': 'codex', 'model': 'selected'}
-                  for name in ([role, 'analyst'] if child or replacement_child else [role])},
+        'roles': roles,
         'role_tree': {role: {'analyst': {}}} if child or replacement_child else {role: {}},
     }))
     ticket = _ticket('154', 'recovery')
-    ticket['body'] = BODY + ticket['body']
+    ticket['body'] = BODY.replace('planned_sessions: {researcher: 1}',
+                                 'planned_sessions: {' + role.rpartition('.')[2].replace('-', '_') + ': 1}') + ticket['body']
     _register(commands, root, ticket)
     _change_status(commands, root, '154', 'ready')
     env['RECOVERY_RELEASE'] = str(tmp_path / 'release')
@@ -96,7 +101,7 @@ def prepare(
 
 @pytest.mark.parametrize('role, historical', [
     ('researcher', False), ('team-leader', False), ('engineer-expert', False),
-    ('engineer', True),
+    ('coding-team.engineer', True),
 ])
 def test_explicitly_stopped_member_is_replaced_without_executing_old_session(
     installed_commands: InstalledCommands,
@@ -122,7 +127,7 @@ def test_explicitly_stopped_member_is_replaced_without_executing_old_session(
             # Reproduce an old Batch whose actual registered identity was engineer.
             batch_file = Path(original['retained_batch_file'])
             batch = yaml.safe_load(batch_file.read_text())
-            batch['tasks'][0]['role'] = 'engineer-expert'
+            batch['tasks'][0]['role'] = 'coding-team.engineer-expert'
             batch_file.write_text(yaml.safe_dump(batch))
         retained_batch = Path(original['retained_batch_file']).read_bytes()
 
@@ -136,7 +141,12 @@ def test_explicitly_stopped_member_is_replaced_without_executing_old_session(
         replacement = yaml.safe_load(replaced.stdout)['replacement_alias']
         wait_for_file(runner / replacement / 'execution.yml')
         current = yaml.safe_load((runner / replacement / 'mapping.yml').read_text())
-        assert current['role'] == original['role'] == role
+        usage = yaml.safe_load((ticket / 'execution-budget.yml').read_text())
+        actual_role = role.rpartition('.')[2]
+        key = actual_role.replace('-', '_')
+        assert usage['sessions'] == {key: 2}
+        assert usage['notifications'].count('planned_sessions.' + key + ':1') == 1
+        assert current['role'] == original['role'] == actual_role
         assert Path(original['retained_batch_file']).read_bytes() == retained_batch
         assert current['session'] != original['session']
         assert current['parent'] == original['parent'] is None

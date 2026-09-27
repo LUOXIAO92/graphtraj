@@ -366,8 +366,8 @@ references use names such as `coding-team.team-leader` or
 `coding-team.spec-reviewer`. Each preset selects `runtime`
 and `model`, with optional `reasoning_effort`, `base_url` and `api_key_env`. The latter names an
 environment variable, never stores the credential. Omitted settings use the
-Runtime's defaults. Team Leader additionally supports `allow_runtime_swarm`,
-which defaults to false. Main's already selected
+Runtime's defaults. Any configured role additionally supports
+`allow_runtime_swarm`, which defaults to false. Main's already selected
 Runtime is outside these presets.
 
 Set `reasoning_effort` on a role when its model needs a different reasoning

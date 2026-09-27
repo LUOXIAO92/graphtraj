@@ -10,14 +10,15 @@ description: "Resolve software implementation conflicts in an in-progress Git me
 3. **Resolve each hunk.** Preserve both intents where possible. Where incompatible, pick the one matching the merge's stated goal and note the trade-off. Do **not** invent new behaviour. Resolve within the accepted requirements; report incompatible requirements to the caller. Do not `--abort` the caller’s operation.
 
 4. Validate the resolved behavior with the relevant automated checks and fix
-   anything the merge broke. In a GraphTraj dispatch, Main's integration command
-   owns the supplied final validation command; return focused results and let
-   that command run once. For standalone work, run the required merge/rebase
-   checks. Reuse valid evidence for unaffected paths.
+   anything the merge broke. In a GraphTraj dispatch, the caller's integration
+   command owns the supplied final validation command; return focused results
+   and let that command run once. For standalone work, run the required
+   merge/rebase checks. Reuse valid evidence for unaffected paths.
 
 5. **Finish the assigned work.** When dispatched as a GraphTraj Merge Resolver,
-   stage the reconciliation and return it to Main; Main’s integration command
-   completes the merge and records the commit. If accepted requirements cannot
-   both be satisfied, report that incompatibility to Main. For standalone
-   merge/rebase work, stage the resolved files and commit, or continue the rebase
-   until all commits are rebased.
+   commit the reconciliation and submit its exact version through the common
+   result operation; report incompatible accepted requirements to the actual
+   parent. The actual parent decides the submitted version, and the caller’s
+   integration then runs the retained validation. For standalone merge/rebase
+   work, stage the resolved files and commit, or continue the rebase until all
+   commits are rebased.

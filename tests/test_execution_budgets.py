@@ -910,7 +910,6 @@ def test_installed_send_notifies_its_caller_while_a_budgeted_resume_runs(
                 {"type": "turn.started"},
             ]
         ),
-        "FAKE_CODEX_LIFECYCLE_ACTION": "complete-team-round",
         "FAKE_CODEX_APPEND_LOG": "1",
         "FAKE_CODEX_CAPTURE_STDIN": "1",
         "FAKE_CODEX_CAPTURE_ROLE": "1",

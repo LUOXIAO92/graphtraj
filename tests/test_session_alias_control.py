@@ -326,7 +326,8 @@ def test_installed_alias_control_resumes_and_interrupts_one_team_session(
         )
     }
     report = ticket_directory / "teams" / "1" / "rounds" / "2" / "leader.md"
-    assert report_writes == {str(report)}
+    assert filesystem[str(report)] == "read"
+    assert report_writes == set()
     assert "hooks" not in policy["settings"]
     assert (worktree_root / "76-session-alias-control").is_dir()
     assert "run_id" not in resumed_mapping

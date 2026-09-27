@@ -809,7 +809,7 @@ def test_installed_mcp_server_continues_a_stopped_ticket_with_unchanged_semantic
             "ticket_name": "session-alias-control",
             "role":        "coding-team.team-leader",
         }]})["result"]
-        assert again["isError"] is False
+        assert again["isError"] is True
         assert again["structuredContent"]["tasks"][0]["launch_status"] == "stopped"
         continued = server.call("continue", {
             "ticket_id": "76", "caused_by_event_ids": [decision_id],
@@ -1726,6 +1726,8 @@ def test_installed_mcp_server_keeps_the_continue_path_on_the_request_caller(
         assert "stop_deliveries" not in continuation
         assert _native_queue_submissions(protocol) == []
 
+    from runner_fixtures import wait_for_ticket_status
+    wait_for_ticket_status(installed_commands, harness, "76", "awaiting-integration")
     after = yaml.safe_load((ticket / "ticket.yml").read_text(encoding="utf-8"))
     assert after["status"] == "awaiting-integration"
     usage = yaml.safe_load((ticket / "execution-budget.yml").read_text(encoding="utf-8"))

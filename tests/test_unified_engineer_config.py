@@ -197,7 +197,7 @@ def test_retained_tiered_batch_still_resolves_for_recovery(tmp_path: Path) -> No
         {"engineer": {"runtime": "codex", "model": "gpt-5.6-sol"}}
     )
     role = resolve_child_role(
-        task.policy_role, selected
+        task.policy_role, selected, tmp_path
     )
 
     assert retained.read_bytes() == original

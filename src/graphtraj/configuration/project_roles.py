@@ -45,7 +45,7 @@ class RolePreset:
     allow_runtime_swarm: bool = False
     reasoning_effort: str | None = None
     codex: Mapping[str, object] | None = None
-    instructions: str = "task"
+    instructions: str | None = None
     harness_skills: tuple[str, ...] = ()
     worktree_access: str = "write"
     reports: tuple[str, ...] = ()
@@ -359,9 +359,10 @@ def _role_preset(
     }
     if "instructions" in entry and (
         not isinstance(entry["instructions"], str)
-        or ROLE_NAME.fullmatch(entry["instructions"]) is None
+        or not entry["instructions"].strip()
+        or "\x00" in entry["instructions"]
     ):
-        diagnostics.append(f"{name}.instructions must name a packaged role resource.")
+        diagnostics.append(f"{name}.instructions must reference a UTF-8 instruction file.")
     if entry.get("worktree_access", "write") not in ("read", "write"):
         diagnostics.append(f"{name}.worktree_access must be read or write.")
     for field in ("harness_skills", "reports"):
@@ -429,7 +430,7 @@ def _role_preset(
             str(entry["api_key_env"]) if "api_key_env" in entry else None
         ),
         allow_runtime_swarm=entry.get("allow_runtime_swarm", False),
-        instructions=entry.get("instructions", "task"),
+        instructions=entry.get("instructions"),
         harness_skills=tuple(entry.get("harness_skills", [])),
         worktree_access=entry.get("worktree_access", "write"),
         reports=tuple(entry.get("reports", [])),

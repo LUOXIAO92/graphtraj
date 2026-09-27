@@ -789,7 +789,7 @@ def _execute_agent(
             runtime_store=project.runtime_store,
             executable=runtime_executable(preset.runtime),
             git_common_directory=project.common_directory,
-            role=resolve_child_role(policy_role, preset),
+            role=resolve_child_role(policy_role, preset, project.harness_root),
             worktree=worktree,
             evidence=evidence,
             repository_skill_source=worktree,

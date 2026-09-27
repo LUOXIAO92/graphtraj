@@ -86,7 +86,6 @@ def test_installed_runner_applies_inline_settings_to_an_existing_preset(
         "        model: gpt-5.6-luna\n"
         "        reasoning_effort: high\n"
         "        allow_runtime_swarm: false\n"
-        "        instructions: team-leader\n"
         "        worktree_access: read\n"
         "        reports: [leader.md]\n"
     )

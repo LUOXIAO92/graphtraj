@@ -193,7 +193,6 @@ def test_a_configured_group_reaches_a_real_launch(
         "team_leader": {
             "runtime": "codex",
             "model": "gpt-6-venus",
-            "instructions": "team-leader",
             "worktree_access": "read",
             "reports": ["leader.md"],
             "reasoning_effort": "low",
@@ -254,7 +253,8 @@ def test_a_configured_group_reaches_a_real_launch(
 
 
 @pytest.mark.parametrize('field, value', [
-    ('instructions', '../engineer'), ('worktree_access', 'all'),
+    ('instructions', ''), ('instructions', None), ('instructions', 12),
+    ('instructions', 'bad\x00path'), ('worktree_access', 'all'),
     ('reports', ['../foreign.md']), ('reports', ['same.md', 'same.md']),
     ('harness_skills', ['../foreign']), ('allow_runtime_swarm', 'yes'),
 ])
@@ -275,22 +275,23 @@ def test_explicit_role_content_is_independent_of_identity(tmp_path: Path) -> Non
     from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 
     _write_roles(tmp_path, yaml.safe_dump({'roles': {'researcher': {
-        'runtime': 'codex', 'model': 'chosen', 'instructions': 'engineer',
+        'runtime': 'codex', 'model': 'chosen', 'instructions': 'role text.txt',
         'harness_skills': ['research'], 'worktree_access': 'read',
         'reports': ['findings.md', 'evidence.md'], 'allow_runtime_swarm': True,
     }}, 'role_tree': {'researcher': {}}}))
+    (tmp_path / 'role text.txt').write_text('External role text.\nrequired_skills: [absent]\n', encoding='utf-8')
     roles = load_project_roles(tmp_path)
     preset = roles.preset('researcher')
-    resolved = resolve_child_role('researcher', preset)
+    resolved = resolve_child_role('researcher', preset, tmp_path)
     assert resolved.name == 'researcher'
-    assert resolved.required_skills == ('implement', 'ponytail', 'research')
+    assert resolved.required_skills == ('research',)
     assert resolved.allow_runtime_swarm
     assert preset.worktree_access == 'read'
     assert preset.reports == ('findings.md', 'evidence.md')
     assert not roles.permits_dispatch('researcher', 'engineer')
     from dataclasses import replace
-    with pytest.raises(RuntimeAdapterError, match='not found'):
-        resolve_child_role('researcher', replace(preset, instructions='missing-resource'))
+    with pytest.raises(RuntimeAdapterError, match='Cannot read UTF-8 role instructions'):
+        resolve_child_role('researcher', replace(preset, instructions='missing-resource'), tmp_path)
 
 
 @pytest.mark.parametrize('reference', [
@@ -303,8 +304,8 @@ def test_role_names_do_not_select_content_or_access(tmp_path: Path, reference: s
 
     name, preset = parse_inline_role({reference: {'runtime': 'codex', 'model': 'chosen'}})
     _, generic = parse_inline_role({'researcher': {'runtime': 'codex', 'model': 'chosen'}})
-    resolved = resolve_child_role(name, preset)
-    assert resolved.instructions == resolve_child_role('researcher', generic).instructions
+    resolved = resolve_child_role(name, preset, tmp_path)
+    assert resolved.instructions == resolve_child_role('researcher', generic, tmp_path).instructions
     assert resolved.required_skills == ()
     assert not resolved.allow_runtime_swarm
     assert preset.worktree_access == 'write'

@@ -53,15 +53,14 @@ def test_installed_setup_leaves_main_configuration_to_the_user(
     assert not (harness / ".codex" / "hooks" / "worktree_guard.py").exists()
 
 
-@pytest.mark.parametrize('role_name, instructions, access', [
-    ('engineer', 'task', 'write'), ('auditor', 'spec-reviewer', 'read'),
+@pytest.mark.parametrize('role_name, access', [
+    ('engineer', 'write'), ('auditor', 'read'),
 ])
 def test_runtime_executes_the_resolved_responsibility_and_required_skill(
     monkeypatch: pytest.MonkeyPatch,
     temporary_git_repository: Path,
     tmp_path: Path,
     role_name: str,
-    instructions: str,
     access: str,
 ) -> None:
     monkeypatch.syspath_prepend(str(PROJECT_ROOT / "src"))
@@ -84,8 +83,9 @@ def test_runtime_executes_the_resolved_responsibility_and_required_skill(
             RolePreset(
                 "codex", "operator-model", None, None,
                 reasoning_effort="high", harness_skills=("research",),
-                instructions=instructions, worktree_access=access,
+                worktree_access=access,
             ),
+            harness,
         ),
         instructions=json.dumps({"skill": "research", "reference": "references/coding.md"}),
     )
@@ -619,10 +619,10 @@ def test_explicit_read_access_is_enforced_by_native_sandbox(
     foreign = evidence / 'foreign.md'
     foreign.write_text('private evidence')
     name, preset = parse_inline_role({'auditor': {
-        'runtime': 'codex', 'model': 'unused', 'instructions': 'spec-reviewer',
+        'runtime': 'codex', 'model': 'unused',
         'worktree_access': 'read', 'reports': ['findings.md'],
     }})
-    role = resolve_child_role(name, preset)
+    role = resolve_child_role(name, preset, root)
     context = preflight_runtime_context(
         runtime_store=root / '.codex', executable=Path(executable),
         git_common_directory=root / 'git-common', role=role, worktree=root,

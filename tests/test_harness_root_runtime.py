@@ -140,8 +140,9 @@ def _engineer_role(
 
     return resolve_child_role(
         "engineer",
-        RolePreset("codex", model, None, None, instructions="engineer",
+        RolePreset("codex", model, None, None, harness_skills=("implement", "ponytail"),
                    reasoning_effort=reasoning_effort or "max"),
+        Path.cwd(),
     )
 
 

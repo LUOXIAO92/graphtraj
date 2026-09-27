@@ -319,7 +319,7 @@ def accepted_document(
     roles_file = root / '.graphtraj/roles.yml'
     roles = yaml.safe_load(roles_file.read_text())
     roles['roles']['editor'] = {'runtime': 'codex', 'model': 'document-model',
-                                'instructions': 'task', 'reports': ['sources.md']}
+                                'reports': ['sources.md']}
     roles['role_tree']['editor'] = {}
     roles_file.write_text(yaml.safe_dump(roles))
     _register(installed_commands, root, _ticket('83', 'integration'))
@@ -377,7 +377,7 @@ def test_configured_document_conflict_requires_common_result_and_validation(
     assert original_round
     environment.update(FAKE_CODEX_LIFECYCLE_ACTION='resolve-integration', FAKE_CODEX_RESOLUTION=outcome,
                        FAKE_CODEX_CAPTURE_STDIN='1')
-    selection = 'editor' if conflict == 'textual' else yaml.safe_dump({'editor': {'runtime': 'codex', 'model': 'inline-document-model', 'instructions': 'task', 'reports': ['sources.md']}})
+    selection = 'editor' if conflict == 'textual' else yaml.safe_dump({'editor': {'runtime': 'codex', 'model': 'inline-document-model', 'reports': ['sources.md']}})
     result = run_process(command + ['--resolve-conflict', 'Preserve both document requirements', '--role', selection, '--', *validator], cwd=root, env=environment)
     assert result.returncode == (1 if outcome == 'prose-only' else 0), result.stdout + result.stderr
     output = yaml.safe_load(result.stdout)

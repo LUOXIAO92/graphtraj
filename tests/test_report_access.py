@@ -202,13 +202,15 @@ def test_installed_send_recovers_historical_reports(
     evidence = root / '.graphtraj/state/tickets/166-historical-reports'
     own = evidence.joinpath(*Path(report_ref).parts[1:])
     own.write_text('Retained evidence')
+    reference = own.with_name('reference.md')
+    reference.write_text('Readable task input')
     private = own.with_name('private.md')
-    private.write_text('Sibling evidence')
+    private.write_text('Private sibling evidence')
     request = launch['adapter_request']
     config = request['session_parameters']['config']
     filesystem = config['permissions'][config['default_permissions']]['filesystem']
     filesystem[str(own)] = 'write'
-    filesystem[str(private)] = 'read'
+    filesystem[str(reference)] = 'read'
     # Old direct-write Contexts recorded exact report grants in their launch.
     from graphtraj.runtimes.codex.codex_adapter import _toml_value
     for index, argument in enumerate(request['arguments']):
@@ -236,7 +238,10 @@ def test_installed_send_recovers_historical_reports(
             settings.update(tomllib.loads(records[-1]['argv'][index + 1]))
     filesystem = settings['permissions'][settings['default_permissions']]['filesystem']
     assert filesystem[str(own)] == 'read'
-    assert filesystem[str(private)] == 'read'
+    assert filesystem[str(reference)] == 'read'
+    assert str(private) not in filesystem
+    assert filesystem[str(root / '.graphtraj/state')] == 'none'
+    assert private.read_text() == 'Private sibling evidence'
     assert filesystem[':workspace_roots']['.'] == 'read'
     reports = run_process([str(installed_commands.runner), 'reports', task['alias']], cwd=root, env=env)
     assert reports.returncode == 0, reports.stdout + reports.stderr

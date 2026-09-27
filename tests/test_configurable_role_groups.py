@@ -193,6 +193,9 @@ def test_a_configured_group_reaches_a_real_launch(
         "team_leader": {
             "runtime": "codex",
             "model": "gpt-6-venus",
+            "instructions": "team-leader",
+            "worktree_access": "read",
+            "reports": ["leader.md"],
             "reasoning_effort": "low",
             "allow_runtime_swarm": False,
         },
@@ -248,3 +251,61 @@ def test_a_configured_group_reaches_a_real_launch(
     assert launch["mapping"]["role_reference"] == "coding_team_experiment.team_leader"
     assert launch["context_evidence"]["model"] == "gpt-6-venus"
     assert launch["context_evidence"]["model_reasoning_effort"] == "low"
+
+
+@pytest.mark.parametrize('field, value', [
+    ('instructions', '../engineer'), ('worktree_access', 'all'),
+    ('reports', ['../foreign.md']), ('reports', ['same.md', 'same.md']),
+    ('harness_skills', ['../foreign']), ('allow_runtime_swarm', 'yes'),
+])
+def test_explicit_role_selections_reject_invalid_configuration(
+    tmp_path: Path, field: str, value: object,
+) -> None:
+    """Selection fields cannot escape resource/report boundaries or widen access."""
+    _write_roles(tmp_path, yaml.safe_dump({'roles': {'researcher': {
+        'runtime': 'codex', 'model': 'chosen', field: value,
+    }}}))
+    with pytest.raises(ProjectRolesError, match=field):
+        load_project_roles(tmp_path)
+
+
+def test_explicit_role_content_is_independent_of_identity(tmp_path: Path) -> None:
+    """A custom role selects professional content and generic access independently."""
+    from graphtraj.configuration.role_definitions import resolve_child_role
+    from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
+
+    _write_roles(tmp_path, yaml.safe_dump({'roles': {'researcher': {
+        'runtime': 'codex', 'model': 'chosen', 'instructions': 'engineer',
+        'harness_skills': ['research'], 'worktree_access': 'read',
+        'reports': ['findings.md', 'evidence.md'], 'allow_runtime_swarm': True,
+    }}, 'role_tree': {'researcher': {}}}))
+    roles = load_project_roles(tmp_path)
+    preset = roles.preset('researcher')
+    resolved = resolve_child_role('researcher', preset)
+    assert resolved.name == 'researcher'
+    assert resolved.required_skills == ('implement', 'ponytail', 'research')
+    assert resolved.allow_runtime_swarm
+    assert preset.worktree_access == 'read'
+    assert preset.reports == ('findings.md', 'evidence.md')
+    assert not roles.permits_dispatch('researcher', 'engineer')
+    from dataclasses import replace
+    with pytest.raises(RuntimeAdapterError, match='not found'):
+        resolve_child_role('researcher', replace(preset, instructions='missing-resource'))
+
+
+@pytest.mark.parametrize('reference', [
+    'research_team.team_leader', 'custom.engineer', 'custom.standards_reviewer',
+])
+def test_role_names_do_not_select_content_or_access(tmp_path: Path, reference: str) -> None:
+    """Same-name professional roles resolve exactly the generic selected content."""
+    from graphtraj.configuration.project_roles import parse_inline_role
+    from graphtraj.configuration.role_definitions import resolve_child_role
+
+    name, preset = parse_inline_role({reference: {'runtime': 'codex', 'model': 'chosen'}})
+    _, generic = parse_inline_role({'researcher': {'runtime': 'codex', 'model': 'chosen'}})
+    resolved = resolve_child_role(name, preset)
+    assert resolved.instructions == resolve_child_role('researcher', generic).instructions
+    assert resolved.required_skills == ()
+    assert not resolved.allow_runtime_swarm
+    assert preset.worktree_access == 'write'
+    assert preset.reports == ()

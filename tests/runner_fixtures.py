@@ -22,7 +22,7 @@ def coding_roles() -> dict:
     Setup writes an empty role selection, so a project that selects coding
     work declares these presets itself.
     """
-    return {"roles": {
+    document = {"roles": {
         "coding_team": {
             "team_leader": {
                 "runtime": "codex",
@@ -36,6 +36,16 @@ def coding_roles() -> dict:
         },
         "delivery_state": {"runtime": "codex", "model": "gpt-5.6-luna"},
     }}
+    for name, preset in document["roles"]["coding_team"].items():
+        preset["instructions"] = name.replace("_", "-")
+        if name in {"team_leader", "standards_reviewer", "spec_reviewer"}:
+            preset["worktree_access"] = "read"
+        if name == "engineer":
+            preset["reports"] = ["engineer.md", "validation.md"]
+        elif name == "team_leader":
+            preset["reports"] = ["leader.md"]
+    document["roles"]["delivery_state"]["instructions"] = "delivery-state"
+    return document
 
 
 def configure_coding_roles(harness_root: Path) -> None:

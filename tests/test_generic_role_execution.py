@@ -35,8 +35,10 @@ def wait_for_idle(commands: InstalledCommands, root: Path, env: dict, alias: str
     raise AssertionError(status)
 
 
-@pytest.mark.parametrize('role, coding_methods', [
-    ('researcher', True), ('engineer', True), ('researcher', False),
+@pytest.mark.parametrize('role, coding_methods, reports', [
+    ('researcher', True, []), ('engineer', False, []), ('researcher', False, []),
+    ('research_team.team_leader', False, []), ('spec_reviewer', False, []),
+    ('engineer', False, ['findings.md', 'evidence.md']),
 ])
 def test_single_role_launch_registers_and_executes_without_placeholder_members(
     installed_commands: InstalledCommands,
@@ -45,6 +47,7 @@ def test_single_role_launch_registers_and_executes_without_placeholder_members(
     tmp_path: Path,
     role: str,
     coding_methods: bool,
+    reports: list[str],
 ) -> None:
     """An authorized lone author runs, with its real membership and own Trace.
 
@@ -61,8 +64,11 @@ def test_single_role_launch_registers_and_executes_without_placeholder_members(
     )
     if not coding_methods:
         remove_coding_method_skills(root, tmp_path / 'operator-home')
+    preset = {'runtime': 'codex', 'model': 'configured-author', 'reports': reports}
+    group, _, name = role.rpartition('.')
+    roles = {group: {name: preset}} if group else {role: preset}
     (root / '.graphtraj/roles.yml').write_text(yaml.safe_dump({
-        'roles': {role: {'runtime': 'codex', 'model': 'configured-author'}},
+        'roles': roles,
         'role_tree': {role: {}},
     }))
     _register(installed_commands, root, _ticket('150', 'formal-author'))
@@ -97,7 +103,7 @@ def test_single_role_launch_registers_and_executes_without_placeholder_members(
     ticket = root / '.graphtraj/state/tickets/150-formal-author'
     state = yaml.safe_load((ticket / 'ticket.yml').read_text())
     team = yaml.safe_load((ticket / 'teams/1/team.yml').read_text())
-    assert {member['role'] for member in team['members'].values()} == {role}
+    assert {member['role'] for member in team['members'].values()} == {role.rpartition('.')[2].replace('_', '-')}
     assert state['status'] != 'integrated' and state['current_candidate'] is None
     assert (ticket / 'teams/1/traces' / task['alias'] / 'events.jsonl').read_text()
     events = [json.loads(line) for shard in (root / '.graphtraj/state/worldline').glob('*.jsonl')
@@ -106,9 +112,9 @@ def test_single_role_launch_registers_and_executes_without_placeholder_members(
 
     worktree = Path(task['worktree_path'])
     assert (worktree / 'result.md').is_file() and (worktree / 'result.tex').is_file()
-    reports = run_process([str(installed_commands.runner), 'reports', task['alias']], cwd=root, env=env)
-    assert reports.returncode == 0, reports.stdout + reports.stderr
-    assert len(yaml.safe_load(reports.stdout)['submissions']) == 1
+    response = run_process([str(installed_commands.runner), 'reports', task['alias']], cwd=root, env=env)
+    assert response.returncode == 0, response.stdout + response.stderr
+    assert len(yaml.safe_load(response.stdout)['submissions']) == 1
     records = [json.loads(line) for line in fake_codex.log_file.read_text().splitlines()]
     settings = {}
     for index, arg in enumerate(records[0]['argv'][:-1]):
@@ -118,6 +124,11 @@ def test_single_role_launch_registers_and_executes_without_placeholder_members(
     assert any('/selected/SKILL.md' in entry['path'] for entry in selected)
     permission = settings['permissions'][settings['default_permissions']]['filesystem']
     assert permission[':workspace_roots']['.'] == 'write'
+    assert len(selected) == 1
+    mapping = yaml.safe_load((root / '.graphtraj/runner/sessions' / task['alias'] / 'mapping.yml').read_text())
+    assert mapping['role_reference'] == role
+    expected = reports or [role.rpartition('.')[2].replace('_', '-') + '.md']
+    assert [Path(path).name for path in mapping['report_files']] == expected
     assert permission[str(root / '.graphtraj/state')] == 'none'
     before = (ticket / 'teams/1/traces' / task['alias'] / 'events.jsonl').read_bytes()
     sent = run_process([str(installed_commands.runner), 'send', task['alias'],
@@ -156,7 +167,7 @@ def test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority(
         installed_commands, temporary_git_repository, fake_codex, tmp_path,
     )
     (root / '.graphtraj/roles.yml').write_text(yaml.safe_dump({
-        'roles': {role: {'runtime': 'codex', 'model': 'selected-model'}
+        'roles': {role: {'runtime': 'codex', 'model': 'selected-model', 'allow_runtime_swarm': True}
                   for role in ('researcher', 'analyst', 'engineer')},
         'role_tree': {'researcher': {'analyst': {}}},
     }))
@@ -225,11 +236,18 @@ def test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority(
     assert all(member['session_ref'] for member in team['members'].values())
 
 
-def test_a_selected_coding_role_reports_its_absent_method_skill(
+@pytest.mark.parametrize('selection, missing', [
+    ({'instructions': 'engineer'}, 'implement'),
+    ({'instructions': 'missing-resource'}, 'missing-resource'),
+    ({'harness_skills': ['missing-skill']}, 'missing-skill'),
+])
+def test_selected_resources_fail_clearly_when_absent(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
     fake_codex: FakeCodex,
     tmp_path: Path,
+    selection: dict,
+    missing: str,
 ) -> None:
     """A selected coding role still fails loudly when its method is absent."""
     root, _, _, env = configure_harness(
@@ -238,7 +256,7 @@ def test_a_selected_coding_role_reports_its_absent_method_skill(
     remove_coding_method_skills(root, tmp_path / 'operator-home')
     (root / '.graphtraj/roles.yml').write_text(yaml.safe_dump({
         'roles': {'coding_team': {
-            'engineer': {'runtime': 'codex', 'model': 'selected-author'},
+            'engineer': {'runtime': 'codex', 'model': 'selected-author', **selection},
         }},
         'role_tree': {'coding_team.engineer': {}},
     }))
@@ -259,7 +277,7 @@ def test_a_selected_coding_role_reports_its_absent_method_skill(
     task = document['tasks'][0]
     assert task['launch_status'] == 'failed'
     assert task['error']['code'] == 'invalid-config'
-    assert 'implement' in task['error']['message']
+    assert missing in task['error']['message']
     assert not list((root / '.graphtraj/runner/sessions').glob('*/mapping.yml'))
 
 

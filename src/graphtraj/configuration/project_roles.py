@@ -45,7 +45,7 @@ class ProjectRolesError(Exception):
 
 @dataclass(frozen=True)
 class RolePreset:
-    """The Runtime settings selected for one reusable child role."""
+    """Explicit content, access and Runtime settings for one reusable child role."""
 
     runtime: str
     model: str
@@ -54,6 +54,10 @@ class RolePreset:
     allow_runtime_swarm: bool = False
     reasoning_effort: str | None = None
     codex: Mapping[str, object] | None = None
+    instructions: str = "task"
+    harness_skills: tuple[str, ...] = ()
+    worktree_access: str = "write"
+    reports: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -363,15 +367,36 @@ def _role_preset(
     entry: object,
     diagnostics: list[str],
 ) -> RolePreset | None:
-    """Return one validated Runtime-setting-only role entry."""
+    """Return one validated role selection without inferring behavior from its name."""
 
     if not isinstance(entry, dict):
         diagnostics.append("{0} must be a mapping.".format(name))
         return None
     initial_count = len(diagnostics)
-    allowed = _REQUIRED_FIELDS | _CONNECTION_FIELDS | {"reasoning_effort", "codex"}
-    if logical_role(name) == "team-leader":
-        allowed = allowed | {"allow_runtime_swarm"}
+    allowed = _REQUIRED_FIELDS | _CONNECTION_FIELDS | {
+        "reasoning_effort", "codex", "allow_runtime_swarm", "instructions",
+        "harness_skills", "worktree_access", "reports",
+    }
+    if "instructions" in entry and (
+        not isinstance(entry["instructions"], str)
+        or ROLE_NAME.fullmatch(entry["instructions"]) is None
+    ):
+        diagnostics.append(f"{name}.instructions must name a packaged role resource.")
+    if entry.get("worktree_access", "write") not in ("read", "write"):
+        diagnostics.append(f"{name}.worktree_access must be read or write.")
+    for field in ("harness_skills", "reports"):
+        values = entry.get(field, [])
+        if (
+            not isinstance(values, list)
+            or any(not isinstance(value, str) or not value for value in values)
+        ):
+            diagnostics.append(f"{name}.{field} must be a list of names.")
+        elif len(set(values)) != len(values) or any(
+            ROLE_NAME.fullmatch(value.removesuffix(".md") if field == "reports" else value) is None
+            or (field == "reports" and not value.endswith(".md"))
+            for value in values
+        ):
+            diagnostics.append(f"{name}.{field} must contain distinct safe names.")
     if "codex" in entry and not isinstance(entry["codex"], dict):
         diagnostics.append("{0}.codex must be a mapping.".format(name))
     for field in entry:
@@ -407,8 +432,7 @@ def _role_preset(
             )
         )
     if (
-        logical_role(name) == "team-leader"
-        and "allow_runtime_swarm" in entry
+        "allow_runtime_swarm" in entry
         and not isinstance(entry["allow_runtime_swarm"], bool)
     ):
         diagnostics.append(
@@ -424,11 +448,11 @@ def _role_preset(
         api_key_env=(
             str(entry["api_key_env"]) if "api_key_env" in entry else None
         ),
-        allow_runtime_swarm=(
-            bool(entry.get("allow_runtime_swarm", True))
-            if logical_role(name) == "team-leader"
-            else False
-        ),
+        allow_runtime_swarm=entry.get("allow_runtime_swarm", False),
+        instructions=entry.get("instructions", "task"),
+        harness_skills=tuple(entry.get("harness_skills", [])),
+        worktree_access=entry.get("worktree_access", "write"),
+        reports=tuple(entry.get("reports", [])),
         reasoning_effort=(
             str(entry["reasoning_effort"])
             if "reasoning_effort" in entry

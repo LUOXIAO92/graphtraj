@@ -86,6 +86,9 @@ def test_installed_runner_applies_inline_settings_to_an_existing_preset(
         "        model: gpt-5.6-luna\n"
         "        reasoning_effort: high\n"
         "        allow_runtime_swarm: false\n"
+        "        instructions: team-leader\n"
+        "        worktree_access: read\n"
+        "        reports: [leader.md]\n"
     )
     environment.update(
         {
@@ -330,7 +333,7 @@ def test_installed_runner_obeys_the_explicit_leader_decision_for_a_run_free_team
         assert filesystem[':workspace_roots']['docs'] == 'read'
         assert filesystem.get(str(root / '.graphtraj/state/worldline/.lock')) != 'write'
         assert not any(access == 'write' and path.startswith(str(ticket)) for path, access in filesystem.items())
-        assert settings['agents']['enabled'] is (call['role'] == 'team-leader' and swarm is not False)
+        assert settings['agents']['enabled'] is (call['role'] == 'team-leader' and swarm is True)
         reports = {Path(path).name for path, access in filesystem.items()
                    if access == 'read' and path.startswith(str(ticket)) and path.endswith('.md')}
         assert reports == ({'leader.md'} if call['role'] == 'team-leader' else {'engineer.md', 'validation.md'})
@@ -907,7 +910,7 @@ def test_installed_runner_runs_a_team_leader_inline_specialist_outside_the_team(
         {
             "coding-team.spec-reviewer": {
                 "runtime": "codex", "model": "operator-model",
-                "allow_runtime_swarm": True,
+                "allow_runtime_swarm": "yes",
             },
         },
         {"other-team.team-leader": {"runtime": "codex", "model": "operator-model"}},

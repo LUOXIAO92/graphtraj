@@ -575,7 +575,8 @@ def test_each_session_projects_resolved_role_skills_and_task_access(
                 skill.parent.mkdir(parents=True)
                 skill.write_text(f'---\nname: {skill_name}\ndescription: temporary check\n---\n')
             role = ResolvedChildRole(role_name, f'Role {name}.', (),
-                                     RolePreset('codex', model, None, None, reasoning_effort=effort))
+                                     RolePreset('codex', model, None, None, reasoning_effort=effort,
+                                                worktree_access='read' if name == 'second' else 'write'))
             contexts.append(context(root, peer, role, ('selected',),
                                     (Path('.state/teams/1/rounds/1/report.md'),)))
         async with CodexAppServer(command=[str(peer)], cwd=tmp_path) as adapter:
@@ -1163,7 +1164,7 @@ def test_team_leader_projection_keeps_control_files_private(
         root, peer,
         ResolvedChildRole('team-leader', 'Lead the Team.', (),
                           RolePreset('codex', 'chosen-model', None, None,
-                                     allow_runtime_swarm=True, reasoning_effort='max')),
+                                     allow_runtime_swarm=True, reasoning_effort='max', worktree_access='read')),
         leader_control_write_paths=(worldline_lock, capacity),
     )
     launch = _native_filesystem(resolved.launch_document()['adapter_request'])

@@ -29,7 +29,11 @@ from graphtraj.configuration.role_definitions import resolve_child_role
 from graphtraj.configuration.project_configuration import load_project_configuration
 from graphtraj.graph.delivery_state import apply_delivery_state_request
 from graphtraj.graph.delivery_worldline import append_project_worldline_event, read_worldline
-from graphtraj.configuration.project_roles import ProjectRolesError, configured_role_name, logical_role
+from graphtraj.configuration.project_roles import (
+    ProjectRolesError,
+    configured_role_name,
+    logical_role,
+)
 from graphtraj.execution.runner_batch import (
     read_batch,
     retain_batch,

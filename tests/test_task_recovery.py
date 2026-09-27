@@ -94,7 +94,7 @@ def prepare(
     return root, env, task
 
 
-@pytest.mark.parametrize('role', ['researcher', 'team-leader'])
+@pytest.mark.parametrize('role', ['researcher', 'team-leader', 'engineer-expert'])
 def test_explicitly_stopped_member_is_replaced_without_executing_old_session(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,

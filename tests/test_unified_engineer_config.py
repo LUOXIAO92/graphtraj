@@ -1,4 +1,4 @@
-"""One unified Engineer configuration serves every coding Team seat."""
+"""Current configured roles stay distinct from historical Engineer aliases."""
 
 from pathlib import Path
 
@@ -15,7 +15,6 @@ from graphtraj.configuration.project_roles import (
 from graphtraj.configuration.role_definitions import resolve_child_role
 from graphtraj.execution.execution_budget import execution_budget_stage
 from graphtraj.execution.runner_batch import parse_batch, read_batch
-from graphtraj.execution.runner_models import RunnerError
 
 
 def test_default_role_selection_names_no_role() -> None:

@@ -214,7 +214,6 @@ def apply_delivery_state_request(
     }
     if phase == "final":
         event["candidate"] = request["candidate"]
-    if phase == "final":
         event.update(
             decision=request["decision"], submission_id=request["submission_id"],
             reason=request["reason"], alias=author,

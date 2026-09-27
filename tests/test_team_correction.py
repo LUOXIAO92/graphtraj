@@ -543,6 +543,7 @@ def test_common_correction_invalidates_candidate_for_every_role(
     from test_result_submission import result_project
 
     runner, team, commit = result_project(tmp_path)
+    monkeypatch.delenv('CODEX_THREAD_ID', raising=False)
     # Give the same real member each task role; aliases confer no role authority.
     members = yaml.safe_load(team.read_text())
     members['members']['first']['role'] = role

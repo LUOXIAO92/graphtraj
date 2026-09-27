@@ -39,11 +39,10 @@ def test_installed_commands_reject_delivery_run_inputs(
         assert rejected.returncode == 2, rejected.stdout + rejected.stderr
 
 
-def test_team_engineer_keeps_explicit_repository_skill_selection(
+def test_team_engineer_leaves_repository_skill_selection_to_runtime(
     installed_commands, temporary_git_repository, fake_codex, tmp_path,
 ):
     import json
-    import tomllib
     from runner_fixtures import configure_harness
     from test_team_round import _register_ready_inline_ticket
 
@@ -63,7 +62,6 @@ def test_team_engineer_keeps_explicit_repository_skill_selection(
     }]}))
     environment.update(
         FAKE_CODEX_LIFECYCLE_ACTION="complete-team-round",
-        FAKE_CODEX_ENGINEER_SKILLS='["selected"]',
         FAKE_CODEX_CAPTURE_ROLE="1", FAKE_CODEX_APPEND_LOG="1",
         GRAPHTRAJ_AGENT_RUNNER=str(installed_commands.runner),
     )
@@ -74,9 +72,6 @@ def test_team_engineer_keeps_explicit_repository_skill_selection(
     assert launched.returncode == 0, launched.stdout + launched.stderr
     records = [json.loads(line) for line in fake_codex.log_file.read_text().splitlines()]
     for record in records:
-        skills = tomllib.loads(next(arg for arg in record["argv"] if arg.startswith("skills=")))["skills"]["config"]
-        if record["role"] == "engineer":
-            assert {"path": str(worktrees / "75-inline-specialist/.agents/skills/selected/SKILL.md"), "enabled": True} in skills
-        assert {"path": str(worktrees / "75-inline-specialist/.agents/skills/disabled/SKILL.md"), "enabled": False} in skills
+        assert not any(arg.startswith("skills=") for arg in record["argv"])
     batches = [yaml.safe_load(path.read_text()) for path in (root / ".graphtraj/state/batches").glob("*.yml")]
-    assert any(task.get("skills") == ["selected"] for batch in batches for task in batch["tasks"])
+    assert all("skills" not in task for batch in batches for task in batch["tasks"])

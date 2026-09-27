@@ -56,5 +56,5 @@ def resolve_child_role(
         "and the configured role_tree.\n"
     )
     return ResolvedChildRole(
-        name, instructions, settings.harness_skills, settings,
+        name, instructions, (), settings,
     )

@@ -276,7 +276,7 @@ def test_explicit_role_content_is_independent_of_identity(tmp_path: Path) -> Non
 
     _write_roles(tmp_path, yaml.safe_dump({'roles': {'researcher': {
         'runtime': 'codex', 'model': 'chosen', 'instructions': 'role text.txt',
-        'harness_skills': ['research'], 'worktree_access': 'read',
+        'worktree_access': 'read',
         'reports': ['findings.md', 'evidence.md'], 'allow_runtime_swarm': True,
     }}, 'role_tree': {'researcher': {}}}))
     (tmp_path / 'role text.txt').write_text('External role text.\nrequired_skills: [absent]\n', encoding='utf-8')
@@ -284,7 +284,7 @@ def test_explicit_role_content_is_independent_of_identity(tmp_path: Path) -> Non
     preset = roles.preset('researcher')
     resolved = resolve_child_role('researcher', preset, tmp_path)
     assert resolved.name == 'researcher'
-    assert resolved.required_skills == ('research',)
+    assert resolved.required_skills == ()
     assert resolved.allow_runtime_swarm
     assert preset.worktree_access == 'read'
     assert preset.reports == ('findings.md', 'evidence.md')
@@ -310,3 +310,33 @@ def test_role_names_do_not_select_content_or_access(tmp_path: Path, reference: s
     assert not resolved.allow_runtime_swarm
     assert preset.worktree_access == 'write'
     assert preset.reports == ()
+
+
+@pytest.mark.parametrize('field', ['skills', 'required_skills', 'harness_skills'])
+def test_new_role_name_selection_directs_caller_to_native_resources(field: str) -> None:
+    """Removed role fields fail with an actionable replacement."""
+    from graphtraj.configuration.project_roles import ProjectRolesError, parse_inline_role
+
+    with pytest.raises(ProjectRolesError, match='Runtime native Skill selection'):
+        parse_inline_role({'author': {'runtime': 'codex', 'model': 'chosen', field: []}})
+
+
+@pytest.mark.parametrize('skills', [[], ['missing'], ['duplicate', 'duplicate']])
+def test_new_swarm_rejects_name_selection_but_retained_batch_stays_readable(
+    tmp_path: Path, skills: list[str],
+) -> None:
+    """First launch rejects retired input without rewriting valid old records."""
+    from graphtraj.execution.runner_batch import parse_swarm, read_batch
+    from graphtraj.execution.runner_models import RunnerError
+
+    document = {'tasks': [{'ticket_id': '176', 'ticket_name': 'native-skills',
+                          'role': 'author', 'skills': skills}]}
+    with pytest.raises(RunnerError, match='Runtime native Skill selection'):
+        parse_swarm(document, None, {'176': 'native-skills'})
+    if len(skills) == len(set(skills)):
+        retained = tmp_path / 'retained.yml'
+        content = yaml.safe_dump(document).encode()
+        retained.write_bytes(content)
+        batch = read_batch(retained, tmp_path)
+        assert batch.tasks[0].requested_skills == tuple(skills)
+        assert batch.source_bytes == retained.read_bytes() == content

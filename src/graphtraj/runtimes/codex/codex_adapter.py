@@ -30,12 +30,6 @@ from graphtraj.execution.runner_io import write_yaml_durably
 from graphtraj.runtimes.codex.approval import approval_route
 from graphtraj.configuration.project_configuration import configuration_exists, load_project_configuration
 from graphtraj.configuration.role_definitions import ResolvedChildRole
-from graphtraj.workspace.git_repository import GitRepositoryError, SourceRepository
-from graphtraj.configuration.skill_check import (
-    declared_skill_name,
-    required_skill_paths,
-    source_history_skill_paths,
-)
 
 
 ADAPTER_ROLE_KEYS = frozenset(
@@ -55,34 +49,12 @@ class CodexAdapterError(RuntimeAdapterError):
 
 
 @dataclass(frozen=True)
-class _EffectiveSkill:
-    """One explicit Codex Skill selection persisted with a launch request."""
-
-    name: str
-    path: Path
-    enabled: bool
-    source: str
-
-    def config_entry(self) -> Dict[str, Any]:
-        return {"path": str(self.path), "enabled": self.enabled}
-
-    def evidence_entry(self) -> Dict[str, str | bool]:
-        return {
-            "name": self.name,
-            "path": str(self.path),
-            "enabled": self.enabled,
-            "source": self.source,
-        }
-
-
-@dataclass(frozen=True)
 class _CodexRole:
     """Validated effective settings for one Harness-owned custom Agent."""
 
     name: str
     reasoning_effort: str
     developer_instructions: str
-    required_skills: Tuple[str, ...]
     default_permissions: str
     agents: Mapping[str, Any]
     native_settings: Mapping[str, Any]
@@ -96,7 +68,7 @@ class _CodexRole:
         worktree: Path,
         evidence: Path,
         git_common_directory: Path,
-        effective_skills: Tuple[_EffectiveSkill, ...],
+        native_skills: Mapping[str, Any] | None,
         report_files: Tuple[Path, ...],
         model: str,
         child_batch_write_paths: Tuple[Path, ...] = (),
@@ -117,16 +89,6 @@ class _CodexRole:
             model,
         ]
         developer_instructions = self.developer_instructions
-        for skill in effective_skills:
-            if (
-                skill.enabled
-                and skill.source in ("harness", "runtime-user")
-                and skill.name in self.required_skills
-            ):
-                developer_instructions = developer_instructions.replace(
-                    "${0}".format(skill.name),
-                    "[${0}]({1})".format(skill.name, skill.path),
-                )
         native_settings = copy.deepcopy(dict(self.native_settings))
         filesystem = native_settings["permissions"][self.default_permissions][
             "filesystem"
@@ -145,9 +107,17 @@ class _CodexRole:
         )
         for path in native_report_paths:
             filesystem[str(path)] = "read"
-        for skill in effective_skills:
-            if skill.enabled:
-                filesystem[str(skill.path.parent)] = "read"
+        if native_skills is not None:
+            native_settings["skills"] = dict(native_skills)
+            for entry in native_skills.get("config", []):
+                if isinstance(entry, dict) and entry.get("enabled", True):
+                    path = entry.get("path")
+                    if isinstance(path, str):
+                        resource = Path(path)
+                        directory = (
+                            resource.parent if resource.name == "SKILL.md" else resource
+                        )
+                        filesystem.setdefault(str(directory), "read")
         approvals_reviewer = (
             "user" if self.approval is not None
             else _harness_approvals_reviewer(runtime_store)
@@ -163,10 +133,6 @@ class _CodexRole:
             ),
             ("developer_instructions", developer_instructions),
             ("agents", self.agents),
-            (
-                "skills",
-                {"config": [skill.config_entry() for skill in effective_skills]},
-            ),
         )
         for key, value in overrides:
             arguments.extend(("-c", "{0}={1}".format(key, _toml_value(value))))
@@ -200,8 +166,7 @@ class _CodexRuntimePreflight:
     _environment: Mapping[str, str]
     _worktree: Path
     _evidence: Path
-    _harness_skills: Tuple[_EffectiveSkill, ...]
-    _requested_skills: Tuple[str, ...]
+    _native_skills: Mapping[str, Any] | None
     _report_files: Tuple[Path, ...]
     _child_batch_write_paths: Tuple[Path, ...]
     _leader_control_write_paths: Tuple[Path, ...]
@@ -209,16 +174,13 @@ class _CodexRuntimePreflight:
     def finalize(self) -> RuntimeContext:
         """Resolve Ticket Worktree facts shared by supported role boundaries."""
 
-        effective_skills = self._harness_skills + _resolve_repository_skills(
-            self._worktree, self._requested_skills
-        )
         request = self._role._launch_request(
             executable=self._executable,
             runtime_store=self._runtime_store,
             worktree=self._worktree,
             evidence=self._evidence,
             git_common_directory=self._git_common_directory,
-            effective_skills=effective_skills,
+            native_skills=self._native_skills,
             report_files=self._report_files,
             model=self._model,
             child_batch_write_paths=self._child_batch_write_paths,
@@ -238,7 +200,7 @@ class _CodexRuntimePreflight:
                 "runtime": "codex", "effective_role": self._role.name,
                 "model": self._model,
                 "model_reasoning_effort": self._role.reasoning_effort,
-                "effective_skills": [skill.evidence_entry() for skill in effective_skills],
+                "native_skills": self._native_skills,
             }),
             _environment=self._environment,
         )
@@ -313,19 +275,20 @@ def preflight_runtime_context(
     _require_codex_permissions(executable)
     resolved_role = _resolve_codex_role(role, runtime_store.parent)
     settings = role.settings
-    harness_skills = _resolve_harness_skills(
-        runtime_store, role.required_skills, repository_skill_source,
-    )
-    repository_skills = _resolve_repository_skills(
-        repository_skill_source, requested_skills
-    )
+    if requested_skills:
+        raise CodexAdapterError(
+            "SKILL_SELECTION_UNSUPPORTED",
+            "Skill names are no longer selected by GraphTraj; use Runtime native "
+            "selection or explicit external resource references.",
+        )
+    native_skills = _harness_native_skills(runtime_store)
     resolved_role._launch_request(
         executable=executable,
         runtime_store=runtime_store,
         git_common_directory=git_common_directory,
         worktree=worktree,
         evidence=evidence,
-        effective_skills=harness_skills + repository_skills,
+        native_skills=native_skills,
         report_files=report_files,
         model=settings.model,
         child_batch_write_paths=child_batch_write_paths,
@@ -342,8 +305,7 @@ def preflight_runtime_context(
         _environment=_connection_environment(settings.base_url, settings.api_key_env),
         _worktree=worktree,
         _evidence=evidence,
-        _harness_skills=harness_skills,
-        _requested_skills=requested_skills,
+        _native_skills=native_skills,
         _report_files=report_files,
         _child_batch_write_paths=child_batch_write_paths,
         _leader_control_write_paths=leader_control_write_paths,
@@ -952,7 +914,6 @@ def _resolve_codex_role(role: ResolvedChildRole, harness_root: Path) -> _CodexRo
         ),
         reasoning_effort=reasoning_effort,
         developer_instructions=role.instructions,
-        required_skills=role.required_skills,
         default_permissions=document["default_permissions"],
         agents={"enabled": role.allow_runtime_swarm},
         native_settings={
@@ -1021,113 +982,36 @@ def _packaged_role(binding: str) -> Dict[str, Any]:
         ) from error
 
 
-def _resolve_harness_skills(
-    runtime_store: Path,
-    required_skills: Tuple[str, ...],
-    repository_skill_source: Path,
-) -> Tuple[_EffectiveSkill, ...]:
-    """Locate the external Skills required by the resolved GraphTraj role."""
+def _harness_native_skills(runtime_store: Path) -> Mapping[str, Any] | None:
+    """Forward explicit native resources outside the Ticket's config lookup.
 
-    if not required_skills:
-        return ()
-    source_history_paths = _runtime_source_history_paths(
-        runtime_store,
-        repository_skill_source,
-    )
-    skills = required_skill_paths(
-        runtime_store,
-        Path.home() / ".agents" / "skills",
-        required_skills,
-        source_history_paths=source_history_paths,
-    )
-    harness_skills = required_skill_paths(
-        runtime_store,
-        Path.home() / ".agents" / "skills",
-        required_skills,
-        source_history_paths=source_history_paths,
-        include_user_skills=False,
-    )
-    effective: List[_EffectiveSkill] = []
-    for name in required_skills:
-        path = skills.get(name)
-        if path is None:
-            raise CodexAdapterError(
-                "HARNESS_SKILL_NOT_FOUND",
-                "The required Harness Skill {0} is not uniquely available.".format(
-                    name
-                ),
-            )
-        effective.append(
-            _EffectiveSkill(
-                name=name,
-                path=path,
-                enabled=True,
-                source="harness" if name in harness_skills else "runtime-user",
-            )
-        )
-    return tuple(effective)
-
-
-def _runtime_source_history_paths(
-    runtime_store: Path,
-    repository_skill_source: Path,
-) -> frozenset[str]:
-    """Return tracked Skill paths when the runtime root shares this Source."""
-
+    Relative resource paths are anchored at the Harness config directory.
+    Discovery and selection remain native; no Skill contents or professional
+    names are inspected.
+    """
+    config = runtime_store / "config.toml"
     try:
-        harness_repository = SourceRepository.from_root(runtime_store.parent)
-        source_repository = SourceRepository.from_root(repository_skill_source)
-        if harness_repository.common_directory != source_repository.common_directory:
-            return frozenset()
-        return source_history_skill_paths(harness_repository, harness_repository.head)
-    except (GitRepositoryError, OSError):
-        return frozenset()
-
-
-def _resolve_repository_skills(
-    worktree: Path,
-    requested_names: Tuple[str, ...],
-) -> Tuple[_EffectiveSkill, ...]:
-    """Resolve the explicit Skill configuration beneath one Worktree."""
-
-    repository_skills = _discover_skill_files(
-        worktree / ".agents" / "skills"
-    )
-    selected_paths = set()
-    for name in requested_names:
-        matches = repository_skills.get(name, ())
-        if not matches:
-            raise CodexAdapterError(
-                "REPOSITORY_SKILL_NOT_FOUND",
-                "The requested Repository Skill {0} was not found in the Ticket Worktree.".format(
-                    name
-                ),
-            )
-        if len(matches) != 1:
-            raise CodexAdapterError(
-                "REPOSITORY_SKILL_AMBIGUOUS",
-                "The requested Repository Skill {0} is ambiguous: {1}.".format(
-                    name,
-                    ", ".join(str(path) for path in matches),
-                ),
-            )
-        selected_paths.add(matches[0])
-    repository_entries = [
-        (name, path)
-        for name, paths in repository_skills.items()
-        for path in paths
-    ]
-    effective: List[_EffectiveSkill] = []
-    for name, path in sorted(repository_entries, key=lambda entry: str(entry[1])):
-        effective.append(
-            _EffectiveSkill(
-                name=name,
-                path=path,
-                enabled=path in selected_paths,
-                source="repository",
-            )
+        document = tomllib.loads(config.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return None
+    except (OSError, UnicodeError, tomllib.TOMLDecodeError) as error:
+        raise CodexAdapterError(
+            "RUNTIME_CONFIG_INVALID", f"Cannot read native configuration {config}: {error}",
+        ) from error
+    skills = document.get("skills")
+    if skills is None:
+        return None
+    if not isinstance(skills, dict) or not isinstance(skills.get("config", []), list):
+        raise CodexAdapterError(
+            "RUNTIME_CONFIG_INVALID", f"Invalid native skills configuration in {config}.",
         )
-    return tuple(effective)
+    for entry in skills.get("config", []):
+        if isinstance(entry, dict) and isinstance(entry.get("path"), str):
+            path = Path(entry["path"]).expanduser()
+            entry["path"] = str(
+                (path if path.is_absolute() else runtime_store / path).resolve()
+            )
+    return skills
 
 
 def _canonical_report_write_paths(
@@ -1320,40 +1204,6 @@ def _is_prior_report_path(
         ):
             return True
     return False
-
-
-def _discover_skill_files(
-    root: Path,
-    *,
-    source_history_paths: frozenset[str] = frozenset(),
-) -> Dict[str, Tuple[Path, ...]]:
-    """Return valid declared Skills beneath one explicit Runtime boundary."""
-    try:
-        if root.is_symlink() or not root.is_dir():
-            return {}
-        resolved_root = root.resolve(strict=True)
-        candidates = tuple(sorted(root.rglob("SKILL.md")))
-    except OSError:
-        return {}
-    discovered: Dict[str, List[Path]] = {}
-    for candidate in candidates:
-        try:
-            if candidate.is_symlink() or not candidate.is_file():
-                continue
-            if (
-                candidate.relative_to(root.parents[1]).as_posix()
-                in source_history_paths
-            ):
-                continue
-            resolved = candidate.resolve(strict=True)
-            if resolved_root not in (resolved, *resolved.parents):
-                continue
-            name = declared_skill_name(candidate.read_bytes())
-        except OSError:
-            continue
-        if name is not None:
-            discovered.setdefault(name, []).append(resolved)
-    return {name: tuple(paths) for name, paths in discovered.items()}
 
 
 def _toml_value(value: Any) -> str:

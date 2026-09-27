@@ -54,6 +54,8 @@ DETAIL_ERROR_CATEGORIES = {
     "ROLE_NOT_CONFIGURED": "invalid-input",
     "INSTRUCTION_INVALID": "invalid-input",
     "SKILL_SELECTION_INVALID": "invalid-input",
+    "SKILL_SELECTION_UNSUPPORTED": "invalid-input",
+    "RUNTIME_CONFIG_INVALID": "invalid-config",
     "REPORT_FILE_INVALID": "invalid-input",
     "REPOSITORY_SKILL_NOT_FOUND": "invalid-input",
     "REPOSITORY_SKILL_AMBIGUOUS": "invalid-input",

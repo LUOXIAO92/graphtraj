@@ -26,6 +26,32 @@ from graphtraj.graph.ticket_graph import _TRANSITIONS, _load_states
 _COMMON = {"phase", "ticket_id", "caused_by_event_ids", "evidence_refs"}
 
 
+def current_result_rejection(
+    events: list[dict[str, Any]],
+    ticket: Mapping[str, Any],
+    team: Mapping[str, Any],
+) -> dict[str, Any] | None:
+    """Return the current Round's rejection until further result work consumes it.
+
+    Member and unrelated facts do not change a decision. A later submission,
+    decision or rework transition does; never search past one for an old rejection.
+    """
+    for event in reversed(events):
+        if (event.get("ticket_id") != ticket["ticket_id"]
+                or event.get("team_ordinal") != ticket["active_team_ordinal"]):
+            continue
+        if event["kind"] not in {
+            "result-submitted", "team-round-accepted",
+            "team-round-implementation-rejected", "team-round-rework-started",
+        }:
+            continue
+        if (event["kind"] == "team-round-implementation-rejected"
+                and event.get("team_round") == team["current_round"]):
+            return event
+        return None
+    return None
+
+
 def apply_delivery_state_request(
     state_directory: Path,
     harness_root: Path,
@@ -169,16 +195,12 @@ def apply_delivery_state_request(
             team_update["members"].update(registered)
             kind = "team-member-started"
         elif phase == "rework":
-            previous = next(
-                (event for event in reversed(read_worldline(state_directory, harness_root))
-                 if event.get("ticket_id") == ticket_id),
-                {},
+            previous = current_result_rejection(
+                read_worldline(state_directory, harness_root), ticket, team_update,
             )
             if (
                 ticket["status"] not in {"reworking", "resolving-integration"}
-                or previous.get("kind") != "team-round-implementation-rejected"
-                or previous.get("ticket_id") != ticket_id
-                or previous.get("team_round") != round_ordinal
+                or previous is None
                 or request["caused_by_event_ids"] != [previous["event_id"]]
             ):
                 raise ValueError("Rework requires the confirmed result rejection")
@@ -242,6 +264,12 @@ def apply_delivery_state_request(
             if ((ticket_directory / "ticket.yml").read_bytes() != original_ticket
                     or team_file.read_bytes() != original_team):
                 raise ValueError("The task changed before acceptance; inspect it again")
+        if phase == "rework":
+            rejection = current_result_rejection(
+                _read_shards(state_directory)[1], ticket, read_team(team_file),
+            )
+            if rejection is None or request["caused_by_event_ids"] != [rejection["event_id"]]:
+                raise ValueError("Rework requires the confirmed result rejection")
         if phase == "final":
             _validate_result_decision(
                 state_directory, harness_root, request, ticket, team_update,

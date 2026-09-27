@@ -442,17 +442,22 @@ def test_current_runtime_diagnostic_uses_only_current_error_events(
     )
 
 
+@pytest.mark.parametrize("role", ("spec-reviewer", "researcher"))
+@pytest.mark.parametrize("report_name", ("reviews/r1-replacement.md", "notes/findings.md"))
 def test_reviewer_send_refreshes_exact_replacement_report_permissions(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    role: str,
+    report_name: str,
 ) -> None:
+    """A retained report reference works independently of role and directory."""
     monkeypatch.syspath_prepend(str(PROJECT_ROOT / "src"))
     from graphtraj.execution.runner_control import _refresh_current_team_report_request
+    from test_result_submission import result_project
 
-    worktree = tmp_path / "worktree"
-    evidence = tmp_path / "evidence"
-    worktree.mkdir()
-    evidence.mkdir()
+    _, team, _ = result_project(tmp_path)
+    worktree = tmp_path / "worktrees/research"
+    evidence = team.parents[2]
     request = {
         "arguments": [
             "/tmp/codex",
@@ -472,11 +477,11 @@ def test_reviewer_send_refreshes_exact_replacement_report_permissions(
         "worktree_path": str(worktree),
     }
     original = copy.deepcopy(request)
-    report = Path(".state") / "reviews" / "r1-replacement.md"
+    report = Path(".state") / report_name
 
     refreshed = _refresh_current_team_report_request(
         request,
-        {"role": "spec-reviewer", "report_file": report.as_posix()},
+        {"role": role, "report_file": report.as_posix(), "ticket_id": "148", "team_generation": 1},
         worktree,
         {
             "GRAPHTRAJ_EVIDENCE": str(evidence),
@@ -492,7 +497,7 @@ def test_reviewer_send_refreshes_exact_replacement_report_permissions(
         next(argument for argument in arguments if argument.startswith("permissions="))
     )["permissions"]
     filesystem = permissions["restricted"]["filesystem"]
-    canonical = evidence / "reviews" / report.name
+    canonical = evidence / report_name
     view = worktree / report
     assert filesystem[str(canonical)] == "write"
     assert str(view) not in filesystem
@@ -511,11 +516,11 @@ def test_engineer_resume_drops_only_the_predecessor_readme_override(
 ) -> None:
     monkeypatch.syspath_prepend(str(PROJECT_ROOT / "src"))
     from graphtraj.execution.runner_control import _refresh_current_team_report_request
+    from test_result_submission import result_project
 
-    worktree = tmp_path / "worktree"
-    evidence = tmp_path / "evidence"
-    worktree.mkdir()
-    evidence.mkdir()
+    _, team, _ = result_project(tmp_path)
+    worktree = tmp_path / "worktrees/research"
+    evidence = team.parents[2]
     request = {
         "arguments": [
             "/tmp/codex",
@@ -538,7 +543,8 @@ def test_engineer_resume_drops_only_the_predecessor_readme_override(
 
     refreshed = _refresh_current_team_report_request(
         request,
-        {"role": role},
+        {"role": role, "ticket_id": "148", "team_generation": 1,
+         "report_file": ".state/teams/1/rounds/1/retained.md"},
         worktree,
         {
             "GRAPHTRAJ_EVIDENCE": str(evidence),
@@ -569,14 +575,13 @@ def test_engineer_resume_drops_only_the_predecessor_readme_override(
         "docs": "read",
     }
     assert filesystem["/saved-setting"] == "read"
-    report_directory = evidence / "teams" / "3" / "rounds" / "7"
+    report_directory = evidence / "teams" / "1" / "rounds" / "1"
     assert {
         path
         for path, access in filesystem.items()
         if access == "write"
     } == {
-        str(report_directory / "engineer.md"),
-        str(report_directory / "validation.md"),
+        str(report_directory / "retained.md"),
     }
     assert not any(argument.startswith("hooks=") for argument in arguments)
     assert "--dangerously-bypass-hook-trust" not in arguments

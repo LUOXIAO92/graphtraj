@@ -20,6 +20,7 @@ from graphtraj.runtimes.codex.codex_adapter import (
     codex_connection_environment,
     read_codex_session_identity,
     refresh_codex_report_paths,
+    _resume_request_setting,
 )
 from graphtraj.configuration.project_roles import logical_role
 from graphtraj.graph.delivery_worldline import read_worldline
@@ -268,46 +269,17 @@ def send_instruction(
     raise _not_resumable()
 
 
-def _session_report_paths(
-    alias: str, cwd: Path, *, collected: bool = False,
-) -> tuple[Path, ...]:
-    """Resolve only report files declared by the target's current native Context."""
+def _session_report_paths(alias: str, cwd: Path) -> tuple[Path, ...]:
+    """Resolve the target's retained assignments without inferring role ownership."""
+    from graphtraj.execution.runner_results import task_report_paths
+
     runner = discover_runner_directory(cwd)
     mapping, directory = read_alias_mapping(runner, alias)
-    if 'report_files' in mapping:
-        from graphtraj.execution.runner_results import task_report_paths
-        return task_report_paths(mapping, cwd)
-    request, _, _ = _read_session_resume_request(directory, mapping)
-    environment = _team_runtime_environment(mapping, cwd)
-    request = _refresh_current_team_report_request(
-        request, mapping, Path(mapping['worktree_path']), environment,
-        session_directory=directory,
-    )
-    config = request['session_parameters']['config']
-    filesystem = config['permissions'][config['default_permissions']]['filesystem']
-    state = load_project_configuration(cwd).state
-    paths = []
-    for name, access in filesystem.items():
-        path = Path(name)
-        if access not in ('read', 'write') or path.suffix != '.md' or not path.is_relative_to(state):
-            continue
-        if collected and not path.exists() and path.parent == Path(environment['GRAPHTRAJ_EVIDENCE']) / 'reviews':
-            # Older collectors moved these files. Only the recorded member may
-            # read the matching collected report; a replacement owns its own file.
-            from graphtraj.graph.delivery_state import read_team
-
-            team_directory = Path(environment['GRAPHTRAJ_EVIDENCE']) / 'teams' / str(mapping['team_generation'])
-            team = read_team(team_directory / 'team.yml')
-            role = logical_role(mapping['role'])
-            owners = [member['session_ref'] for member in team['members'].values()
-                      if logical_role(member['role']) == role]
-            if owners == [alias] and role in {'standards-reviewer', 'spec-reviewer'}:
-                name = role.removesuffix('-reviewer') + '.md'
-                path = team_directory / 'rounds' / str(team['current_round']) / name
-        if path.is_symlink() or path.resolve() != path:
-            raise RunnerError('authority-denied', 'A report path changed its declared target.')
-        paths.append(path)
-    return tuple(paths)
+    if 'report_files' not in mapping:
+        request, _, _ = _read_session_resume_request(directory, mapping)
+        environment = _team_runtime_environment(mapping, cwd)
+        mapping = _recover_report_mapping(request, mapping, environment)
+    return task_report_paths(mapping, cwd)
 
 
 def read_session_reports(alias: str, cwd: Path) -> dict:
@@ -315,9 +287,13 @@ def read_session_reports(alias: str, cwd: Path) -> dict:
     runner = discover_runner_directory(cwd)
     mapping, directory = read_alias_mapping(runner, alias)
     require_direct_authority(runner, alias, mapping)
+    paths = _session_report_paths(alias, cwd)
     reports = [{'path': str(path), 'text': path.read_text(encoding='utf-8')}
-               for path in _session_report_paths(alias, cwd, collected=True) if path.is_file()]
+               for path in paths if path.is_file()]
     result = {'alias': alias, 'reports': reports}
+    missing = [str(path) for path in paths if not path.is_file()]
+    if missing:
+        result['missing_reports'] = missing
     from graphtraj.execution.runner_results import session_submissions
     submissions = session_submissions(mapping, cwd)
     if submissions:
@@ -891,7 +867,6 @@ def _team_runtime_environment(mapping: Dict[str, Any], cwd: Path) -> Dict[str, s
         team_file = evidence / "teams" / str(mapping["team_generation"]) / "team.yml"
         if not team_file.is_file():
             return environment
-        project = discover_project(cwd, require_clean_integration=False)
         team = yaml.safe_load(team_file.read_text(encoding="utf-8"))
         round_ordinal = team["current_round"]
         if (
@@ -915,99 +890,72 @@ def _refresh_current_team_report_request(
     reports_only: bool = False,
     session_directory: Path | None = None,
 ) -> Dict[str, Any]:
-    role = logical_role(mapping["role"])
-    if 'report_files' in mapping:
-        from graphtraj.execution.runner_results import task_report_paths
-        harness = discover_project_root(worktree)
-        evidence = Path(environment['GRAPHTRAJ_EVIDENCE'])
-        report_files = tuple(Path('.state') / path.relative_to(evidence)
-                             for path in task_report_paths(mapping, harness))
-        try:
-            return refresh_codex_report_paths(
-                request, worktree=worktree, evidence=evidence,
-                report_files=report_files, role=role, reports_only=reports_only,
-                session_directory=session_directory,
-            )
-        except RuntimeAdapterError as error:
-            raise RunnerError(error.code, error.message) from error
-    if role == "team-leader" and "GRAPHTRAJ_TEAM_ROUND" not in environment:
-        if not reports_only:
-            return request
-        evidence = environment.get("GRAPHTRAJ_EVIDENCE")
-        if not isinstance(evidence, str) or not evidence:
-            raise _not_resumable()
-        try:
-            return refresh_codex_report_paths(
-                request,
-                worktree=worktree,
-                evidence=Path(evidence),
-                report_files=(),
-                role=role,
-                reports_only=True,
-                session_directory=session_directory,
-            )
-        except RuntimeAdapterError as error:
-            raise RunnerError(error.code, error.message) from error
-    if role == "engineer":
-        names = ("engineer.md", "validation.md")
-    elif role == "team-leader":
-        names = ("leader.md",)
-    elif role in {"standards-reviewer", "spec-reviewer"}:
-        try:
-            report_files = (_reviewer_report_file(mapping),)
-        except ValueError:
-            raise _not_resumable() from None
-    else:
-        return request
-    evidence = environment.get("GRAPHTRAJ_EVIDENCE")
-    generation = environment.get("GRAPHTRAJ_TEAM_GENERATION")
-    ordinal = environment.get("GRAPHTRAJ_TEAM_ROUND")
-    if not isinstance(evidence, str) or not evidence:
-        raise _not_resumable()
-    if role not in {"standards-reviewer", "spec-reviewer"}:
-        if not all(
-            isinstance(value, str) and value
-            for value in (generation, ordinal)
-        ):
-            raise _not_resumable()
-        directory = Path(".state") / "teams" / generation / "rounds" / ordinal
-        report_files = tuple(directory / name for name in names)
+    """Project current report paths from the same assignments used by Runner."""
+    from graphtraj.execution.runner_results import task_report_paths
+
+    mapping = _recover_report_mapping(request, mapping, environment)
+    harness = discover_project_root(worktree)
+    evidence = Path(environment['GRAPHTRAJ_EVIDENCE'])
+    report_files = tuple(Path('.state') / path.relative_to(evidence)
+                         for path in task_report_paths(mapping, harness))
     try:
         return refresh_codex_report_paths(
-            request,
-            worktree=worktree,
-            evidence=Path(evidence),
-            report_files=report_files,
-            role=role,
-            reports_only=reports_only,
-            session_directory=session_directory,
+            request, worktree=worktree, evidence=evidence,
+            report_files=report_files, role=logical_role(mapping['role']),
+            reports_only=reports_only, session_directory=session_directory,
         )
     except RuntimeAdapterError as error:
         raise RunnerError(error.code, error.message) from error
 
 
-def _reviewer_report_file(mapping: Dict[str, Any]) -> Path:
-    names = {
-        "standards-reviewer": "standards.md",
-        "spec-reviewer": "spec.md",
-    }
-    default_name = names.get(mapping.get("role"))
-    if default_name is None:
-        raise ValueError("invalid Reviewer role")
-    value = mapping.get("report_file")
-    if value is None:
-        return Path(".state") / "reviews" / default_name
-    report = Path(value) if isinstance(value, str) else None
-    if (
-        report is None
-        or report.is_absolute()
-        or len(report.parts) != 3
-        or report.parts[:2] != (".state", "reviews")
-        or ".." in report.parts
-        or report.suffix != ".md"
-    ):
-        raise ValueError("invalid Reviewer report")
-    return report
+def _recover_report_mapping(
+    request: Mapping[str, Any],
+    mapping: Dict[str, Any],
+    environment: Mapping[str, str],
+) -> Dict[str, Any]:
+    """Recover historical assignments in memory from exact retained grants.
+
+    A singular report reference is an assignment. Otherwise only exact writable
+    Markdown paths within this Ticket's evidence establish report ownership;
+    readable paths can belong to other members and must never become writable.
+    The original mapping and launch records remain unchanged.
+    """
+    if 'report_files' in mapping:
+        return mapping
+    if mapping.get('report_file') is not None:
+        return {**mapping, 'report_files': [mapping['report_file']]}
+
+    try:
+        config = request.get('session_parameters', {}).get('config')
+        if config is None:
+            arguments = request['arguments']
+            _, profile = _resume_request_setting(arguments, 'default_permissions')
+            _, permissions = _resume_request_setting(arguments, 'permissions')
+        else:
+            profile = config['default_permissions']
+            permissions = config['permissions']
+        filesystem = permissions[profile]['filesystem']
+        evidence = Path(environment['GRAPHTRAJ_EVIDENCE'])
+        reports = []
+        for name, access in filesystem.items():
+            path = Path(name)
+            if access != 'write' or path.suffix != '.md':
+                continue
+            if path.is_absolute() and path.is_relative_to(evidence):
+                reports.append(str(Path('.state') / path.relative_to(evidence)))
+            elif not path.is_absolute() and path.parts[:1] == ('.state',):
+                reports.append(str(path))
+    except (KeyError, TypeError, AttributeError, RuntimeAdapterError) as error:
+        raise RunnerError(
+            'session-not-resumable',
+            'Cannot recover report assignments from the retained launch permissions.',
+        ) from error
+    if not reports:
+        raise RunnerError(
+            'session-not-resumable',
+            'The historical Session has no retained report assignment or exact writable report path.',
+        )
+    return {**mapping, 'report_files': list(dict.fromkeys(reports))}
 
 
 def _attest_runtime_session(

@@ -10,7 +10,7 @@ from typing import Any, Mapping
 
 import yaml
 
-from graphtraj.configuration.project_roles import ROLE_REFERENCE, logical_role
+from graphtraj.configuration.project_roles import ROLE_REFERENCE
 from graphtraj.graph.delivery_worldline import (
     _read_shards,
     _validate_evidence,
@@ -23,7 +23,6 @@ from graphtraj.workspace.runner_project import discover_runner_directory, run_gi
 from graphtraj.graph.ticket_graph import _TRANSITIONS, _load_states
 
 
-_ENGINEERS = {"engineer"}
 _COMMON = {"phase", "ticket_id", "caused_by_event_ids", "evidence_refs"}
 
 
@@ -45,8 +44,6 @@ def apply_delivery_state_request(
     allowed = {
         "start": _COMMON | {"worktree", "branch", "members"},
         "member": _COMMON | {"member", "role", "session_ref"},
-        "candidate": _COMMON | {"candidate"},
-        "correction": _COMMON | {"responsible_role", "session_ref"},
         "final": _COMMON | {"candidate", "decision", "submission_id", "reason"},
         "rework": _COMMON,
         "retiring": _COMMON | {"actor"},
@@ -165,30 +162,6 @@ def apply_delivery_state_request(
                 raise ValueError("Delivery State member request conflicts with the Team")
             team_update["members"].update(registered)
             kind = "team-member-started"
-        elif phase == "correction":
-            if ticket["status"] != "reviewing":
-                raise ValueError("Process correction requires an open Team Round")
-            responsible_role = logical_role(request["responsible_role"])
-            responsible = next(
-                (member for member in team_update["members"].values()
-                 if member["session_ref"] == request["session_ref"]
-                 and logical_role(member["role"]) == responsible_role),
-                None,
-            )
-            if responsible is None or not request["session_ref"] or responsible["session_ref"] != request["session_ref"]:
-                raise ValueError("Process correction must resume the responsible Team Session")
-            if responsible_role in _ENGINEERS:
-                ticket_update["current_candidate"] = None
-            kind = "team-process-correction"
-        elif phase == "candidate":
-            candidate = _validate_candidate(request["candidate"])
-            if ticket["status"] not in {"implementing", "reviewing"} or ticket["current_candidate"] == candidate:
-                raise ValueError("Ticket cannot enter fixed-candidate Review")
-            ticket_update.update(
-                status="reviewing",
-                current_candidate=candidate,
-            )
-            kind = "candidate-ready-for-review"
         elif phase == "rework":
             previous = next(
                 (event for event in reversed(read_worldline(state_directory, harness_root))
@@ -202,7 +175,12 @@ def apply_delivery_state_request(
                 or previous.get("team_round") != round_ordinal
                 or request["caused_by_event_ids"] != [previous["event_id"]]
             ):
-                raise ValueError("Rework requires the confirmed implementation rejection")
+                raise ValueError("Rework requires the confirmed result rejection")
+            runner = discover_runner_directory(harness_root)
+            author = caller_alias(runner)
+            if author is None:
+                raise ValueError("Result correction requires its own Session")
+            require_task_authority(state_directory, runner, ticket_id, author, "submit")
             ticket_update.update(status=_transition(ticket, "implementing"), current_candidate=None)
             team_update["current_round"] += 1
             open_round = True
@@ -223,6 +201,7 @@ def apply_delivery_state_request(
                 kind = "team-round-accepted"
             else:
                 ticket_update["status"] = _transition(ticket_update, "reworking")
+                # Retain the existing event kind for all rejected task results.
                 kind = "team-round-implementation-rejected"
 
     event = {
@@ -233,7 +212,7 @@ def apply_delivery_state_request(
         "team_ordinal": ordinal,
         "team_round": round_ordinal + 1 if open_round else round_ordinal,
     }
-    if phase == "candidate" or phase == "final":
+    if phase == "final":
         event["candidate"] = request["candidate"]
     if phase == "final":
         event.update(
@@ -241,12 +220,6 @@ def apply_delivery_state_request(
             reason=request["reason"], alias=author,
             session=read_alias_mapping(discover_runner_directory(harness_root), author)[0]["session"]
             if author is not None else None,
-        )
-    if phase == "correction":
-        event.update(
-            responsible_role=request["responsible_role"],
-            session_ref=request["session_ref"],
-            action="resume-session-for-correction",
         )
 
     def mutation(recorded: dict[str, Any]):

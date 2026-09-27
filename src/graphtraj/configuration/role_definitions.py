@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from importlib import resources
+from pathlib import Path
 
-import yaml
-
-from graphtraj.configuration.project_roles import ROLE_NAME, RolePreset
+from graphtraj.configuration.project_roles import RolePreset
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 
 
@@ -26,48 +24,24 @@ class ResolvedChildRole:
         return self.settings.allow_runtime_swarm
 
 
-def packaged_role_name(name: str) -> str:
-    """Return the installed filename for an explicitly selected resource.
+def resolve_child_role(
+    name: str, settings: RolePreset, harness_root: Path,
+) -> ResolvedChildRole:
+    """Read optional UTF-8 role text relative to the Harness, preserving identity.
 
-    Installed templates keep their hyphenated file names, so a configured
-    underscore name selects the same template.
+    File reads use the caller's existing permissions. Text is passed through,
+    never interpreted as a template or a list of required Skills.
     """
-
-    return name.replace("_", "-")
-
-
-def has_packaged_role(name: str) -> bool:
-    """Return whether an installed role template defines this role name."""
-
-    if ROLE_NAME.fullmatch(name) is None:
-        return False
-    return resources.files("graphtraj.resources").joinpath(
-        "roles", packaged_role_name(name) + ".yml"
-    ).is_file()
-
-
-def resolve_child_role(name: str, settings: RolePreset) -> ResolvedChildRole:
-    """Load explicitly selected instructions and Skills, preserving actual identity."""
-
-    template = packaged_role_name(settings.instructions)
-    if not has_packaged_role(template):
-        raise RuntimeAdapterError(
-            "PACKAGED_ROLE_INVALID", f"Selected role resource {settings.instructions!r} was not found."
-        )
-    try:
-        document = yaml.safe_load(resources.files("graphtraj.resources").joinpath(
-            "roles", template + ".yml"
-        ).read_text(encoding="utf-8"))
-        instructions = document["instructions"]
-        required_skills = document["required_skills"]
-        if (
-            not isinstance(instructions, str) or not instructions.strip()
-            or not isinstance(required_skills, list)
-            or any(not isinstance(skill, str) or not skill.strip() for skill in required_skills)
-        ):
-            raise ValueError("Invalid child responsibilities or Skills")
-    except (OSError, UnicodeError, yaml.YAMLError, KeyError, TypeError, ValueError) as error:
-        raise RuntimeAdapterError("PACKAGED_ROLE_INVALID", "The installed GraphTraj role definition is invalid.") from error
+    instructions = ""
+    if settings.instructions is not None:
+        path = harness_root / settings.instructions
+        try:
+            instructions = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeError, ValueError) as error:
+            raise RuntimeAdapterError(
+                "ROLE_CONFIG_INVALID",
+                f"Cannot read UTF-8 role instructions at {path}: {error}",
+            ) from error
 
     instructions += (
         "\nNative helpers are permitted only for temporary read-only investigation. "
@@ -82,5 +56,5 @@ def resolve_child_role(name: str, settings: RolePreset) -> ResolvedChildRole:
         "and the configured role_tree.\n"
     )
     return ResolvedChildRole(
-        name, instructions, tuple(dict.fromkeys((*required_skills, *settings.harness_skills))), settings,
+        name, instructions, settings.harness_skills, settings,
     )

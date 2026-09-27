@@ -37,7 +37,11 @@ def coding_roles() -> dict:
         "delivery_state": {"runtime": "codex", "model": "gpt-5.6-luna"},
     }}
     for name, preset in document["roles"]["coding_team"].items():
-        preset["instructions"] = name.replace("_", "-")
+        preset["harness_skills"] = {
+            "engineer": ["implement", "ponytail"],
+            "standards_reviewer": ["ponytail-review"],
+            "merge_resolver": ["resolving-merge-conflicts"],
+        }.get(name, [])
         if name in {"team_leader", "standards_reviewer", "spec_reviewer"}:
             preset["worktree_access"] = "read"
         if name == "engineer":
@@ -46,7 +50,6 @@ def coding_roles() -> dict:
             preset["reports"] = ["leader.md"]
         elif name in {"standards_reviewer", "spec_reviewer"}:
             preset["reports"] = [name.split("_")[0] + ".md"]
-    document["roles"]["delivery_state"]["instructions"] = "delivery-state"
     return document
 
 

@@ -35,13 +35,16 @@ def wait_for_idle(commands: InstalledCommands, root: Path, env: dict, alias: str
     raise AssertionError(status)
 
 
-@pytest.mark.parametrize('role, coding_methods, reports', [
-    ('researcher', True, []), ('engineer', False, []), ('researcher', False, []),
-    ('research_team.team_leader', False, []), ('spec_reviewer', False, []),
-    ('engineer', False, ['findings.md', 'evidence.md']),
-    ('engineer-expert', False, []),
-    ('coding-team.engineer-junior', False, []),
-    ('engineer-senior', False, []),
+@pytest.mark.parametrize('role, coding_methods, reports, instruction_file', [
+    ('researcher', True, [], None), ('engineer', False, [], None),
+    ('researcher', False, [], None),
+    ('research_team.team_leader', False, [], None), ('spec_reviewer', False, [], None),
+    ('engineer', False, ['findings.md', 'evidence.md'], None),
+    ('engineer-expert', False, [], None),
+    ('coding-team.engineer-junior', False, [], None),
+    ('engineer-senior', False, [], None),
+    ('translator', False, [], 'relative'),
+    ('translator', False, [], 'absolute'),
 ])
 def test_single_role_launch_registers_and_executes_without_placeholder_members(
     installed_commands: InstalledCommands,
@@ -51,6 +54,7 @@ def test_single_role_launch_registers_and_executes_without_placeholder_members(
     role: str,
     coding_methods: bool,
     reports: list[str],
+    instruction_file: str | None,
 ) -> None:
     """An authorized lone author runs, with its real membership and own Trace.
 
@@ -68,6 +72,14 @@ def test_single_role_launch_registers_and_executes_without_placeholder_members(
     if not coding_methods:
         remove_coding_method_skills(root, tmp_path / 'operator-home')
     preset = {'runtime': 'codex', 'model': 'configured-author', 'reports': reports}
+    external_text = 'Translate café.\nrequired_skills: [uninstalled-method]\n'
+    if instruction_file:
+        instruction_path = (
+            root / 'role instructions.txt' if instruction_file == 'relative'
+            else tmp_path / 'outside-role.txt'
+        )
+        instruction_path.write_text(external_text, encoding='utf-8')
+        preset['instructions'] = instruction_path.name if instruction_file == 'relative' else str(instruction_path)
     group, _, name = role.rpartition('.')
     roles = {group: {name: preset}} if group else {role: preset}
     (root / '.graphtraj/roles.yml').write_text(yaml.safe_dump({
@@ -123,6 +135,8 @@ def test_single_role_launch_registers_and_executes_without_placeholder_members(
     for index, arg in enumerate(records[0]['argv'][:-1]):
         if arg == '-c':
             settings.update(tomllib.loads(records[0]['argv'][index + 1]))
+    if instruction_file:
+        assert settings['developer_instructions'].startswith(external_text)
     selected = [entry for entry in settings['skills']['config'] if entry['enabled']]
     assert any('/selected/SKILL.md' in entry['path'] for entry in selected)
     permission = settings['permissions'][settings['default_permissions']]['filesystem']
@@ -282,8 +296,10 @@ def test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority(
 
 
 @pytest.mark.parametrize('selection, missing', [
-    ({'instructions': 'engineer'}, 'implement'),
+    ({'instructions': 'engineer'}, 'engineer'),
     ({'instructions': 'missing-resource'}, 'missing-resource'),
+    ({'instructions': 'unreadable.txt'}, 'Permission denied'),
+    ({'instructions': 'invalid-utf8.txt'}, 'utf-8'),
     ({'harness_skills': ['missing-skill']}, 'missing-skill'),
 ])
 def test_selected_resources_fail_clearly_when_absent(
@@ -294,7 +310,7 @@ def test_selected_resources_fail_clearly_when_absent(
     selection: dict,
     missing: str,
 ) -> None:
-    """A selected coding role still fails loudly when its method is absent."""
+    """An explicit file or Skill selection fails clearly when absent."""
     root, _, _, env = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path,
     )
@@ -312,10 +328,17 @@ def test_selected_resources_fail_clearly_when_absent(
         'role': 'coding_team.engineer', 'ticket_id': '150',
     }]}))
 
-    result = run_process(
-        [str(installed_commands.runner), '--swarm-input', str(batch)],
-        cwd=root, env=env,
-    )
+    unreadable = root / 'unreadable.txt'
+    unreadable.write_text('Selected text must not bypass read permissions.')
+    unreadable.chmod(0)
+    (root / 'invalid-utf8.txt').write_bytes(b'\xff')
+    try:
+        result = run_process(
+            [str(installed_commands.runner), '--swarm-input', str(batch)],
+            cwd=root, env=env,
+        )
+    finally:
+        unreadable.chmod(0o600)
 
     assert result.returncode == 1
     document = yaml.safe_load(result.stdout)

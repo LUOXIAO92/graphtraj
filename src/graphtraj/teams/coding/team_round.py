@@ -916,16 +916,16 @@ def _execute_agent(
         session_directory, job_file, worktree, task_prompt, environment,
         capacity_fd, input_delivered, wait_for_completion,
     )
-    if not wait_for_completion:
-        return alias, session_id
-    diagnostic = _current_runtime_diagnostic(
-        session_directory, trace, stderr_offset, trace_offset
-    )
     if outcome == "budget-stopped":
         raise RunnerError(
             "EXECUTION_BUDGET_STOPPED",
             "Runner selected stopping for the Ticket execution budget.",
         )
+    if not wait_for_completion:
+        return alias, session_id
+    diagnostic = _current_runtime_diagnostic(
+        session_directory, trace, stderr_offset, trace_offset
+    )
     if outcome != "completed":
         if _runtime_access_failure(diagnostic, tuple(reports)):
             raise RunnerError(

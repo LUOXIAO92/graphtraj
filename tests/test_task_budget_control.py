@@ -344,7 +344,7 @@ def test_sampled_stop_blocks_native_execution_admission(
     assert result.returncode == 1, result.stdout + result.stderr
     task = yaml.safe_load(result.stdout)['tasks'][0]
     assert task['launch_status'] == 'stopped', task
-    assert task['error']['code'] == 'operation-failed', task
+    assert task['error']['code'] == 'EXECUTION_BUDGET_STOPPED', task
     directories = list((root / '.graphtraj/runner/sessions').iterdir())
     assert len(directories) == 1
     if when == 'before-create':

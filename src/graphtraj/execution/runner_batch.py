@@ -47,14 +47,12 @@ def read_batch(
     batch_file: Path,
     cwd: Path,
     *,
-    retained: bool = True,
+    retained: bool = False,
 ) -> Batch:
-    """Read and strictly validate one retained YAML batch input.
+    """Read a Batch without rewriting its role identities.
 
-    A retained Batch keeps its historical Engineer-tier interpretation so an
-    earlier record still names the seat that ran it. The launch path reads its
-    own retained input with retained=False, so it keeps the caller's current
-    role reference.
+    Explicit historical interpretation is available to readers of old records;
+    a file retained by a current launch remains current input when reread.
     """
 
     document, source_bytes = _read_document(batch_file, cwd)

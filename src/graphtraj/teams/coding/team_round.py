@@ -29,7 +29,7 @@ from graphtraj.configuration.role_definitions import resolve_child_role
 from graphtraj.configuration.project_configuration import load_project_configuration
 from graphtraj.graph.delivery_state import apply_delivery_state_request
 from graphtraj.graph.delivery_worldline import append_project_worldline_event, read_worldline
-from graphtraj.configuration.project_roles import ProjectRolesError, logical_role
+from graphtraj.configuration.project_roles import ProjectRolesError, configured_role_name, logical_role
 from graphtraj.execution.runner_batch import (
     read_batch,
     retain_batch,
@@ -147,15 +147,6 @@ def _task_policy(task: Task, role: str | None = None) -> str:
         return task.policy_role or task.role
     # A retained Team seat keeps its original identity; its policy is the unified role.
     return logical_role(role)
-
-
-def _seat_role_name(task: Task, role: str) -> str:
-    """Return the identity name of the Team seat one execution occupies.
-
-    A new dispatch keeps the configured role's own name; a retained seat keeps
-    the historical Engineer-tier interpretation its records already use.
-    """
-    return task.role if role == task.role else logical_role(role)
 
 
 def _require_dispatch_roles(project: Any, batch: Batch, parent: dict | None) -> None:
@@ -973,7 +964,7 @@ def _execute_agent(
                 "operation": "launch",
                 "drive_children": not wait_for_completion,
                 "monitor_execution_budget": monitor is not None,
-                "member_registration": ({"member": _seat_role_name(task, role).replace("-", "_"), "replaces": replaces_alias}
+                "member_registration": ({"member": configured_role_name(role).replace("-", "_"), "replaces": replaces_alias}
                                         if register_member else None),
                 "mapping": {
                     "alias": alias,
@@ -1329,7 +1320,7 @@ def _agent_alias(project: Any, task: Task, role: str, generation: int = 1) -> st
     use '_'; the entity starts as the role name and takes a numbered successor
     when that name is occupied, so no existing Session is overwritten.
     """
-    role_name = _seat_role_name(task, role).replace("-", "_")
+    role_name = configured_role_name(role).replace("-", "_")
     prefix = "{0}-{1}-handover{2}-{3}@".format(
         task.ticket_id, task.ticket_name.replace("-", "_"), generation - 1, role_name
     )
@@ -1392,9 +1383,7 @@ def _worker_main() -> None:
 
     signal.signal(signal.SIGTERM, stop)
     retained = Path(sys.argv[1])
-    task = read_batch(
-        retained, Path.cwd(), retained=False
-    ).tasks[int(sys.argv[2])]
+    task = read_batch(retained, Path.cwd()).tasks[int(sys.argv[2])]
     try:
         project = discover_project(Path.cwd(), require_clean_integration=False)
         capacity_fd = int(sys.argv[3])

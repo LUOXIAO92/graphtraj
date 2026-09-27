@@ -39,6 +39,9 @@ def wait_for_idle(commands: InstalledCommands, root: Path, env: dict, alias: str
     ('researcher', True, []), ('engineer', False, []), ('researcher', False, []),
     ('research_team.team_leader', False, []), ('spec_reviewer', False, []),
     ('engineer', False, ['findings.md', 'evidence.md']),
+    ('engineer-expert', False, []),
+    ('coding-team.engineer-junior', False, []),
+    ('engineer-senior', False, []),
 ])
 def test_single_role_launch_registers_and_executes_without_placeholder_members(
     installed_commands: InstalledCommands,
@@ -151,6 +154,9 @@ def test_single_role_launch_registers_and_executes_without_placeholder_members(
 
 
 @pytest.mark.parametrize('surface', ['cli', 'mcp'])
+@pytest.mark.parametrize('parent_role, child_role', [
+    ('researcher', 'analyst'), ('engineer-expert', 'engineer-junior'),
+])
 def test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
@@ -158,6 +164,8 @@ def test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     surface: str,
+    parent_role: str,
+    child_role: str,
 ) -> None:
     """Role-tree edges grant dispatch, while same-role peers cannot control instances."""
     import sys
@@ -168,10 +176,15 @@ def test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority(
     )
     (root / '.graphtraj/roles.yml').write_text(yaml.safe_dump({
         'roles': {role: {'runtime': 'codex', 'model': 'selected-model', 'allow_runtime_swarm': True}
-                  for role in ('researcher', 'analyst', 'engineer')},
-        'role_tree': {'researcher': {'analyst': {}}},
+                  for role in (parent_role, child_role, 'engineer')},
+        'role_tree': {parent_role: {child_role: {}}},
     }))
-    scenario = Path(__file__).with_name('generic_dispatch_scenario.py')
+    scenario = tmp_path / 'dispatch_scenario.py'
+    scenario.write_text(
+        Path(__file__).with_name('generic_dispatch_scenario.py').read_text()
+        .replace("'researcher'", repr(parent_role))
+        .replace("'analyst'", repr(child_role))
+    )
     code = fake_codex.executable.read_text().replace("'session_name': 'fake-thread'", "'session_name': os.environ['GRAPHTRAJ_PARENT_ALIAS']").replace(
         "lifecycle_action = os.environ.get('FAKE_CODEX_LIFECYCLE_ACTION')",
         'import runpy; runpy.run_path(' + repr(str(scenario)) + ')\nraise SystemExit(0)',
@@ -183,7 +196,7 @@ def test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority(
         _change_status(installed_commands, root, ticket_id, 'ready')
         if first_child:
             env.update(FOREIGN_CHILD=first_child, CAUSE=events[-1]['event_id'])
-        request = {'tasks': [{'role': 'researcher', 'ticket_id': ticket_id}]}
+        request = {'tasks': [{'role': parent_role, 'ticket_id': ticket_id}]}
         if surface == 'cli':
             batch = root / 'batch.yml'
             batch.write_text(yaml.safe_dump(request))
@@ -213,7 +226,7 @@ def test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority(
             first_child = child['alias']
         ticket = root / '.graphtraj/state/tickets' / (ticket_id + '-dispatch')
         team = yaml.safe_load((ticket / 'teams/1/team.yml').read_text())
-        assert {member['role'] for member in team['members'].values()} == {'researcher', 'analyst'}
+        assert {member['role'] for member in team['members'].values()} == {parent_role, child_role}
         assert len(team['members']) == 2
         mapping = yaml.safe_load((root / '.graphtraj/runner/sessions' / child['alias'] / 'mapping.yml').read_text())
         assert mapping['parent'] == parent['alias']
@@ -232,7 +245,7 @@ def test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority(
     wait_for_idle(installed_commands, root, env, parent['alias'])
     team = yaml.safe_load((ticket / 'teams/1/team.yml').read_text())
     assert len(team['members']) == 3
-    assert sum(member['role'] == 'analyst' for member in team['members'].values()) == 2
+    assert sum(member['role'] == child_role for member in team['members'].values()) == 2
     assert all(member['session_ref'] for member in team['members'].values())
 
 

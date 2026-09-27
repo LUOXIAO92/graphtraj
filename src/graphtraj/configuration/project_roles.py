@@ -94,96 +94,36 @@ class ProjectRoles:
         return inline if inline is not None else self.preset(reference)
 
     def resolve(self, reference: str) -> str:
-        """Return the configured reference that one retained role reference selects.
+        """Resolve current configuration without inferring historical role aliases.
 
-        A configured spelling always wins. Only a retained Batch, Session or
-        Team record that still names a former Engineer tier falls back to the
-        historical interpretation, so that record stays readable. New dispatch
-        selects its preset through preset or dispatch_preset, which read the
-        current configuration alone.
-        """
-        configured = self._configured_reference(reference)
-        if configured is not None:
-            return configured
-        return self._retained_reference(reference)
-
-    def preset(self, reference: str) -> RolePreset:
-        """Return the Runtime settings that current configuration declares.
-
-        A named group selects exactly that group role, a top-level preset name
-        selects itself, and a bare role name selects a group role only when
-        exactly one configured group declares it. A flat roles.yml declares no
-        group, so its former group token is read as part of the role name. An
-        unconfigured former Engineer tier is not silently served by another
-        role; new dispatch fails by name instead.
-        """
-        configured = self._configured_reference(reference)
-        if configured is None:
-            raise ProjectRolesError((
-                "roles.{0} is not a configured preset reference.".format(reference),
-            ))
-        return self.presets[configured]
-
-    def _configured_reference(self, reference: str) -> str | None:
-        """Return the current preset one supplied reference selects, or None.
-
-        The supplied reference's own spellings are read first, then a bare role
-        name that exactly one configured group declares. A group-qualified
-        reference names one declared group role instead of a bare name, so it
-        does not fall back to the role name after its last dot.
+        Exact configured spellings win. A bare name may select the sole group
+        declaring that name; a qualified name must select its declared group.
         """
         for candidate in _reference_spellings(reference):
             if candidate in self.presets:
                 return candidate
         group, _, _ = reference.rpartition(".")
-        if group and self.groups:
-            return None
-        name = configured_role_name(reference)
-        matches = sorted(
-            candidate
-            for candidate in self.presets
-            if configured_role_name(candidate) == name
-        )
-        if len(matches) > 1:
-            raise ProjectRolesError((
-                "roles.{0} is declared by more than one group: {1}.".format(
-                    name, ", ".join(matches)
-                ),
-            ))
-        return matches[0] if matches else None
-
-    def _retained_reference(self, reference: str) -> str:
-        """Return the preset a retained record's role spelling historically selects.
-
-        A former Engineer tier resolves to the unified Engineer seat only when
-        current configuration declares no role of its own for that spelling.
-        """
-        retained = retained_role_reference(reference)
-        for candidate in _reference_spellings(retained):
-            if candidate in self.presets:
-                return candidate
-        group, _, _ = retained.rpartition(".")
-        if group and self.groups:
-            raise ProjectRolesError((
-                "roles.{0} is not a configured preset reference.".format(reference),
-            ))
-        name = logical_role(retained)
-        matches = sorted(
-            candidate
-            for candidate in self.presets
-            if logical_role(candidate) == name
-        )
-        if len(matches) == 1:
-            return matches[0]
-        if matches:
-            raise ProjectRolesError((
-                "roles.{0} is declared by more than one group: {1}.".format(
-                    name, ", ".join(matches)
-                ),
-            ))
+        if not (group and self.groups):
+            name = configured_role_name(reference)
+            matches = sorted(
+                candidate for candidate in self.presets
+                if configured_role_name(candidate) == name
+            )
+            if len(matches) == 1:
+                return matches[0]
+            if matches:
+                raise ProjectRolesError((
+                    "roles.{0} is declared by more than one group: {1}.".format(
+                        name, ", ".join(matches)
+                    ),
+                ))
         raise ProjectRolesError((
             "roles.{0} is not a configured preset reference.".format(reference),
         ))
+
+    def preset(self, reference: str) -> RolePreset:
+        """Return the Runtime settings declared for the selected current role."""
+        return self.presets[self.resolve(reference)]
 
 
 def logical_role(reference: str) -> str:

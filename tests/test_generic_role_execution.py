@@ -389,12 +389,11 @@ def test_public_launch_rejects_retired_skill_selection(
     temporary_git_repository: Path,
     fake_codex: FakeCodex,
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
     surface: str,
     skills: list[str],
 ) -> None:
     """CLI and MCP reject new name selections through their shared service."""
-    from graphtraj.interfaces import mcp
+    from test_mcp_host_tools import McpServerProcess
 
     root, _, _, env = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path,
@@ -409,13 +408,12 @@ def test_public_launch_rejects_retired_skill_selection(
                              cwd=root, env=env)
         assert result.returncode == 1
         document = yaml.safe_load(result.stdout)
+        assert document['error']['code'] == 'invalid-input'
+        message = document['error']['message']
     else:
-        with monkeypatch.context() as patch:
-            for key, value in env.items():
-                patch.setenv(key, value)
-            result = mcp.launch_swarm_tool(request, cwd=root)
-        assert result.failed
-        document = result.document
-    assert document['error']['code'] == 'invalid-input'
-    assert 'Runtime native Skill selection' in document['error']['message']
+        with McpServerProcess(installed_commands.runner.with_name('graphtraj-mcp'), root, env) as server:
+            result = server.call('swarm', request)['result']
+        assert result['isError']
+        message = result['content'][0]['text']
+    assert 'Runtime native Skill selection' in message
     assert not list((root / '.graphtraj/runner/sessions').glob('*/mapping.yml'))

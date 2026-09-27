@@ -140,7 +140,8 @@ def _engineer_role(
 
     return resolve_child_role(
         "engineer",
-        RolePreset("codex", model, None, None, reasoning_effort=reasoning_effort),
+        RolePreset("codex", model, None, None, instructions="engineer",
+                   reasoning_effort=reasoning_effort or "max"),
     )
 
 

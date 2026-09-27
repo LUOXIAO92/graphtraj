@@ -136,8 +136,6 @@ class _CodexRole:
         # Control now runs on the private native callback, not through files
         # writable by an Agent or by a helper inheriting its tool permissions.
         filesystem.update(private_filesystem(runtime_store))
-        if self.name in {'team-leader', 'temporary-role'}:
-            filesystem[':workspace_roots']['.'] = 'read'
         if filesystem.get(":workspace_roots", {}).get(".") == "write":
             filesystem[str(git_common_directory)] = "write"
             filesystem[str(git_common_directory / 'config')] = "read"
@@ -917,10 +915,11 @@ def _process_group_is_alive(process_group: int) -> bool:
 def _resolve_codex_role(role: ResolvedChildRole) -> _CodexRole:
     """Translate a resolved child role using its fixed native permissions."""
 
-    from graphtraj.configuration.role_definitions import has_packaged_role
-
-    document = _packaged_role(role.name if has_packaged_role(role.name) else "task")
+    document = _packaged_role("task")
     _validate_role_schema(document)
+    document["permissions"][document["default_permissions"]]["filesystem"][
+        ":workspace_roots"
+    ]["."] = role.settings.worktree_access
     if role.settings.base_url is not None:
         document["model_provider"] = "graphtraj-role"
         document["model_providers"] = {"graphtraj-role": {

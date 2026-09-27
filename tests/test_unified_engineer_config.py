@@ -148,8 +148,8 @@ def test_retained_tiered_batch_still_resolves_for_recovery(tmp_path: Path) -> No
     assert retained.read_bytes() == original
     assert task.role == "engineer"
     assert role.name == "engineer"
-    # The installed Engineer template is the source of its required Skills.
-    assert role.required_skills == ("implement", "ponytail")
+    # A retained identity does not implicitly select a professional resource.
+    assert role.required_skills == ()
 
 
 @pytest.mark.parametrize(

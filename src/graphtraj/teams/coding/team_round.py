@@ -67,7 +67,6 @@ from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 from graphtraj.graph.ticket_graph import _load_states
 
 
-_ENGINEER_ROLES = frozenset({"engineer"})
 _AGENT_EVIDENCE_ERROR = "AGENT_EVIDENCE_INVALID"
 
 
@@ -891,7 +890,7 @@ def _execute_agent(
     )
     team_file = traces.parent / "team.yml"
     ordinal = yaml.safe_load(team_file.read_text())["current_round"] if team_file.exists() else 1
-    report_files = _role_report_files(task, policy_role, role, generation, ordinal, alias)
+    report_files: tuple[Path, ...] = ()
     if expected_session is not None:
         from graphtraj.execution.runner_control import _session_report_paths
 
@@ -899,8 +898,6 @@ def _execute_agent(
             Path('.state') / path.relative_to(evidence)
             for path in _session_report_paths(alias, project.harness_root)
         )
-    if task.report_file is not None:
-        task = replace(task, report_file=report_files[0])
     # The launched entity keeps its role name; the configured reference that
     # selected its Runtime settings travels with this Session's records. A seat
     # another identity occupies is selected by its own role, not by its batch's.
@@ -915,6 +912,7 @@ def _execute_agent(
             )
         except ProjectRolesError as error:
             raise RunnerError("ROLE_NOT_CONFIGURED", str(error)) from error
+        report_files = _role_report_files(task, preset.reports, role, generation, ordinal, alias)
         context = preflight_runtime_context(
             runtime_store=project.runtime_store,
             executable=runtime_executable(preset.runtime),
@@ -925,15 +923,10 @@ def _execute_agent(
             repository_skill_source=worktree,
             requested_skills=task.requested_skills,
             report_files=report_files,
-            child_batch_write_paths=(registration, project.state_directory / "batches")
-            if policy_role == "team-leader" and registration is not None else (),
-            # The Leader's own direct control reads causal Worldline events and
-            # takes one capacity position; both live outside its Worktree.
-            leader_control_write_paths=(
-                project.state_directory / "worldline" / ".lock",
-                project.runner_directory / "capacity",
-            ) if policy_role == "team-leader" else (),
         ).finalize()
+
+    if task.report_file is not None:
+        task = replace(task, report_file=report_files[0])
 
     # Validate Runtime inputs before publishing an allocation. Native creation
     # still follows the atomic directory reservation and durable launch request.
@@ -1340,28 +1333,20 @@ def _agent_alias(project: Any, task: Task, role: str, generation: int = 1) -> st
 
 def _role_report_files(
     task: Task,
-    policy_role: str,
+    selected_reports: tuple[str, ...],
     role: str,
     generation: int,
     ordinal: int,
     alias: str,
 ) -> tuple[Path, ...]:
-    """Assign role reports once, using the actual alias to avoid collisions.
-
-    Existing coding report names remain available to their task instructions;
-    they are not prerequisites for the common result submission operation.
-    """
+    """Allocate explicit reports or one actual-role report without collisions."""
     from graphtraj.execution.runner_results import assign_session_reports
 
     directory = Path('.state') / 'teams' / str(generation) / 'rounds' / str(ordinal)
     if task.report_file is not None:
         reports = (task.report_file,)
-    elif policy_role in _ENGINEER_ROLES:
-        reports = (directory / 'engineer.md', directory / 'validation.md')
-    elif policy_role == 'team-leader':
-        reports = (directory / 'leader.md',)
     else:
-        reports = ()
+        reports = tuple(directory / name for name in selected_reports)
     return assign_session_reports(role, alias, generation, ordinal, reports)
 
 

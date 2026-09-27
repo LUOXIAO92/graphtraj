@@ -277,7 +277,10 @@ def test_installed_alias_control_resumes_and_interrupts_one_team_session(
          "--instruction", "Inspect the candidate.", "--caused-by-event-id", cause],
         cwd=harness_root, env=environment,
     )
-    assert retry.returncode == 0, retry.stdout + retry.stderr
+    # Releasing capacity does not make Main this descendant's direct parent.
+    assert retry.returncode == 1, retry.stdout + retry.stderr
+    assert yaml.safe_load(retry.stdout)["error"]["code"] == "authority-denied"
+    assert peer_mapping_file.read_text() == peer_before
     idle = run_process(
         [str(installed_commands.runner), "status", alias],
         cwd=harness_root,

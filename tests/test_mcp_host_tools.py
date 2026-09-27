@@ -1390,7 +1390,8 @@ def test_installed_mcp_server_returns_a_budget_stop_to_the_request_caller(
         # A repeated delivery of one stop stays deduplicated, and a request
         # without Codex caller metadata keeps the generic behaviour.
         repeated = server.call("swarm", {"tasks": [task]})["result"]
-        assert repeated["isError"] is False, repeated
+        assert repeated["isError"] is True, repeated
+        assert repeated["structuredContent"]["tasks"][0]["launch_status"] == "stopped"
         assert "stop_deliveries" not in repeated["structuredContent"]
         assert _native_queue_submissions(protocol) == []
 
@@ -1436,7 +1437,7 @@ def test_installed_runner_returns_a_budget_stop_with_the_awaiting_call(
         env={**run_environment, "CODEX_THREAD_ID": "thread-main"},
         timeout=300,
     )
-    assert completed.returncode == 0, completed.stdout + completed.stderr
+    assert completed.returncode == 1, completed.stdout + completed.stderr
     document = yaml.safe_load(completed.stdout)
     assert document["tasks"][0]["launch_status"] == "stopped"
     delivery = document["stop_deliveries"][0]

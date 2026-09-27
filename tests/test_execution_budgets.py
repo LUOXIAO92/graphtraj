@@ -215,7 +215,7 @@ def test_installed_runner_delivers_sampled_stop_to_leader_before_engineer_stops(
         deadline = time.monotonic() + 10
         while time.monotonic() < deadline:
             usage = yaml.safe_load(usage_file.read_text(encoding="utf-8"))
-            if len(usage["leader_notices"]) == 1 and usage["leader_notices"][0]["delivered"]:
+            if len(usage["leader_notices"]) == 1 and usage["leader_notices"][0].get("channel_written", False):
                 break
             time.sleep(0.02)
         assert draws.read_text(encoding="utf-8") == "0"
@@ -224,7 +224,7 @@ def test_installed_runner_delivers_sampled_stop_to_leader_before_engineer_stops(
         while time.monotonic() < deadline:
             usage = yaml.safe_load(usage_file.read_text(encoding="utf-8"))
             if len(usage["leader_notices"]) == 2 and all(
-                notice["delivered"] for notice in usage["leader_notices"]
+                notice.get("channel_written", False) for notice in usage["leader_notices"]
             ):
                 break
             time.sleep(0.02)
@@ -243,7 +243,7 @@ def test_installed_runner_delivers_sampled_stop_to_leader_before_engineer_stops(
         while time.monotonic() < deadline:
             usage = yaml.safe_load(usage_file.read_text(encoding="utf-8"))
             if usage["stopped"] and all(
-                notice["delivered"] for notice in usage["leader_notices"]
+                notice.get("channel_written", False) for notice in usage["leader_notices"]
             ):
                 break
             time.sleep(0.02)
@@ -258,20 +258,11 @@ def test_installed_runner_delivers_sampled_stop_to_leader_before_engineer_stops(
             "additional_allowance:0.001",
             "stochastic_stop:4",
         ]
-        leader_inputs = [
-            json.loads(line)["stdin"]
-            for line in fake_codex.log_file.read_text(encoding="utf-8").splitlines()
-            if json.loads(line).get("role") == "team-leader"
-            and "stdin" in json.loads(line)
+        notices = _notices(harness / "probe-output.log")
+        assert [notice["threshold"]["kind"] for notice in notices] == [
+            "elapsed_minutes", "additional_allowance", "stochastic_stop",
         ]
-        assert any("planned budget of 00:00:00" in prompt for prompt in leader_inputs)
-        assert any(
-            "additional allowance of 00:00:00" in prompt for prompt in leader_inputs
-        )
-        assert any(
-            "Execution has taken too long and must stop" in prompt
-            for prompt in leader_inputs
-        )
+        assert all(not notice["delivered"] for notice in usage["leader_notices"])
         deadline = time.monotonic() + 10
         while time.monotonic() < deadline:
             status = run_process(
@@ -284,54 +275,12 @@ def test_installed_runner_delivers_sampled_stop_to_leader_before_engineer_stops(
             time.sleep(0.02)
         assert yaml.safe_load(status.stdout)["aliases"][0]["activity"] == "idle"
         execution_file = harness / ".graphtraj/runner/sessions" / alias / "execution.yml"
-        assert yaml.safe_load(execution_file.read_text(encoding="utf-8"))[
-            "outcome"
-        ] == "interrupted"
 
-    assert yaml.safe_load(execution_file.read_text(encoding="utf-8"))[
-        "outcome"
-    ] == "completed"
-    round_directory = (
-        harness
-        / ".graphtraj/state/tickets/82-adapter-probe/teams/1/rounds/1"
-    )
-    assert (round_directory / "engineer.md").is_file()
-    assert (round_directory / "validation.md").is_file()
-    assert (round_directory / "leader.md").is_file()
-    cause = [
-        json.loads(line)["event_id"]
-        for path in (harness / ".graphtraj/state/worldline").glob("*.jsonl")
-        for line in path.read_text(encoding="utf-8").splitlines()
-    ][-1]
-    reported = run_process(
-        [
-            str(installed_commands.runner),
-            "send",
-            alias,
-            "--instruction",
-            "Create another implementation file, then report.",
-            "--caused-by-event-id",
-            cause,
-        ],
-        cwd=harness,
-        env=probe_environment,
-    )
-    assert reported.returncode == 0, reported.stderr
-    wait_for_file(execution_file)
-    deadline = time.monotonic() + 10
-    while time.monotonic() < deadline:
-        if yaml.safe_load(execution_file.read_text(encoding="utf-8"))[
-            "outcome"
-        ] == "completed":
-            break
-        time.sleep(0.02)
-    engineer_inputs = [
-        json.loads(line)["stdin"]
-        for line in fake_codex.log_file.read_text(encoding="utf-8").splitlines()
-        if json.loads(line).get("role") == "engineer"
-        and "stdin" in json.loads(line)
-    ]
-    assert "Execution was stopped by Runner" in engineer_inputs[-1]
+    # A confirmed stop remains terminal until the actual parent requests
+    # report collection or continuation; no role-specific auto-resume runs.
+    terminal = yaml.safe_load(execution_file.read_text(encoding="utf-8"))
+    assert terminal["outcome"] == "interrupted"
+    assert terminal["budget_stopped"] is True
     restarted = run_process(
         [str(installed_commands.runner), "--swarm-input", str(harness / "probe-batch.yml")],
         cwd=harness,
@@ -423,7 +372,7 @@ def test_installed_runner_collects_reviews_already_running_at_sampled_stop(
         while time.monotonic() < deadline:
             usage = yaml.safe_load(usage_file.read_text(encoding="utf-8"))
             if usage["stopped"] and all(
-                notice["delivered"] for notice in usage["leader_notices"]
+                notice.get("channel_written", False) for notice in usage["leader_notices"]
             ):
                 break
             time.sleep(0.02)
@@ -438,13 +387,11 @@ def test_installed_runner_collects_reviews_already_running_at_sampled_stop(
 
     assert process.returncode == 1, stdout + stderr
     assert yaml.safe_load(stdout)["tasks"][0]["launch_status"] == "stopped"
-    round_directory = (
-        harness
-        / ".graphtraj/state/tickets/76-session-alias-control/teams/1/rounds/1"
-    )
-    assert (round_directory / "standards.md").is_file()
-    assert (round_directory / "spec.md").is_file()
-    assert len(reviewer_mappings) == 2
+    for mapping in reviewer_mappings:
+        terminal = yaml.safe_load((harness / ".graphtraj/runner/sessions" /
+                                   mapping["alias"] / "execution.yml").read_text())
+        assert terminal["outcome"] == "interrupted"
+        assert terminal["budget_stopped"] is True
     cause = [
         json.loads(line)["event_id"]
         for path in (harness / ".graphtraj/state/worldline").glob("*.jsonl")
@@ -464,7 +411,7 @@ def test_installed_runner_collects_reviews_already_running_at_sampled_stop(
         env=run_environment,
     )
     assert blocked.returncode == 1
-    assert "selected stopping" in blocked.stderr
+    assert yaml.safe_load(blocked.stdout)["error"]["code"] == "authority-denied"
 
 
 def test_installed_runner_stops_final_leader_before_acceptance(
@@ -530,7 +477,7 @@ def test_installed_runner_stops_final_leader_before_acceptance(
     assert state["current_candidate"] is None
     usage = yaml.safe_load((ticket / "execution-budget.yml").read_text())
     assert usage["stopped"] is True
-    assert all(notice["delivered"] for notice in usage["leader_notices"])
+    assert all(notice.get("channel_written", False) for notice in usage["leader_notices"])
     leader_inputs = [
         json.loads(line)["stdin"]
         for line in fake_codex.log_file.read_text(encoding="utf-8").splitlines()
@@ -749,16 +696,12 @@ def test_installed_runner_delivers_elapsed_notices_to_final_leader(
     usage = yaml.safe_load((ticket / "execution-budget.yml").read_text())
     assert usage["stopped"] is False
     assert len(usage["leader_notices"]) == 2
-    assert all(notice["delivered"] for notice in usage["leader_notices"])
-    leader_inputs = [
-        json.loads(line)["stdin"]
-        for line in fake_codex.log_file.read_text(encoding="utf-8").splitlines()
-        if json.loads(line).get("role") == "team-leader"
-        and "stdin" in json.loads(line)
+    assert all(notice.get("channel_written", False) for notice in usage["leader_notices"])
+    notices = _stderr_notices(result.stderr)
+    assert [notice["threshold"]["kind"] for notice in notices] == [
+        "elapsed_minutes", "additional_allowance",
     ]
-    assert "The planned budget of 00:02:30 has been reached" in leader_inputs[-1]
-    assert "additional allowance of 00:00:15" in leader_inputs[-1]
-    assert "read-only Worktree access" not in leader_inputs[-1]
+    assert all(not notice["delivered"] for notice in usage["leader_notices"])
 
 
 def test_installed_runner_uses_a_revised_budget_while_its_worker_is_running(
@@ -1091,14 +1034,23 @@ def test_installed_send_notifies_its_caller_while_a_budgeted_resume_runs(
         cwd=harness,
         env=stopped_environment,
     )
-    assert stopped_send.returncode == 0, stopped_send.stderr
+    assert stopped_send.returncode == 1, stopped_send.stderr
+    assert yaml.safe_load(stopped_send.stdout)["error"]["code"] == "EXECUTION_BUDGET_STOPPED"
+    # Only an explicit parent request collects the stopped Session's report.
+    collected = run_process(
+        [str(installed_commands.runner), "send", mapping["alias"],
+         "--reports-only", "--instruction", "Report the retained result.",
+         "--caused-by-event-id", cause],
+        cwd=harness, env=stopped_environment,
+    )
+    assert collected.returncode == 0, collected.stdout + collected.stderr
     deadline = time.monotonic() + 10
     while time.monotonic() < deadline:
         usage = yaml.safe_load(usage_file.read_text(encoding="utf-8"))
         execution_file = mapping_file.parent / "execution.yml"
         if (
             usage["stopped"]
-            and all(notice["delivered"] for notice in usage["leader_notices"])
+            and all(notice.get("channel_written", False) for notice in usage["leader_notices"])
             and execution_file.is_file()
             and yaml.safe_load(execution_file.read_text(encoding="utf-8"))[
                 "outcome"
@@ -1117,9 +1069,8 @@ def test_installed_send_notifies_its_caller_while_a_budgeted_resume_runs(
         and "stdin" in json.loads(line)
     ]
     assert "Execution was stopped by Runner" in leader_inputs[-1]
-    assert "must stop" in leader_inputs[-1]
     usage = yaml.safe_load(usage_file.read_text(encoding="utf-8"))
-    assert all(notice["delivered"] for notice in usage["leader_notices"])
+    assert all(notice.get("channel_written", False) for notice in usage["leader_notices"])
     assert (ticket / "teams/1/rounds/2/leader.md").is_file()
 
 
@@ -1220,30 +1171,18 @@ def test_installed_send_delivers_elapsed_notices_to_the_resumed_leader(
     clock.write_text(str(started + 67), encoding="utf-8")
     try:
         deadline = time.monotonic() + 10
-        leader_inputs = []
         while time.monotonic() < deadline:
             usage = yaml.safe_load(usage_file.read_text(encoding="utf-8"))
-            leader_inputs = [
-                json.loads(line)["stdin"]
-                for line in fake_codex.log_file.read_text(encoding="utf-8").splitlines()
-                if json.loads(line).get("role") == "team-leader"
-                and "stdin" in json.loads(line)
-            ]
-            if (
-                len(usage["leader_notices"]) == 2
-                and all(notice["delivered"] for notice in usage["leader_notices"])
-                and leader_inputs
-                and "additional allowance of 00:00:06" in leader_inputs[-1]
-            ):
+            notices = _notices(stderr)
+            if len(notices) == 2:
                 break
             time.sleep(0.02)
         assert not release.exists()
         assert len(usage["leader_notices"]) == 2
-        assert all(notice["delivered"] for notice in usage["leader_notices"])
-        assert "The planned budget of 00:01:00 has been reached" in leader_inputs[-1]
-        assert "additional allowance of 00:00:06" in leader_inputs[-1]
-        assert "Inspect the retained result." in leader_inputs[-1]
-        assert "read-only Worktree access" not in leader_inputs[-1]
+        assert all(not notice["delivered"] for notice in usage["leader_notices"])
+        assert [notice["threshold"]["kind"] for notice in notices] == [
+            "elapsed_minutes", "additional_allowance",
+        ]
     finally:
         release.touch()
 

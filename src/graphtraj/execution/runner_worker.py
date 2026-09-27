@@ -514,7 +514,19 @@ def main() -> None:
     if result == 0 and yaml.safe_load(job_file.read_text()).get("drive_children", False):
         from graphtraj.teams.coding.team_round import run_session_children
 
-        run_session_children(job_file)
+        try:
+            run_session_children(job_file)
+        except RunnerError as error:
+            if error.code != "EXECUTION_BUDGET_STOPPED":
+                raise
+            # Child execution may stop a resumed parent after its first turn.
+            # Preserve that confirmed stop across the outer Worker boundary.
+            job = yaml.safe_load(job_file.read_text())
+            _write_worker_error(
+                job_file.parent, job.get("operation", "launch"),
+                error.code, error.message, terminal_confirmed=True,
+            )
+            result = 1
     raise SystemExit(result)
 
 

@@ -980,8 +980,10 @@ def _read_resume_error(error_file: Path) -> RunnerError:
         failure = yaml.safe_load(error_file.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, yaml.YAMLError):
         failure = None
-    if isinstance(failure, dict) and failure.get("code") == "subtree-stopped":
-        return RunnerError("subtree-stopped", failure["message"])
+    if isinstance(failure, dict) and failure.get("code") in {
+        "subtree-stopped", "EXECUTION_BUDGET_STOPPED",
+    }:
+        return RunnerError(failure["code"], failure["message"])
     if isinstance(failure, dict) and failure.get("code") in {
         "PROJECT_CONFIG_MISMATCH",
         "ROLE_GUARD_MISMATCH",

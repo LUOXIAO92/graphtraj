@@ -736,32 +736,11 @@ def test_installed_mcp_server_continues_a_stopped_ticket_with_unchanged_semantic
     _register_ready_ticket(installed_commands, harness, body=_budget_body(total=1))
     clock = tmp_path / "mcp-continue-clock"
     clock.write_text(str(time.time()), encoding="utf-8")
-    controls = tmp_path / "mcp-continue-controls"
-    controls.mkdir()
-    (controls / "sitecustomize.py").write_text(
-        "import os\n"
-        "from pathlib import Path\n"
-        "try:\n"
-        "    import graphtraj.execution.execution_budget as budget\n"
-        "except ModuleNotFoundError:\n"
-        "    pass\n"
-        "else:\n"
-        "    budget.time.time = lambda: float(Path(os.environ['BUDGET_CLOCK']).read_text())\n"
-        "    budget.random.uniform = lambda lower, upper: lower\n"
-        "    budget.random.random = lambda: 0.99\n",
-        encoding="utf-8",
+    environment, _ = _controlled_budget_server(
+        installed_commands, fake_codex, harness, environment, tmp_path,
+        BUDGET_CLOCK=str(clock), FAKE_CODEX_FINAL_LEADER_CLOCK=str(clock),
+        FAKE_CODEX_CAPTURE_STDIN="1",
     )
-    environment = {
-        **environment,
-        "BUDGET_CLOCK":                 str(clock),
-        "FAKE_CODEX_APPEND_LOG":        "1",
-        "FAKE_CODEX_CAPTURE_STDIN":     "1",
-        "FAKE_CODEX_CAPTURE_ROLE":      "1",
-        "FAKE_CODEX_FINAL_LEADER_CLOCK": str(clock),
-        "FAKE_CODEX_LIFECYCLE_ACTION":  "complete-team-round",
-        "GRAPHTRAJ_AGENT_RUNNER":       str(installed_commands.runner),
-        "PYTHONPATH":                   str(controls),
-    }
     ticket = harness / ".graphtraj/state/tickets/76-session-alias-control"
 
     with _started_mcp(mcp_executable, harness, environment) as server:
@@ -769,14 +748,18 @@ def test_installed_mcp_server_continues_a_stopped_ticket_with_unchanged_semantic
             "ticket_id":   "76",
             "ticket_name": "session-alias-control",
             "role":        "coding-team.team-leader",
-        }]})["result"]
+        }]}, thread_id="thread-main")["result"]
         assert stopped["isError"] is True
         assert stopped["structuredContent"]["tasks"][0]["launch_status"] == "stopped"
         usage_before = yaml.safe_load((ticket / "execution-budget.yml").read_text())
         assert usage_before["stopped"] is True
         state = yaml.safe_load((ticket / "ticket.yml").read_text())
         assert state["status"] == "implementing"
-        candidate = state["current_candidate"]
+        assert state['current_candidate'] is None
+        candidate = next(json.loads(line)['candidate']
+                         for shard in (harness / '.graphtraj/state/worldline').glob('*.jsonl')
+                         for line in shard.read_text().splitlines()
+                         if json.loads(line)['kind'] == 'result-submitted')
         assert candidate is not None
         diagnosis = harness / "stopped-team-diagnosis.md"
         diagnosis.write_text(
@@ -840,6 +823,8 @@ def test_installed_mcp_server_continues_a_stopped_ticket_with_unchanged_semantic
     continuation = continued["structuredContent"]
     assert continuation["tasks"]
     assert all(task["send_status"] == "sent" for task in continuation["tasks"])
+    from runner_fixtures import wait_for_ticket_status
+    wait_for_ticket_status(installed_commands, harness, "76", "awaiting-integration")
     after = yaml.safe_load((ticket / "ticket.yml").read_text())
     assert after["status"] == "awaiting-integration"
     assert after["active_team_ordinal"] == 1

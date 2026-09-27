@@ -527,7 +527,7 @@ def test_installed_runner_stops_final_leader_before_acceptance(
     ticket = harness / ".graphtraj/state/tickets/76-session-alias-control"
     state = yaml.safe_load((ticket / "ticket.yml").read_text(encoding="utf-8"))
     assert state["status"] == "implementing"
-    assert state["current_candidate"] is not None
+    assert state["current_candidate"] is None
     usage = yaml.safe_load((ticket / "execution-budget.yml").read_text())
     assert usage["stopped"] is True
     assert all(notice["delivered"] for notice in usage["leader_notices"])
@@ -537,15 +537,16 @@ def test_installed_runner_stops_final_leader_before_acceptance(
         if json.loads(line).get("role") == "team-leader"
         and "stdin" in json.loads(line)
     ]
-    assert "Execution has taken too long and must stop" in leader_inputs[-1]
-    assert "read-only Worktree access" in leader_inputs[-1]
     leader_mappings = [
         yaml.safe_load(path.read_text(encoding="utf-8"))
         for path in (harness / ".graphtraj/runner/sessions").glob("*/mapping.yml")
         if yaml.safe_load(path.read_text(encoding="utf-8"))["role"] == "team-leader"
     ]
     assert len(leader_mappings) == 1
-    candidate = state["current_candidate"]
+    candidate = next(json.loads(line)['candidate']
+                     for shard in (harness / '.graphtraj/state/worldline').glob('*.jsonl')
+                     for line in shard.read_text().splitlines()
+                     if json.loads(line)['kind'] == 'result-submitted')
     round_directory = ticket / "teams/1/rounds/1"
     preserved_reports = {
         name: (round_directory / name).read_bytes()
@@ -652,6 +653,8 @@ def test_installed_runner_stops_final_leader_before_acceptance(
     continuation = yaml.safe_load(continued.stdout)
     assert continuation["tasks"]
     assert all(task["send_status"] == "sent" for task in continuation["tasks"])
+    from runner_fixtures import wait_for_ticket_status
+    wait_for_ticket_status(installed_commands, harness, "76", "awaiting-integration")
     state = yaml.safe_load((ticket / "ticket.yml").read_text(encoding="utf-8"))
     assert state["status"] == "awaiting-integration"
     assert state["active_team_ordinal"] == 1

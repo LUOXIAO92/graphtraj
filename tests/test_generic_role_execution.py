@@ -158,7 +158,7 @@ def test_single_role_launch_registers_and_executes_without_placeholder_members(
 @pytest.mark.parametrize('surface', ['cli', 'mcp'])
 @pytest.mark.parametrize('parent_role, child_role, historical', [
     ('researcher', 'analyst', False), ('engineer-expert', 'engineer-junior', False),
-    ('engineer', 'analyst', True),
+    ('coding-team.engineer', 'analyst', True),
 ])
 def test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority(
     installed_commands: InstalledCommands,
@@ -178,15 +178,20 @@ def test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority(
     root, _, _, env = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path,
     )
+    actual_parent = parent_role.rpartition('.')[2]
+    roles = {role: {'runtime': 'codex', 'model': 'selected-model', 'allow_runtime_swarm': True}
+             for role in (parent_role, child_role, 'engineer')}
+    if '.' in parent_role:
+        group, _, name = parent_role.rpartition('.')
+        roles[group] = {name: roles.pop(parent_role)}
     (root / '.graphtraj/roles.yml').write_text(yaml.safe_dump({
-        'roles': {role: {'runtime': 'codex', 'model': 'selected-model', 'allow_runtime_swarm': True}
-                  for role in (parent_role, child_role, 'engineer')},
+        'roles': roles,
         'role_tree': {parent_role: {child_role: {}}},
     }))
     scenario = tmp_path / 'dispatch_scenario.py'
     scenario.write_text(
         Path(__file__).with_name('generic_dispatch_scenario.py').read_text()
-        .replace("'researcher'", repr(parent_role))
+        .replace("'researcher'", repr(actual_parent))
         .replace("'analyst'", repr(child_role))
     )
     code = fake_codex.executable.read_text().replace("'session_name': 'fake-thread'", "'session_name': os.environ['GRAPHTRAJ_PARENT_ALIAS']").replace(
@@ -230,7 +235,7 @@ def test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority(
             first_child = child['alias']
         ticket = root / '.graphtraj/state/tickets' / (ticket_id + '-dispatch')
         team = yaml.safe_load((ticket / 'teams/1/team.yml').read_text())
-        assert {member['role'] for member in team['members'].values()} == {parent_role, child_role}
+        assert {member['role'] for member in team['members'].values()} == {actual_parent, child_role}
         assert len(team['members']) == 2
         mapping = yaml.safe_load((root / '.graphtraj/runner/sessions' / child['alias'] / 'mapping.yml').read_text())
         assert mapping['parent'] == parent['alias']
@@ -242,7 +247,7 @@ def test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority(
         parent_mapping = yaml.safe_load((root / '.graphtraj/runner/sessions' / parent['alias'] / 'mapping.yml').read_text())
         retained = Path(parent_mapping['retained_batch_file'])
         batch = yaml.safe_load(retained.read_text())
-        batch['tasks'][0]['role'] = 'engineer-expert'
+        batch['tasks'][0]['role'] = 'coding-team.engineer-expert'
         retained.write_text(yaml.safe_dump(batch))
         original_batch = retained.read_bytes()
     sent = run_process([str(installed_commands.runner), 'send', parent['alias'],

@@ -6,7 +6,7 @@ import sys
 from dataclasses import replace
 from pathlib import Path
 
-from graphtraj.configuration.project_roles import logical_role
+from graphtraj.configuration.project_roles import configured_role_name
 from graphtraj.execution.runner_batch import read_batch
 from graphtraj.execution.runner_control import _require_project_events, _session_report_paths
 from graphtraj.execution.runner_models import Project, RunnerError
@@ -38,7 +38,7 @@ def require_active_session(project: Project, alias: str) -> dict | None:
             or ticket["active_team_ordinal"] != mapping["team_generation"]):
         raise RunnerError("team-not-active", "The Team has stopped starting new work.")
     seats = [member for member in team["members"].values()
-             if logical_role(member["role"]) == logical_role(mapping["role"])]
+             if configured_role_name(member["role"]) == configured_role_name(mapping["role"])]
     if seats and all(member["session_ref"] not in {None, alias} for member in seats):
         raise RunnerError("seat-replaced", "This Session no longer occupies its Team seat.")
     return team
@@ -93,7 +93,7 @@ def _replace_stopped_session(
         if member["session_ref"] == alias
         or (
             member["session_ref"] is None
-            and logical_role(member["role"]) == logical_role(mapping["role"])
+            and configured_role_name(member["role"]) == configured_role_name(mapping["role"])
         )
     ]
     seat = seats[0] if len(seats) == 1 else None

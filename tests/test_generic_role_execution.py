@@ -130,6 +130,8 @@ def test_single_role_launch_registers_and_executes_without_placeholder_members(
     assert len(selected) == 1
     mapping = yaml.safe_load((root / '.graphtraj/runner/sessions' / task['alias'] / 'mapping.yml').read_text())
     assert mapping['role_reference'] == role
+    launch = yaml.safe_load((root / '.graphtraj/runner/sessions' / task['alias'] / 'launch.yml').read_text())
+    assert launch['context_evidence']['model'] == 'configured-author'
     expected = reports or [role.rpartition('.')[2].replace('_', '-') + '.md']
     assert [Path(path).name for path in mapping['report_files']] == expected
     assert permission[str(root / '.graphtraj/state')] == 'none'

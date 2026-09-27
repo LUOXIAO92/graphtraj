@@ -156,13 +156,16 @@ def test_a_tier_named_group_role_keeps_its_own_reference(tmp_path: Path) -> None
     )
 
 
-def test_inline_engineer_role_resolves_without_a_tier() -> None:
-    """A one-Batch Engineer role stays traceable without naming a tier."""
+@pytest.mark.parametrize("reference", [
+    "engineer", "engineer-junior", "engineer-senior", "engineer-expert",
+])
+def test_inline_engineer_role_keeps_its_name(reference: str) -> None:
+    """Inline Runtime settings do not rewrite the caller's role identity."""
     name, preset = parse_inline_role(
-        {"engineer": {"runtime": "codex", "model": "gpt-5.6-terra"}}
+        {reference: {"runtime": "codex", "model": "gpt-5.6-terra"}}
     )
 
-    assert name == "engineer"
+    assert name == reference
     assert preset.model == "gpt-5.6-terra"
 
 

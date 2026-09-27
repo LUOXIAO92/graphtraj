@@ -436,7 +436,7 @@ def test_installed_runner_collects_reviews_already_running_at_sampled_stop(
             process.terminate()
             process.wait()
 
-    assert process.returncode == 0, stdout + stderr
+    assert process.returncode == 1, stdout + stderr
     assert yaml.safe_load(stdout)["tasks"][0]["launch_status"] == "stopped"
     round_directory = (
         harness
@@ -522,11 +522,11 @@ def test_installed_runner_stops_final_leader_before_acceptance(
         timeout=30,
     )
 
-    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.returncode == 1, result.stdout + result.stderr
     assert yaml.safe_load(result.stdout)["tasks"][0]["launch_status"] == "stopped"
     ticket = harness / ".graphtraj/state/tickets/76-session-alias-control"
     state = yaml.safe_load((ticket / "ticket.yml").read_text(encoding="utf-8"))
-    assert state["status"] == "reviewing"
+    assert state["status"] == "implementing"
     assert state["current_candidate"] is not None
     usage = yaml.safe_load((ticket / "execution-budget.yml").read_text())
     assert usage["stopped"] is True
@@ -628,7 +628,7 @@ def test_installed_runner_stops_final_leader_before_acceptance(
         env=run_environment,
         timeout=30,
     )
-    assert ordinary_dispatch.returncode == 0, ordinary_dispatch.stderr
+    assert ordinary_dispatch.returncode == 1, ordinary_dispatch.stderr
     assert yaml.safe_load(ordinary_dispatch.stdout)["tasks"][0]["launch_status"] == "stopped"
     (integration / "other-ticket-in-progress.txt").write_text(
         "temporary work from another Ticket\n", encoding="utf-8"
@@ -650,7 +650,8 @@ def test_installed_runner_stops_final_leader_before_acceptance(
 
     assert continued.returncode == 0, continued.stdout + continued.stderr
     continuation = yaml.safe_load(continued.stdout)
-    assert continuation["launch_status"] == "accepted"
+    assert continuation["tasks"]
+    assert all(task["send_status"] == "sent" for task in continuation["tasks"])
     state = yaml.safe_load((ticket / "ticket.yml").read_text(encoding="utf-8"))
     assert state["status"] == "awaiting-integration"
     assert state["active_team_ordinal"] == 1
@@ -738,7 +739,7 @@ def test_installed_runner_delivers_elapsed_notices_to_final_leader(
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert yaml.safe_load(result.stdout)["tasks"][0]["launch_status"] == "accepted"
+    assert yaml.safe_load(result.stdout)["tasks"][0]["launch_status"] == "launched"
     ticket = harness / ".graphtraj/state/tickets/76-session-alias-control"
     state = yaml.safe_load((ticket / "ticket.yml").read_text(encoding="utf-8"))
     assert state["status"] == "awaiting-integration"

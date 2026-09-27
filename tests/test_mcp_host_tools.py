@@ -770,12 +770,12 @@ def test_installed_mcp_server_continues_a_stopped_ticket_with_unchanged_semantic
             "ticket_name": "session-alias-control",
             "role":        "coding-team.team-leader",
         }]})["result"]
-        assert stopped["isError"] is False
+        assert stopped["isError"] is True
         assert stopped["structuredContent"]["tasks"][0]["launch_status"] == "stopped"
         usage_before = yaml.safe_load((ticket / "execution-budget.yml").read_text())
         assert usage_before["stopped"] is True
         state = yaml.safe_load((ticket / "ticket.yml").read_text())
-        assert state["status"] == "reviewing"
+        assert state["status"] == "implementing"
         candidate = state["current_candidate"]
         assert candidate is not None
         diagnosis = harness / "stopped-team-diagnosis.md"
@@ -838,7 +838,8 @@ def test_installed_mcp_server_continues_a_stopped_ticket_with_unchanged_semantic
 
     assert continued["isError"] is False, continued
     continuation = continued["structuredContent"]
-    assert continuation["launch_status"] == "accepted"
+    assert continuation["tasks"]
+    assert all(task["send_status"] == "sent" for task in continuation["tasks"])
     after = yaml.safe_load((ticket / "ticket.yml").read_text())
     assert after["status"] == "awaiting-integration"
     assert after["active_team_ordinal"] == 1
@@ -1372,7 +1373,7 @@ def test_installed_mcp_server_returns_a_budget_stop_to_the_request_caller(
         stopped = server.call(
             "swarm", {"tasks": [task]}, thread_id="thread-main"
         )["result"]
-        assert stopped["isError"] is False, stopped
+        assert stopped["isError"] is True, stopped
         assert stopped["structuredContent"]["tasks"][0]["launch_status"] == "stopped"
 
         # Accounting and retention keep the existing shapes and thresholds.
@@ -1528,7 +1529,7 @@ def test_installed_mcp_server_returns_each_caller_its_own_stop(
             stopped = server.call(
                 "swarm", {"tasks": [tasks[ticket_id]]}, thread_id=thread_id
             )["result"]
-            assert stopped["isError"] is False, stopped
+            assert stopped["isError"] is True, stopped
             assert stopped["structuredContent"]["tasks"][0]["launch_status"] == "stopped"
             delivery = stopped["structuredContent"]["stop_deliveries"][0]
             assert delivery["ticket"]["ticket_id"] == ticket_id
@@ -1667,7 +1668,7 @@ def test_installed_mcp_server_keeps_the_continue_path_on_the_request_caller(
         stopped = server.call(
             "swarm", {"tasks": [task]}, thread_id="thread-main"
         )["result"]
-        assert stopped["isError"] is False, stopped
+        assert stopped["isError"] is True, stopped
         assert stopped["structuredContent"]["tasks"][0]["launch_status"] == "stopped"
         delivery = stopped["structuredContent"]["stop_deliveries"][0]
         assert delivery["stop"] == "stochastic_stop:2"
@@ -1735,7 +1736,8 @@ def test_installed_mcp_server_keeps_the_continue_path_on_the_request_caller(
         assert continuation["continuation_event_id"]
         # A continuation that did not stop again submits nothing new, even
         # though the same binding served it.
-        assert continuation["launch_status"] == "accepted"
+        assert continuation["tasks"]
+        assert all(task["send_status"] == "sent" for task in continuation["tasks"])
         assert continuation["continuation_event_id"]
         # The continuation is served by the same request-scoped caller binding
         # and delivers no new stop.

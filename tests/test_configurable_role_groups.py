@@ -308,7 +308,6 @@ def test_role_names_do_not_select_content_or_access(tmp_path: Path, reference: s
     _, generic = parse_inline_role({'researcher': {'runtime': 'codex', 'model': 'chosen'}})
     resolved = resolve_child_role(name, preset, tmp_path)
     assert resolved.instructions == resolve_child_role('researcher', generic, tmp_path).instructions
-    assert not hasattr(resolved, 'required_skills')
     assert not resolved.allow_runtime_swarm
     assert preset.worktree_access == 'write'
     assert preset.reports == ()

@@ -204,7 +204,7 @@ def test_retained_tiered_batch_still_resolves_for_recovery(tmp_path: Path) -> No
     assert task.role == "engineer-senior"
     assert role.name == "engineer-senior"
     # A retained identity does not implicitly select a professional resource.
-    assert not hasattr(role, "required_skills")
+    assert role.instructions == resolve_child_role("engineer", selected, tmp_path).instructions
 
 
 @pytest.mark.parametrize(

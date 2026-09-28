@@ -1,4 +1,0 @@
-interface:
-  display_name: "Task Delivery"
-  short_description: "Coordinate accepted tasks and their results"
-  default_prompt: "Use $task-delivery to select ready tasks and appropriate executors, follow their results, and continue through validated integration."

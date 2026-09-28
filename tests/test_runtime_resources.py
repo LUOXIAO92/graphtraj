@@ -532,7 +532,6 @@ def test_reviewer_send_refreshes_exact_replacement_report_permissions(
     assert "--dangerously-bypass-hook-trust" not in arguments
 
 
-# A retained Session identity resolves to the same unified Engineer policy.
 @pytest.mark.parametrize("role", ("engineer", "engineer-senior"))
 @pytest.mark.parametrize("reports_only", (False, True))
 def test_engineer_resume_preserves_captured_permissions_and_refreshes_reports(

@@ -492,7 +492,7 @@ def test_runner_status_discovers_the_graphtraj_configuration(
     repository = temporary_git_repository
     setup = run_setup(installed_commands, repository)
     monkeypatch.setenv("CODEX_THREAD_ID", "query-without-recovery-skill")
-    (repository / ".agents/skills/retro/SKILL.md").unlink()
+    assert not (repository / ".agents").exists()
     assert not (repository / ".agents/skills/retro/SKILL.md").exists()
 
     status = run_process(

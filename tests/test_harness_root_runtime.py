@@ -104,12 +104,14 @@ def test_installed_runtime_projects_enabled_external_skill_directories(
     environment = dict(os.environ, HOME=str(user_home), FAKE_CODEX_LOG=str(fake_codex.log_file))
     environment['PATH'] = str(fake_codex.executable.parent) + os.pathsep + environment['PATH']
     user_skills = Path(environment['HOME']) / '.agents' / 'skills'
+    install_skills(harness / '.agents' / 'skills', ('implement', 'ponytail'))
     harness_skill = harness / '.agents' / 'skills' / 'implement' / 'SKILL.md'
     assert harness_skill.is_file()
     unselected = harness_skill.parent.parent / 'unselected' / 'SKILL.md'
     unselected.parent.mkdir()
     unselected.write_text('---\nname: unselected\ndescription: Unselected.\n---\n')
     reference = harness_skill.parent.parent / 'ponytail' / 'tests.md'
+    reference.write_text('Ponytail reference.\n', encoding='utf-8')
     (harness / '.codex/config.toml').write_text(
         '\n'.join('[[skills.config]]\npath = ' + json.dumps(str(path)) + '\nenabled = true'
                   for path in (harness_skill, reference.parent / 'SKILL.md'))
@@ -336,7 +338,7 @@ def test_setup_creates_a_root_owned_runtime_and_runner_discovers_it(
     assert non_root.value.code == "PROJECT_CONFIG_MISMATCH"
 
 
-def test_setup_installs_project_core_skills_even_with_user_copies(
+def test_setup_keeps_bundled_skills_out_of_the_project(
     monkeypatch,
     temporary_git_repository: Path,
     tmp_path: Path,
@@ -355,12 +357,12 @@ def test_setup_installs_project_core_skills_even_with_user_copies(
     monkeypatch.setenv("HOME", str(user_home))
 
     plan = plan_project_setup(harness_root, temporary_git_repository)
-    assert plan.apply(install_missing_skills=True).integration_action == "created"
+    assert plan.apply().integration_action == "created"
 
     runtime_store = harness_root / ".codex"
     assert not (runtime_store / "config.toml").exists()
+    assert not (harness_root / ".agents").exists()
     for name in CORE_SKILL_NAMES:
-        assert (harness_root / ".agents/skills" / name / "SKILL.md").is_file()
         assert (user_home / ".agents/skills" / name / "SKILL.md").is_file()
     preflight_runtime_context(
         runtime_store=runtime_store,
@@ -706,8 +708,7 @@ def test_installed_runner_uses_runtime_user_core_skill_when_source_tracks_it(
     )
     assert setup.returncode == 0, setup.stderr
     configure_coding_roles(repository)
-    # An existing project may lose its local copy; Runner still resolves the user Skill.
-    shutil.rmtree(repository / ".agents/skills/implement")
+    # No local Skill copy exists; Runner still resolves the user Skill.
 
     with engineer_probe(installed_commands, repository, fake_codex, environment) as (alias, worktree, _):
         records = [json.loads(line) for line in fake_codex.log_file.read_text().splitlines()]
@@ -761,8 +762,7 @@ def test_installed_runner_uses_runtime_user_skill_from_newer_primary_history(
     )
     assert setup.returncode == 0, setup.stderr
     configure_coding_roles(repository)
-    # An existing project may lose its local copy; Runner still resolves the user Skill.
-    shutil.rmtree(repository / ".agents/skills/implement")
+    # No local Skill copy exists; Runner still resolves the user Skill.
 
     with engineer_probe(installed_commands, repository, fake_codex, environment) as (alias, worktree, _):
         records = [json.loads(line) for line in fake_codex.log_file.read_text().splitlines()]

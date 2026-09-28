@@ -143,6 +143,7 @@ def test_upgrading_the_installation_preserves_existing_project_records(
         )
     )
     operator_skill = repository / ".agents" / "skills" / "implement" / "SKILL.md"
+    operator_skill.parent.mkdir(parents=True, exist_ok=True)
     operator_skill.write_text(
         "---\nname: implement\ndescription: Operator copy.\n---\n",
         encoding="utf-8",

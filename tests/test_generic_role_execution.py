@@ -18,7 +18,9 @@ from test_ticket_graph import _change_status, _register, _ticket
 def remove_coding_method_skills(root: Path, user_home: Path) -> None:
     """Leave a project whose work selected none of the coding methods."""
     for name in CODING_METHOD_SKILL_NAMES:
-        shutil.rmtree(root / '.agents' / 'skills' / name)
+        harness_skill = root / '.agents' / 'skills' / name
+        if harness_skill.exists():
+            shutil.rmtree(harness_skill)
         shutil.rmtree(user_home / '.agents' / 'skills' / name)
 
 

@@ -8,7 +8,7 @@ import pytest
 import yaml
 
 from conftest import app_server_peer, run_process
-from test_project_setup import run_setup, setup_environment
+from test_project_setup import install_user_skills, run_setup, setup_environment
 from test_ticket_graph import _change_status, _register, _ticket
 
 
@@ -65,6 +65,7 @@ def test_installed_delivery_corrects_a_split_and_delivers_the_current_graph(
         (old_state / name).write_bytes(b"Historical user evidence: \x00\xff\n")
     old_evidence = {path.relative_to(old_state): path.read_bytes() for path in old_state.iterdir()}
     user_home = tmp_path / "operator-home"
+    install_user_skills(user_home)
     setup = run_setup(
         installed_commands, harness_root=root, user_home=user_home,
         fake_codex=fake_codex, answers="y\ny\n",
@@ -79,7 +80,7 @@ def test_installed_delivery_corrects_a_split_and_delivers_the_current_graph(
     assert not (root / ".codex" / "agent-runner").exists()
     assert not (root / ".codex" / "agents").exists()
     assert not (root / ".pi" / "agents").exists()
-    assert (root / ".agents/skills/task-delivery/SKILL.md").is_file()
+    assert not (root / ".agents").exists()
     config_file = root / ".graphtraj/config.yml"
     config = yaml.safe_load(config_file.read_text())
     config["agent_runner"]["max_concurrency"] = 1

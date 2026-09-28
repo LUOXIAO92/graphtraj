@@ -46,11 +46,20 @@ After actual authorization, the supported sampled-stop continuation is:
 agent-runner continue --ticket-id <id> --caused-by-event-id <authorization-or-decision-event>
 ```
 
-The default resumes the existing root Sessions. When the authorized plan instead
-selects new participants, add `--budget-only` (MCP: `budget_only: true`) to restore
-only execution permission, then use ordinary configured swarm dispatch. Old
-Sessions remain stopped with their original parents; this does not change their
-models or reparent their children. Authorization for more time remains separate.
+The default resumes existing roots with a generic continuation message. A revised
+Ticket or causal event alone does not deliver new execution limits. For an
+explicitly restricted sampled-stop recovery, restore permission with
+`continue --budget-only`, then use `send` to deliver the allowed work, prohibited
+work, deadline and actual causal event ID to the original root. Use the returned
+continuation event for that second call. Check each result; restoring permission
+does not mean the Session has resumed. Manual subtree stops still reject this
+sequence and must not be bypassed.
+
+When the authorized plan selects new participants, use ordinary configured root
+swarm dispatch after any necessary budget restoration. Its first instruction can
+state the exact handoff scope. A new root may join an active Team; it is a new
+member, not an implicit replacement of another seat. Old entities retain their
+parents and stop records. Authorization for more time remains separate.
 
 Check that it admits the task's current state, preserve original accounting and
 handle its actual return. Do not repeatedly invoke continuation to manufacture
@@ -58,9 +67,20 @@ acceptance. For an already committed integration escalation, use the retained
 candidate and unchanged validation through the public integration entry as
 specified in [command inputs](command-inputs.md).
 
-When no implementation is authorized, `agent-runner send <alias> --reports-only`
-with the instruction and causal event can collect retained reports. It grants no
-new implementation window. Use the selected Runtime's actual notification channel and report a delivery failure through the caller.
+Where execution permission still admits the Session,
+`agent-runner send <alias> --reports-only` can collect retained reports using an
+explicit instruction and causal event. It grants no implementation window and
+does not bypass a manual subtree stop. Use the selected Runtime's actual notification channel and report a delivery failure through the caller.
+
+## Adopt retained results
+
+A genuinely assigned successor may submit an unchanged committed artifact as its
+own handoff result. Credit the original authors and the valid evidence relayed by
+its actual parent; write its own assigned report before submission. A new commit
+or repeated implementation is not required. Its actual parent decides that new
+submission, while the old submission and original Session relationships remain
+unchanged. This does not grant control of old children or access to their private
+reports, and is not permission to claim another Agent's work or checks as its own.
 
 ## Stop and replace
 

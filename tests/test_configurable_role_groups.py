@@ -284,7 +284,9 @@ def test_explicit_role_content_is_independent_of_identity(tmp_path: Path) -> Non
     preset = roles.preset('researcher')
     resolved = resolve_child_role('researcher', preset, tmp_path)
     assert resolved.name == 'researcher'
-    assert resolved.required_skills == ()
+    # The role instructions are passed through verbatim: an embedded
+    # required_skills line is text, not a Skill selection.
+    assert resolved.instructions.startswith('External role text.\nrequired_skills: [absent]')
     assert resolved.allow_runtime_swarm
     assert preset.worktree_access == 'read'
     assert preset.reports == ('findings.md', 'evidence.md')
@@ -306,7 +308,7 @@ def test_role_names_do_not_select_content_or_access(tmp_path: Path, reference: s
     _, generic = parse_inline_role({'researcher': {'runtime': 'codex', 'model': 'chosen'}})
     resolved = resolve_child_role(name, preset, tmp_path)
     assert resolved.instructions == resolve_child_role('researcher', generic, tmp_path).instructions
-    assert resolved.required_skills == ()
+    assert not hasattr(resolved, 'required_skills')
     assert not resolved.allow_runtime_swarm
     assert preset.worktree_access == 'write'
     assert preset.reports == ()

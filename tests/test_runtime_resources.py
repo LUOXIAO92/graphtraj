@@ -146,7 +146,7 @@ print(json.dumps({'type': 'turn.completed'}), flush=True)
         runtime_store=harness / ".codex", executable=executable,
         git_common_directory=temporary_git_repository / ".git",
         role=role, worktree=worktree, evidence=session,
-        repository_skill_source=worktree, requested_skills=(),
+        requested_skills=(),
     ).finalize()
     if missing_reference:
         (harness / '.agents/skills/research/references/coding.md').unlink()
@@ -647,7 +647,7 @@ def test_explicit_read_access_is_enforced_by_native_sandbox(
     context = preflight_runtime_context(
         runtime_store=root / '.codex', executable=Path(executable),
         git_common_directory=root / 'git-common', role=role, worktree=root,
-        evidence=evidence, repository_skill_source=root, requested_skills=(),
+        evidence=evidence, requested_skills=(),
         report_files=(Path('.state/teams/1/rounds/1/findings.md'),),
     ).finalize()
     arguments = context.launch_document()['adapter_request']['arguments']
@@ -707,7 +707,7 @@ def test_native_resource_configuration_is_forwarded_without_name_selection(
         runtime_store=runtime, executable=_runtime_executable(tmp_path),
         git_common_directory=tmp_path / 'git', role=role,
         worktree=tmp_path / 'separate-worktree', evidence=tmp_path / 'evidence',
-        repository_skill_source=tmp_path / 'source', requested_skills=(),
+        requested_skills=(),
     ).finalize()
     settings = context.session_document()['adapter_request']['config']
     if configuration:
@@ -741,6 +741,6 @@ def test_invalid_explicit_native_config_fails_at_preflight(tmp_path: Path, conte
             runtime_store=runtime, executable=_runtime_executable(tmp_path),
             git_common_directory=tmp_path / 'git', role=role,
             worktree=tmp_path / 'worktree', evidence=tmp_path / 'evidence',
-            repository_skill_source=tmp_path, requested_skills=(),
+            requested_skills=(),
         )
     assert error.value.code == 'RUNTIME_CONFIG_INVALID'

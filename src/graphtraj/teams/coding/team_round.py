@@ -792,7 +792,6 @@ def _execute_agent(
             role=resolve_child_role(policy_role, preset, project.harness_root),
             worktree=worktree,
             evidence=evidence,
-            repository_skill_source=worktree,
             requested_skills=task.requested_skills,
             report_files=report_files,
         ).finalize()

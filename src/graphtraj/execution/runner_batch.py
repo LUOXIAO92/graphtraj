@@ -183,8 +183,8 @@ def _resolve_swarm_task(
 ) -> dict[str, Any]:
     """Return one swarm task with the Ticket identity its caller left out.
 
-    A supplied Ticket id wins over the calling Session's own Ticket, so Main's
-    DAG selection and a Leader's own Ticket both work; a missing name is that
+    A supplied Ticket id wins over the calling Session's own Ticket, so any
+    caller may select a Ticket while omitting its name; a missing name is that
     registered Ticket's name.
     """
     allowed = {"ticket_id", "ticket_name", "role", "instruction", "skills"}

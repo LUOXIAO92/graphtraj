@@ -48,20 +48,18 @@ def context(
     role: ResolvedChildRole | None = None,
     requested_skills: tuple[str, ...] = (),
     report_files: tuple[Path, ...] = (),
-    leader_control_write_paths: tuple[Path, ...] = (),
 ) -> RuntimeContext:
     """Resolve real packaged permissions without unrelated Runner dispatch."""
     root.mkdir(exist_ok=True)
     return preflight_runtime_context(
         runtime_store=root / '.codex', executable=executable,
         git_common_directory=root / 'git-common',
-        role=role or ResolvedChildRole('temporary-role', 'Follow the bounded task.', (),
+        role=role or ResolvedChildRole('temporary-role', 'Follow the bounded task.',
                                RolePreset('codex', 'chosen-model', None, None,
                                           reasoning_effort='low')),
         worktree=root, evidence=root / 'evidence',
-        repository_skill_source=root, requested_skills=requested_skills,
+        requested_skills=requested_skills,
         report_files=report_files,
-        leader_control_write_paths=leader_control_write_paths,
     ).finalize()
 
 
@@ -564,7 +562,7 @@ def test_each_session_projects_resolved_role_skills_and_task_access(
                 skill = root / '.agents/skills' / skill_name / 'SKILL.md'
                 skill.parent.mkdir(parents=True)
                 skill.write_text(f'---\nname: {skill_name}\ndescription: temporary check\n---\n')
-            role = ResolvedChildRole(role_name, f'Role {name}.', (),
+            role = ResolvedChildRole(role_name, f'Role {name}.',
                                      RolePreset('codex', model, None, None, reasoning_effort=effort,
                                                 worktree_access='read' if name == 'second' else 'write'))
             contexts.append(context(root, peer, role, (),
@@ -877,7 +875,7 @@ def test_connection_overrides_cannot_leak_into_a_session_using_defaults(
     """A default Context cannot silently inherit another role's endpoint."""
 
     async def exercise() -> None:
-        role = ResolvedChildRole('temporary-role', 'Bounded task.', (),
+        role = ResolvedChildRole('temporary-role', 'Bounded task.',
                                  RolePreset('codex', 'model', 'https://role.invalid/v1', None,
                                  codex={'approval': {'model': 'review', 'base_url': 'https://review.invalid',
                                                       'api_key_env': 'REVIEW_KEY'}}))
@@ -1106,7 +1104,7 @@ def test_harness_approvals_reviewer_reaches_create_and_resume(
     report_files = (Path('.state/teams/1/rounds/1/engineer.md'),)
     resolved = context(
         root, peer,
-        ResolvedChildRole('engineer', 'Implement the Ticket.', (),
+        ResolvedChildRole('engineer', 'Implement the Ticket.',
                           RolePreset('codex', 'chosen-model', None, None, reasoning_effort='low')),
         report_files=report_files,
     )
@@ -1150,10 +1148,9 @@ def test_parent_projection_keeps_control_files_private(
     capacity = root / '.graphtraj' / 'runner' / 'capacity'
     resolved = context(
         root, peer,
-        ResolvedChildRole(role, 'Lead the Team.', (),
+        ResolvedChildRole(role, 'Lead the Team.',
                           RolePreset('codex', 'chosen-model', None, None,
                                      allow_runtime_swarm=True, reasoning_effort='max', worktree_access='write')),
-        leader_control_write_paths=(worldline_lock, capacity),
     )
     launch = _native_filesystem(resolved.launch_document()['adapter_request'])
     assert launch[str(root / '.graphtraj')] == 'none'
@@ -1205,14 +1202,14 @@ def test_role_assignments_survive_native_followup_permissions(
         root.mkdir()
         evidence = tmp_path / '.graphtraj/state/tickets/149-reports'
         role = ResolvedChildRole(
-            'engineer', 'Implement the assigned task.', (),
+            'engineer', 'Implement the assigned task.',
             RolePreset('codex', 'chosen-model', None, None),
         )
         contexts = [
             preflight_runtime_context(
                 runtime_store=tmp_path / '.codex', executable=peer,
                 git_common_directory=tmp_path / 'git-common', role=role,
-                worktree=root, evidence=evidence, repository_skill_source=root,
+                worktree=root, evidence=evidence,
                 requested_skills=(), report_files=assign_session_reports(
                     'engineer', f'149-reports-handover0-engineer@{entity}', 1, 1,
                 ),

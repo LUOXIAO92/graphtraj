@@ -92,8 +92,6 @@ class _CodexRole:
         native_skills: Mapping[str, Any] | None,
         report_files: Tuple[Path, ...],
         model: str,
-        child_batch_write_paths: Tuple[Path, ...] = (),
-        leader_control_write_paths: Tuple[Path, ...] = (),
     ) -> Dict[str, Any]:
         """Render the private request consumed by this Adapter's worker."""
 
@@ -189,8 +187,6 @@ class _CodexRuntimePreflight:
     _evidence: Path
     _native_skills: Mapping[str, Any] | None
     _report_files: Tuple[Path, ...]
-    _child_batch_write_paths: Tuple[Path, ...]
-    _leader_control_write_paths: Tuple[Path, ...]
 
     def finalize(self) -> RuntimeContext:
         """Resolve Ticket Worktree facts shared by supported role boundaries."""
@@ -204,8 +200,6 @@ class _CodexRuntimePreflight:
             native_skills=self._native_skills,
             report_files=self._report_files,
             model=self._model,
-            child_batch_write_paths=self._child_batch_write_paths,
-            leader_control_write_paths=self._leader_control_write_paths,
         )
         return _CodexRuntimeContext(
             _launch=json.dumps({
@@ -284,11 +278,8 @@ def preflight_runtime_context(
     role: ResolvedChildRole,
     worktree: Path,
     evidence: Path,
-    repository_skill_source: Path,
     requested_skills: Tuple[str, ...],
     report_files: Tuple[Path, ...] = (),
-    child_batch_write_paths: Tuple[Path, ...] = (),
-    leader_control_write_paths: Tuple[Path, ...] = (),
 ) -> RuntimeContextPreflight:
     """Prepare one Codex role without crossing role-specific boundaries."""
 
@@ -312,8 +303,6 @@ def preflight_runtime_context(
         native_skills=native_skills,
         report_files=report_files,
         model=settings.model,
-        child_batch_write_paths=child_batch_write_paths,
-        leader_control_write_paths=leader_control_write_paths,
     )
     return _CodexRuntimePreflight(
         _executable=executable,
@@ -328,8 +317,6 @@ def preflight_runtime_context(
         _evidence=evidence,
         _native_skills=native_skills,
         _report_files=report_files,
-        _child_batch_write_paths=child_batch_write_paths,
-        _leader_control_write_paths=leader_control_write_paths,
     )
 
 

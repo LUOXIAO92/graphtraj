@@ -110,7 +110,7 @@ All module names in this table are beneath `graphtraj`.
 | Module | Operation and input | Result |
 | --- | --- | --- |
 | `workspace.project_initialization` | `plan_project_setup(root, source_repository)`; then `plan.preflight()` and `plan.apply()` | Existing plan and preview objects; apply returns `ProjectSetupResult` with `integration_worktree`, `integration_action` (`created`, `registered`, `reused`) and `completed_actions`. |
-| `configuration.skill_check` | `diagnose_project(root)` | `ProjectDiagnosis`: whether roles were checked, role diagnostics and `succeeded`. |
+| `configuration.project_diagnosis` | `diagnose_project(root)` | `ProjectDiagnosis`: whether roles were checked, role diagnostics and `succeeded`. |
 | `graph.ticket_graph` | `register_ticket(state, root, issue)` | Registered Ticket directory as a `Path`. |
 | `graph.ticket_graph` | `revise_tickets(state, root, revision)`; `update_ticket_state(state, root, change)` | Recorded causal event as a dictionary. |
 | `graph.ticket_graph` | `read_graph(state)` | Dictionary containing current Tickets and dependency readiness. |
@@ -121,9 +121,9 @@ All module names in this table are beneath `graphtraj`.
 | `execution.runner_status` | `status_aliases(aliases, cwd, operation_total=False, baseline=None, candidate=None)`; `status_tree(cwd, operation_total=False, baseline=None, candidate=None)` | Existing `StatusResponse` with `document`, `succeeded` and `errors`. The tree operation returns one `agents` document without an alias list. |
 | `execution.runner_control` | `send_instruction(alias, instruction, cwd, caused_by_event_ids)`; `interrupt_session(alias, cwd)` | Session operation result dictionary. |
 | `execution.runner_cleanup` | `cleanup_ticket(cwd, ticket_id)` | Existing `CleanupResponse` with `document` and `succeeded`. |
-| `teams.coding.team_round` | `continue_stopped_ticket(ticket_id, caused_by_event_ids, cwd, *, budget_only=False)` | Continuation result and its causal event ID. |
-| `teams.coding.team_replacement` | `replace_session(alias, actor, caused_by_event_ids, cwd)` | Replacement result dictionary. |
-| `teams.coding.ticket_integration` | `integrate_ticket(configuration, ticket_id, validation_command, diagnosis=None)` | Candidate, integration status, event ID, evidence path and unlocked Ticket IDs. Validation argv is a tuple; failure retains evidence and a non-integrated status. |
+| `teams.team_round` | `continue_stopped_ticket(ticket_id, caused_by_event_ids, cwd, *, budget_only=False)` | Continuation result and its causal event ID. |
+| `teams.team_replacement` | `replace_session(alias, actor, caused_by_event_ids, cwd)` | Replacement result dictionary. |
+| `teams.ticket_integration` | `integrate_ticket(configuration, ticket_id, validation_command, diagnosis=None)` | Candidate, integration status, event ID, evidence path and unlocked Ticket IDs. Validation argv is a tuple; failure retains evidence and a non-integrated status. |
 
 Issue, revision, state request and event dictionaries use the same fields as
 the corresponding CLI YAML inputs. Paths are `pathlib.Path` objects; causal

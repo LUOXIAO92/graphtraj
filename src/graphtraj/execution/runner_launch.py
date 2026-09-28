@@ -93,7 +93,7 @@ def launch_batch(batch: Batch, cwd: Path) -> LaunchResponse:
     registration = os.environ.get("GRAPHTRAJ_PARENT_REGISTRATION")
     caller = caller_alias(runner_directory)
     if caller is not None:
-        from graphtraj.teams.coding.team_round import register_child_batch
+        from graphtraj.teams.team_round import register_child_batch
 
         # Only this Session's own registration file may be written; a request
         # that names another Session's file is refused there.
@@ -103,7 +103,7 @@ def launch_batch(batch: Batch, cwd: Path) -> LaunchResponse:
             Path(registration) if registration else
             runner_directory / "sessions" / caller / "child-registration.yml",
         )
-    from graphtraj.teams.coding.team_round import launch_team_batch
+    from graphtraj.teams.team_round import launch_team_batch
 
     try:
         return launch_team_batch(batch, cwd)

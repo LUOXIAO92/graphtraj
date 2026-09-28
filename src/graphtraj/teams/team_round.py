@@ -113,7 +113,7 @@ def register_child_batch(batch: Batch, cwd: Path, registration: Path) -> LaunchR
             )
         ancestor, _ = read_alias_mapping(project.runner_directory, parent_alias)
         parent_alias = ancestor["parent"]
-    from graphtraj.teams.coding.team_replacement import require_active_session
+    from graphtraj.teams.team_replacement import require_active_session
 
     require_active_session(project, caller)
     children = [
@@ -340,7 +340,7 @@ def _run_batch_workers(
                     if notice_fd is not None:
                         environment["GRAPHTRAJ_BUDGET_NOTICE_FD"] = str(notice_fd)
                     worker = subprocess.Popen(
-                        [sys.executable, "-I", "-m", "graphtraj.teams.coding.team_round",
+                        [sys.executable, "-I", "-m", "graphtraj.teams.team_round",
                          str(retained), str(index), str(position.fileno()), parent_alias],
                         cwd=project.harness_root, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
                         env=environment,
@@ -435,7 +435,7 @@ def _deliver_ticket(
                 if parent["ticket_id"] != task.ticket_id or parent["team_generation"] != generation:
                     raise RunnerError("authority-denied", "Child must retain its parent's active task.")
     if state["status"] == "resolving-integration":
-        from graphtraj.teams.coding.merge_resolution import integration_assignment
+        from graphtraj.teams.merge_resolution import integration_assignment
 
         worktree, prompt = integration_assignment(project, task, parent_alias)
     else:

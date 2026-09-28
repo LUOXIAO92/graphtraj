@@ -457,7 +457,7 @@ def test_failed_first_creation_can_continue_budget_before_ordinary_launch(
     from graphtraj.execution import execution_budget as budgets
     from graphtraj.execution.runner_models import RunnerError
     from graphtraj.execution.runner_status import runtime_caller
-    from graphtraj.teams.coding.team_round import continue_stopped_ticket
+    from graphtraj.teams.team_round import continue_stopped_ticket
 
     root, _, _, env = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path,
@@ -609,7 +609,7 @@ def test_budget_only_continuation_leaves_old_subtree_for_new_configured_root(
     from graphtraj.execution import execution_budget as budgets
     from graphtraj.execution.runner_models import RunnerError
     from graphtraj.execution.runner_status import runtime_caller
-    from graphtraj.teams.coding.team_round import continue_stopped_ticket
+    from graphtraj.teams.team_round import continue_stopped_ticket
 
     root, env, task = prepare(
         installed_commands, temporary_git_repository, fake_codex, tmp_path,
@@ -651,7 +651,7 @@ def test_budget_only_continuation_leaves_old_subtree_for_new_configured_root(
                 continue_stopped_ticket('154', causes, root, budget_only=True)
 
         # A resolved member from another Team must fail before permission changes.
-        from graphtraj.teams.coding import team_round
+        from graphtraj.teams import team_round
         read_mapping = team_round.read_alias_mapping
 
         def mismatched_member(directory: Path, member: str) -> tuple[dict, Path]:

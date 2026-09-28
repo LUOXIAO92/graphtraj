@@ -11,7 +11,7 @@ from graphtraj.configuration.project_configuration import (
 )
 from graphtraj.workspace.git_repository import GitRepositoryError
 from graphtraj.execution.runner_models import RunnerError
-from graphtraj.teams.coding.ticket_integration import integrate_ticket
+from graphtraj.teams.ticket_integration import integrate_ticket
 from graphtraj.graph.delivery_state import apply_delivery_state_request
 from graphtraj.graph.ticket_graph import (
     register_ticket,

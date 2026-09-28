@@ -16,7 +16,7 @@ from graphtraj.execution.runner_status import (
     require_replacement_authority,
     require_stopped_subtree,
 )
-from graphtraj.teams.coding.team_round import (
+from graphtraj.teams.team_round import (
     _run_agent,
     _trace_ref,
 )
@@ -64,7 +64,7 @@ def replace_session(
     # the public entry or a command carrying an approved/skip-authority flag.
     script = (
         "from pathlib import Path; import yaml; "
-        "from graphtraj.teams.coding.team_replacement import _replace_stopped_session; "
+        "from graphtraj.teams.team_replacement import _replace_stopped_session; "
         "print(yaml.safe_dump(_replace_stopped_session("
         + repr(alias) + ", " + repr(actor) + ", "
         + repr(tuple(caused_by_event_ids)) + ", Path(" + repr(str(cwd))

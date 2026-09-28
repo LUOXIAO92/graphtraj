@@ -541,7 +541,7 @@ def test_shared_integration_enforces_task_authority_and_returns_retained_outcome
     from graphtraj.graph.delivery_worldline import read_worldline
     from graphtraj.graph.ticket_graph import read_graph
     from graphtraj.interfaces.cli.graphtraj import main
-    from graphtraj.teams.coding.ticket_integration import integrate_ticket
+    from graphtraj.teams.ticket_integration import integrate_ticket
 
     root, worktrees, state, candidate = accepted_ticket
     configuration = load_project_configuration(root)
@@ -735,7 +735,7 @@ def test_actual_result_parent_can_integrate_without_role_name_authority(
     from graphtraj.configuration.project_configuration import load_project_configuration
     from graphtraj.execution.runner_status import runtime_caller
     from graphtraj.graph.delivery_worldline import read_worldline
-    from graphtraj.teams.coding.ticket_integration import integrate_ticket
+    from graphtraj.teams.ticket_integration import integrate_ticket
 
     root, _, state, candidate = accepted_ticket
     events = read_worldline(state, root)

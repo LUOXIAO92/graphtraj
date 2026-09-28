@@ -8,7 +8,7 @@ from pathlib import Path
 import click
 
 from graphtraj.workspace.project_initialization import ProjectSetupError, plan_project_setup
-from graphtraj.configuration.skill_check import DoctorError, diagnose_project
+from graphtraj.configuration.project_diagnosis import DoctorError, diagnose_project
 from graphtraj.configuration.project_roles import ProjectRolesError
 from graphtraj.configuration.project_configuration import configuration_exists
 

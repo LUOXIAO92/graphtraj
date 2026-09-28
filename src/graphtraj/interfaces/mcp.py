@@ -369,7 +369,7 @@ def send_session_instruction(
 
     ``reports_only`` resumes the Session to return evidence it already holds
     without sampling the Ticket budget, so a report collection cannot repeat a
-    sampled stop or deliver another retro instruction.
+    sampled stop or deliver another stop instruction.
     """
 
     return ToolResult(
@@ -396,7 +396,7 @@ def interrupt_session_execution(
 def continue_ticket_execution(arguments: Mapping[str, Any]) -> ToolResult:
     """Restore task budget permission, optionally without executing old Sessions."""
 
-    from graphtraj.teams.coding.team_round import continue_stopped_ticket
+    from graphtraj.teams.team_round import continue_stopped_ticket
 
     return ToolResult(
         continue_stopped_ticket(
@@ -545,7 +545,7 @@ def submit_report(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> T
                                            _string_argument(arguments, 'text'), cwd or Path.cwd()))
 
 
-register_tool('submit_report', 'Write your own assigned report by filename (for example engineer.md).',
+register_tool('submit_report', 'Write your own assigned report by filename (for example report.md).',
               {'type': 'object', 'properties': {'name': {'type': 'string'}, 'text': {'type': 'string'}},
                'required': ['name', 'text'], 'additionalProperties': False}, submit_report)
 

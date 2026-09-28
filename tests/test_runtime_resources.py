@@ -343,7 +343,7 @@ def test_current_runtime_diagnostic_uses_only_current_error_events(
     tmp_path: Path,
 ) -> None:
     monkeypatch.syspath_prepend(str(PROJECT_ROOT / "src"))
-    from graphtraj.teams.coding.team_round import (
+    from graphtraj.teams.team_round import (
         _current_runtime_diagnostic,
         _runtime_access_failure,
         _runtime_command_parse_error,

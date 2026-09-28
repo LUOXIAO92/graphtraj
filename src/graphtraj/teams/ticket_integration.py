@@ -83,7 +83,7 @@ def _integrate(
     batch = None
     if diagnosis is not None:
         from graphtraj.execution.runner_batch import parse_batch
-        from graphtraj.teams.coding.team_round import _require_dispatch_roles
+        from graphtraj.teams.team_round import _require_dispatch_roles
         from graphtraj.workspace.runner_project import discover_project
 
         batch = parse_batch({"tasks": [{"ticket_id": ticket_id, "ticket_name": record["ticket_name"],

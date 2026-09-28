@@ -242,8 +242,8 @@ class ExecutionBudgetMonitor:
         """Deliver once to the task's recorded parent, outside the budget lock.
 
         Members of the same Ticket share their root assignment's recipient.
-        The historical queue name is retained; a caller-channel write records
-        transport only and never claims that an Agent received the notice.
+        A caller-channel write records transport only and never claims that
+        an Agent received the notice.
         """
         from graphtraj.execution.runner_control import notify_direct_parent
         from graphtraj.execution.runner_status import read_alias_mapping
@@ -291,7 +291,7 @@ class ExecutionBudgetMonitor:
                 if budget is None:
                     return
                 state, _ = _read_usage(self.ticket_directory, budget)
-                for notice in state["leader_notices"]:
+                for notice in state["parent_notices"]:
                     if notice["key"] == key:
                         notice["channel_written"] = True
                 write_yaml_durably(self.ticket_directory / "execution-budget.yml", state)
@@ -329,7 +329,7 @@ class ExecutionBudgetMonitor:
                 state, _ = _read_usage(self.ticket_directory, budget)
                 return [
                     dict(notice)
-                    for notice in state["leader_notices"]
+                    for notice in state["parent_notices"]
                     if not notice["delivered"]
                 ]
             finally:
@@ -345,7 +345,7 @@ class ExecutionBudgetMonitor:
                 if budget is None:
                     return
                 state, _ = _read_usage(self.ticket_directory, budget)
-                for notice in state["leader_notices"]:
+                for notice in state["parent_notices"]:
                     if notice["key"] in keys:
                         notice["delivered"] = True
                 write_yaml_durably(
@@ -401,7 +401,7 @@ class ExecutionBudgetMonitor:
                     state["notifications"].extend(
                         notice["notification_key"] for notice in notices
                     )
-                    state["leader_notices"].extend(
+                    state["parent_notices"].extend(
                         {
                             "key": notice["notification_key"],
                             "message": notice["message"],
@@ -473,7 +473,7 @@ def _read_usage(
                 ),
                 "stopping_checks": 0,
                 "stopped": False,
-                "leader_notices": [],
+                "parent_notices": [],
             },
             True,
         )
@@ -503,13 +503,21 @@ def _read_usage(
             ),
             stopping_checks=0,
             stopped=False,
-            leader_notices=[],
+            parent_notices=[],
         )
+    if (
+        isinstance(state, dict)
+        and "leader_notices" in state
+        and "parent_notices" not in state
+    ):
+        # Records retained before the queue was renamed after its actual
+        # recipient stay readable; the current key is used from here on.
+        state["parent_notices"] = state.pop("leader_notices")
     if (
         not isinstance(state, dict)
         or set(state) != {
             "started_at", "budget", "sessions", "corrections", "notifications",
-            "allowance_minutes", "stopping_checks", "stopped", "leader_notices",
+            "allowance_minutes", "stopping_checks", "stopped", "parent_notices",
         }
         or not _nonnegative_number(state["started_at"])
         or not isinstance(state["budget"], dict)
@@ -524,7 +532,7 @@ def _read_usage(
         or type(state["stopping_checks"]) is not int
         or state["stopping_checks"] < 0
         or type(state["stopped"]) is not bool
-        or not isinstance(state["leader_notices"], list)
+        or not isinstance(state["parent_notices"], list)
         or any(
             not isinstance(value, dict)
             or not {"key", "message", "delivered"} <= set(value) <= {
@@ -535,7 +543,7 @@ def _read_usage(
             or not _text(value["key"])
             or not _text(value["message"])
             or type(value["delivered"]) is not bool
-            for value in state["leader_notices"]
+            for value in state["parent_notices"]
         )
     ):
         raise RunnerError(

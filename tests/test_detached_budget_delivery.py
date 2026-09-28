@@ -151,9 +151,9 @@ print(json.dumps({'type': 'item.completed', 'item': {'type': 'agent_message', 't
             for field in ('started_at', 'allowance_minutes', 'sessions'):
                 assert usage[field] == before[field]
             if stop:
-                assert len(usage['leader_notices']) == 3
-                assert all(n.get('channel_written') for n in usage['leader_notices'])
-                assert all(not n['delivered'] for n in usage['leader_notices'])
+                assert len(usage['parent_notices']) == 3
+                assert all(n.get('channel_written') for n in usage['parent_notices'])
+                assert all(not n['delivered'] for n in usage['parent_notices'])
                 if inherited:
                     notices = [json.loads(line) for line in os.read(read_fd, 10000).splitlines()]
                     assert len(notices) == 3

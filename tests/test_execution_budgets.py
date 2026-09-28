@@ -215,7 +215,7 @@ def test_installed_runner_delivers_sampled_stop_to_leader_before_engineer_stops(
         deadline = time.monotonic() + 10
         while time.monotonic() < deadline:
             usage = yaml.safe_load(usage_file.read_text(encoding="utf-8"))
-            if len(usage["leader_notices"]) == 1 and usage["leader_notices"][0].get("channel_written", False):
+            if len(usage["parent_notices"]) == 1 and usage["parent_notices"][0].get("channel_written", False):
                 break
             time.sleep(0.02)
         assert draws.read_text(encoding="utf-8") == "0"
@@ -223,8 +223,8 @@ def test_installed_runner_delivers_sampled_stop_to_leader_before_engineer_stops(
         deadline = time.monotonic() + 10
         while time.monotonic() < deadline:
             usage = yaml.safe_load(usage_file.read_text(encoding="utf-8"))
-            if len(usage["leader_notices"]) == 2 and all(
-                notice.get("channel_written", False) for notice in usage["leader_notices"]
+            if len(usage["parent_notices"]) == 2 and all(
+                notice.get("channel_written", False) for notice in usage["parent_notices"]
             ):
                 break
             time.sleep(0.02)
@@ -243,7 +243,7 @@ def test_installed_runner_delivers_sampled_stop_to_leader_before_engineer_stops(
         while time.monotonic() < deadline:
             usage = yaml.safe_load(usage_file.read_text(encoding="utf-8"))
             if usage["stopped"] and all(
-                notice.get("channel_written", False) for notice in usage["leader_notices"]
+                notice.get("channel_written", False) for notice in usage["parent_notices"]
             ):
                 break
             time.sleep(0.02)
@@ -253,7 +253,7 @@ def test_installed_runner_delivers_sampled_stop_to_leader_before_engineer_stops(
         assert allowance_draws.read_text(encoding="utf-8") == "1"
         assert usage["stopping_checks"] == 2
         assert draws.read_text(encoding="utf-8") == "2"
-        assert [notice["key"] for notice in usage["leader_notices"]] == [
+        assert [notice["key"] for notice in usage["parent_notices"]] == [
             "elapsed_minutes:0.01",
             "additional_allowance:0.001",
             "stochastic_stop:4",
@@ -262,7 +262,7 @@ def test_installed_runner_delivers_sampled_stop_to_leader_before_engineer_stops(
         assert [notice["threshold"]["kind"] for notice in notices] == [
             "elapsed_minutes", "additional_allowance", "stochastic_stop",
         ]
-        assert all(not notice["delivered"] for notice in usage["leader_notices"])
+        assert all(not notice["delivered"] for notice in usage["parent_notices"])
         deadline = time.monotonic() + 10
         while time.monotonic() < deadline:
             status = run_process(
@@ -372,7 +372,7 @@ def test_installed_runner_collects_reviews_already_running_at_sampled_stop(
         while time.monotonic() < deadline:
             usage = yaml.safe_load(usage_file.read_text(encoding="utf-8"))
             if usage["stopped"] and all(
-                notice.get("channel_written", False) for notice in usage["leader_notices"]
+                notice.get("channel_written", False) for notice in usage["parent_notices"]
             ):
                 break
             time.sleep(0.02)
@@ -477,7 +477,7 @@ def test_installed_runner_stops_final_leader_before_acceptance(
     assert state["current_candidate"] is None
     usage = yaml.safe_load((ticket / "execution-budget.yml").read_text())
     assert usage["stopped"] is True
-    assert all(notice.get("channel_written", False) for notice in usage["leader_notices"])
+    assert all(notice.get("channel_written", False) for notice in usage["parent_notices"])
     leader_inputs = [
         json.loads(line)["stdin"]
         for line in fake_codex.log_file.read_text(encoding="utf-8").splitlines()
@@ -619,7 +619,7 @@ def test_installed_runner_stops_final_leader_before_acceptance(
         "allowance_minutes",
         "stopping_checks",
         "notifications",
-        "leader_notices",
+        "parent_notices",
     ):
         assert usage[field] == usage_before[field]
     assert usage["budget"]["execution_budget"]["estimated_minutes"]["total"] == 10
@@ -695,13 +695,13 @@ def test_installed_runner_delivers_elapsed_notices_to_final_leader(
     assert state["status"] == "awaiting-integration"
     usage = yaml.safe_load((ticket / "execution-budget.yml").read_text())
     assert usage["stopped"] is False
-    assert len(usage["leader_notices"]) == 2
-    assert all(notice.get("channel_written", False) for notice in usage["leader_notices"])
+    assert len(usage["parent_notices"]) == 2
+    assert all(notice.get("channel_written", False) for notice in usage["parent_notices"])
     notices = _stderr_notices(result.stderr)
     assert [notice["threshold"]["kind"] for notice in notices] == [
         "elapsed_minutes", "additional_allowance",
     ]
-    assert all(not notice["delivered"] for notice in usage["leader_notices"])
+    assert all(not notice["delivered"] for notice in usage["parent_notices"])
 
 
 def test_installed_runner_uses_a_revised_budget_while_its_worker_is_running(
@@ -1049,7 +1049,7 @@ def test_installed_send_notifies_its_caller_while_a_budgeted_resume_runs(
         execution_file = mapping_file.parent / "execution.yml"
         if (
             usage["stopped"]
-            and all(notice.get("channel_written", False) for notice in usage["leader_notices"])
+            and all(notice.get("channel_written", False) for notice in usage["parent_notices"])
             and execution_file.is_file()
             and yaml.safe_load(execution_file.read_text(encoding="utf-8"))[
                 "outcome"
@@ -1069,7 +1069,7 @@ def test_installed_send_notifies_its_caller_while_a_budgeted_resume_runs(
     ]
     assert "Execution was stopped by Runner" in leader_inputs[-1]
     usage = yaml.safe_load(usage_file.read_text(encoding="utf-8"))
-    assert all(notice.get("channel_written", False) for notice in usage["leader_notices"])
+    assert all(notice.get("channel_written", False) for notice in usage["parent_notices"])
     assert (ticket / "teams/1/rounds/2/leader.md").is_file()
 
 
@@ -1177,8 +1177,8 @@ def test_installed_send_delivers_elapsed_notices_to_the_resumed_leader(
                 break
             time.sleep(0.02)
         assert not release.exists()
-        assert len(usage["leader_notices"]) == 2
-        assert all(not notice["delivered"] for notice in usage["leader_notices"])
+        assert len(usage["parent_notices"]) == 2
+        assert all(not notice["delivered"] for notice in usage["parent_notices"])
         assert [notice["threshold"]["kind"] for notice in notices] == [
             "elapsed_minutes", "additional_allowance",
         ]

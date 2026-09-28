@@ -834,7 +834,7 @@ def test_installed_mcp_server_continues_a_stopped_ticket_with_unchanged_semantic
     assert usage["stopped"] is False
     for field in (
         "started_at", "sessions", "corrections", "allowance_minutes",
-        "stopping_checks", "notifications", "leader_notices",
+        "stopping_checks", "notifications", "parent_notices",
     ):
         assert usage[field] == usage_before[field]
     assert usage["budget"]["execution_budget"]["estimated_minutes"]["total"] == 10

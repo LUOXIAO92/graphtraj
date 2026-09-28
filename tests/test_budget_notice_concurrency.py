@@ -111,9 +111,9 @@ assert monitor.is_stopped()
     assert state['stopped'] and state['stopping_checks'] == 1
     assert state['sessions']['engineer'] == 2 and state['corrections'] == 1
     assert state['started_at'] == 1000 and state['allowance_minutes'] == .1
-    assert {notice['key'].split(':')[0] for notice in state['leader_notices']} == {
+    assert {notice['key'].split(':')[0] for notice in state['parent_notices']} == {
         'elapsed_minutes', 'additional_allowance', 'stochastic_stop', 'planned_sessions.engineer',
     }
-    assert all(notice['delivered'] for notice in state['leader_notices'])
+    assert all(notice['delivered'] for notice in state['parent_notices'])
     assert (tmp_path / 'second-entered').exists()
     assert first[0]['message'] not in (tmp_path / 'second-entered').read_text()

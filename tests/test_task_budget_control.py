@@ -81,7 +81,47 @@ def test_budget_accepts_actual_work_and_keeps_allowance_across_roles_and_resume(
         assert after[field] == before[field]
     assert after['stopping_checks'] > before['stopping_checks']
     assert not after['stopped']
-    assert len(after['leader_notices']) == 3
+    assert len(after['parent_notices']) == 3
+
+
+def test_existing_notice_records_stay_readable_under_the_parent_key(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Records named leader_notices stay readable and keep their accounted facts."""
+    monitor = monitor_at(tmp_path / 'retained-budget')
+    monitor.record_session('researcher', 'researcher')
+    sample_stop(monitor, monkeypatch)
+    usage_file = monitor.ticket_directory / 'execution-budget.yml'
+
+    current = yaml.safe_load(usage_file.read_text())
+    assert 'parent_notices' in current and 'leader_notices' not in current
+
+    # An earlier release retained the same queue under leader_notices.
+    retained = dict(current)
+    retained['leader_notices'] = retained.pop('parent_notices')
+    retained['leader_notices'][0]['delivered'] = True
+    usage_file.write_text(yaml.safe_dump(retained))
+
+    pending = monitor.pending_parent_notices()
+    assert [notice['key'] for notice in pending] == [
+        notice['key'] for notice in retained['leader_notices'][1:]
+    ]
+
+    # The parent acknowledgement path marks only the acknowledged key and
+    # leaves every accounted fact unchanged.
+    monitor.mark_parent_notices_delivered([pending[0]['key']])
+    after = yaml.safe_load(usage_file.read_text())
+    for field in ('started_at', 'allowance_minutes', 'sessions', 'corrections',
+                  'stopping_checks', 'stopped', 'notifications', 'budget'):
+        assert after[field] == retained[field]
+    assert [notice['key'] for notice in after['parent_notices']] == [
+        notice['key'] for notice in retained['leader_notices']
+    ]
+    delivered = {notice['key']: notice['delivered'] for notice in after['parent_notices']}
+    assert delivered[retained['leader_notices'][0]['key']] is True
+    assert delivered[pending[0]['key']] is True
+    assert delivered[pending[1]['key']] is False
+    assert 'leader_notices' not in after
 
 
 def test_distinct_configured_roles_keep_independent_budget_counts(tmp_path: Path) -> None:
@@ -198,6 +238,11 @@ print(json.dumps({'type': 'item.completed', 'item': {'type': 'agent_message', 't
                     child_mapping, alias=sender.name, parent=root_child.name,
                 )))
             sample_stop(other, monkeypatch)
+            # Earlier releases retained this queue as leader_notices; notices
+            # from such a record must still reach the actual parent.
+            record = yaml.safe_load((other.ticket_directory / 'execution-budget.yml').read_text())
+            record['leader_notices'] = record.pop('parent_notices')
+            (other.ticket_directory / 'execution-budget.yml').write_text(yaml.safe_dump(record))
             if mode == 'admission':
                 stopped = run_process(
                     [str(commands.runner.with_name('python')), '-I', '-m',
@@ -221,7 +266,7 @@ print(json.dumps({'type': 'item.completed', 'item': {'type': 'agent_message', 't
             finally:
                 os.close(read_fd)
             retained = yaml.safe_load((other.ticket_directory / 'execution-budget.yml').read_text())
-            assert all(notice['delivered'] for notice in retained['leader_notices'])
+            assert all(notice['delivered'] for notice in retained['parent_notices'])
         native = [json.loads(line) for line in protocol.read_text().splitlines()]
         assert len([request for request in native if request['method'] == 'turn/steer']) == 9
         assert len([request for request in native if request['method'] == 'turn/start']) == 1
@@ -240,13 +285,13 @@ print(json.dumps({'type': 'item.completed', 'item': {'type': 'agent_message', 't
         after = yaml.safe_load((evidence / 'execution-budget.yml').read_text())
         assert after['allowance_minutes'] == before['allowance_minutes']
         assert after['sessions'][role.replace('-', '_')] == 1
-        assert all(not notice['delivered'] for notice in after['leader_notices'])
+        assert all(not notice['delivered'] for notice in after['parent_notices'])
         pending = monitor_at(tmp_path / 'idle-parent-budget')
         pending.record_session('researcher', 'researcher')
         sample_stop(pending, monkeypatch)
         pending.deliver_parent_notices(root_child)
         unreceived = yaml.safe_load((pending.ticket_directory / 'execution-budget.yml').read_text())
-        assert all(not notice['delivered'] for notice in unreceived['leader_notices'])
+        assert all(not notice['delivered'] for notice in unreceived['parent_notices'])
 
         release.touch()
         events = [json.loads(line) for shard in (root / '.graphtraj/state/worldline').glob('*.jsonl')
@@ -294,7 +339,7 @@ def test_top_level_caller_channel_is_retained_without_claiming_agent_receipt(
         'elapsed_minutes', 'additional_allowance', 'stochastic_stop',
     ]
     usage = yaml.safe_load((monitor.ticket_directory / 'execution-budget.yml').read_text())
-    assert all(notice['channel_written'] and not notice['delivered'] for notice in usage['leader_notices'])
+    assert all(notice['channel_written'] and not notice['delivered'] for notice in usage['parent_notices'])
 
 
 @pytest.mark.parametrize('when', ['before-create', 'during-create'])

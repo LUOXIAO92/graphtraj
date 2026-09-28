@@ -384,7 +384,7 @@ def test_sampled_stop_continues_original_researcher_with_unchanged_accounting(
         assert not after['stopped']
         for field in ('started_at', 'allowance_minutes', 'sessions', 'stopping_checks', 'notifications'):
             assert after[field] == before[field]
-        assert len(after['leader_notices']) == len(before['leader_notices'])
+        assert len(after['parent_notices']) == len(before['parent_notices'])
         context = yaml.safe_load((directory / 'resume.yml').read_text())
         assert context['monitor_execution_budget'] and context['drive_children']
         assert (directory / 'launch.yml').read_bytes() == original_launch

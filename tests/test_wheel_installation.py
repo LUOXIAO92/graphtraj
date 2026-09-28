@@ -21,9 +21,9 @@ from test_mcp_host_tools import TOOL_NAMES, _started_mcp
 from test_ticket_graph import _ticket, _write
 
 
-RESOURCE_DIRECTORIES = (
+UNBUNDLED_RESOURCE_DIRECTORIES = (
     "graphtraj/resources/roles/",
-    "graphtraj/resources/codex/agents/",
+    "graphtraj/resources/codex/",
     "graphtraj/resources/skills/",
 )
 
@@ -40,10 +40,10 @@ def installed_provenance(installed_commands: InstalledCommands) -> dict:
     return json.loads(recorded.read_text(encoding="utf-8"))
 
 
-def test_built_wheel_carries_the_commands_and_their_packaged_resources(
+def test_built_wheel_carries_only_the_commands_and_runtime_policy(
     built_wheel: Path,
 ) -> None:
-    """The artifact an operator installs contains every command and resource."""
+    """The artifact an operator installs contains the commands, not Skill bodies."""
 
     with zipfile.ZipFile(built_wheel) as archive:
         names = archive.namelist()
@@ -55,10 +55,8 @@ def test_built_wheel_carries_the_commands_and_their_packaged_resources(
 
     assert "graphtraj/interfaces/cli/graphtraj.py" in names
     assert "graphtraj/interfaces/mcp.py" in names
-    for directory in RESOURCE_DIRECTORIES:
-        assert any(name.startswith(directory) for name in names), directory
-    assert sum(name.endswith("/SKILL.md") for name in names) == 18
-    assert any(name.endswith("/references/coding.md") for name in names)
+    for directory in UNBUNDLED_RESOURCE_DIRECTORIES:
+        assert not any(name.startswith(directory) for name in names), directory
     assert {
         line.split(" = ")[0]
         for line in entry_points.splitlines()
@@ -106,7 +104,7 @@ def test_installed_wheel_initializes_both_layouts_and_serves_host_tools(
     assert configuration.read_bytes() == configured
     assert (harness_root / ".graphtraj" / ".agent-worktrees" / "dev").is_dir()
 
-    # Doctor resolves every core Skill and role from the installed wheel.
+    # Doctor validates the configured reusable roles from the installed wheel.
     doctor = run_process(
         [str(installed_commands.product), "doctor"], cwd=harness_root
     )

@@ -13,7 +13,6 @@ import time
 import tomllib
 import threading
 from dataclasses import dataclass
-from importlib import resources
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
@@ -42,6 +41,28 @@ REASONING_EFFORTS = frozenset(
     {"none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"}
 )
 BARE_TOML_KEY = re.compile(r"^[A-Za-z0-9_-]+$")
+
+# The generic Codex Runtime projection shared by every Harness-owned role.
+# Per-role selections (worktree access, instructions, reasoning effort and
+# connection) are applied on top of a copy of this projection.
+_CODEX_ROLE_PROJECTION: Mapping[str, Any] = {
+    "model_reasoning_effort": "high",
+    "default_permissions": "project-documents-read-only",
+    "permissions": {
+        "project-documents-read-only": {
+            "extends": ":workspace",
+            "filesystem": {
+                ":workspace_roots": {
+                    ".": "write",
+                    ".agents": "read",
+                    "AGENTS.md": "read",
+                    "CONTEXT.md": "read",
+                    "docs": "read",
+                }
+            },
+        }
+    },
+}
 
 
 class CodexAdapterError(RuntimeAdapterError):
@@ -877,7 +898,7 @@ def _process_group_is_alive(process_group: int) -> bool:
 def _resolve_codex_role(role: ResolvedChildRole, harness_root: Path) -> _CodexRole:
     """Translate a resolved child role using its fixed native permissions."""
 
-    document = _packaged_role("task")
+    document = copy.deepcopy(dict(_CODEX_ROLE_PROJECTION))
     _validate_role_schema(document)
     document["permissions"][document["default_permissions"]]["filesystem"][
         ":workspace_roots"
@@ -967,19 +988,6 @@ def codex_connection_environment(
 ) -> Mapping[str, str]:
     """Return transient Codex connection overrides for a resumed Session."""
     return _connection_environment(base_url, api_key_env)
-
-
-def _packaged_role(binding: str) -> Dict[str, Any]:
-    try:
-        content = resources.files("graphtraj.resources").joinpath(
-            "codex", "agents", "{0}.toml".format(binding)
-        ).read_bytes()
-        return tomllib.loads(content.decode())
-    except (OSError, UnicodeError, tomllib.TOMLDecodeError) as error:
-        raise CodexAdapterError(
-            "PACKAGED_ROLE_INVALID",
-            "The installed Codex role resource is invalid.",
-        ) from error
 
 
 def _harness_native_skills(runtime_store: Path) -> Mapping[str, Any] | None:

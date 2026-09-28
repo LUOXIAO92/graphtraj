@@ -1,51 +1,68 @@
+"""The distribution ships no bundled Skill, role or Codex agent resources.
+
+Core imports and Runtime role resolution must work from the shipped code
+alone, without any packaged Skill bodies or role templates.
+"""
+
 from __future__ import annotations
 
-import pytest
+import json
+import zipfile
+from pathlib import Path
 
-from conftest import PROJECT_ROOT
-
-
-CORE_SKILL_NAMES = (
-    "setup-project",
-    "grill-with-docs",
-    "grilling",
-    "domain-modeling",
-    "to-spec",
-    "to-tickets",
-    "task-delivery",
-    "implement",
-    "ponytail",
-    "tdd",
-    "code-review",
-    "resolving-merge-conflicts",
-    "task-breakdown",
-    "research",
-    "retro",
-    "wayfinder",
-    "prototype",
-    "ponytail-review",
-)
+from conftest import InstalledCommands, run_process
 
 
-def test_supported_skills_loads_from_one_child_traversable(
-    monkeypatch: pytest.MonkeyPatch,
+def test_built_distribution_supplies_no_bundled_runtime_resources(
+    built_wheel: Path,
 ) -> None:
-    monkeypatch.syspath_prepend(str(PROJECT_ROOT / "src"))
-    from graphtraj.configuration import supported_skills
+    """The artifact an operator installs carries no packaged runtime resources."""
 
-    class SingleChildTraversable:
-        def joinpath(self, child: str) -> "SingleChildTraversable":
-            return self
+    with zipfile.ZipFile(built_wheel) as archive:
+        names = archive.namelist()
 
-        def is_dir(self) -> bool:
-            return True
+    assert not [name for name in names if name.startswith("graphtraj/resources/")]
 
-    monkeypatch.setattr(
-        supported_skills.resources,
-        "files",
-        lambda _package: SingleChildTraversable(),
+
+def test_installed_core_imports_and_role_resolution_work_without_resources(
+    installed_commands: InstalledCommands,
+    tmp_path: Path,
+) -> None:
+    """Shipped code imports and resolves a role with no packaged resources."""
+
+    probe = """
+import json
+from pathlib import Path
+
+import graphtraj
+from graphtraj.configuration.project_roles import RolePreset
+from graphtraj.configuration.role_definitions import resolve_child_role
+from graphtraj.interfaces import mcp
+from graphtraj.interfaces.cli import agent_runner, graphtraj as cli
+
+role = resolve_child_role(
+    "engineer",
+    RolePreset(
+        "codex", "operator-model", None, None,
+        reasoning_effort="high", worktree_access="write",
+    ),
+    None,
+)
+print(json.dumps({
+    "role": role.name,
+    "instructions": bool(role.instructions),
+    "resources": (Path(graphtraj.__file__).parent / "resources").exists(),
+}))
+"""
+
+    result = run_process(
+        [str(installed_commands.product.parent / "python"), "-c", probe],
+        cwd=tmp_path,
     )
 
-    loaded = supported_skills.SupportedSkills.load()
-
-    assert tuple(loaded.resources_by_name) == CORE_SKILL_NAMES
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout) == {
+        "role": "engineer",
+        "instructions": True,
+        "resources": False,
+    }

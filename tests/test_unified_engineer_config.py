@@ -62,16 +62,24 @@ def test_configured_engineer_preset_serves_the_engineer_seat(tmp_path: Path) -> 
 
 
 def test_engineer_batch_reference_keeps_the_supplied_reference() -> None:
-    """A new Batch keeps the role reference its caller named."""
-    task = parse_batch({"tasks": [{
+    """A new Batch keeps the role reference its caller named and refuses retired Skills."""
+    from graphtraj.execution.runner_models import RunnerError
+
+    document = {"tasks": [{
         "ticket_id": "73", "ticket_name": "shared-graph",
-        "role": "coding-team.engineer-junior", "skills": ["implement"],
-    }]}).tasks[0]
+        "role": "coding-team.engineer-junior",
+    }]}
+    task = parse_batch(document).tasks[0]
 
     assert task.role == "engineer-junior"
     assert task.policy_role == "engineer-junior"
     assert task.role_reference == "coding-team.engineer-junior"
-    assert task.requested_skills == ("implement",)
+    assert task.requested_skills == ()
+
+    with pytest.raises(RunnerError, match="Runtime native Skill selection"):
+        parse_batch({"tasks": [
+            {**document["tasks"][0], "skills": ["implement"]},
+        ]})
 
 
 @pytest.mark.parametrize("tier", ["junior", "senior", "expert"])
@@ -168,15 +176,15 @@ def test_inline_engineer_role_keeps_its_name(reference: str) -> None:
     assert preset.model == "gpt-5.6-terra"
 
 
-def test_non_engineer_task_retains_selected_repository_skills() -> None:
-    """A non-Engineer task retains its selected repository Skills."""
+def test_non_engineer_task_keeps_its_role_reference() -> None:
+    """A non-Engineer task keeps its role identity and selects no Skills by name."""
     batch = parse_batch({"tasks": [{
         "ticket_id": "73", "ticket_name": "shared-graph",
-        "role": "team-leader", "skills": ["implement"],
+        "role": "team-leader",
     }]})
 
     assert batch.tasks[0].role == "team-leader"
-    assert batch.tasks[0].requested_skills == ("implement",)
+    assert batch.tasks[0].requested_skills == ()
 
 
 def test_retained_tiered_batch_still_resolves_for_recovery(tmp_path: Path) -> None:

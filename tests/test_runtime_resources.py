@@ -535,12 +535,13 @@ def test_reviewer_send_refreshes_exact_replacement_report_permissions(
 # A retained Session identity resolves to the same unified Engineer policy.
 @pytest.mark.parametrize("role", ("engineer", "engineer-senior"))
 @pytest.mark.parametrize("reports_only", (False, True))
-def test_engineer_resume_drops_only_the_predecessor_readme_override(
+def test_engineer_resume_preserves_captured_permissions_and_refreshes_reports(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     role: str,
     reports_only: bool,
 ) -> None:
+    """A resume keeps captured permissions, refreshes reports, and narrows on request."""
     monkeypatch.syspath_prepend(str(PROJECT_ROOT / "src"))
     from graphtraj.execution.runner_control import _refresh_current_team_report_request
     from test_result_submission import result_project
@@ -591,17 +592,18 @@ def test_engineer_resume_drops_only_the_predecessor_readme_override(
     workspace_roots = filesystem[":workspace_roots"]
     assert profile["extends"] == ":workspace"
     assert workspace_roots["."] == ("read" if reports_only else "write")
-    assert "README.md" not in workspace_roots
     assert {
         name: workspace_roots[name]
-        for name in (".agents", "AGENTS.md", "CONTEXT.md", "docs")
+        for name in (".agents", "AGENTS.md", "CONTEXT.md", "README.md", "docs")
     } == {
         ".agents": "read",
         "AGENTS.md": "read",
         "CONTEXT.md": "read",
+        "README.md": "read",
         "docs": "read",
     }
     assert filesystem["/saved-setting"] == "read"
+    # Only the current report reference changes; every captured setting stays.
     report_directory = evidence / "teams" / "1" / "rounds" / "1"
     assert {
         path

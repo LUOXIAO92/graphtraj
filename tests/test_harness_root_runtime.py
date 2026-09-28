@@ -14,9 +14,8 @@ import yaml
 from conftest import FakeCodex, InstalledCommands, run_process, wait_for_file
 from runner_fixtures import configure_coding_roles, engineer_probe
 from test_project_setup import (
-    CORE_SKILL_NAMES,
+    OPERATOR_SKILL_NAMES,
     install_skills,
-    supported_skill_contents,
     tree_contents,
     run_ready_setup,
 )
@@ -94,7 +93,7 @@ def test_installed_runtime_projects_enabled_external_skill_directories(
 ):
     harness = temporary_git_repository if same_root else temporary_git_repository.parent
     user_home = tmp_path / 'operator-home'
-    install_skills(user_home / '.agents' / 'skills', CORE_SKILL_NAMES)
+    install_skills(user_home / '.agents' / 'skills', OPERATOR_SKILL_NAMES)
     setup = run_ready_setup(
         installed_commands, harness_root=harness, user_home=user_home,
         fake_codex=fake_codex, answers='y\n',
@@ -350,7 +349,7 @@ def test_setup_keeps_bundled_skills_out_of_the_project(
 
     harness_root = temporary_git_repository.parent
     user_home = tmp_path / "runtime-user"
-    install_skills(user_home / ".agents" / "skills", CORE_SKILL_NAMES)
+    install_skills(user_home / ".agents" / "skills", OPERATOR_SKILL_NAMES)
     monkeypatch.setenv("HOME", str(user_home))
 
     plan = plan_project_setup(harness_root, temporary_git_repository)
@@ -359,7 +358,7 @@ def test_setup_keeps_bundled_skills_out_of_the_project(
     runtime_store = harness_root / ".codex"
     assert not (runtime_store / "config.toml").exists()
     assert not (harness_root / ".agents").exists()
-    for name in CORE_SKILL_NAMES:
+    for name in OPERATOR_SKILL_NAMES:
         assert (user_home / ".agents/skills" / name / "SKILL.md").is_file()
     preflight_runtime_context(
         runtime_store=runtime_store,
@@ -491,26 +490,13 @@ def test_runtime_preflight_uses_fixed_policy_and_selected_model(
     assert "project-engineer" in arguments
 
 
-@pytest.mark.parametrize(
-    ("skill_directories", "requested_skill", "expected_code"),
-    (
-        ((), "missing", "SKILL_SELECTION_UNSUPPORTED"),
-        (
-            (("duplicate-one", "duplicate"), ("duplicate-two", "duplicate")),
-            "duplicate",
-            "SKILL_SELECTION_UNSUPPORTED",
-        ),
-    ),
-)
-def test_engineer_runtime_context_preflight_rejects_unresolved_repository_skills(
+def test_engineer_runtime_context_preflight_rejects_retired_skill_selection(
     monkeypatch,
     temporary_git_repository: Path,
     fake_codex: FakeCodex,
     tmp_path: Path,
-    skill_directories: tuple[tuple[str, str], ...],
-    requested_skill: str,
-    expected_code: str,
 ) -> None:
+    """A task-selected Skill name is refused before any launch artifact exists."""
     monkeypatch.syspath_prepend(
         str(Path(__file__).resolve().parents[1] / "src")
     )
@@ -527,14 +513,6 @@ def test_engineer_runtime_context_preflight_rejects_unresolved_repository_skills
     install_skills(user_home / ".agents" / "skills", ("implement", "ponytail", "tdd"))
     plan = plan_project_setup(harness_root, temporary_git_repository)
     plan.apply()
-    source = harness_root / ".graphtraj" / ".agent-worktrees" / "dev"
-    for directory, name in skill_directories:
-        skill = source / ".agents" / "skills" / directory / "SKILL.md"
-        skill.parent.mkdir(parents=True)
-        skill.write_text(
-            "---\nname: {0}\ndescription: test\n---\n".format(name),
-            encoding="utf-8",
-        )
     worktree = tmp_path / "ticket-worktree"
     evidence = tmp_path / "evidence"
 
@@ -546,10 +524,10 @@ def test_engineer_runtime_context_preflight_rejects_unresolved_repository_skills
             role=_engineer_role(),
             worktree=worktree,
             evidence=evidence,
-            requested_skills=(requested_skill,),
+            requested_skills=("implement",),
         )
 
-    assert raised.value.code == expected_code
+    assert raised.value.code == "SKILL_SELECTION_UNSUPPORTED"
     assert not worktree.exists()
     assert not evidence.exists()
     assert not fake_codex.log_file.exists()
@@ -666,7 +644,7 @@ def test_installed_runner_uses_runtime_user_core_skill_when_source_tracks_it(
         ["git", "commit", "-m", "Add repository implement Skill"], cwd=repository
     ).check_returncode()
     runtime_user = tmp_path / "runtime-user"
-    install_skills(runtime_user / ".agents" / "skills", CORE_SKILL_NAMES)
+    install_skills(runtime_user / ".agents" / "skills", OPERATOR_SKILL_NAMES)
     environment = os.environ.copy()
     environment["HOME"] = str(runtime_user)
     environment["PATH"] = "{0}{1}{2}".format(
@@ -720,7 +698,7 @@ def test_installed_runner_uses_runtime_user_skill_from_newer_primary_history(
         ["git", "rev-parse", "dev"], cwd=repository
     ).stdout.strip() != run_process(["git", "rev-parse", "HEAD"], cwd=repository).stdout.strip()
     runtime_user = tmp_path / "runtime-user"
-    install_skills(runtime_user / ".agents" / "skills", CORE_SKILL_NAMES)
+    install_skills(runtime_user / ".agents" / "skills", OPERATOR_SKILL_NAMES)
     environment = os.environ.copy()
     environment["HOME"] = str(runtime_user)
     environment["PATH"] = "{0}{1}{2}".format(

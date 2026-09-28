@@ -34,7 +34,7 @@ def require_active_session(
             and ticket["status"] != "resolving-integration" and not reports_only):
         raise RunnerError("authority-denied", "Integration Worktree work requires an active conflict assignment.")
     team_file = directory / "teams" / str(mapping["team_generation"]) / "team.yml"
-    # A newly launched Leader registers its first Batch before Team start.
+    # The newly launched parent Session registers its first Batch before Team start.
     if not team_file.exists():
         return
     team = read_team(team_file)

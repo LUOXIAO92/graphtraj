@@ -49,7 +49,7 @@ def custom_context(tmp_path: Path, peer: Path, route_source: str = 'role'):
     if route_source == 'hosted-native':
         (root / '.codex').mkdir()
         (root / '.codex/config.toml').write_text('approvals_reviewer = "auto_review"\n')
-    role = ResolvedChildRole('temporary-role', 'Do not delete files.', (),
+    role = ResolvedChildRole('temporary-role', 'Do not delete files.',
         RolePreset('codex', 'work-model',
                    None if route_source.startswith('hosted-') else 'https://work.example/v1',
                    'WORK_KEY', codex={'approval': ROUTE} if route_source.endswith('role') else None))
@@ -354,7 +354,7 @@ def test_missing_custom_route_reports_field_and_hosted_keeps_guardian(tmp_path: 
         'codex': {'approval': ROUTE},
     }}}))
     settings = load_project_roles(root).presets['temporary-role']
-    role = ResolvedChildRole('temporary-role', 'restrictions', (), settings)
+    role = ResolvedChildRole('temporary-role', 'restrictions', settings)
     resolved = context(tmp_path / 'valid', peer, role)
     assert resolved.launch_document()['adapter_request']['approval'] == ROUTE
     for field in ROUTE:
@@ -386,7 +386,7 @@ def test_invalid_present_role_never_uses_project_default(
     """A configured but invalid role route fails before any approval request."""
     root = tmp_path / 'worktree'
     project_defaults(root, {'approval': DEFAULT_ROUTE})
-    role = ResolvedChildRole('temporary-role', 'restrictions', (),
+    role = ResolvedChildRole('temporary-role', 'restrictions',
         RolePreset('codex', 'work-model', 'https://work.example' if custom else None,
                    None, codex={'approval': invalid}))
     with pytest.raises(RuntimeAdapterError, match='codex.approval'):
@@ -401,7 +401,7 @@ def test_custom_provider_without_usable_route_fails(
     root = tmp_path / 'worktree'
     if codex is not None:
         project_defaults(root, codex)
-    role = ResolvedChildRole('temporary-role', 'restrictions', (),
+    role = ResolvedChildRole('temporary-role', 'restrictions',
         RolePreset('codex', 'work-model', 'https://work.example', None))
     with pytest.raises(RuntimeAdapterError, match='codex.approval.model'):
         context(root, peer, role)
@@ -411,7 +411,7 @@ def test_role_route_precedes_invalid_default(tmp_path: Path, peer: Path) -> None
     """Only the selected route is validated by the Codex adapter."""
     root = tmp_path / 'worktree'
     project_defaults(root, {'approval': None})
-    role = ResolvedChildRole('temporary-role', 'restrictions', (),
+    role = ResolvedChildRole('temporary-role', 'restrictions',
         RolePreset('codex', 'work-model', None, None, codex={'approval': ROUTE}))
     request = context(root, peer, role).launch_document()['adapter_request']
     assert request['approval'] == ROUTE

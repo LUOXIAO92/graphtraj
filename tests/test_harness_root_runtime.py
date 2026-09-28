@@ -152,14 +152,13 @@ def _engineer_role(
     )
 
 
-def _role_with_required_skill(name: str):
+def _role_with_instruction_text(name: str):
     from graphtraj.configuration.project_roles import RolePreset
     from graphtraj.configuration.role_definitions import ResolvedChildRole
 
     return ResolvedChildRole(
         name="standards-reviewer",
         instructions="Use ${0}.".format(name),
-        required_skills=(name,),
         settings=RolePreset("codex", "gpt-5.6-sol", None, None),
     )
 
@@ -204,10 +203,9 @@ def test_preflight_leaves_duplicate_harness_skills_to_native_discovery(
         runtime_store=harness_root / ".codex",
         executable=_runtime_executable(tmp_path),
         git_common_directory=temporary_git_repository / ".git",
-        role=_role_with_required_skill("role-only"),
+        role=_role_with_instruction_text("role-only"),
         worktree=worktree,
         evidence=evidence,
-        repository_skill_source=temporary_git_repository,
         requested_skills=(),
     ).finalize()
 
@@ -261,10 +259,9 @@ def test_preflight_projects_a_linked_harness_skill_at_its_canonical_path(
         runtime_store=harness_root / ".codex",
         executable=_runtime_executable(tmp_path),
         git_common_directory=temporary_git_repository / ".git",
-        role=_role_with_required_skill("role-only"),
+        role=_role_with_instruction_text("role-only"),
         worktree=worktree,
         evidence=evidence,
-        repository_skill_source=temporary_git_repository,
         requested_skills=(),
     ).finalize()
 
@@ -371,9 +368,6 @@ def test_setup_keeps_bundled_skills_out_of_the_project(
         role=_engineer_role(),
         worktree=tmp_path / "ticket-worktree",
         evidence=tmp_path / "evidence",
-        repository_skill_source=(
-            harness_root / ".graphtraj" / ".agent-worktrees" / "dev"
-        ),
         requested_skills=(),
     )
 
@@ -416,9 +410,6 @@ def test_engineer_runtime_context_preflight_validates_without_launch_artifacts(
             role=_engineer_role(),
             worktree=target_worktree,
             evidence=evidence,
-            repository_skill_source=(
-                harness_root / ".graphtraj" / ".agent-worktrees" / "dev"
-            ),
             requested_skills=(),
         )
     assert legacy_sandbox.value.code == "LEGACY_SANDBOX_CONFIG_CONFLICT"
@@ -434,9 +425,6 @@ def test_engineer_runtime_context_preflight_validates_without_launch_artifacts(
         role=_engineer_role(),
         worktree=target_worktree,
         evidence=evidence,
-        repository_skill_source=(
-            harness_root / ".graphtraj" / ".agent-worktrees" / "dev"
-        ),
         requested_skills=(),
     )
     assert not target_worktree.exists()
@@ -452,9 +440,6 @@ def test_engineer_runtime_context_preflight_validates_without_launch_artifacts(
         role=_engineer_role(),
         worktree=target_worktree,
         evidence=evidence,
-        repository_skill_source=(
-            harness_root / ".graphtraj" / ".agent-worktrees" / "dev"
-        ),
         requested_skills=(),
     )
     assert not target_worktree.exists()
@@ -497,9 +482,6 @@ def test_runtime_preflight_uses_fixed_policy_and_selected_model(
             role=_engineer_role("project-engineer"),
             worktree=tmp_path / "ticket-worktree",
             evidence=tmp_path / "evidence",
-            repository_skill_source=(
-                harness_root / ".graphtraj" / ".agent-worktrees" / "dev"
-            ),
             requested_skills=(),
         )
 
@@ -564,7 +546,6 @@ def test_engineer_runtime_context_preflight_rejects_unresolved_repository_skills
             role=_engineer_role(),
             worktree=worktree,
             evidence=evidence,
-            repository_skill_source=source,
             requested_skills=(requested_skill,),
         )
 
@@ -627,7 +608,6 @@ def test_engineer_runtime_context_finalizes_worktree_facts_once(
         evidence=evidence,
         git_common_directory=git_common,
         role=_engineer_role(reasoning_effort=reasoning_effort),
-        repository_skill_source=source,
         requested_skills=(),
     )
 
@@ -938,7 +918,7 @@ def test_role_connection_selects_native_provider_without_persisting_key(
     from graphtraj.runtimes.codex.codex_adapter import preflight_runtime_context
 
     monkeypatch.setenv("ROLE_TEST_API_KEY", "private-test-key")
-    role = ResolvedChildRole("temporary-role", "Run the bounded task.", (), RolePreset(
+    role = ResolvedChildRole("temporary-role", "Run the bounded task.", RolePreset(
         "codex", "deepseek-flash", "https://example.com/v1", "ROLE_TEST_API_KEY",
         reasoning_effort="high",
         codex={"approval": {"model": "review", "base_url": "https://review.example",
@@ -947,8 +927,7 @@ def test_role_connection_selects_native_provider_without_persisting_key(
     context = preflight_runtime_context(
         runtime_store=tmp_path / ".codex", executable=_runtime_executable(tmp_path),
         git_common_directory=tmp_path / "git-common", role=role,
-        worktree=tmp_path, evidence=tmp_path / "evidence",
-        repository_skill_source=tmp_path, requested_skills=(),
+        worktree=tmp_path, evidence=tmp_path / "evidence", requested_skills=(),
     ).finalize()
     launch = context.launch_document()
     config = context.session_document()["adapter_request"]["config"]

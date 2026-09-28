@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "graphtraj"
 version = "0.1.0"
-description = "GraphTraj, a soft harness for product architecture and delivery."
+description = "GraphTraj, a task graph and trajectory delivery harness."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

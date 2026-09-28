@@ -15,7 +15,6 @@ class ResolvedChildRole:
 
     name: str
     instructions: str
-    required_skills: tuple[str, ...]
     settings: RolePreset
 
     @property
@@ -56,5 +55,5 @@ def resolve_child_role(
         "and the configured role_tree.\n"
     )
     return ResolvedChildRole(
-        name, instructions, (), settings,
+        name, instructions, settings,
     )

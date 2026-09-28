@@ -7,8 +7,10 @@ Harness Project Documents.
 
 ## Project structure
 
-- `src/graphtraj/` contains the Python package and packaged
-  Runtime, role, and Skill resources.
+- `src/graphtraj/` contains the Python package and generic Runtime integration.
+- `skills/` contains independently selected general task methods;
+  `examples/coding-skills/` contains optional customized development samples.
+  Neither directory is a Python runtime resource or an auto-discovery directory.
 - `tests/` contains behavior-focused pytest coverage.
 - `README.md` is the product-facing installation and operation guide.
 - `pyproject.toml` defines the GraphTraj distribution and the `graphtraj` /
@@ -19,6 +21,12 @@ Harness Project Documents.
 - Reuse existing `CONTEXT.md` and `docs/` in linked Worktrees, preserving their
   contents and Git tracking. Missing paths may link to shared Project Documents.
   Delegated Agents retain read-only access; Main owns document updates.
+
+Role `instructions` refer to optional external UTF-8 text files. The Runtime
+owns Skill discovery and explicit selection; new dispatch does not accept the
+retired task `skills` or role `harness_skills` / `required_skills` fields.
+Preserve historical inputs and actual Runtime/permission configuration when
+changing these interfaces. Setup and doctor do not install a Skill catalog.
 
 ## Python readability
 

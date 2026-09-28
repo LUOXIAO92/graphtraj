@@ -1,10 +1,11 @@
 # GraphTraj
 
-GraphTraj is a Harness for delivering a graph of accepted Tickets through
-Teams of configured roles, including one-Agent Teams. Main manages the request,
-dependencies and integration. Coding roles carry specialist instructions;
-researchers and engineers share formal execution, workspaces and evidence.
-The installed commands provide setup, isolated execution and durable records.
+GraphTraj manages a task graph and its execution trajectories: accepted work,
+artifact dependencies, configured Agents, versioned results and retained evidence.
+A Team can contain one Agent. Research, Markdown, LaTeX, data and software tasks
+share execution, submission, acceptance and integration. Projects choose their
+roles and professional methods; a leader or code review is not required by the
+common task protocol.
 
 Main is started and configured by the user. It follows the user's instructions
 and the `AGENTS.md` files applicable to the task, reading Skills as needed.
@@ -30,8 +31,9 @@ becomes both the Harness Project Root and Source Repository. In the separated la
 child, or asks for an explicit choice when there are zero or several candidates.
 Later commands use the recorded paths.
 
-`uv tool install` builds and installs this distribution's wheel, which carries
-the bundled Skills, role definitions and Codex resources. To check a local
+`uv tool install` builds and installs the Python distribution. Skills and role
+instruction templates are separate user-selected files, not runtime package
+resources. To check a local
 candidate, build that wheel and install the artifact. The documented flags skip
 pip's build isolation, so the declared build requirement (`setuptools>=61`,
 from `pyproject.toml`) must already be installed in the invoking environment,
@@ -49,15 +51,9 @@ Worldline history.
 
 Setup is interactive and checks conflicts before writing. It preserves
 project-owned content and valid operator configuration, creates or registers
-the `dev` Integration Worktree, and installs every missing bundled Skill into the Harness Project Root’s
-`.agents/skills` after confirmation, even when a user-global copy exists.
-Existing project Skills are preserved; project-local copies take precedence
-over user-global Skills. Setup writes an empty role selection and requires only
-the Skills every task needs: the professional coding methods (`implement`,
-`tdd`, `code-review`, `ponytail`, `ponytail-review`,
-`resolving-merge-conflicts`) are installed when the operator confirms but
-their absence does not stop setup, and a task that selects none of them runs
-without them. It does not clone a repository, configure credentials,
+the `dev` Integration Worktree, and writes an empty role selection for a new
+project. It does not require a Skill catalog, offer Skill installation or
+replace existing Skills. It does not clone a repository, configure credentials,
 modify Runtime-global settings or promote `dev` to `main`.
 
 The default layout is:
@@ -67,7 +63,7 @@ The default layout is:
 ├── AGENTS.md                           user/project instructions
 ├── CONTEXT.md                          shared vocabulary
 ├── docs/                               Project Documents
-├── .agents/skills/                     Harness Skills
+├── .agents/skills/                     optional Runtime-discovered Skills
 ├── .codex/                             user Runtime configuration
 └── .graphtraj/
     ├── config.yml                      paths and Runner limits
@@ -92,8 +88,8 @@ are the basis for later updates. Delegated Agents retain read-only document
 access, and Main owns Project Document changes. Source Repository README
 remains ordinary repository content within the assigned implementation scope.
 Runtime-native permissions govern file access; GraphTraj installs no Worktree
-Guard or command-parsing Hook. Selected Skills and their references remain
-readable through their projected paths.
+Guard or command-parsing Hook. External instructions and Skill files remain subject to the selected Runtime
+and its configured filesystem permissions.
 
 Generated document links use Worktree-specific Git ignore rules. Existing
 repository documents and new files beneath them remain visible to Git unless
@@ -114,7 +110,7 @@ All module names in this table are beneath `graphtraj`.
 | Module | Operation and input | Result |
 | --- | --- | --- |
 | `workspace.project_initialization` | `plan_project_setup(root, source_repository)`; then `plan.preflight()` and `plan.apply()` | Existing plan and preview objects; apply returns `ProjectSetupResult` with `integration_worktree`, `integration_action` (`created`, `registered`, `reused`) and `completed_actions`. |
-| `configuration.skill_check` | `diagnose_project(root, user_skill_root)` | `ProjectDiagnosis`: Skill statuses, whether roles were checked, role diagnostics and `succeeded`. |
+| `configuration.skill_check` | `diagnose_project(root)` | `ProjectDiagnosis`: whether roles were checked, role diagnostics and `succeeded`. |
 | `graph.ticket_graph` | `register_ticket(state, root, issue)` | Registered Ticket directory as a `Path`. |
 | `graph.ticket_graph` | `revise_tickets(state, root, revision)`; `update_ticket_state(state, root, change)` | Recorded causal event as a dictionary. |
 | `graph.ticket_graph` | `read_graph(state)` | Dictionary containing current Tickets and dependency readiness. |
@@ -144,14 +140,12 @@ graph = read_graph(configuration.state)
 ready = [ticket for ticket in graph["tickets"] if ticket["ready"]]
 ```
 
-Setup's `apply()` is the explicit mutation step. Pass
-`install_missing_skills=True` to both preflight and apply when authorizing
-missing Skill installation. The CLI supplies the repository-selection and
-confirmation prompts and renders the same plan and result.
+Setup's `apply()` is the explicit mutation step. The CLI supplies repository
+selection and confirmation prompts and renders the same plan and result.
 
 Graph and semantic-state validation raise `ValueError`; Setup raises
-`ProjectSetupError`. Doctor returns missing-Skill and invalid-role diagnostics,
-and raises `DoctorError` for a known child Worktree. Configuration, filesystem
+`ProjectSetupError`. Doctor reports project and role configuration diagnostics,
+and raises `DoctorError` for invalid configuration or a known child Worktree. Configuration, filesystem
 and stored-document errors retain their existing exception types. Runner
 operations use `RunnerError`; `error.as_document()` supplies the CLI's public
 error code and message. Check response `succeeded` or integration `status`
@@ -173,8 +167,7 @@ caller channel when the caller provides its Codex thread identity
 `CodexMainRecovery` ignores ordinary estimate/allowance notices and retains only
 a sampled stop: the deterministic stop identity, the stop's own absolute instant
 with its explicit UTC offset, the elapsed work duration as a separate
-expression, and the explicit `$retro` instruction with the absolute
-`retro/SKILL.md` path. The document the awaited call returns carries that stop
+expression, and the configured stop instruction (if nonempty). The document the awaited call returns carries that stop
 as `stop_deliveries`, and the delivery instant is stamped when the call returns,
 so Main handles the event inside its current turn instead of after the turn
 ends. A delayed stop keeps the instant it actually happened and never reports
@@ -198,7 +191,7 @@ placed in Main's input box.
 `agent-runner send --reports-only` collects a report a Session already holds.
 It resumes that Session read-only without attaching the budget monitor, so
 returning existing evidence advances no stopping check, repeats no sampled stop
-and delivers no new retro instruction. Every other `send` and `continue` keeps
+and delivers no new stop instruction. Every other `send` and `continue` keeps
 the Ticket under its budget control, and this mode changes no accounting,
 identity or stop history.
 
@@ -228,48 +221,36 @@ used. Preserve the host's existing configuration and permissions; the delivery
 adds no role or Skill discovery configuration. The delivered fields and the
 late-stop boundary are in the Codex-only recovery reference.
 
-## Bundled Skills and their sources
+## Independent task methods
 
-After `graphtraj setup` installs the bundled Skills, invoke `$setup-project` to
-configure task tracking and domain documents. It explicitly asks whether the
-project includes work needing software engineering delivery. Small helper
-scripts remain direct work with proportionate validation, even in a project
-that also has engineering tasks.
-`setup-project` is GraphTraj's name for its adaptation of Matt Pocock's
-`setup-matt-pocock-skills`. `graphtraj setup` prepares the Harness; the Skill
-guides the project-document configuration.
+The repository's [skills](skills/) directory provides five optional methods.
+Install or select them with your Runtime's supported Skill mechanism; setup
+does not copy them into a project or require their names.
 
-The release bundles these 18 Skills. The table describes the bundled
-workflows and their GraphTraj adaptations; user-installed Skills outside this
-set are managed separately. Matt Pocock sources are from
-[mattpocock/skills](https://github.com/mattpocock/skills).
+| Method | Purpose |
+| --- | --- |
+| [setup-project](skills/setup-project/SKILL.md) | Establish missing project paths, tracking and chosen resources while preserving existing conventions. |
+| [task-breakdown](skills/task-breakdown/SKILL.md) | Recursively split work to fit available resources, with independently verifiable results and real artifact dependencies. |
+| [task-delivery](skills/task-delivery/SKILL.md) | Dispatch, submit, accept, integrate and recover work through the common task protocol. |
+| [research](skills/research/SKILL.md) | Investigate questions using primary sources and retain evidence, uncertainty and citations. |
+| [concept-clarification](skills/concept-clarification/SKILL.md) | Clarify terminology, concepts, relationships and boundaries. |
 
-| Project Skill | Source | GraphTraj adaptation |
-| --- | --- | --- |
-| `setup-project` | Matt Pocock: `setup-matt-pocock-skills` | Asks which work the project includes; shared setup stays in the entrypoint, coding setup is read conditionally. Project Documents belong to the Harness Project Root. |
-| `grill-with-docs` | Matt Pocock: same name | Retains the interview and domain-modeling composition. |
-| `grilling` | Matt Pocock: same name | Retains the decision-tree interview workflow. |
-| `domain-modeling` | Matt Pocock: same name | Shared terminology and decisions in the entrypoint; code checks and architecture examples in a conditional reference. Main owns Project Documents. |
-| `to-spec` | Matt Pocock: same name | Retains the software specification workflow; refers to `setup-project` for configuration. |
-| `to-tickets` | Matt Pocock: same name | Code tickets preserve accepted task nodes, acceptance and dependencies; add justified difficulty and execution budgets as YAML front matter. |
-| `implement` | Matt Pocock: same name | Team Engineers self-review and return evidence to their Leader, who schedules Reviewers; standalone work retains the code-review step. |
-| `code-review` | Matt Pocock: same name | Distinguishes Leader-owned Team Review from standalone review orchestration; assigned Reviewers perform only their supplied axis. |
-| `resolving-merge-conflicts` | Matt Pocock: same name | The selected member commits the reconciliation and submits its exact version through the common result operation; the actual parent decides that submitted version, and the caller's integration then runs the retained validation. |
-| `tdd` | Matt Pocock: same name | Retains the upstream test-driven development workflow. |
-| `ponytail` | [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail) | Bundled minimal-implementation guidance, with no GraphTraj-specific changes to its instructions. |
-| `ponytail-review` | [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail) | Bundled over-engineering review guidance, with no GraphTraj-specific changes to its instructions. |
-| `task-delivery` | GraphTraj | General readiness, executor selection, dispatch, acceptance and integration; coding dispatch is conditional and the coding Leader owns its specialist workflow. |
-| `task-breakdown` | GraphTraj | General goal-to-task decomposition with observable results, completion criteria and genuine blocking dependencies. |
-| `research` | Matt Pocock: same name | Primary-source investigation; software source checks are a conditional reference. |
-| `retro` | Matt Pocock: same name | Session-based improvements to Agent work; coding checks and review standards are a conditional reference. |
-| `wayfinder` | Matt Pocock: same name | Retains the shared decision map; general rough artifacts do not automatically invoke software prototyping. |
-| `prototype` | Matt Pocock: same name | Retains the software UI and logic prototype workflows with an explicitly software-scoped description. |
+These methods have no coding/non-coding router. Obtain specialist methods from
+sources relevant to your work, or write your own. Customized coding methods
+used to develop GraphTraj are retained separately as
+[reference samples](examples/coding-skills/README.md), outside auto-discovery
+locations and outside the runtime distribution. They preserve this project's
+customizations; they are not a required workflow for GraphTraj users.
 
-General Skill entrypoints load only their shared method. They read a domain
-reference when the current task calls for it; they do not load all references
-before choosing. Software-specific Skills remain independent and are selected
-for the coding role's work. Existing explicit-only invocation policies are
-preserved; a returned Skill name is not assumed to activate another Skill.
+A direct dependency names an input the consumer actually needs. For example,
+A summarizes paper1 and finds papers2–4; B summarizes only papers2–4; C compares
+all four. C needs both A's paper1 summary and B's summaries, so A→C and B→C are
+both necessary despite A→B. If B instead delivers a complete package containing
+all four summaries and sources, C needs only B: adding A→C supplies no new input.
+Split composite work further when available Agents cannot independently deliver
+it; stop when the selected executor can handle the node within its resources.
+Difficult reasoning is not automatically made easy by more task nodes. The
+Agent organization tree and the task dependency graph describe different things.
 
 A stopped Team member is replaced with `agent-runner replace <member-alias>
 --caused-by-event-id <event-id>`; the Runner's recorded direct parent or the
@@ -289,19 +270,40 @@ user-installed Matt Pocock `handoff` Skill remains independent.
 
 ## Configuration and roles
 
-All bundled Skill bodies and references live in `resources/skills` and install
-through the same path. GraphTraj child definitions in `resources/roles` hold
-responsibilities and required Skills independently of Codex configuration
-syntax. `configuration/role_definitions.py` resolves these definitions and their logical
-dispatch constraints with the Runtime, model and connection settings selected
-in `.graphtraj/roles.yml`.
+Role presets select user Runtime settings, permissions and optional external
+instructions. `instructions` names a UTF-8 file, relative to the Harness Project
+Root or absolute. Its contents are passed as text; GraphTraj does not parse
+required Skill names from it. Omit it for the common task context alone.
+Role names do not load an implicit professional template.
 
-Runner passes the resolved child role to the Codex Adapter. The Adapter
-locates its Skills and translates that role into native launch arguments,
-permissions, Hooks and session calls. `resources/codex` contains only the
-Codex integration: native child permission/Hook settings, reasoning settings
-and tool-event handling. Main has no Runner child preset or managed Runtime
-configuration template.
+The Runtime owns Skill discovery and selection. GraphTraj forwards explicitly
+configured native resources without maintaining a Skill catalog or disabling
+all unselected Skills. For Codex it forwards the Harness `.codex/config.toml`
+`[skills]` configuration; relative override paths resolve from that `.codex`
+directory. Enablement overrides do not by themselves establish discovery of an
+arbitrary external directory: use the Runtime's supported discovery locations,
+links or explicit selection and check access under the executing Session.
+On the verified Codex 0.156.1 interface, an external Skill can be exposed by a
+per-Skill symlink in each consuming Worktree's `.agents/skills` directory:
+
+```text
+mkdir -p <worktree>/.agents/skills
+ln -s <absolute-skill-directory> <worktree>/.agents/skills/<unused-link-name>
+```
+
+Preserve existing entries and use distinct link names where needed. Native
+metadata can contain several Skills with the same declared name; use the exact
+path to select the intended customization. Keep canonical paths in native
+configuration and ensure the executing Session may read the targets and their
+references. Arrange discovery locations for future Worktrees as part of the
+chosen project/Runtime setup; GraphTraj does not automatically place these links.
+The installed 0.156.1 schema used for verification did not expose
+`perCwdExtraUserRoots`, so that newer documented request field is not assumed
+available here.
+
+New task `skills` and role `harness_skills`, `required_skills` or `skills`
+fields are rejected with migration guidance; retained historical inputs stay
+unchanged. Main has no Runner-managed child preset or configuration template.
 
 The default `.graphtraj/config.yml` is:
 
@@ -318,72 +320,41 @@ agent_runner:
 ```
 
 Paths resolve from the Harness Project Root. `dispatch_depth` limits formal
-descendants below Main; a Team Leader is depth 1 and its children depth 2.
+descendants below Main; a root assignment is depth 1 and its children depth 2.
 `max_concurrency` limits executing Agents across the project. Operating-system
 locks enforce capacity; lock-file presence is not occupancy. A normal Batch
-starts all its tasks or none. Team delivery also works at capacity one, with
-the coding Team's selected Review axes running sequentially in the same Round;
-that Leader selects only the necessary axes, each at most once per Ticket. A
+starts all its tasks or none. At capacity one, separately dispatch work that
+can run sequentially. A
 child Batch beyond `dispatch_depth` returns `authority-denied` before
 registration. Runner counts the retained parent Session chain; resuming a
-Leader adds no depth. Dispatch permission comes from explicit `role_tree`
-edges and `dispatch_depth`, not from being the Leader: a registered member
+Session adds no depth. Dispatch permission comes from explicit `role_tree`
+edges and `dispatch_depth`: a registered member
 registers the direct children its `role_tree` permits, and a child Batch must
 belong to the parent's Ticket.
 
-Setup writes an empty `roles` mapping in `.graphtraj/roles.yml`: a project
-declares the roles its own work uses, and no coding arrangement is selected for
-it. A project that selects coding work adds the coding presets under
-`roles.coding-team`, with shared `delivery-state` directly under `roles`:
+Setup writes an empty `roles` mapping in `.graphtraj/roles.yml`. For example,
+a project can select a single researcher:
 
 ```yaml
 roles:
-  coding-team:
-    team_leader:
-      runtime: codex
-      model: gpt-5.6-sol
-    engineer:
-      runtime: codex
-      model: gpt-5.6-sol
-    standards_reviewer:
-      runtime: codex
-      model: gpt-5.6-sol
-    spec_reviewer:
-      runtime: codex
-      model: gpt-5.6-sol
-    merge_resolver:
-      runtime: codex
-      model: gpt-5.6-sol
-  delivery-state:
+  researcher:
     runtime: codex
-    model: gpt-5.6-luna
+    model: your-selected-model
+    instructions: instructions/researcher.md
+role_tree:
+  researcher: {}
 ```
 
-The presets offer that role content; a Team uses only the members and Review
-axes its work needs (one-person Teams are allowed), and a task that needs none
-declares a different selection, such as the researcher below. Batch
-references use names such as `coding-team.team-leader` or
-`coding-team.spec-reviewer`. Each preset selects `runtime`
-and `model`, with optional `reasoning_effort`, `base_url` and `api_key_env`. The latter names an
-environment variable, never stores the credential. Omitted settings use the
-Runtime's defaults. Any configured role additionally supports
-`allow_runtime_swarm`, which defaults to false. Main's already selected
-Runtime is outside these presets.
-
-Set `reasoning_effort` on a role when its model needs a different reasoning
-level. For example, this entry inside the existing `roles` mapping selects
-`high` for the Engineer:
-
-```yaml
-coding-team:
-  engineer:
-    runtime: codex
-    model: gpt-5.6-terra
-    reasoning_effort: high
-```
+The instruction file is user-provided. A role can also select
+`reasoning_effort`, `base_url` and `api_key_env`; the latter names an environment
+variable and never stores the credential. Omitted settings use Runtime defaults.
+`allow_runtime_swarm` defaults to false. Add direct child edges to `role_tree`
+only for the dispatch relationships this project permits. A preset name alone
+grants neither dispatch nor acceptance authority. Grouped presets and inline
+roles use the same configuration and relationship checks.
 
 The Runtime Adapter interprets this setting. Codex maps it to
-`model_reasoning_effort`; omission keeps the bundled role default. Invalid
+`model_reasoning_effort`; omission retains the shared Codex projection default (`high`). Invalid
 values produce a configuration error. The effective setting is preserved on
 Session continuation. Batch inline roles accept the same optional field.
 
@@ -394,14 +365,38 @@ inline Runtime settings cannot add an edge. Existing role instructions and
 file restrictions remain in effect. Setup does not generate
 Runtime-specific child-role directories.
 
-Any authorized role task selects Repository Skills explicitly through its
-`skills` list. Session resumption preserves the original Adapter selection.
-In the default same-directory layout, Source history distinguishes a tracked
-Repository Skill from a Harness-owned Skill at the same physical path.
+`codex.approval` is Codex-adapter configuration: it makes an HTTP model request
+to review a native approval request. It does not declare a reviewer Runtime or
+start another Codex Session. Put a dedicated reviewer under the role, or use
+the same structure at the top level of `.graphtraj/config.yml` for a project
+default automatic reviewer:
+
+```yaml
+codex:
+  approval:
+    model: your-review-model
+    base_url: https://your-provider.example/v1
+    api_key_env: REVIEW_API_KEY
+```
+
+A configured dedicated reviewer takes precedence over the project default.
+When neither is configured, previously supported native approval stays native;
+a route that requires a custom reviewer fails clearly if none is available.
+Invalid configuration is not absence. A denial, timeout or failed request does
+not try another reviewer. First launch and recovery share this selection while
+preserving the work model, Session identity, parent and permissions.
+
+To change the text returned with an enforced budget stop, set
+`agent_runner.stop_instruction` in `.graphtraj/config.yml`. Omit it for a general
+status/recovery instruction, supply your own text verbatim, or set `""` for stop
+facts alone. Custom text can explicitly reference a user-installed method;
+GraphTraj requires no `retro` file or fixed Skill path. Text does not change the
+stop identity, actual parent, time accounting or authorization needed to resume.
+Runner enforces stopping; the recorded parent coordinates its children.
 
 ## Deliver accepted Tickets
 
-Use the installed `task-delivery` Skill for the full workflow. Main registers
+The optional [task-delivery](skills/task-delivery/SKILL.md) method describes the workflow. Main registers
 accepted GitHub Issue definitions and dependencies, generates the current
 graph with `graphtraj ticket graph`, and selects ready Tickets.
 Only validated `dev` integration satisfies a dependency.
@@ -423,7 +418,7 @@ Only actual members are registered; no Leader or Engineer seat is required.
 Task files may be committed in the Worktree; project documents and private
 control records retain their restrictions. Reports use the exact assigned
 paths through `graphtraj_submit_report`. Ending execution does not accept or
-complete the Ticket. Use ordinary `send` to continue its existing Session.
+complete the Ticket. Use ordinary `send` to continue an eligible existing Session.
 
 Select the ready Ticket with a block-style YAML swarm input:
 
@@ -465,15 +460,13 @@ graphtraj ticket integrate --ticket-id <id> -- <validation-command> <arguments>
 agent-runner cleanup --ticket-id <id>
 ```
 
-Each coding Team Leader schedules its Engineer and the Review axes it selects
-through the same Runner, against a fixed candidate and comparison point, then
-makes the final adversarial decision. A Review axis runs at most once per
-Ticket. Process corrections stay in the current Team Round. Only a compliant
-implementation rejection confirmed by the Leader opens the next Round. Main or
-the user can retire a Team; replacement retains the Ticket branch and Worktree,
-and reads the replaced member's retained reports and Trace. Replacing a member
-changes only that seat, and the Runner's recorded direct parent decides who may
-replace it.
+The project assigns implementation, investigation, validation and acceptance
+responsibilities through its selected instructions and actual Agent hierarchy.
+Specialist checks provide evidence for the common result decision; they do not
+create a separate completion protocol. A confirmed result rejection opens the
+next Round. Replacements retain the Ticket branch, Worktree and prior evidence;
+the stopped Session remains retained. The recorded direct parent or the user
+supplies replacement authority, after the target subtree has stopped.
 
 Continue an unfinished Team through `agent-runner continue` after deciding the
 next action. Runner reuses the retained original Sessions, the Worktree,
@@ -528,7 +521,8 @@ Main integrates accepted candidates serially into `dev` and supplies the
 project's validation command. For an actual textual or semantic conflict,
 the integration command accepts `--resolve-conflict <diagnosis>` to dispatch
 an explicitly selected role (`--role <configured role reference or inline
-role>`). Successful Team Review alone does not merge a candidate.
+role>`). The selected executor submits its resolved version for an authorized
+decision before integration completes.
 Cleanup verifies integration and a clean disposable Worktree, removes safe
 live mappings and the Ticket Worktree/branch, and preserves durable evidence.
 
@@ -538,23 +532,19 @@ live mappings and the Ticket Worktree/branch, and preserves durable evidence.
 control using Codex 0.153.0's stdio app-server. Runner Session workers use this
 Adapter and retain the connection and native Trace after a launch or send caller
 returns. The existing registered-task inline-role launch returns `launched` with
-an alias and native `session`; coding Team scheduling still follows its existing
-workflow.
+an alias and native `session`.
 
 `launch_batch(parse_batch(document), root)` dispatches a Batch through the same
 Worker and Adapter. A calling Session registers the direct children its
 `role_tree` permits; a Batch that cannot fit starts none of its tasks and
-returns `insufficient-capacity` to the caller Session. In the optional coding
-method, a Leader registers its Engineer and selected Review axes for the fixed
-candidate and makes the final decision after collecting their reports; when a
-Batch cannot fit, the Leader registers its axes separately to proceed at
-capacity one, and the stopped parent's position transfers to each child in turn.
+returns `insufficient-capacity` to the caller Session. Separately register tasks
+that can run sequentially when capacity is limited.
 
-`read_graph(state)` exposes the Ticket's `implementing`, `reviewing`, and
-`awaiting-integration` states. `read_worldline(state, root)` supplies the fixed
-candidate and the final `team-round-accepted` event. A Leader can be idle while
-its children execute; Session completion alone is not Team acceptance. Current
-Round reports remain under `tickets/<id>-<name>/teams/<generation>/rounds/<round>/`.
+`read_graph(state)` exposes current Ticket states. `read_worldline(state, root)`
+supplies the submitted versions and recorded decisions, including the retained
+`team-round-accepted` event. A parent can be idle while its children execute;
+Session completion alone does not accept the task. Current Round reports remain
+under `tickets/<id>-<name>/teams/<generation>/rounds/<round>/`.
 
 A registered member can submit code, Markdown or LaTeX through the same operation:
 
@@ -760,7 +750,7 @@ unanswered request leaves the genuine Team check incomplete.
 
 Pass the immutable `RuntimeContext` returned by the existing
 `preflight_runtime_context(...).finalize()`. Its `session_document()` projects
-the resolved role instructions, model, effort, selected Skills, Worktree and
+the resolved role instructions, model, effort, native resources, Worktree and
 native task/report permissions. It does not change persistent Codex configuration.
 
 ```python
@@ -907,7 +897,7 @@ The tools are the existing graph, execution, control and interaction operations:
 | `ticket_revise` | One product-preserving revision: `product_preserving`, `caused_by_event_ids`, `evidence_refs`, `tickets`. | Recorded causal event; the same operation as `graphtraj ticket revise`. |
 | `ticket_update` | One evidence-backed state change: `ticket_id`, `status`, `active_team_ordinal`, `worktree`, `branch`, `current_candidate`, `caused_by_event_ids`, `evidence_refs`. | Recorded causal event; the same operation as `graphtraj ticket update`. |
 | `alias_status` | optionally `aliases`, `operation_total`, `baseline`, `candidate`. | Session status document, or the visible Session tree when `aliases` is omitted; the same document as `agent-runner status`. |
-| `swarm` | One structured swarm input: `tasks` with `role` (a preset reference or one inline role), optionally `instruction` and `skills`, and the `ticket_id` Main selected from the DAG. | Each activated Agent's `launch_status`, `alias` and `session`; the same document as `agent-runner --swarm-input`. The call returns while those executions stay owned, and later calls address the returned alias. |
+| `swarm` | One structured swarm input: `tasks` with `role` (a preset reference or one inline role), optionally `instruction`, and the `ticket_id` Main selected from the DAG. | Each activated Agent's `launch_status`, `alias` and `session`; the same document as `agent-runner --swarm-input`. The call returns while those executions stay owned, and later calls address the returned alias. |
 | `send_instruction` | `alias`, `instruction`, `caused_by_event_ids`, and optionally `reports_only`. | `send_status`; the same operation as `agent-runner send`. |
 | `session_reports` | `alias`. | Assigned reports and retained result submissions; the same operation as `agent-runner reports`. |
 | `submit_report` | `name`, `text`. | Writes only the calling Session's assigned report. |
@@ -930,12 +920,9 @@ A Codex host sends its calling thread on every tool request. When the server
 receives `params._meta.threadId`, it routes live budget notices to that Main
 through the same recovery binding the CLI uses: an enforced stop returns with
 that tool call as `stop_deliveries`, carrying the deterministic stop identity,
-the stop's own absolute instant, the elapsed duration and the explicit `$retro`
-instruction with the `retro` Skill path, using the existing
+the stop's own absolute instant, elapsed duration and configured stop instruction, using the existing
 `CodexMainRecovery` retention and deduplication. Ordinary elapsed and allowance
-reminders stay ordinary notices. Without that request metadata, or without the
-installed Skill at `.agents/skills/retro/SKILL.md` in the server's working
-directory, the tools keep their generic behaviour and run without a caller
+reminders stay ordinary notices. Without that request metadata, the tools keep their generic behaviour and run without a caller
 notice channel; such a stop is only retained in the Ticket's
 `execution-budget.yml` and reported to the Session's recorded parent. Nothing
 here writes Main developer instructions or user Runtime configuration, and no
@@ -1014,8 +1001,8 @@ Historical `state/<run-id>` directories are left byte-for-byte untouched.
 GraphTraj does not migrate them, read them as fallback or offer compatibility
 for the old project command, Run-based Batch syntax or configuration sources.
 
-The current Adapter supports Codex. Dispatched coding Teams use Runner for
-formal implementation and Review. A role configured with `allow_runtime_swarm`
+The current Adapter supports Codex. Dispatched Agents use Runner for formal
+task work. A role configured with `allow_runtime_swarm`
 may use Runtime-native helpers only for temporary read-only investigation;
 those helpers cannot occupy a Team seat, have no independent GraphTraj Trace,
 and do not authorize any formal Runner dispatch edge. No Session starts another
@@ -1033,3 +1020,19 @@ probe explicitly:
 ```text
 CODEX_REAL_ACCEPTANCE=1 pytest -p no:cacheprovider -q tests/test_harness_root_runtime.py -k test_real_codex --tb=short
 ```
+
+## Resource-decoupling validation boundary
+
+The accepted product installation was built from Git commit `36be7ac`; the final
+validation commit `1c4fc48` changes only a test file, with identical package source
+and packaging configuration. Its recorded checks cover 18 installed composition
+cases and four targeted budget cases. The package contains no Skill/role/template
+resource tree; generic Codex permission policy remains. Earlier per-feature
+checks were reused instead of counted again or presented as a full-suite pass.
+
+A no-model `skills/list` query with Codex 0.156.1 verified native discovery of
+external customized Skills through symlinks, including same-name entries. This
+is discovery evidence, not a paid-model execution or native Seatbelt proof.
+Four earlier README-override recovery assertions remain documented as pre-existing
+failures. Earlier budget failures did not reproduce on the correctly installed
+final candidate; that result alone does not establish their historical cause.

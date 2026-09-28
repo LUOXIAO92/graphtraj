@@ -30,7 +30,7 @@ def test_native_status_uses_callback_identity(
     """Native identity governs detail and control through the same public boundary."""
     from graphtraj.execution import runner_control
     from graphtraj.execution.runner_status import caller_alias
-    from graphtraj.teams.coding import team_replacement
+    from graphtraj.teams import team_replacement
     configuration = tmp_path / '.graphtraj/config.yml'
     child_directory = tmp_path / '.graphtraj/runner/sessions/probe@e1'
     child_directory.mkdir(parents=True)

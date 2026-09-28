@@ -308,7 +308,7 @@ def revise_tickets(
                 )
                 revised_budget = read_execution_budget(definition["body"])
                 if previous_budget is not None and revised_budget is None:
-                    raise ValueError("a coding Ticket budget cannot be removed")
+                    raise ValueError("a Ticket execution budget cannot be removed")
                 if (
                     (
                         previous_budget is None

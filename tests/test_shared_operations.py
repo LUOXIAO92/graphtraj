@@ -63,7 +63,7 @@ def test_python_setup_returns_actions_and_doctor_reports_without_a_terminal(
     separated: bool,
 ) -> None:
     """The existing Setup plan supplies structured completion and diagnostics."""
-    from graphtraj.configuration.skill_check import diagnose_project
+    from graphtraj.configuration.project_diagnosis import diagnose_project
     from graphtraj.workspace.project_initialization import plan_project_setup
 
     repository = temporary_git_repository
@@ -100,7 +100,7 @@ def test_doctor_python_result_matches_roles_and_root_error(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Diagnostics are data; the CLI alone translates failure and usage exits."""
-    from graphtraj.configuration.skill_check import diagnose_project, DoctorError
+    from graphtraj.configuration.project_diagnosis import diagnose_project, DoctorError
 
     _configure(tmp_path)
     user = tmp_path / "user"
@@ -391,8 +391,8 @@ def test_python_budgeted_launch_preserves_notices_without_writing_to_terminal(
     from graphtraj.execution.runner_models import RunnerError
     from graphtraj.execution.runner_status import status_aliases
     from graphtraj.interfaces.cli.agent_runner import main as runner_main
-    from graphtraj.teams.coding.team_round import continue_stopped_ticket
-    from graphtraj.teams.coding.team_replacement import replace_session
+    from graphtraj.teams.team_round import continue_stopped_ticket
+    from graphtraj.teams.team_replacement import replace_session
 
     monkeypatch.chdir(root)
     alias = response.document["tasks"][0]["alias"]

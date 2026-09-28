@@ -292,7 +292,7 @@ def replace(alias: str, actor: str | None, caused_by_event_id: tuple[str, ...]) 
     The recorded direct parent or native user approval authorizes replacement.
     The target and all descendants must already be stopped.
     """
-    from graphtraj.teams.coding.team_replacement import replace_session
+    from graphtraj.teams.team_replacement import replace_session
 
     try:
         response = replace_session(alias, actor, caused_by_event_id, Path.cwd().resolve())
@@ -314,7 +314,7 @@ def continue_ticket(
     ticket_id: str, caused_by_event_id: tuple[str, ...], budget_only: bool,
 ) -> None:
     """Restore an authorized task budget and, by default, resume original roots."""
-    from graphtraj.teams.coding.team_round import continue_stopped_ticket
+    from graphtraj.teams.team_round import continue_stopped_ticket
 
     try:
         response = continue_stopped_ticket(

@@ -512,7 +512,7 @@ def main() -> None:
     job_file = Path(sys.argv[1])
     result = run(job_file)
     if result == 0 and yaml.safe_load(job_file.read_text()).get("drive_children", False):
-        from graphtraj.teams.coding.team_round import run_session_children
+        from graphtraj.teams.team_round import run_session_children
 
         try:
             run_session_children(job_file)

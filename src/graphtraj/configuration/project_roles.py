@@ -186,7 +186,7 @@ def default_roles_content() -> str:
     """Render the empty role selection an operator fills in for this project.
 
     No role is preselected: a project declares only the roles its own work
-    uses, and coding presets are one such selection rather than a default.
+    uses, and role presets are one such selection rather than a default.
     """
     return yaml.safe_dump({"roles": {}})
 

@@ -15,7 +15,7 @@ from graphtraj.execution import runner_status
 from graphtraj.execution.runner_models import RunnerError
 from graphtraj.execution.runner_transport import runtime_launch_failure
 from graphtraj.runtimes import replacement
-from graphtraj.teams.coding import team_replacement
+from graphtraj.teams import team_replacement
 from test_direct_control_authority import _record_direct_session
 
 

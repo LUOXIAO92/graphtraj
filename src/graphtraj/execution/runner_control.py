@@ -1,4 +1,4 @@
-"""Alias-addressed follow-up operations for recoverable Engineer sessions."""
+"""Alias-addressed follow-up operations for recoverable Sessions."""
 
 from __future__ import annotations
 
@@ -251,7 +251,7 @@ def send_instruction(
     require_direct_authority(runner_directory, alias, mapping)
     if is_session_mapping(mapping):
         _require_project_events(cwd, caused_by_event_ids)
-        from graphtraj.teams.coding.team_replacement import require_active_session
+        from graphtraj.teams.team_replacement import require_active_session
 
         require_active_session(
             discover_project(cwd, require_clean_integration=False), alias,
@@ -392,7 +392,7 @@ def _send_session_locked(
 
     A report collection never attaches the budget monitor, so returning
     evidence the Session already holds advances no stopping check, emits no
-    new stop notice and produces no new retro input. Every other resume keeps
+    new stop notice and produces no new stop input. Every other resume keeps
     the monitor and the Ticket's budget control.
     """
     execution_file = session_directory / "execution.yml"

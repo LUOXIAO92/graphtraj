@@ -3,6 +3,7 @@
 import fcntl
 import json
 import os
+import shutil
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
@@ -19,9 +20,16 @@ from test_task_budget_control import BODY, commands, sample_stop
 from test_ticket_graph import _change_status, _register, _ticket
 
 
-@pytest.mark.parametrize('inherited', [False, True], ids=['caller-binding', 'inherited-fd'])
-@pytest.mark.parametrize('surface', ['cli', 'mcp'])
-@pytest.mark.parametrize('stop', [True, False], ids=['budget-stop', 'completed'])
+@pytest.mark.parametrize('surface,stop,inherited,stop_instruction', [
+    (surface, stop, inherited, None)
+    for surface in ('cli', 'mcp')
+    for stop in (True, False)
+    for inherited in (False, True)
+] + [
+    (surface, True, False, instruction)
+    for surface in ('cli', 'mcp')
+    for instruction in ('Use my external research method.\nPreserve the evidence.', '')
+])
 def test_bound_top_level_transport_lasts_until_execution_ends(
     commands: InstalledCommands,
     temporary_git_repository: Path,
@@ -31,12 +39,21 @@ def test_bound_top_level_transport_lasts_until_execution_ends(
     surface: str,
     stop: bool,
     inherited: bool,
+    stop_instruction: str | None,
 ) -> None:
     """Return late stop evidence, or normal completion, before task acceptance."""
     root, worktrees, _, env = configure_harness(
         commands, temporary_git_repository, fake_codex, tmp_path,
     )
-    (root / '.agents/skills/retro/SKILL.md').unlink()
+    # Setup no longer supplies Skills; remove the fixture's user methods too.
+    for skills in (root / '.agents/skills', tmp_path / 'operator-home/.agents/skills'):
+        if skills.exists():
+            shutil.rmtree(skills)
+    if stop_instruction is not None:
+        config_path = root / '.graphtraj/config.yml'
+        config = yaml.safe_load(config_path.read_text())
+        config['agent_runner']['stop_instruction'] = stop_instruction
+        config_path.write_text(yaml.safe_dump(config))
     (root / '.graphtraj/roles.yml').write_text(yaml.safe_dump({
         'roles': {'researcher': {'runtime': 'codex', 'model': 'selected'}},
         'role_tree': {'researcher': {}},
@@ -148,6 +165,12 @@ print(json.dumps({'type': 'item.completed', 'item': {'type': 'agent_message', 't
                     assert len(deliveries) == 1
                     assert deliveries[0]['ticket'] == {'ticket_id': '153', 'ticket_name': 'research'}
                     assert deliveries[0]['triggered_at'] and deliveries[0]['delivered_at']
+                    if stop_instruction == '':
+                        assert 'instruction' not in deliveries[0]
+                    elif stop_instruction is not None:
+                        assert deliveries[0]['instruction'] == stop_instruction
+                    else:
+                        assert deliveries[0]['instruction']
             else:
                 assert 'stop_deliveries' not in document
                 assert yaml.safe_load((directory / 'execution.yml').read_text())['outcome'] == 'completed'

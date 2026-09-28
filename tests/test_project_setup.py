@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Iterable
 
 import pytest
-import yaml
 
 from conftest import FakeCodex, InstalledCommands, run_process
 
@@ -42,9 +41,6 @@ CODING_METHOD_SKILL_NAMES = (
     "tdd",
     "code-review",
     "resolving-merge-conflicts",
-)
-REQUIRED_SKILL_NAMES = tuple(
-    name for name in CORE_SKILL_NAMES if name not in CODING_METHOD_SKILL_NAMES
 )
 
 
@@ -103,17 +99,6 @@ def run_setup(
     fake_codex: FakeCodex,
     answers: str,
 ) -> subprocess.CompletedProcess[str]:
-    # These fixtures previously relied on user Skills to skip installation.
-    # Accept the new project-local installation prompt before their other answers.
-    if (all((user_home / ".agents/skills" / name / "SKILL.md").is_file()
-            for name in CORE_SKILL_NAMES)
-            and not (harness_root / ".agents/skills/task-delivery/SKILL.md").exists()):
-        candidates = [p for p in harness_root.iterdir() if (p / ".git").exists()]
-        if not (harness_root / ".git").exists() and len(candidates) > 1:
-            selection, _, remaining = answers.partition("\n")
-            answers = selection + "\ny\n" + remaining
-        else:
-            answers = "y\n" + answers
     return subprocess.run(
         [str(installed_commands.product), "setup"],
         cwd=harness_root,
@@ -171,99 +156,62 @@ def commit_dev_files_without_leaving_dev_checked_out(
     ).check_returncode()
 
 
-def test_setup_refuses_missing_core_skills_without_mutating_either_scope(
+@pytest.mark.parametrize("layout", ("same", "separated"))
+def test_setup_and_doctor_need_no_bundled_skills(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
     fake_codex: FakeCodex,
     tmp_path: Path,
+    layout: str,
 ) -> None:
-    harness_root = temporary_git_repository.parent
+    """Setup prepares either layout without bundled Skills and without asking."""
+    root = temporary_git_repository if layout == "same" else temporary_git_repository.parent
     user_home = tmp_path / "operator-home"
     user_home.mkdir()
-    (user_home / "operator-note.txt").write_text(
-        "leave the Runtime-user scope alone\n",
-        encoding="utf-8",
-    )
     user_before = tree_contents(user_home)
-    worktrees_before = git_output(
-        temporary_git_repository, "worktree", "list", "--porcelain"
-    )
 
     result = run_setup(
         installed_commands,
-        harness_root=harness_root,
+        harness_root=root,
         user_home=user_home,
         fake_codex=fake_codex,
-        answers="n\n",
-    )
-
-    assert result.returncode == 1
-    assert "Missing bundled Skills:" in result.stdout
-    assert "implement" in result.stdout
-    assert "Setup stopped before any setup mutation." in result.stderr
-    assert not (harness_root / ".graphtraj").exists()
-    assert not (harness_root / ".codex").exists()
-    assert not (harness_root / ".agents").exists()
-    assert tree_contents(user_home) == user_before
-    assert git_output(
-        temporary_git_repository, "worktree", "list", "--porcelain"
-    ) == worktrees_before
-
-
-def test_a_project_without_coding_methods_prepares_and_diagnoses_cleanly(
-    installed_commands: InstalledCommands,
-    temporary_git_repository: Path,
-    fake_codex: FakeCodex,
-    tmp_path: Path,
-) -> None:
-    """Declining the coding methods leaves a project that never selects them valid."""
-    harness_root = temporary_git_repository.parent
-    user_home = tmp_path / "operator-home"
-    user_home.mkdir()
-    harness_skills = harness_root / ".agents" / "skills"
-    install_skills(harness_skills, REQUIRED_SKILL_NAMES)
-
-    result = run_setup(
-        installed_commands,
-        harness_root=harness_root,
-        user_home=user_home,
-        fake_codex=fake_codex,
-        answers="n\ny\n",
+        answers="y\n",
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert sorted(path.name for path in harness_skills.iterdir()) == sorted(
-        REQUIRED_SKILL_NAMES
-    )
-    roles = yaml.safe_load(
-        (harness_root / ".graphtraj" / "roles.yml").read_text(encoding="utf-8")
-    )
-    assert roles == {"roles": {}}
+    assert "Skills" not in result.stdout
+    assert not (root / ".agents").exists()
+    assert tree_contents(user_home) == user_before
+    assert (root / ".graphtraj" / ".agent-worktrees" / "dev").is_dir()
 
     diagnosed = run_process(
         [str(installed_commands.product), "doctor"],
-        cwd=harness_root,
+        cwd=root,
         env=setup_environment(user_home, fake_codex),
     )
-
     assert diagnosed.returncode == 0, diagnosed.stdout + diagnosed.stderr
+    assert diagnosed.stdout.splitlines() == ["roles: OK"]
 
 
-def test_setup_installs_only_missing_core_skills_at_the_harness_root(
+@pytest.mark.parametrize("separated", (False, True))
+def test_setup_leaves_existing_operator_skills_byte_identical(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
     fake_codex: FakeCodex,
     tmp_path: Path,
+    separated: bool,
 ) -> None:
-    harness_root = temporary_git_repository.parent
+    """Setup never creates, replaces or rewrites operator Skills in either scope."""
+    harness_root = temporary_git_repository.parent if separated else temporary_git_repository
     harness_skills = harness_root / ".agents" / "skills"
-    install_skills(harness_skills, ("grilling",))
+    install_skills(harness_skills, ("grilling", "task-delivery", "operator-method"))
+    (harness_skills / "task-delivery" / "SKILL.md").write_bytes(b"User task delivery\x00\xff\n")
     existing_grilling = harness_skills / "grilling" / "SKILL.md"
     existing_grilling.write_text(
         "---\nname: grilling\ndescription: Operator Skill.\n---\n",
         encoding="utf-8",
     )
-    grilling_before = existing_grilling.read_bytes()
+    harness_before = tree_contents(harness_skills)
     user_home = tmp_path / "operator-home"
     install_skills(user_home / ".agents" / "skills", ("tdd",))
     user_before = tree_contents(user_home)
@@ -273,29 +221,28 @@ def test_setup_installs_only_missing_core_skills_at_the_harness_root(
         harness_root=harness_root,
         user_home=user_home,
         fake_codex=fake_codex,
-        answers="y\ny\n",
+        answers="y\n",
     )
 
-    assert result.returncode == 0, result.stderr
-    assert existing_grilling.read_bytes() == grilling_before
-    for name in CORE_SKILL_NAMES:
-        target = harness_skills / name
-        if name == "grilling":
-            assert target.joinpath("SKILL.md").read_bytes() == grilling_before
-        else:
-            assert tree_contents(target) == supported_skill_contents(name)
+    assert result.returncode == 0, result.stdout + result.stderr
+    diagnosed = run_process(
+        [str(installed_commands.product), "doctor"],
+        cwd=harness_root,
+        env=setup_environment(user_home, fake_codex),
+    )
+    assert diagnosed.returncode == 0, diagnosed.stdout + diagnosed.stderr
+    assert tree_contents(harness_skills) == harness_before
     assert tree_contents(user_home) == user_before
-    assert not (
-        harness_root / ".graphtraj" / "runner" / "config.yml"
-    ).exists()
+    assert not (harness_root / ".graphtraj" / "runner" / "config.yml").exists()
 
 
-def test_setup_preflights_missing_skill_targets_before_project_mutation(
+def test_setup_leaves_a_redirected_harness_skill_target_untouched(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
     fake_codex: FakeCodex,
     tmp_path: Path,
 ) -> None:
+    """A Skill path outside the Harness root is irrelevant to setup."""
     harness_root = temporary_git_repository.parent
     redirected_target = tmp_path / "outside-harness"
     redirected_target.mkdir()
@@ -310,30 +257,20 @@ def test_setup_preflights_missing_skill_targets_before_project_mutation(
     )
     user_home = tmp_path / "operator-home"
     user_home.mkdir()
-    user_before = tree_contents(user_home)
     outside_before = tree_contents(redirected_target)
-    worktrees_before = git_output(
-        temporary_git_repository, "worktree", "list", "--porcelain"
-    )
 
     result = run_setup(
         installed_commands,
         harness_root=harness_root,
         user_home=user_home,
         fake_codex=fake_codex,
-        answers="y\ny\n",
+        answers="y\n",
     )
 
-    assert result.returncode == 1
-    assert "Harness Skill target is not a real directory" in result.stderr
-    assert not (harness_root / ".graphtraj").exists()
-    assert not (harness_root / ".codex").exists()
+    assert result.returncode == 0, result.stdout + result.stderr
     assert (harness_skills / "implement").is_symlink()
     assert tree_contents(redirected_target) == outside_before
-    assert tree_contents(user_home) == user_before
-    assert git_output(
-        temporary_git_repository, "worktree", "list", "--porcelain"
-    ) == worktrees_before
+    assert not (harness_root / ".codex" / "config.toml").exists()
 
 
 def test_setup_reuses_tracked_source_documents(
@@ -482,12 +419,13 @@ def test_setup_reuses_repository_document_symlinks(
     assert (worktree / "CONTEXT.md").read_text() == "Existing context.\n"
     assert (worktree / "docs/decision.md").read_text() == "Existing decision.\n"
 
-def test_same_root_setup_rejects_a_tracked_core_skill_before_mutating(
+def test_same_root_setup_leaves_tracked_repository_skills_byte_identical(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
     fake_codex: FakeCodex,
     tmp_path: Path,
 ) -> None:
+    """Repository-owned Skills are Source content setup never rewrites."""
     repository = temporary_git_repository
     source_skill = repository / ".agents" / "skills" / "implement" / "SKILL.md"
     source_skill.parent.mkdir(parents=True)
@@ -501,12 +439,8 @@ def test_same_root_setup_rejects_a_tracked_core_skill_before_mutating(
     ).check_returncode()
     source_before = source_skill.read_bytes()
     user_home = tmp_path / "operator-home"
-    install_skills(
-        user_home / ".agents" / "skills",
-        tuple(name for name in CORE_SKILL_NAMES if name != "implement"),
-    )
+    user_home.mkdir()
     user_before = tree_contents(user_home)
-    worktrees_before = git_output(repository, "worktree", "list", "--porcelain")
 
     result = run_setup(
         installed_commands,
@@ -516,58 +450,13 @@ def test_same_root_setup_rejects_a_tracked_core_skill_before_mutating(
         answers="y\n",
     )
 
-    assert result.returncode == 1
-    assert "Missing bundled Skills:" in result.stdout
-    assert "implement" in result.stdout
-    assert "Source Repository history" in result.stderr
+    assert result.returncode == 0, result.stdout + result.stderr
     assert source_skill.read_bytes() == source_before
-    assert not (repository / ".graphtraj").exists()
-    assert not (repository / ".codex").exists()
+    assert sorted(
+        path.name for path in (repository / ".agents" / "skills").iterdir()
+    ) == ["implement"]
     assert tree_contents(user_home) == user_before
-    assert git_output(repository, "worktree", "list", "--porcelain") == worktrees_before
-
-
-def test_same_root_setup_installs_a_non_overlapping_harness_core_skill(
-    installed_commands: InstalledCommands,
-    temporary_git_repository: Path,
-    fake_codex: FakeCodex,
-    tmp_path: Path,
-) -> None:
-    repository = temporary_git_repository
-    source_skill = (
-        repository / ".agents" / "skills" / "repository-implement" / "SKILL.md"
-    )
-    source_skill.parent.mkdir(parents=True)
-    source_skill.write_text(
-        "---\nname: implement\ndescription: Repository Skill.\n---\n",
-        encoding="utf-8",
-    )
-    run_process(["git", "add", ".agents"], cwd=repository).check_returncode()
-    run_process(
-        ["git", "commit", "-m", "Add repository implement Skill"], cwd=repository
-    ).check_returncode()
-    source_before = source_skill.read_bytes()
-    user_home = tmp_path / "operator-home"
-    install_skills(
-        user_home / ".agents" / "skills",
-        tuple(name for name in CORE_SKILL_NAMES if name != "implement"),
-    )
-    user_before = tree_contents(user_home)
-
-    result = run_setup(
-        installed_commands,
-        harness_root=repository,
-        user_home=user_home,
-        fake_codex=fake_codex,
-        answers="y\ny\n",
-    )
-
-    assert result.returncode == 0, result.stderr
-    assert source_skill.read_bytes() == source_before
-    assert tree_contents(
-        repository / ".agents" / "skills" / "implement"
-    ) == supported_skill_contents("implement")
-    assert tree_contents(user_home) == user_before
+    assert (repository / ".graphtraj" / ".agent-worktrees" / "dev").is_dir()
 
 
 def test_setup_preflights_a_dev_checkout_owned_elsewhere(

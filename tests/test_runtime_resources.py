@@ -72,8 +72,16 @@ def test_runtime_executes_the_resolved_responsibility_and_required_skill(
 
     harness = temporary_git_repository.parent
     monkeypatch.setenv("HOME", str(tmp_path / "operator-home"))
-    plan_project_setup(harness, temporary_git_repository).apply(install_missing_skills=True)
+    plan_project_setup(harness, temporary_git_repository).apply()
     worktree = harness / ".graphtraj" / ".agent-worktrees" / "dev"
+    provided_skill = harness / ".agents" / "skills" / "research"
+    (provided_skill / "references").mkdir(parents=True)
+    (provided_skill / "SKILL.md").write_text(
+        "---\nname: research\ndescription: Provided Skill.\n---\n", encoding="utf-8"
+    )
+    (provided_skill / "references" / "coding.md").write_text(
+        "Research reference.\n", encoding="utf-8"
+    )
     session = tmp_path / "session"
     session.mkdir()
     # Replace model reasoning with a deterministic responsibility at the Runtime

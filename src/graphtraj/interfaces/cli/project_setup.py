@@ -53,17 +53,6 @@ def _select_source_repository(harness_root: Path) -> Path:
     return selected
 
 
-def _confirm_missing_skill_installation(missing_skills: tuple[str, ...]) -> bool:
-    """Ask the operator whether to install the listed missing bundled Skills."""
-    click.echo(
-        "Missing bundled Skills: {0}".format(", ".join(missing_skills))
-    )
-    return click.confirm(
-        "Install the missing bundled Skills into this Harness Project?",
-        default=True,
-    )
-
-
 @click.command()
 def setup() -> None:
     """Initialize GraphTraj in the current existing Git repository."""
@@ -79,22 +68,8 @@ def setup() -> None:
     except ProjectSetupError as error:
         raise click.ClickException(str(error)) from error
 
-    install_missing_skills = False
-    if plan.missing_bundled_skills:
-        if _confirm_missing_skill_installation(plan.missing_bundled_skills):
-            install_missing_skills = True
-        elif plan.missing_required_skills:
-            raise click.ClickException(
-                "Setup stopped before any setup mutation. Install the missing "
-                "Skills independently and rerun setup."
-            )
-        else:
-            click.echo("Continuing without the missing bundled Skills.")
-    else:
-        click.echo("Core Skills: OK")
-
     try:
-        preview = plan.preflight(install_missing_skills=install_missing_skills)
+        preview = plan.preflight()
     except ProjectSetupError as error:
         raise click.ClickException(str(error)) from error
     click.echo("Setup plan:")
@@ -110,12 +85,10 @@ def setup() -> None:
             raise click.Abort()
 
     try:
-        result = plan.apply(install_missing_skills=install_missing_skills)
+        result = plan.apply()
     except ProjectSetupError as error:
         raise click.ClickException(str(error)) from error
 
-    if install_missing_skills:
-        click.echo("Core Skills: OK")
     click.echo({
         "created": "Created Integration Worktree on dev.",
         "registered": "Registered Integration Worktree on existing dev.",
@@ -126,13 +99,11 @@ def setup() -> None:
 
 @click.command()
 def doctor() -> None:
-    """Report required Skills and roles from the active Harness Project context."""
+    """Report configuration and roles from the active Harness Project context."""
     try:
-        result = diagnose_project(Path.cwd(), Path.home() / ".agents" / "skills")
+        result = diagnose_project(Path.cwd())
     except DoctorError as error:
         raise click.UsageError(str(error)) from error
-    for status in result.skills:
-        click.echo("{0}: {1}".format(status.name, "OK" if status.discovered else "MISSING"))
     if result.role_diagnostics:
         click.echo(str(ProjectRolesError(result.role_diagnostics)))
     elif result.roles_checked:

@@ -1,4 +1,4 @@
-"""Discover the Skills a Harness Project bundles and requires."""
+"""Discover selected Skills and diagnose Harness Project configuration."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from typing import Dict, Optional, Tuple
 
 import yaml
 
-from graphtraj.workspace.git_repository import GitRepositoryError, SourceRepository
+from graphtraj.workspace.git_repository import SourceRepository
 from graphtraj.configuration.project_configuration import (
     ProjectConfigurationError,
     configuration_exists,
@@ -37,22 +37,6 @@ BUNDLED_SKILL_NAMES = (
     "wayfinder",
     "prototype",
     "ponytail-review",
-)
-
-# Professional methods that a task selects when its own work needs them. A
-# project that never selects them prepares and runs without them.
-CODING_METHOD_SKILL_NAMES = (
-    "implement",
-    "ponytail",
-    "ponytail-review",
-    "tdd",
-    "code-review",
-    "resolving-merge-conflicts",
-)
-
-# Skills every project needs before any task can run.
-REQUIRED_SKILL_NAMES = tuple(
-    name for name in BUNDLED_SKILL_NAMES if name not in CODING_METHOD_SKILL_NAMES
 )
 
 
@@ -196,54 +180,35 @@ def _doctor_runtime_store(cwd: Path) -> Path:
     return cwd / ".codex"
 
 
-def _doctor_source_history_paths(runtime_store: Path) -> frozenset[str]:
-    """Return tracked Skill paths only when the Harness and Source roots match."""
-
-    try:
-        harness_root = runtime_store.parent
-        if configuration_exists(harness_root):
-            configuration = load_project_configuration(harness_root)
-            if configuration.project_root != configuration.harness_root:
-                return frozenset()
-            repository = SourceRepository.from_root(configuration.project_root)
-        else:
-            repository = SourceRepository.from_root(harness_root)
-        return source_history_skill_paths(repository, repository.head)
-    except (GitRepositoryError, OSError, ProjectConfigurationError):
-        return frozenset()
-
-
 class DoctorError(ValueError):
     """The requested directory is not a supported diagnostic context."""
 
 
 @dataclass(frozen=True)
 class ProjectDiagnosis:
-    """Skill discovery and reusable-role diagnostics without terminal output."""
+    """Reusable-role diagnostics without terminal output."""
 
-    skills: Tuple[SkillStatus, ...]
     roles_checked: bool
     role_diagnostics: Tuple[str, ...]
 
     @property
     def succeeded(self) -> bool:
-        """Return whether all required Skills and any checked roles are valid."""
-        return all(status.discovered for status in self.skills) and not self.role_diagnostics
+        """Return whether the checked roles are valid."""
+        return not self.role_diagnostics
 
 
-def diagnose_project(cwd: Path, user_skill_root: Path) -> ProjectDiagnosis:
-    """Check one Harness root without mutation; reject known child Worktrees.
+def diagnose_project(cwd: Path) -> ProjectDiagnosis:
+    """Check configuration and roles without mutation or Skill discovery.
 
-    Missing Skills and invalid roles are returned as diagnostics. A wrong
-    Harness context raises DoctorError. The caller selects the user Skill scope.
+    Invalid roles are returned as diagnostics. A wrong Harness context or
+    invalid project configuration raises DoctorError.
     """
     runtime_store = _doctor_runtime_store(cwd.resolve())
-    statuses = check_skills(
-        runtime_store,
-        user_skill_root,
-        REQUIRED_SKILL_NAMES,
-        source_history_paths=_doctor_source_history_paths(runtime_store),
-    )
+    if configuration_exists(runtime_store.parent):
+        try:
+            load_project_configuration(runtime_store.parent)
+        except ProjectConfigurationError as error:
+            raise DoctorError(str(error)) from error
     roles_checked = configuration_exists(runtime_store.parent) or roles_exist(runtime_store.parent)
     diagnostics = ()
     if roles_checked:
@@ -251,4 +216,4 @@ def diagnose_project(cwd: Path, user_skill_root: Path) -> ProjectDiagnosis:
             load_project_roles(runtime_store.parent)
         except ProjectRolesError as error:
             diagnostics = error.diagnostics
-    return ProjectDiagnosis(statuses, roles_checked, diagnostics)
+    return ProjectDiagnosis(roles_checked, diagnostics)

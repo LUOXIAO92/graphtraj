@@ -31,14 +31,6 @@ from graphtraj.configuration.project_roles import (
     roles_exist,
     roles_file,
 )
-from graphtraj.configuration.skill_check import (
-    BUNDLED_SKILL_NAMES,
-    REQUIRED_SKILL_NAMES,
-    check_skills,
-    harness_skill_root,
-    source_history_skill_paths,
-)
-from graphtraj.configuration.supported_skills import SupportedSkills, SupportedSkillsError
 
 
 INTEGRATION_BRANCH = "dev"
@@ -197,10 +189,6 @@ class ProjectSetupPlan:
     configuration: ProjectConfiguration
     roles: ProjectRoles
     codex_files: CodexProjectFiles
-    supported_skills: SupportedSkills
-    missing_required_skills: Tuple[str, ...]
-    missing_bundled_skills: Tuple[str, ...]
-    source_history_paths: frozenset[str]
     write_default_configuration: bool
     write_default_roles: bool
     proposed_base: Optional[str]
@@ -222,42 +210,21 @@ class ProjectSetupPlan:
     def runner_store(self) -> Path:
         return self.harness_root / ".graphtraj" / "runner"
 
-    def _skill_names_to_install(
-        self,
-        install_missing_skills: bool,
-    ) -> Tuple[str, ...]:
-        if not install_missing_skills:
-            return ()
-        return self.missing_bundled_skills
-
-    def preflight(
-        self,
-        *,
-        install_missing_skills: bool = False,
-    ) -> ProjectSetupPreview:
+    def preflight(self) -> ProjectSetupPreview:
         """Check every setup target before setup mutates the project."""
 
         try:
-            return self._preflight(install_missing_skills=install_missing_skills)
+            return self._preflight()
         except ProjectSetupError:
             raise
-        except (GitRepositoryError, OSError, SupportedSkillsError) as error:
+        except (GitRepositoryError, OSError) as error:
             raise ProjectSetupError(
                 "Setup preflight could not be completed: {0}".format(error)
             ) from error
 
-    def _preflight(
-        self,
-        *,
-        install_missing_skills: bool = False,
-    ) -> ProjectSetupPreview:
+    def _preflight(self) -> ProjectSetupPreview:
         actions: List[PlannedSetupAction] = []
         conflicts: List[str] = []
-        self._preflight_supported_skills(
-            self._skill_names_to_install(install_missing_skills),
-            actions,
-            conflicts,
-        )
         if self.write_default_configuration:
             actions.append(
                 PlannedSetupAction(
@@ -393,57 +360,6 @@ class ProjectSetupPlan:
         _raise_conflicts(conflicts)
         return ProjectSetupPreview(tuple(actions))
 
-    def _preflight_supported_skills(
-        self,
-        names: Tuple[str, ...],
-        actions: List[PlannedSetupAction],
-        conflicts: List[str],
-    ) -> None:
-        if not names:
-            return
-        source_conflicts = False
-        for name in names:
-            source_paths = tuple(
-                sorted(
-                    path
-                    for path in self.source_history_paths
-                    if path.startswith(".agents/skills/{0}/".format(name))
-                )
-            )
-            if source_paths:
-                source_conflicts = True
-                _append_conflict(
-                    conflicts,
-                    "Harness Skill conflicts with Source Repository history: {0}".format(
-                        self.harness_root / source_paths[0]
-                    ),
-                )
-        if source_conflicts:
-            return
-        try:
-            self.supported_skills.preflight_installation(self.runtime_store, names)
-        except SupportedSkillsError as error:
-            _append_conflict(conflicts, str(error))
-            return
-        skill_root = harness_skill_root(self.runtime_store)
-        for name in names:
-            for relative_path, content in self.supported_skills.manifest(name).items():
-                target = skill_root / name / relative_path
-                entry = _filesystem_entry(target)
-                description = SupportedSkills.resource_action(
-                    self.runtime_store,
-                    name,
-                    relative_path,
-                )
-                if entry is None:
-                    actions.append(PlannedSetupAction("CREATE", description))
-                elif entry.kind == "file" and entry.content == content:
-                    actions.append(
-                        PlannedSetupAction("ALREADY CONFIGURED", description)
-                    )
-                else:
-                    actions.append(PlannedSetupAction("REPLACE", description))
-
     def _preflight_runtime_resources(
         self,
         actions: List[PlannedSetupAction],
@@ -536,16 +452,14 @@ class ProjectSetupPlan:
                 )
                 actions.append(PlannedSetupAction(disposition, description))
 
-    def apply(self, *, install_missing_skills: bool = False) -> ProjectSetupResult:
+    def apply(self) -> ProjectSetupResult:
         """Apply setup and return completed actions, without prompting.
 
         Calling apply authorizes the planned branch and Worktree creation.
-        Missing Skill installation requires install_missing_skills=True.
         ProjectSetupError reports preflight conflicts or partial execution.
         """
 
-        preview = self.preflight(install_missing_skills=install_missing_skills)
-        skill_names = self._skill_names_to_install(install_missing_skills)
+        preview = self.preflight()
         pending = tuple(
             action.description
             for action in preview.actions
@@ -615,17 +529,10 @@ class ProjectSetupPlan:
                 common_git_directory=self.repository.common_directory,
                 on_action_complete=mark_completed,
             )
-            if skill_names:
-                self.supported_skills.install_missing(
-                    self.runtime_store,
-                    skill_names,
-                    on_action_complete=mark_completed,
-                )
         except (
             CodexProjectError,
             GitRepositoryError,
             OSError,
-            SupportedSkillsError,
         ) as error:
             incomplete = tuple(
                 description for description in pending if description not in completed
@@ -696,35 +603,12 @@ def plan_project_setup(
             else proposed_base
         )
         codex_files = CodexProjectFiles.load()
-        supported_skills = SupportedSkills.load()
-        source_paths = (
-            source_history_skill_paths(repository, repository.head)
-            if configuration.project_root == root
-            else frozenset()
-        )
-        skill_statuses = check_skills(
-            root / ".codex",
-            Path.home() / ".agents" / "skills",
-            BUNDLED_SKILL_NAMES,
-            source_history_paths=source_paths,
-            include_user_skills=False,
-        )
-        discovered_skills = {
-            status.name for status in skill_statuses if status.discovered
-        }
-        missing_required_skills = tuple(
-            name for name in REQUIRED_SKILL_NAMES if name not in discovered_skills
-        )
-        missing_bundled_skills = tuple(
-            name for name in BUNDLED_SKILL_NAMES if name not in discovered_skills
-        )
     except (
         CodexProjectError,
         GitRepositoryError,
         OSError,
         ProjectConfigurationError,
         ProjectRolesError,
-        SupportedSkillsError,
     ) as error:
         raise ProjectSetupError(str(error)) from error
     return ProjectSetupPlan(
@@ -733,10 +617,6 @@ def plan_project_setup(
         configuration=configuration,
         roles=roles,
         codex_files=codex_files,
-        supported_skills=supported_skills,
-        missing_required_skills=missing_required_skills,
-        missing_bundled_skills=missing_bundled_skills,
-        source_history_paths=source_paths,
         write_default_configuration=write_default_configuration,
         write_default_roles=write_default_roles,
         proposed_base=proposed_base,

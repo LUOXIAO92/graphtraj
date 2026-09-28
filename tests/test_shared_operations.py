@@ -68,29 +68,25 @@ def test_python_setup_returns_actions_and_doctor_reports_without_a_terminal(
 
     repository = temporary_git_repository
     root = repository.parent if separated else repository
-    user_skills = tmp_path / "user/.agents/skills"
     plan = plan_project_setup(root, repository)
-    preview = plan.preflight(install_missing_skills=True)
+    preview = plan.preflight()
     assert preview.actions
     assert not (root / ".graphtraj/config.yml").exists()
-    result = plan.apply(install_missing_skills=True)
+    result = plan.apply()
     assert result.integration_worktree == plan.configuration.integration_worktree
     assert result.integration_action == "created"
     assert result.completed_actions
     assert capsys.readouterr() == ("", "")
 
-    diagnosis = diagnose_project(root, user_skills)
+    diagnosis = diagnose_project(root)
     assert diagnosis.succeeded
     assert diagnosis.roles_checked and not diagnosis.role_diagnostics
-    assert all(status.discovered for status in diagnosis.skills)
     monkeypatch.chdir(root)
-    monkeypatch.setenv("HOME", str(user_skills.parent.parent))
+    monkeypatch.setenv("HOME", str(tmp_path / "user"))
     runner = CliRunner()
     doctor = runner.invoke(main, ["doctor"])
     assert doctor.exit_code == 0, doctor.output
-    assert dict(line.split(": ") for line in doctor.stdout.splitlines()) == {
-        **{status.name: "OK" for status in diagnosis.skills}, "roles": "OK",
-    }
+    assert doctor.stdout.splitlines() == ["roles: OK"]
     repeat = plan_project_setup(root).apply()
     assert repeat.integration_action == "reused"
     config_before = (root / ".graphtraj/config.yml").read_bytes()
@@ -100,7 +96,7 @@ def test_python_setup_returns_actions_and_doctor_reports_without_a_terminal(
     assert repeat.integration_worktree.is_dir()
 
 
-def test_doctor_python_result_matches_missing_skills_roles_and_root_error(
+def test_doctor_python_result_matches_roles_and_root_error(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Diagnostics are data; the CLI alone translates failure and usage exits."""
@@ -110,20 +106,17 @@ def test_doctor_python_result_matches_missing_skills_roles_and_root_error(
     user = tmp_path / "user"
     monkeypatch.setenv("HOME", str(user))
     monkeypatch.chdir(tmp_path)
-    diagnosis = diagnose_project(tmp_path, user / ".agents/skills")
+    diagnosis = diagnose_project(tmp_path)
     assert not diagnosis.succeeded
     assert diagnosis.roles_checked and diagnosis.role_diagnostics
     result = CliRunner().invoke(main, ["doctor"])
     assert result.exit_code == 1
-    for status in diagnosis.skills:
-        assert not status.discovered
-        assert f"{status.name}: MISSING" in result.stdout
     for diagnostic in diagnosis.role_diagnostics:
         assert diagnostic in result.stdout
     child = tmp_path / "child"
     child.mkdir()
     with pytest.raises(DoctorError) as error:
-        diagnose_project(child, user / ".agents/skills")
+        diagnose_project(child)
     monkeypatch.chdir(child)
     result = CliRunner().invoke(main, ["doctor"])
     assert result.exit_code == 2

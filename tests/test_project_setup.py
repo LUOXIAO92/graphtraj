@@ -12,7 +12,9 @@ import pytest
 from conftest import FakeCodex, InstalledCommands, run_process
 
 
-CORE_SKILL_NAMES = (
+# Operator Skills this test installs as explicit external examples; the
+# product neither supplies nor requires them.
+OPERATOR_SKILL_NAMES = (
     "setup-project",
     "grill-with-docs",
     "grilling",
@@ -55,7 +57,7 @@ def install_skills(skill_root: Path, names: Iterable[str]) -> None:
 
 
 def install_user_skills(user_home: Path) -> None:
-    install_skills(user_home / ".agents" / "skills", CORE_SKILL_NAMES)
+    install_skills(user_home / ".agents" / "skills", OPERATOR_SKILL_NAMES)
 
 
 def tree_contents(root: Path) -> dict[str, bytes]:
@@ -64,17 +66,6 @@ def tree_contents(root: Path) -> dict[str, bytes]:
         for path in root.rglob("*")
         if path.is_file()
     }
-
-
-def supported_skill_contents(name: str) -> dict[str, bytes]:
-    package_root = (
-        Path(__file__).resolve().parents[1]
-        / "src"
-        / "graphtraj"
-        / "resources"
-    )
-    root = package_root / "skills" / name
-    return tree_contents(root)
 
 
 def setup_environment(user_home: Path, fake_codex: FakeCodex) -> dict[str, str]:

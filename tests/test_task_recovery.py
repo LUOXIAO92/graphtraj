@@ -54,7 +54,10 @@ def prepare(
              for name in ([role, 'analyst'] if child or replacement_child else [role])}
     selection = role
     if external_inline:
-        shutil.rmtree(root / '.agents/skills')
+        # Setup no longer supplies packaged Skills, so this scenario keeps no
+        # Harness Skill directory and only the selected external method.
+        harness_skills = root / '.agents/skills'
+        assert not harness_skills.exists(), harness_skills
         shutil.rmtree(tmp_path / 'operator-home/.agents/skills')
         (root / 'role.txt').write_text('Use the selected external method.\n')
         skill = root / 'external-method'
@@ -90,11 +93,11 @@ def prepare(
     if preflight_failure:
         invalid = tmp_path / 'invalid-swarm.yml'
         invalid.write_text(yaml.safe_dump({'tasks': [
-            {'role': role, 'ticket_id': '154', 'skills': ['missing-repository-skill']},
+            {'role': role, 'ticket_id': '154', 'skills': ['implement']},
         ]}))
         failed = command(commands, root, env, '--swarm-input', str(invalid))
         assert failed.returncode == 1, failed.stdout + failed.stderr
-        assert 'missing-repository-skill' in failed.stdout + failed.stderr
+        assert 'Runtime native Skill selection' in failed.stdout + failed.stderr
         sessions = root / '.graphtraj/runner/sessions'
         assert not sessions.exists() or not list(sessions.iterdir())
         traces = root / '.graphtraj/state/tickets/154-recovery/teams/1/traces'

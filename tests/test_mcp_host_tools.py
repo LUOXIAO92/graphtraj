@@ -45,6 +45,16 @@ VOLATILE_EVENT_KEYS = {
 }
 
 
+def require_no_retro_skill(root: Path) -> None:
+    """Assert the controlled Harness root has no retro Skill to depend on.
+
+    Setup no longer supplies packaged Skills, so stop delivery must work with
+    the retro file absent instead of deleting a file it never installs.
+    """
+    retro = root / ".agents" / "skills" / "retro" / "SKILL.md"
+    assert not retro.exists(), retro
+
+
 class McpServerProcess:
     """Drive the installed MCP server over its newline-delimited stdio seam."""
 
@@ -547,7 +557,7 @@ def test_installed_mcp_server_dispatches_and_controls_a_managed_child(
     """A host dispatches one managed child and controls it by its identity."""
 
     root, cause = managed_mcp.root, managed_mcp.cause
-    (root / ".agents/skills/retro/SKILL.md").unlink()
+    require_no_retro_skill(root)
     managed_mcp.environment["CODEX_THREAD_ID"] = "managed-main"
     dispatched = managed_mcp.document("swarm", {"tasks": [_inline_task()]})
     assert set(dispatched) == {"retained_batch_file", "tasks"}
@@ -663,7 +673,7 @@ def test_installed_mcp_server_rejects_execution_input_like_the_cli(
     """Rejected dispatch, control and interaction calls keep the CLI's message."""
 
     root, cause = managed_mcp.root, managed_mcp.cause
-    (root / ".agents/skills/retro/SKILL.md").unlink()
+    require_no_retro_skill(root)
     managed_mcp.environment["CODEX_THREAD_ID"] = "managed-main"
     empty_batch = _write(root / "empty-batch.yml", {"tasks": []})
     unregistered = _write(
@@ -1335,7 +1345,7 @@ def test_installed_mcp_server_returns_a_budget_stop_to_the_request_caller(
     harness, _, _, environment = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path,
     )
-    (harness / ".agents/skills/retro/SKILL.md").unlink()
+    require_no_retro_skill(harness)
     _register_ready_ticket(installed_commands, harness, body=_budget_body(total=1))
     clock = tmp_path / "mcp-caller-clock"
     clock.write_text(str(time.time()), encoding="utf-8")
@@ -1411,7 +1421,7 @@ def test_installed_runner_returns_a_budget_stop_with_the_awaiting_call(
     harness, _, _, environment = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path,
     )
-    (harness / ".agents/skills/retro/SKILL.md").unlink()
+    require_no_retro_skill(harness)
     _register_ready_ticket(installed_commands, harness, body=_budget_body(total=1))
     clock = tmp_path / "cli-caller-clock"
     clock.write_text(str(time.time()), encoding="utf-8")
@@ -1472,7 +1482,7 @@ def test_installed_mcp_server_returns_each_caller_its_own_stop(
     harness, _, _, environment = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path,
     )
-    (harness / ".agents/skills/retro/SKILL.md").unlink()
+    require_no_retro_skill(harness)
     _register_ready_ticket(installed_commands, harness, body=_budget_body(total=1))
     _register(
         installed_commands,
@@ -1537,7 +1547,7 @@ def test_installed_mcp_server_does_not_queue_a_late_stop_without_a_waiting_call(
     harness, _, _, environment = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path,
     )
-    (harness / ".agents/skills/retro/SKILL.md").unlink()
+    require_no_retro_skill(harness)
     _register_ready_ticket(installed_commands, harness, body=_budget_body(total=0.01))
     started = time.time()
     clock = tmp_path / "mcp-late-clock"
@@ -1629,7 +1639,7 @@ def test_installed_mcp_server_keeps_the_continue_path_on_the_request_caller(
     harness, _, _, environment = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path,
     )
-    (harness / ".agents/skills/retro/SKILL.md").unlink()
+    require_no_retro_skill(harness)
     _register_ready_ticket(installed_commands, harness, body=_budget_body(total=1))
     clock = tmp_path / "mcp-continue-clock"
     clock.write_text(str(time.time()), encoding="utf-8")

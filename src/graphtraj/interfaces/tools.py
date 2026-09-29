@@ -595,6 +595,7 @@ register_tool(
     _EMPTY_SCHEMA,
     read_current_graph,
     manual_ref="manuals/task-breakdown/guide.md",
+    examples=({},),
 )
 register_tool(
     "ticket_register",
@@ -603,6 +604,16 @@ register_tool(
     _ISSUE_SCHEMA,
     register_current_ticket,
     manual_ref="manuals/task-breakdown/guide.md",
+    examples=(
+        {
+            "ticket_id":    "paper-1",
+            "ticket_name":  "paper-summary",
+            "source":       "local:paper-1",
+            "title":        "Summarize the first paper",
+            "body":         "Read the paper and deliver a cited summary with links to related papers.",
+            "dependencies": [],
+        },
+    ),
 )
 register_tool(
     "ticket_revise",
@@ -627,6 +638,9 @@ register_tool(
     _PROJECT_SETUP_SCHEMA,
     preview_or_apply_project_setup,
     manual_ref="manuals/setup-project/guide.md",
+    examples=(
+        {"source_repository": "./source", "apply": False, "create_dev": False},
+    ),
 )
 register_tool(
     "project_doctor",
@@ -710,6 +724,12 @@ register_tool(
     _SEND_SCHEMA,
     send_session_instruction,
     manual_ref="manuals/task-delivery/guide.md",
+    examples=(
+        {
+            "alias":       "<returned-agent-alias>",
+            "instruction": "Preserve the completed summary and include the source links.",
+        },
+    ),
 )
 register_tool(
     "interrupt",
@@ -727,6 +747,13 @@ register_tool(
     _CONTINUE_SCHEMA,
     continue_ticket_execution,
     manual_ref="manuals/task-delivery/guide.md",
+    examples=(
+        {
+            "ticket_id":           "paper-1",
+            "caused_by_event_ids": ["<actual-authorization-event-id>"],
+            "budget_only":         True,
+        },
+    ),
 )
 register_tool(
     "pending_requests",
@@ -736,6 +763,9 @@ register_tool(
     _REQUESTS_SCHEMA,
     read_pending_requests,
     manual_ref="manuals/task-delivery/guide.md",
+    examples=(
+        {"alias": "<returned-agent-alias>"},
+    ),
 )
 register_tool(
     "reply_to_request",
@@ -793,7 +823,12 @@ register_tool('submit_result',
                   'completion': {'type': 'string'},
                   'unresolved': {'type': 'array', 'items': {'type': 'string'}},
               }, 'required': ['commit', 'result_refs', 'completion'], 'additionalProperties': False},
-              submit_result, manual_ref='manuals/task-delivery/guide.md')
+              submit_result, manual_ref='manuals/task-delivery/guide.md',
+              examples=({
+                  'commit':      '<committed-result-version>',
+                  'result_refs': ['summary.md'],
+                  'completion':  'The cited summary and related-paper links are complete.',
+              },))
 
 
 def decide_result(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> ToolResult:

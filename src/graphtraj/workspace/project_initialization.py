@@ -44,6 +44,51 @@ class ProjectSetupError(Exception):
     """The selected GraphTraj project cannot be initialized as planned."""
 
 
+def _has_git_entry(directory: Path) -> bool:
+    """Report a local Git entry on one candidate directory."""
+
+    return os.path.lexists(str(directory / ".git"))
+
+
+def existing_source_repository(harness_root: Path) -> Optional[Path]:
+    """Return the only Source Repository candidate, or None when ambiguous.
+
+    The Harness Project Root itself wins when it holds a Git entry. Otherwise
+    a single Git child directory is the unambiguous candidate; a caller that
+    needs a different choice must ask the operator explicitly.
+    """
+
+    if _has_git_entry(harness_root):
+        return harness_root
+    try:
+        candidates = tuple(
+            child.resolve()
+            for child in harness_root.iterdir()
+            if child.is_dir() and _has_git_entry(child)
+        )
+    except OSError as error:
+        raise ProjectSetupError(
+            "Setup could not inspect the Harness Project Root."
+        ) from error
+    return candidates[0] if len(candidates) == 1 else None
+
+
+def require_source_repository(harness_root: Path, candidate: Path) -> Path:
+    """Return one explicit choice after checking it is the root or its Git child."""
+
+    root = harness_root.resolve()
+    selected = candidate.resolve()
+    if (
+        (selected != root and selected.parent != root)
+        or not _has_git_entry(selected)
+    ):
+        raise ProjectSetupError(
+            "The selected Source Repository must be an existing direct Git "
+            "child of the Harness Project Root."
+        )
+    return selected
+
+
 @dataclass(frozen=True)
 class PlannedSetupAction:
     """One operator-reviewable action and its preflight disposition."""

@@ -7,18 +7,10 @@ import yaml
 
 from graphtraj.configuration.project_configuration import (
     ProjectConfigurationError,
-    load_project_configuration,
 )
 from graphtraj.workspace.git_repository import GitRepositoryError
 from graphtraj.execution.runner_models import RunnerError
-from graphtraj.teams.ticket_integration import integrate_ticket
-from graphtraj.graph.delivery_state import apply_delivery_state_request
-from graphtraj.graph.ticket_graph import (
-    register_ticket,
-    read_graph,
-    revise_tickets,
-    update_ticket_state,
-)
+from graphtraj.interfaces.tools import TOOLS
 
 
 @click.group()
@@ -37,8 +29,7 @@ def register_command(ticket_file: Path) -> None:
 
     try:
         issue = yaml.safe_load(ticket_file.read_text(encoding="utf-8"))
-        configuration = load_project_configuration(Path.cwd())
-        directory = register_ticket(configuration.state, configuration.harness_root, issue)
+        directory = TOOLS["ticket_register"].handler(issue).document["ticket_directory"]
     except (
         OSError,
         UnicodeError,
@@ -47,7 +38,7 @@ def register_command(ticket_file: Path) -> None:
         ProjectConfigurationError,
     ) as error:
         raise click.ClickException(str(error)) from error
-    click.echo(str(directory))
+    click.echo(directory)
 
 
 @ticket.command("revise")
@@ -61,10 +52,7 @@ def revise_command(revision_file: Path) -> None:
 
     try:
         revision = yaml.safe_load(revision_file.read_text(encoding="utf-8"))
-        configuration = load_project_configuration(Path.cwd())
-        recorded = revise_tickets(
-            configuration.state, configuration.harness_root, revision
-        )
+        recorded = TOOLS["ticket_revise"].handler(revision).document
     except (
         OSError,
         UnicodeError,
@@ -81,8 +69,7 @@ def graph_command() -> None:
     """Generate the current Ticket DAG and readiness view as YAML."""
 
     try:
-        configuration = load_project_configuration(Path.cwd())
-        view = read_graph(configuration.state)
+        view = TOOLS["ticket_graph"].handler({}).document
     except (
         OSError,
         UnicodeError,
@@ -105,10 +92,7 @@ def update_command(state_file: Path) -> None:
 
     try:
         change = yaml.safe_load(state_file.read_text(encoding="utf-8"))
-        configuration = load_project_configuration(Path.cwd())
-        recorded = update_ticket_state(
-            configuration.state, configuration.harness_root, change
-        )
+        recorded = TOOLS["ticket_update"].handler(change).document
     except (
         OSError,
         UnicodeError,
@@ -142,10 +126,9 @@ def apply_command(request_file: Path, facts_file: Path) -> None:
     try:
         request = yaml.safe_load(request_file.read_text(encoding="utf-8"))
         facts = yaml.safe_load(facts_file.read_text(encoding="utf-8"))
-        configuration = load_project_configuration(Path.cwd())
-        recorded = apply_delivery_state_request(
-            configuration.state, configuration.harness_root, request, facts
-        )
+        recorded = TOOLS["delivery_state_apply"].handler(
+            {"request": request, "facts": facts}
+        ).document
     except (OSError, UnicodeError, ValueError, yaml.YAMLError, RunnerError) as error:
         raise click.ClickException(str(error)) from error
     click.echo(yaml.safe_dump(recorded, sort_keys=False), nl=False)
@@ -182,18 +165,18 @@ def integrate_command(
 
     with _budget_notices():
         try:
-            configuration = load_project_configuration(Path.cwd())
-            result = integrate_ticket(
-                configuration, ticket_id, validation_command, resolve_conflict,
-                yaml.safe_load(role) if role is not None else None, confirmed_commit
-            )
+            result = TOOLS["ticket_integrate"].handler({
+                "ticket_id":          ticket_id,
+                "validation_command": list(validation_command),
+                "resolve_conflict":   resolve_conflict,
+                "confirmed_commit":   confirmed_commit,
+                "role":               yaml.safe_load(role) if role is not None else None,
+            })
         except (OSError, ValueError, GitRepositoryError, ProjectConfigurationError, yaml.YAMLError, RunnerError) as error:
             _emit_result({"error": str(error)})
             raise click.ClickException(str(error)) from error
-        _emit_result(result)
-    if result["status"] != "integrated" and not (
-        result["status"] == "resolving-integration" and result.get("resolution")
-    ):
+        _emit_result(result.document)
+    if result.failed:
         raise click.ClickException("Integration failed; see retained evidence")
 
 

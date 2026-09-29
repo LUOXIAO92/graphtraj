@@ -39,6 +39,13 @@ TOOL_NAMES = {
     "ticket_register",
     "ticket_revise",
     "ticket_update",
+    "project_setup",
+    "project_doctor",
+    "worldline_append",
+    "worldline_read",
+    "worldline_render",
+    "delivery_state_apply",
+    "ticket_integrate",
 }
 VOLATILE_EVENT_KEYS = {
     "event_id", "captured_at", "definition_refs", "evidence_refs",

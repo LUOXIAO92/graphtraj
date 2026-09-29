@@ -16,12 +16,7 @@ from typing import Any, Dict, Mapping, Tuple
 
 import yaml
 
-from graphtraj.runtimes.codex.codex_adapter import (
-    codex_connection_environment,
-    read_codex_session_identity,
-    refresh_codex_report_paths,
-    _resume_request_setting,
-)
+from graphtraj.runtimes import runtime_adapter
 from graphtraj.graph.delivery_worldline import read_worldline
 from graphtraj.execution.execution_budget import caller_notice_fd, execution_budget_monitor
 from graphtraj.configuration.project_configuration import (
@@ -53,7 +48,6 @@ from graphtraj.execution.runner_status import (
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 
 
-SESSION_IDENTITY_READERS = {"codex": read_codex_session_identity}
 SESSION_IMMUTABLE_MAPPING_FIELDS = SESSION_BINDING_FIELDS + (
     "retained_batch_file",
     "worktree_path",
@@ -733,7 +727,7 @@ def _require_project_events(cwd: Path, event_ids: tuple[str, ...]) -> None:
 
 def _read_session_resume_request(
     session_directory: Path, mapping: Dict[str, Any]
-) -> Tuple[Dict[str, Any], Dict[str, str], Dict[str, Any]]:
+) -> Tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any]]:
     launch_file = session_directory / "launch.yml"
     if launch_file.is_symlink() or not launch_file.is_file():
         raise _not_resumable()
@@ -751,18 +745,9 @@ def _read_session_resume_request(
             launch["mapping"].get(field) != mapping.get(field)
             for field in SESSION_IMMUTABLE_MAPPING_FIELDS
         )
-        or launch["adapter_request"].get("worktree_path")
-        != mapping["worktree_path"]
     ):
         raise _invalid_mapping()
     connection = launch["connection"]
-    if any(
-        key not in {"base_url", "api_key_env"}
-        or not isinstance(value, str)
-        or not value
-        for key, value in connection.items()
-    ):
-        raise _invalid_mapping()
     return launch["adapter_request"], connection, launch.get("context_evidence", {})
 
 
@@ -815,16 +800,15 @@ def _await_session_resume(
 
 def _resume_environment(
     mapping: Dict[str, Any],
-    connection: Dict[str, str],
+    connection: Dict[str, Any],
 ) -> Dict[str, str]:
     """Resolve one resume environment from the immutable launch Context."""
-    if mapping.get("runtime") == "codex":
-        return dict(
-            codex_connection_environment(
-                connection.get("base_url"), connection.get("api_key_env")
-            )
-        )
-    raise _not_resumable()
+    try:
+        return dict(runtime_adapter.select_runtime_adapter(
+            mapping["runtime"]
+        ).recovery_environment(connection))
+    except RuntimeAdapterError as error:
+        raise RunnerError(error.code, error.message) from error
 
 
 def _team_runtime_environment(mapping: Dict[str, Any], cwd: Path) -> Dict[str, str]:
@@ -895,7 +879,7 @@ def _refresh_current_team_report_request(
     report_files = tuple(Path('.state') / path.relative_to(evidence)
                          for path in task_report_paths(mapping, harness))
     try:
-        return refresh_codex_report_paths(
+        return runtime_adapter.select_runtime_adapter(mapping["runtime"]).refresh_report_paths(
             request, worktree=worktree, evidence=evidence,
             report_files=report_files, role=mapping['role'],
             reports_only=reports_only, session_directory=session_directory,
@@ -922,46 +906,21 @@ def _recover_report_mapping(
         return {**mapping, 'report_files': [mapping['report_file']]}
 
     try:
-        config = request.get('session_parameters', {}).get('config')
-        if config is None:
-            arguments = request['arguments']
-            _, profile = _resume_request_setting(arguments, 'default_permissions')
-            _, permissions = _resume_request_setting(arguments, 'permissions')
-        else:
-            profile = config['default_permissions']
-            permissions = config['permissions']
-        filesystem = permissions[profile]['filesystem']
-        evidence = Path(environment['GRAPHTRAJ_EVIDENCE'])
-        reports = []
-        for name, access in filesystem.items():
-            path = Path(name)
-            if access != 'write' or path.suffix != '.md':
-                continue
-            if path.is_absolute() and path.is_relative_to(evidence):
-                reports.append(str(Path('.state') / path.relative_to(evidence)))
-            elif not path.is_absolute() and path.parts[:1] == ('.state',):
-                reports.append(str(path))
-    except (KeyError, TypeError, AttributeError, RuntimeAdapterError) as error:
-        raise RunnerError(
-            'session-not-resumable',
-            'Cannot recover report assignments from the retained launch permissions.',
-        ) from error
-    if not reports:
-        raise RunnerError(
-            'session-not-resumable',
-            'The historical Session has no retained report assignment or exact writable report path.',
+        reports = runtime_adapter.select_runtime_adapter(mapping["runtime"]).recover_report_files(
+            request, Path(environment["GRAPHTRAJ_EVIDENCE"]),
         )
-    return {**mapping, 'report_files': list(dict.fromkeys(reports))}
+    except RuntimeAdapterError as error:
+        raise RunnerError(error.code, error.message) from error
+    return {**mapping, 'report_files': list(reports)}
 
 
 def _attest_runtime_session(
     session_directory: Path, mapping: Dict[str, Any]
 ) -> None:
-    reader = SESSION_IDENTITY_READERS.get(mapping["runtime"])
-    if reader is None:
-        raise _not_resumable()
     try:
-        identity = reader(session_directory)
+        identity = runtime_adapter.select_runtime_adapter(mapping["runtime"]).read_session_identity(
+            session_directory,
+        )
     except RuntimeAdapterError as error:
         raise _not_resumable() from error
     if identity != mapping["session"]:

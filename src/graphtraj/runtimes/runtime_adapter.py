@@ -136,6 +136,38 @@ class RuntimePreparationAdapter(Protocol):
 class RuntimeAdapter(RuntimePreparationAdapter, Protocol):
     """Prepare Context and own managed execution for the selected Runtime."""
 
+    def read_session_identity(self, session_directory: Path) -> str:
+        """Attest the native Session identity from its retained Runtime record."""
+
+    def recovery_environment(self, connection: Mapping[str, Any]) -> Mapping[str, str]:
+        """Validate retained connection settings and resolve transient overrides."""
+
+    def recover_report_files(
+        self, request: Mapping[str, Any], evidence: Path,
+    ) -> tuple[str, ...]:
+        """Recover old report assignments from exact retained native write grants.
+
+        Return Worktree-relative .state paths; fail if ownership cannot be
+        established. Read grants must never become report assignments.
+        """
+
+    def refresh_report_paths(
+        self,
+        request: Mapping[str, Any],
+        *,
+        worktree: Path,
+        evidence: Path,
+        report_files: tuple[Path, ...],
+        role: str,
+        reports_only: bool = False,
+        session_directory: Path | None = None,
+    ) -> Dict[str, Any]:
+        """Validate and copy retained settings for same-Session recovery.
+
+        Preserve native permissions/settings except refreshed report access and
+        explicit reports-only tightening. Never mutate the retained launch.
+        """
+
     def managed_execution(
         self,
         request: dict,

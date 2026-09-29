@@ -15,10 +15,6 @@ from typing import Any
 import yaml
 
 from graphtraj.workspace.project_files import ignore_worktree_documents
-from graphtraj.runtimes.codex.codex_adapter import (
-    codex_connection_environment,
-    refresh_codex_report_paths,
-)
 from graphtraj.execution.execution_budget import (
     caller_notice_fd,
     execution_budget_monitor,
@@ -930,15 +926,10 @@ def _resume_job(
             "Agent Entity, so it cannot change its ownership.",
         )
     connection = launch["connection"]
-    if any(
-        key not in {"base_url", "api_key_env"}
-        or not isinstance(value, str)
-        or not value
-        for key, value in connection.items()
-    ):
-        raise RunnerError("RUNTIME_WORKER_FAILED", "The mapped Session is unavailable.")
     try:
-        adapter_request = refresh_codex_report_paths(
+        adapter = runtime_adapter.select_runtime_adapter(mapping["runtime"])
+        runtime_environment = adapter.recovery_environment(connection)
+        adapter_request = adapter.refresh_report_paths(
             launch["adapter_request"],
             worktree=worktree,
             evidence=evidence,
@@ -966,11 +957,7 @@ def _resume_job(
             },
         },
     )
-    return resume_file, dict(
-        codex_connection_environment(
-            connection.get("base_url"), connection.get("api_key_env")
-        )
-    )
+    return resume_file, dict(runtime_environment)
 
 
 def _run_session_worker(

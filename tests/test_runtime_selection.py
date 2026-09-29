@@ -173,3 +173,129 @@ def test_first_task_preparation_uses_selected_context(
     assert roles_path.read_bytes() == roles_before
     assert selected == [runtime]
     assert not fake_codex.log_file.exists()
+
+
+@pytest.mark.parametrize("runtime", ["codex", "test-runtime"])
+@pytest.mark.parametrize(
+    ("outcome", "message", "code"),
+    [
+        ("failed", "Permission denied: current tool", "RUNTIME_ACCESS_DENIED"),
+        ("failed", "Provider unavailable: current request", "RUNTIME_PROVIDER_FAILED"),
+        ("completed", "Permission denied: current report", "RUNTIME_ACCESS_DENIED"),
+    ],
+)
+def test_task_failure_uses_selected_runtime_diagnostic(
+    runtime: str,
+    outcome: str,
+    message: str,
+    code: str,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Task classification consumes selected native diagnostics, not event shape."""
+    import json
+
+    root = temporary_git_repository.parent
+    monkeypatch.setenv("HOME", str(tmp_path / "operator"))
+    monkeypatch.setenv(
+        "PATH", str(fake_codex.executable.parent) + os.pathsep + os.environ["PATH"],
+    )
+    plan_project_setup(root, temporary_git_repository).apply()
+    (root / ".graphtraj/roles.yml").write_text(yaml.safe_dump({
+        "roles": {"author": {
+            "runtime": runtime, "model": "selected-model",
+            "worktree_access": "read", "reports": ["evidence.md"],
+        }},
+        "role_tree": {"author": {}},
+    }))
+    state = root / ".graphtraj/state"
+    register_ticket(state, root, _ticket("217", "runtime-diagnostic"))
+    (root / "ready.md").write_text("Authorized diagnostic probe.\n")
+    update_ticket_state(state, root, {
+        "ticket_id": "217", "status": "ready", "active_team_ordinal": None,
+        "worktree": None, "branch": None, "current_candidate": None,
+        "caused_by_event_ids": [], "evidence_refs": ["ready.md"],
+    })
+    original_select = runtime_adapter.select_runtime_adapter
+    observed = {}
+
+    class TestAdapter:
+        """Interpret a line protocol that contains no Codex event fields."""
+
+        def preflight_runtime_context(self, **kwargs: Any) -> TestContext:
+            """Prepare a distinct Context using the real selection boundary."""
+            return TestContext()
+
+        def current_execution_diagnostic(
+            self,
+            session_directory: Path,
+            trace_file: Path,
+            stderr_offset: int,
+            trace_offset: int,
+        ) -> str:
+            """Read only current failure lines from the test Runtime's Trace."""
+            observed["diagnosed"] = True
+            with trace_file.open("rb") as stream:
+                stream.seek(trace_offset)
+                return "\n".join(
+                    line.removeprefix("FAIL|")
+                    for line in stream.read().decode().splitlines()
+                    if line.startswith("FAIL|")
+                )
+
+    def select(name: str) -> runtime_adapter.RuntimePreparationAdapter:
+        """Inject the different-format Adapter through the shared selector."""
+        return TestAdapter() if name == "test-runtime" else original_select(name)
+
+    def in_process_batch(
+        project: Project,
+        batch: Batch,
+        retained: Path | None = None,
+        parent_alias: str = "",
+        capacity_fd: int | None = None,
+    ) -> None:
+        """Keep selection injection local while exercising actual task delivery."""
+        with capacity_positions(project, 1, capacity_fd) as positions:
+            team_round._deliver_ticket(
+                project, batch.tasks[0], retain_batch(project.state_directory, batch),
+                positions[0].fileno(),
+            )
+
+    original_run = team_round._run_agent
+
+    def run_and_wait(*args: Any, **kwargs: Any) -> tuple[str, str]:
+        """Exercise the synchronous failure handling used for child tasks."""
+        kwargs["wait_for_completion"] = True
+        return original_run(*args, **kwargs)
+
+    def worker(*args: Any) -> tuple[str, str]:
+        """Supply native output only; retain real task preparation/classification."""
+        launch = yaml.safe_load(args[1].read_text())
+        trace = Path(launch["mapping"]["trace_file"])
+        if runtime == "test-runtime":
+            raw = "OK|Permission denied quoted by successful command\nFAIL|" + message + "\n"
+        else:
+            raw = "\n".join(json.dumps(event) for event in [
+                {"type": "item.completed", "item": {
+                    "type": "command_execution", "exit_code": 0,
+                    "aggregated_output": "Permission denied quoted by successful command",
+                }},
+                {"type": "turn.failed", "error": {"message": message}},
+            ]) + "\n"
+        trace.write_text(raw)
+        observed.update(trace=trace, raw=raw.encode())
+        return "diagnostic-session", outcome
+
+    monkeypatch.setattr(runtime_adapter, "select_runtime_adapter", select)
+    monkeypatch.setattr(team_round, "_run_batch_workers", in_process_batch)
+    monkeypatch.setattr(team_round, "_run_agent", run_and_wait)
+    monkeypatch.setattr(team_round, "_run_session_worker", worker)
+    with pytest.raises(RunnerError) as failure:
+        launch_swarm({"tasks": [{"ticket_id": "217", "role": "author"}]}, root)
+    assert failure.value.code == code
+    assert message in failure.value.message
+    assert "quoted by successful command" not in failure.value.message
+    assert observed["trace"].read_bytes() == observed["raw"]
+    assert observed.get("diagnosed", False) == (runtime == "test-runtime")

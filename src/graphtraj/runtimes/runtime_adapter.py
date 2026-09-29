@@ -86,7 +86,21 @@ ResumeRuntimeAdapter = Callable[
 
 
 class RuntimePreparationAdapter(Protocol):
-    """Prepare the existing Context contract for a selected Runtime."""
+    """Prepare Context and interpret execution diagnostics for a Runtime."""
+
+    def current_execution_diagnostic(
+        self,
+        session_directory: Path,
+        trace_file: Path,
+        stderr_offset: int,
+        trace_offset: int,
+    ) -> str:
+        """Return diagnostic text without assigning task failure categories.
+
+        Offsets are byte positions captured before the current execution.
+        Interpret only new native error records and current stderr; preserve
+        the stored Trace and ignore successful output and Agent prose.
+        """
 
     def preflight_runtime_context(
         self,

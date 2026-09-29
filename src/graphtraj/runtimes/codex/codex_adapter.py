@@ -295,7 +295,36 @@ def restore_codex_context(
 
 
 class CodexRuntimeAdapter:
-    """Bind first preparation and native statistics to Codex's own records."""
+    """Prepare Codex Context and interpret native statistics and current diagnostics."""
+
+    def current_execution_diagnostic(
+        self,
+        session_directory: Path,
+        trace_file: Path,
+        stderr_offset: int,
+        trace_offset: int,
+    ) -> str:
+        """Collect Runtime output recorded since this execution started.
+
+        The Runtime writes its own records into the Runtime-owned Session file,
+        which reaches the Harness only through the retained Trace entry, so that
+        entry supplies the Runtime's error records for the current execution.
+        """
+
+        diagnostics = [_diagnostic_since(session_directory / "stderr.log", stderr_offset)]
+        try:
+            diagnostics.append(
+                (session_directory / "worker-stderr.log").read_text(encoding="utf-8")
+            )
+        except (OSError, UnicodeError):
+            pass
+        try:
+            with trace_file.open("rb") as events:
+                events.seek(trace_offset)
+                diagnostics.extend(_runtime_event_errors(events.read()))
+        except OSError:
+            pass
+        return "\n".join(diagnostic for diagnostic in diagnostics if diagnostic)
 
     def preflight_runtime_context(
         self,
@@ -1327,3 +1356,73 @@ def _toml_key(value: Any) -> str:
             "The configured Codex role contains a non-string key.",
         )
     return value if BARE_TOML_KEY.fullmatch(value) else json.dumps(value)
+
+
+def _diagnostic_since(path: Path, offset: int) -> str:
+    """Read only bytes appended during the current execution."""
+    try:
+        with path.open("rb") as diagnostic:
+            diagnostic.seek(offset)
+            return diagnostic.read().decode("utf-8", errors="replace")
+    except OSError:
+        return ""
+
+
+def _runtime_event_errors(events: bytes) -> list[str]:
+    """Extract errors from Codex native events, excluding successful output."""
+    errors = []
+    for line in events.splitlines():
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(event, dict):
+            continue
+        event_type = event.get("type")
+        if event_type in {"error", "turn.failed"}:
+            error = _runtime_error_text(event)
+        else:
+            item = event.get("item")
+            if event_type == "event_msg" and isinstance(event.get("payload"), dict):
+                item = event["payload"].get("item")
+            error = (
+                _runtime_error_text(item)
+                if isinstance(item, dict)
+                and (
+                    item.get("type") in {"error", "tool_error", "Error", "ToolError"}
+                    or (
+                        item.get("type") in {"command_execution", "CommandExecution", "FileChange"}
+                        and (
+                            item.get("status") in {"failed", "error"}
+                            or isinstance(item.get("error"), (dict, str))
+                            or (
+                                isinstance(item.get("exit_code"), int)
+                                and item["exit_code"] != 0
+                            )
+                        )
+                    )
+                )
+                else ""
+            )
+        if error:
+            errors.append(error)
+    return errors
+
+
+def _runtime_error_text(event: dict[str, Any]) -> str:
+    """Collect the diagnostic fields of one known Codex error record."""
+    values = []
+    for key in ("aggregated_output", "stderr", "stdout", "message", "detail"):
+        value = event.get(key)
+        if isinstance(value, str) and value:
+            values.append(value)
+    error = event.get("error")
+    if isinstance(error, str) and error:
+        values.append(error)
+    elif isinstance(error, dict):
+        values.extend(
+            value
+            for key in ("message", "detail")
+            if isinstance(value := error.get(key), str) and value
+        )
+    return "\n".join(values)

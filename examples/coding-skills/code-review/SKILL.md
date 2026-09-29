@@ -19,7 +19,7 @@ need the relevant input and failure evidence.
 
 Within a GraphTraj Team, the Team Leader schedules only the necessary Review
 axes through agent-runner against the assigned candidate and comparison.
-Use [task-delivery](../../../skills/task-delivery/SKILL.md) for dispatch, notification-based
+Use [task-delivery](../../../manuals/task-delivery/guide.md) for dispatch, notification-based
 waiting and recovery, including the shared Harness polling limit. Main receives
 the Team result without starting another review or monitoring its members.
 An assigned Reviewer performs only its supplied axis and returns its report;

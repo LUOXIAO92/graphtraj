@@ -19,7 +19,7 @@ have one member. Role names do not grant task acceptance or control authority;
 role_tree permits dispatch edges, while real Session bindings determine parents.
 Apply the project's assigned validation responsibilities.
 
-Difficulty assessment belongs to [task-breakdown](../task-breakdown/SKILL.md).
+Difficulty assessment belongs to [task-breakdown](../task-breakdown/guide.md).
 Use it to complete a missing assessment or revise one when new evidence changes
 scope, resource fit or granularity; delivery consumes that result rather than
 running a second assessment. Consume the registered node's required artifacts

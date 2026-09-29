@@ -1,7 +1,6 @@
 ---
 name: setup-project
 description: Establish a project's GraphTraj paths, task tracker, available execution resources and shared conventions while preserving existing choices.
-disable-model-invocation: true
 ---
 
 # Setup Project
@@ -38,7 +37,7 @@ question again or make an optional preference a prerequisite for setup.
   user's optional resources, not a catalog this setup installs or routes by
   domain. Keep content selection separate from the task completion protocol.
 - **Shared language:** follow existing glossary and decision locations. Use
-  [concept-clarification](../concept-clarification/SKILL.md) when a real term or
+  [concept-clarification](../concept-clarification/guide.md) when a real term or
   relationship needs clarification. A missing glossary alone is not a problem;
   create records only for content the work actually needs.
 - **Project conventions:** preserve document ownership, result locations,

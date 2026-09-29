@@ -22,6 +22,6 @@ assess its supplied facts and the remaining work once. Use event-driven follow-u
 and the project's shared polling limit; do not start another monitoring loop.
 
 On an actual stop preserve files, commits, task/Session bindings and Traces and
-collect only the permitted retained wrap-up. Use [recovery decisions](../../../../skills/task-delivery/references/recovery.md)
+collect only the permitted retained wrap-up. Use [recovery decisions](../../../../manuals/task-delivery/references/recovery.md)
 for the existing authorization and continuation path. Stopping does not authorize
 new implementation, Review, replacement, a reset or an extra window.

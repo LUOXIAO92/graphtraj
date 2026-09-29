@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
@@ -130,7 +130,8 @@ _SEND_SCHEMA = {
         "alias":               {"type": "string"},
         "instruction":         {"type": "string"},
         "caused_by_event_ids": {"type": "array", "items": {"type": "string"}},
-        "reports_only":        {"type": "boolean"},
+        "reports_only":        {"type": "boolean", "default": False,
+                                "description": "Collect existing reports without sampling the Ticket budget."},
     },
     "required":             ["alias", "instruction"],
     "additionalProperties": False,
@@ -140,7 +141,8 @@ _CONTINUE_SCHEMA = {
     "properties": {
         "ticket_id":           {"type": "string"},
         "caused_by_event_ids": {"type": "array", "items": {"type": "string"}},
-        "budget_only":         {"type": "boolean"},
+        "budget_only":         {"type": "boolean", "default": False,
+                                "description": "Restore budget permission without executing old Sessions."},
     },
     "required":             ["ticket_id", "caused_by_event_ids"],
     "additionalProperties": False,
@@ -149,7 +151,8 @@ _REQUESTS_SCHEMA = {
     "type": "object",
     "properties": {
         "alias":        {"type": "string"},
-        "execution_id": {"type": ["string", "null"]},
+        "execution_id": {"type": ["string", "null"],
+                         "description": "Reject a mapping that has moved to another execution."},
     },
     "required":             ["alias"],
     "additionalProperties": False,
@@ -159,7 +162,7 @@ _REPLY_SCHEMA = {
     "properties": {
         "alias":    {"type": "string"},
         "request":  {"type": "object"},
-        "response": {"type": "object"},
+        "response": {"type": "object", "description": "Explicit native response as a JSON object."},
     },
     "required":             ["alias", "request", "response"],
     "additionalProperties": False,
@@ -168,8 +171,8 @@ _PROJECT_SETUP_SCHEMA = {
     "type": "object",
     "properties": {
         "source_repository": {"type": ["string", "null"]},
-        "apply":             {"type": "boolean"},
-        "create_dev":        {"type": "boolean"},
+        "apply":             {"type": "boolean", "default": False},
+        "create_dev":        {"type": "boolean", "default": False},
     },
     "additionalProperties": False,
 }
@@ -195,9 +198,12 @@ _INTEGRATE_SCHEMA = {
         "validation_command": {
             "type": "array", "minItems": 1, "items": {"type": "string"},
         },
-        "resolve_conflict":   {"type": ["string", "null"]},
-        "confirmed_commit":   {"type": ["string", "null"]},
-        "role":               {"type": ["string", "object", "null"]},
+        "resolve_conflict":   {"type": ["string", "null"],
+                               "description": "Dispatch an explicitly selected role for a retained conflict."},
+        "confirmed_commit":   {"type": ["string", "null"],
+                               "description": "Confirm the exact committed resolution when adopting an escalated integration."},
+        "role":               {"type": ["string", "object", "null"],
+                               "description": "Explicit configured role reference or inline YAML role definition for conflict work."},
     },
     "required":             ["ticket_id", "validation_command"],
     "additionalProperties": False,
@@ -226,6 +232,8 @@ class Tool:
     handler: Callable[..., ToolResult]
     manual_ref: str | None = None
     examples: tuple[dict[str, Any], ...] = ()
+    cli_path: tuple[str, ...] = ()
+    cli_parameters: dict[str, tuple[str, str]] = field(default_factory=dict)
 
 
 TOOLS: dict[str, Tool] = {}
@@ -672,7 +680,8 @@ register_tool(
         "type": "object",
         "properties": {
             "aliases":         {"type": "array", "items": {"type": "string"}},
-            "operation_total": {"type": "boolean"},
+            "operation_total": {"type": "boolean", "default": False,
+                                "description": "Report native tool requests once by native identifier."},
             "baseline":        {"type": ["string", "null"]},
             "candidate":       {"type": ["string", "null"]},
         },
@@ -885,3 +894,40 @@ register_tool(
     }, "required": ["instruction"], "additionalProperties": False},
     run_codex_main,
 )
+
+
+# CLI names and decoding are presentation metadata, not another parameter schema.
+# Unlisted parameters use their Python name and Click's existing scalar/repeated form.
+_CLI = {
+    "ticket_graph": (("graphtraj", "ticket", "graph"), {}),
+    "ticket_register": (("graphtraj", "ticket", "register"), {"ticket_file": ("", "yaml")}),
+    "ticket_revise": (("graphtraj", "ticket", "revise"), {"revision_file": ("", "yaml")}),
+    "ticket_update": (("graphtraj", "ticket", "update"), {"state_file": ("", "yaml")}),
+    "project_setup": (("graphtraj", "setup"), {}),
+    "project_doctor": (("graphtraj", "doctor"), {}),
+    "worldline_append": (("graphtraj", "worldline", "append"), {"event_file": ("event", "yaml")}),
+    "worldline_read": (("graphtraj", "worldline", "read"), {}),
+    "worldline_render": (("graphtraj", "worldline", "render"), {}),
+    "delivery_state_apply": (("graphtraj", "delivery-state", "apply"), {
+        "request_file": ("request", "yaml"), "facts_file": ("facts", "yaml"),
+    }),
+    "ticket_integrate": (("graphtraj", "ticket", "integrate"), {"role": ("role", "yaml-value")}),
+    "alias_status": (("agent-runner", "status"), {}),
+    "swarm": (("agent-runner", "--swarm-input"), {"swarm_input": ("", "yaml")}),
+    "send_instruction": (("agent-runner", "send"), {"caused_by_event_id": ("caused_by_event_ids", "value")}),
+    "interrupt": (("agent-runner", "interrupt"), {}),
+    "continue": (("agent-runner", "continue"), {"caused_by_event_id": ("caused_by_event_ids", "value")}),
+    "pending_requests": (("agent-runner", "requests"), {}),
+    "reply_to_request": (("agent-runner", "reply"), {
+        "request_file": ("request", "yaml"), "response": ("response", "json"),
+    }),
+    "session_reports": (("agent-runner", "reports"), {}),
+    "submit_report": (("agent-runner", "submit-report"), {}),
+    "submit_result": (("agent-runner", "submit-result"), {}),
+    "decide_result": (("agent-runner", "decide-result"), {}),
+    "replace": (("agent-runner", "replace"), {"caused_by_event_id": ("caused_by_event_ids", "value")}),
+    "cleanup": (("agent-runner", "cleanup"), {}),
+    "main": (("agent-runner", "main"), {"instruction_file": ("instruction", "text")}),
+}
+for _name, (_path, _parameters) in _CLI.items():
+    TOOLS[_name] = replace(TOOLS[_name], cli_path=_path, cli_parameters=_parameters)

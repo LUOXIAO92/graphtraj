@@ -10,15 +10,15 @@ from graphtraj.configuration.project_configuration import (
 )
 from graphtraj.workspace.git_repository import GitRepositoryError
 from graphtraj.execution.runner_models import RunnerError
-from graphtraj.interfaces.tools import TOOLS
+from graphtraj.interfaces.cli.projection import OperationCommand, OperationGroup, invoke_tool
 
 
-@click.group()
+@click.group(cls=OperationGroup)
 def ticket() -> None:
     """Register Tickets and inspect their current Task Graph."""
 
 
-@ticket.command("register")
+@ticket.command("register", cls=OperationCommand, feature="ticket_register")
 @click.option(
     "--ticket-file",
     required=True,
@@ -29,7 +29,7 @@ def register_command(ticket_file: Path) -> None:
 
     try:
         issue = yaml.safe_load(ticket_file.read_text(encoding="utf-8"))
-        directory = TOOLS["ticket_register"].handler(issue).document["ticket_directory"]
+        directory = invoke_tool("ticket_register", issue).document["ticket_directory"]
     except (
         OSError,
         UnicodeError,
@@ -41,7 +41,7 @@ def register_command(ticket_file: Path) -> None:
     click.echo(directory)
 
 
-@ticket.command("revise")
+@ticket.command("revise", cls=OperationCommand, feature="ticket_revise")
 @click.option(
     "--revision-file",
     required=True,
@@ -52,7 +52,7 @@ def revise_command(revision_file: Path) -> None:
 
     try:
         revision = yaml.safe_load(revision_file.read_text(encoding="utf-8"))
-        recorded = TOOLS["ticket_revise"].handler(revision).document
+        recorded = invoke_tool("ticket_revise", revision).document
     except (
         OSError,
         UnicodeError,
@@ -64,12 +64,12 @@ def revise_command(revision_file: Path) -> None:
     click.echo(yaml.safe_dump(recorded, sort_keys=False), nl=False)
 
 
-@ticket.command("graph")
+@ticket.command("graph", cls=OperationCommand, feature="ticket_graph")
 def graph_command() -> None:
     """Generate the current Ticket DAG and readiness view as YAML."""
 
     try:
-        view = TOOLS["ticket_graph"].handler({}).document
+        view = invoke_tool("ticket_graph", {}).document
     except (
         OSError,
         UnicodeError,
@@ -81,7 +81,7 @@ def graph_command() -> None:
     click.echo(yaml.safe_dump(view, sort_keys=False), nl=False)
 
 
-@ticket.command("update")
+@ticket.command("update", cls=OperationCommand, feature="ticket_update")
 @click.option(
     "--state-file",
     required=True,
@@ -92,7 +92,7 @@ def update_command(state_file: Path) -> None:
 
     try:
         change = yaml.safe_load(state_file.read_text(encoding="utf-8"))
-        recorded = TOOLS["ticket_update"].handler(change).document
+        recorded = invoke_tool("ticket_update", change).document
     except (
         OSError,
         UnicodeError,
@@ -104,20 +104,18 @@ def update_command(state_file: Path) -> None:
     click.echo(yaml.safe_dump(recorded, sort_keys=False), nl=False)
 
 
-@click.group("delivery-state")
+@click.group("delivery-state", cls=OperationGroup)
 def delivery_state() -> None:
     """Apply semantic state requests with their authoritative facts."""
 
 
-@delivery_state.command("apply")
+@delivery_state.command("apply", cls=OperationCommand, feature="delivery_state_apply")
 @click.option(
     "--request-file",
-    required=True,
     type=click.Path(path_type=Path, exists=True, dir_okay=False),
 )
 @click.option(
     "--facts-file",
-    required=True,
     type=click.Path(path_type=Path, exists=True, dir_okay=False),
 )
 def apply_command(request_file: Path, facts_file: Path) -> None:
@@ -126,7 +124,7 @@ def apply_command(request_file: Path, facts_file: Path) -> None:
     try:
         request = yaml.safe_load(request_file.read_text(encoding="utf-8"))
         facts = yaml.safe_load(facts_file.read_text(encoding="utf-8"))
-        recorded = TOOLS["delivery_state_apply"].handler(
+        recorded = invoke_tool("delivery_state_apply",
             {"request": request, "facts": facts}
         ).document
     except (OSError, UnicodeError, ValueError, yaml.YAMLError, RunnerError) as error:
@@ -134,21 +132,12 @@ def apply_command(request_file: Path, facts_file: Path) -> None:
     click.echo(yaml.safe_dump(recorded, sort_keys=False), nl=False)
 
 
-@click.command("integrate")
-@click.option("--ticket-id", required=True)
-@click.option(
-    "--resolve-conflict", metavar="DIAGNOSIS",
-    help="Dispatch an explicitly selected role for a retained conflict.",
-)
-@click.option(
-    "--confirm-resolution", "confirmed_commit",
-    help="Confirm the exact committed resolution when adopting an escalated integration.",
-)
-@click.option(
-    "--role",
-    help="Explicit configured role reference or inline YAML role definition for conflict work.",
-)
-@click.argument("validation_command", nargs=-1, required=True, type=click.UNPROCESSED)
+@click.command("integrate", cls=OperationCommand, feature="ticket_integrate")
+@click.option("--ticket-id")
+@click.option("--resolve-conflict", metavar="DIAGNOSIS")
+@click.option("--confirm-resolution", "confirmed_commit")
+@click.option("--role")
+@click.argument("validation_command", nargs=-1, type=click.UNPROCESSED)
 def integrate_command(
     ticket_id: str,
     resolve_conflict: str | None,
@@ -165,7 +154,7 @@ def integrate_command(
 
     with _budget_notices():
         try:
-            result = TOOLS["ticket_integrate"].handler({
+            result = invoke_tool("ticket_integrate", {
                 "ticket_id":          ticket_id,
                 "validation_command": list(validation_command),
                 "resolve_conflict":   resolve_conflict,

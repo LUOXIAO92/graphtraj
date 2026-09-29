@@ -7,18 +7,17 @@ import click
 import yaml
 
 from graphtraj.configuration.project_configuration import ProjectConfigurationError
-from graphtraj.interfaces.tools import TOOLS
+from graphtraj.interfaces.cli.projection import OperationCommand, OperationGroup, invoke_tool
 
 
-@click.group()
+@click.group(cls=OperationGroup)
 def worldline() -> None:
     """Append, read, and render the configured project's Worldline."""
 
 
-@worldline.command("append")
+@worldline.command("append", cls=OperationCommand, feature="worldline_append")
 @click.option(
     "--event-file",
-    required=True,
     type=click.Path(path_type=Path, exists=True, dir_okay=False),
 )
 def append_command(
@@ -28,7 +27,7 @@ def append_command(
 
     try:
         event = yaml.safe_load(event_file.read_text(encoding="utf-8"))
-        recorded = TOOLS["worldline_append"].handler({"event": event}).document
+        recorded = invoke_tool("worldline_append", {"event": event}).document
     except (
         OSError,
         UnicodeError,
@@ -40,12 +39,12 @@ def append_command(
     click.echo(yaml.safe_dump(recorded, sort_keys=False), nl=False)
 
 
-@worldline.command("read")
+@worldline.command("read", cls=OperationCommand, feature="worldline_read")
 def read_command() -> None:
     """Read the complete Worldline as chronological JSONL."""
 
     try:
-        events = TOOLS["worldline_read"].handler({}).document["events"]
+        events = invoke_tool("worldline_read", {}).document["events"]
     except (
         OSError,
         UnicodeError,
@@ -58,12 +57,12 @@ def read_command() -> None:
         click.echo(json.dumps(event, ensure_ascii=False, separators=(",", ":")))
 
 
-@worldline.command("render")
+@worldline.command("render", cls=OperationCommand, feature="worldline_render")
 def render_command() -> None:
     """Render a ledger-shaped YAML view without persisting it."""
 
     try:
-        events = TOOLS["worldline_render"].handler({}).document["events"]
+        events = invoke_tool("worldline_render", {}).document["events"]
     except (
         OSError,
         UnicodeError,

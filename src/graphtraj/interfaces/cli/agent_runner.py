@@ -14,7 +14,7 @@ import yaml
 
 from graphtraj.execution.execution_budget import budget_notice_output, caller_notice_fd
 from graphtraj.execution.runner_models import RunnerError
-from graphtraj.interfaces.tools import TOOLS
+from graphtraj.interfaces.cli.projection import OperationCommand, OperationGroup, invoke_tool
 
 
 _MAIN_RECOVERY: "CodexMainRecovery | None" = None
@@ -56,20 +56,17 @@ def _budget_notices() -> Iterator[None]:
             os.close(descriptor)
 
 
-@click.group(invoke_without_command=True)
+@click.group(invoke_without_command=True, cls=OperationGroup)
 @click.option(
     "--swarm-input",
     metavar="YAML_FILE",
     type=click.Path(path_type=Path),
-    help="Activate the roles selected in the launch input.",
 )
 @click.pass_context
 def main(context: click.Context, swarm_input: Path | None) -> None:
     """Launch formal GraphTraj roles and control their Sessions; no compatibility commands."""
-    # Queries do not sample execution budgets or need a caller notice channel.
-    if context.invoked_subcommand not in {"status", "requests", "reports"}:
-        context.with_resource(_budget_notices())
     if context.invoked_subcommand is None:
+        context.with_resource(_budget_notices())
         if swarm_input is None:
             error = RunnerError(
                 "BATCH_INPUT_REQUIRED", "Launch requires --swarm-input YAML_FILE."
@@ -77,7 +74,7 @@ def main(context: click.Context, swarm_input: Path | None) -> None:
             _fail(error)
         try:
             cwd = Path.cwd().resolve()
-            response = TOOLS["swarm"].handler({}, cwd=cwd, input_file=swarm_input)
+            response = invoke_tool("swarm", {}, cwd=cwd, input_file=swarm_input)
         except RunnerError as error:
             _fail(error)
         _emit_result(response.document)
@@ -108,9 +105,9 @@ def _fail(error: RunnerError, **identity: str) -> NoReturn:
     raise click.exceptions.Exit(1)
 
 
-@main.command('main')
-@click.option('--instruction-file', required=True, type=click.Path(exists=True, path_type=Path))
-@click.option('--resume', help='Main record returned by a previous completed invocation.')
+@main.command('main', cls=OperationCommand, feature="main")
+@click.option('--instruction-file', type=click.Path(exists=True, path_type=Path))
+@click.option('--resume')
 def main_session(instruction_file: Path, resume: str | None) -> None:
     """Run an isolated Main turn using the user's native Runtime settings.
 
@@ -155,7 +152,7 @@ def main_session(instruction_file: Path, resume: str | None) -> None:
         return asyncio.run(execute(root, instruction, record))
 
     try:
-        result = TOOLS["main"].handler(
+        result = invoke_tool("main",
             {"instruction": instruction_file.read_text(), "resume": resume},
             cwd=Path.cwd().resolve(), execute=execute_main,
         )
@@ -166,12 +163,11 @@ def main_session(instruction_file: Path, resume: str | None) -> None:
         _fail(RunnerError('invalid-input', str(error)))
 
 
-@main.command()
+@main.command(cls=OperationCommand, feature="alias_status")
 @click.argument("aliases", nargs=-1, required=False)
 @click.option(
     "--operation-total",
-    is_flag=True,
-    help="Report native tool requests once by native identifier.",
+    is_flag=True
 )
 @click.option("--baseline")
 @click.option("--candidate")
@@ -186,7 +182,7 @@ def status(
         arguments = {"operation_total": operation_total, "baseline": baseline, "candidate": candidate}
         if aliases:
             arguments["aliases"] = list(aliases)
-        response = TOOLS["alias_status"].handler(arguments, cwd=Path.cwd().resolve())
+        response = invoke_tool("alias_status", arguments, cwd=Path.cwd().resolve())
     except RunnerError as error:
         _fail(error)
     _emit_result(response.document)
@@ -197,13 +193,13 @@ def status(
         raise click.exceptions.Exit(1)
 
 
-@main.command()
+@main.command(cls=OperationCommand, feature="pending_requests")
 @click.argument("alias")
-@click.option("--execution-id", help="Reject a mapping that has moved to another execution.")
+@click.option("--execution-id")
 def requests(alias: str, execution_id: str | None) -> None:
     """Query pending native requests without consuming them."""
     try:
-        response = TOOLS["pending_requests"].handler(
+        response = invoke_tool("pending_requests",
             {"alias": alias, "execution_id": execution_id}, cwd=Path.cwd().resolve(),
         ).document
     except RunnerError as error:
@@ -211,11 +207,10 @@ def requests(alias: str, execution_id: str | None) -> None:
     _emit_result(response)
 
 
-@main.command()
+@main.command(cls=OperationCommand, feature="reply_to_request")
 @click.argument("alias")
-@click.option("--request-file", required=True, type=click.Path(path_type=Path),
-              help="YAML/JSON file containing one request returned by requests.")
-@click.option("--response", required=True, help="Explicit native response as a JSON object.")
+@click.option("--request-file", type=click.Path(path_type=Path))
+@click.option("--response")
 def reply(alias: str, request_file: Path, response: str) -> None:
     """Return an explicit reply to the original native request."""
     try:
@@ -224,7 +219,7 @@ def reply(alias: str, request_file: Path, response: str) -> None:
     except (OSError, ValueError, yaml.YAMLError) as error:
         _fail(RunnerError("invalid-input", str(error)), alias=alias)
     try:
-        result = TOOLS["reply_to_request"].handler(
+        result = invoke_tool("reply_to_request",
             {"alias": alias, "request": request, "response": native_response},
             cwd=Path.cwd().resolve(),
         ).document
@@ -234,17 +229,16 @@ def reply(alias: str, request_file: Path, response: str) -> None:
     _emit_result(result)
 
 
-@main.command()
+@main.command(cls=OperationCommand, feature="send_instruction")
 @click.argument("alias")
-@click.option("--instruction", required=True)
+@click.option("--instruction")
 @click.option(
     "--caused-by-event-id",
     multiple=True,
 )
 @click.option(
     "--reports-only",
-    is_flag=True,
-    help="Collect existing reports without sampling the Ticket budget.",
+    is_flag=True
 )
 def send(
     alias: str,
@@ -254,7 +248,7 @@ def send(
 ) -> None:
     """Resume one Session using causal Project Worldline event IDs."""
     try:
-        response = TOOLS["send_instruction"].handler(
+        response = invoke_tool("send_instruction",
             {"alias": alias, "instruction": instruction,
              "caused_by_event_ids": list(caused_by_event_id), "reports_only": reports_only},
             cwd=Path.cwd().resolve(),
@@ -264,25 +258,24 @@ def send(
     _emit_result(response)
 
 
-@main.command()
+@main.command(cls=OperationCommand, feature="interrupt")
 @click.argument("alias")
 def interrupt(alias: str) -> None:
     """Stop a descendant subtree and prevent further work, retaining Sessions."""
     try:
-        response = TOOLS["interrupt"].handler({"alias": alias}, cwd=Path.cwd().resolve()).document
+        response = invoke_tool("interrupt", {"alias": alias}, cwd=Path.cwd().resolve()).document
     except RunnerError as error:
         _fail(error, alias=alias)
     _emit_result(response)
 
 
-@main.command()
+@main.command(cls=OperationCommand, feature="replace")
 @click.argument("alias")
 @click.option(
     "--actor",
-    type=click.Choice(["main", "user"]),
-    help="Retained caller label; this option grants no replacement authority.",
+    type=click.Choice(["main", "user"])
 )
-@click.option("--caused-by-event-id", multiple=True, required=True)
+@click.option("--caused-by-event-id", multiple=True)
 def replace(alias: str, actor: str | None, caused_by_event_id: tuple[str, ...]) -> None:
     """Replace one stopped actual member while preserving its Team and evidence.
 
@@ -290,7 +283,7 @@ def replace(alias: str, actor: str | None, caused_by_event_id: tuple[str, ...]) 
     The target and all descendants must already be stopped.
     """
     try:
-        response = TOOLS["replace"].handler(
+        response = invoke_tool("replace",
             {"alias": alias, "actor": actor, "caused_by_event_ids": list(caused_by_event_id)},
             cwd=Path.cwd().resolve(),
         ).document
@@ -301,19 +294,18 @@ def replace(alias: str, actor: str | None, caused_by_event_id: tuple[str, ...]) 
     _emit_result(response)
 
 
-@main.command("continue")
-@click.option("--ticket-id", required=True)
-@click.option("--caused-by-event-id", multiple=True, required=True)
+@main.command("continue", cls=OperationCommand, feature="continue")
+@click.option("--ticket-id")
+@click.option("--caused-by-event-id", multiple=True)
 @click.option(
-    "--budget-only", is_flag=True,
-    help="Restore budget permission without executing old Sessions.",
+    "--budget-only", is_flag=True
 )
 def continue_ticket(
     ticket_id: str, caused_by_event_id: tuple[str, ...], budget_only: bool,
 ) -> None:
     """Restore an authorized task budget and, by default, resume original roots."""
     try:
-        response = TOOLS["continue"].handler(
+        response = invoke_tool("continue",
             {"ticket_id": ticket_id, "caused_by_event_ids": list(caused_by_event_id),
              "budget_only": budget_only}, cwd=Path.cwd().resolve(),
         ).document
@@ -322,7 +314,7 @@ def continue_ticket(
     _emit_result(response)
 
 
-@main.command()
+@main.command(cls=OperationCommand, feature="cleanup")
 @click.option("--ticket-id")
 def cleanup(ticket_id: str | None) -> None:
     """Clean up one safely integrated ticket by stable identity."""
@@ -333,7 +325,7 @@ def cleanup(ticket_id: str | None) -> None:
         )
         _fail(error)
     try:
-        response = TOOLS["cleanup"].handler({"ticket_id": ticket_id}, cwd=Path.cwd().resolve())
+        response = invoke_tool("cleanup", {"ticket_id": ticket_id}, cwd=Path.cwd().resolve())
     except RunnerError as error:
         _fail(error)
     _emit_result(response.document)
@@ -343,25 +335,25 @@ def cleanup(ticket_id: str | None) -> None:
         raise click.exceptions.Exit(1)
 
 
-@main.command('reports')
+@main.command('reports', cls=OperationCommand, feature="session_reports")
 @click.argument('alias')
 def reports(alias: str) -> None:
     """Read a directly owned Session's reports and retained result submissions."""
     from graphtraj.workspace.runner_project import discover_project_root
 
     try:
-        _emit_result(TOOLS["session_reports"].handler(
+        _emit_result(invoke_tool("session_reports",
             {"alias": alias}, cwd=discover_project_root(Path.cwd()),
         ).document)
     except (RunnerError, ValueError, OSError) as error:
         _fail(error if isinstance(error, RunnerError) else RunnerError('RESULT_INVALID', str(error)))
 
 
-@main.command('submit-result')
-@click.option('--commit', required=True)
-@click.option('--result-ref', 'result_refs', multiple=True, required=True)
+@main.command('submit-result', cls=OperationCommand, feature="submit_result")
+@click.option('--commit')
+@click.option('--result-ref', 'result_refs', multiple=True)
 @click.option('--evidence-ref', 'evidence_refs', multiple=True)
-@click.option('--completion', required=True)
+@click.option('--completion')
 @click.option('--unresolved', multiple=True)
 def submit_result(
     commit: str,
@@ -372,7 +364,7 @@ def submit_result(
 ) -> None:
     """Submit the calling Session's committed files and retained evidence."""
     try:
-        _emit_result(TOOLS["submit_result"].handler(
+        _emit_result(invoke_tool("submit_result",
             {"commit": commit, "result_refs": list(result_refs), "evidence_refs": list(evidence_refs),
              "completion": completion, "unresolved": list(unresolved)}, cwd=Path.cwd(),
         ).document)
@@ -380,12 +372,12 @@ def submit_result(
         _fail(error if isinstance(error, RunnerError) else RunnerError('RESULT_INVALID', str(error)))
 
 
-@main.command('decide-result')
-@click.option('--submission-id', required=True)
-@click.option('--commit', required=True)
-@click.option('--decision', type=click.Choice(['accepted', 'rejected']), required=True)
-@click.option('--reason', required=True)
-@click.option('--evidence-ref', 'evidence_refs', multiple=True, required=True)
+@main.command('decide-result', cls=OperationCommand, feature="decide_result")
+@click.option('--submission-id')
+@click.option('--commit')
+@click.option('--decision')
+@click.option('--reason')
+@click.option('--evidence-ref', 'evidence_refs', multiple=True)
 def decide_result(
     submission_id: str,
     commit: str,
@@ -395,9 +387,20 @@ def decide_result(
 ) -> None:
     """Accept or reject a submitted version using the caller's actual authority."""
     try:
-        _emit_result(TOOLS["decide_result"].handler(
+        _emit_result(invoke_tool("decide_result",
             {"submission_id": submission_id, "commit": commit, "decision": decision,
              "reason": reason, "evidence_refs": list(evidence_refs)}, cwd=Path.cwd(),
         ).document)
     except (RunnerError, ValueError, OSError) as error:
         _fail(error if isinstance(error, RunnerError) else RunnerError('RESULT_INVALID', str(error)))
+
+
+@main.command("submit-report", cls=OperationCommand, feature="submit_report")
+@click.option("--name")
+@click.option("--text")
+def submit_report(name: str, text: str) -> None:
+    """Submit the calling Session's assigned report through the shared operation."""
+    try:
+        _emit_result(invoke_tool("submit_report", {"name": name, "text": text}, cwd=Path.cwd()).document)
+    except (RunnerError, ValueError, OSError) as error:
+        _fail(error if isinstance(error, RunnerError) else RunnerError("RESULT_INVALID", str(error)))

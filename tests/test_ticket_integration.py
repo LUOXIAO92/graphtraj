@@ -860,15 +860,22 @@ def test_public_retry_of_unestablished_resolver_preserves_attempt_and_integrates
     assert yaml.safe_load(integrated.stdout)['status'] == 'integrated'
 
 
+@pytest.mark.parametrize('manual_stop', [False, True])
 def test_unestablished_resolver_retry_does_not_restart_stopped_budget(
+    installed_commands: InstalledCommands,
     failed_resolver_start: tuple,
     fake_codex: FakeCodex,
     monkeypatch: pytest.MonkeyPatch,
+    manual_stop: bool,
 ) -> None:
-    """A pre-Session failure grants no new time or bypass around sampled stopping."""
+    """Only explicit budget-only continuation permits the retained conflict retry."""
     from graphtraj.execution.execution_budget import ExecutionBudgetMonitor
+    from graphtraj.execution.runner_models import RunnerError
+    from graphtraj.execution.runner_status import runtime_caller
+    from graphtraj.graph.delivery_worldline import read_worldline
+    from graphtraj.teams import team_round
 
-    root, _, state, _, command, selection, validation, environment, _ = failed_resolver_start
+    root, dev, state, candidate, command, selection, validation, environment, allocation = failed_resolver_start
     ticket = state / 'tickets/83-integration'
     monitor = ExecutionBudgetMonitor(ticket, '83', 'integration')
     usage = yaml.safe_load((ticket / 'execution-budget.yml').read_text())
@@ -885,3 +892,65 @@ def test_unestablished_resolver_retry_does_not_restart_stopped_budget(
     for field in ('started_at', 'allowance_minutes', 'budget', 'sessions', 'corrections', 'stopping_checks', 'stopped'):
         assert after[field] == budget[field]
     assert fake_codex.log_file.read_bytes() == runtime
+    cause = yaml.safe_load(retried.stdout)['event_id']
+    continue_command = [str(installed_commands.runner), 'continue', '--ticket-id', '83',
+                        '--caused-by-event-id', cause]
+    ordinary = run_process(continue_command, cwd=root, env=environment)
+    assert ordinary.returncode == 1 and 'current active Team' in ordinary.stdout
+    history = read_worldline(state, root)
+    before_ticket = (ticket / 'ticket.yml').read_bytes()
+    before_head = run_process(['git', 'rev-parse', 'HEAD'], cwd=dev).stdout
+    before_merge = run_process(['git', 'rev-parse', 'MERGE_HEAD'], cwd=dev).stdout
+    retained = {path: path.read_bytes() for path in allocation.parent.glob('*/*')
+                if path.name in {'mapping.yml', 'execution.yml', 'launch-error.yml'}}
+    mappings = [yaml.safe_load(path.read_text()) for path in allocation.parent.glob('*/mapping.yml')]
+    child = next(mapping for mapping in mappings if mapping['parent'] is not None)
+    with runtime_caller(root / '.graphtraj/runner', child['alias']):
+        with pytest.raises(RunnerError, match='direct parent'):
+            team_round.continue_stopped_ticket('83', (cause,), root, budget_only=True)
+    # Missing/unsupported current Teams fail before clearing the sampled stop.
+    states = team_round._load_states(state / 'tickets')
+    for change in ({'active_team_ordinal': None}, {'active_team_ordinal': 99},
+                   {'status': 'awaiting-integration'}):
+        with monkeypatch.context() as controlled:
+            controlled.setattr(team_round, '_load_states', lambda _: {
+                **states, '83': (states['83'][0], {**states['83'][1], **change}),
+            })
+            with pytest.raises(RunnerError):
+                team_round.continue_stopped_ticket('83', (cause,), root, budget_only=True)
+    assert yaml.safe_load((ticket / 'execution-budget.yml').read_text()) == after
+    assert read_worldline(state, root) == history
+    if manual_stop:
+        original_root = next(mapping['alias'] for mapping in mappings if mapping['parent'] is None)
+        stopped = run_process([str(installed_commands.runner), 'interrupt', original_root],
+                              cwd=root, env=environment)
+        assert stopped.returncode == 0, stopped.stdout + stopped.stderr
+        refused = run_process(continue_command + ['--budget-only'], cwd=root, env=environment)
+        assert refused.returncode == 1 and 'subtree-stopped' in refused.stdout
+        assert yaml.safe_load((ticket / 'execution-budget.yml').read_text()) == after
+        assert fake_codex.log_file.read_bytes() == runtime
+        return
+    continued = run_process(continue_command + ['--budget-only'], cwd=root, env=environment)
+    assert continued.returncode == 0, continued.stdout + continued.stderr
+    assert yaml.safe_load(continued.stdout)['tasks'] == []
+    assert yaml.safe_load((ticket / 'execution-budget.yml').read_text()) == dict(after, stopped=False)
+    assert fake_codex.log_file.read_bytes() == runtime
+    assert all(path.read_bytes() == content for path, content in retained.items())
+    assert (ticket / 'ticket.yml').read_bytes() == before_ticket
+    assert run_process(['git', 'rev-parse', 'HEAD'], cwd=dev).stdout == before_head
+    assert run_process(['git', 'rev-parse', 'MERGE_HEAD'], cwd=dev).stdout == before_merge
+    resolved = run_process(command + selection + ['--', *validation], cwd=root, env=environment, timeout=30)
+    assert resolved.returncode == 0, resolved.stdout + resolved.stderr
+    result = yaml.safe_load(resolved.stdout)
+    assert result['candidate'] == candidate and result['status'] == 'resolving-integration'
+    alias = result['resolution']['alias']
+    mapping = yaml.safe_load((allocation.parent / alias / 'mapping.yml').read_text())
+    original = yaml.safe_load((allocation / 'launch.yml').read_text())['mapping']
+    assert mapping['worktree_path'] == original['worktree_path'] == str(dev)
+    assert mapping['parent'] == original['parent'] is None
+    pending = run_process(command + ['--', *validation], cwd=root)
+    assert pending.returncode == 1 and 'acceptance' in pending.stdout
+    _accept_resolution(installed_commands, root, alias)
+    integrated = run_process(command + ['--', *validation], cwd=root)
+    assert integrated.returncode == 0, integrated.stdout + integrated.stderr
+    assert yaml.safe_load(integrated.stdout)['status'] == 'integrated'

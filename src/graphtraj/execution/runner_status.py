@@ -264,7 +264,8 @@ def require_replacement_authority(
     Otherwise the native execution interface runs the remaining operation;
     its returned document is the replacement result, never an approval record.
     """
-    from graphtraj.runtimes.replacement import caller_runtime, execute_replacement
+    from graphtraj.runtimes import runtime_adapter
+    from graphtraj.runtimes.replacement import caller_runtime
 
     caller = caller_alias(runner_directory)
     if is_direct_owner(caller, mapping):
@@ -273,13 +274,20 @@ def require_replacement_authority(
         read_alias_mapping(runner_directory, caller)[0]["runtime"]
         if caller is not None else caller_runtime()
     )
-    # pi deliberately has no native approval mechanism. Unknown Runtime or a
-    # missing Codex channel is not evidence of that capability choice.
-    if runtime == "pi":
+    try:
+        execute = runtime_adapter.native_replacement_approval(runtime)
+    except runtime_adapter.RuntimeAdapterError as error:
+        if error.code == "RUNTIME_UNSUPPORTED":
+            raise _replacement_denied() from error
+        raise RunnerError("native-approval-unavailable", error.message) from error
+    if execute is None:
         return None
-    if runtime != "codex" or command is None:
+    if command is None:
         raise _replacement_denied()
-    return execute_replacement(command)
+    result = execute(command)
+    if not isinstance(result, dict):
+        raise RunnerError("operation-failed", "The native replacement returned no result.")
+    return result
 
 
 def require_stopped_subtree(runner_directory: Path, alias: str) -> None:

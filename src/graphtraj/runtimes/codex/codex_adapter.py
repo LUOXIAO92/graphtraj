@@ -19,6 +19,7 @@ from typing import Any, Dict, List, Mapping, Optional, Tuple
 import yaml
 
 from graphtraj.runtimes.runtime_adapter import (
+    NativeReplacement,
     RuntimeAdapterError,
     RuntimeContext,
     RuntimeContextPreflight,
@@ -272,6 +273,12 @@ def restore_codex_context(
 
 class CodexRuntimeAdapter:
     """Bind first preparation to Codex's executable and existing Context."""
+
+    def native_replacement_approval(self) -> NativeReplacement:
+        """Return Codex native execution; a missing channel never means no approval."""
+        from graphtraj.runtimes.codex.replacement import execute_replacement
+
+        return execute_replacement
 
     def preflight_runtime_context(
         self,

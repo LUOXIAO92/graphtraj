@@ -2,12 +2,14 @@
 
 import click
 
+from graphtraj.interfaces.cli.projection import OperationGroup
+
 from graphtraj.interfaces.cli.worldline import worldline
 from graphtraj.interfaces.cli.project_setup import setup, doctor
 from graphtraj.interfaces.cli.ticket import delivery_state, ticket
 
 
-@click.group()
+@click.group(cls=OperationGroup)
 def main() -> None:
     """Set up GraphTraj and manage Ticket, Team, and Project Worldline evidence.
 

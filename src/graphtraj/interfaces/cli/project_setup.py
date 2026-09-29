@@ -14,7 +14,7 @@ from graphtraj.workspace.project_initialization import (
 from graphtraj.configuration.project_diagnosis import DoctorError
 from graphtraj.configuration.project_roles import ProjectRolesError
 from graphtraj.configuration.project_configuration import configuration_exists
-from graphtraj.interfaces.tools import TOOLS
+from graphtraj.interfaces.cli.projection import OperationCommand, invoke_tool
 
 
 def _select_source_repository(harness_root: Path) -> Path:
@@ -35,7 +35,7 @@ def _select_source_repository(harness_root: Path) -> Path:
     ))
 
 
-@click.command()
+@click.command(cls=OperationCommand, feature="project_setup")
 def setup() -> None:
     """Initialize GraphTraj in the current existing Git repository."""
 
@@ -52,7 +52,7 @@ def setup() -> None:
             ),
             "apply": False,
         }
-        preview = TOOLS["project_setup"].handler(arguments).document
+        preview = invoke_tool("project_setup", arguments).document
     except (ProjectSetupError, ValueError) as error:
         raise click.ClickException(str(error)) from error
     click.echo("Setup plan:")
@@ -68,7 +68,7 @@ def setup() -> None:
             raise click.Abort()
 
     try:
-        result = TOOLS["project_setup"].handler(
+        result = invoke_tool("project_setup",
             {**arguments, "apply": True, "create_dev": True}
         ).document
     except (ProjectSetupError, ValueError) as error:
@@ -82,11 +82,11 @@ def setup() -> None:
     click.echo("GraphTraj project setup complete.")
 
 
-@click.command()
+@click.command(cls=OperationCommand, feature="project_doctor")
 def doctor() -> None:
     """Report configuration and roles from the active Harness Project context."""
     try:
-        result = TOOLS["project_doctor"].handler({})
+        result = invoke_tool("project_doctor", {})
     except DoctorError as error:
         raise click.UsageError(str(error)) from error
     if result.document["role_diagnostics"]:

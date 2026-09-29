@@ -67,7 +67,7 @@ def test_both_transports_consume_shared_schema_and_handler(
     monkeypatch.chdir(tmp_path)
     listed = mcp_request('tools/list', {})['tools']
     native = native_runner_tools()
-    assert len(listed) == 25
+    assert len(listed) == 29
     assert [tool['name'] for tool in native] == ['graphtraj']
     assert next(t for t in listed if t['name'] == 'alias_status')['inputSchema'] == schema
     described = native_request(tmp_path, 'graphtraj', {'action': 'describe', 'feature': 'alias_status'})

@@ -217,13 +217,15 @@ class Tool:
     """One operation's stable name, schema, handler and optional method material.
 
     ``manual_ref`` identifies caller-managed text; registering or executing an
-    operation does not read it. ``examples`` holds structured argument examples.
+    operation does not read it. A ``None`` handler marks a method-only feature:
+    it carries guidance and no executable action. ``examples`` holds structured
+    argument examples.
     """
 
     name: str
     description: str
     input_schema: dict[str, Any]
-    handler: Callable[..., ToolResult]
+    handler: Callable[..., ToolResult] | None
     manual_ref: str | None = None
     examples: tuple[dict[str, Any], ...] = ()
 
@@ -234,7 +236,7 @@ def register_tool(
     name: str,
     description: str,
     input_schema: dict[str, Any],
-    handler: Callable[..., ToolResult],
+    handler: Callable[..., ToolResult] | None,
     *,
     manual_ref: str | None = None,
     examples: tuple[dict[str, Any], ...] = (),
@@ -620,6 +622,7 @@ register_tool(
     "`graphtraj setup`.",
     _PROJECT_SETUP_SCHEMA,
     preview_or_apply_project_setup,
+    manual_ref="manuals/setup-project/guide.md",
 )
 register_tool(
     "project_doctor",
@@ -884,4 +887,39 @@ register_tool(
                    "description": "Main record returned by a previous completed invocation."},
     }, "required": ["instruction"], "additionalProperties": False},
     run_codex_main,
+)
+
+# Method-only features expose Main-authored guidance without an executable
+# action or any new permission. Each manual reference names the guide the
+# distribution delivers under its data location.
+register_tool(
+    "task_breakdown",
+    "Recursively split work to fit available resources, with independently "
+    "verifiable results and real artifact dependencies.",
+    _EMPTY_SCHEMA,
+    None,
+    manual_ref="manuals/task-breakdown/guide.md",
+)
+register_tool(
+    "task_delivery",
+    "Dispatch, submit, accept, integrate and recover work through the common "
+    "task protocol.",
+    _EMPTY_SCHEMA,
+    None,
+    manual_ref="manuals/task-delivery/guide.md",
+)
+register_tool(
+    "research",
+    "Investigate questions using primary sources and retain evidence, "
+    "uncertainty and citations.",
+    _EMPTY_SCHEMA,
+    None,
+    manual_ref="manuals/research/guide.md",
+)
+register_tool(
+    "concept_clarification",
+    "Clarify terminology, concepts, relationships and boundaries.",
+    _EMPTY_SCHEMA,
+    None,
+    manual_ref="manuals/concept-clarification/guide.md",
 )

@@ -32,7 +32,7 @@ def test_every_operation_help_uses_selected_gateway_material(
     monkeypatch.setattr(subprocess, "Popen", forbidden)
     tool = tools.TOOLS[feature]
     monkeypatch.setitem(tools.TOOLS, feature, replace(
-        tool, description=f"Shared description for {feature}", manual_ref="manual.txt",
+        tool, description=f"Shared description for {feature}", manual_ref=str(manual),
         examples=({"sample": "shared-example"},), handler=forbidden,
     ))
     command = graphtraj.main if tool.cli_path[0] == "graphtraj" else agent_runner.main

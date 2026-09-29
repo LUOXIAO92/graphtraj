@@ -12,6 +12,10 @@ from graphtraj.runtimes.codex.codex_project import (
     CodexProjectError,
     CodexProjectFiles,
 )
+from graphtraj.workspace.project_files import (
+    ProjectFiles,
+    WorkspaceProjectError,
+)
 from graphtraj.workspace.git_repository import GitRepositoryError, GitTreeEntry, SourceRepository
 from graphtraj.configuration.project_configuration import (
     ProjectConfiguration,
@@ -189,6 +193,7 @@ class ProjectSetupPlan:
     configuration: ProjectConfiguration
     roles: ProjectRoles
     codex_files: CodexProjectFiles
+    project_files: ProjectFiles
     write_default_configuration: bool
     write_default_roles: bool
     proposed_base: Optional[str]
@@ -395,7 +400,7 @@ class ProjectSetupPlan:
             ("docs", self.configuration.docs),
         )
         for name, target in links:
-            description = self.codex_files.link_action(
+            description = self.project_files.link_action(
                 self.configuration.integration_worktree,
                 name,
                 target,
@@ -417,7 +422,7 @@ class ProjectSetupPlan:
         common = self.repository.common_directory
         info = _filesystem_entry(common / "info")
         exclude = _filesystem_entry(common / "info" / "exclude")
-        description = self.codex_files.exclude_action(common)
+        description = self.project_files.exclude_action(common)
         if info is not None and info.kind != "directory":
             _append_conflict(
                 conflicts,
@@ -521,7 +526,11 @@ class ProjectSetupPlan:
                 integration_action = "registered"
             else:
                 integration_action = "reused"
-            self.codex_files.install_setup_resources(
+            self.codex_files.remove_obsolete_guard(
+                self.runtime_store,
+                mark_completed,
+            )
+            self.project_files.install_setup_resources(
                 harness_root=self.harness_root,
                 integration_worktree=self.configuration.integration_worktree,
                 state_directory=self.configuration.state,
@@ -531,6 +540,7 @@ class ProjectSetupPlan:
             )
         except (
             CodexProjectError,
+            WorkspaceProjectError,
             GitRepositoryError,
             OSError,
         ) as error:
@@ -603,8 +613,10 @@ def plan_project_setup(
             else proposed_base
         )
         codex_files = CodexProjectFiles.load()
+        project_files = ProjectFiles.load()
     except (
         CodexProjectError,
+        WorkspaceProjectError,
         GitRepositoryError,
         OSError,
         ProjectConfigurationError,
@@ -617,6 +629,7 @@ def plan_project_setup(
         configuration=configuration,
         roles=roles,
         codex_files=codex_files,
+        project_files=project_files,
         write_default_configuration=write_default_configuration,
         write_default_roles=write_default_roles,
         proposed_base=proposed_base,

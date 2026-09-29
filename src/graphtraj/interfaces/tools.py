@@ -7,8 +7,10 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 
 from graphtraj.configuration.project_configuration import (
+    configuration_exists,
     load_project_configuration,
 )
+from graphtraj.configuration.project_diagnosis import diagnose_project
 from graphtraj.execution.runner_control import (
     interrupt_session,
     pending_requests,
@@ -19,11 +21,24 @@ from graphtraj.execution.runner_control import (
 )
 from graphtraj.execution.runner_launch import launch_swarm
 from graphtraj.execution.runner_status import status_aliases, status_tree
+from graphtraj.graph.delivery_state import apply_delivery_state_request
+from graphtraj.graph.delivery_worldline import (
+    append_project_worldline_event,
+    read_worldline,
+)
 from graphtraj.graph.ticket_graph import (
     read_graph,
     register_ticket,
     revise_tickets,
     update_ticket_state,
+)
+from graphtraj.teams.ticket_integration import integrate_ticket
+from graphtraj.workspace.git_repository import GitRepositoryError
+from graphtraj.workspace.project_initialization import (
+    ProjectSetupError,
+    existing_source_repository,
+    plan_project_setup,
+    require_source_repository,
 )
 
 _ISSUE_PROPERTIES = {
@@ -55,8 +70,12 @@ _REVISION_SCHEMA = {
     "properties": {
         "product_preserving":  {"const": True},
         "caused_by_event_ids": {"type": "array", "items": {"type": "string"}},
-        "evidence_refs":       {"type": "array", "items": {"type": "string"}},
-        "tickets":             {"type": "array", "items": _REVISED_TICKET_SCHEMA},
+        "evidence_refs":       {
+            "type": "array", "minItems": 1, "items": {"type": "string"},
+        },
+        "tickets":             {
+            "type": "array", "minItems": 1, "items": _REVISED_TICKET_SCHEMA,
+        },
     },
     "required":             [
         "product_preserving", "caused_by_event_ids", "evidence_refs", "tickets",
@@ -145,6 +164,44 @@ _REPLY_SCHEMA = {
     "required":             ["alias", "request", "response"],
     "additionalProperties": False,
 }
+_PROJECT_SETUP_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "source_repository": {"type": ["string", "null"]},
+        "apply":             {"type": "boolean"},
+        "create_dev":        {"type": "boolean"},
+    },
+    "additionalProperties": False,
+}
+_WORLDLINE_APPEND_SCHEMA = {
+    "type": "object",
+    "properties": {"event": {"type": "object"}},
+    "required":             ["event"],
+    "additionalProperties": False,
+}
+_DELIVERY_STATE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "request": {"type": "object"},
+        "facts":   {"type": "object"},
+    },
+    "required":             ["request", "facts"],
+    "additionalProperties": False,
+}
+_INTEGRATE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "ticket_id":          {"type": "string"},
+        "validation_command": {
+            "type": "array", "minItems": 1, "items": {"type": "string"},
+        },
+        "resolve_conflict":   {"type": ["string", "null"]},
+        "confirmed_commit":   {"type": ["string", "null"]},
+        "role":               {"type": ["string", "object", "null"]},
+    },
+    "required":             ["ticket_id", "validation_command"],
+    "additionalProperties": False,
+}
 
 
 @dataclass(frozen=True)
@@ -198,7 +255,7 @@ def register_current_ticket(arguments: Mapping[str, Any]) -> ToolResult:
 
     configuration = load_project_configuration(Path.cwd())
     directory = register_ticket(
-        configuration.state, configuration.harness_root, dict(arguments)
+        configuration.state, configuration.harness_root, arguments
     )
     return ToolResult({"ticket_directory": str(directory)})
 
@@ -208,7 +265,7 @@ def revise_current_tickets(arguments: Mapping[str, Any]) -> ToolResult:
 
     configuration = load_project_configuration(Path.cwd())
     recorded = revise_tickets(
-        configuration.state, configuration.harness_root, dict(arguments)
+        configuration.state, configuration.harness_root, arguments
     )
     return ToolResult(recorded)
 
@@ -218,9 +275,143 @@ def update_current_ticket_state(arguments: Mapping[str, Any]) -> ToolResult:
 
     configuration = load_project_configuration(Path.cwd())
     recorded = update_ticket_state(
-        configuration.state, configuration.harness_root, dict(arguments)
+        configuration.state, configuration.harness_root, arguments
     )
     return ToolResult(recorded)
+
+
+def preview_or_apply_project_setup(
+    arguments: Mapping[str, Any], *, cwd: Path | None = None
+) -> ToolResult:
+    """Preview or apply setup from explicit inputs instead of CLI prompts."""
+
+    root = (cwd or Path.cwd()).resolve()
+    supplied = arguments.get("source_repository")
+    if supplied is not None and not isinstance(supplied, str):
+        raise ValueError("source_repository must be a string or null")
+    apply_setup = _boolean_argument(arguments, "apply")
+    create_dev = _boolean_argument(arguments, "create_dev")
+    try:
+        source_repository = None
+        if not configuration_exists(root):
+            source_repository = (
+                require_source_repository(root, Path(supplied))
+                if supplied is not None
+                else existing_source_repository(root)
+            )
+            if source_repository is None:
+                raise ProjectSetupError("Setup could not select a Source Repository.")
+        plan = plan_project_setup(root, source_repository)
+        preview = plan.preflight()
+        document = {
+            "actions": [
+                {"disposition": action.disposition, "description": action.description}
+                for action in preview.actions
+            ],
+            "proposed_base": plan.proposed_base,
+            "applied":       False,
+        }
+        if not apply_setup:
+            return ToolResult(document)
+        if plan.proposed_base is not None and not create_dev:
+            raise ProjectSetupError(
+                "Applying setup must explicitly confirm creating dev from {0}.".format(
+                    plan.proposed_base
+                )
+            )
+        result = plan.apply()
+    except (ProjectSetupError, GitRepositoryError) as error:
+        raise ValueError(str(error)) from error
+    document.update({
+        "applied":              True,
+        "integration_worktree": str(result.integration_worktree),
+        "integration_action":   result.integration_action,
+        "completed_actions":    list(result.completed_actions),
+    })
+    return ToolResult(document)
+
+
+def diagnose_current_project(
+    arguments: Mapping[str, Any], *, cwd: Path | None = None
+) -> ToolResult:
+    """Report configuration and reusable-role diagnostics for the project."""
+
+    diagnosis = diagnose_project(cwd or Path.cwd())
+    return ToolResult(
+        {
+            "roles_checked":    diagnosis.roles_checked,
+            "role_diagnostics": list(diagnosis.role_diagnostics),
+        },
+        failed=not diagnosis.succeeded,
+    )
+
+
+def append_worldline_event(
+    arguments: Mapping[str, Any], *, cwd: Path | None = None
+) -> ToolResult:
+    """Append one explicit durable fact supplied as the same event mapping."""
+
+    event = arguments.get("event")
+    if not isinstance(event, dict):
+        raise ValueError("event file must contain one mapping")
+    configuration = load_project_configuration(cwd or Path.cwd())
+    recorded = append_project_worldline_event(
+        configuration.state, configuration.harness_root, event
+    )
+    return ToolResult(recorded)
+
+
+def read_project_worldline(
+    arguments: Mapping[str, Any], *, cwd: Path | None = None
+) -> ToolResult:
+    """Return the project's complete Worldline as one event sequence."""
+
+    configuration = load_project_configuration(cwd or Path.cwd())
+    events = read_worldline(configuration.state, configuration.harness_root)
+    return ToolResult({"events": events})
+
+
+def apply_state_request(
+    arguments: Mapping[str, Any], *, cwd: Path | None = None
+) -> ToolResult:
+    """Validate and atomically apply one semantic state request with its facts."""
+
+    configuration = load_project_configuration(cwd or Path.cwd())
+    recorded = apply_delivery_state_request(
+        configuration.state,
+        configuration.harness_root,
+        arguments.get("request"),
+        arguments.get("facts"),
+    )
+    return ToolResult(recorded)
+
+
+def integrate_current_ticket(
+    arguments: Mapping[str, Any], *, cwd: Path | None = None
+) -> ToolResult:
+    """Merge or recover an accepted Ticket under its actual task authority."""
+
+    validation_command = arguments.get("validation_command")
+    if not isinstance(validation_command, list) or any(
+        not isinstance(argument, str) for argument in validation_command
+    ):
+        raise ValueError("validation_command must be a list of strings")
+    try:
+        configuration = load_project_configuration(cwd or Path.cwd())
+        result = integrate_ticket(
+            configuration,
+            _string_argument(arguments, "ticket_id"),
+            tuple(validation_command),
+            _optional_string_argument(arguments, "resolve_conflict"),
+            arguments.get("role"),
+            _optional_string_argument(arguments, "confirmed_commit"),
+        )
+    except GitRepositoryError as error:
+        raise ValueError(str(error)) from error
+    failed = result["status"] != "integrated" and not (
+        result["status"] == "resolving-integration" and result.get("resolution")
+    )
+    return ToolResult(result, failed=failed)
 
 
 def read_alias_status(
@@ -412,6 +603,55 @@ register_tool(
     "causal event. Equivalent to `graphtraj ticket update`.",
     _STATE_CHANGE_SCHEMA,
     update_current_ticket_state,
+)
+register_tool(
+    "project_setup",
+    "Initialize GraphTraj in the current existing Git repository. Equivalent to "
+    "`graphtraj setup`.",
+    _PROJECT_SETUP_SCHEMA,
+    preview_or_apply_project_setup,
+)
+register_tool(
+    "project_doctor",
+    "Report configuration and roles from the active Harness Project context. "
+    "Equivalent to `graphtraj doctor`.",
+    _EMPTY_SCHEMA,
+    diagnose_current_project,
+)
+register_tool(
+    "worldline_append",
+    "Append one explicit durable fact from a YAML file. Equivalent to "
+    "`graphtraj worldline append --event-file`.",
+    _WORLDLINE_APPEND_SCHEMA,
+    append_worldline_event,
+)
+register_tool(
+    "worldline_read",
+    "Read the complete Worldline as chronological JSONL. Equivalent to "
+    "`graphtraj worldline read`.",
+    _EMPTY_SCHEMA,
+    read_project_worldline,
+)
+register_tool(
+    "worldline_render",
+    "Render a ledger-shaped YAML view without persisting it. Equivalent to "
+    "`graphtraj worldline render`.",
+    _EMPTY_SCHEMA,
+    read_project_worldline,
+)
+register_tool(
+    "delivery_state_apply",
+    "Validate and atomically apply one semantic state request. Equivalent to "
+    "`graphtraj delivery-state apply`.",
+    _DELIVERY_STATE_SCHEMA,
+    apply_state_request,
+)
+register_tool(
+    "ticket_integrate",
+    "Merge or recover an accepted Ticket under its actual task authority. "
+    "Equivalent to `graphtraj ticket integrate`.",
+    _INTEGRATE_SCHEMA,
+    integrate_current_ticket,
 )
 register_tool(
     "alias_status",

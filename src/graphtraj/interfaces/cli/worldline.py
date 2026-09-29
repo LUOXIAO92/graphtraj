@@ -6,11 +6,8 @@ from pathlib import Path
 import click
 import yaml
 
-from graphtraj.configuration.project_configuration import (
-    ProjectConfigurationError,
-    load_project_configuration,
-)
-from graphtraj.graph.delivery_worldline import append_project_worldline_event, read_worldline
+from graphtraj.configuration.project_configuration import ProjectConfigurationError
+from graphtraj.interfaces.tools import TOOLS
 
 
 @click.group()
@@ -31,12 +28,7 @@ def append_command(
 
     try:
         event = yaml.safe_load(event_file.read_text(encoding="utf-8"))
-        if not isinstance(event, dict):
-            raise ValueError("event file must contain one mapping")
-        configuration = load_project_configuration(Path.cwd())
-        recorded = append_project_worldline_event(
-            configuration.state, configuration.harness_root, event
-        )
+        recorded = TOOLS["worldline_append"].handler({"event": event}).document
     except (
         OSError,
         UnicodeError,
@@ -53,8 +45,7 @@ def read_command() -> None:
     """Read the complete Worldline as chronological JSONL."""
 
     try:
-        configuration = load_project_configuration(Path.cwd())
-        events = read_worldline(configuration.state, configuration.harness_root)
+        events = TOOLS["worldline_read"].handler({}).document["events"]
     except (
         OSError,
         UnicodeError,
@@ -72,8 +63,7 @@ def render_command() -> None:
     """Render a ledger-shaped YAML view without persisting it."""
 
     try:
-        configuration = load_project_configuration(Path.cwd())
-        events = read_worldline(configuration.state, configuration.harness_root)
+        events = TOOLS["worldline_render"].handler({}).document["events"]
     except (
         OSError,
         UnicodeError,

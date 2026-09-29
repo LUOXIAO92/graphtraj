@@ -101,6 +101,14 @@ class RuntimePreparationAdapter(Protocol):
     ) -> RuntimeContextPreflight:
         """Validate Runtime inputs before a Session allocation is published."""
 
+    def operation_total(self, trace_file: Path, session: str) -> int:
+        """Return the Runtime's own count of native operations for one Session.
+
+        The Adapter interprets its own native records, so a caller observes
+        the Runtime's operations without knowing that Runtime's event shapes.
+        An unreadable record must fail rather than report no operations.
+        """
+
 
 def select_runtime_adapter(runtime: str) -> RuntimePreparationAdapter:
     """Select an implemented Adapter from the resolved role's Runtime setting."""

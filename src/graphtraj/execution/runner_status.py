@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 import re
 from contextlib import contextmanager
@@ -18,6 +17,8 @@ from graphtraj.execution.runner_connection import session_operation
 from graphtraj.execution.runner_heartbeat import ownership_is_held, read_heartbeat
 from graphtraj.execution.runner_process import process_ancestors
 from graphtraj.execution.runner_transport import valid_terminal_launch_failure
+from graphtraj.runtimes import runtime_adapter
+from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 from graphtraj.workspace.runner_project import discover_runner_directory
 
 
@@ -564,9 +565,7 @@ def _status_alias(
         return _status_summary(mapping, session_directory, alias)
     status = _status_session(mapping, session_directory, alias)
     if operation_total:
-        status["operation_total"] = _operation_total(
-            Path(mapping["trace_file"]), mapping["session"]
-        )
+        status["operation_total"] = _operation_total(mapping)
     if baseline is not None and candidate is not None:
         status["diff"] = _commit_diff(
             Path(mapping["worktree_path"]), baseline, candidate
@@ -716,39 +715,24 @@ def _unresponsive_status(
     return {"activity": activity}
 
 
-def _operation_total(trace_file: Path, session: str) -> int:
-    """Count one native Codex tool request for each call ID in one Session."""
+def _operation_total(mapping: Mapping[str, Any]) -> int:
+    """Return one Session's operation count from its selected Runtime Adapter.
 
+    The selected Runtime Adapter interprets its own native records, so this
+    count stays Runtime-specific without status reaching into any one
+    Runtime's event shapes. A Runtime whose Adapter cannot be selected is
+    reported as unsupported for this alias; a record the Adapter cannot read
+    remains a diagnostic failure rather than a successful count of zero.
+    """
     try:
-        text = trace_file.read_text(encoding="utf-8")
-    except (OSError, UnicodeError) as error:
+        adapter = runtime_adapter.select_runtime_adapter(mapping["runtime"])
+        return adapter.operation_total(
+            Path(mapping["trace_file"]), mapping["session"]
+        )
+    except RuntimeAdapterError as error:
+        if error.code == "RUNTIME_UNSUPPORTED":
+            raise RunnerError("RUNTIME_UNSUPPORTED", error.message) from error
         raise _diagnostic_failure() from error
-    # The Runtime appends to the linked native file, so a running Session can
-    # end with a record that is not written completely yet.
-    records = text.splitlines() if text.endswith("\n") else text.splitlines()[:-1]
-    calls = set()
-    try:
-        for record in records:
-            item = json.loads(record)
-            if item.get("type") != "response_item":
-                continue
-            payload = item.get("payload")
-            if not isinstance(payload, dict):
-                continue
-            item_type = payload.get("type")
-            if item_type in {"function_call", "custom_tool_call"}:
-                request_id = payload.get("call_id")
-            elif item_type in {"local_shell_call", "tool_search_call"}:
-                request_id = payload.get("call_id") or payload.get("id")
-            elif item_type in {"web_search_call", "image_generation_call"}:
-                request_id = payload.get("id")
-            else:
-                continue
-            if isinstance(request_id, str) and request_id:
-                calls.add((session, request_id))
-    except (TypeError, json.JSONDecodeError) as error:
-        raise _diagnostic_failure() from error
-    return len(calls)
 
 
 def _commit_diff(worktree: Path, baseline: str, candidate: str) -> Dict[str, Any]:

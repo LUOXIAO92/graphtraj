@@ -271,7 +271,7 @@ def restore_codex_context(
 
 
 class CodexRuntimeAdapter:
-    """Bind first preparation to Codex's executable and existing Context."""
+    """Bind first preparation and native statistics to Codex's own records."""
 
     def preflight_runtime_context(
         self,
@@ -297,6 +297,51 @@ class CodexRuntimeAdapter:
             requested_skills=requested_skills,
             report_files=report_files,
         )
+
+    def operation_total(self, trace_file: Path, session: str) -> int:
+        """Count one native Codex tool request for each call ID in one Session.
+
+        The linked native record is read exactly as the Runtime wrote it: only
+        Codex's own ``response_item`` tool requests are counted, repeated
+        records dedupe to one operation per ``(session, call ID)``, and a
+        trailing record that is still being written is ignored.
+        """
+        try:
+            text = trace_file.read_text(encoding="utf-8")
+        except (OSError, UnicodeError) as error:
+            raise RuntimeAdapterError(
+                "OPERATION_TOTAL_UNREADABLE",
+                "The Session's native records could not be read.",
+            ) from error
+        # The Runtime appends to the linked native file, so a running Session
+        # can end with a record that is not written completely yet.
+        records = text.splitlines() if text.endswith("\n") else text.splitlines()[:-1]
+        calls = set()
+        try:
+            for record in records:
+                item = json.loads(record)
+                if item.get("type") != "response_item":
+                    continue
+                payload = item.get("payload")
+                if not isinstance(payload, dict):
+                    continue
+                item_type = payload.get("type")
+                if item_type in {"function_call", "custom_tool_call"}:
+                    request_id = payload.get("call_id")
+                elif item_type in {"local_shell_call", "tool_search_call"}:
+                    request_id = payload.get("call_id") or payload.get("id")
+                elif item_type in {"web_search_call", "image_generation_call"}:
+                    request_id = payload.get("id")
+                else:
+                    continue
+                if isinstance(request_id, str) and request_id:
+                    calls.add((session, request_id))
+        except (TypeError, json.JSONDecodeError) as error:
+            raise RuntimeAdapterError(
+                "OPERATION_TOTAL_UNREADABLE",
+                "The Session's native records could not be read.",
+            ) from error
+        return len(calls)
 
 
 def preflight_runtime_context(

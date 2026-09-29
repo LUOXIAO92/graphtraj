@@ -199,7 +199,9 @@ print(json.dumps({'type': 'item.completed', 'item': {'type': 'agent_message', 't
     result = subprocess.run(
         [str(commands.runner.with_name('graphtraj-mcp'))], cwd=root, env=env,
         input=json.dumps({'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call',
-                          'params': {'name': 'swarm', 'arguments': yaml.safe_load(batch.read_text())}}) + '\n',
+                          'params': {'name': 'graphtraj', 'arguments': {
+                              'action': 'execute', 'feature': 'swarm',
+                              'arguments': yaml.safe_load(batch.read_text())}}}) + '\n',
         text=True, capture_output=True, timeout=20,
     )
     assert result.returncode == 0, result.stdout + result.stderr

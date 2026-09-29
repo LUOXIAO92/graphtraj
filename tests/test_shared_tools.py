@@ -13,7 +13,7 @@ from typing import Any, Mapping
 import pytest
 
 from graphtraj.configuration.project_configuration import default_configuration_content
-from graphtraj.interfaces import mcp, tools
+from graphtraj.interfaces import gateway, mcp, tools
 from graphtraj.runtimes.codex.app_server import CodexAppServer, CodexServerRequest
 from graphtraj.runtimes.codex.codex_adapter import native_runner_tools
 from graphtraj.runtimes.codex.managed_session import run_native_operation
@@ -67,13 +67,23 @@ def test_both_transports_consume_shared_schema_and_handler(
     monkeypatch.chdir(tmp_path)
     listed = mcp_request('tools/list', {})['tools']
     native = native_runner_tools()
-    assert len(listed) == 25
+    assert len(listed) == 1
     assert len(native) == 11
-    assert next(t for t in listed if t['name'] == 'alias_status')['inputSchema'] == schema
+    assert listed[0]['name'] == 'graphtraj'
+    assert listed[0]['inputSchema'] == gateway.INPUT_SCHEMA
+    described = mcp_request('tools/call', {
+        'name': 'graphtraj',
+        'arguments': {'action': 'describe', 'feature': 'alias_status'},
+    })['structuredContent']
+    assert described['input_schema'] == schema
     assert next(t for t in native if t['name'] == 'graphtraj_status')['inputSchema'] == schema
 
     arguments = {'sample': 'shared'}
-    result = mcp_request('tools/call', {'name': 'alias_status', 'arguments': arguments})
+    result = mcp_request('tools/call', {
+        'name': 'graphtraj',
+        'arguments': {'action': 'execute', 'feature': 'alias_status',
+                      'arguments': arguments},
+    })
     response = native_request(tmp_path, 'graphtraj_status', arguments)
     assert result['structuredContent'] == json.loads(response['contentItems'][0]['text'])
     assert result['isError'] is failed
@@ -87,13 +97,19 @@ def test_both_transports_preserve_handler_input_rejection(
     """The existing argument error survives each transport's error formatting."""
     monkeypatch.chdir(tmp_path)
     arguments = {'alias': 'child', 'instruction': 42}
-    result = mcp_request('tools/call', {'name': 'send_instruction', 'arguments': arguments})
+    result = mcp_request('tools/call', {
+        'name': 'graphtraj',
+        'arguments': {'action': 'execute', 'feature': 'send_instruction',
+                      'arguments': arguments},
+    })
     response = native_request(tmp_path, 'graphtraj_send', arguments)
     assert result['isError'] is True
     assert response['success'] is False
     error = json.loads(response['contentItems'][0]['text'])['error']
     assert error == {'code': 'invalid-input', 'message': 'instruction must be a string'}
-    assert result['content'][0]['text'] == error['message']
+    # MCP validates the selected schema first, so its rejection names the field
+    # instead of repeating the handler's own text; both remain tool failures.
+    assert 'instruction' in result['content'][0]['text']
 
 
 def test_main_native_callback_runs_when_mcp_import_is_unavailable(

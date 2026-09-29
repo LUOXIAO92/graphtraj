@@ -412,10 +412,12 @@ def test_public_launch_rejects_retired_skill_selection(
         document = yaml.safe_load(result.stdout)
         assert document['error']['code'] == 'invalid-input'
         message = document['error']['message']
+        assert 'Runtime native Skill selection' in message
     else:
         with McpServerProcess(installed_commands.runner.with_name('graphtraj-mcp'), root, env) as server:
             result = server.call('swarm', request)['result']
         assert result['isError']
-        message = result['content'][0]['text']
-    assert 'Runtime native Skill selection' in message
+        # The single tool validates the selected schema before the handler, so
+        # the retired field is rejected as an unexpected parameter here.
+        assert 'skills' in result['content'][0]['text']
     assert not list((root / '.graphtraj/runner/sessions').glob('*/mapping.yml'))

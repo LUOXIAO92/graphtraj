@@ -92,7 +92,9 @@ print(json.dumps({'type': 'item.completed', 'item': {'type': 'agent_message', 't
         command = [str(commands.runner.with_name('graphtraj-mcp'))]
         request = json.dumps({
             'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call',
-            'params': {'name': 'swarm', 'arguments': tasks,
+            'params': {'name': 'graphtraj',
+                       'arguments': {'action': 'execute', 'feature': 'swarm',
+                                     'arguments': tasks},
                        '_meta': {'threadId': 'existing-external-caller'}},
         }) + '\n'
 

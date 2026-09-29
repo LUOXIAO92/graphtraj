@@ -106,8 +106,9 @@ def prepare(
     result = subprocess.run(
         [str(commands.runner.with_name('graphtraj-mcp'))], cwd=root, env=env,
         input=json.dumps({'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call',
-                          'params': {'name': 'swarm', 'arguments': {
-                              'tasks': [{'role': selection, 'ticket_id': '154'}]}}}) + '\n',
+                          'params': {'name': 'graphtraj', 'arguments': {
+                              'action': 'execute', 'feature': 'swarm', 'arguments': {
+                                  'tasks': [{'role': selection, 'ticket_id': '154'}]}}}}) + '\n',
         text=True, capture_output=True, timeout=20,
     )
     assert result.returncode == 0, result.stdout + result.stderr
@@ -367,8 +368,11 @@ def test_sampled_stop_continues_original_researcher_with_unchanged_accounting(
             resumed = subprocess.run(
                 [str(installed_commands.runner.with_name('graphtraj-mcp'))], cwd=root, env=env,
                 input=json.dumps({'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call',
-                                  'params': {'name': 'continue', 'arguments': {
-                                      'ticket_id': '154', 'caused_by_event_ids': [decision_id]}}}) + '\n',
+                                  'params': {'name': 'graphtraj', 'arguments': {
+                                      'action': 'execute', 'feature': 'continue',
+                                      'arguments': {
+                                          'ticket_id': '154',
+                                          'caused_by_event_ids': [decision_id]}}}}) + '\n',
                 text=True, capture_output=True, timeout=20,
             )
             assert resumed.returncode == 0, resumed.stdout + resumed.stderr
@@ -678,9 +682,12 @@ def test_budget_only_continuation_leaves_old_subtree_for_new_configured_root(
             continued = subprocess.run(
                 [str(installed_commands.runner.with_name('graphtraj-mcp'))], cwd=root, env=env,
                 input=json.dumps({'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call',
-                                  'params': {'name': 'continue', 'arguments': {
-                                      'ticket_id': '154', 'caused_by_event_ids': [cause],
-                                      'budget_only': True}}}) + '\n',
+                                  'params': {'name': 'graphtraj', 'arguments': {
+                                      'action': 'execute', 'feature': 'continue',
+                                      'arguments': {
+                                          'ticket_id': '154',
+                                          'caused_by_event_ids': [cause],
+                                          'budget_only': True}}}}) + '\n',
                 text=True, capture_output=True, timeout=20,
             )
             assert continued.returncode == 0, continued.stdout + continued.stderr

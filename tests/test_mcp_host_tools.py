@@ -19,37 +19,22 @@ import pytest
 import yaml
 
 from conftest import FakeCodex, InstalledCommands, run_process
+from graphtraj.interfaces import gateway, tools
 from runner_fixtures import configure_harness
 from test_ticket_graph import _configure, _ticket, _write
 
 
-TOOL_NAMES = {
-    "replace",
-    "cleanup",
-    "main",
-    "session_reports",
-    "submit_report",
-    "submit_result",
-    "decide_result",
-    "alias_status",
-    "continue",
-    "swarm",
-    "interrupt",
-    "pending_requests",
-    "reply_to_request",
-    "send_instruction",
-    "ticket_graph",
-    "ticket_register",
-    "ticket_revise",
-    "ticket_update",
-    "project_setup",
-    "project_doctor",
-    "worldline_append",
-    "worldline_read",
-    "worldline_render",
-    "delivery_state_apply",
-    "ticket_integrate",
-}
+# The MCP surface exposes exactly one tool; features are reached through it.
+TOOL_NAMES = {"graphtraj"}
+MCP_TOOL_NAME = "graphtraj"
+
+
+def tool_envelope(feature: str, arguments: dict) -> dict:
+    """Wrap one feature call in the outer discover/describe/execute envelope."""
+
+    return {"action": "execute", "feature": feature, "arguments": arguments}
+
+
 VOLATILE_EVENT_KEYS = {
     "event_id", "captured_at", "definition_refs", "evidence_refs",
 }
@@ -117,13 +102,14 @@ class McpServerProcess:
     def call(
         self, name: str, arguments: dict, thread_id: str | None = None
     ) -> dict:
-        """Call one tool and return its JSON-RPC result or error message.
+        """Call one feature through the single MCP tool and return its result.
 
-        ``thread_id`` adds the caller identity a real Codex host sends as
-        ``params._meta.threadId`` on its own tool request.
+        ``name`` selects the feature inside the outer envelope rather than a
+        top-level tool. ``thread_id`` adds the caller identity a real Codex
+        host sends as ``params._meta.threadId`` on its own tool request.
         """
 
-        params = {"name": name, "arguments": arguments}
+        params = {"name": MCP_TOOL_NAME, "arguments": tool_envelope(name, arguments)}
         if thread_id is not None:
             params["_meta"] = {"threadId": thread_id}
         return self.request("tools/call", params)
@@ -215,11 +201,37 @@ def test_installed_mcp_server_discovers_tools_and_reads_the_same_graph_as_the_cl
     with _started_mcp(mcp_executable, project) as server:
         listed = server.request("tools/list")["result"]["tools"]
         assert {tool["name"] for tool in listed} == TOOL_NAMES
-        assert all(
-            tool["inputSchema"]["type"] == "object"
-            and tool["description"]
-            for tool in listed
-        )
+        descriptor, = listed
+        assert descriptor["description"]
+        # The one registered schema is the fixed outer envelope, not a union of
+        # the selected feature's schemas and not a second flat tool list.
+        assert descriptor["inputSchema"] == gateway.INPUT_SCHEMA
+        assert set(descriptor["inputSchema"]["properties"]) == {
+            "action", "query", "feature", "arguments",
+        }
+
+        # discover and describe are reached through the same single tool.
+        found = server.request("tools/call", {
+            "name": MCP_TOOL_NAME,
+            "arguments": {"action": "discover", "query": "ticket graph"},
+        })["result"]
+        assert found["isError"] is False
+        assert "ticket_graph" in {
+            feature["feature"] for feature in found["structuredContent"]["features"]
+        }
+
+        described = server.request("tools/call", {
+            "name": MCP_TOOL_NAME,
+            "arguments": {"action": "describe", "feature": "ticket_graph"},
+        })["result"]
+        description = described["structuredContent"]
+        assert description["feature"] == "ticket_graph"
+        assert description["input_schema"] == tools.TOOLS["ticket_graph"].input_schema
+        assert description["call"] == {
+            "action": "execute", "feature": "ticket_graph", "arguments": {},
+        }
+        assert {"examples", "manual_ref", "manual"} <= set(description)
+        assert described["isError"] is ("error" in description)
 
         call = server.call("ticket_graph", {})
         assert call["result"]["isError"] is False
@@ -364,7 +376,10 @@ def test_installed_mcp_server_reports_invalid_input_and_unknown_requests(
 
     with _started_mcp(mcp_executable, project) as server:
         rejected = server.call("ticket_register", invalid)["result"]
-        unknown_tool = server.call("ticket_send", {})
+        unknown_tool = server.request(
+            "tools/call", {"name": "ticket_send", "arguments": {}}
+        )
+        unknown_feature = server.call("ticket_send", {})["result"]
         unknown_method = server.request("resources/list", {})
 
     cli = _cli(
@@ -377,8 +392,11 @@ def test_installed_mcp_server_reports_invalid_input_and_unknown_requests(
     )
     assert cli.returncode == 1
     assert rejected["isError"] is True
-    assert rejected["content"][0]["text"] in cli.stderr
+    assert "required" in rejected["structuredContent"]["error"]
+    assert rejected["content"][0]["text"]
     assert unknown_tool["error"]["code"] == -32602
+    assert unknown_feature["isError"] is True
+    assert "ticket_send" in unknown_feature["structuredContent"]["error"]
     assert unknown_method["error"]["code"] == -32601
 
 
@@ -990,8 +1008,8 @@ def test_real_codex_host_discovers_and_calls_the_mcp_graph_tools_offline(
             {
                 "server":    "graphtraj",
                 "threadId":  host.thread_id,
-                "tool":      "ticket_register",
-                "arguments": issue,
+                "tool":      MCP_TOOL_NAME,
+                "arguments": tool_envelope("ticket_register", issue),
             },
         )["result"]
         assert registered["isError"] is False
@@ -1002,8 +1020,10 @@ def test_real_codex_host_discovers_and_calls_the_mcp_graph_tools_offline(
             {
                 "server":    "graphtraj",
                 "threadId":  host.thread_id,
-                "tool":      "alias_status",
-                "arguments": {"aliases": ["missing@l1"], "baseline": "abc123"},
+                "tool":      MCP_TOOL_NAME,
+                "arguments": tool_envelope(
+                    "alias_status", {"aliases": ["missing@l1"], "baseline": "abc123"}
+                ),
             },
         )["result"]
         assert rejected["isError"] is True
@@ -1016,8 +1036,8 @@ def test_real_codex_host_discovers_and_calls_the_mcp_graph_tools_offline(
             {
                 "server":    "graphtraj",
                 "threadId":  host.thread_id,
-                "tool":      "ticket_graph",
-                "arguments": {},
+                "tool":      MCP_TOOL_NAME,
+                "arguments": tool_envelope("ticket_graph", {}),
             },
         )["result"]
 
@@ -1063,8 +1083,8 @@ def _host_tool(host: "CodexHost", probe: Path, tool: str, arguments: dict) -> di
         {
             "server":    "graphtraj",
             "threadId":  host.thread_id,
-            "tool":      tool,
-            "arguments": arguments,
+            "tool":      MCP_TOOL_NAME,
+            "arguments": tool_envelope(tool, arguments),
         },
         timeout=60,
     )["result"]

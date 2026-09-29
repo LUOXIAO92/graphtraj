@@ -21,12 +21,26 @@ locations, reusable evidence, inherited constraints and each required input.
 Distinguish required predecessor results from background sources or chronology.
 A dependency does not transfer the consumer's acceptance criteria upstream.
 
-## Recurse to fit available resources
+## Assess difficulty and recurse to fit available resources
 
 Assess the resources actually available: permitted executors and their observed
 capabilities, context, time, cost, concurrency and the effort of combining work.
 A model mentioned as an example is not an available preset. Preserve the user's
 resource choices; model names alone do not establish capability.
+
+During breakdown, record each node's difficulty judgment and concrete reasons:
+the expertise or reasoning needed, uncertainty, interacting constraints and
+validation effort. State how the available executor fits that work, whether
+further decomposition would help, and why the chosen granularity is sufficient.
+Distinguish difficulty from workload; file counts, time estimates and model
+names alone are not an assessment. Use the project's ordinary descriptions or
+rating scale without introducing a mandatory grading schema.
+
+Include this assessment in the node's existing description and carry it into
+the task ticket before dispatch. Delivery uses the recorded assessment rather
+than creating a separate one. When new evidence changes scope, resource fit or
+difficulty, update the assessment and affected decomposition through this skill;
+a changed estimate does not authorize more time or different user settings.
 
 For every proposed assignment ask whether it still contains separable results
 that would be better handled independently by the available executors. If so,
@@ -112,5 +126,6 @@ preserving useful results, stable identities and original inputs elsewhere.
 Record the cause. Product-preserving details belong to the executor; unresolved
 changes to the promised outcome or authority return to the user.
 
-Present the nodes, dependency reasons, resource assumptions and remaining
-uncertainties. Publish tickets and execute only within the user's authorization.
+Present the nodes with their difficulty assessments, dependency reasons,
+resource assumptions and remaining uncertainties. Publish tickets and execute
+only within the user's authorization.

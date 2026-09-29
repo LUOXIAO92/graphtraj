@@ -77,11 +77,12 @@ def calculate_total(
 ## Coordination and source investigation
 
 Main may investigate to decompose work and gives each Ticket its scope,
-investigation findings, relevant locations and reusable evidence. The Leader
-assesses actual difficulty and scope before selecting methods. Coordination,
-status and recovery do not authorize reconstructing internal execution flows;
-Engineers own remaining implementation questions. A specific diff may be read
-when needed to assess supplied evidence.
+recorded task-breakdown difficulty assessment, investigation findings, relevant
+locations and reusable evidence. The Leader uses that assessment when selecting
+methods; new evidence requiring a changed assessment returns to task-breakdown.
+Coordination, status and recovery do not authorize reconstructing internal
+execution flows; Engineers own remaining implementation questions. A specific
+diff may be read when needed to assess supplied evidence.
 
 Every Agent communicates only with its direct parent and direct children.
 Cross-level observation uses status summaries, not raw Sessions or reports.

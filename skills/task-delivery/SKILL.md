@@ -12,22 +12,27 @@ commands from the Harness Project Root.
 ## Assign ready work
 
 Select tasks whose required predecessor results are integrated. Read the current
-Ticket definition and provide its scope, findings, inputs and acceptance criteria.
-Choose the actual expertise and professional methods the task needs. A Team can
+Ticket definition and provide its scope, recorded difficulty assessment,
+resource assumptions, findings, inputs and acceptance criteria. Use that assessment
+to select the actual expertise and professional methods the task needs. A Team can
 have one member. Role names do not grant task acceptance or control authority;
 role_tree permits dispatch edges, while real Session bindings determine parents.
 Apply the project's assigned validation responsibilities.
 
-Before dispatch, use [task-breakdown](../task-breakdown/SKILL.md) when scope or
-available resources require a different granularity. Consume the registered
-node's required artifacts and preserved evidence; use the project's selected
-professional methods without changing the common completion protocol.
+Difficulty assessment belongs to [task-breakdown](../task-breakdown/SKILL.md).
+Use it to complete a missing assessment or revise one when new evidence changes
+scope, resource fit or granularity; delivery consumes that result rather than
+running a second assessment. Consume the registered node's required artifacts
+and preserved evidence; use the project's selected professional methods without
+changing the common completion protocol.
 
 Formal dispatch uses `agent-runner --swarm-input <swarm.yml>` with the selected
 role, instruction and ready Ticket ID. Reuse the registered definition and
 returned aliases. Supply external role instructions and explicitly selected
 resources through the configured Runtime's supported mechanisms; GraphTraj
 does not choose a professional Skill by its name.
+If child dispatch returns `registered`, end that dispatch turn so the existing
+Driver can start the child.
 Keep one execution per Session and communicate only with direct parents/children.
 
 ## Receive and decide results

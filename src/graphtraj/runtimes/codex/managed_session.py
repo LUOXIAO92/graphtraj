@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import copy
 import os
 import json
 import uuid
@@ -80,10 +79,11 @@ class CodexManagedExecution:
         session_created: Callable[[str, int], None] | None = None,
     ) -> None:
         """Capture immutable task configuration for one Worker execution."""
-        request = copy.deepcopy(request)
+        self.context = restore_codex_context(request, context_evidence)
+        request = self.context.launch_document()['adapter_request']
         if expected_session:
             refresh_approval_route(request, session_directory)
-        self.context = restore_codex_context(request, context_evidence)
+            self.context = restore_codex_context(request, context_evidence)
         self.approval = request.get("approval")
         self.approval_items: dict[str, dict] = {}
         self.command = (request['arguments'][0], 'app-server', '--listen', 'stdio://')

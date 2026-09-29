@@ -156,7 +156,7 @@ def test_missing_historical_assignment_does_not_infer_from_role(
     assert 'no retained report assignment' in missing.value.message
 
 
-@pytest.mark.parametrize('source', ['mapping', 'launch'])
+@pytest.mark.parametrize('source', ['mapping', 'launch', 'cli-launch'])
 def test_installed_send_recovers_historical_reports(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
@@ -216,6 +216,8 @@ def test_installed_send_recovers_historical_reports(
     for index, argument in enumerate(request['arguments']):
         if argument.startswith('permissions='):
             request['arguments'][index] = 'permissions=' + _toml_value(config['permissions'])
+    if source == 'cli-launch':
+        del request['session_parameters']
     mapping_file.write_text(yaml.safe_dump(mapping))
     launch_file.write_text(yaml.safe_dump(launch))
     before = launch_file.read_bytes()
@@ -237,7 +239,7 @@ def test_installed_send_recovers_historical_reports(
         if argument == '-c':
             settings.update(tomllib.loads(records[-1]['argv'][index + 1]))
     filesystem = settings['permissions'][settings['default_permissions']]['filesystem']
-    assert filesystem[str(own)] == 'read'
+    assert filesystem[str(own)] == ('write' if source == 'cli-launch' else 'read')
     assert filesystem[str(reference)] == 'read'
     assert str(private) not in filesystem
     assert filesystem[str(root / '.graphtraj/state')] == 'none'

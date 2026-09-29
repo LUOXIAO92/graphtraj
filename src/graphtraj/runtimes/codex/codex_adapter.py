@@ -280,8 +280,27 @@ def restore_codex_context(
     request: Mapping[str, Any], evidence: Mapping[str, Any],
 ) -> RuntimeContext:
     """Restore a Worker's resolved Context without consulting current role defaults."""
-    _validate_launch_request(request)
+    arguments, worktree = _validate_launch_request(request)
     params = request.get("session_parameters")
+    if params is None:
+        # Historical exec launches retain the actual settings in CLI overrides.
+        # Reconstruct only those captured values, never current role defaults.
+        try:
+            config = {}
+            for index, argument in enumerate(arguments[:-1]):
+                if argument == "-c":
+                    config.update(tomllib.loads(arguments[index + 1]))
+            model = arguments[arguments.index("--model") + 1]
+            params = {
+                "cwd": str(worktree), "model": model,
+                "developerInstructions": config.pop("developer_instructions"),
+                "config": config,
+            }
+        except (ValueError, IndexError, KeyError, tomllib.TOMLDecodeError) as error:
+            raise CodexAdapterError(
+                "RUNTIME_REQUEST_INVALID", "The retained Codex CLI Context is invalid.",
+            ) from error
+        request = {**request, "session_parameters": params}
     if (
         not isinstance(params, dict)
         or params.get("cwd") != request["worktree_path"]
@@ -298,6 +317,77 @@ def restore_codex_context(
 
 class CodexRuntimeAdapter:
     """Prepare Codex Context, manage execution, and interpret statistics and diagnostics."""
+
+    def read_session_identity(self, session_directory: Path) -> str:
+        """Attest the native identity retained by the Codex owner."""
+        return read_codex_session_identity(session_directory)
+
+    def recovery_environment(self, connection: Mapping[str, Any]) -> Mapping[str, str]:
+        """Validate captured Codex connection settings and resolve their secrets."""
+        if any(
+            key not in {"base_url", "api_key_env"}
+            or not isinstance(value, str)
+            or not value
+            for key, value in connection.items()
+        ):
+            raise CodexAdapterError(
+                "RUNTIME_REQUEST_INVALID", "The retained Codex connection is invalid.",
+            )
+        return codex_connection_environment(
+            connection.get("base_url"), connection.get("api_key_env"),
+        )
+
+    def recover_report_files(
+        self, request: Mapping[str, Any], evidence: Path,
+    ) -> tuple[str, ...]:
+        """Read old exact report write grants without changing launch evidence."""
+        try:
+            config = request.get('session_parameters', {}).get('config')
+            if config is None:
+                arguments = request['arguments']
+                _, profile = _resume_request_setting(arguments, 'default_permissions')
+                _, permissions = _resume_request_setting(arguments, 'permissions')
+            else:
+                profile = config['default_permissions']
+                permissions = config['permissions']
+            filesystem = permissions[profile]['filesystem']
+            reports = []
+            for name, access in filesystem.items():
+                path = Path(name)
+                if access != 'write' or path.suffix != '.md':
+                    continue
+                if path.is_absolute() and path.is_relative_to(evidence):
+                    reports.append(str(Path('.state') / path.relative_to(evidence)))
+                elif not path.is_absolute() and path.parts[:1] == ('.state',):
+                    reports.append(str(path))
+        except (KeyError, TypeError, AttributeError, RuntimeAdapterError) as error:
+            raise CodexAdapterError(
+                'session-not-resumable',
+                'Cannot recover report assignments from the retained launch permissions.',
+            ) from error
+        if not reports:
+            raise CodexAdapterError(
+                'session-not-resumable',
+                'The historical Session has no retained report assignment or exact writable report path.',
+            )
+        return tuple(dict.fromkeys(reports))
+
+    def refresh_report_paths(
+        self,
+        request: Mapping[str, Any],
+        *,
+        worktree: Path,
+        evidence: Path,
+        report_files: tuple[Path, ...],
+        role: str,
+        reports_only: bool = False,
+        session_directory: Path | None = None,
+    ) -> Dict[str, Any]:
+        """Refresh Codex report access while retaining captured native settings."""
+        return refresh_codex_report_paths(
+            request, worktree=worktree, evidence=evidence, report_files=report_files,
+            role=role, reports_only=reports_only, session_directory=session_directory,
+        )
 
     def current_execution_diagnostic(
         self,
@@ -1219,12 +1309,21 @@ def refresh_codex_report_paths(
     native_report_paths = _canonical_report_write_paths(
         evidence, report_files
     )
-    _, default_permissions = _resume_request_setting(
+    profile_index, default_permissions = _resume_request_setting(
         refreshed, "default_permissions"
     )
     permissions_index, permissions = _resume_request_setting(
         refreshed, "permissions"
     )
+    params = request.get("session_parameters")
+    if params is not None:
+        try:
+            default_permissions = params["config"]["default_permissions"]
+            permissions = params["config"]["permissions"]
+        except (KeyError, TypeError) as error:
+            raise CodexAdapterError(
+                "RUNTIME_REQUEST_INVALID", "The retained Codex permissions are invalid.",
+            ) from error
     if not isinstance(default_permissions, str) or not isinstance(permissions, dict):
         raise CodexAdapterError(
             "RUNTIME_REQUEST_INVALID",
@@ -1270,6 +1369,9 @@ def refresh_codex_report_paths(
         # already granted by the durable launch request.
         for path in _direct_child_session_directories(session_directory):
             filesystem[str(path)] = "write"
+    refreshed[profile_index + 1] = "default_permissions={0}".format(
+        _toml_value(default_permissions)
+    )
     refreshed[permissions_index + 1] = "permissions={0}".format(
         _toml_value(permissions)
     )

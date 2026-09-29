@@ -532,7 +532,7 @@ def test_reviewer_send_refreshes_exact_replacement_report_permissions(
 
     refreshed = _refresh_current_team_report_request(
         request,
-        {"role": role, "report_file": report.as_posix(), "ticket_id": "148", "team_generation": 1},
+        {"runtime": "codex", "role": role, "report_file": report.as_posix(), "ticket_id": "148", "team_generation": 1},
         worktree,
         {
             "GRAPHTRAJ_EVIDENCE": str(evidence),
@@ -558,11 +558,13 @@ def test_reviewer_send_refreshes_exact_replacement_report_permissions(
 
 @pytest.mark.parametrize("role", ("engineer", "engineer-senior"))
 @pytest.mark.parametrize("reports_only", (False, True))
-def test_engineer_resume_preserves_captured_permissions_and_refreshes_reports(
+@pytest.mark.parametrize("native_parameters", (False, True))
+def test_resume_preserves_captured_permissions_and_refreshes_reports(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     role: str,
     reports_only: bool,
+    native_parameters: bool,
 ) -> None:
     """A resume keeps captured permissions, refreshes reports, and narrows on request."""
     monkeypatch.syspath_prepend(str(PROJECT_ROOT / "src"))
@@ -590,11 +592,24 @@ def test_engineer_resume_preserves_captured_permissions_and_refreshes_reports(
         ],
         "worktree_path": str(worktree),
     }
+    if native_parameters:
+        config = {}
+        for index, argument in enumerate(request['arguments'][:-1]):
+            if argument == '-c':
+                config.update(tomllib.loads(request['arguments'][index + 1]))
+        # Native Context is authoritative even when the historical CLI copy differs.
+        config['permissions']['project-documents-read-only']['filesystem']['/saved-setting'] = 'none'
+        config['model_provider'] = 'retained-provider'
+        config['model_reasoning_effort'] = 'high'
+        request['session_parameters'] = {
+            'model': 'captured-model', 'config': config,
+            'developerInstructions': 'Retained task', 'dynamicTools': [],
+        }
     original = copy.deepcopy(request)
 
     refreshed = _refresh_current_team_report_request(
         request,
-        {"role": role, "ticket_id": "148", "team_generation": 1,
+        {"runtime": "codex", "role": role, "ticket_id": "148", "team_generation": 1,
          "report_file": ".state/teams/1/rounds/1/retained.md"},
         worktree,
         {
@@ -625,7 +640,11 @@ def test_engineer_resume_preserves_captured_permissions_and_refreshes_reports(
         "README.md": "read",
         "docs": "read",
     }
-    assert filesystem["/saved-setting"] == "read"
+    assert filesystem["/saved-setting"] == ('none' if native_parameters else 'read')
+    if native_parameters:
+        expected = copy.deepcopy(original['session_parameters'])
+        expected['config']['permissions'] = permissions
+        assert refreshed['session_parameters'] == expected
     # Only the current report reference changes; every captured setting stays.
     report_directory = evidence / "teams" / "1" / "rounds" / "1"
     assert {

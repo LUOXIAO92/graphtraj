@@ -91,7 +91,8 @@ def _integrate(
         parent = read_alias_mapping(runner, caller)[0] if caller is not None else None
         _require_dispatch_roles(discover_project(root, require_clean_integration=False), batch, parent)
     resolving = record["status"] == "resolving-integration"
-    recovering = record["status"] == "escalated"
+    retrying = record["status"] == "escalated" and diagnosis is not None
+    recovering = record["status"] == "escalated" and not retrying
     if not record["active"] or record["status"] not in {"awaiting-integration", "integrating", "escalated", "resolving-integration"} or acceptance is None:
         raise ValueError("Integration requires acceptance of the current candidate")
     escalated_integrations = {
@@ -148,13 +149,18 @@ def _integrate(
         except GitRepositoryError as error:
             raise ValueError("Recovery requires the accepted candidate and retained dev commit in HEAD") from error
     if diagnosis is not None:
-        if (not diagnosis.strip() or predecessor["kind"] != "ticket-integration-failed"
+        if (not diagnosis.strip() or predecessor["kind"] != (
+                "ticket-integration-escalated" if retrying else "ticket-integration-failed")
             or predecessor.get("conflict_kind") not in {"textual", "semantic"}
             or predecessor.get("candidate") != candidate or predecessor.get("dev_commit") != before
             or predecessor.get("validation_command") != list(validation_command)):
             raise ValueError("Resolution requires a retained conflict at the same candidate and dev state, with the same integration validation")
         if predecessor["conflict_kind"] == "textual" and _git(dev, "rev-parse", "MERGE_HEAD") != candidate:
             raise ValueError("The retained merge must still target the fixed candidate")
+        if retrying:
+            from graphtraj.teams.merge_resolution import require_unestablished_resolution
+
+            require_unestablished_resolution(configuration, record, events, batch.tasks[0], caller)
     started = _record(configuration, directory, record, "integrating" if diagnosis is None else "resolving-integration", {
         "kind": "ticket-integration-started" if diagnosis is None else "ticket-integration-conflict-started",
         "caused_by_event_ids": [predecessor["event_id"]] + ([decision["event_id"]] if resolving and diagnosis is None else []),

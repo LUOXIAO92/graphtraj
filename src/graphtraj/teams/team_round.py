@@ -215,7 +215,18 @@ def continue_stopped_ticket(
             for dependency in state["dependencies"]
         ):
             raise RunnerError("invalid-input", "Explicit continuation requires a ready Ticket.")
-    elif state["status"] not in {"implementing", "reviewing", "reworking"}:
+    elif state["status"] not in {"implementing", "reviewing", "reworking"} and not (
+        # Integration recovery may restore budget permission, but must not
+        # resume the accepted roots or change the retained integration state.
+        budget_only and state["status"] in {"integrating", "resolving-integration", "escalated"}
+        and any(
+            event.get("ticket_id") == ticket_id
+            and event["kind"].startswith("ticket-integration-")
+            and event.get("to_status") == state["status"]
+            and event.get("candidate") == state["current_candidate"]
+            for event in read_worldline(project.state_directory, project.harness_root)
+        )
+    ):
         raise RunnerError(
             "invalid-input", "Explicit continuation requires the current active Team."
         )

@@ -48,7 +48,7 @@ def test_common_correction_invalidates_candidate_for_every_role(
     from click.testing import CliRunner
     from graphtraj.execution.runner_status import runtime_caller
     from graphtraj.graph.delivery_worldline import read_worldline
-    from graphtraj.interfaces import mcp
+    from graphtraj.interfaces import tools
     from graphtraj.interfaces.cli.graphtraj import main
     from test_result_submission import result_project
 
@@ -64,12 +64,12 @@ def test_common_correction_invalidates_candidate_for_every_role(
     arguments = {'commit': commit, 'result_refs': ['result.md'],
                  'evidence_refs': ['result.md'], 'completion': 'First result'}
     with runtime_caller(runner, 'research@x1'):
-        first = mcp.submit_result(arguments, cwd=tmp_path).document
+        first = tools.submit_result(arguments, cwd=tmp_path).document
     decision = {'submission_id': first['event_id'], 'commit': commit,
                 'decision': 'rejected', 'reason': 'Missing conclusion.',
                 'evidence_refs': first['evidence_refs']}
     with runtime_caller(runner, None):
-        rejected = mcp.decide_result(decision, cwd=tmp_path).document
+        rejected = tools.decide_result(decision, cwd=tmp_path).document
     history = read_worldline(tmp_path / 'state', tmp_path)
     monkeypatch.chdir(tmp_path)
     if entry == 'state-cli':
@@ -90,7 +90,7 @@ def test_common_correction_invalidates_candidate_for_every_role(
         assert result.exit_code == 0, result.output
     else:
         with runtime_caller(runner, 'research@x1'):
-            mcp.submit_report({'name': 'researcher-x1.md', 'text': 'Correcting conclusion.'},
+            tools.submit_report({'name': 'researcher-x1.md', 'text': 'Correcting conclusion.'},
                               cwd=tmp_path)
     state = yaml.safe_load((team.parents[2] / 'ticket.yml').read_text())
     assert state['current_candidate'] is None
@@ -103,19 +103,19 @@ def test_common_correction_invalidates_candidate_for_every_role(
         assert denied.exit_code == 1, denied.output
         assert 'requires acceptance' in denied.output
         with pytest.raises(ValueError):
-            mcp.decide_result({**decision, 'decision': 'accepted'}, cwd=tmp_path)
+            tools.decide_result({**decision, 'decision': 'accepted'}, cwd=tmp_path)
     worktree = tmp_path / 'worktrees/research'
     (worktree / 'result.md').write_text('Result with conclusion.\n')
     subprocess.run(['git', 'commit', '-am', 'Correct result'], cwd=worktree,
                    check=True, capture_output=True)
     corrected = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=worktree, text=True).strip()
     with runtime_caller(runner, 'research@x1'):
-        second = mcp.submit_result({**arguments, 'commit': corrected}, cwd=tmp_path).document
+        second = tools.submit_result({**arguments, 'commit': corrected}, cwd=tmp_path).document
     with runtime_caller(runner, None):
         with pytest.raises(ValueError):
-            mcp.decide_result({**decision, 'submission_id': second['event_id'],
+            tools.decide_result({**decision, 'submission_id': second['event_id'],
                                'decision': 'accepted'}, cwd=tmp_path)
-        accepted = mcp.decide_result({
+        accepted = tools.decide_result({
             **decision, 'submission_id': second['event_id'], 'commit': corrected,
             'decision': 'accepted', 'evidence_refs': second['evidence_refs'],
         }, cwd=tmp_path).document

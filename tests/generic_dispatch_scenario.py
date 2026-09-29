@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 
 from graphtraj.execution.runner_models import RunnerError
-from graphtraj.interfaces import mcp
+from graphtraj.interfaces import tools
 
 root = Path(os.environ['GRAPHTRAJ_HARNESS_ROOT'])
 role = os.environ['GRAPHTRAJ_ROLE']
@@ -15,7 +15,7 @@ if role == 'researcher':
     visits.write_text(str(count))
     if count in (1, 3):
         try:
-            mcp.launch_swarm_tool({'tasks': [{'role': 'engineer'}]}, cwd=root)
+            tools.launch_swarm_tool({'tasks': [{'role': 'engineer'}]}, cwd=root)
         except RunnerError as error:
             assert error.code == 'authority-denied'
         else:
@@ -23,13 +23,13 @@ if role == 'researcher':
         foreign = os.environ.get('FOREIGN_CHILD')
         if foreign:
             try:
-                mcp.send_session_instruction({'alias': foreign, 'instruction': 'Hijack',
+                tools.send_session_instruction({'alias': foreign, 'instruction': 'Hijack',
                                              'caused_by_event_ids': [os.environ['CAUSE']]}, cwd=root)
             except RunnerError as error:
                 assert error.code == 'authority-denied', error
             else:
                 raise AssertionError('Same-role other-instance control was authorized')
-        response = mcp.launch_swarm_tool({'tasks': [{'role': 'analyst'}]}, cwd=root)
+        response = tools.launch_swarm_tool({'tasks': [{'role': 'analyst'}]}, cwd=root)
         assert not response.failed, response.document
         Path('last-child.json').write_text(json.dumps(response.document['tasks'][0]))
 else:

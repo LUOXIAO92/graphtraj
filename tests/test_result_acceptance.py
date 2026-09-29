@@ -6,7 +6,8 @@ from typing import Any
 import pytest
 
 from graphtraj.execution.runner_status import runtime_caller
-from graphtraj.interfaces import mcp
+from graphtraj.interfaces import mcp, tools
+from graphtraj.runtimes.codex.codex_adapter import native_runner_tools
 from test_result_submission import result_project
 
 
@@ -14,12 +15,12 @@ def test_parent_accepts_document_submission_without_coding_reports(tmp_path: Pat
     """A parent records a versioned decision using the author's retained evidence."""
     runner, _, commit = result_project(tmp_path, multiple=False)
     with runtime_caller(runner, 'research@x1'):
-        submission = mcp.submit_result({
+        submission = tools.submit_result({
             'commit': commit, 'result_refs': ['result.md'],
             'evidence_refs': ['result.md'], 'completion': 'Research complete',
         }, cwd=tmp_path).document
     with runtime_caller(runner, None):
-        decision = mcp.decide_result({
+        decision = tools.decide_result({
             'submission_id': submission['event_id'], 'commit': commit,
             'decision': 'accepted', 'reason': 'The sources meet the task criteria.',
             'evidence_refs': submission['evidence_refs'],
@@ -43,9 +44,9 @@ def test_rejection_then_corrected_submission_preserves_decision_and_cause(
     arguments = {'commit': commit, 'result_refs': ['result.md'],
                  'evidence_refs': ['result.md'], 'completion': 'First result'}
     with runtime_caller(runner, 'research@x1'):
-        first = mcp.submit_result(arguments, cwd=tmp_path).document
+        first = tools.submit_result(arguments, cwd=tmp_path).document
     with runtime_caller(runner, None):
-        rejected = mcp.decide_result({
+        rejected = tools.decide_result({
             'submission_id': first['event_id'], 'commit': commit, 'decision': 'rejected',
             'reason': 'The result lacks the required conclusion.',
             'evidence_refs': first['evidence_refs'],
@@ -57,18 +58,18 @@ def test_rejection_then_corrected_submission_preserves_decision_and_cause(
     corrected = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=worktree, text=True).strip()
     with runtime_caller(runner, 'research@x1'):
         if write_report:
-            corrected_report = mcp.submit_report({'name': 'researcher-x1.md', 'text': 'Correction checked.'},
+            corrected_report = tools.submit_report({'name': 'researcher-x1.md', 'text': 'Correction checked.'},
                                                  cwd=tmp_path).document['report']
             assert '/rounds/2/' in corrected_report
-        second = mcp.submit_result({**arguments, 'commit': corrected}, cwd=tmp_path).document
+        second = tools.submit_result({**arguments, 'commit': corrected}, cwd=tmp_path).document
     assert second['round'] == 2
     with runtime_caller(runner, None):
-        accepted = mcp.decide_result({
+        accepted = tools.decide_result({
             'submission_id': second['event_id'], 'commit': corrected, 'decision': 'accepted',
             'reason': 'The conclusion now meets the requirement.',
             'evidence_refs': second['evidence_refs'],
         }, cwd=tmp_path).document
-        history = mcp.read_reports({'alias': 'research@x1'}, cwd=tmp_path).document
+        history = tools.read_reports({'alias': 'research@x1'}, cwd=tmp_path).document
     assert history['submissions'] == [first, second]
     events = read_worldline(tmp_path / 'state', tmp_path)
     assert rejected in events and accepted in events
@@ -92,7 +93,7 @@ def test_decision_rejects_unowned_mismatched_and_superseded_results(tmp_path: Pa
 
     runner, _, commit = result_project(tmp_path)
     with runtime_caller(runner, 'research@x1'):
-        submission = mcp.submit_result({'commit': commit, 'result_refs': ['result.md'],
+        submission = tools.submit_result({'commit': commit, 'result_refs': ['result.md'],
                                         'evidence_refs': ['result.md'], 'completion': 'Done'},
                                        cwd=tmp_path).document
     arguments = {'submission_id': submission['event_id'], 'commit': commit,
@@ -102,19 +103,19 @@ def test_decision_rejects_unowned_mismatched_and_superseded_results(tmp_path: Pa
     monkeypatch.setenv('GRAPHTRAJ_ROLE', 'team-leader')
     for caller in ('research@x1', 'research@x2'):
         with runtime_caller(runner, caller), pytest.raises(RunnerError):
-            mcp.decide_result(arguments, cwd=tmp_path)
+            tools.decide_result(arguments, cwd=tmp_path)
     with runtime_caller(runner, None):
         for extra in ({'commit': 'a' * 40}, {'reason': ''}, {'evidence_refs': []},
                       {'evidence_refs': ['absent.md']}, {'decision': 'maybe'},
                       {'alias': 'research@x1'}):
             with pytest.raises((ValueError, RunnerError)):
-                mcp.decide_result({**arguments, **extra}, cwd=tmp_path)
+                tools.decide_result({**arguments, **extra}, cwd=tmp_path)
     assert read_worldline(tmp_path / 'state', tmp_path) == before
     with runtime_caller(runner, 'research@x1'):
-        mcp.submit_result({'commit': commit, 'result_refs': ['result.md'], 'completion': 'Revised claim'},
+        tools.submit_result({'commit': commit, 'result_refs': ['result.md'], 'completion': 'Revised claim'},
                           cwd=tmp_path)
     with runtime_caller(runner, None), pytest.raises(ValueError, match='latest submission'):
-        mcp.decide_result(arguments, cwd=tmp_path)
+        tools.decide_result(arguments, cwd=tmp_path)
 
 
 def test_actual_parent_decides_with_its_own_retained_evidence(tmp_path: Path) -> None:
@@ -127,12 +128,12 @@ def test_actual_parent_decides_with_its_own_retained_evidence(tmp_path: Path) ->
     mapping['parent'] = 'research@x3'
     mapping_file.write_text(yaml.safe_dump(mapping))
     with runtime_caller(runner, 'research@x1'):
-        submission = mcp.submit_result({'commit': commit, 'result_refs': ['result.md'],
+        submission = tools.submit_result({'commit': commit, 'result_refs': ['result.md'],
                                         'completion': 'Done'}, cwd=tmp_path).document
     with runtime_caller(runner, 'research@x3'):
-        report = mcp.submit_report({'name': 'researcher-x3.md', 'text': 'Checked required sources.'},
+        report = tools.submit_report({'name': 'researcher-x3.md', 'text': 'Checked required sources.'},
                                    cwd=tmp_path).document['report']
-        decided = mcp.decide_result({
+        decided = tools.decide_result({
             'submission_id': submission['event_id'], 'commit': commit, 'decision': 'accepted',
             'reason': 'The required sources are covered.',
             'evidence_refs': [Path(report).relative_to(tmp_path).as_posix()],
@@ -164,7 +165,7 @@ def test_cli_accepts_code_as_actual_parent_and_mcp_exposes_same_operation(tmp_pa
     mapping = yaml.safe_load(child.read_text())
     child.write_text(yaml.safe_dump({**mapping, 'parent': 'research@x3'}))
     with runtime_caller(runner, 'research@x1'):
-        submission = mcp.submit_result({'commit': commit, 'result_refs': ['result.py'],
+        submission = tools.submit_result({'commit': commit, 'result_refs': ['result.py'],
                                         'evidence_refs': ['result.py'], 'completion': 'Code complete'},
                                        cwd=tmp_path).document
     directory = runner / 'sessions/research@x3'
@@ -184,14 +185,14 @@ def test_cli_accepts_code_as_actual_parent_and_mcp_exposes_same_operation(tmp_pa
     assert accepted['kind'] == 'team-round-accepted'
     assert accepted['alias'] == 'research@x3'
     assert accepted['candidate'] == commit
-    graph = mcp.read_current_graph({}, cwd=tmp_path).document
+    graph = tools.read_current_graph({}, cwd=tmp_path).document
     assert graph['tickets'][0]['status'] == 'awaiting-integration'
 
     output = io.StringIO()
     mcp.serve(io.StringIO(json.dumps({'jsonrpc': '2.0', 'id': 1, 'method': 'tools/list'}) + '\n'), output)
-    tools = json.loads(output.getvalue())['result']['tools']
-    descriptor = next(tool for tool in tools if tool['name'] == 'decide_result')
-    native = next(tool for tool in mcp.native_runner_tools() if tool['name'] == 'graphtraj_decide_result')
+    descriptors = json.loads(output.getvalue())['result']['tools']
+    descriptor = next(tool for tool in descriptors if tool['name'] == 'decide_result')
+    native = next(tool for tool in native_runner_tools() if tool['name'] == 'graphtraj_decide_result')
     assert descriptor['inputSchema'] == native['inputSchema']
 
 
@@ -205,7 +206,7 @@ def test_changed_worktree_and_closed_submission_cannot_be_accepted_again(tmp_pat
     arguments = {'commit': commit, 'result_refs': ['result.md'],
                  'evidence_refs': ['result.md'], 'completion': 'Done'}
     with runtime_caller(runner, 'research@x1'):
-        submission = mcp.submit_result(arguments, cwd=tmp_path).document
+        submission = tools.submit_result(arguments, cwd=tmp_path).document
     decision = {'submission_id': submission['event_id'], 'commit': commit,
                 'decision': 'accepted', 'reason': 'Meets requirements.',
                 'evidence_refs': submission['evidence_refs']}
@@ -214,18 +215,18 @@ def test_changed_worktree_and_closed_submission_cannot_be_accepted_again(tmp_pat
     original = result.read_bytes()
     result.write_text('Uncommitted change\n')
     with runtime_caller(runner, None), pytest.raises(ValueError, match='Worktree'):
-        mcp.decide_result(decision, cwd=tmp_path)
+        tools.decide_result(decision, cwd=tmp_path)
     assert read_worldline(tmp_path / 'state', tmp_path) == before
     result.write_bytes(original)
     with runtime_caller(runner, None):
-        mcp.decide_result(decision, cwd=tmp_path)
+        tools.decide_result(decision, cwd=tmp_path)
         with pytest.raises(ValueError):
-            mcp.decide_result(decision, cwd=tmp_path)
+            tools.decide_result(decision, cwd=tmp_path)
     with runtime_caller(runner, 'research@x1'):
         with pytest.raises(ValueError):
-            mcp.submit_result(arguments, cwd=tmp_path)
+            tools.submit_result(arguments, cwd=tmp_path)
         with pytest.raises(ValueError):
-            mcp.submit_report({'name': 'researcher-x1.md', 'text': 'After closure'}, cwd=tmp_path)
+            tools.submit_report({'name': 'researcher-x1.md', 'text': 'After closure'}, cwd=tmp_path)
 
 
 def test_failed_decision_append_restores_state_reports_and_evidence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -235,11 +236,11 @@ def test_failed_decision_append_restores_state_reports_and_evidence(tmp_path: Pa
 
     runner, team, commit = result_project(tmp_path)
     with runtime_caller(runner, 'research@x1'):
-        mcp.submit_report({'name': 'researcher-x1.md', 'text': 'Author evidence'}, cwd=tmp_path)
-        submission = mcp.submit_result({'commit': commit, 'result_refs': ['result.md'],
+        tools.submit_report({'name': 'researcher-x1.md', 'text': 'Author evidence'}, cwd=tmp_path)
+        submission = tools.submit_result({'commit': commit, 'result_refs': ['result.md'],
                                         'evidence_refs': ['result.md'], 'completion': 'Done'},
                                        cwd=tmp_path).document
-    before = mcp.read_current_graph({}, cwd=tmp_path).document
+    before = tools.read_current_graph({}, cwd=tmp_path).document
     events = read_worldline(tmp_path / 'state', tmp_path)
     original_open = Path.open
 
@@ -252,14 +253,14 @@ def test_failed_decision_append_restores_state_reports_and_evidence(tmp_path: Pa
     with monkeypatch.context() as patch, runtime_caller(runner, None):
         patch.setattr(Path, 'open', fail_append)
         with pytest.raises(OSError, match='injected append failure'):
-            mcp.decide_result({'submission_id': submission['event_id'], 'commit': commit,
+            tools.decide_result({'submission_id': submission['event_id'], 'commit': commit,
                                'decision': 'accepted', 'reason': 'Satisfied.',
                                'evidence_refs': submission['evidence_refs']}, cwd=tmp_path)
-    assert mcp.read_current_graph({}, cwd=tmp_path).document == before
+    assert tools.read_current_graph({}, cwd=tmp_path).document == before
     assert read_worldline(tmp_path / 'state', tmp_path) == events
     assert len(list((team.parent / 'traces/research@x1').iterdir())) == 1
     with runtime_caller(runner, 'research@x1'):
-        mcp.submit_report({'name': 'researcher-x1.md', 'text': 'Still open'}, cwd=tmp_path)
+        tools.submit_report({'name': 'researcher-x1.md', 'text': 'Still open'}, cwd=tmp_path)
 
 
 def test_parent_cannot_retain_an_unassigned_sibling_report(tmp_path: Path) -> None:
@@ -272,14 +273,14 @@ def test_parent_cannot_retain_an_unassigned_sibling_report(tmp_path: Path) -> No
     mapping = yaml.safe_load(child.read_text())
     child.write_text(yaml.safe_dump({**mapping, 'parent': 'research@x3'}))
     with runtime_caller(runner, 'research@x1'):
-        submitted = mcp.submit_result({'commit': commit, 'result_refs': ['result.md'],
+        submitted = tools.submit_result({'commit': commit, 'result_refs': ['result.md'],
                                       'completion': 'Done'}, cwd=tmp_path).document
     with runtime_caller(runner, 'research@x2'):
-        report = mcp.submit_report({'name': 'researcher-x2.md', 'text': 'Private sibling evidence'},
+        report = tools.submit_report({'name': 'researcher-x2.md', 'text': 'Private sibling evidence'},
                                    cwd=tmp_path).document['report']
     before = read_worldline(tmp_path / 'state', tmp_path)
     with runtime_caller(runner, 'research@x3'), pytest.raises(ValueError):
-        mcp.decide_result({'submission_id': submitted['event_id'], 'commit': commit,
+        tools.decide_result({'submission_id': submitted['event_id'], 'commit': commit,
                            'decision': 'accepted', 'reason': 'Done',
                            'evidence_refs': [Path(report).relative_to(tmp_path).as_posix()]}, cwd=tmp_path)
     assert read_worldline(tmp_path / 'state', tmp_path) == before
@@ -296,7 +297,7 @@ def test_delivery_state_cli_cannot_bypass_actual_caller_authority(tmp_path: Path
 
     runner, _, commit = result_project(tmp_path)
     with runtime_caller(runner, 'research@x1'):
-        submitted = mcp.submit_result({'commit': commit, 'result_refs': ['result.md'],
+        submitted = tools.submit_result({'commit': commit, 'result_refs': ['result.md'],
                                       'evidence_refs': ['result.md'], 'completion': 'Done'},
                                      cwd=tmp_path).document
     request = tmp_path / 'decision.yml'

@@ -7,7 +7,7 @@ import sys
 import time
 from pathlib import Path
 
-from graphtraj.interfaces import mcp
+from graphtraj.interfaces import tools
 
 if sys.argv[1:3] == ['exec', '--help']:
     print('--sandbox')
@@ -23,12 +23,12 @@ if entity != role.replace('-', '_'):
     if not Path('result.md').exists():
         assert 'Retained work by ' in prompt
     stem += '-' + entity
-owned = mcp.submit_report({'name': stem + '.md', 'text': 'Retained work by ' + alias}, cwd=root).document
+owned = tools.submit_report({'name': stem + '.md', 'text': 'Retained work by ' + alias}, cwd=root).document
 if (os.environ.get('RECOVERY_CHILD') and role == 'researcher'
         and (os.environ['RECOVERY_CHILD'] != 'replacement' or entity != 'researcher')):
     child = Path('child.json')
     if not child.exists():
-        response = mcp.launch_swarm_tool({'tasks': [{'role': 'analyst'}]}, cwd=root)
+        response = tools.launch_swarm_tool({'tasks': [{'role': 'analyst'}]}, cwd=root)
         child.write_text(json.dumps(response.document['tasks'][0]))
         print(json.dumps({'type': 'item.completed', 'item': {'type': 'agent_message', 'text': 'Child registered'}}))
         raise SystemExit(0)
@@ -37,7 +37,7 @@ if (os.environ.get('RECOVERY_CHILD') and role == 'researcher'
         shard = next((root / '.graphtraj/state/worldline').glob('*.jsonl'))
         cause = json.loads(shard.read_text().splitlines()[0])['event_id']
         try:
-            mcp.send_session_instruction({'alias': json.loads(child.read_text())['alias'],
+            tools.send_session_instruction({'alias': json.loads(child.read_text())['alias'],
                                          'instruction': 'Old child remains with its original parent',
                                          'caused_by_event_ids': [cause]}, cwd=root)
         except RunnerError as error:
@@ -51,7 +51,7 @@ Path('result.md').write_text('# Research\nRecovered by ' + alias + '\n')
 subprocess.run(['git', 'add', 'result.md'], check=True, capture_output=True)
 subprocess.run(['git', 'commit', '--allow-empty', '-m', 'Recovered result'], check=True, capture_output=True)
 commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
-submitted = mcp.submit_result({
+submitted = tools.submit_result({
     'commit': commit, 'result_refs': ['result.md'], 'evidence_refs': [owned['report']],
     'completion': 'Recovered result',
 }, cwd=root).document

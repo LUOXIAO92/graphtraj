@@ -17,7 +17,7 @@ from test_ticket_graph import _change_status, _register, _ticket
 RUNTIME = app_server_peer(r'''
 import json, os, subprocess, sys
 from pathlib import Path
-from graphtraj.interfaces import mcp
+from graphtraj.interfaces import tools
 if sys.argv[1:] == ['exec', '--help']:
     print('--sandbox')
     raise SystemExit(0)
@@ -38,9 +38,9 @@ subprocess.run(['git', 'add', *names], check=True, capture_output=True)
 subprocess.run(['git', 'commit', '--allow-empty', '-m', 'Deliver task result'], check=True, capture_output=True)
 commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
 validated = subprocess.run([sys.executable, 'cli.py' if ticket == '3' else 'render.py'], text=True, capture_output=True)
-report = mcp.submit_report({'name': 'validation.md', 'text': validated.stdout + validated.stderr}, cwd=root).document
-mcp.submit_report({'name': 'engineer.md', 'text': 'Candidate commit: ' + commit}, cwd=root)
-mcp.submit_result({'commit': commit, 'result_refs': names, 'evidence_refs': [report['report']], 'completion': 'Validation evidence retained'}, cwd=root)
+report = tools.submit_report({'name': 'validation.md', 'text': validated.stdout + validated.stderr}, cwd=root).document
+tools.submit_report({'name': 'engineer.md', 'text': 'Candidate commit: ' + commit}, cwd=root)
+tools.submit_result({'commit': commit, 'result_refs': names, 'evidence_refs': [report['report']], 'completion': 'Validation evidence retained'}, cwd=root)
 print(json.dumps({'type': 'item.completed', 'item': {'type': 'agent_message', 'text': 'Submitted'}}))
 ''', "'fake-' + os.environ['GRAPHTRAJ_TICKET_ID']")
 

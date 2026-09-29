@@ -105,7 +105,7 @@ def test_main_empty_status_start_resume_and_invalid_formal_record(
     tmp_path: Path, peer: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Main records do not pollute status; malformed formal records still fail."""
-    from graphtraj.interfaces.mcp import read_alias_status
+    from graphtraj.interfaces.tools import read_alias_status
 
     config = tmp_path / '.graphtraj/config.yml'
     config.parent.mkdir()

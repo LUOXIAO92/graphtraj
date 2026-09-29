@@ -179,13 +179,13 @@ def test_mcp_delivers_the_configured_stop_text_to_the_request_caller(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The request's own Codex caller receives the configured stop text."""
-    from graphtraj.interfaces import mcp
+    from graphtraj.interfaces import mcp, tools
 
     write_config(tmp_path, {"stop_instruction": CUSTOM_TEXT})
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("GRAPHTRAJ_BUDGET_NOTICE_FD", raising=False)
 
-    def handler(arguments: dict) -> mcp.ToolResult:
+    def handler(arguments: dict) -> tools.ToolResult:
         descriptor, owned = caller_notice_fd()
         assert descriptor is not None
         try:
@@ -193,9 +193,9 @@ def test_mcp_delivers_the_configured_stop_text_to_the_request_caller(
         finally:
             if owned:
                 os.close(descriptor)
-        return mcp.ToolResult({"tasks": []})
+        return tools.ToolResult({"tasks": []})
 
-    monkeypatch.setitem(mcp.TOOLS, "probe", mcp.Tool("probe", "probe", {}, handler))
+    monkeypatch.setitem(tools.TOOLS, "probe", tools.Tool("probe", "probe", {}, handler))
     response = mcp._tool_call_response(1, {
         "name": "probe", "arguments": {}, "_meta": {"threadId": "existing-caller"},
     })

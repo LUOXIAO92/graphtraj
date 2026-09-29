@@ -411,18 +411,18 @@ def test_configured_document_conflict_requires_common_result_and_validation(
         if conflict == 'textual' and outcome == 'resolved':
             from graphtraj.execution.runner_models import RunnerError
             from graphtraj.execution.runner_status import runtime_caller
-            from graphtraj.interfaces import mcp
+            from graphtraj.interfaces import tools
 
             original = team['members']['editor']['session_ref']
             with runtime_caller(root / '.graphtraj/runner', original):
-                report = mcp.submit_report({'name': 'sources.md', 'text': 'Original scope checked.'}, cwd=root)
+                report = tools.submit_report({'name': 'sources.md', 'text': 'Original scope checked.'}, cwd=root)
                 assert '/rounds/2/' in report.document['report']
                 with pytest.raises(RunnerError, match='Integration Worktree'):
-                    mcp.submit_result({'commit': candidate, 'result_refs': ['article.md'],
+                    tools.submit_result({'commit': candidate, 'result_refs': ['article.md'],
                                        'completion': 'Original result is not a resolution'}, cwd=root)
                 submitted = output['resolution']['submissions'][-1]
                 with pytest.raises(RunnerError):
-                    mcp.decide_result({'submission_id': submitted['event_id'], 'commit': submitted['candidate'],
+                    tools.decide_result({'submission_id': submitted['event_id'], 'commit': submitted['candidate'],
                                        'decision': 'accepted', 'reason': 'Same role is not the parent',
                                        'evidence_refs': submitted['evidence_refs']}, cwd=root)
 
@@ -435,15 +435,15 @@ def test_configured_document_conflict_requires_common_result_and_validation(
             # A newer rejected submission of the same commit supersedes the old
             # acceptance; version equality alone cannot manufacture acceptance.
             with runtime_caller(root / '.graphtraj/runner', alias):
-                newer = mcp.submit_result({'commit': submission['candidate'], 'result_refs': ['article.md'],
+                newer = tools.submit_result({'commit': submission['candidate'], 'result_refs': ['article.md'],
                                            'evidence_refs': ['article.md'], 'completion': 'Reassessed document'}, cwd=root).document
-            mcp.decide_result({'submission_id': newer['event_id'], 'commit': newer['candidate'],
+            tools.decide_result({'submission_id': newer['event_id'], 'commit': newer['candidate'],
                                'decision': 'rejected', 'reason': 'Reconfirm the document evidence',
                                'evidence_refs': newer['evidence_refs']}, cwd=root)
             pending = run_process(command + ['--', *validator], cwd=root)
             assert pending.returncode == 1 and 'acceptance' in pending.stdout
             with runtime_caller(root / '.graphtraj/runner', alias):
-                corrected = mcp.submit_result({'commit': submission['candidate'], 'result_refs': ['article.md'],
+                corrected = tools.submit_result({'commit': submission['candidate'], 'result_refs': ['article.md'],
                                                'evidence_refs': ['article.md'], 'completion': 'Evidence reconfirmed'}, cwd=root).document
             assert corrected['round'] == 3
             _accept_resolution(installed_commands, root, alias)
@@ -452,10 +452,10 @@ def test_configured_document_conflict_requires_common_result_and_validation(
         assert yaml.safe_load(checked.stdout)['status'] == ('integrated' if outcome == 'resolved' else 'resolving-integration')
         if outcome == 'resolved':
             from graphtraj.execution.runner_models import RunnerError
-            from graphtraj.interfaces import mcp
+            from graphtraj.interfaces import tools
 
             with pytest.raises(RunnerError, match='active conflict assignment'):
-                mcp.send_session_instruction({'alias': alias, 'instruction': 'More work',
+                tools.send_session_instruction({'alias': alias, 'instruction': 'More work',
                                              'caused_by_event_ids': [yaml.safe_load(checked.stdout)['event_id']]}, cwd=root)
 
     graph = yaml.safe_load(run_process([str(installed_commands.product), 'ticket', 'graph'], cwd=root).stdout)

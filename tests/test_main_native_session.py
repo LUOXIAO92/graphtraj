@@ -51,7 +51,7 @@ def test_main_start_and_resume_preserve_native_configuration(
         assert selected['extends'] == 'operator'
         assert selected['filesystem'][str(config.parent)] == 'none'
         assert selected['filesystem'][str(config)] == 'read'
-    assert 'graphtraj_swarm' in {tool['name'] for tool in start['dynamicTools']}
+    assert [tool['name'] for tool in start['dynamicTools']] == ['graphtraj']
     assert 'dynamicTools' not in resume
 
 
@@ -79,7 +79,8 @@ def test_main_summarizes_actual_native_status_callback(
         entry.update(session='private-session', execution_id='private-turn')
     entry.update(activity='idle', last_outcome='completed')
     exchange = {'method': 'item/tool/call', 'params': {
-        'threadId': issuer, 'tool': 'graphtraj_status', 'arguments': {'aliases': ['child@e1']}},
+        'threadId': issuer, 'tool': 'graphtraj', 'arguments': {
+            'action': 'execute', 'feature': 'alias_status', 'arguments': {'aliases': ['child@e1']}}},
         'response': {'contentItems': [{'type': 'inputText', 'text': json.dumps({'aliases': [entry]})}],
                      'success': True}}
     monkeypatch.setattr(main_session, 'runtime_executable', lambda runtime: peer)
@@ -95,7 +96,7 @@ def test_main_summarizes_actual_native_status_callback(
     result = asyncio.run(main_session.run_main(tmp_path, 'configured-request', None, native_request))
     assert result['last_agent_message'] == 'request accepted'
     assert result['native_operations'] == [{
-        'tool': 'graphtraj_status', 'success': True, 'from_main': issuer == 'thread-1',
+        'tool': 'graphtraj', 'success': True, 'from_main': issuer == 'thread-1',
         'aliases': [{'alias': 'child@e1', 'has_session': issuer == 'thread-1',
                      'has_execution_id': issuer == 'thread-1'}]}]
     assert 'private-session' not in json.dumps(result['native_operations'])
@@ -111,7 +112,8 @@ def test_main_empty_status_start_resume_and_invalid_formal_record(
     config.parent.mkdir()
     config.write_text(default_configuration_content(tmp_path, tmp_path))
     exchange = {'method': 'item/tool/call', 'params': {
-        'threadId': 'thread-1', 'tool': 'graphtraj_status', 'arguments': {}},
+        'threadId': 'thread-1', 'tool': 'graphtraj', 'arguments': {
+            'action': 'execute', 'feature': 'alias_status', 'arguments': {}}},
         'response': {'contentItems': [{'type': 'inputText', 'text': json.dumps({'agents': []})}],
                      'success': True}}
     monkeypatch.setattr(main_session, 'runtime_executable', lambda runtime: peer)
@@ -133,7 +135,7 @@ def test_main_empty_status_start_resume_and_invalid_formal_record(
         for result in (first, second):
             assert result['last_agent_message'] == 'request accepted'
             assert result['native_operations'] == [{
-                'tool': 'graphtraj_status', 'success': True, 'from_main': True, 'aliases': [],
+                'tool': 'graphtraj', 'success': True, 'from_main': True, 'aliases': [],
             }]
 
     asyncio.run(exercise())
@@ -149,3 +151,40 @@ def test_main_empty_status_start_resume_and_invalid_formal_record(
     assert invalid.failed
     assert invalid.document['agents'][0]['alias'] == 'broken@e1'
     assert invalid.document['agents'][0]['error']['code'] == 'operation-failed'
+
+
+@pytest.mark.parametrize('method, response', [
+    ('item/commandExecution/requestApproval', {'decision': 'decline'}),
+    ('item/tool/requestUserInput', {'answers': {'choice': {'answers': ['continue']}}}),
+])
+def test_main_keeps_native_requests_outside_gateway(
+    tmp_path: Path,
+    peer: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    method: str,
+    response: dict,
+) -> None:
+    """Approval and user-input callbacks retain their original handler and reply."""
+    config = tmp_path / '.graphtraj/config.yml'
+    config.parent.mkdir()
+    config.write_text(default_configuration_content(tmp_path, tmp_path))
+    params = {'threadId': 'thread-1', 'turnId': 'turn-1'}
+    monkeypatch.setattr(main_session, 'runtime_executable', lambda runtime: peer)
+    monkeypatch.setenv('PEER_REQUEST_EXCHANGE', json.dumps({
+        'method': method, 'params': params, 'response': response,
+    }))
+    monkeypatch.setenv('PEER_NATIVE_ROLLOUT', str(tmp_path / 'native'))
+    received = []
+
+    async def native_request(request: CodexServerRequest) -> dict:
+        """Return the user's native response without a gateway envelope."""
+        received.append(request)
+        return response
+
+    result = asyncio.run(main_session.run_main(tmp_path, 'configured-request', None, native_request))
+    assert result['last_agent_message'] == 'request accepted'
+    assert result['native_operations'] == []
+    assert len(received) == 1
+    assert received[0].request_id == 'native-request-1'
+    assert received[0].method == method
+    assert received[0].params == params

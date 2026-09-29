@@ -100,7 +100,8 @@ sessions = {}
 parent_reads = {}
 active = {}
 requests = {}
-exchange = json.loads(os.environ.get('PEER_REQUEST_EXCHANGE', 'null'))
+exchanges = iter(json.loads(os.environ.get('PEER_REQUEST_EXCHANGES', '[]')))
+exchange = next(exchanges, json.loads(os.environ.get('PEER_REQUEST_EXCHANGE', 'null')))
 held_reply = None
 sequence = 0
 queued = 0
@@ -123,7 +124,14 @@ for line in sys.stdin:
                 complete(thread_id, turn_id, 'request rejected')
             continue
         assert message['result'] == (exchange['response'] if exchange else {'decision': 'accept'})
-        complete(thread_id, turn_id, 'request accepted')
+        following = next(exchanges, None)
+        if following is not None:
+            exchange = following
+            request_id = message['id'] + '-next'
+            requests[request_id] = (thread_id, turn_id)
+            emit({'id': request_id, 'method': exchange['method'], 'params': exchange['params']})
+        else:
+            complete(thread_id, turn_id, 'request accepted')
         continue
     if method == 'initialize':
         if os.environ.get('PEER_INITIALIZE_FAIL'):

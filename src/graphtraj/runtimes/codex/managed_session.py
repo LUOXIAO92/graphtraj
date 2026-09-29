@@ -258,7 +258,10 @@ class CodexManagedExecution:
         """Hold one native callback until an explicit reply or native cancellation."""
         from graphtraj.runtimes.codex.codex_adapter import NATIVE_RUNNER_TOOLS
 
-        if request.method == 'item/tool/call' and request.params.get('tool') in NATIVE_RUNNER_TOOLS:
+        if (
+            request.method == 'item/tool/call'
+            and request.params.get('tool') in {'graphtraj', *NATIVE_RUNNER_TOOLS}
+        ):
             return await self._native_runner_request(request)
         if self.approval is not None and request.method.endswith("/requestApproval"):
             return await self._review_approval(request)
@@ -434,6 +437,7 @@ async def run_native_operation(
     """Route an owned native callback, preserving the Runtime's issuing identity."""
     from graphtraj.execution.runner_models import RunnerError
     from graphtraj.execution.runner_status import runtime_caller
+    from graphtraj.interfaces.gateway import handle_request
     from graphtraj.interfaces.tools import TOOLS, ToolResult
     from graphtraj.runtimes.codex.codex_adapter import NATIVE_RUNNER_TOOLS
     from graphtraj.workspace.runner_project import discover_runner_directory
@@ -441,13 +445,12 @@ async def run_native_operation(
     try:
         thread = request.params.get('threadId')
         arguments = request.params.get('arguments')
-        name = request.params['tool']
-        tool = TOOLS[NATIVE_RUNNER_TOOLS[name]]
+        name = request.params.get('tool')
         if (
             not isinstance(thread, str) or not thread
             or native_session is None or adapter is None
             or not isinstance(arguments, dict)
-            or not set(arguments) <= set(tool.input_schema['properties'])
+            or name not in {'graphtraj', *NATIVE_RUNNER_TOOLS}
         ):
             raise RunnerError('invalid-input', 'Supply only supported tool arguments.')
         current: str | None = thread
@@ -459,13 +462,26 @@ async def run_native_operation(
             current = await adapter.read_thread_parent(current)
             if current is None:
                 raise RunnerError('authority-denied', 'Native caller is outside this Session subtree.')
-        if thread != native_session and name not in {'graphtraj_status', 'graphtraj_ticket_graph'}:
-            raise RunnerError('authority-denied', 'Temporary native helpers have read-only Runner access.')
+        allowed_features = set(NATIVE_RUNNER_TOOLS.values())
+        if name == 'graphtraj':
+            feature = arguments.get('feature')
+            action = arguments.get('action')
+        else:
+            feature, action = NATIVE_RUNNER_TOOLS[name], 'execute'
+            tool = TOOLS[feature]
+            if not set(arguments) <= set(tool.input_schema['properties']):
+                raise RunnerError('invalid-input', 'Supply only supported tool arguments.')
+        if thread != native_session:
+            allowed_features = {'alias_status', 'ticket_graph'}
+            if action == 'execute' and feature not in ('alias_status', 'ticket_graph'):
+                raise RunnerError('authority-denied', 'Temporary native helpers have read-only Runner access.')
         identity = root_alias if thread == native_session else thread
 
         def operate() -> ToolResult:
             """Reuse public validation/control without process-based authorization."""
             with runtime_caller(discover_runner_directory(root), identity):
+                if name == 'graphtraj':
+                    return handle_request(arguments, cwd=root, allowed_features=allowed_features)
                 return tool.handler(arguments, cwd=root)
 
         response = await asyncio.to_thread(operate)

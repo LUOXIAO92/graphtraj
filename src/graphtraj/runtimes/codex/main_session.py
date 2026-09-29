@@ -74,13 +74,22 @@ async def run_main(
 
         async def handle(request: CodexServerRequest) -> dict:
             """Use native issuer identity for Runner calls, forwarding other requests."""
-            if request.method == 'item/tool/call' and request.params.get('tool') in NATIVE_RUNNER_TOOLS:
+            if (
+                request.method == 'item/tool/call'
+                and request.params.get('tool') in {'graphtraj', *NATIVE_RUNNER_TOOLS}
+            ):
                 result = await run_native_operation(adapter, native_session, None, root, request)
                 # Summarize actual callback results without exporting private
                 # helper IDs, conversations or report contents to a caller.
                 summary = {'tool': request.params['tool'], 'success': result['success'],
                            'from_main': request.params.get('threadId') == native_session}
-                if request.params['tool'] == 'graphtraj_status':
+                arguments = request.params.get('arguments')
+                if request.params['tool'] == 'graphtraj_status' or (
+                    request.params['tool'] == 'graphtraj'
+                    and isinstance(arguments, dict)
+                    and arguments.get('action') == 'execute'
+                    and arguments.get('feature') == 'alias_status'
+                ):
                     document = json.loads(result['contentItems'][0]['text'])
                     summary['aliases'] = [
                         {'alias': item.get('alias'), 'has_session': 'session' in item,

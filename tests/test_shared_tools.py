@@ -68,13 +68,16 @@ def test_both_transports_consume_shared_schema_and_handler(
     listed = mcp_request('tools/list', {})['tools']
     native = native_runner_tools()
     assert len(listed) == 25
-    assert len(native) == 11
+    assert [tool['name'] for tool in native] == ['graphtraj']
     assert next(t for t in listed if t['name'] == 'alias_status')['inputSchema'] == schema
-    assert next(t for t in native if t['name'] == 'graphtraj_status')['inputSchema'] == schema
+    described = native_request(tmp_path, 'graphtraj', {'action': 'describe', 'feature': 'alias_status'})
+    assert json.loads(described['contentItems'][0]['text'])['input_schema'] == schema
 
     arguments = {'sample': 'shared'}
     result = mcp_request('tools/call', {'name': 'alias_status', 'arguments': arguments})
-    response = native_request(tmp_path, 'graphtraj_status', arguments)
+    response = native_request(tmp_path, 'graphtraj', {
+        'action': 'execute', 'feature': 'alias_status', 'arguments': arguments,
+    })
     assert result['structuredContent'] == json.loads(response['contentItems'][0]['text'])
     assert result['isError'] is failed
     assert response['success'] is not failed
@@ -101,7 +104,8 @@ def test_main_native_callback_runs_when_mcp_import_is_unavailable(
 ) -> None:
     """A fresh process runs a real native peer callback while MCP imports fail."""
     exchange = {'method': 'item/tool/call', 'params': {
-        'threadId': 'thread-1', 'tool': 'graphtraj_status', 'arguments': {}},
+        'threadId': 'thread-1', 'tool': 'graphtraj', 'arguments': {
+            'action': 'execute', 'feature': 'alias_status', 'arguments': {}}},
         'response': {'contentItems': [{'type': 'inputText', 'text': '{"agents": []}'}],
                      'success': True}}
     environment = {**os.environ, 'PEER_REQUEST_EXCHANGE': json.dumps(exchange),
@@ -128,7 +132,7 @@ async def unexpected(request):
     raise AssertionError(request.method)
 result = asyncio.run(main_session.run_main(Path(sys.argv[2]), 'configured-request', None, unexpected))
 assert result['last_agent_message'] == 'request accepted', result
-assert result['native_operations'] == [{'tool': 'graphtraj_status', 'success': True,
+assert result['native_operations'] == [{'tool': 'graphtraj', 'success': True,
                                        'from_main': True, 'aliases': []}], result
 '''
     completed = subprocess.run(

@@ -1,0 +1,21 @@
+{
+  "name": "graphtraj",
+  "version": "0.1.0",
+  "description": "Task graphs and execution traces for local projects.",
+  "author": {
+    "name": "LUOXIAO92"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "GraphTraj",
+    "shortDescription": "Use GraphTraj to plan task dependencies, coordinate execution and follow retained results and traces in a user-owned project.",
+    "longDescription": "GraphTraj manages a task graph and its execution trajectories: accepted work, artifact dependencies, configured Agents, versioned results and retained evidence.",
+    "developerName": "LUOXIAO92",
+    "category": "Productivity",
+    "capabilities": [],
+    "defaultPrompt": [
+      "GraphTraj connects tasks through the results they need and retains the execution history.",
+      "Read only the method needed for the current task."
+    ]
+  }
+}

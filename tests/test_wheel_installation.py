@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import subprocess
 import zipfile
 from pathlib import Path
 
@@ -16,6 +17,7 @@ import pytest
 import yaml
 
 from conftest import InstalledCommands, run_process
+from graphtraj.configuration.project_configuration import default_configuration_content
 from test_existing_repository_setup import run_setup
 from test_mcp_host_tools import TOOL_NAMES, _started_mcp
 from test_ticket_graph import _ticket, _write
@@ -26,6 +28,29 @@ UNBUNDLED_RESOURCE_DIRECTORIES = (
     "graphtraj/resources/codex/",
     "graphtraj/resources/skills/",
 )
+
+GUIDE_DATA_MARKER = ".data/data/share/graphtraj/"
+
+DELIVERED_METHOD_GUIDES = {
+    "manuals/concept-clarification/guide.md",
+    "manuals/research/guide.md",
+    "manuals/setup-project/guide.md",
+    "manuals/task-breakdown/guide.md",
+    "manuals/task-delivery/guide.md",
+    "manuals/task-delivery/references/command-inputs.md",
+    "manuals/task-delivery/references/recovery.md",
+}
+
+
+def wheel_guide_assets(built_wheel: Path) -> dict:
+    """Return each delivered method guide as text, keyed by its manual reference."""
+
+    with zipfile.ZipFile(built_wheel) as archive:
+        return {
+            name.split(GUIDE_DATA_MARKER, 1)[1]: archive.read(name).decode("utf-8")
+            for name in archive.namelist()
+            if GUIDE_DATA_MARKER in name
+        }
 
 
 def installed_provenance(installed_commands: InstalledCommands) -> dict:
@@ -220,3 +245,72 @@ def test_upgrading_the_installation_preserves_existing_project_records(
     assert user_config.read_bytes() == selections["user_config"]
     doctor = run_process([str(upgraded.product), "doctor"], cwd=repository)
     assert doctor.returncode == 0, doctor.stdout + doctor.stderr
+
+
+def test_built_wheel_carries_method_guides_outside_skill_discovery(
+    built_wheel: Path,
+) -> None:
+    """Guides ship as prefix data and never as package or Skill files."""
+
+    guides = wheel_guide_assets(built_wheel)
+    assert set(guides) == DELIVERED_METHOD_GUIDES
+    root = Path(__file__).resolve().parents[1]
+    for name, text in guides.items():
+        assert text == (root / name).read_text(encoding="utf-8"), name
+
+    with zipfile.ZipFile(built_wheel) as archive:
+        names = archive.namelist()
+    assert not [name for name in names if name.startswith("graphtraj/manuals/")]
+    assert not [name for name in names if name.startswith("graphtraj/resources/")]
+
+
+def test_installed_tool_reads_the_delivered_guide_from_another_directory(
+    installed_commands: InstalledCommands,
+    tmp_path: Path,
+) -> None:
+    """An installed tool describes the real guide and executes with no local manuals."""
+
+    project = tmp_path / "project"
+    configuration = project / ".graphtraj" / "config.yml"
+    configuration.parent.mkdir(parents=True)
+    configuration.write_text(
+        default_configuration_content(project, project), encoding="utf-8"
+    )
+    # The same reference with different text, beside the project. The installed
+    # tool must read its delivered file, not a process-directory guess.
+    decoy = project / "manuals" / "task-breakdown" / "guide.md"
+    decoy.parent.mkdir(parents=True)
+    decoy.write_text("Decoy guide beside the project.", encoding="utf-8")
+
+    requests = "".join(
+        json.dumps(request) + "\n"
+        for request in [
+            {"action": "discover", "query": "task-breakdown"},
+            {"action": "describe", "feature": "task-breakdown"},
+            {"action": "describe", "feature": "ticket_graph"},
+            {"action": "execute", "feature": "ticket_graph", "arguments": {}},
+        ]
+    )
+    completed = subprocess.run(
+        [str(installed_commands.product.with_name("graphtraj-tool"))],
+        cwd=project,
+        input=requests,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    replies = [json.loads(line) for line in completed.stdout.splitlines()]
+
+    assert [entry["feature"] for entry in replies[0]["result"]["features"]] == [
+        "task-breakdown"
+    ]
+    described = replies[1]["result"]
+    assert described["call"] is None
+    assert described["manual"] == (
+        Path(__file__).resolve().parents[1] / "manuals/task-breakdown/guide.md"
+    ).read_text(encoding="utf-8")
+    assert described["manual_ref"] == "manuals/task-breakdown/guide.md"
+    assert replies[2]["result"]["manual"] == described["manual"]
+    assert replies[2]["result"]["manual_ref"] == "manuals/task-breakdown/guide.md"
+    assert replies[3]["result"] == {"tickets": []}

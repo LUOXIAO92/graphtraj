@@ -438,7 +438,7 @@ async def run_native_operation(
     from graphtraj.execution.runner_models import RunnerError
     from graphtraj.execution.runner_status import runtime_caller
     from graphtraj.interfaces.gateway import handle_request
-    from graphtraj.interfaces.tools import TOOLS, ToolResult
+    from graphtraj.interfaces.tools import METHOD_FEATURE_NAMES, TOOLS, ToolResult
     from graphtraj.runtimes.codex.codex_adapter import NATIVE_RUNNER_TOOLS
     from graphtraj.workspace.runner_project import discover_runner_directory
 
@@ -462,7 +462,9 @@ async def run_native_operation(
             current = await adapter.read_thread_parent(current)
             if current is None:
                 raise RunnerError('authority-denied', 'Native caller is outside this Session subtree.')
-        allowed_features = set(NATIVE_RUNNER_TOOLS.values())
+        # Method-only features have no handler, so disclosing them adds
+        # readable guidance without adding executable capability.
+        allowed_features = set(NATIVE_RUNNER_TOOLS.values()) | set(METHOD_FEATURE_NAMES)
         if name == 'graphtraj':
             feature = arguments.get('feature')
             action = arguments.get('action')
@@ -472,7 +474,7 @@ async def run_native_operation(
             if not set(arguments) <= set(tool.input_schema['properties']):
                 raise RunnerError('invalid-input', 'Supply only supported tool arguments.')
         if thread != native_session:
-            allowed_features = {'alias_status', 'ticket_graph'}
+            allowed_features = {'alias_status', 'ticket_graph', *METHOD_FEATURE_NAMES}
             if action == 'execute' and feature not in ('alias_status', 'ticket_graph'):
                 raise RunnerError('authority-denied', 'Temporary native helpers have read-only Runner access.')
         identity = root_alias if thread == native_session else thread

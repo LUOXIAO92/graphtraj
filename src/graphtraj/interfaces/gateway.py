@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sysconfig
 from inspect import signature
 from pathlib import Path
 from typing import Any, Collection, Mapping
@@ -20,6 +21,28 @@ INPUT_SCHEMA: dict[str, Any] = {
     "required": ["action"],
     "additionalProperties": False,
 }
+
+
+def delivered_manuals_root() -> Path:
+    """Return the installed directory that carries the delivered method guides.
+
+    The distribution installs ``manuals/**/*.md`` under ``share/graphtraj`` in
+    the installation prefix, outside Skill discovery and outside the importable
+    package. A relative ``manual_ref`` resolves here, so an installed tool finds
+    the guides from any process working directory.
+    """
+    return Path(sysconfig.get_path("data")) / "share" / "graphtraj"
+
+
+def _manual_path(reference: str) -> Path:
+    """Resolve one manual reference to an absolute file path.
+
+    An absolute reference is used as given. A relative reference names a
+    delivered file below :func:`delivered_manuals_root`; it is never guessed
+    from the process working directory.
+    """
+    path = Path(reference)
+    return path if path.is_absolute() else delivered_manuals_root() / path
 
 
 def _validate(value: Any, schema: Mapping[str, Any], path: str) -> None:
@@ -93,10 +116,12 @@ def handle_request(
     business handlers retain authorization. A host can restrict its exposed
     features with ``allowed_features`` without creating another registry.
 
-    Manual references are local UTF-8 paths, absolute or relative to ``cwd``.
-    Only describe reads them. Execution needs no prior help request or material.
-    Handlers accepting ``cwd`` receive it; older ambient-directory handlers keep
-    their existing calling convention. Business exceptions remain host-owned.
+    Manual references are local UTF-8 paths. An absolute reference is read as
+    given; a relative one resolves to the distribution's delivered data
+    location, never to ``cwd``. Only describe reads them. Execution needs no
+    prior help request or material. Handlers accepting ``cwd`` receive it; older
+    ambient-directory handlers keep their existing calling convention. Business
+    exceptions remain host-owned.
     """
     try:
         _validate(request, INPUT_SCHEMA, "request")
@@ -146,9 +171,7 @@ def handle_request(
             document["error"] = f"No manual reference for feature: {feature}"
         else:
             try:
-                document["manual"] = ((cwd or Path.cwd()) / tool.manual_ref).read_text(
-                    encoding="utf-8"
-                )
+                document["manual"] = _manual_path(tool.manual_ref).read_text(encoding="utf-8")
             except (OSError, UnicodeError) as error:
                 document["error"] = f"Cannot read manual {tool.manual_ref}: {error}"
         return ToolResult(document, failed="error" in document)

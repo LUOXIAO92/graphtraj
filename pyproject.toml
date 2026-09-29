@@ -30,5 +30,19 @@ graphtraj = [
     "runtimes/codex/policy/*",
 ]
 
+# Method guides are delivered data, not importable package resources and not
+# Skill bodies. They install below the prefix so a wheel installation can read
+# them by reference from any working directory.
+[tool.setuptools.data-files]
+"share/graphtraj/manuals/concept-clarification" = ["manuals/concept-clarification/guide.md"]
+"share/graphtraj/manuals/research"              = ["manuals/research/guide.md"]
+"share/graphtraj/manuals/setup-project"         = ["manuals/setup-project/guide.md"]
+"share/graphtraj/manuals/task-breakdown"        = ["manuals/task-breakdown/guide.md"]
+"share/graphtraj/manuals/task-delivery"         = ["manuals/task-delivery/guide.md"]
+"share/graphtraj/manuals/task-delivery/references" = [
+    "manuals/task-delivery/references/command-inputs.md",
+    "manuals/task-delivery/references/recovery.md",
+]
+
 [tool.pytest.ini_options]
 pythonpath = ["src"]

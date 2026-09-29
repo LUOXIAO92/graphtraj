@@ -34,6 +34,9 @@ def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     (tmp_path / "ticket-graph.md").write_text(
         "Fixture manual for ticket_graph.", encoding="utf-8"
     )
+    # A relative reference resolves to the distribution's delivered data
+    # location, so point that location at the fixture material.
+    monkeypatch.setattr(gateway, "delivered_manuals_root", lambda: tmp_path)
     monkeypatch.setitem(tools.TOOLS, "ticket_graph", replace(
         tools.TOOLS["ticket_graph"], manual_ref="ticket-graph.md",
     ))
@@ -171,7 +174,10 @@ sys.meta_path.insert(0, NoMcp())
 sys.path.insert(0, source)
 from graphtraj.interfaces import local_tool, tools
 assert Path(tools.__file__).is_relative_to(Path(source)), tools.__file__
-tools.TOOLS["ticket_graph"] = replace(tools.TOOLS["ticket_graph"], manual_ref="ticket-graph.md")
+tools.TOOLS["ticket_graph"] = replace(
+    tools.TOOLS["ticket_graph"],
+    manual_ref=str(Path(sys.argv[2]) / "ticket-graph.md"),
+)
 sys.argv = ["graphtraj-tool"]
 local_tool.main()
 sys.stderr.write("mcp_imported={0}\\n".format("graphtraj.interfaces.mcp" in sys.modules))
@@ -184,7 +190,7 @@ sys.stderr.write("mcp_imported={0}\\n".format("graphtraj.interfaces.mcp" in sys.
         json.dumps({"action": "execute", "feature": "ticket_register", "arguments": ISSUE}),
     ]
     completed = subprocess.run(
-        [sys.executable, "-c", script, str(source)],
+        [sys.executable, "-c", script, str(source), str(project)],
         input="\n".join(lines) + "\n",
         cwd=project, capture_output=True, text=True, timeout=30,
     )

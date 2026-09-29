@@ -5,9 +5,13 @@ from pathlib import Path
 from typing import Any, Mapping
 
 import pytest
+import yaml
 
 from graphtraj.configuration.project_configuration import default_configuration_content
 from graphtraj.interfaces import gateway, tools
+
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 
 
 @pytest.fixture
@@ -21,6 +25,9 @@ def feature(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> list:
         return tools.ToolResult({"received": dict(arguments)})
 
     (tmp_path / "manual.txt").write_text("Selected fixture manual", encoding="utf-8")
+    # A relative reference resolves to the delivered data location, so point
+    # that location at the fixture material instead of a cwd guess.
+    monkeypatch.setattr(gateway, "delivered_manuals_root", lambda: tmp_path)
     monkeypatch.setitem(tools.TOOLS, "alias_status", replace(
         tools.TOOLS["alias_status"], handler=handler, manual_ref="manual.txt",
         examples=({"aliases": ["child"]},),
@@ -143,6 +150,67 @@ def test_missing_manual_does_not_gate_direct_core_execution(tmp_path: Path, monk
     assert gateway.handle_request({"action": "discover"}, cwd=tmp_path).document["features"]
     after = {path.relative_to(tmp_path): path.read_bytes() for path in tmp_path.rglob("*") if path.is_file()}
     assert before == after
+
+
+def test_delivered_guide_resolution_is_independent_of_the_process_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A relative reference resolves to delivered data; absence is reported and never gates execution."""
+    configuration = tmp_path / ".graphtraj/config.yml"
+    configuration.parent.mkdir()
+    configuration.write_text(default_configuration_content(tmp_path, tmp_path))
+    monkeypatch.setattr(
+        gateway, "delivered_manuals_root", lambda: tmp_path / "delivered-material",
+    )
+
+    described = gateway.handle_request(
+        {"action": "describe", "feature": "task-breakdown"}, cwd=tmp_path,
+    )
+    assert described.failed
+    assert described.document["manual"] is None
+    assert described.document["call"] is None
+    assert "Cannot read manual manuals/task-breakdown/guide.md" in described.document["error"]
+
+    refused = gateway.handle_request(
+        {"action": "execute", "feature": "task-breakdown", "arguments": {}},
+    )
+    assert refused.failed
+    assert refused.document == {"error": "Feature is not executable: task-breakdown"}
+
+    executed = gateway.handle_request(
+        {"action": "execute", "feature": "ticket_graph", "arguments": {}},
+        cwd=tmp_path,
+    )
+    assert executed.document == {"tickets": []}
+
+
+def test_method_only_rows_use_guide_names_and_frontmatter_descriptions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Each method-only row is the delivered guide: same name, description and text."""
+    monkeypatch.setattr(gateway, "delivered_manuals_root", lambda: REPOSITORY_ROOT)
+
+    assert set(tools.METHOD_FEATURE_NAMES) == {
+        "setup-project", "task-breakdown", "task-delivery", "research",
+        "concept-clarification",
+    }
+    for name in tools.METHOD_FEATURE_NAMES:
+        guide = REPOSITORY_ROOT / "manuals" / name / "guide.md"
+        frontmatter = yaml.safe_load(guide.read_text(encoding="utf-8").split("---", 2)[1])
+        row = tools.TOOLS[name]
+
+        assert row.handler is None
+        assert row.manual_ref == f"manuals/{name}/guide.md"
+        assert row.description == frontmatter["description"]
+        assert {entry["feature"] for entry in gateway.handle_request(
+            {"action": "discover", "query": name}).document["features"]} == {name}
+
+        described = gateway.handle_request({"action": "describe", "feature": name})
+        assert not described.failed
+        assert described.document["manual"] == guide.read_text(encoding="utf-8")
+        assert described.document["call"] is None
+        assert gateway.handle_request(
+            {"action": "execute", "feature": name, "arguments": {}}).failed
 
 
 def test_unknown_method_only_and_host_restriction(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, feature: list) -> None:

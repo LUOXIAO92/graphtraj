@@ -434,11 +434,23 @@ def _monitor_execution_budget(
     retry_at = 0.0
 
     def deliver() -> None:
-        """Keep failed transport pending without failing or delaying execution."""
-        try:
-            monitor.deliver_parent_notices(session_directory)
-        except (RunnerError, OSError, ValueError, yaml.YAMLError):
-            pass
+        """Retry transient native failures within the existing cleanup window.
+
+        This thread is independent of termination. A stop's last notice gets
+        the same retry opportunity even after the monitor stops sampling work.
+        """
+        deadline = time.monotonic() + OPERATION_TIMEOUT_SECONDS
+        while True:
+            try:
+                monitor.deliver_parent_notices(session_directory)
+            except (RunnerError, OSError, ValueError, yaml.YAMLError):
+                pass
+            if mapping.get("parent") is None or not monitor.pending_parent_notices():
+                return
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return
+            time.sleep(min(1, remaining))
 
     while not stop.is_set():
         stopped = monitor.check(role, execution_budget_stage(role))

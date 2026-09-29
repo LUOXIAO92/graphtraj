@@ -1125,9 +1125,9 @@ def test_harness_approvals_reviewer_reaches_create_and_resume(
 
 
 @pytest.mark.parametrize('role', ['team-leader', 'engineer', 'researcher'])
-@pytest.mark.parametrize('legacy', [False, True])
+@pytest.mark.parametrize('toolset', ['gateway', 'native11', 'none'])
 def test_parent_projection_keeps_control_files_private(
-    tmp_path: Path, peer: Path, role: str, legacy: bool,
+    tmp_path: Path, peer: Path, role: str, toolset: str,
 ) -> None:
     """Callback control survives resume without writable child control records."""
     root = tmp_path / 'worktree'
@@ -1170,8 +1170,12 @@ def test_parent_projection_keeps_control_files_private(
         if argument.startswith('permissions='):
             request['arguments'][index] = 'permissions=' + _toml_value(permissions)
     request['session_parameters']['config']['permissions'] = permissions
-    if legacy:
-        request['session_parameters']['dynamicTools'] = []
+    if toolset != 'gateway':
+        from graphtraj.runtimes.codex.codex_adapter import NATIVE_RUNNER_TOOLS
+
+        request['session_parameters']['dynamicTools'] = (
+            [{'name': name} for name in NATIVE_RUNNER_TOOLS] if toolset == 'native11' else []
+        )
     resumed = refresh_codex_report_paths(
         request,
         worktree=root, evidence=root / 'evidence',
@@ -1179,7 +1183,11 @@ def test_parent_projection_keeps_control_files_private(
         role=role, session_directory=sessions / leader_alias,
     )
     filesystem = _native_filesystem(resumed)
-    assert (filesystem.get(str(sessions / child_alias)) == 'write') is legacy
+    assert (filesystem.get(str(sessions / child_alias)) == 'write') is (toolset == 'none')
+    assert filesystem[str(root / 'evidence/teams/1/rounds/1/leader.md')] == (
+        'write' if toolset == 'none' else 'read'
+    )
+    assert resumed['session_parameters']['dynamicTools'] == request['session_parameters']['dynamicTools']
     assert filesystem[':workspace_roots']['README.md'] == 'read'
     assert filesystem[str(root / '.graphtraj')] == 'none'
     assert filesystem.get(str(worldline_lock)) != 'write'

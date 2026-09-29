@@ -14,6 +14,7 @@ from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 from test_codex_app_server import context, peer
 
 
+@pytest.mark.parametrize('gateway', [False, True])
 @pytest.mark.parametrize('issuer, forged, operation', [
     ('thread-1', False, 'status'), ('helper', False, 'status'),
     ('helper', True, 'status'), ('outsider', False, 'status'),
@@ -26,6 +27,7 @@ def test_native_status_uses_callback_identity(
     issuer: str,
     forged: bool,
     operation: str,
+    gateway: bool,
 ) -> None:
     """Native identity governs detail and control through the same public boundary."""
     from graphtraj.execution import runner_control
@@ -66,7 +68,11 @@ def test_native_status_uses_callback_identity(
             document = {'error': {'code': 'authority-denied',
                                  'message': 'Temporary native helpers have read-only Runner access.'}}
     if forged:
-        document = {'error': {'code': 'invalid-input', 'message': 'Supply only supported tool arguments.'}}
+        document = (
+            {'feature': 'alias_status', 'error': 'arguments.threadId: unexpected parameter'}
+            if gateway else
+            {'error': {'code': 'invalid-input', 'message': 'Supply only supported tool arguments.'}}
+        )
     elif issuer == 'outsider':
         document = {'error': {'code': 'authority-denied', 'message': 'Native caller is outside this Session subtree.'}}
     reply = {'contentItems': [{'type': 'inputText', 'text': json.dumps(document)}],
@@ -80,7 +86,10 @@ def test_native_status_uses_callback_identity(
     exchange = {
         'method': 'item/tool/call',
         'params': {'threadId': issuer, 'turnId': 'turn-1', 'callId': 'call',
-                   'tool': 'graphtraj_' + operation, 'arguments': arguments},
+                   'tool': 'graphtraj' if gateway else 'graphtraj_' + operation,
+                   'arguments': {'action': 'execute',
+                                 'feature': 'alias_status' if operation == 'status' else 'send_instruction',
+                                 'arguments': arguments} if gateway else arguments},
         'response': reply,
     }
 
@@ -117,7 +126,10 @@ def test_native_status_uses_callback_identity(
                 assert document['send_status'] == 'sent'
                 assert delivered == ['probe@l1']
         elif forged or issuer == 'outsider':
-            assert document['error']['code'] == ('invalid-input' if forged else 'authority-denied')
+            if gateway and forged:
+                assert document['error'] == 'arguments.threadId: unexpected parameter'
+            else:
+                assert document['error']['code'] == ('invalid-input' if forged else 'authority-denied')
         else:
             assert ('session' in document['aliases'][0]) == (issuer == 'thread-1')
 

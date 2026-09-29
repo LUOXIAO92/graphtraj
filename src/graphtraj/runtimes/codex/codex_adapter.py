@@ -67,8 +67,8 @@ _CODEX_ROLE_PROJECTION: Mapping[str, Any] = {
 }
 
 
-# The Runtime callback reuses these public handlers and argument schemas.
-# Ticket state mutation and arbitrary file operations are not Runtime tools.
+# Captured tool names remain callable by existing Sessions. New Sessions expose
+# these same operations through the gateway, without adding mutation privileges.
 NATIVE_RUNNER_TOOLS = {
     'graphtraj_status': 'alias_status',
     'graphtraj_swarm': 'swarm',
@@ -85,14 +85,14 @@ NATIVE_RUNNER_TOOLS = {
 
 
 def native_runner_tools() -> list[dict[str, Any]]:
-    """Describe existing Runner operations for the native callback transport."""
-    from graphtraj.interfaces.tools import TOOLS
+    """Project the shared gateway schema onto the native callback transport."""
+    from graphtraj.interfaces.gateway import INPUT_SCHEMA
 
-    return [
-        {'type': 'function', 'name': name, 'description': TOOLS[key].description,
-         'inputSchema': TOOLS[key].input_schema}
-        for name, key in NATIVE_RUNNER_TOOLS.items()
-    ]
+    return [{
+        'type': 'function', 'name': 'graphtraj',
+        'description': 'Discover, describe or execute one registered feature.',
+        'inputSchema': INPUT_SCHEMA,
+    }]
 
 
 class CodexAdapterError(RuntimeAdapterError):
@@ -1258,10 +1258,12 @@ def refresh_codex_report_paths(
         if isinstance(tool, dict)
     }
     for path in native_report_paths:
-        filesystem[str(path)] = "read" if 'graphtraj_submit_report' in native_tools else "write"
+        filesystem[str(path)] = (
+            "read" if native_tools & {'graphtraj', 'graphtraj_submit_report'} else "write"
+        )
     if (
         session_directory is not None
-        and 'graphtraj_swarm' not in native_tools
+        and not native_tools & {'graphtraj', 'graphtraj_swarm'}
     ):
         # Continuing one direct child writes its Session directory, which
         # exists only after this Session started. Every other Session path is

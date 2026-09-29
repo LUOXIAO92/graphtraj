@@ -684,3 +684,36 @@ def test_setup_preserves_user_document_ignore_rules(
     assert run_process(["git", "check-ignore", "-q", "CONTEXT.md"], cwd=repository).returncode == 0
     assert run_process(["git", "check-ignore", "-q", "docs/private/secret.md"], cwd=repository).returncode == 0
     assert run_process(["git", "check-ignore", "-q", "docs/public.md"], cwd=repository).returncode == 1
+
+
+@pytest.mark.parametrize("runtime", [None, "test-runtime", "codex"])
+def test_setup_runtime_layout_selection(
+    temporary_git_repository: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    runtime: str | None,
+) -> None:
+    """Generic setup, doctor and graph work without a native Runtime binary."""
+    import yaml
+    from click.testing import CliRunner
+    from graphtraj.configuration.project_diagnosis import diagnose_project
+    from graphtraj.interfaces.cli.graphtraj import main
+    from graphtraj.workspace.project_initialization import plan_project_setup
+
+    root = temporary_git_repository.parent
+    monkeypatch.setenv("PATH", "/usr/bin:/bin")
+    roles = root / ".graphtraj/roles.yml"
+    roles.parent.mkdir()
+    roles.write_text(yaml.safe_dump({"roles": {} if runtime is None else {
+        "author": {"runtime": runtime, "model": "operator-model"},
+    }}))
+    before = roles.read_bytes()
+    plan_project_setup(root, temporary_git_repository).apply()
+    plan_project_setup(root).apply()
+    assert diagnose_project(root).succeeded
+    monkeypatch.chdir(root)
+    runner = CliRunner()
+    for arguments in (["--help"], ["ticket", "graph"]):
+        result = runner.invoke(main, arguments)
+        assert result.exit_code == 0, result.output
+    assert (root / ".codex").exists() == (runtime == "codex")
+    assert roles.read_bytes() == before

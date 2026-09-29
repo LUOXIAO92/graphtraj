@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable, Iterable, Optional
 
 
 class CodexProjectError(Exception):
@@ -16,6 +16,21 @@ class CodexProjectFiles:
     @classmethod
     def load(cls) -> "CodexProjectFiles":
         return cls()
+
+    @staticmethod
+    def runtime_store(harness_root: Path) -> Path:
+        """Keep Codex resources at their existing project location."""
+        return harness_root / ".codex"
+
+    @classmethod
+    def for_project(
+        cls, harness_root: Path, runtimes: Iterable[str],
+    ) -> "CodexProjectFiles | None":
+        """Prepare Codex support only for selected or existing Codex projects."""
+        store = cls.runtime_store(harness_root)
+        if "codex" in runtimes or store.exists() or store.is_symlink():
+            return cls.load()
+        return None
 
     @staticmethod
     def obsolete_guard(runtime_store: Path) -> Path:

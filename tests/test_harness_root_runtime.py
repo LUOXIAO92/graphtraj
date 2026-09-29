@@ -467,7 +467,7 @@ def test_runtime_preflight_uses_fixed_policy_and_selected_model(
     plan.apply()
     runtime_store = harness_root / ".codex"
     role_path = runtime_store / "agents" / "engineer.toml"
-    role_path.parent.mkdir()
+    role_path.parent.mkdir(parents=True)
     role_path.write_text(
         "name = 'engineer'\nmodel = 'legacy-projection-model'\n",
         encoding="utf-8",

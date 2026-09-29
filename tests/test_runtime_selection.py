@@ -101,6 +101,9 @@ def test_first_task_preparation_uses_selected_context(
             assert kwargs["role"].settings.model == "selected-model"
             assert kwargs["report_files"][0].name == "evidence.md"
             assert kwargs["worktree"].is_dir()
+            store = kwargs["harness_root"] / "test-runtime-data"
+            store.mkdir()
+            (store / "context.txt").write_text("prepared")
             return TestContext()
 
     def select(name: str) -> runtime_adapter.RuntimePreparationAdapter:
@@ -153,6 +156,8 @@ def test_first_task_preparation_uses_selected_context(
             ".state/teams/1/rounds/1/evidence.md"
         ]
         if runtime == "test-runtime":
+            assert (root / "test-runtime-data/context.txt").read_text() == "prepared"
+            assert not (root / ".codex").exists()
             assert launch["test_request"] == {"prepared": True}
             assert launch["context_evidence"] == {"test_evidence": "selected"}
             assert handoff["environment"]["TEST_RUNTIME_SELECTED"] == "yes"

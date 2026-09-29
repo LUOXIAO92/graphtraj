@@ -158,11 +158,6 @@ class Project:
     roles: ProjectRoles
     max_concurrency: int = 18
 
-    @property
-    def runtime_store(self) -> Path:
-        """Return the Harness-owned Runtime Store for this project."""
-        return self.harness_root / ".codex"
-
 
 @dataclass(frozen=True)
 class LaunchResponse:

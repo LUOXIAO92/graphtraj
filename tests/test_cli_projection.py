@@ -66,16 +66,24 @@ def test_top_level_help_is_an_overview_and_directs_to_runner(
         """Root discovery must not read material or open recovery."""
         pytest.fail("Overview opened a resource")
 
-    monkeypatch.setattr(Path, "read_text", forbidden)
     monkeypatch.setattr(agent_runner, "_budget_notices", forbidden)
-    for command in (graphtraj.main, agent_runner.main):
-        result = CliRunner().invoke(command, ["--help"])
-        assert result.exit_code == 0, result.output
-        assert "agent-runner" in result.output
-        assert "send" in result.output
-        assert "input_schema" not in result.output
+    with monkeypatch.context() as root_help:
+        root_help.setattr(Path, "read_text", forbidden)
+        for command in (graphtraj.main, agent_runner.main):
+            result = CliRunner().invoke(command, ["--help"])
+            assert result.exit_code == 0, result.output
+            assert "agent-runner" in result.output
+            assert "send" in result.output
+            assert "input_schema" not in result.output
+
+    manual = tmp_path / "manual.txt"
+    manual.write_text("Selected Main material")
+    monkeypatch.setitem(tools.TOOLS, "main", replace(
+        tools.TOOLS["main"], manual_ref=str(manual),
+    ))
     result = CliRunner().invoke(agent_runner.main, ["main", "--help"])
-    assert "Codex only" in result.output
+    assert result.exit_code == 0, result.output
+    assert manual.read_text() in result.output
 
 
 def test_schema_change_updates_help_describe_and_scalar_input(

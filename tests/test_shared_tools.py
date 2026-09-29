@@ -13,7 +13,7 @@ from typing import Any, Mapping
 import pytest
 
 from graphtraj.configuration.project_configuration import default_configuration_content
-from graphtraj.interfaces import mcp, tools
+from graphtraj.interfaces import gateway, mcp, tools
 from graphtraj.runtimes.codex.app_server import CodexAppServer, CodexServerRequest
 from graphtraj.runtimes.codex.codex_adapter import native_runner_tools
 from graphtraj.runtimes.codex.managed_session import run_native_operation
@@ -67,14 +67,25 @@ def test_both_transports_consume_shared_schema_and_handler(
     monkeypatch.chdir(tmp_path)
     listed = mcp_request('tools/list', {})['tools']
     native = native_runner_tools()
-    assert len(listed) == 25
+    assert [tool['name'] for tool in listed] == ['graphtraj']
     assert [tool['name'] for tool in native] == ['graphtraj']
-    assert next(t for t in listed if t['name'] == 'alias_status')['inputSchema'] == schema
-    described = native_request(tmp_path, 'graphtraj', {'action': 'describe', 'feature': 'alias_status'})
-    assert json.loads(described['contentItems'][0]['text'])['input_schema'] == schema
+    assert listed[0]['inputSchema'] == native[0]['inputSchema'] == gateway.INPUT_SCHEMA
+    described = mcp_request('tools/call', {
+        'name': 'graphtraj',
+        'arguments': {'action': 'describe', 'feature': 'alias_status'},
+    })['structuredContent']
+    native_description = native_request(tmp_path, 'graphtraj', {
+        'action': 'describe', 'feature': 'alias_status',
+    })
+    assert described['input_schema'] == schema
+    assert json.loads(native_description['contentItems'][0]['text'])['input_schema'] == schema
 
     arguments = {'sample': 'shared'}
-    result = mcp_request('tools/call', {'name': 'alias_status', 'arguments': arguments})
+    result = mcp_request('tools/call', {
+        'name': 'graphtraj',
+        'arguments': {'action': 'execute', 'feature': 'alias_status',
+                      'arguments': arguments},
+    })
     response = native_request(tmp_path, 'graphtraj', {
         'action': 'execute', 'feature': 'alias_status', 'arguments': arguments,
     })
@@ -87,16 +98,24 @@ def test_both_transports_consume_shared_schema_and_handler(
 def test_both_transports_preserve_handler_input_rejection(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The existing argument error survives each transport's error formatting."""
+    """Both transports preserve the shared gateway's argument rejection."""
     monkeypatch.chdir(tmp_path)
     arguments = {'alias': 'child', 'instruction': 42}
-    result = mcp_request('tools/call', {'name': 'send_instruction', 'arguments': arguments})
-    response = native_request(tmp_path, 'graphtraj_send', arguments)
+    result = mcp_request('tools/call', {
+        'name': 'graphtraj',
+        'arguments': {'action': 'execute', 'feature': 'send_instruction',
+                      'arguments': arguments},
+    })
+    response = native_request(tmp_path, 'graphtraj', {
+        'action': 'execute', 'feature': 'send_instruction', 'arguments': arguments,
+    })
     assert result['isError'] is True
     assert response['success'] is False
-    error = json.loads(response['contentItems'][0]['text'])['error']
-    assert error == {'code': 'invalid-input', 'message': 'instruction must be a string'}
-    assert result['content'][0]['text'] == error['message']
+    document = json.loads(response['contentItems'][0]['text'])
+    assert result['structuredContent'] == document
+    assert document['feature'] == 'send_instruction'
+    assert 'instruction' in document['error']
+    assert 'instruction' in result['content'][0]['text']
 
 
 def test_main_native_callback_runs_when_mcp_import_is_unavailable(

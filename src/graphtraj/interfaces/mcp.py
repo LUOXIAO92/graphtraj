@@ -2,9 +2,9 @@
 
 The installed ``graphtraj-mcp`` entry point answers the MCP methods a host
 needs to discover and run tools: ``initialize``, ``notifications/initialized``,
-``tools/list``, ``tools/call`` and ``ping``. Every tool takes structured input
-and calls the same Python operation as the CLI, so a host receives the same
-document instead of reconstructing it from terminal output.
+``tools/list``, ``tools/call`` and ``ping``. It exposes one ``graphtraj`` tool
+whose fixed outer schema forwards discover/describe/execute requests to the
+shared gateway, so a host reaches the same operations and documents as the CLI.
 
 The server speaks newline-delimited JSON-RPC 2.0 over stdin/stdout and uses
 only the standard library, so no MCP SDK dependency is required. It reads the
@@ -17,6 +17,7 @@ import json
 import os
 import sys
 from contextlib import contextmanager
+from pathlib import Path
 from typing import Any, Iterator, Mapping, TextIO
 
 import yaml
@@ -24,7 +25,7 @@ import yaml
 from graphtraj.configuration.project_configuration import ProjectConfigurationError
 from graphtraj.execution.execution_budget import budget_notice_output, caller_notice_fd
 from graphtraj.execution.runner_models import RunnerError
-from graphtraj.interfaces.tools import TOOLS, Tool
+from graphtraj.interfaces import gateway
 from graphtraj.runtimes.codex.app_server import CodexMainRecovery
 from graphtraj.runtimes.codex.codex_adapter import CodexAdapterError
 
@@ -33,18 +34,29 @@ JSONRPC_VERSION = "2.0"
 PROTOCOL_VERSION = "2025-06-18"
 SERVER_INFO      = {"name": "graphtraj", "version": "0.1.0"}
 
+MCP_TOOL_NAME        = "graphtraj"
+MCP_TOOL_DESCRIPTION = (
+    "Discover, read the manual for, or run a GraphTraj feature. Send "
+    "action=discover to list features, action=describe for one feature's "
+    "manual and input schema, and action=execute to run it."
+)
+
 PARSE_ERROR      = -32700
 INVALID_REQUEST  = -32600
 METHOD_NOT_FOUND = -32601
 INVALID_PARAMS   = -32602
 
-def _tool_document(tool: Tool) -> dict[str, Any]:
-    """Render one registered tool as an MCP tool descriptor."""
+def _tool_document() -> dict[str, Any]:
+    """Render the single ``graphtraj`` entry the host discovers.
+
+    The outer schema is the gateway's fixed request structure, so new features
+    never expand the registered tool list or add another top-level tool.
+    """
 
     return {
-        "name":        tool.name,
-        "description": tool.description,
-        "inputSchema": tool.input_schema,
+        "name":        MCP_TOOL_NAME,
+        "description": MCP_TOOL_DESCRIPTION,
+        "inputSchema": gateway.INPUT_SCHEMA,
     }
 
 
@@ -107,11 +119,16 @@ def _caller_notices(
 def _tool_call_response(
     request_id: Any, params: Mapping[str, Any]
 ) -> dict[str, Any]:
-    """Run one registered tool and return its document as an MCP tool result."""
+    """Forward one ``graphtraj`` request and return its MCP tool result.
+
+    The request's outer arguments are the gateway's discover/describe/execute
+    envelope. The server's own working directory is the trusted project
+    location; model arguments cannot supply it. Business failures keep the
+    shared document and the CLI's message instead of stopping the server.
+    """
 
     name = params.get("name")
-    tool = TOOLS.get(name) if isinstance(name, str) else None
-    if tool is None:
+    if name != MCP_TOOL_NAME:
         return _error_response(
             request_id, INVALID_PARAMS, "Unknown tool: {0}".format(name)
         )
@@ -122,7 +139,7 @@ def _tool_call_response(
         )
     try:
         with _caller_notices(params) as recovery:
-            result = tool.handler(arguments)
+            result = gateway.handle_request(arguments, cwd=Path.cwd())
             document = (
                 recovery.attach_stop_deliveries(result.document)
                 if recovery is not None
@@ -173,9 +190,7 @@ def _respond(message: Mapping[str, Any]) -> dict[str, Any] | None:
     if method == "initialize":
         return _result_response(request_id, _initialize_result(params))
     if method == "tools/list":
-        return _result_response(
-            request_id, {"tools": [_tool_document(tool) for tool in TOOLS.values()]}
-        )
+        return _result_response(request_id, {"tools": [_tool_document()]})
     if method == "tools/call":
         return _tool_call_response(request_id, params)
     if method == "ping":

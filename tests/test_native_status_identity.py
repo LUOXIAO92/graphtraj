@@ -17,7 +17,7 @@ from test_codex_app_server import context, peer
 @pytest.mark.parametrize('issuer, forged, operation', [
     ('thread-1', False, 'status'), ('helper', False, 'status'),
     ('helper', True, 'status'), ('outsider', False, 'status'),
-    ('thread-1', False, 'send'), ('helper', False, 'send'),
+    ('thread-1', False, 'send'), ('helper', False, 'send'), ('outsider', False, 'send'),
 ])
 def test_native_status_uses_callback_identity(
     tmp_path: Path,
@@ -110,7 +110,7 @@ def test_native_status_uses_callback_identity(
             assert (await adapter.wait(execution, timeout=2))['last_agent_message'] == 'request accepted'
         document = json.loads(received[0]['contentItems'][0]['text'])
         if operation == 'send':
-            if issuer == 'helper':
+            if issuer in {'helper', 'outsider'}:
                 assert document['error']['code'] == 'authority-denied'
                 assert not delivered
             else:

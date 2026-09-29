@@ -13,16 +13,8 @@ import click
 import yaml
 
 from graphtraj.execution.execution_budget import budget_notice_output, caller_notice_fd
-from graphtraj.execution.runner_cleanup import cleanup_ticket
-from graphtraj.execution.runner_control import (
-    interrupt_session,
-    pending_requests,
-    reply_to_request,
-    send_instruction,
-)
-from graphtraj.execution.runner_launch import launch_swarm_file
 from graphtraj.execution.runner_models import RunnerError
-from graphtraj.execution.runner_status import status_aliases, status_tree
+from graphtraj.interfaces.tools import TOOLS
 
 
 _MAIN_RECOVERY: "CodexMainRecovery | None" = None
@@ -85,11 +77,11 @@ def main(context: click.Context, swarm_input: Path | None) -> None:
             _fail(error)
         try:
             cwd = Path.cwd().resolve()
-            response = launch_swarm_file(swarm_input, cwd)
+            response = TOOLS["swarm"].handler({}, cwd=cwd, input_file=swarm_input)
         except RunnerError as error:
             _fail(error)
         _emit_result(response.document)
-        if not response.succeeded:
+        if response.failed:
             for task in response.document["tasks"]:
                 error = task.get("error")
                 if error is not None:
@@ -129,7 +121,7 @@ def main_session(instruction_file: Path, resume: str | None) -> None:
     from graphtraj.runtimes.codex.app_server import CodexServerRequest
     from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 
-    async def execute() -> dict:
+    async def execute(root: Path, instruction: str, record: str | None) -> dict:
         """Keep native request/response correlation while the turn is active."""
         replies = asyncio.Lock()
 
@@ -153,13 +145,21 @@ def main_session(instruction_file: Path, resume: str | None) -> None:
         previous = signal.getsignal(signal.SIGTERM)
         loop.add_signal_handler(signal.SIGTERM, task.cancel)
         try:
-            return await run_main(Path.cwd().resolve(), instruction_file.read_text(), resume, native_request)
+            return await run_main(root, instruction, record, native_request)
         finally:
             loop.remove_signal_handler(signal.SIGTERM)
             signal.signal(signal.SIGTERM, previous)
 
+    def execute_main(root: Path, instruction: str, record: str | None) -> dict:
+        """Bind the shared operation to the CLI native reply and signal transport."""
+        return asyncio.run(execute(root, instruction, record))
+
     try:
-        _emit_result(asyncio.run(execute()))
+        result = TOOLS["main"].handler(
+            {"instruction": instruction_file.read_text(), "resume": resume},
+            cwd=Path.cwd().resolve(), execute=execute_main,
+        )
+        _emit_result(result.document)
     except (RunnerError, RuntimeAdapterError) as error:
         _fail(RunnerError(error.code, error.message))
     except (OSError, ValueError) as error:
@@ -183,27 +183,17 @@ def status(
 ) -> None:
     """Inspect the supplied Session aliases, or the visible Session tree."""
     try:
+        arguments = {"operation_total": operation_total, "baseline": baseline, "candidate": candidate}
         if aliases:
-            response = status_aliases(
-                aliases,
-                Path.cwd().resolve(),
-                operation_total=operation_total,
-                baseline=baseline,
-                candidate=candidate,
-            )
-        else:
-            response = status_tree(
-                Path.cwd().resolve(),
-                operation_total=operation_total,
-                baseline=baseline,
-                candidate=candidate,
-            )
+            arguments["aliases"] = list(aliases)
+        response = TOOLS["alias_status"].handler(arguments, cwd=Path.cwd().resolve())
     except RunnerError as error:
         _fail(error)
     _emit_result(response.document)
-    if not response.succeeded:
-        for error in response.errors:
-            click.echo(error.message, err=True)
+    if response.failed:
+        for entry in response.document.get("aliases", response.document.get("agents", [])):
+            if "error" in entry:
+                click.echo(entry["error"]["message"], err=True)
         raise click.exceptions.Exit(1)
 
 
@@ -213,7 +203,9 @@ def status(
 def requests(alias: str, execution_id: str | None) -> None:
     """Query pending native requests without consuming them."""
     try:
-        response = pending_requests(alias, Path.cwd().resolve(), execution_id=execution_id)
+        response = TOOLS["pending_requests"].handler(
+            {"alias": alias, "execution_id": execution_id}, cwd=Path.cwd().resolve(),
+        ).document
     except RunnerError as error:
         _fail(error, alias=alias)
     _emit_result(response)
@@ -232,9 +224,13 @@ def reply(alias: str, request_file: Path, response: str) -> None:
     except (OSError, ValueError, yaml.YAMLError) as error:
         _fail(RunnerError("invalid-input", str(error)), alias=alias)
     try:
-        result = reply_to_request(alias, request, native_response, Path.cwd().resolve())
-    except RunnerError as error:
-        _fail(error, alias=alias)
+        result = TOOLS["reply_to_request"].handler(
+            {"alias": alias, "request": request, "response": native_response},
+            cwd=Path.cwd().resolve(),
+        ).document
+    except (RunnerError, ValueError) as error:
+        _fail(error if isinstance(error, RunnerError) else RunnerError("invalid-input", str(error)),
+              alias=alias)
     _emit_result(result)
 
 
@@ -258,10 +254,11 @@ def send(
 ) -> None:
     """Resume one Session using causal Project Worldline event IDs."""
     try:
-        response = send_instruction(
-            alias, instruction, Path.cwd().resolve(), caused_by_event_id,
-            reports_only=reports_only,
-        )
+        response = TOOLS["send_instruction"].handler(
+            {"alias": alias, "instruction": instruction,
+             "caused_by_event_ids": list(caused_by_event_id), "reports_only": reports_only},
+            cwd=Path.cwd().resolve(),
+        ).document
     except RunnerError as error:
         _fail(error, alias=alias)
     _emit_result(response)
@@ -272,7 +269,7 @@ def send(
 def interrupt(alias: str) -> None:
     """Stop a descendant subtree and prevent further work, retaining Sessions."""
     try:
-        response = interrupt_session(alias, Path.cwd().resolve())
+        response = TOOLS["interrupt"].handler({"alias": alias}, cwd=Path.cwd().resolve()).document
     except RunnerError as error:
         _fail(error, alias=alias)
     _emit_result(response)
@@ -292,10 +289,11 @@ def replace(alias: str, actor: str | None, caused_by_event_id: tuple[str, ...]) 
     The recorded direct parent or native user approval authorizes replacement.
     The target and all descendants must already be stopped.
     """
-    from graphtraj.teams.team_replacement import replace_session
-
     try:
-        response = replace_session(alias, actor, caused_by_event_id, Path.cwd().resolve())
+        response = TOOLS["replace"].handler(
+            {"alias": alias, "actor": actor, "caused_by_event_ids": list(caused_by_event_id)},
+            cwd=Path.cwd().resolve(),
+        ).document
     except (RunnerError, OSError, ValueError, yaml.YAMLError) as error:
         if not isinstance(error, RunnerError):
             error = RunnerError("operation-failed", str(error))
@@ -314,12 +312,11 @@ def continue_ticket(
     ticket_id: str, caused_by_event_id: tuple[str, ...], budget_only: bool,
 ) -> None:
     """Restore an authorized task budget and, by default, resume original roots."""
-    from graphtraj.teams.team_round import continue_stopped_ticket
-
     try:
-        response = continue_stopped_ticket(
-            ticket_id, caused_by_event_id, Path.cwd().resolve(), budget_only=budget_only
-        )
+        response = TOOLS["continue"].handler(
+            {"ticket_id": ticket_id, "caused_by_event_ids": list(caused_by_event_id),
+             "budget_only": budget_only}, cwd=Path.cwd().resolve(),
+        ).document
     except RunnerError as error:
         _fail(error, ticket_id=ticket_id)
     _emit_result(response)
@@ -336,11 +333,11 @@ def cleanup(ticket_id: str | None) -> None:
         )
         _fail(error)
     try:
-        response = cleanup_ticket(Path.cwd().resolve(), ticket_id)
+        response = TOOLS["cleanup"].handler({"ticket_id": ticket_id}, cwd=Path.cwd().resolve())
     except RunnerError as error:
         _fail(error)
     _emit_result(response.document)
-    if not response.succeeded:
+    if response.failed:
         error = response.document["error"]
         click.echo(error["message"], err=True)
         raise click.exceptions.Exit(1)
@@ -350,11 +347,12 @@ def cleanup(ticket_id: str | None) -> None:
 @click.argument('alias')
 def reports(alias: str) -> None:
     """Read a directly owned Session's reports and retained result submissions."""
-    from graphtraj.execution.runner_control import read_session_reports
     from graphtraj.workspace.runner_project import discover_project_root
 
     try:
-        _emit_result(read_session_reports(alias, discover_project_root(Path.cwd())))
+        _emit_result(TOOLS["session_reports"].handler(
+            {"alias": alias}, cwd=discover_project_root(Path.cwd()),
+        ).document)
     except (RunnerError, ValueError, OSError) as error:
         _fail(error if isinstance(error, RunnerError) else RunnerError('RESULT_INVALID', str(error)))
 
@@ -373,11 +371,11 @@ def submit_result(
     unresolved: tuple[str, ...],
 ) -> None:
     """Submit the calling Session's committed files and retained evidence."""
-    from graphtraj.execution.runner_results import submit_session_result
-
     try:
-        _emit_result(submit_session_result(commit, result_refs, evidence_refs, completion,
-                                         unresolved, Path.cwd()))
+        _emit_result(TOOLS["submit_result"].handler(
+            {"commit": commit, "result_refs": list(result_refs), "evidence_refs": list(evidence_refs),
+             "completion": completion, "unresolved": list(unresolved)}, cwd=Path.cwd(),
+        ).document)
     except (RunnerError, ValueError, OSError) as error:
         _fail(error if isinstance(error, RunnerError) else RunnerError('RESULT_INVALID', str(error)))
 
@@ -396,10 +394,10 @@ def decide_result(
     evidence_refs: tuple[str, ...],
 ) -> None:
     """Accept or reject a submitted version using the caller's actual authority."""
-    from graphtraj.execution.runner_results import decide_session_result
-
     try:
-        _emit_result(decide_session_result(submission_id, commit, decision, reason,
-                                         evidence_refs, Path.cwd()))
+        _emit_result(TOOLS["decide_result"].handler(
+            {"submission_id": submission_id, "commit": commit, "decision": decision,
+             "reason": reason, "evidence_refs": list(evidence_refs)}, cwd=Path.cwd(),
+        ).document)
     except (RunnerError, ValueError, OSError) as error:
         _fail(error if isinstance(error, RunnerError) else RunnerError('RESULT_INVALID', str(error)))

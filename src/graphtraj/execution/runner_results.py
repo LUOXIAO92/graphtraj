@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import json
 import re
 import shutil
 import subprocess
@@ -186,7 +187,16 @@ def submit_session_result(
             raise
         return lambda: shutil.rmtree(retained)
 
-    return append_project_worldline_event(configuration.state, configuration.harness_root, event, retain)
+    recorded = append_project_worldline_event(configuration.state, configuration.harness_root, event, retain)
+    from graphtraj.execution.runner_control import deliver_parent_event
+
+    deliver_parent_event(
+        runner / 'sessions' / alias,
+        'Result submitted for assessment:\n' + json.dumps(recorded, ensure_ascii=False),
+        {'type': recorded['kind'], 'session': mapping['session'],
+         'execution_id': mapping.get('execution_id')},
+    )
+    return recorded
 
 
 def start_result_correction(mapping: Mapping[str, Any], cwd: Path) -> None:

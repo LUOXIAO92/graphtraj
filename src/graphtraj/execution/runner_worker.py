@@ -53,6 +53,7 @@ def run(job_file: Path) -> int:
     monitor_thread: threading.Thread | None = None
     budget_stopped = threading.Event()
     startup_lock = None
+    execution_mapping: dict[str, object] | None = None
 
     def request_termination(signum: int, frame: object) -> None:
         """Pass Worker/budget termination to the owned native execution."""
@@ -136,7 +137,7 @@ def run(job_file: Path) -> int:
 
             def record_created(session: str, runtime_pid: int) -> None:
                 """Bind the native Session and register assignment before its first turn."""
-                nonlocal mapping_recorded
+                nonlocal mapping_recorded, execution_mapping
                 if operation == "resume" and session != expected_session:
                     raise RuntimeAdapterError(
                         "RUNTIME_SESSION_NOT_RESUMABLE", "The mapped Runtime session could not be resumed.",
@@ -148,6 +149,7 @@ def run(job_file: Path) -> int:
                     "runtime_pid": runtime_pid, "control_directory": control_directory,
                 }
                 write_yaml_durably(session_directory / "mapping.yml", mapping)
+                execution_mapping = mapping
                 mapping_recorded = True
                 launch_file = session_directory / "launch.yml"
                 assignment = yaml.safe_load(launch_file.read_text()).get("member_registration")
@@ -169,7 +171,7 @@ def run(job_file: Path) -> int:
 
             def record_session(session: str, runtime_pid: int) -> None:
                 """Persist native execution identity before acknowledging its caller."""
-                nonlocal mapping_recorded
+                nonlocal mapping_recorded, execution_mapping
                 if operation == "resume" and session != expected_session:
                     raise RuntimeAdapterError(
                         "RUNTIME_SESSION_NOT_RESUMABLE",
@@ -197,6 +199,7 @@ def run(job_file: Path) -> int:
                     _append_follow_up(session_directory / "events.jsonl", causes)
                 (session_directory / "execution.yml").unlink(missing_ok=True)
                 write_yaml_durably(session_directory / "mapping.yml", mapping)
+                execution_mapping = mapping
                 mapping_recorded = True
                 heartbeat["execution_id"] = mapping["execution_id"]
                 write_heartbeat(session_directory, heartbeat)
@@ -273,6 +276,22 @@ def run(job_file: Path) -> int:
             # Reply cleanup may have allowed a successor to take ownership.
             if not terminal_published:
                 write_yaml_durably(session_directory / "execution.yml", terminal)
+            if execution_mapping is not None:
+                from graphtraj.execution.runner_control import deliver_parent_event
+
+                # A successor may already own mapping.yml. This notice belongs
+                # to the native execution that produced this terminal result.
+                deliver_parent_event(
+                    session_directory,
+                    'Session execution ended:\n' + json.dumps({
+                        'session': execution_mapping['session'],
+                        'execution_id': execution_mapping.get('execution_id'),
+                        **terminal,
+                    }, ensure_ascii=False),
+                    {'type': terminal['outcome'],
+                     'session': execution_mapping['session'],
+                     'execution_id': execution_mapping.get('execution_id')},
+                )
             return 0
     finally:
         if startup_lock is not None:

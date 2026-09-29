@@ -508,6 +508,7 @@ def _run_registered_children(
             _send_session(
                 alias, "Direct child execution results:\n" + yaml.safe_dump(children.document),
                 directory, mapping, (), project.harness_root, capacity_fd=capacity_fd,
+                retain_notice_channel=True,
             )
             # Input acknowledgement is not completion. Retain the Driver until
             # the parent consumes results and finishes any further registration.

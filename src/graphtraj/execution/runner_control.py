@@ -132,12 +132,18 @@ def notify_direct_parent(
             record["notice"] = message
             # Reuse the same alias lock and continuation path as ordinary send.
             # A child's inherited capacity belongs to this existing task tree.
-            capacity = os.environ.get("GRAPHTRAJ_CAPACITY_FD")
+            # Only the Worker inherited this descriptor. Runtime-launched CLI
+            # subprocesses can retain the environment string without the FD.
+            capacity = (
+                os.environ.get("GRAPHTRAJ_CAPACITY_FD")
+                if mapping.get("worker_pid") == os.getpid() else None
+            )
             receipt = _send_session(
                 parent, message, parent_directory, parent_mapping, (),
                 runner_directory.parent.parent,
                 capacity_fd=int(capacity) if capacity is not None else None,
                 system_notice=True,
+                retain_notice_channel=mapping.get("worker_pid") == os.getpid(),
             )
             record.update({
                 "delivery": "received",
@@ -164,6 +170,24 @@ def _append_notice_record(
         "a", encoding="utf-8"
     ) as stream:
         stream.write(json.dumps(record, sort_keys=True) + "\n")
+
+
+def deliver_parent_event(
+    session_directory: Path, message: str, identity: Mapping[str, Any],
+) -> Dict[str, Any]:
+    """Deliver an existing event, retrying transient refusal for one operation window.
+
+    Retain each transport attempt through the existing notice path. Completion
+    of this function establishes acknowledgement only, never Agent processing.
+    No parent binding means no resumable recipient; do not invent one.
+    """
+    deadline = time.monotonic() + OPERATION_TIMEOUT_SECONDS
+    while True:
+        receipt = notify_direct_parent(session_directory, message, identity)
+        remaining = deadline - time.monotonic()
+        if receipt['delivery'] != 'not-delivered' or remaining <= 0:
+            return receipt
+        time.sleep(min(1, remaining))
 
 
 def pending_requests(
@@ -367,6 +391,7 @@ def _send_session(
     capacity_fd: int | None = None,
     reports_only: bool = False,
     system_notice: bool = False,
+    retain_notice_channel: bool = False,
 ) -> Dict[str, str]:
     """Serialize alias changes so two idle sends cannot create competing owners."""
     launch_file = session_directory / "launch.yml"
@@ -386,6 +411,7 @@ def _send_session(
             alias, instruction, session_directory, mapping, caused_by_event_ids, cwd,
             capacity_fd=capacity_fd, reports_only=reports_only,
             system_notice=system_notice,
+            retain_notice_channel=retain_notice_channel,
         )
 
 
@@ -400,6 +426,7 @@ def _send_session_locked(
     capacity_fd: int | None = None,
     reports_only: bool = False,
     system_notice: bool = False,
+    retain_notice_channel: bool = False,
 ) -> Dict[str, str]:
     """Deliver input or restore the retained Context under the alias lock.
 
@@ -504,7 +531,11 @@ def _send_session_locked(
         # control requests are judged against the Runner's recorded owner.
         worker_environment["GRAPHTRAJ_PARENT_ALIAS"] = alias
         worker_environment["GRAPHTRAJ_PARENT_REGISTRATION"] = str(session_directory / "child-registration.yml")
-        if monitor is not None:
+        # Send returns after ownership ACK. Its caller channel ends with that
+        # call; inheriting it retains a CLI capture pipe until the new Worker
+        # exits. Later events use the recorded parent Session instead.
+        worker_environment.pop("GRAPHTRAJ_BUDGET_NOTICE_FD", None)
+        if retain_notice_channel:
             notice_fd, close_notice_fd = caller_notice_fd()
             if notice_fd is not None:
                 worker_environment["GRAPHTRAJ_BUDGET_NOTICE_FD"] = str(notice_fd)
@@ -532,8 +563,8 @@ def _send_session_locked(
                     text=True,
                     start_new_session=True,
                     env=worker_environment,
-                    pass_fds=(positions[0].fileno(),) if notice_fd is None else (
-                        positions[0].fileno(), notice_fd,
+                    pass_fds=(positions[0].fileno(),) + (
+                        (notice_fd,) if notice_fd is not None else ()
                     ),
                 )
                 assert worker.stdin is not None

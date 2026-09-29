@@ -98,6 +98,8 @@ def consume_budgets() -> None:
 prompt = sys.stdin.read()
 if sys.argv[1:3] == ['exec', '--help']:
     print('--sandbox')
+elif prompt.startswith('{') and json.loads(prompt)['event'] in {'completed', 'runtime-error', 'interrupted'}:
+    retain({'terminal_notice': json.loads(prompt)})
 elif prompt.startswith('{'):
     child = consume(prompt)
     while not Path(os.environ['PAIR_RELEASE']).exists():

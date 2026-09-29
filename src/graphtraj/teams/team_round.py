@@ -14,7 +14,7 @@ from typing import Any
 
 import yaml
 
-from graphtraj.runtimes.codex.codex_project import ignore_worktree_documents
+from graphtraj.workspace.project_files import ignore_worktree_documents
 from graphtraj.runtimes.codex.codex_adapter import (
     codex_connection_environment,
     preflight_runtime_context,

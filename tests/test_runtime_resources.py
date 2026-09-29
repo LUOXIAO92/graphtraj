@@ -344,10 +344,13 @@ def test_current_runtime_diagnostic_uses_only_current_error_events(
 ) -> None:
     monkeypatch.syspath_prepend(str(PROJECT_ROOT / "src"))
     from graphtraj.teams.team_round import (
-        _current_runtime_diagnostic,
         _runtime_access_failure,
         _runtime_command_parse_error,
     )
+
+    from graphtraj.runtimes.codex.codex_adapter import CodexRuntimeAdapter
+
+    current_diagnostic = CodexRuntimeAdapter().current_execution_diagnostic
 
     session = tmp_path / "session"
     session.mkdir()
@@ -383,11 +386,32 @@ def test_current_runtime_diagnostic_uses_only_current_error_events(
         + "\n",
         encoding="utf-8",
     )
+    with trace.open("a", encoding="utf-8") as stream:
+        stream.write(json.dumps({
+            "type": "turn.failed", "error": {"message": "Permission denied: old execution"},
+        }) + "\n")
     trace_offset = trace.stat().st_size
 
-    diagnostic = _current_runtime_diagnostic(
+    # Successful output and Agent prose in this execution are not errors either.
+    with trace.open("a", encoding="utf-8") as stream:
+        stream.write(json.dumps({
+            "type": "item.completed", "item": {
+                "type": "command_execution", "exit_code": 0, "status": "completed",
+                "aggregated_output": "Permission denied in a source example",
+            },
+        }) + "\n")
+        stream.write(json.dumps({
+            "type": "item.completed", "item": {
+                "type": "agent_message", "text": "Permission denied quoted by Agent",
+            },
+        }) + "\n")
+    retained_trace = trace.read_bytes()
+
+    diagnostic = current_diagnostic(
         session, trace, stderr_offset, trace_offset
     )
+    assert diagnostic == ""
+    assert trace.read_bytes() == retained_trace
     assert not _runtime_access_failure(diagnostic, (report,))
 
     parse_offset = trace.stat().st_size
@@ -410,7 +434,7 @@ def test_current_runtime_diagnostic_uses_only_current_error_events(
             )
             + "\n"
         )
-    parse_diagnostic = _current_runtime_diagnostic(
+    parse_diagnostic = current_diagnostic(
         session, trace, stderr_offset, parse_offset
     )
     assert not _runtime_access_failure(parse_diagnostic, (report,))
@@ -436,7 +460,7 @@ def test_current_runtime_diagnostic_uses_only_current_error_events(
             )
             + "\n"
         )
-    wrong_target = _current_runtime_diagnostic(
+    wrong_target = current_diagnostic(
         session, trace, stderr_offset, wrong_target_offset
     )
     assert not _runtime_access_failure(wrong_target, (report,))
@@ -461,7 +485,7 @@ def test_current_runtime_diagnostic_uses_only_current_error_events(
             )
             + "\n"
         )
-    denial = _current_runtime_diagnostic(session, trace, stderr_offset, denial_offset)
+    denial = current_diagnostic(session, trace, stderr_offset, denial_offset)
     assert _runtime_access_failure(denial, (report,))
     assert _runtime_access_failure(
         "Native startup failed: symlinked writable roots are not supported",

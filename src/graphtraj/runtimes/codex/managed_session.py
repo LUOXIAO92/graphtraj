@@ -251,7 +251,7 @@ class CodexManagedExecution:
 
     async def _request(self, request: CodexServerRequest) -> dict:
         """Hold one native callback until an explicit reply or native cancellation."""
-        from graphtraj.interfaces.mcp import NATIVE_RUNNER_TOOLS
+        from graphtraj.runtimes.codex.codex_adapter import NATIVE_RUNNER_TOOLS
 
         if request.method == 'item/tool/call' and request.params.get('tool') in NATIVE_RUNNER_TOOLS:
             return await self._native_runner_request(request)
@@ -429,7 +429,8 @@ async def run_native_operation(
     """Route an owned native callback, preserving the Runtime's issuing identity."""
     from graphtraj.execution.runner_models import RunnerError
     from graphtraj.execution.runner_status import runtime_caller
-    from graphtraj.interfaces.mcp import NATIVE_RUNNER_TOOLS, TOOLS, ToolResult
+    from graphtraj.interfaces.tools import TOOLS, ToolResult
+    from graphtraj.runtimes.codex.codex_adapter import NATIVE_RUNNER_TOOLS
     from graphtraj.workspace.runner_project import discover_runner_directory
 
     try:

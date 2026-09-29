@@ -12,7 +12,7 @@ from click.testing import CliRunner
 from graphtraj.execution.runner_models import RunnerError
 from graphtraj.execution.runner_status import runtime_caller
 from graphtraj.graph.delivery_worldline import read_worldline
-from graphtraj.interfaces import mcp
+from graphtraj.interfaces import tools
 from graphtraj.interfaces.cli.agent_runner import main as runner_main
 from graphtraj.interfaces.cli.graphtraj import main
 from test_result_submission import result_project
@@ -25,8 +25,8 @@ def accepted_result(tmp_path: Path) -> tuple[Path, Path, dict, dict]:
     mapping = yaml.safe_load(child.read_text())
     child.write_text(yaml.safe_dump({**mapping, 'parent': 'research@x3'}))
     with runtime_caller(runner, 'research@x1'):
-        mcp.submit_report({'name': 'researcher-x1.md', 'text': 'Original evidence'}, cwd=tmp_path)
-        submitted = mcp.submit_result({
+        tools.submit_report({'name': 'researcher-x1.md', 'text': 'Original evidence'}, cwd=tmp_path)
+        submitted = tools.submit_result({
             'commit': commit, 'result_refs': ['result.md'],
             'evidence_refs': ['result.md'], 'completion': 'Complete',
         }, cwd=tmp_path).document
@@ -35,7 +35,7 @@ def accepted_result(tmp_path: Path) -> tuple[Path, Path, dict, dict]:
         'reason': 'The result meets the task criteria.', 'evidence_refs': submitted['evidence_refs'],
     }
     with runtime_caller(runner, 'research@x3'):
-        accepted = mcp.decide_result(decision, cwd=tmp_path).document
+        accepted = tools.decide_result(decision, cwd=tmp_path).document
     return runner, team, decision, accepted
 
 
@@ -66,7 +66,7 @@ def test_accepted_result_correction_and_integration(
     old_report = team.parent / 'rounds/1/researcher-x1.md'
     with runtime_caller(runner, 'research@x3'):
         if entry == 'mcp':
-            returned = mcp.decide_result(rejection, cwd=tmp_path).document
+            returned = tools.decide_result(rejection, cwd=tmp_path).document
         else:
             response = CliRunner().invoke(runner_main, [
                 'decide-result', '--submission-id', decision['submission_id'],
@@ -76,7 +76,7 @@ def test_accepted_result_correction_and_integration(
             assert response.exit_code == 0, response.output
             returned = yaml.safe_load(response.output)
         with pytest.raises(ValueError):
-            mcp.decide_result(rejection, cwd=tmp_path)
+            tools.decide_result(rejection, cwd=tmp_path)
     assert accepted['event_id'] in returned['caused_by_event_ids']
     assert read_worldline(tmp_path / 'state', tmp_path)[:len(before)] == before
     assert old_report.read_text() == 'Original evidence'
@@ -88,10 +88,10 @@ def test_accepted_result_correction_and_integration(
         assert 'requires acceptance' in denied.output
     with runtime_caller(runner, 'research@x1'):
         if entry == 'cli':
-            report = mcp.submit_report({'name': 'researcher-x1.md', 'text': 'Correction checked'},
+            report = tools.submit_report({'name': 'researcher-x1.md', 'text': 'Correction checked'},
                                        cwd=tmp_path).document['report']
             assert '/rounds/2/' in report
-        submitted = mcp.submit_result({
+        submitted = tools.submit_result({
             'commit': corrected, 'result_refs': ['result.md'], 'evidence_refs': ['result.md'],
             'completion': 'Corrected the unsupported conclusion.',
         }, cwd=tmp_path).document
@@ -102,15 +102,15 @@ def test_accepted_result_correction_and_integration(
     with runtime_caller(runner, 'research@x3'):
         for obsolete in (decision, {**decision, 'submission_id': submitted['event_id']}):
             with pytest.raises(ValueError):
-                mcp.decide_result(obsolete, cwd=tmp_path)
-        fresh = mcp.decide_result({
+                tools.decide_result(obsolete, cwd=tmp_path)
+        fresh = tools.decide_result({
             **decision, 'submission_id': submitted['event_id'], 'commit': corrected,
             'evidence_refs': submitted['evidence_refs'],
         }, cwd=tmp_path).document
         failed = CliRunner().invoke(main, [*integrate[:-1], 'raise SystemExit(1)'])
         assert yaml.safe_load(failed.output)['status'] == 'integrating'
         with pytest.raises(ValueError):
-            mcp.decide_result({**rejection, 'submission_id': submitted['event_id'],
+            tools.decide_result({**rejection, 'submission_id': submitted['event_id'],
                                'commit': corrected}, cwd=tmp_path)
         integrated = CliRunner().invoke(main, integrate)
     assert integrated.exit_code == 0, integrated.output
@@ -122,7 +122,7 @@ def test_accepted_result_correction_and_integration(
     assert accepted in events and returned in events
     assert (tmp_path / decision['evidence_refs'][0]).read_text() == 'A versioned research result\n'
     with runtime_caller(runner, 'research@x3'), pytest.raises(ValueError):
-        mcp.decide_result({**rejection, 'submission_id': submitted['event_id'], 'commit': corrected},
+        tools.decide_result({**rejection, 'submission_id': submitted['event_id'], 'commit': corrected},
                           cwd=tmp_path)
 
 
@@ -133,12 +133,12 @@ def test_return_requires_parent_exact_version_reason_and_evidence(tmp_path: Path
     before = read_worldline(tmp_path / 'state', tmp_path)
     for caller in (None, 'research@x1', 'research@x2'):
         with runtime_caller(runner, caller), pytest.raises(RunnerError):
-            mcp.decide_result(rejection, cwd=tmp_path)
+            tools.decide_result(rejection, cwd=tmp_path)
     with runtime_caller(runner, 'research@x3'):
         for extra in ({'commit': 'a' * 40}, {'submission_id': 'missing'}, {'decision': 'accepted'},
                       {'reason': ''}, {'evidence_refs': []}, {'evidence_refs': ['missing.md']}):
             with pytest.raises((ValueError, RunnerError)):
-                mcp.decide_result({**rejection, **extra}, cwd=tmp_path)
+                tools.decide_result({**rejection, **extra}, cwd=tmp_path)
     assert read_worldline(tmp_path / 'state', tmp_path) == before
 
 
@@ -146,7 +146,7 @@ def test_failed_return_preserves_acceptance(tmp_path: Path, monkeypatch: pytest.
     """Failed event retention rolls back the return and keeps closed reports intact."""
     runner, team, decision, _ = accepted_result(tmp_path)
     before = read_worldline(tmp_path / 'state', tmp_path)
-    graph = mcp.read_current_graph({}, cwd=tmp_path).document
+    graph = tools.read_current_graph({}, cwd=tmp_path).document
     original_open = Path.open
 
     def fail_append(path: Path, mode: str = 'r', *args: Any, **kwargs: Any):
@@ -158,10 +158,10 @@ def test_failed_return_preserves_acceptance(tmp_path: Path, monkeypatch: pytest.
     with monkeypatch.context() as patch, runtime_caller(runner, 'research@x3'):
         patch.setattr(Path, 'open', fail_append)
         with pytest.raises(OSError, match='injected append failure'):
-            mcp.decide_result({**decision, 'decision': 'rejected', 'reason': 'Contradicting source found.'},
+            tools.decide_result({**decision, 'decision': 'rejected', 'reason': 'Contradicting source found.'},
                               cwd=tmp_path)
     assert read_worldline(tmp_path / 'state', tmp_path) == before
-    assert mcp.read_current_graph({}, cwd=tmp_path).document == graph
+    assert tools.read_current_graph({}, cwd=tmp_path).document == graph
     assert not (team.parent / 'rounds/1/researcher-x1.md').stat().st_mode & 0o200
 
 

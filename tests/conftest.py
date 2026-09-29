@@ -275,10 +275,10 @@ def fake_codex(tmp_path: Path) -> FakeCodex:
         "        commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()\n"
         '        evidence_args = []\n'
         "        if name == 'article.md':\n"
-        '            from graphtraj.interfaces import mcp\n'
-        "            reports = mcp.read_reports({'alias': os.environ['GRAPHTRAJ_PARENT_ALIAS']}, cwd=Path(os.environ['GRAPHTRAJ_HARNESS_ROOT'])).document\n"
+        '            from graphtraj.interfaces import tools\n'
+        "            reports = tools.read_reports({'alias': os.environ['GRAPHTRAJ_PARENT_ALIAS']}, cwd=Path(os.environ['GRAPHTRAJ_HARNESS_ROOT'])).document\n"
         "            report = Path(reports['missing_reports'][0])\n"
-        "            mcp.submit_report({'name': report.name, 'text': 'Both document requirements inspected.'}, cwd=Path(os.environ['GRAPHTRAJ_HARNESS_ROOT']))\n"
+        "            tools.submit_report({'name': report.name, 'text': 'Both document requirements inspected.'}, cwd=Path(os.environ['GRAPHTRAJ_HARNESS_ROOT']))\n"
         "            relative = Path('.state') / report.relative_to(Path(os.environ['GRAPHTRAJ_EVIDENCE']))\n"
         "            evidence_args = ['--evidence-ref', str(relative)]\n"
         "        submitted = subprocess.run([os.environ['GRAPHTRAJ_AGENT_RUNNER'], 'submit-result', '--commit', commit,\n"
@@ -303,8 +303,8 @@ def fake_codex(tmp_path: Path) -> FakeCodex:
         "            json.dumps(facts, sort_keys=True) + '\\n'\n"
         "        )\n"
         "    elif role == 'team-leader':\n"
-        "        from graphtraj.interfaces import mcp\n"
-        "        assigned = mcp.read_reports({'alias': os.environ['GRAPHTRAJ_PARENT_ALIAS']}, cwd=Path(os.environ['GRAPHTRAJ_HARNESS_ROOT'])).document\n"
+        "        from graphtraj.interfaces import tools\n"
+        "        assigned = tools.read_reports({'alias': os.environ['GRAPHTRAJ_PARENT_ALIAS']}, cwd=Path(os.environ['GRAPHTRAJ_HARNESS_ROOT'])).document\n"
         "        paths = [item['path'] for item in assigned['reports']] + assigned['missing_reports']\n"
         "        leader_report = Path(paths[0])\n"
         "        counter = Path.cwd() / '.scratch' / ('leader-stage-' + ordinal)\n"

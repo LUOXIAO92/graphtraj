@@ -37,7 +37,7 @@ from pathlib import Path
 import graphtraj
 from graphtraj.configuration.project_roles import RolePreset
 from graphtraj.configuration.role_definitions import resolve_child_role
-from graphtraj.interfaces import mcp
+from graphtraj.interfaces import tools
 from graphtraj.interfaces.cli import agent_runner, graphtraj as cli
 
 role = resolve_child_role(

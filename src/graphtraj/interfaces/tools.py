@@ -1,0 +1,551 @@
+"""Shared operation definitions and handlers for local GraphTraj callers."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Callable, Mapping
+
+from graphtraj.configuration.project_configuration import (
+    load_project_configuration,
+)
+from graphtraj.execution.runner_control import (
+    interrupt_session,
+    pending_requests,
+    reply_to_request,
+    read_session_reports,
+    submit_session_report,
+    send_instruction,
+)
+from graphtraj.execution.runner_launch import launch_swarm
+from graphtraj.execution.runner_status import status_aliases, status_tree
+from graphtraj.graph.ticket_graph import (
+    read_graph,
+    register_ticket,
+    revise_tickets,
+    update_ticket_state,
+)
+
+_ISSUE_PROPERTIES = {
+    "ticket_id":         {"type": "string"},
+    "ticket_name":       {"type": "string"},
+    "source":            {"type": "string"},
+    "title":             {"type": "string"},
+    "body":              {"type": "string"},
+    "dependencies":      {"type": "array", "items": {"type": "string"}},
+}
+_ISSUE_SCHEMA = {
+    "type":                 "object",
+    "properties":           _ISSUE_PROPERTIES,
+    "required":             sorted(_ISSUE_PROPERTIES),
+    "additionalProperties": False,
+}
+_REVISED_TICKET_SCHEMA = {
+    "type": "object",
+    "properties": {
+        **_ISSUE_PROPERTIES,
+        "active":      {"type": "boolean"},
+        "replaced_by": {"type": "array", "items": {"type": "string"}},
+    },
+    "required":             sorted({*_ISSUE_PROPERTIES, "active", "replaced_by"}),
+    "additionalProperties": False,
+}
+_REVISION_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "product_preserving":  {"const": True},
+        "caused_by_event_ids": {"type": "array", "items": {"type": "string"}},
+        "evidence_refs":       {"type": "array", "items": {"type": "string"}},
+        "tickets":             {"type": "array", "items": _REVISED_TICKET_SCHEMA},
+    },
+    "required":             [
+        "product_preserving", "caused_by_event_ids", "evidence_refs", "tickets",
+    ],
+    "additionalProperties": False,
+}
+_STATE_CHANGE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "ticket_id":           {"type": "string"},
+        "status":              {"type": "string"},
+        "active_team_ordinal": {"type": ["integer", "null"]},
+        "worktree":            {"type": ["string", "null"]},
+        "branch":              {"type": ["string", "null"]},
+        "current_candidate":   {"type": ["string", "null"]},
+        "caused_by_event_ids": {"type": "array", "items": {"type": "string"}},
+        "evidence_refs":       {"type": "array", "items": {"type": "string"}},
+    },
+    "required": [
+        "ticket_id", "status", "active_team_ordinal", "worktree", "branch",
+        "current_candidate", "caused_by_event_ids", "evidence_refs",
+    ],
+    "additionalProperties": False,
+}
+_EMPTY_SCHEMA = {"type": "object", "properties": {}, "additionalProperties": False}
+_ALIAS_SCHEMA = {
+    "type": "object",
+    "properties": {"alias": {"type": "string"}},
+    "required":             ["alias"],
+    "additionalProperties": False,
+}
+_SWARM_TASK_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "ticket_id":   {"type": "string"},
+        "ticket_name": {"type": "string"},
+        "role":        {"type": ["string", "object"]},
+        "instruction": {"type": "string"},
+    },
+    "required":             ["role"],
+    "additionalProperties": False,
+}
+_SWARM_SCHEMA = {
+    "type": "object",
+    "properties": {"tasks": {"type": "array", "items": _SWARM_TASK_SCHEMA}},
+    "required":             ["tasks"],
+    "additionalProperties": False,
+}
+_SEND_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "alias":               {"type": "string"},
+        "instruction":         {"type": "string"},
+        "caused_by_event_ids": {"type": "array", "items": {"type": "string"}},
+        "reports_only":        {"type": "boolean"},
+    },
+    "required":             ["alias", "instruction"],
+    "additionalProperties": False,
+}
+_CONTINUE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "ticket_id":           {"type": "string"},
+        "caused_by_event_ids": {"type": "array", "items": {"type": "string"}},
+        "budget_only":         {"type": "boolean"},
+    },
+    "required":             ["ticket_id", "caused_by_event_ids"],
+    "additionalProperties": False,
+}
+_REQUESTS_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "alias":        {"type": "string"},
+        "execution_id": {"type": ["string", "null"]},
+    },
+    "required":             ["alias"],
+    "additionalProperties": False,
+}
+_REPLY_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "alias":    {"type": "string"},
+        "request":  {"type": "object"},
+        "response": {"type": "object"},
+    },
+    "required":             ["alias", "request", "response"],
+    "additionalProperties": False,
+}
+
+
+@dataclass(frozen=True)
+class ToolResult:
+    """One tool's structured document and whether the operation failed."""
+
+    document: dict[str, Any]
+    failed: bool = False
+
+
+@dataclass(frozen=True)
+class Tool:
+    """One operation's stable name, schema, handler and optional method material.
+
+    ``manual_ref`` identifies caller-managed text; registering or executing an
+    operation does not read it. ``examples`` holds structured argument examples.
+    """
+
+    name: str
+    description: str
+    input_schema: dict[str, Any]
+    handler: Callable[..., ToolResult]
+    manual_ref: str | None = None
+    examples: tuple[dict[str, Any], ...] = ()
+
+
+TOOLS: dict[str, Tool] = {}
+
+def register_tool(
+    name: str,
+    description: str,
+    input_schema: dict[str, Any],
+    handler: Callable[..., ToolResult],
+    *,
+    manual_ref: str | None = None,
+    examples: tuple[dict[str, Any], ...] = (),
+) -> None:
+    """Bind an operation and optional manual reference/examples to its schema."""
+    TOOLS[name] = Tool(name, description, input_schema, handler, manual_ref, examples)
+
+
+def read_current_graph(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> ToolResult:
+    """Return the current Ticket DAG and readiness view for the project."""
+
+    configuration = load_project_configuration(cwd or Path.cwd())
+    return ToolResult(read_graph(configuration.state))
+
+
+def register_current_ticket(arguments: Mapping[str, Any]) -> ToolResult:
+    """Register one accepted Ticket definition in the project graph."""
+
+    configuration = load_project_configuration(Path.cwd())
+    directory = register_ticket(
+        configuration.state, configuration.harness_root, dict(arguments)
+    )
+    return ToolResult({"ticket_directory": str(directory)})
+
+
+def revise_current_tickets(arguments: Mapping[str, Any]) -> ToolResult:
+    """Apply one validated product-preserving Task Graph revision."""
+
+    configuration = load_project_configuration(Path.cwd())
+    recorded = revise_tickets(
+        configuration.state, configuration.harness_root, dict(arguments)
+    )
+    return ToolResult(recorded)
+
+
+def update_current_ticket_state(arguments: Mapping[str, Any]) -> ToolResult:
+    """Apply one evidence-backed current Ticket state transition."""
+
+    configuration = load_project_configuration(Path.cwd())
+    recorded = update_ticket_state(
+        configuration.state, configuration.harness_root, dict(arguments)
+    )
+    return ToolResult(recorded)
+
+
+def read_alias_status(
+    arguments: Mapping[str, Any], *, cwd: Path | None = None,
+) -> ToolResult:
+    """Report the requested Session aliases, or the visible Session tree."""
+
+    aliases = arguments.get("aliases")
+    operation_total = bool(arguments.get("operation_total", False))
+    baseline = arguments.get("baseline")
+    candidate = arguments.get("candidate")
+    if aliases is None:
+        response = status_tree(
+            cwd or Path.cwd(),
+            operation_total=operation_total,
+            baseline=baseline,
+            candidate=candidate,
+        )
+    else:
+        if not isinstance(aliases, list) or not all(
+            isinstance(alias, str) for alias in aliases
+        ):
+            raise ValueError("aliases must be a list of Session alias strings")
+        response = status_aliases(
+            aliases,
+            cwd or Path.cwd(),
+            operation_total=operation_total,
+            baseline=baseline,
+            candidate=candidate,
+        )
+    return ToolResult(response.document, failed=not response.succeeded)
+
+
+def _string_argument(arguments: Mapping[str, Any], name: str) -> str:
+    """Return one required string argument without restating the operation."""
+
+    value = arguments.get(name)
+    if not isinstance(value, str):
+        raise ValueError("{0} must be a string".format(name))
+    return value
+
+
+def _optional_string_argument(
+    arguments: Mapping[str, Any], name: str
+) -> str | None:
+    """Return one optional string argument, or None when it was not supplied."""
+
+    value = arguments.get(name)
+    if value is not None and not isinstance(value, str):
+        raise ValueError("{0} must be a string".format(name))
+    return value
+
+
+def _string_list_argument(
+    arguments: Mapping[str, Any], name: str
+) -> tuple[str, ...]:
+    """Return one optional list of strings; the operation owns its own rules."""
+
+    value = arguments.get(name, [])
+    if not isinstance(value, list) or any(
+        not isinstance(item, str) for item in value
+    ):
+        raise ValueError("{0} must be a list of strings".format(name))
+    return tuple(value)
+
+
+def _boolean_argument(arguments: Mapping[str, Any], name: str) -> bool:
+    """Return one optional flag, defaulting to the operation's plain behavior."""
+
+    value = arguments.get(name, False)
+    if not isinstance(value, bool):
+        raise ValueError("{0} must be a boolean".format(name))
+    return value
+
+
+def launch_swarm_tool(
+    arguments: Mapping[str, Any], *, cwd: Path | None = None,
+) -> ToolResult:
+    """Activate one swarm input; the returned identity stays owned.
+
+    The calling Session's Ticket and the registered Ticket state supply the
+    identity each task does not repeat.
+    """
+
+    response = launch_swarm(dict(arguments), cwd or Path.cwd())
+    return ToolResult(response.document, failed=not response.succeeded)
+
+
+def send_session_instruction(
+    arguments: Mapping[str, Any], *, cwd: Path | None = None,
+) -> ToolResult:
+    """Steer an active execution or continue an idle mapped Session.
+
+    ``reports_only`` resumes the Session to return evidence it already holds
+    without sampling the Ticket budget, so a report collection cannot repeat a
+    sampled stop or deliver another stop instruction.
+    """
+
+    return ToolResult(
+        send_instruction(
+            _string_argument(arguments, "alias"),
+            _string_argument(arguments, "instruction"),
+            cwd or Path.cwd(),
+            _string_list_argument(arguments, "caused_by_event_ids"),
+            reports_only=_boolean_argument(arguments, "reports_only"),
+        )
+    )
+
+
+def interrupt_session_execution(
+    arguments: Mapping[str, Any], *, cwd: Path | None = None,
+) -> ToolResult:
+    """Stop a descendant subtree and return each member confirmation."""
+
+    return ToolResult(
+        interrupt_session(_string_argument(arguments, "alias"), cwd or Path.cwd())
+    )
+
+
+def continue_ticket_execution(arguments: Mapping[str, Any]) -> ToolResult:
+    """Restore task budget permission, optionally without executing old Sessions."""
+
+    from graphtraj.teams.team_round import continue_stopped_ticket
+
+    return ToolResult(
+        continue_stopped_ticket(
+            _string_argument(arguments, "ticket_id"),
+            _string_list_argument(arguments, "caused_by_event_ids"),
+            Path.cwd(),
+            budget_only=_boolean_argument(arguments, "budget_only"),
+        )
+    )
+
+
+def read_pending_requests(
+    arguments: Mapping[str, Any], *, cwd: Path | None = None,
+) -> ToolResult:
+    """Query the mapped execution's native requests without consuming them."""
+
+    return ToolResult(
+        pending_requests(
+            _string_argument(arguments, "alias"),
+            cwd or Path.cwd(),
+            execution_id=_optional_string_argument(arguments, "execution_id"),
+        )
+    )
+
+
+def answer_pending_request(
+    arguments: Mapping[str, Any], *, cwd: Path | None = None,
+) -> ToolResult:
+    """Submit an explicit reply to one request returned by the query path."""
+
+    request = arguments.get("request")
+    response = arguments.get("response")
+    if not isinstance(request, dict) or not isinstance(response, dict):
+        raise ValueError("request and response must be JSON objects")
+    return ToolResult(
+        reply_to_request(
+            _string_argument(arguments, "alias"), request, response, cwd or Path.cwd()
+        )
+    )
+
+
+register_tool(
+    "ticket_graph",
+    "Read the current Ticket DAG, states and dependency readiness for the project "
+    "in the server working directory. Equivalent to `graphtraj ticket graph`.",
+    _EMPTY_SCHEMA,
+    read_current_graph,
+)
+register_tool(
+    "ticket_register",
+    "Register one accepted Ticket definition with its dependencies. Equivalent to "
+    "`graphtraj ticket register --ticket-file`.",
+    _ISSUE_SCHEMA,
+    register_current_ticket,
+)
+register_tool(
+    "ticket_revise",
+    "Apply one validated product-preserving Ticket graph revision and return its "
+    "recorded causal event. Equivalent to `graphtraj ticket revise`.",
+    _REVISION_SCHEMA,
+    revise_current_tickets,
+)
+register_tool(
+    "ticket_update",
+    "Apply one evidence-backed Ticket state transition and return its recorded "
+    "causal event. Equivalent to `graphtraj ticket update`.",
+    _STATE_CHANGE_SCHEMA,
+    update_current_ticket_state,
+)
+register_tool(
+    "alias_status",
+    "Read the explicitly supplied Session aliases, including their Runtime "
+    "activity and last outcome, or omit `aliases` for the Session tree this "
+    "caller may see. Equivalent to `agent-runner status`.",
+    {
+        "type": "object",
+        "properties": {
+            "aliases":         {"type": "array", "items": {"type": "string"}},
+            "operation_total": {"type": "boolean"},
+            "baseline":        {"type": ["string", "null"]},
+            "candidate":       {"type": ["string", "null"]},
+        },
+        "additionalProperties": False,
+    },
+    read_alias_status,
+)
+register_tool(
+    "swarm",
+    "Activate the roles this swarm input selects and return each Agent's alias, "
+    "so later calls query, steer and continue it by that alias rather than by "
+    "another launch input. Equivalent to `agent-runner --swarm-input`.",
+    _SWARM_SCHEMA,
+    launch_swarm_tool,
+)
+register_tool(
+    "send_instruction",
+    "Steer an active execution or continue an idle mapped Session using unique "
+    "causal Project Worldline event IDs. Equivalent to `agent-runner send`.",
+    _SEND_SCHEMA,
+    send_session_instruction,
+)
+register_tool(
+    "interrupt",
+    "Stop a descendant subtree and prevent further work while preserving its "
+    "Sessions. Returns each member confirmation. Equivalent to `agent-runner interrupt`.",
+    _ALIAS_SCHEMA,
+    interrupt_session_execution,
+)
+register_tool(
+    "continue",
+    "Restore a sampled stopped task budget and resume original roots by default; "
+    "budget_only leaves old Sessions stopped for a later ordinary swarm dispatch. Equivalent to "
+    "`agent-runner continue`.",
+    _CONTINUE_SCHEMA,
+    continue_ticket_execution,
+)
+register_tool(
+    "pending_requests",
+    "Query the mapped execution's pending native approval or user-input requests, "
+    "including the identity required to reply. Equivalent to `agent-runner "
+    "requests`.",
+    _REQUESTS_SCHEMA,
+    read_pending_requests,
+)
+register_tool(
+    "reply_to_request",
+    "Return the explicit native reply for one request document obtained from "
+    "`pending_requests`. Equivalent to `agent-runner reply`.",
+    _REPLY_SCHEMA,
+    answer_pending_request,
+)
+
+
+def read_reports(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> ToolResult:
+    """Read the declared reports of an authorized direct child."""
+    return ToolResult(read_session_reports(_string_argument(arguments, 'alias'), cwd or Path.cwd()))
+
+
+register_tool('session_reports', "Read your or your direct child's reports and retained result submissions.",
+              _ALIAS_SCHEMA, read_reports)
+
+
+def submit_report(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> ToolResult:
+    """Submit the current Session's assigned report through the shared operation."""
+    return ToolResult(submit_session_report(_string_argument(arguments, 'name'),
+                                           _string_argument(arguments, 'text'), cwd or Path.cwd()))
+
+
+register_tool('submit_report', 'Write your own assigned report by filename (for example report.md).',
+              {'type': 'object', 'properties': {'name': {'type': 'string'}, 'text': {'type': 'string'}},
+               'required': ['name', 'text'], 'additionalProperties': False}, submit_report)
+
+
+def submit_result(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> ToolResult:
+    """Submit a versioned result using the authenticated Session context."""
+    from graphtraj.execution.runner_results import submit_session_result
+
+    if set(arguments) - {'commit', 'result_refs', 'evidence_refs', 'completion', 'unresolved'}:
+        raise ValueError('Unknown result submission fields.')
+    return ToolResult(submit_session_result(
+        _string_argument(arguments, 'commit'),
+        _string_list_argument(arguments, 'result_refs'),
+        _string_list_argument(arguments, 'evidence_refs'),
+        _string_argument(arguments, 'completion'),
+        _string_list_argument(arguments, 'unresolved'),
+        cwd or Path.cwd(),
+    ))
+
+
+register_tool('submit_result',
+              'Submit your committed task result and retain its evidence. Equivalent to agent-runner submit-result.',
+              {'type': 'object', 'properties': {
+                  'commit': {'type': 'string'},
+                  'result_refs': {'type': 'array', 'minItems': 1, 'items': {'type': 'string'}},
+                  'evidence_refs': {'type': 'array', 'items': {'type': 'string'}},
+                  'completion': {'type': 'string'},
+                  'unresolved': {'type': 'array', 'items': {'type': 'string'}},
+              }, 'required': ['commit', 'result_refs', 'completion'], 'additionalProperties': False},
+              submit_result)
+
+
+def decide_result(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> ToolResult:
+    """Accept or reject an identified submission as its authorized caller."""
+    from graphtraj.execution.runner_results import decide_session_result
+
+    if set(arguments) - {'submission_id', 'commit', 'decision', 'reason', 'evidence_refs'}:
+        raise ValueError('Unknown result decision fields.')
+    return ToolResult(decide_session_result(
+        _string_argument(arguments, 'submission_id'),
+        _string_argument(arguments, 'commit'),
+        _string_argument(arguments, 'decision'),
+        _string_argument(arguments, 'reason'),
+        _string_list_argument(arguments, 'evidence_refs'), cwd or Path.cwd(),
+    ))
+
+
+register_tool('decide_result',
+              'Accept or reject a submitted result with reasons and evidence. Equivalent to agent-runner decide-result.',
+              {'type': 'object', 'properties': {
+                  'submission_id': {'type': 'string'}, 'commit': {'type': 'string'},
+                  'decision': {'type': 'string', 'enum': ['accepted', 'rejected']},
+                  'reason': {'type': 'string'},
+                  'evidence_refs': {'type': 'array', 'minItems': 1, 'items': {'type': 'string'}},
+              }, 'required': ['submission_id', 'commit', 'decision', 'reason', 'evidence_refs'],
+               'additionalProperties': False}, decide_result)

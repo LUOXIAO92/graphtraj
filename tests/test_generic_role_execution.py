@@ -193,7 +193,7 @@ def test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority(
 ) -> None:
     """Role-tree edges grant dispatch, while same-role peers cannot control instances."""
     import sys
-    from graphtraj.interfaces import mcp
+    from graphtraj.interfaces import tools
 
     root, _, _, env = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path,
@@ -239,7 +239,7 @@ def test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority(
                 for key, value in env.items():
                     patch.setenv(key, value)
                 patch.setattr(sys, 'executable', str(installed_commands.runner.with_name('python')))
-                result = mcp.launch_swarm_tool(request, cwd=root)
+                result = tools.launch_swarm_tool(request, cwd=root)
             assert not result.failed, result.document
             document = result.document
         parent = document['tasks'][0]

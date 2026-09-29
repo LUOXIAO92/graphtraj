@@ -7,7 +7,7 @@ from pathlib import Path
 
 import yaml
 
-from graphtraj.interfaces import mcp
+from graphtraj.interfaces import tools
 from graphtraj.execution.runner_models import RunnerError
 
 
@@ -26,14 +26,14 @@ for args in (['git', 'add', 'result.md', 'result.tex', 'visits.txt'],
              ['git', 'commit', '-m', 'Deliver task documents']):
     subprocess.run(args, check=True, capture_output=True)
 commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
-owned = mcp.submit_report({'name': report, 'text': 'Candidate: ' + commit}, cwd=root).document
+owned = tools.submit_report({'name': report, 'text': 'Candidate: ' + commit}, cwd=root).document
 try:
-    mcp.submit_report({'name': 'foreign.md', 'text': 'forbidden'}, cwd=root)
+    tools.submit_report({'name': 'foreign.md', 'text': 'forbidden'}, cwd=root)
 except RunnerError as error:
     assert error.code == 'authority-denied'
 else:
     raise AssertionError('Foreign report write was authorized')
-submitted = mcp.submit_result({'commit': commit, 'result_refs': ['result.md', 'result.tex'],
+submitted = tools.submit_result({'commit': commit, 'result_refs': ['result.md', 'result.tex'],
                               'evidence_refs': [owned['report']], 'completion': 'Research delivered'},
                              cwd=root).document
 print(json.dumps({'type': 'item.completed', 'item': {'type': 'agent_message',

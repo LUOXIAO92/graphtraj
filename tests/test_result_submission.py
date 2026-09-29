@@ -8,7 +8,7 @@ import yaml
 from graphtraj.configuration.project_configuration import default_configuration_content
 from graphtraj.execution.runner_status import runtime_caller
 from graphtraj.execution.runner_results import assign_session_reports
-from graphtraj.interfaces import mcp
+from graphtraj.interfaces import tools
 from test_generic_members import _register_research_team
 
 
@@ -51,16 +51,16 @@ def test_researchers_submit_distinct_retained_results_without_coding_reports(tmp
     for alias, note in [('research@x1', 'First evidence'), ('research@x2', 'Second evidence')]:
         name = f'researcher-{alias.split("@")[1]}.md'
         with runtime_caller(runner, alias):
-            report = mcp.submit_report({'name': name, 'text': note}, cwd=tmp_path).document['report']
-            submission = mcp.submit_result({
+            report = tools.submit_report({'name': name, 'text': note}, cwd=tmp_path).document['report']
+            submission = tools.submit_result({
                 'commit': commit, 'result_refs': ['result.md'],
                 'evidence_refs': [report], 'completion': 'Research complete',
                 'unresolved': [],
             }, cwd=tmp_path).document
             submissions.append(submission)
-            mcp.submit_report({'name': name, 'text': 'Later work'}, cwd=tmp_path)
+            tools.submit_report({'name': name, 'text': 'Later work'}, cwd=tmp_path)
         with runtime_caller(runner, None):
-            result = mcp.read_reports({'alias': alias}, cwd=tmp_path).document
+            result = tools.read_reports({'alias': alias}, cwd=tmp_path).document
         assert result['submissions'] == [submission]
         assert submission['session'] == 'native-' + alias
         assert submission['candidate'] == commit
@@ -83,24 +83,24 @@ def test_submission_rejects_unowned_or_invalid_inputs(tmp_path: Path) -> None:
     state = tmp_path / 'state'
     before = read_worldline(state, tmp_path)
     with runtime_caller(runner, 'research@x2'):
-        mcp.submit_report({'name': 'researcher-x2.md', 'text': 'Other member evidence'}, cwd=tmp_path)
+        tools.submit_report({'name': 'researcher-x2.md', 'text': 'Other member evidence'}, cwd=tmp_path)
     with runtime_caller(runner, None), pytest.raises(RunnerError):
-        mcp.submit_result(arguments, cwd=tmp_path)
+        tools.submit_result(arguments, cwd=tmp_path)
     with runtime_caller(runner, 'research@x1'):
         for extra in ({'alias': 'research@x2'}, {'ticket_id': 'other'}, {'role': 'engineer'}):
             with pytest.raises(ValueError):
-                mcp.submit_result({**arguments, **extra}, cwd=tmp_path)
+                tools.submit_result({**arguments, **extra}, cwd=tmp_path)
         for extra in ({'result_refs': ['absent.md']}, {'commit': '0' * 40},
                       {'result_refs': ['../evidence.md']},
                       {'evidence_refs': [str(team.parent / 'rounds/1/researcher-x2.md')]}):
             with pytest.raises((ValueError, RunnerError)):
-                mcp.submit_result({**arguments, **extra}, cwd=tmp_path)
+                tools.submit_result({**arguments, **extra}, cwd=tmp_path)
     assert read_worldline(state, tmp_path) == before
     request = {'phase': 'retiring', 'ticket_id': '148', 'actor': 'user',
                'caused_by_event_ids': [before[-1]['event_id']], 'evidence_refs': ['evidence.md']}
     apply_delivery_state_request(state, tmp_path, request, request)
     with runtime_caller(runner, 'research@x1'), pytest.raises(RunnerError):
-        mcp.submit_result(arguments, cwd=tmp_path)
+        tools.submit_result(arguments, cwd=tmp_path)
     trace = team.parent / 'traces/research@x1/events.jsonl'
     trace.parent.mkdir(parents=True)
     trace.write_text('Retained Session trace\n')
@@ -123,9 +123,9 @@ def test_submission_rejects_unowned_or_invalid_inputs(tmp_path: Path) -> None:
              'members': {'new': {'role': 'researcher', 'session_ref': 'research@x4'}}}
     apply_delivery_state_request(state, tmp_path, start, start)
     with runtime_caller(runner, 'research@x1'), pytest.raises(RunnerError):
-        mcp.submit_result(arguments, cwd=tmp_path)
+        tools.submit_result(arguments, cwd=tmp_path)
     with runtime_caller(runner, 'research@x4'):
-        assert mcp.submit_result(arguments, cwd=tmp_path).document['team_ordinal'] == 2
+        assert tools.submit_result(arguments, cwd=tmp_path).document['team_ordinal'] == 2
 
 
 def test_failed_evidence_write_or_event_append_leaves_no_submission(tmp_path: Path, monkeypatch) -> None:
@@ -135,7 +135,7 @@ def test_failed_evidence_write_or_event_append_leaves_no_submission(tmp_path: Pa
 
     runner, team, commit = result_project(tmp_path)
     with runtime_caller(runner, 'research@x1'):
-        report = mcp.submit_report({'name': 'researcher-x1.md', 'text': 'Retain me'}, cwd=tmp_path).document['report']
+        report = tools.submit_report({'name': 'researcher-x1.md', 'text': 'Retain me'}, cwd=tmp_path).document['report']
         arguments = {'commit': commit, 'result_refs': ['result.md'],
                      'evidence_refs': [report], 'completion': 'Done'}
         before = read_worldline(tmp_path / 'state', tmp_path)
@@ -149,7 +149,7 @@ def test_failed_evidence_write_or_event_append_leaves_no_submission(tmp_path: Pa
             with monkeypatch.context() as patch:
                 patch.setattr(Path, 'open', fail_write)
                 with pytest.raises(OSError, match='injected write failure'):
-                    mcp.submit_result(arguments, cwd=tmp_path)
+                    tools.submit_result(arguments, cwd=tmp_path)
             assert read_worldline(tmp_path / 'state', tmp_path) == before
             assert not list((team.parent / 'traces/research@x1').iterdir())
         assert Path(report).read_text() == 'Retain me'
@@ -191,7 +191,7 @@ def test_cli_submits_versioned_code_using_real_process_ownership(tmp_path: Path)
     assert read.returncode == 0, read.stdout + read.stderr
     assert yaml.safe_load(read.stdout)['submissions'] == [submission]
     with runtime_caller(runner, None):
-        assert mcp.read_reports({'alias': 'research@x1'}, cwd=tmp_path).document['submissions'] == [submission]
+        assert tools.read_reports({'alias': 'research@x1'}, cwd=tmp_path).document['submissions'] == [submission]
 
 
 def test_new_role_aliases_get_distinct_named_reports(tmp_path: Path) -> None:
@@ -217,9 +217,9 @@ def test_new_role_aliases_get_distinct_named_reports(tmp_path: Path) -> None:
         }))
         apply_delivery_state_request(tmp_path / 'state', tmp_path, request, request)
         with runtime_caller(runner, alias):
-            report = mcp.submit_report({'name': assigned[0].name, 'text': entity}, cwd=tmp_path).document
+            report = tools.submit_report({'name': assigned[0].name, 'text': entity}, cwd=tmp_path).document
             reports.append(Path(report['report']))
-            mcp.submit_result({'commit': commit, 'result_refs': ['result.md'],
+            tools.submit_result({'commit': commit, 'result_refs': ['result.md'],
                                'completion': 'Done', 'evidence_refs': [report['report']]}, cwd=tmp_path)
     assert reports[0].name == 'researcher.md'
     assert reports[1].name == 'researcher-researcher_2.md'

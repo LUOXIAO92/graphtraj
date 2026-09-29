@@ -17,7 +17,7 @@ from test_ticket_graph import _change_status, _register, _ticket
 RUNTIME = r'''
 import json, os, subprocess, sys
 from pathlib import Path
-from graphtraj.interfaces import mcp
+from graphtraj.interfaces import tools
 
 if sys.argv[1:] == ['exec', '--help']:
     print('--sandbox')
@@ -32,15 +32,15 @@ if count == 1:
     if os.environ['RECOVERY_CASE'] == 'provider':
         raise SystemExit(1)
     if os.environ['RECOVERY_CASE'] == 'prose':
-        mcp.submit_report({'name': role + '.md', 'text': 'Decision: ACCEPT\n'}, cwd=root)
+        tools.submit_report({'name': role + '.md', 'text': 'Decision: ACCEPT\n'}, cwd=root)
 else:
     assert 'Repair the assigned result' in prompt
-    report = mcp.submit_report({'name': role + '.md', 'text': 'Restored evidence'}, cwd=root).document
+    report = tools.submit_report({'name': role + '.md', 'text': 'Restored evidence'}, cwd=root).document
     Path('result.md').write_text('Corrected task result\n')
     subprocess.run(['git', 'add', 'result.md'], check=True, capture_output=True)
     subprocess.run(['git', 'commit', '-m', 'Corrected result'], check=True, capture_output=True)
     commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
-    mcp.submit_result({'commit': commit, 'result_refs': ['result.md'],
+    tools.submit_result({'commit': commit, 'result_refs': ['result.md'],
                        'evidence_refs': [report['report']], 'completion': 'Recovered'}, cwd=root)
 print(json.dumps({'type': 'item.completed', 'item': {'type': 'agent_message', 'text': 'Turn finished'}}))
 '''

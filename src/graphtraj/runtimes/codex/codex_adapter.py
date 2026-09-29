@@ -65,6 +65,34 @@ _CODEX_ROLE_PROJECTION: Mapping[str, Any] = {
 }
 
 
+# The Runtime callback reuses these public handlers and argument schemas.
+# Ticket state mutation and arbitrary file operations are not Runtime tools.
+NATIVE_RUNNER_TOOLS = {
+    'graphtraj_status': 'alias_status',
+    'graphtraj_swarm': 'swarm',
+    'graphtraj_send': 'send_instruction',
+    'graphtraj_interrupt': 'interrupt',
+    'graphtraj_requests': 'pending_requests',
+    'graphtraj_reply': 'reply_to_request',
+    'graphtraj_reports': 'session_reports',
+    'graphtraj_submit_report': 'submit_report',
+    'graphtraj_submit_result': 'submit_result',
+    'graphtraj_decide_result': 'decide_result',
+    'graphtraj_ticket_graph': 'ticket_graph',
+}
+
+
+def native_runner_tools() -> list[dict[str, Any]]:
+    """Describe existing Runner operations for the native callback transport."""
+    from graphtraj.interfaces.tools import TOOLS
+
+    return [
+        {'type': 'function', 'name': name, 'description': TOOLS[key].description,
+         'inputSchema': TOOLS[key].input_schema}
+        for name, key in NATIVE_RUNNER_TOOLS.items()
+    ]
+
+
 class CodexAdapterError(RuntimeAdapterError):
     """A selected Codex role cannot be launched safely."""
 
@@ -94,10 +122,6 @@ class _CodexRole:
         model: str,
     ) -> Dict[str, Any]:
         """Render the private request consumed by this Adapter's worker."""
-
-        # Import after Adapter initialization; all transports share the public
-        # operation schemas and validation instead of defining a second Runner.
-        from graphtraj.interfaces.mcp import native_runner_tools
 
         arguments = [
             str(executable),

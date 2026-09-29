@@ -10,7 +10,7 @@ from graphtraj.execution.runner_results import assign_session_reports
 from graphtraj.execution.runner_status import runtime_caller
 from graphtraj.graph.delivery_state import apply_delivery_state_request, read_team
 from graphtraj.graph.delivery_worldline import read_worldline
-from graphtraj.interfaces import mcp
+from graphtraj.interfaces import tools
 from test_result_submission import result_project
 
 
@@ -29,16 +29,16 @@ def test_replacement_member_corrects_current_rejection(
     arguments = {'commit': commit, 'result_refs': ['result.md'],
                  'evidence_refs': ['result.md'], 'completion': 'Result ready'}
     with runtime_caller(runner, 'research@x1'):
-        mcp.submit_report({'name': 'researcher-x1.md', 'text': 'Original evidence'}, cwd=tmp_path)
-        first = mcp.submit_result(arguments, cwd=tmp_path).document
+        tools.submit_report({'name': 'researcher-x1.md', 'text': 'Original evidence'}, cwd=tmp_path)
+        first = tools.submit_result(arguments, cwd=tmp_path).document
     decision = {'submission_id': first['event_id'], 'commit': commit,
                 'decision': 'rejected', 'reason': 'Required conclusion is missing.',
                 'evidence_refs': first['evidence_refs']}
     with runtime_caller(runner, parent):
         # Cover both direct rejection and returning a previously accepted result.
         if report_first:
-            mcp.decide_result({**decision, 'decision': 'accepted'}, cwd=tmp_path)
-        rejected = mcp.decide_result(decision, cwd=tmp_path).document
+            tools.decide_result({**decision, 'decision': 'accepted'}, cwd=tmp_path)
+        rejected = tools.decide_result(decision, cwd=tmp_path).document
     old_report = team_file.parent / 'rounds/1/researcher-x1.md'
     before = read_worldline(state, tmp_path)
 
@@ -66,17 +66,17 @@ def test_replacement_member_corrects_current_rejection(
             with pytest.raises((RunnerError, ValueError)):
                 apply_delivery_state_request(state, tmp_path, replay, replay)
             with pytest.raises(RunnerError):
-                mcp.submit_result(arguments, cwd=tmp_path)
+                tools.submit_result(arguments, cwd=tmp_path)
             with pytest.raises(RunnerError):
-                mcp.submit_report({'name': 'researcher-x1.md', 'text': 'Unauthorized'}, cwd=tmp_path)
+                tools.submit_report({'name': 'researcher-x1.md', 'text': 'Unauthorized'}, cwd=tmp_path)
     assert read_worldline(state, tmp_path) == after_replacement
 
     with runtime_caller(runner, 'research@x4'):
         if report_first:
-            report = mcp.submit_report({'name': reports[0].name, 'text': 'Correction evidence'},
+            report = tools.submit_report({'name': reports[0].name, 'text': 'Correction evidence'},
                                        cwd=tmp_path).document['report']
             assert '/rounds/2/' in report
-        second = mcp.submit_result(arguments, cwd=tmp_path).document
+        second = tools.submit_result(arguments, cwd=tmp_path).document
         assert second['round'] == 2
         assert second['alias'] == 'research@x4'
         assert second['session'] == 'native-replacement'
@@ -93,21 +93,21 @@ def test_replacement_member_corrects_current_rejection(
 
     decision = {**decision, 'evidence_refs': second['evidence_refs']}
     with runtime_caller(runner, parent):
-        accepted = mcp.decide_result({**decision, 'submission_id': second['event_id'],
+        accepted = tools.decide_result({**decision, 'submission_id': second['event_id'],
                                      'decision': 'accepted'}, cwd=tmp_path).document
     with runtime_caller(runner, 'research@x4'):
         with pytest.raises(ValueError, match='confirmed result rejection'):
             apply_delivery_state_request(state, tmp_path, replay, replay)
         with pytest.raises(ValueError, match='not accepting'):
-            mcp.submit_result(arguments, cwd=tmp_path)
+            tools.submit_result(arguments, cwd=tmp_path)
     # Even while the Ticket is reworking again, the first rejection is spent.
     with runtime_caller(runner, parent):
-        latest = mcp.decide_result({**decision, 'submission_id': second['event_id']},
+        latest = tools.decide_result({**decision, 'submission_id': second['event_id']},
                                    cwd=tmp_path).document
     with runtime_caller(runner, 'research@x4'):
         with pytest.raises(ValueError, match='confirmed result rejection'):
             apply_delivery_state_request(state, tmp_path, replay, replay)
-        third = mcp.submit_result(arguments, cwd=tmp_path).document
+        third = tools.submit_result(arguments, cwd=tmp_path).document
     assert third['round'] == 3
     events = read_worldline(state, tmp_path)
     assert accepted in events and latest in events

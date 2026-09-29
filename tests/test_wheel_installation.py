@@ -55,13 +55,14 @@ def test_built_wheel_carries_only_the_commands_and_runtime_policy(
 
     assert "graphtraj/interfaces/cli/graphtraj.py" in names
     assert "graphtraj/interfaces/mcp.py" in names
+    assert "graphtraj/interfaces/local_tool.py" in names
     for directory in UNBUNDLED_RESOURCE_DIRECTORIES:
         assert not any(name.startswith(directory) for name in names), directory
     assert {
         line.split(" = ")[0]
         for line in entry_points.splitlines()
         if " = " in line
-    } == {"graphtraj", "agent-runner", "graphtraj-mcp"}
+    } == {"graphtraj", "agent-runner", "graphtraj-mcp", "graphtraj-tool"}
 
 
 def test_installed_commands_come_from_the_built_wheel(

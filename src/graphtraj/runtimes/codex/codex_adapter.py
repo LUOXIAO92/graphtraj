@@ -22,6 +22,7 @@ from graphtraj.runtimes.runtime_adapter import (
     RuntimeAdapterError,
     RuntimeContext,
     RuntimeContextPreflight,
+    RuntimeTurn,
     SessionStarted,
 )
 from graphtraj.execution.runner_transport import record_runtime_identity, runtime_turn_outcome
@@ -271,7 +272,7 @@ def restore_codex_context(
 
 
 class CodexRuntimeAdapter:
-    """Bind first preparation to Codex's executable and existing Context."""
+    """Bind preparation and managed execution to Codex's existing Context."""
 
     def preflight_runtime_context(
         self,
@@ -296,6 +297,27 @@ class CodexRuntimeAdapter:
             evidence=evidence,
             requested_skills=requested_skills,
             report_files=report_files,
+        )
+
+    def managed_execution(
+        self,
+        request: dict,
+        prompt: str,
+        session_directory: Path,
+        session_started: SessionStarted,
+        context_evidence: dict,
+        *,
+        trace_file: Path,
+        expected_session: str | None = None,
+        session_created: SessionStarted,
+    ) -> RuntimeTurn:
+        """Construct the native owner without starting or resuming its Session."""
+        from graphtraj.runtimes.codex.managed_session import CodexManagedExecution
+
+        return CodexManagedExecution(
+            request, prompt, session_directory, session_started, context_evidence,
+            trace_file=trace_file, expected_session=expected_session,
+            session_created=session_created,
         )
 
 

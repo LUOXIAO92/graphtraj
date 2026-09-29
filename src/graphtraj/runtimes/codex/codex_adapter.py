@@ -22,6 +22,7 @@ from graphtraj.runtimes.runtime_adapter import (
     RuntimeAdapterError,
     RuntimeContext,
     RuntimeContextPreflight,
+    RuntimeTurn,
     SessionStarted,
 )
 from graphtraj.execution.runner_transport import record_runtime_identity, runtime_turn_outcome
@@ -295,7 +296,7 @@ def restore_codex_context(
 
 
 class CodexRuntimeAdapter:
-    """Prepare Codex Context and interpret native statistics and current diagnostics."""
+    """Prepare Codex Context, manage execution, and interpret statistics and diagnostics."""
 
     def current_execution_diagnostic(
         self,
@@ -396,6 +397,27 @@ class CodexRuntimeAdapter:
                 "The Session's native records could not be read.",
             ) from error
         return len(calls)
+
+    def managed_execution(
+        self,
+        request: dict,
+        prompt: str,
+        session_directory: Path,
+        session_started: SessionStarted,
+        context_evidence: dict,
+        *,
+        trace_file: Path,
+        expected_session: str | None = None,
+        session_created: SessionStarted,
+    ) -> RuntimeTurn:
+        """Construct the native owner without starting or resuming its Session."""
+        from graphtraj.runtimes.codex.managed_session import CodexManagedExecution
+
+        return CodexManagedExecution(
+            request, prompt, session_directory, session_started, context_evidence,
+            trace_file=trace_file, expected_session=expected_session,
+            session_created=session_created,
+        )
 
 
 def preflight_runtime_context(

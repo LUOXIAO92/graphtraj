@@ -103,6 +103,11 @@ class CodexManagedExecution:
         self.outcome: dict | None = None
         self.requests: dict[str, tuple[CodexServerRequest, asyncio.Future[dict]]] = {}
 
+    @property
+    def execution_id(self) -> str | None:
+        """Expose native execution identity without leaking the Codex handle."""
+        return self.execution.turn_id if self.execution is not None else None
+
     def run(self) -> dict:
         """Run native control on one loop while the Worker accepts local calls."""
         return asyncio.run(self._run())

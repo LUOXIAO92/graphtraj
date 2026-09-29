@@ -12,7 +12,6 @@ from typing import Callable
 
 import yaml
 
-from graphtraj.runtimes.codex.managed_session import CodexManagedExecution
 from graphtraj.execution.runner_connection import worker_connection
 from graphtraj.execution.execution_budget import (
     ExecutionBudgetMonitor,
@@ -33,14 +32,16 @@ from graphtraj.execution.runner_status import (
 from graphtraj.execution.runner_models import RunnerError
 from graphtraj.execution.runner_process import OPERATION_TIMEOUT_SECONDS
 from graphtraj.execution.runner_transport import runtime_launch_failure
-from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
+from graphtraj.runtimes.runtime_adapter import (
+    RuntimeAdapterError, RuntimeTurn, select_runtime_adapter,
+)
 
 
 def run(job_file: Path) -> int:
     """Own one current Session execution without creating a Turn record."""
 
     session_directory = job_file.parent
-    turn_handle: CodexManagedExecution | None = None
+    turn_handle: RuntimeTurn | None = None
     mapping_recorded = False
     terminal_published = False
     terminal: dict[str, object] | None = None
@@ -105,8 +106,7 @@ def run(job_file: Path) -> int:
                 or len(causes) != len(set(causes))
             ):
                 raise ValueError("follow-up causes are invalid")
-            if runtime != "codex":
-                raise ValueError("unsupported Runtime")
+            adapter = select_runtime_adapter(runtime)
 
             startup_lock = execution_start_lock(session_directory.parent.parent)
             try:
@@ -177,7 +177,7 @@ def run(job_file: Path) -> int:
                 previous_outcome = _previous_outcome(
                     session_directory / "execution.yml"
                 )
-                assert turn_handle is not None and turn_handle.execution is not None
+                assert turn_handle is not None and turn_handle.execution_id is not None
                 mapping = {
                     **{
                         key: value
@@ -187,7 +187,7 @@ def run(job_file: Path) -> int:
                     "session": session,
                     "worker_pid": os.getpid(),
                     "runtime_pid": runtime_pid,
-                    "execution_id": turn_handle.execution.turn_id,
+                    "execution_id": turn_handle.execution_id,
                     "control_directory": control_directory,
                 }
                 if previous_outcome is not None:
@@ -201,7 +201,7 @@ def run(job_file: Path) -> int:
                 write_heartbeat(session_directory, heartbeat)
                 startup_lock.close()
 
-            turn_handle = CodexManagedExecution(
+            turn_handle = adapter.managed_execution(
                 request, prompt, session_directory, record_session,
                 job.get("context_evidence", {}),
                 expected_session=expected_session if operation == "resume" else None,

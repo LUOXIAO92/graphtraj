@@ -38,16 +38,24 @@ class RuntimeAdapterError(Exception):
 
 
 class RuntimeTurn(Protocol):
-    """One Adapter-owned Runtime invocation."""
+    """One managed invocation, including native control and public identity."""
 
     def run(self) -> Dict[str, Any]:
         """Run the invocation until its Runtime reaches a terminal state."""
 
-    def terminate(self) -> bool:
-        """Request termination and confirm that it stopped a live Runtime."""
+    @property
+    def execution_id(self) -> str | None:
+        """Return the opaque execution ID, available before session_started."""
 
-    def terminate_until_terminal(self) -> None:
-        """Keep ownership until the Runtime process group is terminal."""
+    def operate(self, request: dict) -> dict:
+        """Control the exact Session/execution named by a Worker request."""
+
+    def terminate(self) -> bool:
+        """Retain a stop request; return whether native interruption was scheduled.
+
+        This is not terminal confirmation. run() retains ownership until the
+        Runtime stops, including a stop requested before Session creation.
+        """
 
 
 class RuntimeContext(Protocol):
@@ -75,14 +83,6 @@ class RuntimeContextPreflight(Protocol):
 
     def finalize(self) -> RuntimeContext:
         """Resolve Worktree-local facts and freeze the effective Context."""
-
-
-RuntimeAdapter = Callable[
-    [Mapping[str, Any], str, Path, SessionStarted], RuntimeTurn
-]
-ResumeRuntimeAdapter = Callable[
-    [Mapping[str, Any], str, str, Path, SessionStarted], RuntimeTurn
-]
 
 
 class RuntimePreparationAdapter(Protocol):
@@ -124,7 +124,32 @@ class RuntimePreparationAdapter(Protocol):
         """
 
 
-def select_runtime_adapter(runtime: str) -> RuntimePreparationAdapter:
+class RuntimeAdapter(RuntimePreparationAdapter, Protocol):
+    """Prepare Context and own managed execution for the selected Runtime."""
+
+    def managed_execution(
+        self,
+        request: dict,
+        prompt: str,
+        session_directory: Path,
+        session_started: SessionStarted,
+        context_evidence: dict,
+        *,
+        trace_file: Path,
+        expected_session: str | None = None,
+        session_created: SessionStarted,
+    ) -> RuntimeTurn:
+        """Construct an unstarted owner from retained Adapter configuration.
+
+        run() calls session_created with Session ID and service PID before any
+        task execution, allowing binding and member registration to finish.
+        It then calls session_started with those identities once execution_id
+        is available, before acknowledging execution to the caller. A resumed
+        owner must retain expected_session. Callbacks may refuse execution.
+        """
+
+
+def select_runtime_adapter(runtime: str) -> RuntimeAdapter:
     """Select an implemented Adapter from the resolved role's Runtime setting."""
     if runtime == "codex":
         from graphtraj.runtimes.codex.codex_adapter import CodexRuntimeAdapter

@@ -31,7 +31,7 @@ and validation evidence to the Team Leader. That Leader chooses Review scope;
 each axis runs at most once per Ticket and Reviewers never run tests. Subsequent
 corrections return to the Leader for verification, not another Review cycle.
 Return concrete blockers promptly to that owner. Follow
-[task-delivery](../../../skills/task-delivery/SKILL.md) for event handling and the shared
+[task-delivery](../../../manuals/task-delivery/guide.md) for event handling and the shared
 Harness polling limit for any running probe; do not
 start a second review or watch another role's report files.
 Before handoff, compare the report with the complete fixed candidate, including

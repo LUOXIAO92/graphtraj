@@ -8,9 +8,11 @@ Harness Project Documents.
 ## Project structure
 
 - `src/graphtraj/` contains the Python package and generic Runtime integration.
-- `skills/` contains independently selected general task methods;
-  `examples/coding-skills/` contains optional customized development samples.
-  Neither directory is a Python runtime resource or an auto-discovery directory.
+- `skills/graphtraj/` contains the thin Skill overview for Runtime discovery.
+  `manuals/` contains independently selected method guides and their references;
+  these stay outside Skill discovery locations. `examples/coding-skills/` contains
+  optional customized development samples. Guides and samples are not Python
+  runtime resources.
 - `tests/` contains behavior-focused pytest coverage.
 - `README.md` is the product-facing installation and operation guide.
 - `pyproject.toml` defines the GraphTraj distribution and the `graphtraj` /

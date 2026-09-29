@@ -21,7 +21,7 @@ domain router to maintain. General Harness Skills are not copied here.
 
 Project-specific instructions are examples, not GraphTraj requirements. Adapt
 named coordination and testing responsibilities to your project. Existing links
-to the general task-delivery Skill now point to `skills/task-delivery`; the
+to the general task-delivery Skill now point to `manuals/task-delivery`; the
 coding-ticket budget reference is retained beside `to-tickets`. That reference
 points to the general recovery instructions. Other files retain their content.
 When installing a sample separately, make its explicitly referenced methods

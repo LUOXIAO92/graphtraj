@@ -221,19 +221,26 @@ used. Preserve the host's existing configuration and permissions; the delivery
 adds no role or Skill discovery configuration. The delivered fields and the
 late-stop boundary are in the Codex-only recovery reference.
 
-## Independent task methods
+## GraphTraj overview and method guides
 
-The repository's [skills](skills/) directory provides five optional methods.
-Install or select them with your Runtime's supported Skill mechanism; setup
-does not copy them into a project or require their names.
+The [graphtraj Skill](skills/graphtraj/SKILL.md) is the thin discovery overview.
+Select it through the Runtime's supported Skill mechanism. Installing a Skill
+provides instructions; the host must also register the GraphTraj tool. Skill
+installation alone does not register a native callback in an existing session.
+
+The five method guides below live in [manuals](manuals/), outside Skill discovery
+locations. A selected feature's `manual_ref` points to its guide for tool
+explanation and CLI help. Bindings resolve that reference to the delivered file;
+they do not maintain another copy of its text. Read only the method needed for
+the current task. Setup does not install a catalog or require these method names.
 
 | Method | Purpose |
 | --- | --- |
-| [setup-project](skills/setup-project/SKILL.md) | Establish missing project paths, tracking and chosen resources while preserving existing conventions. |
-| [task-breakdown](skills/task-breakdown/SKILL.md) | Recursively split work to fit available resources, with independently verifiable results and real artifact dependencies. |
-| [task-delivery](skills/task-delivery/SKILL.md) | Dispatch, submit, accept, integrate and recover work through the common task protocol. |
-| [research](skills/research/SKILL.md) | Investigate questions using primary sources and retain evidence, uncertainty and citations. |
-| [concept-clarification](skills/concept-clarification/SKILL.md) | Clarify terminology, concepts, relationships and boundaries. |
+| [setup-project](manuals/setup-project/guide.md) | Establish missing project paths, tracking and chosen resources while preserving existing conventions. |
+| [task-breakdown](manuals/task-breakdown/guide.md) | Recursively split work to fit available resources, with independently verifiable results and real artifact dependencies. |
+| [task-delivery](manuals/task-delivery/guide.md) | Dispatch, submit, accept, integrate and recover work through the common task protocol. |
+| [research](manuals/research/guide.md) | Investigate questions using primary sources and retain evidence, uncertainty and citations. |
+| [concept-clarification](manuals/concept-clarification/guide.md) | Clarify terminology, concepts, relationships and boundaries. |
 
 These methods have no coding/non-coding router. Obtain specialist methods from
 sources relevant to your work, or write your own. Customized coding methods
@@ -396,7 +403,7 @@ Runner enforces stopping; the recorded parent coordinates its children.
 
 ## Deliver accepted Tickets
 
-The optional [task-delivery](skills/task-delivery/SKILL.md) method describes the workflow. Main registers
+The optional [task-delivery](manuals/task-delivery/guide.md) method describes the workflow. Main registers
 accepted GitHub Issue definitions and dependencies, generates the current
 graph with `graphtraj ticket graph`, and selects ready Tickets.
 Only validated `dev` integration satisfies a dependency.

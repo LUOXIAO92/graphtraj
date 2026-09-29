@@ -1,5 +1,0 @@
-interface:
-  display_name: "Setup Project"
-  short_description: "Configure project paths, tracking and selected resources"
-policy:
-  allow_implicit_invocation: false

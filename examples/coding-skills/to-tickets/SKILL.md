@@ -95,7 +95,7 @@ Publish the accepted tickets when tracker writes are authorized. **How** depends
 - **A real issue tracker (GitHub, Linear, …)** → publish one issue per ticket in dependency order (blockers first) so each ticket's blocking edges can reference real identifiers. Use the platform's native blocking / sub-issue relationship where it has one; otherwise set each ticket's "Blocked by" to the blocking issues. Apply the `ready-for-agent` triage label unless instructed otherwise — the tickets are agent-grabbable by construction.
 
 When execution is authorized, hand the accepted graph and publication results
-to [task-delivery](../../../skills/task-delivery/SKILL.md), reusing its current context.
+to [task-delivery](../../../manuals/task-delivery/guide.md), reusing its current context.
 It owns readiness, dispatch, event handling and recovery; ticketing does not
 start another monitoring loop. Apply any user pause or stop-after instruction.
 

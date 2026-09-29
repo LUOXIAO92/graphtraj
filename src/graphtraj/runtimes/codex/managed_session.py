@@ -269,9 +269,11 @@ class CodexManagedExecution:
         response = asyncio.get_running_loop().create_future()
         self.requests[token] = (request, response)
         try:
-            await self._notify_direct_parent(request, token)
+            notification = asyncio.create_task(self._notify_direct_parent(request, token))
             return await response
         finally:
+            notification.cancel()
+            await asyncio.gather(notification, return_exceptions=True)
             self.requests.pop(token, None)
 
     async def _native_runner_request(self, request: CodexServerRequest) -> dict:
@@ -305,13 +307,20 @@ class CodexManagedExecution:
                 session, request.request_id, request.method, execution_id,
             )
         )
-        await asyncio.to_thread(
-            notify_direct_parent, self.directory, notice, {
-                "request_id": request.request_id, "method": request.method,
-                "request_token": token, "session": session,
-                "execution_id": execution_id,
-            },
-        )
+        identity = {
+            "request_id": request.request_id, "method": request.method,
+            "request_token": token, "session": session,
+            "execution_id": execution_id,
+        }
+        notice += "\n" + json.dumps({**identity, "params": request.params}, ensure_ascii=False)
+        while token in self.requests and not self.requests[token][1].done():
+            receipt = await asyncio.to_thread(
+                notify_direct_parent, self.directory, notice, identity,
+            )
+            if receipt["delivery"] in {"received", "no-direct-parent"}:
+                return
+            # Retry only while the original native request is still pending.
+            await asyncio.sleep(1)
 
     async def _review_approval(self, request: CodexServerRequest) -> dict:
         """Review this request and return its native response without a separate log."""

@@ -7,6 +7,7 @@ import os
 import signal
 import sys
 import threading
+import time
 from pathlib import Path
 from typing import Callable
 
@@ -430,7 +431,7 @@ def _monitor_execution_budget(
     role = mapping["role"]
     assert isinstance(role, str)
     delivery: threading.Thread | None = None
-    attempted: set[str] = set()
+    retry_at = 0.0
 
     def deliver() -> None:
         """Keep failed transport pending without failing or delaying execution."""
@@ -448,8 +449,8 @@ def _monitor_execution_budget(
             terminate()
         if (session_directory / "launch.yml").is_file():
             pending = {notice["key"] for notice in monitor.pending_parent_notices()}
-            if pending - attempted and (delivery is None or not delivery.is_alive()):
-                attempted.update(pending)
+            if pending and time.monotonic() >= retry_at and (delivery is None or not delivery.is_alive()):
+                retry_at = time.monotonic() + 1
                 delivery = threading.Thread(target=deliver, daemon=True)
                 delivery.start()
         if stopped:

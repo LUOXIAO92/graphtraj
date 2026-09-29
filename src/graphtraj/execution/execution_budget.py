@@ -241,9 +241,9 @@ class ExecutionBudgetMonitor:
     def deliver_parent_notices(self, session_directory: Path) -> None:
         """Deliver once to the task's recorded parent, outside the budget lock.
 
-        Members of the same Ticket share their root assignment's recipient.
-        A caller-channel write records transport only and never claims that
-        an Agent received the notice.
+        The notifying Session uses its own direct parent, including while that
+        parent's Driver waits for children. A caller-channel write records
+        transport only and never claims that an Agent received the notice.
         """
         from graphtraj.execution.runner_control import notify_direct_parent
         from graphtraj.execution.runner_status import read_alias_mapping
@@ -256,11 +256,6 @@ class ExecutionBudgetMonitor:
             # also available when admission stops before a native Session exists.
             mapping = yaml.safe_load((session_directory / "launch.yml").read_text())["mapping"]
             directory = session_directory
-        while isinstance(mapping.get("parent"), str):
-            parent, parent_directory = read_alias_mapping(runner, mapping["parent"])
-            if parent["ticket_id"] != mapping["ticket_id"]:
-                break
-            mapping, directory = parent, parent_directory
 
         def deliver(pending: list[dict[str, Any]]) -> list[str]:
             """Return only notice keys acknowledged by the actual parent."""

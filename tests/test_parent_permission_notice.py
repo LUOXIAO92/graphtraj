@@ -1,15 +1,12 @@
-"""A child's native request reaching the direct parent's own execution.
+"""Parent consumption, explicit native replies and original Driver aggregation.
 
-One Team Leader Session registers one Engineer child. The Leader's model work
-is a controlled native peer scenario that runs inside the Leader's own process
-tree, so its control calls are the calls a real Leader makes; the Engineer runs
-the managed native peer. The Leader is kept running while the child produces a
-native permission request, so the notice has to reach a live execution rather
-than an idle Session.
+Controlled app-server peers replace model work only. Real installed Runner,
+Adapter, process ownership and native request/reply transports remain in use.
 """
 
 from __future__ import annotations
 
+import fcntl
 import json
 import os
 import subprocess
@@ -63,9 +60,67 @@ def notice_received():
     )
 
 
+def consume(text: str) -> str:
+    """Consume the received system message before deciding the native request."""
+    notice = json.loads(text)
+    assert set(notice) == {'source', 'alias', 'event', 'message'}
+    assert all(isinstance(value, str) and value for value in notice.values())
+    assert notice['source'] == 'graphtraj'
+    assert notice['event'] == 'item/commandExecution/requestApproval'
+    details = json.loads(notice['message'].split('\\n')[-1])
+    assert details['params']['command'] == 'printf APPROVAL_121'
+    retain({'consumed': notice})
+    return notice['alias']
+
+
+seen_budgets = set()
+
+
+def consume_budgets() -> None:
+    """Act on budget messages in the actual parent's running native scenario."""
+    path = Path(os.environ['PEER_PROTOCOL_LOG'])
+    if not path.exists():
+        return
+    for line in path.read_text().splitlines():
+        record = json.loads(line)
+        text = record['params']['input'][0]['text']
+        if not text.startswith('{'):
+            continue
+        notice = json.loads(text)
+        if notice['event'] != 'execution-budget-exceeded' or text in seen_budgets:
+            continue
+        assert set(notice) == {'source', 'alias', 'event', 'message'}
+        assert notice['source'] == 'graphtraj'
+        seen_budgets.add(text)
+        retain({'budget_action': notice})
+
+
 prompt = sys.stdin.read()
 if sys.argv[1:3] == ['exec', '--help']:
     print('--sandbox')
+elif prompt.startswith('{'):
+    child = consume(prompt)
+    while not Path(os.environ['PAIR_RELEASE']).exists():
+        consume_budgets()
+        time.sleep(0.05)
+    queried = call('requests', child)
+    request = yaml.safe_load(queried.stdout)['requests'][0]
+    Path(os.environ['PAIR_REQUEST_FILE']).write_text(json.dumps(request))
+    call('reply', child, '--request-file', os.environ['PAIR_REQUEST_FILE'],
+         '--response', '{"decision":"accept"}')
+    # Stay active until aggregation arrives, exercising send rather than a
+    # competing continuation when the original Driver collects child results.
+    deadline = time.monotonic() + 20
+    while time.monotonic() < deadline:
+        records = [json.loads(line) for line in Path(os.environ['PEER_PROTOCOL_LOG']).read_text().splitlines()]
+        if any('Direct child execution results:' in r['params']['input'][0]['text'] for r in records):
+            retain({'aggregated': True})
+            break
+        time.sleep(0.05)
+    else:
+        raise SystemExit('Original Driver did not return child results')
+elif 'Direct child execution results:' in prompt:
+    retain({'aggregated': True})
 elif 'Run the pair probe' in prompt:
     child = os.environ['PAIR_CHILD']
     # Steer the running child while this parent keeps its own execution live.
@@ -83,8 +138,11 @@ elif 'Run the pair probe' in prompt:
         time.sleep(0.05)
     if not waiting or not received:
         raise SystemExit('The child never waited for its request in this parent.')
+    records = [json.loads(line) for line in Path(os.environ['PEER_PROTOCOL_LOG']).read_text().splitlines()]
+    consume(next(r['params']['input'][0]['text'] for r in records if r.get('method') == 'turn/steer' and r['params']['input'][0]['text'].startswith('{')))
     # The request stays unanswered until this parent's own reply entry runs.
     while not Path(os.environ['PAIR_RELEASE']).exists():
+        consume_budgets()
         if time.monotonic() >= deadline:
             raise SystemExit('The pair probe was never released.')
         time.sleep(0.05)
@@ -128,11 +186,29 @@ def _controlled_peers(fake_codex: FakeCodex) -> None:
     )
     (directory / "runner_peer.py").write_text(
         peer.replace(anchor, anchor + (
+            "        text = params['input'][0]['text']\n"
+            "        event = json.loads(text).get('event') if text.startswith('{') else None\n"
+            "        marker = Path(os.environ['PAIR_EXECUTIONS']).with_suffix('.' + str(event).replace('/', '_'))\n"
+            "        if event and os.environ.get('PAIR_FAIL_ONCE') and not marker.exists():\n"
+            "            marker.touch()\n"
+            "            emit({'id': request['id'], 'error': {'code': -32000, 'message': 'temporary notice refusal'}})\n"
+            "            continue\n"
             "        path = os.environ.get('PEER_PROTOCOL_LOG')\n"
             "        if path:\n"
             "            with open(path, 'a') as stream:\n"
             "                stream.write(json.dumps(request) + '\\n')\n"
-        ), 1),
+        ), 1).replace(
+            "    with output_lock:",
+            "    if message.get('method') == 'turn/completed':\n"
+            "        with open(os.environ['PAIR_EXECUTIONS'], 'a') as stream:\n"
+            "            stream.write(json.dumps({'end': message['params']['turn']['id']}) + '\\n')\n"
+            "    with output_lock:",
+        ).replace(
+            "        worker = threading.Thread(target=finish,",
+            "        with open(os.environ['PAIR_EXECUTIONS'], 'a') as stream:\n"
+            "            stream.write(json.dumps({'start': turn}) + '\\n')\n"
+            "        worker = threading.Thread(target=finish,",
+        ),
         encoding="utf-8",
     )
     (directory / "member_peer.py").write_text(
@@ -171,7 +247,7 @@ def _mapping_for_role(runner_directory: Path, role: str, timeout: float = 60.0) 
     while time.monotonic() < deadline:
         for path in sorted((runner_directory / "sessions").glob("*/mapping.yml")):
             mapping = yaml.safe_load(path.read_text(encoding="utf-8"))
-            if mapping.get("role") == role:
+            if mapping.get("role") == role and mapping.get("execution_id"):
                 return mapping
         time.sleep(0.02)
     raise AssertionError("No {0} Session was launched".format(role))
@@ -201,24 +277,30 @@ def _await_records(path: Path, predicate, timeout: float = 60.0) -> list[dict]:
     raise AssertionError("Timed out waiting for records in {0}".format(path))
 
 
-def test_a_child_request_reaches_the_running_direct_parent(
+@pytest.mark.parametrize("idle,transient", [(False, False), (False, True), (True, False)])
+def test_parent_consumes_notices_and_replies_while_driver_waits(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
     fake_codex: FakeCodex,
     tmp_path: Path,
+    idle: bool,
+    transient: bool,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The real request arrives in the parent's live execution and stays pending."""
+    """Running/idle parents consume notices, explicitly reply and retain aggregation."""
     from graphtraj.execution.runner_status import read_alias_mapping
 
     root, _, _, environment = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path,
     )
     _controlled_peers(fake_codex)
-    _register_ready_ticket(installed_commands, root)
+    from test_task_budget_control import BODY
+    _register_ready_ticket(installed_commands, root, body=BODY)
     child_batch = root / "child-batch.yml"
     child_batch.write_text(yaml.safe_dump({"tasks": [{
         "ticket_id": "76", "ticket_name": "session-alias-control",
         "role": "coding-team.engineer",
+        "instruction": "request:approval" if idle else "hold",
     }]}, sort_keys=False), encoding="utf-8")
     batch = root / "batch.yml"
     batch.write_text(yaml.safe_dump({"tasks": [{
@@ -236,6 +318,9 @@ def test_a_child_request_reaches_the_running_direct_parent(
         "CODEX_HOME": str(tmp_path / "codex-home"),
         "PAIR_CHILD_BATCH": str(child_batch),
         "PAIR_LOG": str(parent_log),
+        "PEER_PROTOCOL_LOG": str(protocol_log),
+        "PAIR_FAIL_ONCE": "1" if transient else "",
+        "PAIR_EXECUTIONS": str(tmp_path / "executions.jsonl"),
         "PAIR_CAUSE": _last_worldline_event(root),
         "PAIR_RELEASE": str(release),
         "PAIR_REQUEST_FILE": str(tmp_path / "child-request.json"),
@@ -254,7 +339,8 @@ def test_a_child_request_reaches_the_running_direct_parent(
         assert child["parent"] == leader["alias"]
         child_alias = child["alias"]
         notices = runner_directory / "sessions" / child_alias / "parent-notices.jsonl"
-        assert not notices.exists()
+        if not idle:
+            assert not notices.exists()
 
         sessions_before = sorted(
             path.name for path in (runner_directory / "sessions").iterdir()
@@ -262,22 +348,24 @@ def test_a_child_request_reaches_the_running_direct_parent(
 
         # The parent resumes and keeps running while it steers the child, so the
         # child's request appears while the parent owns a live execution.
-        probe = run_process(
-            [
-                str(installed_commands.runner), "send", leader["alias"],
-                "--instruction", "Run the pair probe now.",
-                "--caused-by-event-id", _last_worldline_event(root),
-            ],
-            cwd=root,
-            env={
-                **environment,
-                "PEER_PROTOCOL_LOG": str(protocol_log),
-                "PAIR_CHILD": child_alias,
-            },
-            timeout=60,
-        )
-        assert probe.returncode == 0, probe.stdout + probe.stderr
-        assert yaml.safe_load(probe.stdout)["send_status"] == "sent"
+        if not idle:
+            with (tmp_path / 'send-stderr.log').open('w') as diagnostics:
+                probe = subprocess.run(
+                    [
+                        str(installed_commands.runner), "send", leader["alias"],
+                        "--instruction", "Run the pair probe now.",
+                        "--caused-by-event-id", _last_worldline_event(root),
+                    ],
+                    cwd=root,
+                    env={
+                        **environment,
+                        "PEER_PROTOCOL_LOG": str(protocol_log),
+                        "PAIR_CHILD": child_alias,
+                    },
+                    timeout=60, stdout=subprocess.PIPE, stderr=diagnostics, text=True,
+                )
+            assert probe.returncode == 0, probe.stdout + (tmp_path / 'send-stderr.log').read_text()
+            assert yaml.safe_load(probe.stdout)["send_status"] == "sent"
 
         received = _await_records(
             notices, lambda records: any(
@@ -286,19 +374,22 @@ def test_a_child_request_reaches_the_running_direct_parent(
         )
         record, = [item for item in received if item["delivery"] == "received"]
         parent, parent_directory = read_alias_mapping(runner_directory, leader["alias"])
-        received_by_parent = _await_records(
-            protocol_log, lambda records: any(
-                record.get("method") == "turn/steer" for record in records
-            ),
-        )
-        steer, = [item for item in received_by_parent if item["method"] == "turn/steer"]
-
-        # The notice reached the exact execution the parent already owned and was
-        # produced by a request that is still waiting for a native decision.
-        assert steer["params"]["threadId"] == parent["session"] == record["parent_session"]
-        assert steer["params"]["expectedTurnId"] == parent["execution_id"]
-        assert steer["params"]["expectedTurnId"] == record["parent_execution_id"]
-        assert steer["params"]["input"][0]["text"] == record["notice"]
+        consumed = _await_records(parent_log, lambda records: any('consumed' in r for r in records))
+        notice = next(r['consumed'] for r in consumed if 'consumed' in r)
+        assert notice == json.loads(record['notice'])
+        assert notice['alias'] == child_alias
+        assert parent['session'] == leader['session'] == record['parent_session']
+        assert parent['execution_id'] == record['parent_execution_id']
+        if idle:
+            assert parent['execution_id'] != leader['execution_id']
+        else:
+            received_by_parent = _await_records(
+                protocol_log, lambda records: any(record.get('method') == 'turn/steer' for record in records),
+            )
+            steer = next(item for item in received_by_parent if item['method'] == 'turn/steer')
+            assert steer['params']['threadId'] == parent['session']
+            assert steer['params']['expectedTurnId'] == parent['execution_id']
+            assert steer['params']['input'][0]['text'] == record['notice']
         assert record["parent"] == leader["alias"]
         assert record["identity"]["method"] == "item/commandExecution/requestApproval"
         assert record["identity"]["session"] == child["session"]
@@ -312,21 +403,22 @@ def test_a_child_request_reaches_the_running_direct_parent(
         def child_waiting(records: list[dict]) -> bool:
             """Return whether the parent already observed the child's native wait."""
             return any(
-                item["call"] == ["status", child_alias]
+                item.get("call") == ["status", child_alias]
                 and yaml.safe_load(item["document"])["aliases"][0].get("waiting_for")
                 == "runtime-request"
                 for item in records
             )
 
-        waiting = _await_records(parent_log, child_waiting)
-        observed = [
-            item for item in waiting if item["call"] == ["status", child_alias]
-            and yaml.safe_load(item["document"])["aliases"][0].get("waiting_for")
-            == "runtime-request"
-        ]
-        assert yaml.safe_load(observed[-1]["document"])["aliases"][0]["execution_id"] == (
-            record["identity"]["execution_id"]
-        )
+        if not idle:
+            waiting = _await_records(parent_log, child_waiting)
+            observed = [
+                item for item in waiting if item.get("call") == ["status", child_alias]
+                and yaml.safe_load(item["document"])["aliases"][0].get("waiting_for")
+                == "runtime-request"
+            ]
+            assert yaml.safe_load(observed[-1]["document"])["aliases"][0]["execution_id"] == (
+                record["identity"]["execution_id"]
+            )
         assert not (runner_directory / "sessions" / child_alias / "execution.yml").exists()
 
         # Knowing the request is not the authority to answer it. This caller
@@ -357,13 +449,41 @@ def test_a_child_request_reaches_the_running_direct_parent(
         assert refusal["alias"] == child_alias, refusal
         assert refusal["error"]["code"] == "authority-denied", refusal
 
+        # The actual child monitor sees a retained threshold, retries a native
+        # refusal if configured, and the same parent consumes the budget notice.
+        from graphtraj.execution import execution_budget as budgets
+        evidence = root / '.graphtraj/state/tickets/76-session-alias-control'
+        monitor = budgets.execution_budget_monitor(evidence, '76', 'session-alias-control')
+        usage = yaml.safe_load((evidence / 'execution-budget.yml').read_text())
+        with (parent_directory / 'launch.yml').open('rb') as input_lock:
+            fcntl.flock(input_lock, fcntl.LOCK_EX)
+            with monkeypatch.context() as patch:
+                patch.setattr(budgets.time, 'time', lambda: usage['started_at'] + 600)
+                assert not monitor.check('engineer', 'engineer')
+            blocked = _await_records(notices, lambda records: any(
+                r.get('identity', {}).get('type') == 'execution-budget-exceeded'
+                and r['delivery'] == 'not-delivered' for r in records
+            ))
+            assert any(r.get('error', {}).get('code') == 'operation-failed' for r in blocked)
+            assert read_alias_mapping(runner_directory, leader['alias'])[0]['execution_id'] == parent['execution_id']
+        budget_actions = _await_records(parent_log, lambda records: any('budget_action' in r for r in records))
+        action = next(r['budget_action'] for r in budget_actions if 'budget_action' in r)
+        assert action['alias'] == child_alias
+        records = _records(notices)
+        if transient:
+            failures = [r for r in records if r['delivery'] == 'not-delivered']
+            assert len(failures) >= 2
+            native_failures = [r for r in failures if 'temporary notice refusal' in r['error']['message']]
+            assert {json.loads(r['notice'])['event'] for r in native_failures} == {
+                'item/commandExecution/requestApproval', 'execution-budget-exceeded',
+            }
         release.touch()
         replied = _await_records(
             parent_log, lambda records: any(
-                item["call"] == ["reply", child_alias] for item in records
+                item.get("call") == ["reply", child_alias] for item in records
             ),
         )
-        reply, = [item for item in replied if item["call"] == ["reply", child_alias]]
+        reply, = [item for item in replied if item.get("call") == ["reply", child_alias]]
         assert reply["returncode"] == 0, reply
         assert yaml.safe_load(reply["document"])["reply_status"] == "submitted"
         # The refused caller consumed nothing: the same native request, by the
@@ -376,7 +496,22 @@ def test_a_child_request_reaches_the_running_direct_parent(
         native = tmp_path / "native" / ("rollout-" + child["session"] + ".jsonl")
         assert json.loads(native.read_text(encoding="utf-8").splitlines()[-1])[
             "payload"]["last_agent_message"] == "approval:accept"
+        _await_records(parent_log, lambda records: any(r.get('aggregated') for r in records))
+        wait_for_file(parent_directory / 'execution.yml')
+        assert yaml.safe_load((parent_directory / 'execution.yml').read_text())['outcome'] == 'completed'
+        active = None
+        for execution in _records(tmp_path / 'executions.jsonl'):
+            if 'start' in execution:
+                assert active is None, 'Concurrent native executions for one parent Session'
+                active = execution['start']
+            else:
+                assert execution['end'] == active
+                active = None
+        assert active is None
     finally:
+        if 'leader' in locals():
+            run_process([str(installed_commands.runner), 'interrupt', leader['alias']],
+                        cwd=root, env=environment, timeout=30)
         round_process.kill()
         round_process.wait(timeout=30)
 
@@ -488,10 +623,11 @@ def test_real_native_parent_receives_the_child_request_notice(
 
     observe(call, parent, 'idle', timeout=180)
     trace = Path(parent_before['trace_file'])
+    encoded_notice = json.dumps(record['notice'], ensure_ascii=False)[1:-1]
     deadline = time.monotonic() + 30
-    while time.monotonic() < deadline and record['notice'] not in trace.read_text(errors='replace'):
+    while time.monotonic() < deadline and encoded_notice not in trace.read_text(errors='replace'):
         time.sleep(0.1)
-    assert record['notice'] in trace.read_text(errors='replace')
+    assert encoded_notice in trace.read_text(errors='replace')
 
     # The notice answered nothing: the child's request still has no native reply.
     assert not (tmp_path / 'native' / ('rollout-' + child_before['session'] + '.replies.jsonl')).exists()

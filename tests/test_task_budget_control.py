@@ -214,9 +214,9 @@ print(json.dumps({'type': 'item.completed', 'item': {'type': 'agent_message', 't
         # The Session may wait normally without being classified as failed.
         status = run_process([str(commands.runner), 'status', alias], cwd=root, env=env)
         assert yaml.safe_load(status.stdout)['aliases'][0]['activity'] == 'running'
-        # A task's direct and nested members use the same actual task parent.
-        # Only the parent is live; retained child mappings are controlled inputs
-        # to the public notice seam, and native turn/steer supplies the receipt.
+        # Only the parent is live; retained child mappings are controlled
+        # inputs to the notice seam. A nested sender must address its own
+        # parent, never skip it to reach a running ancestor.
         parent_mapping = yaml.safe_load((directory / 'mapping.yml').read_text())
         for mode in ("direct", "nested", "admission"):
             nested = mode == "nested"
@@ -262,6 +262,11 @@ print(json.dumps({'type': 'item.completed', 'item': {'type': 'agent_message', 't
             try:
                 with budgets.budget_notice_output(write_fd):
                     other.deliver_parent_notices(sender)
+                    if nested:
+                        failed = [json.loads(line) for line in (sender / 'parent-notices.jsonl').read_text().splitlines()]
+                        assert all(item['parent'] == root_child.name for item in failed)
+                        assert all(item['delivery'] == 'not-delivered' for item in failed)
+                        assert all(not item['delivered'] for item in other.pending_parent_notices())
                     other.deliver_parent_notices(root_child)
                 os.close(write_fd)
                 assert os.read(read_fd, 10000) == b''  # no extra caller copy
@@ -291,9 +296,24 @@ print(json.dumps({'type': 'item.completed', 'item': {'type': 'agent_message', 't
         pending = monitor_at(tmp_path / 'idle-parent-budget')
         pending.record_session('researcher', 'researcher')
         sample_stop(pending, monkeypatch)
-        pending.deliver_parent_notices(root_child)
-        unreceived = yaml.safe_load((pending.ticket_directory / 'execution-budget.yml').read_text())
-        assert all(not notice['delivered'] for notice in unreceived['parent_notices'])
+        resumed_notice = run_process(
+            [str(commands.runner.with_name('python')), '-I', '-c',
+             'from pathlib import Path; from graphtraj.execution.execution_budget import ExecutionBudgetMonitor; '
+             'import sys; ExecutionBudgetMonitor(Path(sys.argv[1]), "153", "research").deliver_parent_notices(Path(sys.argv[2]))',
+             str(pending.ticket_directory), str(root_child)], cwd=root, env=env, timeout=15,
+        )
+        assert resumed_notice.returncode == 0, resumed_notice.stderr
+        received = yaml.safe_load((pending.ticket_directory / 'execution-budget.yml').read_text())
+        assert all(notice['delivered'] for notice in received['parent_notices'])
+        resumed_mapping = yaml.safe_load((directory / 'mapping.yml').read_text())
+        assert resumed_mapping['session'] == parent_mapping['session']
+        assert resumed_mapping['execution_id'] != parent_mapping['execution_id']
+        native = [json.loads(line) for line in protocol.read_text().splitlines()]
+        continuation = [item for item in native if item['method'] == 'turn/start'][1]
+        message = json.loads(continuation['params']['input'][0]['text'])
+        assert set(message) == {'source', 'alias', 'event', 'message'}
+        assert message['source'] == 'graphtraj' and message['alias'] == root_child.name
+        assert message['event'] == 'execution-budget-exceeded'
 
         release.touch()
         events = [json.loads(line) for shard in (root / '.graphtraj/state/worldline').glob('*.jsonl')

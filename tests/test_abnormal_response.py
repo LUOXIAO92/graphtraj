@@ -125,12 +125,17 @@ def test_judged_abnormality_notifies_the_parent_and_stops_the_subtree(
 
     # The parent's own execution consumed the notice once it reached it.
     trace = Path(parent_before['trace_file'])
+    def consumed() -> bool:
+        """Read the native message value, including its JSON notice envelope."""
+        return any(
+            json.loads(line).get('payload', {}).get('last_agent_message') == record['notice']
+            for line in trace.read_text().splitlines()
+        )
+
     deadline = time.monotonic() + 30
-    while time.monotonic() < deadline and record['notice'] not in trace.read_text(
-        errors='replace'
-    ):
+    while time.monotonic() < deadline and not consumed():
         time.sleep(0.05)
-    assert record['notice'] in trace.read_text(errors='replace')
+    assert consumed()
 
 
 def test_normal_waits_and_unconfirmed_owners_do_not_answer(

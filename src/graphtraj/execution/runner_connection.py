@@ -76,4 +76,6 @@ def session_operation(mapping: dict, operation: str, **arguments: object) -> dic
             raise RunnerError(response['error']['code'], response['error']['message'])
         return response
     except (OSError, ValueError, KeyError, TypeError) as error:
-        raise RunnerError('operation-failed', 'The mapped Session owner did not acknowledge the operation.') from error
+        raise RunnerError(
+            'operation-failed', 'The mapped Session owner did not acknowledge the operation: ' + str(error),
+        ) from error

@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import fcntl
 import json
 import os
 import signal
 import subprocess
 import sys
 import threading
+import time
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -34,7 +36,7 @@ from graphtraj.execution.runner_batch import (
 )
 from graphtraj.execution.runner_capacity import capacity_positions
 from graphtraj.execution.runner_io import write_yaml_durably
-from graphtraj.execution.runner_heartbeat import execution_start_lock
+from graphtraj.execution.runner_heartbeat import execution_start_lock, ownership_is_held
 from graphtraj.execution.runner_models import (
     Batch,
     LaunchResponse,
@@ -487,20 +489,43 @@ def _run_registered_children(
     capacity_fd: int,
 ) -> None:
     """Execute registered children, then deliver their outcomes to their parent."""
-    registration = project.runner_directory / "sessions" / alias / "child-registration.yml"
-    while registration.exists():
-        mapping, _ = read_alias_mapping(project.runner_directory, alias)
-        worktree = Path(mapping["worktree_path"])
-        batch, retained = _registered_batch(registration, worktree)
-        children = _run_batch_workers(project, batch, retained, alias, capacity_fd)
-        evidence = project.state_directory / "tickets" / (task.ticket_id + "-" + task.ticket_name)
-        traces = evidence / "teams" / str(mapping["team_generation"]) / "traces"
-        _run_agent(
-            project, task, task.role, worktree, evidence, traces, alias, session,
-            registration, mapping["parent"], retained_batch,
-            "Direct child execution results:\n" + yaml.safe_dump(children.document),
-            capacity_fd=capacity_fd, register_member=True,
-        )
+    from graphtraj.execution.runner_control import _send_session
+
+    directory = project.runner_directory / "sessions" / alias
+    registration = directory / "child-registration.yml"
+    # The original Driver retains aggregation while notices resume native
+    # turns. Those Workers must not become a second Driver for this Session.
+    with (directory / "children.lock").open("a+b") as driver:
+        try:
+            fcntl.flock(driver, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return
+        while registration.exists():
+            mapping, _ = read_alias_mapping(project.runner_directory, alias)
+            worktree = Path(mapping["worktree_path"])
+            batch, retained = _registered_batch(registration, worktree)
+            children = _run_batch_workers(project, batch, retained, alias, capacity_fd)
+            _send_session(
+                alias, "Direct child execution results:\n" + yaml.safe_dump(children.document),
+                directory, mapping, (), project.harness_root, capacity_fd=capacity_fd,
+            )
+            # Input acknowledgement is not completion. Retain the Driver until
+            # the parent consumes results and finishes any further registration.
+            while True:
+                with (directory / "launch.yml").open("rb") as lock:
+                    fcntl.flock(lock, fcntl.LOCK_EX)
+                    mapping, _ = read_alias_mapping(project.runner_directory, alias)
+                    if (directory / "execution.yml").is_file():
+                        outcome = read_terminal_outcome(directory / "execution.yml")
+                        terminal = yaml.safe_load((directory / "execution.yml").read_text())
+                        if terminal.get("budget_stopped"):
+                            raise RunnerError("EXECUTION_BUDGET_STOPPED", "Runner stopped the parent execution.")
+                        if outcome != "completed":
+                            raise RunnerError("RUNTIME_PROVIDER_FAILED", "The parent ended with " + outcome)
+                        break
+                    if not ownership_is_held(directory, mapping["worker_pid"]):
+                        raise RunnerError("RUNTIME_WORKER_FAILED", "The parent Worker ended without a terminal result.")
+                time.sleep(0.05)
 
 
 def _registered_batch(registration: Path, worktree: Path) -> tuple[Batch, Path]:

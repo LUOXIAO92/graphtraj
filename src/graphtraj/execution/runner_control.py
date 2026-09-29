@@ -63,15 +63,12 @@ def notify_direct_parent(
     *,
     before_creation: bool = False,
 ) -> Dict[str, Any]:
-    """Deliver one notice into the recorded direct parent's existing execution.
+    """Send an event to the actual parent, continuing its Session when idle.
 
-    A child Session reports an event - a native request waiting for a decision,
-    or an abnormal end - to the parent its own record names. The notice travels
-    through the parent's control channel into the execution that parent already
-    owns, so a parent that is running or waiting receives it in the same
-    Session and execution without a second execution, a copied Session or a
-    polling reader. What the parent's owning execution acknowledged is
-    recorded; registering the event alone is not a delivery.
+    Reuse ordinary send's alias lock, native steering and retained continuation.
+    The parent's original Driver remains responsible for any registered child
+    aggregation. The returned receipt records transport acknowledgement; callers
+    must observe the parent's actions to establish that it processed the event.
 
     Parameters
     ----------
@@ -79,7 +76,7 @@ def notify_direct_parent(
         Session directory of the notifying Session. Its own record supplies
         the direct parent, never a value the caller carries.
     notice
-        Plain-text input delivered to the parent's execution.
+        Event message wrapped with source, bound alias and existing event type.
     identity
         Optional facts of what produced the notice, retained in the record.
     before_creation
@@ -122,17 +119,31 @@ def notify_direct_parent(
             parent_mapping, parent_directory = read_alias_mapping(
                 runner_directory, parent
             )
-            owning = owning_execution(parent, parent_directory, parent_mapping)
-            if owning is None or owning.get("activity") != "running":
-                record["delivery"] = "not-delivered"
-                record["activity"] = (owning or {}).get("activity", "idle")
-            else:
-                session_operation(parent_mapping, "send", instruction=notice)
-                record.update({
-                    "delivery": "received",
-                    "parent_session": parent_mapping["session"],
-                    "parent_execution_id": parent_mapping["execution_id"],
-                })
+            event = (
+                (identity or {}).get("type") or (identity or {}).get("method")
+                or (identity or {}).get("activity")
+            )
+            if not isinstance(event, str) or not event or not notice.strip():
+                raise RunnerError("invalid-input", "A system notice needs an existing event and message.")
+            message = json.dumps({
+                "source": "graphtraj", "alias": mapping["alias"],
+                "event": event, "message": notice,
+            }, ensure_ascii=False)
+            record["notice"] = message
+            # Reuse the same alias lock and continuation path as ordinary send.
+            # A child's inherited capacity belongs to this existing task tree.
+            capacity = os.environ.get("GRAPHTRAJ_CAPACITY_FD")
+            receipt = _send_session(
+                parent, message, parent_directory, parent_mapping, (),
+                runner_directory.parent.parent,
+                capacity_fd=int(capacity) if capacity is not None else None,
+                system_notice=True,
+            )
+            record.update({
+                "delivery": "received",
+                "parent_session": receipt["session"],
+                "parent_execution_id": receipt["execution_id"],
+            })
     except RunnerError as error:
         record["delivery"] = "not-delivered"
         record["error"] = {"code": error.code, "message": error.message}
@@ -355,19 +366,26 @@ def _send_session(
     *,
     capacity_fd: int | None = None,
     reports_only: bool = False,
+    system_notice: bool = False,
 ) -> Dict[str, str]:
     """Serialize alias changes so two idle sends cannot create competing owners."""
     launch_file = session_directory / "launch.yml"
     if launch_file.is_symlink() or not launch_file.is_file():
         raise _not_resumable()
     with launch_file.open("rb") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | (fcntl.LOCK_NB if system_notice else 0))
+        except BlockingIOError as error:
+            raise RunnerError(
+                "operation-failed", "The parent Session input lock is busy; retry this notice.",
+            ) from error
         mapping, _ = read_alias_mapping(session_directory.parent.parent, alias)
         with execution_start_lock(session_directory.parent.parent):
             require_execution_allowed(session_directory.parent.parent, alias, mapping)
         return _send_session_locked(
             alias, instruction, session_directory, mapping, caused_by_event_ids, cwd,
             capacity_fd=capacity_fd, reports_only=reports_only,
+            system_notice=system_notice,
         )
 
 
@@ -381,6 +399,7 @@ def _send_session_locked(
     *,
     capacity_fd: int | None = None,
     reports_only: bool = False,
+    system_notice: bool = False,
 ) -> Dict[str, str]:
     """Deliver input or restore the retained Context under the alias lock.
 
@@ -426,17 +445,29 @@ def _send_session_locked(
         else None
     )
     stopped = monitor is not None and monitor.is_stopped()
+    from graphtraj.teams.team_replacement import require_active_session
+
+    require_active_session(
+        discover_project(cwd, require_clean_integration=False), alias,
+        reports_only=reports_only or stopped,
+    )
     request = _refresh_current_team_report_request(
         request, mapping, worktree, team_environment,
         reports_only=stopped or reports_only,
         session_directory=session_directory,
     )
     if stopped:
-        instruction = (
+        restriction = (
             "Execution was stopped by Runner. New task work and dispatch are "
             "prohibited. Report only the existing result and commit only "
-            "already-made authorized changes.\n" + instruction
+            "already-made authorized changes.\n"
         )
+        if system_notice:
+            message = json.loads(instruction)
+            message["message"] = restriction + message["message"]
+            instruction = json.dumps(message, ensure_ascii=False)
+        else:
+            instruction = restriction + instruction
         monitor = None
     elif reports_only:
         monitor = None
@@ -472,6 +503,7 @@ def _send_session_locked(
         # Every resumed Session carries its own Agent Entity alias, so its
         # control requests are judged against the Runner's recorded owner.
         worker_environment["GRAPHTRAJ_PARENT_ALIAS"] = alias
+        worker_environment["GRAPHTRAJ_PARENT_REGISTRATION"] = str(session_directory / "child-registration.yml")
         if monitor is not None:
             notice_fd, close_notice_fd = caller_notice_fd()
             if notice_fd is not None:
@@ -516,7 +548,7 @@ def _send_session_locked(
         if "worker" in locals():
             stop_worker(worker.pid)
         raise RunnerError(
-            "operation-failed", "The mapped Runtime session could not be resumed."
+            "operation-failed", "The mapped Runtime session could not be resumed: " + str(error),
         ) from error
     finally:
         if close_notice_fd and notice_fd is not None:
@@ -951,10 +983,12 @@ def _read_resume_error(error_file: Path) -> RunnerError:
         "RUNTIME_SESSION_NOT_RESUMABLE",
         "RUNTIME_START_FAILED",
     }:
-        return _not_resumable()
+        return RunnerError(
+            "session-not-resumable", "{0}: {1}".format(failure["code"], failure["message"]),
+        )
     return RunnerError(
         "operation-failed",
-        "The mapped Runtime Session could not be resumed.",
+        "The mapped Runtime Session could not be resumed: " + str(failure),
     )
 
 

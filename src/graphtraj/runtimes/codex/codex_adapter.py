@@ -270,6 +270,35 @@ def restore_codex_context(
     )
 
 
+class CodexRuntimeAdapter:
+    """Bind first preparation to Codex's executable and existing Context."""
+
+    def preflight_runtime_context(
+        self,
+        *,
+        runtime_store: Path,
+        git_common_directory: Path,
+        role: ResolvedChildRole,
+        worktree: Path,
+        evidence: Path,
+        requested_skills: tuple[str, ...],
+        report_files: tuple[Path, ...] = (),
+    ) -> RuntimeContextPreflight:
+        """Resolve Codex and delegate its existing preflight validation."""
+        from graphtraj.workspace.runner_project import runtime_executable
+
+        return preflight_runtime_context(
+            runtime_store=runtime_store,
+            executable=runtime_executable(role.settings.runtime),
+            git_common_directory=git_common_directory,
+            role=role,
+            worktree=worktree,
+            evidence=evidence,
+            requested_skills=requested_skills,
+            report_files=report_files,
+        )
+
+
 def preflight_runtime_context(
     *,
     runtime_store: Path,

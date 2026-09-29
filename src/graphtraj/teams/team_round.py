@@ -17,7 +17,6 @@ import yaml
 from graphtraj.runtimes.codex.codex_project import ignore_worktree_documents
 from graphtraj.runtimes.codex.codex_adapter import (
     codex_connection_environment,
-    preflight_runtime_context,
     refresh_codex_report_paths,
 )
 from graphtraj.execution.execution_budget import (
@@ -51,7 +50,6 @@ from graphtraj.workspace.runner_project import (
     discover_project_root,
     provision_worktree,
     run_git,
-    runtime_executable,
 )
 from graphtraj.execution.runner_status import (
     caller_alias,
@@ -65,6 +63,7 @@ from graphtraj.execution.runner_status import (
     require_stopped_subtree,
 )
 from graphtraj.execution.runner_transport import record_runtime_identity
+from graphtraj.runtimes import runtime_adapter
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 from graphtraj.graph.ticket_graph import _load_states
 
@@ -785,11 +784,12 @@ def _execute_agent(
         except ProjectRolesError as error:
             raise RunnerError("ROLE_NOT_CONFIGURED", str(error)) from error
         report_files = _role_report_files(task, preset.reports, role, generation, ordinal, alias)
-        context = preflight_runtime_context(
+        resolved_role = resolve_child_role(policy_role, preset, project.harness_root)
+        adapter = runtime_adapter.select_runtime_adapter(resolved_role.settings.runtime)
+        context = adapter.preflight_runtime_context(
             runtime_store=project.runtime_store,
-            executable=runtime_executable(preset.runtime),
             git_common_directory=project.common_directory,
-            role=resolve_child_role(policy_role, preset, project.harness_root),
+            role=resolved_role,
             worktree=worktree,
             evidence=evidence,
             requested_skills=task.requested_skills,

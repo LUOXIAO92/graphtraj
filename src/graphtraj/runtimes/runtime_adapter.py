@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Callable, Dict, Literal, Mapping, Protocol, TypedDict
+from typing import TYPE_CHECKING, Any, Callable, Dict, Literal, Mapping, Protocol, TypedDict
+
+if TYPE_CHECKING:
+    from graphtraj.configuration.role_definitions import ResolvedChildRole
 
 
 SessionStarted = Callable[[str, int], None]
@@ -80,3 +83,32 @@ RuntimeAdapter = Callable[
 ResumeRuntimeAdapter = Callable[
     [Mapping[str, Any], str, str, Path, SessionStarted], RuntimeTurn
 ]
+
+
+class RuntimePreparationAdapter(Protocol):
+    """Prepare the existing Context contract for a selected Runtime."""
+
+    def preflight_runtime_context(
+        self,
+        *,
+        runtime_store: Path,
+        git_common_directory: Path,
+        role: ResolvedChildRole,
+        worktree: Path,
+        evidence: Path,
+        requested_skills: tuple[str, ...],
+        report_files: tuple[Path, ...] = (),
+    ) -> RuntimeContextPreflight:
+        """Validate Runtime inputs before a Session allocation is published."""
+
+
+def select_runtime_adapter(runtime: str) -> RuntimePreparationAdapter:
+    """Select an implemented Adapter from the resolved role's Runtime setting."""
+    if runtime == "codex":
+        from graphtraj.runtimes.codex.codex_adapter import CodexRuntimeAdapter
+
+        return CodexRuntimeAdapter()
+    raise RuntimeAdapterError(
+        "RUNTIME_UNSUPPORTED",
+        "The selected Agent Runtime is not supported by this Runner.",
+    )

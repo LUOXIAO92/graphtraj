@@ -190,8 +190,8 @@ def test_cli_accepts_code_as_actual_parent_and_mcp_exposes_same_operation(tmp_pa
 
     output = io.StringIO()
     mcp.serve(io.StringIO(json.dumps({'jsonrpc': '2.0', 'id': 1, 'method': 'tools/list'}) + '\n'), output)
-    tools = json.loads(output.getvalue())['result']['tools']
-    descriptor = next(tool for tool in tools if tool['name'] == 'decide_result')
+    descriptors = json.loads(output.getvalue())['result']['tools']
+    descriptor = next(tool for tool in descriptors if tool['name'] == 'decide_result')
     native = next(tool for tool in native_runner_tools() if tool['name'] == 'graphtraj_decide_result')
     assert descriptor['inputSchema'] == native['inputSchema']
 

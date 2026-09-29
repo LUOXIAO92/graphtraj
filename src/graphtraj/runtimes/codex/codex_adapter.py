@@ -276,7 +276,7 @@ class CodexRuntimeAdapter:
     def preflight_runtime_context(
         self,
         *,
-        runtime_store: Path,
+        harness_root: Path,
         git_common_directory: Path,
         role: ResolvedChildRole,
         worktree: Path,
@@ -286,9 +286,10 @@ class CodexRuntimeAdapter:
     ) -> RuntimeContextPreflight:
         """Resolve Codex and delegate its existing preflight validation."""
         from graphtraj.workspace.runner_project import runtime_executable
+        from graphtraj.runtimes.codex.codex_project import CodexProjectFiles
 
         return preflight_runtime_context(
-            runtime_store=runtime_store,
+            runtime_store=CodexProjectFiles.runtime_store(harness_root),
             executable=runtime_executable(role.settings.runtime),
             git_common_directory=git_common_directory,
             role=role,

@@ -91,7 +91,7 @@ class RuntimePreparationAdapter(Protocol):
     def preflight_runtime_context(
         self,
         *,
-        runtime_store: Path,
+        harness_root: Path,
         git_common_directory: Path,
         role: ResolvedChildRole,
         worktree: Path,

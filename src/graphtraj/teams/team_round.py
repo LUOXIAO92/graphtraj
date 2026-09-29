@@ -787,7 +787,7 @@ def _execute_agent(
         resolved_role = resolve_child_role(policy_role, preset, project.harness_root)
         adapter = runtime_adapter.select_runtime_adapter(resolved_role.settings.runtime)
         context = adapter.preflight_runtime_context(
-            runtime_store=project.runtime_store,
+            harness_root=project.harness_root,
             git_common_directory=project.common_directory,
             role=resolved_role,
             worktree=worktree,

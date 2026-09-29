@@ -192,7 +192,7 @@ class ProjectSetupPlan:
     repository: SourceRepository
     configuration: ProjectConfiguration
     roles: ProjectRoles
-    codex_files: CodexProjectFiles
+    codex_files: CodexProjectFiles | None
     project_files: ProjectFiles
     write_default_configuration: bool
     write_default_roles: bool
@@ -208,8 +208,11 @@ class ProjectSetupPlan:
         return roles_file(self.harness_root)
 
     @property
-    def runtime_store(self) -> Path:
-        return self.harness_root / ".codex"
+    def runtime_store(self) -> Path | None:
+        """Return a store only when Codex project support applies."""
+        if self.codex_files is None:
+            return None
+        return self.codex_files.runtime_store(self.harness_root)
 
     @property
     def runner_store(self) -> Path:
@@ -268,12 +271,13 @@ class ProjectSetupPlan:
             actions,
             conflicts,
         )
-        _preflight_directory(
-            self.runtime_store,
-            "Harness Runtime Store",
-            actions,
-            conflicts,
-        )
+        if self.runtime_store is not None:
+            _preflight_directory(
+                self.runtime_store,
+                "Harness Runtime Store",
+                actions,
+                conflicts,
+            )
         _preflight_directory(
             self.runner_store,
             "Harness Runner Directory",
@@ -369,6 +373,8 @@ class ProjectSetupPlan:
         self,
         actions: List[PlannedSetupAction],
     ) -> None:
+        if self.codex_files is None or self.runtime_store is None:
+            return
         if _entry_kind(self.runtime_store) not in {None, "directory"}:
             return
         if self.codex_files.has_obsolete_guard(self.runtime_store):
@@ -500,8 +506,9 @@ class ProjectSetupPlan:
             mark_completed(
                 _directory_action("Harness State Directory", self.configuration.state)
             )
-            self.runtime_store.mkdir(parents=True, exist_ok=True)
-            mark_completed(_directory_action("Harness Runtime Store", self.runtime_store))
+            if self.runtime_store is not None:
+                self.runtime_store.mkdir(parents=True, exist_ok=True)
+                mark_completed(_directory_action("Harness Runtime Store", self.runtime_store))
             self.runner_store.mkdir(parents=True, exist_ok=True)
             mark_completed(
                 _directory_action("Harness Runner Directory", self.runner_store)
@@ -526,10 +533,11 @@ class ProjectSetupPlan:
                 integration_action = "registered"
             else:
                 integration_action = "reused"
-            self.codex_files.remove_obsolete_guard(
-                self.runtime_store,
-                mark_completed,
-            )
+            if self.codex_files is not None and self.runtime_store is not None:
+                self.codex_files.remove_obsolete_guard(
+                    self.runtime_store,
+                    mark_completed,
+                )
             self.project_files.install_setup_resources(
                 harness_root=self.harness_root,
                 integration_worktree=self.configuration.integration_worktree,
@@ -612,7 +620,9 @@ def plan_project_setup(
             if dev_exists
             else proposed_base
         )
-        codex_files = CodexProjectFiles.load()
+        codex_files = CodexProjectFiles.for_project(
+            root, (preset.runtime for preset in roles.presets.values()),
+        )
         project_files = ProjectFiles.load()
     except (
         CodexProjectError,

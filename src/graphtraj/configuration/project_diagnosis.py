@@ -14,15 +14,15 @@ from graphtraj.configuration.project_configuration import (
 from graphtraj.configuration.project_roles import ProjectRolesError, load_project_roles, roles_exist
 
 
-def _doctor_runtime_store(cwd: Path) -> Path:
-    """Return the root store, rejecting a known Harness child worktree."""
+def _doctor_harness_root(cwd: Path) -> Path:
+    """Return the project root, rejecting a known Harness child worktree."""
 
     if configuration_exists(cwd):
-        return cwd / ".codex"
+        return cwd
     for ancestor in cwd.parents:
         if configuration_exists(ancestor):
             raise DoctorError("Run doctor from the Harness Project Root.")
-    return cwd / ".codex"
+    return cwd
 
 
 class DoctorError(ValueError):
@@ -48,17 +48,17 @@ def diagnose_project(cwd: Path) -> ProjectDiagnosis:
     Invalid roles are returned as diagnostics. A wrong Harness context or
     invalid project configuration raises DoctorError.
     """
-    runtime_store = _doctor_runtime_store(cwd.resolve())
-    if configuration_exists(runtime_store.parent):
+    harness_root = _doctor_harness_root(cwd.resolve())
+    if configuration_exists(harness_root):
         try:
-            load_project_configuration(runtime_store.parent)
+            load_project_configuration(harness_root)
         except ProjectConfigurationError as error:
             raise DoctorError(str(error)) from error
-    roles_checked = configuration_exists(runtime_store.parent) or roles_exist(runtime_store.parent)
+    roles_checked = configuration_exists(harness_root) or roles_exist(harness_root)
     diagnostics = ()
     if roles_checked:
         try:
-            load_project_roles(runtime_store.parent)
+            load_project_roles(harness_root)
         except ProjectRolesError as error:
             diagnostics = error.diagnostics
     return ProjectDiagnosis(roles_checked, diagnostics)

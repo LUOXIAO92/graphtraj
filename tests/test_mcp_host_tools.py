@@ -24,6 +24,9 @@ from test_ticket_graph import _configure, _ticket, _write
 
 
 TOOL_NAMES = {
+    "replace",
+    "cleanup",
+    "main",
     "session_reports",
     "submit_report",
     "submit_result",

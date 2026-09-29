@@ -17,7 +17,7 @@ from graphtraj.execution.runner_control import (
     submit_session_report,
     send_instruction,
 )
-from graphtraj.execution.runner_launch import launch_swarm
+from graphtraj.execution.runner_launch import launch_swarm, launch_swarm_file
 from graphtraj.execution.runner_status import status_aliases, status_tree
 from graphtraj.graph.ticket_graph import (
     read_graph,
@@ -297,7 +297,10 @@ def _boolean_argument(arguments: Mapping[str, Any], name: str) -> bool:
 
 
 def launch_swarm_tool(
-    arguments: Mapping[str, Any], *, cwd: Path | None = None,
+    arguments: Mapping[str, Any],
+    *,
+    cwd: Path | None = None,
+    input_file: Path | None = None,
 ) -> ToolResult:
     """Activate one swarm input; the returned identity stays owned.
 
@@ -305,7 +308,12 @@ def launch_swarm_tool(
     identity each task does not repeat.
     """
 
-    response = launch_swarm(dict(arguments), cwd or Path.cwd())
+    # The CLI retains the original file, including comments and formatting.
+    response = (
+        launch_swarm_file(input_file, cwd or Path.cwd())
+        if input_file is not None
+        else launch_swarm(dict(arguments), cwd or Path.cwd())
+    )
     return ToolResult(response.document, failed=not response.succeeded)
 
 
@@ -340,7 +348,9 @@ def interrupt_session_execution(
     )
 
 
-def continue_ticket_execution(arguments: Mapping[str, Any]) -> ToolResult:
+def continue_ticket_execution(
+    arguments: Mapping[str, Any], *, cwd: Path | None = None,
+) -> ToolResult:
     """Restore task budget permission, optionally without executing old Sessions."""
 
     from graphtraj.teams.team_round import continue_stopped_ticket
@@ -349,7 +359,7 @@ def continue_ticket_execution(arguments: Mapping[str, Any]) -> ToolResult:
         continue_stopped_ticket(
             _string_argument(arguments, "ticket_id"),
             _string_list_argument(arguments, "caused_by_event_ids"),
-            Path.cwd(),
+            cwd or Path.cwd(),
             budget_only=_boolean_argument(arguments, "budget_only"),
         )
     )
@@ -549,3 +559,89 @@ register_tool('decide_result',
                   'evidence_refs': {'type': 'array', 'minItems': 1, 'items': {'type': 'string'}},
               }, 'required': ['submission_id', 'commit', 'decision', 'reason', 'evidence_refs'],
                'additionalProperties': False}, decide_result)
+
+
+
+def replace_session_execution(
+    arguments: Mapping[str, Any], *, cwd: Path | None = None,
+) -> ToolResult:
+    """Replace a stopped member using the existing real-caller authorization."""
+    from graphtraj.teams.team_replacement import replace_session
+
+    return ToolResult(replace_session(
+        _string_argument(arguments, "alias"),
+        _optional_string_argument(arguments, "actor"),
+        _string_list_argument(arguments, "caused_by_event_ids"),
+        cwd or Path.cwd(),
+    ))
+
+
+def cleanup_ticket_execution(
+    arguments: Mapping[str, Any], *, cwd: Path | None = None,
+) -> ToolResult:
+    """Return the existing cleanup result without changing its safety checks."""
+    from graphtraj.execution.runner_cleanup import cleanup_ticket
+
+    response = cleanup_ticket(cwd or Path.cwd(), _string_argument(arguments, "ticket_id"))
+    return ToolResult(response.document, failed=not response.succeeded)
+
+
+def run_codex_main(
+    arguments: Mapping[str, Any],
+    *,
+    cwd: Path | None = None,
+    execute: Callable[[Path, str, str | None], dict[str, Any]] | None = None,
+) -> ToolResult:
+    """Run Codex Main through the host's native request/response transport.
+
+    The executor is supplied by the host, never by operation arguments. The
+    CLI owns stdin replies, cancellation, and the existing run_main binding.
+    """
+    from graphtraj.execution.runner_models import RunnerError
+
+    if execute is None:
+        raise RunnerError("unsupported-operation", "Codex Main requires agent-runner main.")
+    return ToolResult(execute(
+        cwd or Path.cwd(),
+        _string_argument(arguments, "instruction"),
+        _optional_string_argument(arguments, "resume"),
+    ))
+
+
+register_tool(
+    "replace",
+    "Replace one stopped actual member while preserving its Team and evidence. "
+    "The recorded direct parent or native user approval authorizes replacement. "
+    "The target and all descendants must already be stopped.",
+    {
+        "type": "object",
+        "properties": {
+            "alias": {"type": "string"},
+            "actor": {"type": ["string", "null"], "enum": ["main", "user", None],
+                      "description": "Retained caller label; this option grants no replacement authority."},
+            "caused_by_event_ids": {"type": "array", "minItems": 1,
+                                    "items": {"type": "string"}},
+        },
+        "required": ["alias", "caused_by_event_ids"],
+        "additionalProperties": False,
+    },
+    replace_session_execution,
+)
+register_tool(
+    "cleanup",
+    "Clean up one safely integrated ticket by stable identity.",
+    {"type": "object", "properties": {"ticket_id": {"type": "string"}},
+     "required": ["ticket_id"], "additionalProperties": False},
+    cleanup_ticket_execution,
+)
+register_tool(
+    "main",
+    "Run an isolated Main turn using the user's native Runtime settings. Codex only; "
+    "agent-runner main supplies native requests on stderr and replies on stdin.",
+    {"type": "object", "properties": {
+        "instruction": {"type": "string"},
+        "resume": {"type": ["string", "null"],
+                   "description": "Main record returned by a previous completed invocation."},
+    }, "required": ["instruction"], "additionalProperties": False},
+    run_codex_main,
+)

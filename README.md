@@ -31,9 +31,11 @@ becomes both the Harness Project Root and Source Repository. In the separated la
 child, or asks for an explicit choice when there are zero or several candidates.
 Later commands use the recorded paths.
 
-`uv tool install` builds and installs the Python distribution. Skills and role
-instruction templates are separate user-selected files, not runtime package
-resources. To check a local
+`uv tool install` installs the Python commands and independent method files under
+`<install-prefix>/share/graphtraj/manuals`. The guides are plain user-manageable
+files outside the Python package and automatic Skill discovery. The separate
+`plugins/graphtraj` artifact contains the thin overview Skill; role instructions
+and professional Skills remain user-selected external files. To check a local
 candidate, build that wheel and install the artifact. The documented flags skip
 pip's build isolation, so the declared build requirement (`setuptools>=61`,
 from `pyproject.toml`) must already be installed in the invoking environment,
@@ -64,7 +66,7 @@ The default layout is:
 ├── CONTEXT.md                          shared vocabulary
 ├── docs/                               Project Documents
 ├── .agents/skills/                     optional Runtime-discovered Skills
-├── .codex/                             user Runtime configuration
+├── .codex/                             optional, when using Codex
 └── .graphtraj/
     ├── config.yml                      paths and Runner limits
     ├── roles.yml                       child-role Runtime settings
@@ -424,7 +426,8 @@ Trace, report submission and versioned result submission as an engineer.
 Only actual members are registered; no Leader or Engineer seat is required.
 Task files may be committed in the Worktree; project documents and private
 control records retain their restrictions. Reports use the exact assigned
-paths through `graphtraj_submit_report`. Ending execution does not accept or
+paths through the `graphtraj` tool (`action: execute`, `feature: submit_report`)
+or `agent-runner submit-report`. Ending execution does not accept or
 complete the Ticket. Use ordinary `send` to continue an eligible existing Session.
 
 Select the ready Ticket with a block-style YAML swarm input:
@@ -532,6 +535,30 @@ role>`). The selected executor submits its resolved version for an authorized
 decision before integration completes.
 Cleanup verifies integration and a clean disposable Worktree, removes safe
 live mappings and the Ticket Worktree/branch, and preserves durable evidence.
+
+## Runtime Adapter boundary
+
+The task graph, Session ownership, result decisions, budgets and retained history
+belong to the common core. The selected Runtime Adapter prepares native context,
+provides execution identity and control, interprets captured recovery settings,
+and refreshes native permissions and report access. Core execution consumes that
+contract rather than Codex turn objects or configuration fields.
+
+Native operation statistics and current-execution failure diagnostics also come
+from the Adapter. Missing support is reported explicitly. Replacement first
+checks the actual relationship and stopped subtree, then uses the caller
+Runtime's approval capability: refusal, failure and genuine absence remain
+distinct. A model-supplied actor or role name does not grant authority.
+
+Common project files and Worktree layout belong to workspace handling. Generic
+setup does not require or create `.codex`; Codex's selected adapter owns its
+configuration, native storage and legacy interpretation. Existing captured
+Session settings and parent relationships survive same-Session recovery.
+
+Codex is the delivered production backend. Controlled alternate-Adapter tests
+exercise the real preparation, Worker, control and recovery paths with different
+native objects; they are evidence of the boundary, not another supported runtime.
+The following section documents the legitimate Codex-specific Python interface.
 
 ## Codex Session interface in Python
 
@@ -849,151 +876,129 @@ Native startup/completion races can return `CodexRPCError`, which retains
 `method`, `request_id` and `native_error`. A newly accepted turn can still be
 initializing; use native activity notifications when timing active control.
 
-## MCP host tools
+## One local tool and progressive disclosure
 
-The installed `graphtraj-mcp` command serves the same Python operations to a
-host Agent over MCP stdio. It is an ordinary console entry point of this wheel
-and speaks newline-delimited JSON-RPC 2.0 (`initialize`, `tools/list`,
-`tools/call`, `ping`) using only the standard library. Python 3.12 or newer plus
-the dependencies already in this distribution are enough; no MCP SDK or other
-dependency is added.
+Local hosts, fresh managed native Sessions and the optional MCP server expose
+one tool named `graphtraj`. Its small outer schema has `action`, optional `query`,
+`feature` and `arguments`; each action uses only its applicable fields. Operation
+schemas are disclosed for the selected feature, not registered as more tools or
+combined into one large schema union.
 
-Install it like the other commands:
+| Request | Example | Result |
+| --- | --- | --- |
+| Discover | `{"action":"discover","query":"task"}` | Relevant feature identifiers and short descriptions. Omit query for the compact directory. |
+| Describe | `{"action":"describe","feature":"task-breakdown"}` | Selected guide, schema, examples and call information. Method-only features have no executable call. |
+| Execute | `{"action":"execute","feature":"ticket_graph","arguments":{}}` | The existing operation's result under the actual caller's authority. |
 
-```text
-uv tool install "git+https://github.com/LUOXIAO92/graphtraj.git@<tag-or-commit>"
+The shared registry is `graphtraj.interfaces.tools`; the gateway is
+`graphtraj.interfaces.gateway`. The delivered registry contains 25 operations
+and five method-only guides. A host can expose a subset. Discovery does not
+execute tasks, and known authorized operations can be called directly without a
+prior describe step. Invalid parameters produce a local error; the host can
+correct them and use the same tool again. Missing guide material is reported
+when describing that feature and does not disable otherwise valid core calls.
+
+CLI operation help is another presentation of the same definition, schema,
+examples and selected guide. Use `graphtraj --help` or `agent-runner --help` for
+the overview, then a concrete command such as `graphtraj ticket register --help`
+or `agent-runner submit-result --help`. Required values, defaults, enums and input
+file mappings come from the shared definition. Python business operations remain
+usable directly, as documented above.
+
+### Python host binding and local process bridge
+
+A Python host registers the descriptor in its own tool API and uses the bound
+callback for requests:
+
+```python
+from pathlib import Path
+from graphtraj.interfaces.local_tool import bind, tool_descriptor
+
+descriptor = tool_descriptor()  # name, description, input_schema
+callback = bind(cwd=Path("/absolute/path/to/harness-project-root"))
+reply = callback({"action": "execute", "feature": "ticket_graph", "arguments": {}})
+print(reply.document, reply.failed)
 ```
 
-Register the server with Codex, either through the CLI:
+The host supplies the project directory, optional `allowed_features` restriction
+and actual caller context. These are not model arguments or a substitute for
+existing ownership checks. Unknown Agent identity does not become Main. The
+binding invokes the gateway directly and does not import or start MCP.
 
-```text
-codex mcp add graphtraj -- graphtraj-mcp
+A host needing a process boundary starts `graphtraj-tool` in the project root and
+exchanges one JSON request/response per line. For an existing configured project:
+
+```sh
+graphtraj-tool <<'JSONL'
+{"action":"discover","query":"graph"}
+{"action":"describe","feature":"ticket_graph"}
+{"action":"execute","feature":"ticket_graph","arguments":{}}
+JSONL
 ```
 
-or directly in the host configuration:
+Replies carry `failed` and the operation document under `result`; malformed input
+or raised errors can carry an `error` message instead. A rejected request leaves
+the process available for subsequent requests. `--allowed-features` is an
+optional host launch restriction, not authority supplied in a request. No plugin
+installation, MCP server or remote orchestration service is needed for this path.
+
+### Thin Skill plugin and Codex native callbacks
+
+The separate `plugins/graphtraj` directory is the plugin artifact. Its manifest
+points to one thin Skill copied from `skills/graphtraj/SKILL.md`. Select that
+artifact through the host's supported plugin mechanism, or select the thin Skill
+independently. The five guides and two task-delivery references are installed as
+plain files under `<install-prefix>/share/graphtraj/manuals`; the gateway resolves
+those delivered files independently of the caller's working directory. Plugin
+files are distributed separately from the Python wheel.
+
+On the verified Codex 0.156.1 interface, the host that owns the app-server
+connection registers the single `graphtraj` dynamic tool when creating a thread
+and handles its callback using the original JSON-RPC request identity. The
+GraphTraj-managed binding preserves its eleven callable operations, exposes the
+five method guides for reading, and retains read-only helper restrictions.
+Broadening readable guides does not broaden execution authority.
+
+A plugin manifest alone cannot inject arbitrary non-MCP callbacks into an
+already running external GUI, CLI or IDE Session. Existing Sessions retain their
+captured tool set, configuration and installation; thread resume does not
+re-register dynamic tools. Use the delivered owning app-server integration or
+the explicit local binding/bridge. No other production host compatibility is
+implied by the controlled Adapter evidence.
+
+### Optional MCP compatibility
+
+`graphtraj-mcp` is an optional stdio projection over the same gateway. It uses
+newline-delimited JSON-RPC 2.0 with `initialize`, `tools/list`, `tools/call` and
+`ping`; it adds no MCP SDK dependency. Configure it with the Harness Project Root
+as its working directory, for example in a compatible host:
 
 ```toml
 [mcp_servers.graphtraj]
 command = "graphtraj-mcp"
 args = []
 cwd = "/absolute/path/to/harness-project-root"
-startup_timeout_sec = 30
-tool_timeout_sec = 30
 ```
 
-The server reads the Harness Project Root from its own working directory,
-exactly like the CLI, so set `cwd` to that root or start the host there. Keep
-the host configuration isolated (a separate `CODEX_HOME`) when validating the
-tools against a temporary project.
+`tools/list` contains only `graphtraj`. Call a feature through that tool:
 
-A host passes an MCP server a filtered environment. When the dispatched Runtime
-needs a setting that the server does not inherit, declare it on the server
-itself, for example:
-
-```toml
-[mcp_servers.graphtraj.env]
-CODEX_HOME = "/absolute/path/to/codex-home"
+```json
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"graphtraj","arguments":{"action":"execute","feature":"ticket_graph","arguments":{}}}}
 ```
 
-The tools are the existing graph, execution, control and interaction operations:
+The response carries the common document as `structuredContent`, a text
+representation and the MCP `isError` flag. Shared feature validation and business
+authority are unchanged. Registry extensions belong to
+`graphtraj.interfaces.tools.register_tool`, not the MCP module. The server is not
+a dependency of CLI, Python, local bridge or native callbacks.
 
-| Tool | Structured input | Result |
-| --- | --- | --- |
-| `ticket_graph` | none | Current Tickets, states and dependency readiness; the same document as `graphtraj ticket graph`. |
-| `ticket_register` | One accepted definition: `ticket_id`, `ticket_name`, `source`, `title`, `body`, `dependencies`. | `ticket_directory` of the registered Ticket; the same operation as `graphtraj ticket register`. |
-| `ticket_revise` | One product-preserving revision: `product_preserving`, `caused_by_event_ids`, `evidence_refs`, `tickets`. | Recorded causal event; the same operation as `graphtraj ticket revise`. |
-| `ticket_update` | One evidence-backed state change: `ticket_id`, `status`, `active_team_ordinal`, `worktree`, `branch`, `current_candidate`, `caused_by_event_ids`, `evidence_refs`. | Recorded causal event; the same operation as `graphtraj ticket update`. |
-| `alias_status` | optionally `aliases`, `operation_total`, `baseline`, `candidate`. | Session status document, or the visible Session tree when `aliases` is omitted; the same document as `agent-runner status`. |
-| `swarm` | One structured swarm input: `tasks` with `role` (a preset reference or one inline role), optionally `instruction`, and the `ticket_id` Main selected from the DAG. | Each activated Agent's `launch_status`, `alias` and `session`; the same document as `agent-runner --swarm-input`. The call returns while those executions stay owned, and later calls address the returned alias. |
-| `send_instruction` | `alias`, `instruction`, `caused_by_event_ids`, and optionally `reports_only`. | `send_status`; the same operation as `agent-runner send`. |
-| `session_reports` | `alias`. | Assigned reports and retained result submissions; the same operation as `agent-runner reports`. |
-| `submit_report` | `name`, `text`. | Writes only the calling Session's assigned report. |
-| `submit_result` | `commit`, `result_refs`, `completion`; optionally `evidence_refs`, `unresolved`. | A `result-submitted` Worldline event; the same operation as `agent-runner submit-result`. Native Sessions use `graphtraj_submit_result` with the same schema. |
-| `decide_result` | `submission_id`, `commit`, `decision` (`accepted` or `rejected`), `reason`, `evidence_refs`. | Authorized, version-bound decision and state transition; the same operation as `agent-runner decide-result`. Native Sessions use `graphtraj_decide_result`. |
-| `interrupt` | `alias`. | `interrupt_status`; the same operation as `agent-runner interrupt`. |
-| `continue` | `ticket_id`, `caused_by_event_ids`. | The continued Team's result and `continuation_event_id`; the same D.3 stop/continue operation as `agent-runner continue`. |
-| `pending_requests` | `alias`, and optionally `execution_id`. | The pending native approval or user-input requests, with the identity `reply_to_request` needs; the same document as `agent-runner requests`. |
-| `reply_to_request` | `alias`, the `request` document returned by `pending_requests`, and an explicit `response` object. | `request_id` and `reply_status`; the same operation as `agent-runner reply`. |
-
-Each tool calls the same Python operation as its CLI command, takes structured
-input instead of file paths or terminal text, and returns the shared document as
-`structuredContent`. The text content is the CLI's own YAML rendering of that
-document. A rejected operation returns `isError: true` carrying the message the
-CLI reports for the same input. Later tools register through
-`graphtraj.interfaces.mcp.register_tool(name, description, input_schema,
-handler)`.
-
-A Codex host sends its calling thread on every tool request. When the server
-receives `params._meta.threadId`, it routes live budget notices to that Main
-through the same recovery binding the CLI uses: an enforced stop returns with
-that tool call as `stop_deliveries`, carrying the deterministic stop identity,
-the stop's own absolute instant, elapsed duration and configured stop instruction, using the existing
-`CodexMainRecovery` retention and deduplication. Ordinary elapsed and allowance
-reminders stay ordinary notices. Without that request metadata, the tools keep their generic behaviour and run without a caller
-notice channel; such a stop is only retained in the Ticket's
-`execution-budget.yml` and reported to the Session's recorded parent. Nothing
-here writes Main developer instructions or user Runtime configuration, and no
-stop is queued into the host's native input.
-
-A host can run the whole loop from tools alone: `swarm` a launch input, read
-identity, activity and outcome with `alias_status`, steer the owned execution
-with `send_instruction`, answer a waiting native request with `pending_requests`
-plus `reply_to_request`, interrupt one execution with `interrupt`, and continue a
-stopped Team with `continue`. Every call runs the same Python operation as its
-CLI command against the same Harness Project, so a user can start work from the
-terminal and control it from the host, or the other way round; no CLI text is
-parsed and no second state store exists. `continue` is the existing stop/continue
-path: it resumes the retained Team Batch, keeps the already consumed budget and
-records one continuation event. Replace, retire and cleanup are not exposed.
-
-To watch an isolated host discover and call the tools without a model turn, use
-the Codex app-server MCP client requests:
-
-```python
-import json, os, subprocess
-
-host = subprocess.Popen(
-    ["codex", "app-server", "--listen", "stdio://"], cwd=project_root, text=True,
-    stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-    env={**os.environ, "CODEX_HOME": isolated_codex_home},
-)
-def request(request_id, method, params):
-    host.stdin.write(json.dumps({"jsonrpc": "2.0", "id": request_id, "method": method,
-                                 "params": params}) + "\n")
-    host.stdin.flush()
-    while True:
-        message = json.loads(host.stdout.readline())
-        if message.get("id") == request_id:
-            return message
-
-request(1, "initialize", {"clientInfo": {"name": "probe", "version": "0"}})
-host.stdin.write(json.dumps({"jsonrpc": "2.0", "method": "initialized",
-                             "params": {}}) + "\n")
-thread = request(2, "thread/start", {"cwd": str(project_root)})["result"]["thread"]["id"]
-inventory = request(3, "mcpServerStatus/list",
-                    {"threadId": thread, "detail": "full"})["result"]["data"]
-called = request(4, "mcpServer/tool/call",
-                 {"server": "graphtraj", "threadId": thread,
-                  "tool": "ticket_graph", "arguments": {}})["result"]
-print(inventory[0]["tools"].keys(), called["structuredContent"])
-```
-
-On this checkout the installed entry point and the real host client are
-exercised together with:
-
-```text
-pytest -p no:cacheprovider -q tests/test_mcp_host_tools.py
-CODEX_REAL_MCP_HOST=1 pytest -p no:cacheprovider -q tests/test_mcp_host_tools.py
-```
-
-The first command covers discovery, every tool and CLI equivalence through the
-installed server, including a dispatched child whose Runtime work is substituted
-by a controlled peer and a stopped-Team continuation. The second additionally
-drives an installed Codex app-server with a temporary `CODEX_HOME` and an
-isolated MCP server configuration: it discovers the tools, dispatches one
-managed child, and then queries, steers, answers, interrupts and continues that
-child through host tool calls. It needs an installed `codex` executable and no
-model access; its exchange is retained under `/tmp/mcp118-host/probe.log`.
+A Codex host can supply its actual calling thread through `params._meta.threadId`
+for the existing caller-notice binding. The awaited call can return an enforced
+stop in `stop_deliveries`, with the retained stop identity, actual stop time and
+elapsed duration. Other callers retain the generic notice behavior. This does
+not queue an unsolicited message into Main, prove Agent receipt from a channel
+write, or solve event delivery after the original call has returned. Preserve the
+notification and same-Session limits described above.
 
 ## Evidence and limits
 
@@ -1028,18 +1033,30 @@ probe explicitly:
 CODEX_REAL_ACCEPTANCE=1 pytest -p no:cacheprovider -q tests/test_harness_root_runtime.py -k test_real_codex --tb=short
 ```
 
-## Resource-decoupling validation boundary
+## Validation boundary
 
-The accepted product installation was built from Git commit `36be7ac`; the final
-validation commit `1c4fc48` changes only a test file, with identical package source
-and packaging configuration. Its recorded checks cover 18 installed composition
-cases and four targeted budget cases. The package contains no Skill/role/template
-resource tree; generic Codex permission policy remains. Earlier per-feature
-checks were reused instead of counted again or presented as a full-suite pass.
+The local-tool/Runtime-adapter combination was accepted at
+`187ae5976ac802c60fd92d0c393b90b4d4e3cfb8`. Its fixed wheel and installation were
+checked against the committed archive for all 66 package files and seven
+independent manual/reference files. The final commit changes one help test;
+product-file hashes match the earlier accepted combination, allowing unchanged
+evidence to be reused. This README's subsequent documentation changes do not
+claim a different production build.
 
-A no-model `skills/list` query with Codex 0.156.1 verified native discovery of
-external customized Skills through symlinks, including same-name entries. This
-is discovery evidence, not a paid-model execution or native Seatbelt proof.
-Four earlier README-override recovery assertions remain documented as pre-existing
-failures. Earlier budget failures did not reproduce on the correctly installed
-final candidate; that result alone does not establish their historical cause.
+Controlled installed checks cover non-MCP graph mutation, local/CLI/MCP/native
+result parity, one-tool exposure, selected guides, all 25 CLI help projections,
+user-file preservation, the real Worker with an alternate test Adapter, Codex
+recovery and approval behavior, public pre-Session resolver retry, actual-parent
+notices and enforced stopping. They are scoped checks, not a full-suite pass or
+paid-model acceptance. Retained initial fixture failures and earlier environment
+limitations are not relabeled as passes.
+
+The plugin/native callback limitations above remain. Alternate Runtime objects
+are test inputs rather than a second production backend. A separately recorded
+failure to notify and wake the responsible Agent promptly across task events
+remains open; successful channel writes, retained stop records and controlled
+receipt tests do not establish that broader behavior.
+
+Earlier resource-decoupling and external Skill-discovery evidence remains in its
+original Ticket history. User-selected roles, models, permissions, Skills,
+Sessions, original budgets and stop records remain preserved.

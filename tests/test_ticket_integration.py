@@ -407,6 +407,11 @@ def test_configured_document_conflict_requires_common_result_and_validation(
     trace = Path(mapping['trace_file']).read_text()
     if outcome == 'prose-only':
         assert 'Decision: RESOLVED' in trace
+        retained = fake_codex.log_file.read_bytes()
+        retry = run_process(command + ['--resolve-conflict', 'Preserve both document requirements',
+                                      '--role', selection, '--', *validator], cwd=root, env=environment)
+        assert retry.returncode == 1 and 'without a Session' in retry.stdout
+        assert fake_codex.log_file.read_bytes() == retained
     else:
         if conflict == 'textual' and outcome == 'resolved':
             from graphtraj.execution.runner_models import RunnerError
@@ -746,3 +751,137 @@ def test_actual_result_parent_can_integrate_without_role_name_authority(
     with runtime_caller(root / '.graphtraj/runner', mapping['parent']):
         result = integrate_ticket(load_project_configuration(root), '83', (sys.executable, '-c', 'pass'))
     assert result['candidate'] == candidate and result['status'] == 'integrated'
+
+
+@pytest.fixture
+def failed_resolver_start(
+    installed_commands: InstalledCommands,
+    accepted_ticket: tuple,
+    fake_codex: FakeCodex,
+) -> tuple:
+    """Fail a real native thread/start request during public conflict dispatch."""
+    root, worktrees, state, candidate = accepted_ticket
+    dev = worktrees / 'dev'
+    delivered = dev / 'TEAM_ROUND_DELIVERED.txt'
+    delivered.write_text('conflicting integration work\n')
+    run_process(['git', 'add', delivered.name], cwd=dev).check_returncode()
+    run_process(['git', 'commit', '-m', 'Independent integration work'], cwd=dev).check_returncode()
+    command = [str(installed_commands.product), 'ticket', 'integrate', '--ticket-id', '83']
+    validation = [sys.executable, '-c', "from pathlib import Path; assert Path('TEAM_ROUND_DELIVERED.txt').read_text() == 'complete team round\\nconflicting integration work\\n'"]
+    failed = run_process(command + ['--', *validation], cwd=root)
+    assert failed.returncode == 1, failed.stdout + failed.stderr
+    selection = ['--resolve-conflict', 'Preserve both accepted lines', '--role', 'coding_team.merge_resolver']
+    environment = {
+        **os.environ, 'HOME': str(root / 'operator-home'),
+        'PATH': str(fake_codex.executable.parent) + os.pathsep + os.environ['PATH'],
+        'FAKE_CODEX_LOG': str(fake_codex.log_file),
+        'FAKE_CODEX_LIFECYCLE_ACTION': 'resolve-integration',
+        'FAKE_CODEX_RESOLUTION': 'resolved',
+        'GRAPHTRAJ_AGENT_RUNNER': str(installed_commands.runner),
+    }
+    failed = run_process(command + selection + ['--', *validation], cwd=root,
+                         env={**environment, 'FAKE_CODEX_EVENTS': '[]'}, timeout=20)
+    assert failed.returncode == 1, failed.stdout + failed.stderr
+    output = yaml.safe_load(failed.stdout)
+    assert output['status'] == 'escalated'
+    failures = list((root / '.graphtraj/runner/sessions').glob('*/launch-error.yml'))
+    assert len(failures) == 1
+    allocation = failures[0].parent
+    assert yaml.safe_load(failures[0].read_text())['terminal_confirmed'] is True
+    assert not (allocation / 'mapping.yml').exists()
+    return root, dev, state, candidate, command, selection, validation, environment, allocation
+
+
+def test_public_retry_of_unestablished_resolver_preserves_attempt_and_integrates(
+    installed_commands: InstalledCommands,
+    failed_resolver_start: tuple,
+    fake_codex: FakeCodex,
+) -> None:
+    """Corrected native startup reuses dev and completes ordinary result acceptance."""
+    from graphtraj.configuration.project_configuration import load_project_configuration
+    from graphtraj.execution.runner_status import runtime_caller
+    from graphtraj.graph.delivery_worldline import read_worldline
+    from graphtraj.teams.ticket_integration import integrate_ticket
+
+    root, dev, state, candidate, command, selection, validation, environment, allocation = failed_resolver_start
+    ticket = state / 'tickets/83-integration'
+    before = read_worldline(state, root)
+    retained = {path: path.read_bytes() for directory in (allocation, state / 'batches', ticket / 'teams/1/rounds')
+                for path in directory.rglob('*') if path.is_file()}
+    budget = yaml.safe_load((ticket / 'execution-budget.yml').read_text())
+    original = yaml.safe_load((allocation / 'launch.yml').read_text())['mapping']
+    # Even the accepted result's parent cannot take over Main's failed launch.
+    roles_file = root / '.graphtraj/roles.yml'
+    roles = yaml.safe_load(roles_file.read_text())
+    roles['role_tree']['coding-team.team-leader']['coding_team.merge_resolver'] = {}
+    roles_file.write_text(yaml.safe_dump(roles))
+    acceptance = next(event for event in reversed(before) if event['kind'] == 'team-round-accepted')
+    submission = next(event for event in before if event['event_id'] == acceptance['submission_id'])
+    accepted_mapping = yaml.safe_load((allocation.parent / submission['alias'] / 'mapping.yml').read_text())
+    with runtime_caller(root / '.graphtraj/runner', accepted_mapping['parent']):
+        with pytest.raises(ValueError, match='actual parent'):
+            integrate_ticket(load_project_configuration(root), '83', tuple(validation), selection[1], selection[3])
+    assert read_worldline(state, root) == before
+    release = root / 'resolver-release'
+    fake_codex.log_file.unlink()
+    process = subprocess.Popen(command + selection + ['--', *validation], cwd=root,
+                               env={**environment, 'FAKE_CODEX_RELEASE_FILE': str(release)},
+                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    try:
+        wait_for_file(fake_codex.log_file)
+        duplicate = run_process(command + selection + ['--', *validation], cwd=root, env=environment)
+        assert duplicate.returncode == 1 and 'in progress' in duplicate.stdout
+    finally:
+        release.touch()
+        stdout, stderr = process.communicate(timeout=30)
+    assert process.returncode == 0, stdout + stderr
+    output = yaml.safe_load(stdout)
+    assert output['status'] == 'resolving-integration' and output['candidate'] == candidate
+    alias = output['resolution']['alias']
+    mapping = yaml.safe_load((allocation.parent / alias / 'mapping.yml').read_text())
+    assert alias != allocation.name
+    assert mapping['worktree_path'] == original['worktree_path'] == str(dev)
+    assert mapping['parent'] == original['parent'] is None
+    assert mapping['team_generation'] == original['team_generation']
+    assert all(path.read_bytes() == content for path, content in retained.items())
+    after = yaml.safe_load((ticket / 'execution-budget.yml').read_text())
+    for field in ('started_at', 'allowance_minutes', 'budget', 'stopping_checks', 'stopped'):
+        assert after[field] == budget[field]
+    events = read_worldline(state, root)
+    assert events[:len(before)] == before
+    retry = next(event for event in events[len(before):] if event['kind'] == 'ticket-integration-conflict-started')
+    assert retry['caused_by_event_ids'] == [before[-1]['event_id']]
+    pending = run_process(command + ['--', *validation], cwd=root)
+    assert pending.returncode == 1 and 'acceptance' in pending.stdout
+    submission = _accept_resolution(installed_commands, root, alias)
+    assert submission['candidate'] == run_process(['git', 'rev-parse', 'HEAD'], cwd=dev).stdout.strip()
+    integrated = run_process(command + ['--', *validation], cwd=root)
+    assert integrated.returncode == 0, integrated.stdout + integrated.stderr
+    assert yaml.safe_load(integrated.stdout)['status'] == 'integrated'
+
+
+def test_unestablished_resolver_retry_does_not_restart_stopped_budget(
+    failed_resolver_start: tuple,
+    fake_codex: FakeCodex,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A pre-Session failure grants no new time or bypass around sampled stopping."""
+    from graphtraj.execution.execution_budget import ExecutionBudgetMonitor
+
+    root, _, state, _, command, selection, validation, environment, _ = failed_resolver_start
+    ticket = state / 'tickets/83-integration'
+    monitor = ExecutionBudgetMonitor(ticket, '83', 'integration')
+    usage = yaml.safe_load((ticket / 'execution-budget.yml').read_text())
+    with monkeypatch.context() as controlled:
+        controlled.setattr('graphtraj.execution.execution_budget.time.time', lambda: usage['started_at'] + 100000)
+        controlled.setattr('graphtraj.execution.execution_budget.random.random', lambda: 1.0)
+        assert monitor.check('merge-resolver', 'integration')
+    budget = yaml.safe_load((ticket / 'execution-budget.yml').read_text())
+    runtime = fake_codex.log_file.read_bytes()
+    retried = run_process(command + selection + ['--', *validation], cwd=root, env=environment, timeout=20)
+    assert retried.returncode == 1, retried.stdout + retried.stderr
+    assert yaml.safe_load(retried.stdout)['status'] == 'escalated'
+    after = yaml.safe_load((ticket / 'execution-budget.yml').read_text())
+    for field in ('started_at', 'allowance_minutes', 'budget', 'sessions', 'corrections', 'stopping_checks', 'stopped'):
+        assert after[field] == budget[field]
+    assert fake_codex.log_file.read_bytes() == runtime

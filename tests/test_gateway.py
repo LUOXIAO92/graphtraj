@@ -5,9 +5,13 @@ from pathlib import Path
 from typing import Any, Mapping
 
 import pytest
+import yaml
 
 from graphtraj.configuration.project_configuration import default_configuration_content
 from graphtraj.interfaces import gateway, tools
+
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 
 
 @pytest.fixture
@@ -160,7 +164,7 @@ def test_delivered_guide_resolution_is_independent_of_the_process_directory(
     )
 
     described = gateway.handle_request(
-        {"action": "describe", "feature": "task_breakdown"}, cwd=tmp_path,
+        {"action": "describe", "feature": "task-breakdown"}, cwd=tmp_path,
     )
     assert described.failed
     assert described.document["manual"] is None
@@ -168,16 +172,45 @@ def test_delivered_guide_resolution_is_independent_of_the_process_directory(
     assert "Cannot read manual manuals/task-breakdown/guide.md" in described.document["error"]
 
     refused = gateway.handle_request(
-        {"action": "execute", "feature": "task_breakdown", "arguments": {}},
+        {"action": "execute", "feature": "task-breakdown", "arguments": {}},
     )
     assert refused.failed
-    assert refused.document == {"error": "Feature is not executable: task_breakdown"}
+    assert refused.document == {"error": "Feature is not executable: task-breakdown"}
 
     executed = gateway.handle_request(
         {"action": "execute", "feature": "ticket_graph", "arguments": {}},
         cwd=tmp_path,
     )
     assert executed.document == {"tickets": []}
+
+
+def test_method_only_rows_use_guide_names_and_frontmatter_descriptions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Each method-only row is the delivered guide: same name, description and text."""
+    monkeypatch.setattr(gateway, "delivered_manuals_root", lambda: REPOSITORY_ROOT)
+
+    assert set(tools.METHOD_FEATURE_NAMES) == {
+        "setup-project", "task-breakdown", "task-delivery", "research",
+        "concept-clarification",
+    }
+    for name in tools.METHOD_FEATURE_NAMES:
+        guide = REPOSITORY_ROOT / "manuals" / name / "guide.md"
+        frontmatter = yaml.safe_load(guide.read_text(encoding="utf-8").split("---", 2)[1])
+        row = tools.TOOLS[name]
+
+        assert row.handler is None
+        assert row.manual_ref == f"manuals/{name}/guide.md"
+        assert row.description == frontmatter["description"]
+        assert {entry["feature"] for entry in gateway.handle_request(
+            {"action": "discover", "query": name}).document["features"]} == {name}
+
+        described = gateway.handle_request({"action": "describe", "feature": name})
+        assert not described.failed
+        assert described.document["manual"] == guide.read_text(encoding="utf-8")
+        assert described.document["call"] is None
+        assert gateway.handle_request(
+            {"action": "execute", "feature": name, "arguments": {}}).failed
 
 
 def test_unknown_method_only_and_host_restriction(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, feature: list) -> None:

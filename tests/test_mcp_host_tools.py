@@ -49,10 +49,11 @@ TOOL_NAMES = {
     "worldline_render",
     "delivery_state_apply",
     "ticket_integrate",
-    "task_breakdown",
-    "task_delivery",
+    "setup-project",
+    "task-breakdown",
+    "task-delivery",
     "research",
-    "concept_clarification",
+    "concept-clarification",
 }
 VOLATILE_EVENT_KEYS = {
     "event_id", "captured_at", "definition_refs", "evidence_refs",

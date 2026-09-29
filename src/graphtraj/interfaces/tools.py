@@ -594,6 +594,7 @@ register_tool(
     "in the server working directory. Equivalent to `graphtraj ticket graph`.",
     _EMPTY_SCHEMA,
     read_current_graph,
+    manual_ref="manuals/task-breakdown/guide.md",
 )
 register_tool(
     "ticket_register",
@@ -601,6 +602,7 @@ register_tool(
     "`graphtraj ticket register --ticket-file`.",
     _ISSUE_SCHEMA,
     register_current_ticket,
+    manual_ref="manuals/task-breakdown/guide.md",
 )
 register_tool(
     "ticket_revise",
@@ -608,6 +610,7 @@ register_tool(
     "recorded causal event. Equivalent to `graphtraj ticket revise`.",
     _REVISION_SCHEMA,
     revise_current_tickets,
+    manual_ref="manuals/task-breakdown/guide.md",
 )
 register_tool(
     "ticket_update",
@@ -615,6 +618,7 @@ register_tool(
     "causal event. Equivalent to `graphtraj ticket update`.",
     _STATE_CHANGE_SCHEMA,
     update_current_ticket_state,
+    manual_ref="manuals/task-delivery/guide.md",
 )
 register_tool(
     "project_setup",
@@ -630,6 +634,7 @@ register_tool(
     "Equivalent to `graphtraj doctor`.",
     _EMPTY_SCHEMA,
     diagnose_current_project,
+    manual_ref="manuals/setup-project/guide.md",
 )
 register_tool(
     "worldline_append",
@@ -637,6 +642,7 @@ register_tool(
     "`graphtraj worldline append --event-file`.",
     _WORLDLINE_APPEND_SCHEMA,
     append_worldline_event,
+    manual_ref="manuals/task-delivery/guide.md",
 )
 register_tool(
     "worldline_read",
@@ -644,6 +650,7 @@ register_tool(
     "`graphtraj worldline read`.",
     _EMPTY_SCHEMA,
     read_project_worldline,
+    manual_ref="manuals/task-delivery/guide.md",
 )
 register_tool(
     "worldline_render",
@@ -651,6 +658,7 @@ register_tool(
     "`graphtraj worldline render`.",
     _EMPTY_SCHEMA,
     read_project_worldline,
+    manual_ref="manuals/task-delivery/guide.md",
 )
 register_tool(
     "delivery_state_apply",
@@ -658,6 +666,7 @@ register_tool(
     "`graphtraj delivery-state apply`.",
     _DELIVERY_STATE_SCHEMA,
     apply_state_request,
+    manual_ref="manuals/task-delivery/guide.md",
 )
 register_tool(
     "ticket_integrate",
@@ -665,6 +674,7 @@ register_tool(
     "Equivalent to `graphtraj ticket integrate`.",
     _INTEGRATE_SCHEMA,
     integrate_current_ticket,
+    manual_ref="manuals/task-delivery/guide.md",
 )
 register_tool(
     "alias_status",
@@ -682,6 +692,7 @@ register_tool(
         "additionalProperties": False,
     },
     read_alias_status,
+    manual_ref="manuals/task-delivery/guide.md",
 )
 register_tool(
     "swarm",
@@ -690,6 +701,7 @@ register_tool(
     "another launch input. Equivalent to `agent-runner --swarm-input`.",
     _SWARM_SCHEMA,
     launch_swarm_tool,
+    manual_ref="manuals/task-delivery/guide.md",
 )
 register_tool(
     "send_instruction",
@@ -697,6 +709,7 @@ register_tool(
     "causal Project Worldline event IDs. Equivalent to `agent-runner send`.",
     _SEND_SCHEMA,
     send_session_instruction,
+    manual_ref="manuals/task-delivery/guide.md",
 )
 register_tool(
     "interrupt",
@@ -704,6 +717,7 @@ register_tool(
     "Sessions. Returns each member confirmation. Equivalent to `agent-runner interrupt`.",
     _ALIAS_SCHEMA,
     interrupt_session_execution,
+    manual_ref="manuals/task-delivery/guide.md",
 )
 register_tool(
     "continue",
@@ -712,6 +726,7 @@ register_tool(
     "`agent-runner continue`.",
     _CONTINUE_SCHEMA,
     continue_ticket_execution,
+    manual_ref="manuals/task-delivery/guide.md",
 )
 register_tool(
     "pending_requests",
@@ -720,6 +735,7 @@ register_tool(
     "requests`.",
     _REQUESTS_SCHEMA,
     read_pending_requests,
+    manual_ref="manuals/task-delivery/guide.md",
 )
 register_tool(
     "reply_to_request",
@@ -727,6 +743,7 @@ register_tool(
     "`pending_requests`. Equivalent to `agent-runner reply`.",
     _REPLY_SCHEMA,
     answer_pending_request,
+    manual_ref="manuals/task-delivery/guide.md",
 )
 
 
@@ -736,7 +753,7 @@ def read_reports(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> To
 
 
 register_tool('session_reports', "Read your or your direct child's reports and retained result submissions.",
-              _ALIAS_SCHEMA, read_reports)
+              _ALIAS_SCHEMA, read_reports, manual_ref='manuals/task-delivery/guide.md')
 
 
 def submit_report(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> ToolResult:
@@ -747,7 +764,8 @@ def submit_report(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> T
 
 register_tool('submit_report', 'Write your own assigned report by filename (for example report.md).',
               {'type': 'object', 'properties': {'name': {'type': 'string'}, 'text': {'type': 'string'}},
-               'required': ['name', 'text'], 'additionalProperties': False}, submit_report)
+               'required': ['name', 'text'], 'additionalProperties': False}, submit_report,
+              manual_ref='manuals/task-delivery/guide.md')
 
 
 def submit_result(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> ToolResult:
@@ -775,7 +793,7 @@ register_tool('submit_result',
                   'completion': {'type': 'string'},
                   'unresolved': {'type': 'array', 'items': {'type': 'string'}},
               }, 'required': ['commit', 'result_refs', 'completion'], 'additionalProperties': False},
-              submit_result)
+              submit_result, manual_ref='manuals/task-delivery/guide.md')
 
 
 def decide_result(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> ToolResult:
@@ -801,7 +819,8 @@ register_tool('decide_result',
                   'reason': {'type': 'string'},
                   'evidence_refs': {'type': 'array', 'minItems': 1, 'items': {'type': 'string'}},
               }, 'required': ['submission_id', 'commit', 'decision', 'reason', 'evidence_refs'],
-               'additionalProperties': False}, decide_result)
+               'additionalProperties': False}, decide_result,
+              manual_ref='manuals/task-delivery/guide.md')
 
 
 
@@ -869,6 +888,7 @@ register_tool(
         "additionalProperties": False,
     },
     replace_session_execution,
+    manual_ref="manuals/task-delivery/guide.md",
 )
 register_tool(
     "cleanup",
@@ -876,6 +896,7 @@ register_tool(
     {"type": "object", "properties": {"ticket_id": {"type": "string"}},
      "required": ["ticket_id"], "additionalProperties": False},
     cleanup_ticket_execution,
+    manual_ref="manuals/task-delivery/guide.md",
 )
 register_tool(
     "main",
@@ -887,39 +908,35 @@ register_tool(
                    "description": "Main record returned by a previous completed invocation."},
     }, "required": ["instruction"], "additionalProperties": False},
     run_codex_main,
-)
-
-# Method-only features expose Main-authored guidance without an executable
-# action or any new permission. Each manual reference names the guide the
-# distribution delivers under its data location.
-register_tool(
-    "task_breakdown",
-    "Recursively split work to fit available resources, with independently "
-    "verifiable results and real artifact dependencies.",
-    _EMPTY_SCHEMA,
-    None,
-    manual_ref="manuals/task-breakdown/guide.md",
-)
-register_tool(
-    "task_delivery",
-    "Dispatch, submit, accept, integrate and recover work through the common "
-    "task protocol.",
-    _EMPTY_SCHEMA,
-    None,
     manual_ref="manuals/task-delivery/guide.md",
 )
-register_tool(
-    "research",
-    "Investigate questions using primary sources and retain evidence, "
-    "uncertainty and citations.",
-    _EMPTY_SCHEMA,
-    None,
-    manual_ref="manuals/research/guide.md",
+
+# Method-only features carry the guide's own frontmatter description and no
+# executable action. Their identifiers are the delivered guide directory names,
+# so the registry stays the only catalog of feature identifiers.
+METHOD_FEATURES = (
+    ("setup-project", "Establish a project's GraphTraj paths, task tracker, available "
+     "execution resources and shared conventions while preserving existing choices."),
+    ("task-breakdown", "Break an agreed goal into independently verifiable tasks, "
+     "recursively sizing them for available resources and connecting the results each "
+     "task needs."),
+    ("task-delivery", "Coordinate accepted tasks through dispatch, result submission, "
+     "acceptance, integration and recovery."),
+    ("research", "Investigate a factual question across relevant primary sources and "
+     "deliver an evidence-based answer with citations, limitations and unresolved "
+     "uncertainty."),
+    ("concept-clarification", "Clarify ambiguous terminology, concept boundaries and "
+     "relationships using concrete scenarios and the project's accepted meanings. Use "
+     "when shared understanding needs to change or become explicit."),
 )
-register_tool(
-    "concept_clarification",
-    "Clarify terminology, concepts, relationships and boundaries.",
-    _EMPTY_SCHEMA,
-    None,
-    manual_ref="manuals/concept-clarification/guide.md",
-)
+
+METHOD_FEATURE_NAMES = tuple(name for name, _ in METHOD_FEATURES)
+
+for _feature, _description in METHOD_FEATURES:
+    register_tool(
+        _feature,
+        _description,
+        _EMPTY_SCHEMA,
+        None,
+        manual_ref="manuals/{0}/guide.md".format(_feature),
+    )

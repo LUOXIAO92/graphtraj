@@ -16,6 +16,9 @@ from graphtraj.runtimes.codex.managed_session import CodexManagedExecution, run_
 from test_codex_app_server import context, peer
 
 
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+
+
 def native_result(document: dict, success: bool = True) -> dict:
     """Encode the expected business result in the native response envelope."""
     return {'contentItems': [{'type': 'inputText', 'text': json.dumps(document)}],
@@ -149,8 +152,12 @@ def test_native_gateway_restricts_features_and_context(
 
             discovered, success = await call({'action': 'discover'})
             assert success
+            callable_features = (
+                set(NATIVE_RUNNER_TOOLS.values()) if issuer == 'owner'
+                else {'alias_status', 'ticket_graph'}
+            )
             assert {entry['feature'] for entry in discovered['features']} == (
-                set(NATIVE_RUNNER_TOOLS.values()) if issuer == 'owner' else {'alias_status', 'ticket_graph'}
+                callable_features | set(tools.METHOD_FEATURE_NAMES)
             )
             for feature in ('ticket_update', 'not_registered'):
                 for action in ('describe', 'execute'):
@@ -205,3 +212,47 @@ def test_formal_child_cannot_use_gateway_as_its_parent(project: Path, peer: Path
     response = asyncio.run(exercise())
     assert not response['success']
     assert json.loads(response['contentItems'][0]['text'])['error']['code'] == 'authority-denied'
+
+
+def test_native_gateway_discloses_method_guides_without_widening_execution(
+    project: Path, peer: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The session and its helpers read method guides while helpers stay read-only."""
+    monkeypatch.setattr(gateway, 'delivered_manuals_root', lambda: REPOSITORY_ROOT)
+    guide = REPOSITORY_ROOT / 'manuals' / 'task-delivery' / 'guide.md'
+
+    async def exercise() -> None:
+        """Reuse the controlled peer for discovery, description and rejection."""
+        async with CodexAppServer(command=[str(peer)], cwd=project, environment={
+            'PEER_THREAD_PARENTS': '{"helper":"owner"}',
+        }) as adapter:
+            async def call(issuer: str, arguments: dict) -> tuple[dict, bool]:
+                """Send one request through the production native callback."""
+                response = await run_native_operation(adapter, 'owner', 'parent@l1', project,
+                    CodexServerRequest(1, 'item/tool/call', {
+                        'threadId': issuer, 'tool': 'graphtraj', 'arguments': arguments,
+                    }))
+                return json.loads(response['contentItems'][0]['text']), response['success']
+
+            discovered, success = await call('owner', {'action': 'discover'})
+            assert success
+            assert set(tools.METHOD_FEATURE_NAMES) <= {
+                entry['feature'] for entry in discovered['features']
+            }
+
+            for issuer in ('owner', 'helper'):
+                described, success = await call(
+                    issuer, {'action': 'describe', 'feature': 'task-delivery'},
+                )
+                assert success
+                assert described['manual'] == guide.read_text(encoding='utf-8')
+                assert described['call'] is None
+
+            for feature in ('ticket_register', 'task-delivery'):
+                document, success = await call('helper', {
+                    'action': 'execute', 'feature': feature, 'arguments': {},
+                })
+                assert not success
+                assert document['error']['code'] == 'authority-denied'
+
+    asyncio.run(exercise())

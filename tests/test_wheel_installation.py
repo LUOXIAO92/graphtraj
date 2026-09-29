@@ -285,8 +285,9 @@ def test_installed_tool_reads_the_delivered_guide_from_another_directory(
     requests = "".join(
         json.dumps(request) + "\n"
         for request in [
-            {"action": "discover", "query": "task_breakdown"},
-            {"action": "describe", "feature": "task_breakdown"},
+            {"action": "discover", "query": "task-breakdown"},
+            {"action": "describe", "feature": "task-breakdown"},
+            {"action": "describe", "feature": "ticket_graph"},
             {"action": "execute", "feature": "ticket_graph", "arguments": {}},
         ]
     )
@@ -302,11 +303,14 @@ def test_installed_tool_reads_the_delivered_guide_from_another_directory(
     replies = [json.loads(line) for line in completed.stdout.splitlines()]
 
     assert [entry["feature"] for entry in replies[0]["result"]["features"]] == [
-        "task_breakdown"
+        "task-breakdown"
     ]
     described = replies[1]["result"]
     assert described["call"] is None
     assert described["manual"] == (
         Path(__file__).resolve().parents[1] / "manuals/task-breakdown/guide.md"
     ).read_text(encoding="utf-8")
-    assert replies[2]["result"] == {"tickets": []}
+    assert described["manual_ref"] == "manuals/task-breakdown/guide.md"
+    assert replies[2]["result"]["manual"] == described["manual"]
+    assert replies[2]["result"]["manual_ref"] == "manuals/task-breakdown/guide.md"
+    assert replies[3]["result"] == {"tickets": []}

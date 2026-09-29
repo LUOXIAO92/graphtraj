@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Dict, Literal, Mapping, Protocol, TypedDict
+from typing import TYPE_CHECKING, Any, Callable, Dict, Literal, Mapping, Protocol, Sequence, TypedDict
 
 if TYPE_CHECKING:
     from graphtraj.configuration.role_definitions import ResolvedChildRole
 
 
 SessionStarted = Callable[[str, int], None]
+NativeReplacement = Callable[[Sequence[str]], dict]
 
 
 class RuntimeExecutionResult(TypedDict):
@@ -102,6 +103,14 @@ class RuntimePreparationAdapter(Protocol):
         the stored Trace and ignore successful output and Agent prose.
         """
 
+    def native_replacement_approval(self) -> NativeReplacement | None:
+        """Return native execution, or None only for known absence of approvals.
+
+        Unknown capability and unavailable channels must raise, never return None.
+        The operation returns its replacement result or native execution request;
+        rejection and execution failure must raise without local fallback.
+        """
+
     def preflight_runtime_context(
         self,
         *,
@@ -159,3 +168,16 @@ def select_runtime_adapter(runtime: str) -> RuntimeAdapter:
         "RUNTIME_UNSUPPORTED",
         "The selected Agent Runtime is not supported by this Runner.",
     )
+
+
+def native_replacement_approval(runtime: str | None) -> NativeReplacement | None:
+    """Resolve approval capability without treating unsupported Runtimes as absent.
+
+    pi's previously supported absence is retained here without pretending it has
+    a launch Adapter. Every implemented Runtime uses the shared Adapter selector.
+    """
+    if runtime == "pi":
+        return None
+    if runtime is None:
+        raise RuntimeAdapterError("RUNTIME_UNSUPPORTED", "The calling Runtime is unknown.")
+    return select_runtime_adapter(runtime).native_replacement_approval()

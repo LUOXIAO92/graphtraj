@@ -24,6 +24,10 @@ from functools import partial
 from pathlib import Path
 from typing import Any, Callable, Collection, Mapping, TextIO
 
+from graphtraj.execution.runner_connection import parent_connection, worker_connection
+from graphtraj.execution.runner_models import RunnerError
+from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
+from graphtraj.workspace.runner_project import discover_runner_directory
 from graphtraj.interfaces import gateway
 from graphtraj.interfaces.tools import ToolResult
 
@@ -53,13 +57,79 @@ def tool_descriptor() -> dict[str, Any]:
 def bind(
     cwd: Path | None = None,
     allowed_features: Collection[str] | None = None,
+    *,
+    event_receiver: Callable[[dict[str, str]], None] | None = None,
 ) -> Callable[[Mapping[str, Any]], ToolResult]:
     """Return the tool callback bound to one trusted host launch context.
 
     The returned callable takes the model-supplied request object only. ``cwd``
     and ``allowed_features`` come from the host, never from the request.
+    With ``event_receiver``, the returned HostTool retains the host callback
+    across tool calls until explicitly closed. The callback uses the host's
+    existing client; its return acknowledges forwarding, not Agent processing.
     """
+    if event_receiver is not None:
+        return HostTool(cwd or Path.cwd(), allowed_features, event_receiver)
     return partial(gateway.handle_request, cwd=cwd, allowed_features=allowed_features)
+
+
+class HostTool:
+    """Keep an owning host's event receiver alive across individual tool returns.
+
+    The host forwards events using its already-owned Session/client, and closes
+    this binding only when it stops receiving child events. No Session, model,
+    permission or caller identity is created here. Use as a context manager or
+    call ``close``; asynchronous hosts should close off their client event loop.
+    """
+
+    def __init__(
+        self,
+        cwd: Path,
+        allowed_features: Collection[str] | None,
+        receiver: Callable[[dict[str, str]], None],
+    ) -> None:
+        """Open the existing private control transport for this trusted callback."""
+        self.cwd = cwd
+        self.allowed_features = allowed_features
+        self.closed = False
+        directory = discover_runner_directory(cwd)
+        directory.mkdir(parents=True, exist_ok=True)
+
+        def receive(message: dict) -> dict:
+            """Forward only a four-field event; failures remain retryable by its producer."""
+            if (set(message) != {'source', 'alias', 'event', 'message'}
+                    or message['source'] != 'graphtraj'
+                    or any(not isinstance(value, str) or not value for value in message.values())):
+                raise ValueError('Invalid parent event')
+            try:
+                receiver(message)
+            except Exception as error:
+                raise RuntimeAdapterError('operation-failed', str(error)) from error
+            return {}
+
+        self.connection = worker_connection(directory, receive)
+        self.address = self.connection.__enter__()
+
+    def __call__(self, request: Mapping[str, Any]) -> ToolResult:
+        """Run one ordinary tool request without shortening the receiver lifetime."""
+        if self.closed:
+            raise RunnerError('operation-failed', 'The owning host event binding is closed.')
+        with parent_connection(self.address):
+            return gateway.handle_request(request, cwd=self.cwd, allowed_features=self.allowed_features)
+
+    def close(self) -> None:
+        """Release this host connection; later delivery must report a failure."""
+        if not self.closed:
+            self.closed = True
+            self.connection.__exit__(None, None, None)
+
+    def __enter__(self) -> HostTool:
+        """Retain this binding until its owning host leaves the scope."""
+        return self
+
+    def __exit__(self, *exception: object) -> None:
+        """Close without suppressing host exceptions."""
+        self.close()
 
 
 def answer(

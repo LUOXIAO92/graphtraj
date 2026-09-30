@@ -23,7 +23,7 @@ from graphtraj.configuration.project_configuration import (
     ProjectConfigurationError,
     load_project_configuration,
 )
-from graphtraj.execution.runner_connection import session_operation
+from graphtraj.execution.runner_connection import connection_operation, session_operation
 from graphtraj.execution.runner_io import confirm_alias_mapping_durable, write_yaml_durably
 from graphtraj.execution.runner_capacity import capacity_positions
 from graphtraj.execution.runner_models import RunnerError
@@ -113,23 +113,23 @@ def notify_direct_parent(
                 raise RunnerError("invalid-mapping", "The Runner admission binding is unreadable.") from error
         else:
             mapping, _ = read_alias_mapping(runner_directory, session_directory.name)
+        event = (
+            (identity or {}).get("type") or (identity or {}).get("method")
+            or (identity or {}).get("activity")
+        )
+        if not isinstance(event, str) or not event or not notice.strip():
+            raise RunnerError("invalid-input", "A system notice needs an existing event and message.")
+        message = json.dumps({
+            "source": "graphtraj", "alias": mapping["alias"],
+            "event": event, "message": notice,
+        }, ensure_ascii=False)
+        record["notice"] = message
         parent = mapping.get("parent")
         if isinstance(parent, str):
             record["parent"] = parent
             parent_mapping, parent_directory = read_alias_mapping(
                 runner_directory, parent
             )
-            event = (
-                (identity or {}).get("type") or (identity or {}).get("method")
-                or (identity or {}).get("activity")
-            )
-            if not isinstance(event, str) or not event or not notice.strip():
-                raise RunnerError("invalid-input", "A system notice needs an existing event and message.")
-            message = json.dumps({
-                "source": "graphtraj", "alias": mapping["alias"],
-                "event": event, "message": notice,
-            }, ensure_ascii=False)
-            record["notice"] = message
             # Reuse the same alias lock and continuation path as ordinary send.
             # A child's inherited capacity belongs to this existing task tree.
             # Only the Worker inherited this descriptor. Runtime-launched CLI
@@ -150,6 +150,11 @@ def notify_direct_parent(
                 "parent_session": receipt["session"],
                 "parent_execution_id": receipt["execution_id"],
             })
+        elif mapping.get("parent_connection") is not None:
+            address = mapping["parent_connection"]
+            record["parent_connection"] = address
+            connection_operation(address, json.loads(message))
+            record["delivery"] = "received"
     except RunnerError as error:
         record["delivery"] = "not-delivered"
         record["error"] = {"code": error.code, "message": error.message}

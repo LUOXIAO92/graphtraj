@@ -464,7 +464,7 @@ def _monitor_execution_budget(
                 monitor.deliver_parent_notices(session_directory)
             except (RunnerError, OSError, ValueError, yaml.YAMLError):
                 pass
-            if mapping.get("parent") is None or not monitor.pending_parent_notices():
+            if (mapping.get("parent") is None and not mapping.get("parent_connection")) or not monitor.pending_parent_notices():
                 return
             remaining = deadline - time.monotonic()
             if remaining <= 0:

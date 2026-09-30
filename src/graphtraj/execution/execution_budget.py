@@ -261,7 +261,7 @@ class ExecutionBudgetMonitor:
             """Return only notice keys acknowledged by the actual parent."""
             received = []
             for notice in pending:
-                if isinstance(mapping.get("parent"), str):
+                if isinstance(mapping.get("parent"), str) or mapping.get("parent_connection") is not None:
                     receipt = notify_direct_parent(
                         directory, notice["message"],
                         {"type": "execution-budget-exceeded", "key": notice["key"]},

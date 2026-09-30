@@ -205,3 +205,16 @@ sys.stderr.write("mcp_imported={0}\\n".format("graphtraj.interfaces.mcp" in sys.
     assert not replies[4]["failed"]
     # The write landed in the host's launch directory, not the test process one.
     assert (project / ".graphtraj/state/tickets/900-probe-ticket").is_dir()
+
+
+def test_event_receiver_is_trusted_host_context_and_has_explicit_lifetime(project: Path) -> None:
+    """Closing a host binding prevents further calls; model input cannot bind a receiver."""
+    from graphtraj.execution.runner_models import RunnerError
+
+    with local_tool.bind(project, event_receiver=lambda event: None) as call:
+        rejected = call({'action': 'execute', 'feature': 'ticket_graph',
+                         'arguments': {}, 'event_receiver': 'replace owner'})
+        assert rejected.failed
+        assert not call({'action': 'execute', 'feature': 'ticket_graph', 'arguments': {}}).failed
+    with pytest.raises(RunnerError, match='closed'):
+        call({'action': 'execute', 'feature': 'ticket_graph', 'arguments': {}})

@@ -35,6 +35,7 @@ from graphtraj.execution.runner_batch import (
     valid_ticket_id,
 )
 from graphtraj.execution.runner_capacity import capacity_positions
+from graphtraj.execution.runner_connection import current_parent_connection
 from graphtraj.execution.runner_io import write_yaml_durably
 from graphtraj.execution.runner_heartbeat import execution_start_lock, ownership_is_held
 from graphtraj.execution.runner_models import (
@@ -345,6 +346,10 @@ def _run_batch_workers(
             for index, position in enumerate(positions):
                 try:
                     environment = dict(os.environ)
+                    environment.pop("GRAPHTRAJ_PARENT_CONNECTION", None)
+                    host = current_parent_connection()
+                    if not parent_alias and host is not None:
+                        environment["GRAPHTRAJ_PARENT_CONNECTION"] = host
                     if notice_fd is not None:
                         environment["GRAPHTRAJ_BUDGET_NOTICE_FD"] = str(notice_fd)
                     worker = subprocess.Popen(
@@ -780,6 +785,9 @@ def _execute_agent(
                     "role": role,
                     "role_reference": reference,
                     "parent": parent_alias,
+                    "parent_connection": (
+                        current_parent_connection() or os.environ.get("GRAPHTRAJ_PARENT_CONNECTION")
+                    ) if parent_alias is None else None,
                     "retained_batch_file": str(retained_batch),
                     "worktree_path": str(worktree),
                     "trace_file": str(trace),

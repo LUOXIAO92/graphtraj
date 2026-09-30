@@ -8,12 +8,31 @@ import tempfile
 import threading
 import time
 from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Callable, Iterator
 
 from graphtraj.execution.runner_models import RunnerError
 from graphtraj.execution.runner_process import OPERATION_TIMEOUT_SECONDS
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
+
+
+_parent_connection: ContextVar[str | None] = ContextVar('parent_connection', default=None)
+
+
+@contextmanager
+def parent_connection(address: str) -> Iterator[None]:
+    """Bind the owning host's existing receiver to launches in this call only."""
+    token = _parent_connection.set(address)
+    try:
+        yield
+    finally:
+        _parent_connection.reset(token)
+
+
+def current_parent_connection() -> str | None:
+    """Return trusted host context, never a model-supplied operation parameter."""
+    return _parent_connection.get()
 
 
 @contextmanager
@@ -58,12 +77,20 @@ def worker_connection(directory: Path, operate: Callable[[dict], dict]) -> Itera
 def session_operation(mapping: dict, operation: str, **arguments: object) -> dict:
     """Ask the owner to control the exact mapped native execution and await its reply."""
     try:
-        with tempfile.TemporaryDirectory(dir=mapping['control_directory']) as directory:
+        return connection_operation(mapping['control_directory'], {
+            'operation': operation, 'session': mapping['session'],
+            'execution_id': mapping['execution_id'], **arguments,
+        })
+    except (KeyError, TypeError) as error:
+        raise RunnerError('operation-failed', 'The mapped Session control identity is invalid.') from error
+
+
+def connection_operation(address: str, document: dict) -> dict:
+    """Exchange one request with an existing owner, retaining acknowledgement semantics."""
+    try:
+        with tempfile.TemporaryDirectory(dir=address) as directory:
             request = Path(directory) / 'request.tmp'
-            request.write_text(json.dumps({
-                'operation': operation, 'session': mapping['session'],
-                'execution_id': mapping['execution_id'], **arguments,
-            }))
+            request.write_text(json.dumps(document))
             os.replace(request, request.with_suffix('.json'))
             response_file = Path(directory) / 'response.json'
             deadline = time.monotonic() + OPERATION_TIMEOUT_SECONDS

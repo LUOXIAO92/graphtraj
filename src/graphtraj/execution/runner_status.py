@@ -78,6 +78,7 @@ SESSION_BINDING_FIELDS = (
     "team_generation",
     "role",
     "parent",
+    "parent_connection",
 )
 
 

@@ -23,6 +23,7 @@ from graphtraj.runtimes.codex.codex_adapter import (
     _reject_legacy_user_sandbox_config,
 )
 from graphtraj.runtimes.runtime_adapter import RuntimeContext, RuntimeExecutionResult
+from graphtraj.runtimes.codex.websocket import CodexWebSocket
 
 
 _DEFAULT_TIMEOUT = object()
@@ -221,6 +222,7 @@ class CodexAppServer:
         self._on_request = on_request
         self._handlers: dict[int | str, asyncio.Task[None]] = {}
         self._process: asyncio.subprocess.Process | None = None
+        self._websocket: CodexWebSocket | None = None
         self._reader: asyncio.Task[None] | None = None
         self._stderr_reader: asyncio.Task[None] | None = None
         self._stderr = b''
@@ -263,9 +265,19 @@ class CodexAppServer:
             )
         except (OSError, ValueError) as error:
             raise CodexAdapterError('RUNTIME_START_FAILED', f'Cannot open Codex stdio: {error}') from error
-        self._reader = asyncio.create_task(self._read())
         self._stderr_reader = asyncio.create_task(self._read_stderr())
         try:
+            if self._command[1:3] == ('app-server', 'proxy'):
+                assert self._process.stdout is not None and self._process.stdin is not None
+                self._websocket = CodexWebSocket(self._process.stdout, self._process.stdin)
+                try:
+                    await asyncio.wait_for(self._websocket.open(), self._timeout)
+                except Exception as error:
+                    raise CodexAdapterError(
+                        'RUNTIME_CONNECTION_FAILED', f'Codex WebSocket Upgrade failed: {error}',
+                        terminal_confirmed=False,
+                    ) from error
+            self._reader = asyncio.create_task(self._read())
             await self._call('initialize', {
                 'clientInfo': {'name': 'graphtraj', 'version': '0.1.0'},
                 'capabilities': {'experimentalApi': self._experimental_api},
@@ -727,12 +739,16 @@ class CodexAppServer:
         return response['result']
 
     async def _send(self, message: dict[str, Any]) -> None:
-        """Write one complete JSON line before yielding to other operations."""
+        """Write JSONL for stdio services or a Text message for daemon proxies."""
         self._require_connection()
         assert self._process is not None and self._process.stdin is not None
         try:
-            self._process.stdin.write((json.dumps(message, allow_nan=False) + '\n').encode())
-            await self._process.stdin.drain()
+            encoded = json.dumps(message, allow_nan=False)
+            if self._websocket is not None:
+                await self._websocket.send(encoded)
+            else:
+                self._process.stdin.write((encoded + '\n').encode())
+                await self._process.stdin.drain()
         except (OSError, ValueError, TypeError) as error:
             failure = CodexAdapterError('RUNTIME_CONNECTION_FAILED', f'Writing Codex stdio failed: {error}',
                                         terminal_confirmed=False)
@@ -743,7 +759,11 @@ class CodexAppServer:
         """Consume responses and native completion notifications asynchronously."""
         assert self._process is not None and self._process.stdout is not None
         try:
-            async for line in self._process.stdout:
+            messages = (
+                self._websocket.messages() if self._websocket is not None
+                else self._process.stdout
+            )
+            async for line in messages:
                 message = json.loads(line)
                 self._receive(message)
         except Exception as error:

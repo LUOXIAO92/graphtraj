@@ -23,26 +23,58 @@ PROXY = r'''
 import json, os, sys
 from pathlib import Path
 if sys.argv[1:] == ['app-server', 'proxy']:
+    from websockets.server import ServerProtocol
+    from websockets.http11 import Request
+    from websockets.frames import Frame, Opcode
     root = Path(os.environ['HOST_TEST_ROOT'])
-    for line in sys.stdin:
-        request = json.loads(line)
-        with (root / 'wire.jsonl').open('a') as stream:
-            stream.write(json.dumps({'request':request, 'home':os.environ['CODEX_HOME']})+'\n')
-        if request['method'] == 'initialized':
-            continue
-        result = {'id':request['id'], 'result': {}}
-        if request['method'] == 'turn/start':
-            params = request['params']
-            event = json.loads(params['toolOutput']['output'])
-            assert params['threadId'] == 'original-host'
-            assert set(params) == {'threadId', 'input', 'toolOutput'}
-            assert params['input'] == [] and params['toolOutput']['name'] == 'graphtraj'
-            if event['message'] == 'refuse':
-                result = {'id':request['id'], 'error': {'code':-32600, 'message': 'direct input refused'}}
-            else:
-                result['result'] = {'turn': {'id': 'existing-or-new-turn', 'status': 'inProgress', 'items': []}}
-                (root / (event['event'] + '-received')).write_text(json.dumps(event))
-        print(json.dumps(result), flush=True)
+    ws = ServerProtocol()
+    initialized = False
+    pending = ''
+    def flush():
+        for data in ws.data_to_send():
+            sys.stdout.buffer.write(data)
+        sys.stdout.buffer.flush()
+    while data := sys.stdin.buffer.read1(65536):
+        ws.receive_data(data)
+        for frame in ws.events_received():
+            if isinstance(frame, Request):
+                assert frame.headers['Host'] == 'localhost' and frame.path == '/rpc'
+                ws.send_response(ws.accept(frame))
+                ws.send_ping(b'control')
+                flush()
+                continue
+            if isinstance(frame, Frame) and frame.opcode is Opcode.PONG:
+                assert frame.data == b'control'
+                (root / 'pong-received').touch()
+                continue
+            assert isinstance(frame, Frame) and frame.opcode is Opcode.TEXT, frame
+            pending += frame.data.decode('utf-8')
+            if not frame.fin:
+                continue
+            request = json.loads(pending)
+            pending = ''
+            with (root / 'wire.jsonl').open('a') as stream:
+                stream.write(json.dumps({'request':request, 'home':os.environ['CODEX_HOME']})+'\n')
+            if request['method'] == 'initialized':
+                initialized = True
+                continue
+            result = {'id':request['id'], 'result': {}}
+            if request['method'] == 'turn/start':
+                assert initialized
+                params = request['params']
+                event = json.loads(params['toolOutput']['output'])
+                assert params['threadId'] == 'original-host'
+                assert set(params) == {'threadId', 'input', 'toolOutput'}
+                assert params['input'] == [] and params['toolOutput']['name'] == 'graphtraj'
+                if event['message'] == 'refuse':
+                    result = {'id':request['id'], 'error': {'code':-32600, 'message': 'direct input refused'}}
+                else:
+                    result['result'] = {'turn': {'id': 'existing-or-new-turn', 'status': 'inProgress', 'items': []}}
+                    (root / (event['event'] + '-received')).write_text(json.dumps(event))
+            payload = json.dumps(result)
+            ws.send_text(payload[:5].encode(), fin=False)
+            ws.send_continuation(payload[5:].encode(), fin=True)
+            flush()
     raise SystemExit(0)
 '''
 
@@ -83,6 +115,7 @@ def test_capture_and_native_refusal(tmp_path: Path, monkeypatch: pytest.MonkeyPa
         send_event(connection, {'source': 'graphtraj', 'alias': 'child', 'event': 'completed', 'message': 'refuse'})
     wire = [json.loads(line) for line in (tmp_path / 'wire.jsonl').read_text().splitlines()]
     assert {item['home'] for item in wire} == {str(tmp_path / 'owning-home')}
+    assert (tmp_path / 'pong-received').is_file()
     assert [item['request']['method'] for item in wire] == ['initialize', 'initialized', 'turn/start'] * 4
 
 

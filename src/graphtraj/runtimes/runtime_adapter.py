@@ -136,6 +136,9 @@ class RuntimePreparationAdapter(Protocol):
 class RuntimeAdapter(RuntimePreparationAdapter, Protocol):
     """Prepare Context and own managed execution for the selected Runtime."""
 
+    def current_host_connection(self) -> dict | None:
+        """Capture this Runtime's owning host, or None when no host is available."""
+
     def send_host_event(self, connection: Mapping[str, Any], event: dict[str, str]) -> dict:
         """Forward an event to the captured owning host, without creating a Session."""
 
@@ -195,9 +198,18 @@ class RuntimeAdapter(RuntimePreparationAdapter, Protocol):
 
 def current_host_connection() -> dict | None:
     """Capture supported host context at the trusted root launch boundary."""
-    from graphtraj.runtimes.codex.host_events import current_connection
+    from graphtraj.runtimes.replacement import caller_runtime
 
-    return current_connection()
+    runtime = caller_runtime()
+    if runtime is None:
+        return None
+    try:
+        adapter = select_runtime_adapter(runtime)
+    except RuntimeAdapterError as error:
+        if error.code == "RUNTIME_UNSUPPORTED":
+            return None
+        raise
+    return adapter.current_host_connection()
 
 
 def select_runtime_adapter(runtime: str) -> RuntimeAdapter:

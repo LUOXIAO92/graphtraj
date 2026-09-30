@@ -318,6 +318,12 @@ def restore_codex_context(
 class CodexRuntimeAdapter:
     """Prepare Codex Context, manage execution, and interpret statistics and diagnostics."""
 
+    def current_host_connection(self) -> dict | None:
+        """Capture the native Codex host independently of the child Runtime."""
+        from graphtraj.runtimes.codex.host_events import current_connection
+
+        return current_connection()
+
     def send_host_event(self, connection: Mapping[str, Any], event: dict[str, str]) -> dict:
         """Use the existing host daemon rather than a short-lived caller receiver."""
         from graphtraj.runtimes.codex.host_events import send_event

@@ -99,8 +99,8 @@ def test_native_creation_registers_members_before_execution(
     actual = {entry['session_ref'] for entry in team['members'].values()}
     assert None not in actual
     assert all(row['alias'] in actual for row in rows)
-    assert sum(event['kind'] == 'team-started' for event in events) == 1
-    assert sum(event['kind'] == 'team-member-started' for event in events) == len(actual) - 1
+    assert sum(event['event'] == 'team-started' for event in events) == 1
+    assert sum(event['event'] == 'team-member-started' for event in events) == len(actual) - 1
     if failure:
         failed = next(row for row in rows if row['role'] == failure)
         terminal = yaml.safe_load((root / '.graphtraj/runner/sessions' / failed['alias'] / 'execution.yml').read_text())

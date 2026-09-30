@@ -108,7 +108,7 @@ def managed_project(
     role_file.write_text(yaml.safe_dump(roles))
     (root / 'instruction.md').write_text('Exercise the registered Session.\n')
     cause = append_project_worldline_event(state, root, {
-        'kind': 'main-decision', 'decision': 'Exercise the registered Session.',
+        'event': 'main-decision', 'decision': 'Exercise the registered Session.',
         'caused_by_event_ids': [], 'evidence_refs': ['instruction.md'],
     })['event_id']
     executable = fake_codex.executable

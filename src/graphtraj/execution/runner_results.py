@@ -67,7 +67,7 @@ def session_submissions(mapping: Mapping[str, Any], cwd: Path) -> list[dict[str,
     """Read retained submissions for this exact Session, including prior Rounds."""
     configuration = load_project_configuration(discover_project_root(cwd))
     return [event for event in read_worldline(configuration.state, configuration.harness_root)
-            if event['kind'] == 'result-submitted'
+            if event['event'] == 'result-submitted'
             and event.get('alias') == mapping.get('alias')
             and event.get('session') == mapping.get('session')]
 
@@ -153,7 +153,7 @@ def submit_session_result(
     predecessors = [event['event_id'] for event in read_worldline(configuration.state, configuration.harness_root)
                     if event.get('ticket_id') == mapping['ticket_id']]
     event = {
-        'kind': 'result-submitted', 'ticket_id': mapping['ticket_id'],
+        'event': 'result-submitted', 'ticket_id': mapping['ticket_id'],
         'alias': alias, 'session': mapping['session'], 'role': mapping['role'],
         'team_ordinal': mapping['team_generation'], 'round': ordinal,
         'candidate': commit, 'result_refs': list(result_refs),
@@ -193,7 +193,7 @@ def submit_session_result(
     deliver_parent_event(
         runner / 'sessions' / alias,
         'Result submitted for assessment:\n' + json.dumps(recorded, ensure_ascii=False),
-        {'type': recorded['kind'], 'session': mapping['session'],
+        {'type': recorded['event'], 'session': mapping['session'],
          'execution_id': mapping.get('execution_id')},
     )
     return recorded
@@ -244,7 +244,7 @@ def decide_session_result(
     events = read_worldline(configuration.state, configuration.harness_root)
     submission = next((event for event in events
                        if event["event_id"] == submission_id
-                       and event["kind"] == "result-submitted"), None)
+                       and event["event"] == "result-submitted"), None)
     if submission is None:
         raise ValueError("Unknown result submission")
     request = {

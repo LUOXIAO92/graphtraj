@@ -30,7 +30,7 @@ def require_unestablished_resolution(
     """
     conflict = next((event for event in reversed(events)
                      if event.get('ticket_id') == task.ticket_id
-                     and event['kind'] == 'ticket-integration-conflict-started'), None)
+                     and event['event'] == 'ticket-integration-conflict-started'), None)
     if conflict is None or conflict.get('parent') != parent_alias:
         raise ValueError('Retry must retain the original resolution actual parent')
     runner = configuration.harness_root / '.graphtraj/runner'
@@ -68,8 +68,8 @@ def integration_assignment(
     conflict = next((event for event in reversed(read_worldline(
         project.state_directory, project.harness_root,
     )) if event.get('ticket_id') == task.ticket_id
-        and event['kind'] == 'ticket-integration-conflict-started'), None)
-    if (conflict is None or conflict['kind'] != 'ticket-integration-conflict-started'
+        and event['event'] == 'ticket-integration-conflict-started'), None)
+    if (conflict is None or conflict['event'] != 'ticket-integration-conflict-started'
             or conflict.get('parent') != parent_alias
             or conflict.get('role_reference') != (task.role_reference or task.role)
             or conflict.get('instruction') != task.instruction

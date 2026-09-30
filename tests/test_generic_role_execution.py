@@ -128,7 +128,7 @@ def test_single_role_launch_registers_and_executes_without_placeholder_members(
     assert (ticket / 'teams/1/traces' / task['alias'] / 'events.jsonl').read_text()
     events = [json.loads(line) for shard in (root / '.graphtraj/state/worldline').glob('*.jsonl')
               for line in shard.read_text().splitlines()]
-    assert sum(event['kind'] == 'team-started' for event in events) == 1
+    assert sum(event['event'] == 'team-started' for event in events) == 1
 
     worktree = Path(task['worktree_path'])
     assert (worktree / 'result.md').is_file() and (worktree / 'result.tex').is_file()

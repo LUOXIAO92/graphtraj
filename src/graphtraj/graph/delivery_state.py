@@ -40,12 +40,12 @@ def current_result_rejection(
         if (event.get("ticket_id") != ticket["ticket_id"]
                 or event.get("team_ordinal") != ticket["active_team_ordinal"]):
             continue
-        if event["kind"] not in {
+        if event["event"] not in {
             "result-submitted", "team-round-accepted",
             "team-round-implementation-rejected", "team-round-rework-started",
         }:
             continue
-        if (event["kind"] == "team-round-implementation-rejected"
+        if (event["event"] == "team-round-implementation-rejected"
                 and event.get("team_round") == team["current_round"]):
             return event
         return None
@@ -238,7 +238,7 @@ def apply_delivery_state_request(
                 kind = "team-round-implementation-rejected"
 
     event = {
-        "kind": kind,
+        "event": kind,
         "caused_by_event_ids": list(request["caused_by_event_ids"]),
         "evidence_refs": list(request["evidence_refs"]),
         "ticket_id": ticket_id,
@@ -392,7 +392,7 @@ def _validate_result_decision(
         raise ValueError("Result decision must be accepted or rejected")
     if not isinstance(request["reason"], str) or not request["reason"].strip():
         raise ValueError("Result decision requires a reason")
-    submissions = [event for event in events if event["kind"] == "result-submitted"
+    submissions = [event for event in events if event["event"] == "result-submitted"
                    and event.get("ticket_id") == ticket["ticket_id"]
                    and event.get("team_ordinal") == ticket["active_team_ordinal"]
                    and event.get("round") == team["current_round"]]
@@ -414,7 +414,7 @@ def _validate_result_decision(
     if returning:
         session = read_alias_mapping(runner, author)[0]["session"] if author is not None else None
         if (request["decision"] != "rejected" or candidate != ticket["current_candidate"]
-                or len(decisions) != 1 or decisions[0]["kind"] != "team-round-accepted"
+                or len(decisions) != 1 or decisions[0]["event"] != "team-round-accepted"
                 or decisions[0].get("alias") != author or decisions[0].get("session") != session):
             raise ValueError("Only the accepting parent may return the current accepted result for correction")
         # The author may already have committed a correction. Return the retained

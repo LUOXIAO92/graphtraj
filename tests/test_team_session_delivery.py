@@ -198,7 +198,7 @@ def test_public_team_phases_and_parent_capacity_transfer(
         reviewing = read_graph(state)["tickets"][0]
         assert reviewing["status"] == "implementing"
         candidate = next(event["candidate"] for event in read_worldline(state, root)
-                         if event["kind"] == "result-submitted")
+                         if event["event"] == "result-submitted")
         assert len(candidate) == 40
     finally:
         engineer_release.touch()

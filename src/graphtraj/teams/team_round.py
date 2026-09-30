@@ -220,7 +220,7 @@ def continue_stopped_ticket(
         budget_only and state["status"] in {"integrating", "resolving-integration", "escalated"}
         and any(
             event.get("ticket_id") == ticket_id
-            and event["kind"].startswith("ticket-integration-")
+            and event["event"].startswith("ticket-integration-")
             and event.get("to_status") == state["status"]
             and event.get("candidate") == state["current_candidate"]
             for event in read_worldline(project.state_directory, project.harness_root)
@@ -296,7 +296,7 @@ def continue_stopped_ticket(
             project.state_directory,
             project.harness_root,
             {
-                "kind": "team-continuation-started",
+                "event": "team-continuation-started",
                 "caused_by_event_ids": list(caused_by_event_ids),
                 "evidence_refs": list(
                     dict.fromkeys(

@@ -549,7 +549,7 @@ def managed_mcp(
         "Exercise the dispatched child.\n", encoding="utf-8"
     )
     cause = append_project_worldline_event(state, root, {
-        "kind":                "main-decision",
+        "event":                "main-decision",
         "decision":            "Exercise the dispatched child.",
         "caused_by_event_ids": [],
         "evidence_refs":       ["instruction.md"],
@@ -798,7 +798,7 @@ def test_installed_mcp_server_continues_a_stopped_ticket_with_unchanged_semantic
         candidate = next(json.loads(line)['candidate']
                          for shard in (harness / '.graphtraj/state/worldline').glob('*.jsonl')
                          for line in shard.read_text().splitlines()
-                         if json.loads(line)['kind'] == 'result-submitted')
+                         if json.loads(line)['event'] == 'result-submitted')
         assert candidate is not None
         diagnosis = harness / "stopped-team-diagnosis.md"
         diagnosis.write_text(
@@ -814,7 +814,7 @@ def test_installed_mcp_server_continues_a_stopped_ticket_with_unchanged_semantic
         decision_file = _write(
             harness / "continuation-decision.yml",
             {
-                "kind":                "ticket-continuation-decided",
+                "event":                "ticket-continuation-decided",
                 "caused_by_event_ids": [stop_event],
                 "evidence_refs":       ["stopped-team-diagnosis.md"],
                 "decision":            "continue",
@@ -885,7 +885,7 @@ def test_installed_mcp_server_continues_a_stopped_ticket_with_unchanged_semantic
         event for event in events
         if event["event_id"] == continuation["continuation_event_id"]
     )
-    assert recorded["kind"] == "team-continuation-started"
+    assert recorded["event"] == "team-continuation-started"
     assert recorded["caused_by_event_ids"] == [decision_id]
 
 
@@ -1149,7 +1149,7 @@ def test_real_codex_host_dispatches_and_controls_a_managed_child_offline(
         "Exercise the dispatched child.\n", encoding="utf-8"
     )
     cause = append_project_worldline_event(state, harness, {
-        "kind":                "main-decision",
+        "event":                "main-decision",
         "decision":            "Exercise the dispatched child.",
         "caused_by_event_ids": [],
         "evidence_refs":       ["instruction.md"],
@@ -1715,7 +1715,7 @@ def test_installed_mcp_server_keeps_the_continue_path_on_the_request_caller(
         decision_file = _write(
             harness / "continuation-decision.yml",
             {
-                "kind":                "ticket-continuation-decided",
+                "event":                "ticket-continuation-decided",
                 "caused_by_event_ids": [stop_event],
                 "evidence_refs":       ["stopped-team-diagnosis.md"],
                 "decision":            "continue",

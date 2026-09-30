@@ -159,7 +159,7 @@ def test_python_and_cli_revise_and_transition_with_the_same_validation(
         result = runner.invoke(main, ["ticket", command, option, str(_write(cli_root / "input.yml", document))])
         assert result.exit_code == 0, result.output
         rendered = yaml.safe_load(result.stdout)
-        assert rendered["kind"] == recorded["kind"]
+        assert rendered["event"] == recorded["event"]
         assert rendered["evidence_refs"][:1] == recorded["evidence_refs"][:1] == ["evidence.md"]
         assert read_worldline(state, python_root)[-1] == recorded
         assert read_worldline(cli_root / ".graphtraj/state", cli_root)[-1] == rendered
@@ -225,11 +225,11 @@ def test_python_and_cli_commit_team_state_and_worldline_facts(
     assert {k: v for k, v in recorded.items() if k not in {"event_id", "captured_at"}} == {
         k: v for k, v in rendered.items() if k not in {"event_id", "captured_at"}
     }
-    assert recorded["kind"] == "team-started"
+    assert recorded["event"] == "team-started"
     assert yaml.safe_load(runner.invoke(main, ["ticket", "graph"]).stdout) == read_graph(state)
     assert read_graph(state)["tickets"][0]["status"] == "implementing"
 
-    event = {"kind": "main-decision", "caused_by_event_ids": [predecessor["event_id"]],
+    event = {"event": "main-decision", "caused_by_event_ids": [predecessor["event_id"]],
              "evidence_refs": ["evidence.md"], "decision": "Continue the accepted work."}
     recorded = append_project_worldline_event(state, python_root, event)
     result = runner.invoke(main, ["worldline", "append", "--event-file", str(_write(cli_root / "event.yml", event))])

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -71,7 +72,7 @@ def test_installed_command_appends_reads_and_renders_project_worldline(
         project,
         "first.yml",
         {
-            "kind": "user-decision",
+            "event": "user-decision",
             "caused_by_event_ids": [],
             "evidence_refs": [],
             "decision": "Use the candidate.",
@@ -95,7 +96,7 @@ def test_installed_command_appends_reads_and_renders_project_worldline(
         project,
         "second.yml",
         {
-            "kind": "candidate-recorded",
+            "event": "candidate-recorded",
             "caused_by_event_ids": [first["event_id"]],
             "evidence_refs": ["evidence/candidate.txt"],
             "candidate_commit": "a" * 40,
@@ -144,7 +145,7 @@ def test_installed_command_appends_reads_and_renders_project_worldline(
         project,
         "third.yml",
         {
-            "kind": "candidate-recorded",
+            "event": "candidate-recorded",
             "caused_by_event_ids": [second["event_id"]],
             "evidence_refs": ["evidence/new-candidate.txt"],
             "candidate_commit": "b" * 40,
@@ -166,22 +167,22 @@ def test_installed_command_appends_reads_and_renders_project_worldline(
     "event",
     [
         {
-            "kind": "candidate-recorded",
+            "event": "candidate-recorded",
             "caused_by_event_ids": ["missing-event"],
             "evidence_refs": [],
         },
         {
-            "kind": "candidate-recorded",
+            "event": "candidate-recorded",
             "caused_by_event_ids": [],
             "evidence_refs": ["evidence/missing.txt"],
         },
         {
-            "kind": "candidate-recorded",
+            "event": "candidate-recorded",
             "caused_by_event_ids": [],
             "evidence_refs": [],
             "captured_at": "2026-09-05T12:00:00+09:00",
         },
-        {"kind": "Not a plain kind", "caused_by_event_ids": [], "evidence_refs": []},
+        {"event": "Not a plain event", "caused_by_event_ids": [], "evidence_refs": []},
         [],
     ],
 )
@@ -203,7 +204,7 @@ def test_invalid_event_is_rejected_without_append(
 
 
 @pytest.mark.parametrize(
-    "kind",
+    "event",
     [
         "synchronization",
         "unchanged-polling",
@@ -216,14 +217,14 @@ def test_invalid_event_is_rejected_without_append(
 def test_operation_without_a_new_fact_creates_no_event(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
-    kind: str,
+    event: str,
 ) -> None:
     project = temporary_git_repository
     state = _configure_project(project)
     event_file = _event_file(
         project,
         "event.yml",
-        {"kind": kind, "caused_by_event_ids": [], "evidence_refs": []},
+        {"event": event, "caused_by_event_ids": [], "evidence_refs": []},
     )
 
     result = _worldline(
@@ -247,7 +248,7 @@ def test_installed_command_rolls_200_events_into_a_new_immutable_shard(
         event_file.write_text(
             yaml.safe_dump(
                 {
-                    "kind": "fact-recorded",
+                    "event": "fact-recorded",
                     "caused_by_event_ids": [predecessor] if predecessor else [],
                     "evidence_refs": [],
                     "number": number,
@@ -298,7 +299,7 @@ def test_malformed_retained_history_prevents_an_append(
         project,
         "event.yml",
         {
-            "kind": "fact-recorded",
+            "event": "fact-recorded",
             "caused_by_event_ids": [],
             "evidence_refs": [],
             "fact": "first",
@@ -348,7 +349,7 @@ def test_same_instant_offset_collisions_keep_causal_order_across_shards(
         event_file.write_text(
             yaml.safe_dump(
                 {
-                    "kind": "fact-recorded",
+                    "event": "fact-recorded",
                     "caused_by_event_ids": [predecessor] if predecessor else [],
                     "evidence_refs": [],
                     "number": number,
@@ -377,3 +378,106 @@ def test_same_instant_offset_collisions_keep_causal_order_across_shards(
     events = [json.loads(line) for line in read_result.output.splitlines()]
     assert [event["number"] for event in events] == list(range(201))
     assert events[200]["caused_by_event_ids"] == [events[199]["event_id"]]
+
+
+def _migration_script() -> Path:
+    return PROJECT_ROOT / "scripts" / "migrate_worldline_event_field.py"
+
+
+def _write_shard(worldline: Path, records: list[dict]) -> Path:
+    shard = worldline / (records[0]["event_id"] + ".jsonl")
+    shard.write_text(
+        "".join(
+            json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n"
+            for record in records
+        ),
+        encoding="utf-8",
+    )
+    return shard
+
+
+def _run_migration(worldline: Path, cwd: Path):
+    return run_process(
+        [sys.executable, str(_migration_script()), str(worldline)], cwd=cwd
+    )
+
+
+def test_one_time_migration_renames_only_the_top_level_kind_key(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+) -> None:
+    project = temporary_git_repository
+    state = _configure_project(project)
+    worldline = state / "worldline"
+    worldline.mkdir()
+    record = {
+        "event_id": "20260101T000000.000000+0900",
+        "captured_at": "2026-01-01T00:00:00.000000+09:00",
+        "kind": "user-decision",
+        "caused_by_event_ids": [],
+        "evidence_refs": [],
+        "decision": "Use the candidate.",
+        "policy": {"kind": "budget", "limit": 1},
+    }
+    shard = _write_shard(worldline, [record])
+    original = shard.read_bytes()
+
+    migrated = _run_migration(worldline, project)
+    assert migrated.returncode == 0, migrated.stderr
+
+    rewritten = json.loads(shard.read_text(encoding="utf-8"))
+    assert rewritten["event"] == "user-decision"
+    assert "kind" not in rewritten
+    assert rewritten["policy"] == {"kind": "budget", "limit": 1}
+    assert {key: value for key, value in rewritten.items() if key != "event"} == {
+        key: value for key, value in record.items() if key != "kind"
+    }
+    assert shard.read_bytes() != original
+
+    read = _worldline(installed_commands, project, "read")
+    assert read.returncode == 0, read.stderr
+    assert json.loads(read.stdout)["event"] == "user-decision"
+    assert _worldline(installed_commands, project, "render").returncode == 0
+
+    new_event = _event_file(
+        project,
+        "new-event.yml",
+        {
+            "event": "candidate-recorded",
+            "caused_by_event_ids": ["20260101T000000.000000+0900"],
+            "evidence_refs": [],
+            "candidate_commit": "a" * 40,
+        },
+    )
+    appended = _worldline(
+        installed_commands, project, "append", "--event-file", str(new_event)
+    )
+    assert appended.returncode == 0, appended.stderr
+
+    settled = shard.read_bytes()
+    for line in settled.decode("utf-8").splitlines():
+        assert "kind" not in json.loads(line)
+        assert "event" in json.loads(line)
+
+    again = _run_migration(worldline, project)
+    assert again.returncode == 0, again.stderr
+    assert shard.read_bytes() == settled
+
+
+def test_migration_refuses_a_record_with_both_keys(tmp_path: Path) -> None:
+    worldline = tmp_path / "worldline"
+    worldline.mkdir()
+    record = {
+        "event_id": "20260101T000000.000000+0900",
+        "captured_at": "2026-01-01T00:00:00.000000+09:00",
+        "kind": "user-decision",
+        "event": "user-decision",
+        "caused_by_event_ids": [],
+        "evidence_refs": [],
+    }
+    shard = _write_shard(worldline, [record])
+    before = shard.read_bytes()
+
+    result = _run_migration(worldline, tmp_path)
+    assert result.returncode == 1
+    assert shard.read_bytes() == before

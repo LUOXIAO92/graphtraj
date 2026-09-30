@@ -87,7 +87,7 @@ def test_replacement_member_corrects_current_rejection(
     assert not old_report.stat().st_mode & 0o200
     events = read_worldline(state, tmp_path)
     assert events[:len(before)] == before
-    corrections = [event for event in events if event['kind'] == 'team-round-rework-started']
+    corrections = [event for event in events if event['event'] == 'team-round-rework-started']
     assert len(corrections) == 1
     assert corrections[0]['caused_by_event_ids'] == [rejected['event_id']]
 
@@ -111,7 +111,7 @@ def test_replacement_member_corrects_current_rejection(
     assert third['round'] == 3
     events = read_worldline(state, tmp_path)
     assert accepted in events and latest in events
-    corrections = [event for event in events if event['kind'] == 'team-round-rework-started']
+    corrections = [event for event in events if event['event'] == 'team-round-rework-started']
     assert [event['caused_by_event_ids'] for event in corrections] == [
         [rejected['event_id']], [latest['event_id']],
     ]

@@ -52,7 +52,7 @@ def test_worldline_definition_and_cli_keep_one_event_sequence(
     evidence.parent.mkdir()
     evidence.write_text("candidate\n", encoding="utf-8")
     event = {
-        "kind":                "user-decision",
+        "event":                "user-decision",
         "caused_by_event_ids": [],
         "evidence_refs":       ["evidence/candidate.txt"],
         "decision":            "Use the candidate.",
@@ -64,7 +64,7 @@ def test_worldline_definition_and_cli_keep_one_event_sequence(
     appended = runner.invoke(main, ["worldline", "append", "--event-file", str(event_file)])
     assert appended.exit_code == 0, appended.stderr
     recorded = yaml.safe_load(appended.stdout)
-    assert recorded["kind"] == "user-decision"
+    assert recorded["event"] == "user-decision"
 
     read = tools.TOOLS["worldline_read"].handler({}).document
     render = tools.TOOLS["worldline_render"].handler({}).document

@@ -13,7 +13,7 @@ from typing import Any, Callable, Mapping
 
 _SHARD_SIZE = 200
 _ASSIGNED_FIELDS = frozenset({"event_id", "captured_at", "run_id", "worldline_seq"})
-_EVENT_FIELDS = frozenset({"kind", "caused_by_event_ids", "evidence_refs"})
+_EVENT_FIELDS = frozenset({"event", "caused_by_event_ids", "evidence_refs"})
 _KIND = re.compile(r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*\Z")
 _TIMESTAMP = re.compile(
     r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}[+-]\d{2}:\d{2}\Z"
@@ -154,10 +154,10 @@ def _validate_supplied_event(event: Mapping[str, Any]) -> None:
         raise ValueError("worldline event must be a mapping")
     if _ASSIGNED_FIELDS.intersection(event):
         raise ValueError("worldline event contains assigned fields")
-    kind = event.get("kind")
-    if not isinstance(kind, str) or _KIND.fullmatch(kind) is None:
-        raise ValueError("worldline event requires a plain kind")
-    if kind in _NON_FACT_KINDS:
+    event_name = event.get("event")
+    if not isinstance(event_name, str) or _KIND.fullmatch(event_name) is None:
+        raise ValueError("worldline event requires a plain event")
+    if event_name in _NON_FACT_KINDS:
         raise ValueError("operation does not introduce a new durable fact")
     _validate_string_list(event, "caused_by_event_ids")
     _validate_string_list(event, "evidence_refs")

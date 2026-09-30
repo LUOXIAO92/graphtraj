@@ -493,7 +493,7 @@ def test_installed_runner_stops_final_leader_before_acceptance(
     candidate = next(json.loads(line)['candidate']
                      for shard in (harness / '.graphtraj/state/worldline').glob('*.jsonl')
                      for line in shard.read_text().splitlines()
-                     if json.loads(line)['kind'] == 'result-submitted')
+                     if json.loads(line)['event'] == 'result-submitted')
     round_directory = ticket / "teams/1/rounds/1"
     preserved_reports = {
         name: (round_directory / name).read_bytes()
@@ -511,7 +511,7 @@ def test_installed_runner_stops_final_leader_before_acceptance(
     decision_file.write_text(
         yaml.safe_dump(
             {
-                "kind": "ticket-continuation-decided",
+                "event": "ticket-continuation-decided",
                 "caused_by_event_ids": [stop_event],
                 "evidence_refs": ["stopped-team-diagnosis.md"],
                 "decision": "continue",

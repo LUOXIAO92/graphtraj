@@ -88,13 +88,13 @@ def test_main_integrates_an_accepted_candidate_and_unlocks_only_satisfied_depend
     assert [item["ticket_id"] for item in graph["tickets"] if item["ready"]] == ["84", "85"]
     assert [item["status"] for item in graph["tickets"]] == ["integrated", "ready", "ready", "pending"]
     events = [json.loads(line) for shard in (state / "worldline").glob("*.jsonl") for line in shard.read_text().splitlines()]
-    accepted = next(event for event in events if event["kind"] == "team-round-accepted")
-    started = next(event for event in events if event["kind"] == "ticket-integration-started")
-    integrated = next(event for event in events if event["kind"] == "ticket-integrated")
+    accepted = next(event for event in events if event["event"] == "team-round-accepted")
+    started = next(event for event in events if event["event"] == "ticket-integration-started")
+    integrated = next(event for event in events if event["event"] == "ticket-integrated")
     assert started["caused_by_event_ids"] == [accepted["event_id"]]
     assert integrated["caused_by_event_ids"] == [started["event_id"]]
     assert "integration checks passed" in (root / integrated["evidence_refs"][0]).read_text()
-    unlocked = [event for event in events if event["kind"] == "ticket-dependency-unlocked"]
+    unlocked = [event for event in events if event["event"] == "ticket-dependency-unlocked"]
     assert {event["ticket_id"] for event in unlocked} == {"84", "85"}
     assert all(event["caused_by_event_ids"] == [integrated["event_id"]] for event in unlocked)
     assert not any(path.name in {"task-map.yml", "dag.md", "ledger.yml"} for path in state.rglob("*"))
@@ -580,7 +580,7 @@ def test_shared_integration_enforces_task_authority_and_returns_retained_outcome
     assert result["candidate"] == candidate
     assert set(result["unlocked_ticket_ids"]) == ({"84", "85"} if validation_exit == 0 else set())
     event = next(item for item in read_worldline(state, root) if item["event_id"] == result["event_id"])
-    assert event["kind"] == ("ticket-integrated" if validation_exit == 0 else "ticket-integration-failed")
+    assert event["event"] == ("ticket-integrated" if validation_exit == 0 else "ticket-integration-failed")
     assert event["validation_command"] == list(command)
     assert result["evidence"] in event["evidence_refs"]
     assert (root / result["evidence"]).is_file()
@@ -744,7 +744,7 @@ def test_actual_result_parent_can_integrate_without_role_name_authority(
 
     root, _, state, candidate = accepted_ticket
     events = read_worldline(state, root)
-    accepted = next(event for event in reversed(events) if event['kind'] == 'team-round-accepted')
+    accepted = next(event for event in reversed(events) if event['event'] == 'team-round-accepted')
     submitted = next(event for event in events if event['event_id'] == accepted['submission_id'])
     mapping = yaml.safe_load((root / '.graphtraj/runner/sessions' / submitted['alias'] / 'mapping.yml').read_text())
     assert mapping['parent'] is not None
@@ -815,7 +815,7 @@ def test_public_retry_of_unestablished_resolver_preserves_attempt_and_integrates
     roles = yaml.safe_load(roles_file.read_text())
     roles['role_tree']['coding-team.team-leader']['coding_team.merge_resolver'] = {}
     roles_file.write_text(yaml.safe_dump(roles))
-    acceptance = next(event for event in reversed(before) if event['kind'] == 'team-round-accepted')
+    acceptance = next(event for event in reversed(before) if event['event'] == 'team-round-accepted')
     submission = next(event for event in before if event['event_id'] == acceptance['submission_id'])
     accepted_mapping = yaml.safe_load((allocation.parent / submission['alias'] / 'mapping.yml').read_text())
     with runtime_caller(root / '.graphtraj/runner', accepted_mapping['parent']):
@@ -849,7 +849,7 @@ def test_public_retry_of_unestablished_resolver_preserves_attempt_and_integrates
         assert after[field] == budget[field]
     events = read_worldline(state, root)
     assert events[:len(before)] == before
-    retry = next(event for event in events[len(before):] if event['kind'] == 'ticket-integration-conflict-started')
+    retry = next(event for event in events[len(before):] if event['event'] == 'ticket-integration-conflict-started')
     assert retry['caused_by_event_ids'] == [before[-1]['event_id']]
     pending = run_process(command + ['--', *validation], cwd=root)
     assert pending.returncode == 1 and 'acceptance' in pending.stdout

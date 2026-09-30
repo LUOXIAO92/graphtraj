@@ -25,7 +25,7 @@ def test_parent_accepts_document_submission_without_coding_reports(tmp_path: Pat
             'decision': 'accepted', 'reason': 'The sources meet the task criteria.',
             'evidence_refs': submission['evidence_refs'],
         }, cwd=tmp_path).document
-    assert decision['kind'] == 'team-round-accepted'
+    assert decision['event'] == 'team-round-accepted'
     assert decision['candidate'] == commit
     assert decision['submission_id'] == submission['event_id']
     assert submission['event_id'] in decision['caused_by_event_ids']
@@ -182,7 +182,7 @@ def test_cli_accepts_code_as_actual_parent_and_mcp_exposes_same_operation(tmp_pa
         result = subprocess.run(command, cwd=worktree, env=environment, capture_output=True, text=True)
     assert result.returncode == 0, result.stdout + result.stderr
     accepted = yaml.safe_load(result.stdout)
-    assert accepted['kind'] == 'team-round-accepted'
+    assert accepted['event'] == 'team-round-accepted'
     assert accepted['alias'] == 'research@x3'
     assert accepted['candidate'] == commit
     graph = tools.read_current_graph({}, cwd=tmp_path).document

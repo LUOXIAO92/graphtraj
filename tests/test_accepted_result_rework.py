@@ -117,7 +117,7 @@ def test_accepted_result_correction_and_integration(
     assert yaml.safe_load(integrated.output)['candidate'] == corrected
     assert (tmp_path / 'worktrees/dev/result.md').read_text() == (worktree / 'result.md').read_text()
     events = read_worldline(tmp_path / 'state', tmp_path)
-    started = next(event for event in events if event['kind'] == 'ticket-integration-started')
+    started = next(event for event in events if event['event'] == 'ticket-integration-started')
     assert started['caused_by_event_ids'] == [fresh['event_id']]
     assert accepted in events and returned in events
     assert (tmp_path / decision['evidence_refs'][0]).read_text() == 'A versioned research result\n'

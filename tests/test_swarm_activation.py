@@ -50,7 +50,7 @@ def _cause(root: Path) -> str:
         root / ".graphtraj/state",
         root,
         {
-            "kind":                "main-decision",
+            "event":                "main-decision",
             "decision":            "Use the activated Agent.",
             "caused_by_event_ids": [],
             "evidence_refs":       ["instruction.md"],

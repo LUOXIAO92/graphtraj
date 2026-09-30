@@ -263,7 +263,7 @@ def register_ticket(state: Path, harness_root: Path, issue: dict[str, Any]) -> P
             state,
             harness_root,
             {
-                "kind": "ticket-registered",
+                "event": "ticket-registered",
                 "caused_by_event_ids": [],
                 "evidence_refs": [evidence],
                 "ticket_id": issue["ticket_id"],
@@ -356,7 +356,7 @@ def revise_tickets(
         _validate_graph(proposed)
 
         event = {
-            "kind": "ticket-graph-revised",
+            "event": "ticket-graph-revised",
             "caused_by_event_ids": revision["caused_by_event_ids"],
             "evidence_refs": revision["evidence_refs"],
             "affected_ticket_ids": list(revised),
@@ -501,7 +501,7 @@ def update_ticket_state(
         ):
             updated[field] = change[field]
         event = {
-            "kind": "ticket-state-changed",
+            "event": "ticket-state-changed",
             "caused_by_event_ids": change["caused_by_event_ids"],
             "evidence_refs": change["evidence_refs"],
             "ticket_id": ticket_id,

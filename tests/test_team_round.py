@@ -314,7 +314,7 @@ def test_installed_runner_obeys_the_explicit_leader_decision_for_a_run_free_team
     assert {member['role'] for member in team['members'].values()} == {'team-leader', 'engineer'}
     assert not (ticket / 'teams/1/rounds/2').exists()
     events = read_worldline(root / '.graphtraj/state', root)
-    submitted = next(event for event in events if event['kind'] == 'result-submitted')
+    submitted = next(event for event in events if event['event'] == 'result-submitted')
     decided = next(event for event in events if event.get('submission_id') == submitted['event_id'])
     assert decided['candidate'] == submitted['candidate'] == current['current_candidate']
     assert decided['decision'] == ('accepted' if decision == 'accept' else 'rejected')
@@ -945,11 +945,11 @@ def test_coding_acceptance_consumes_submission_without_report_commit(
     assert launched.returncode == 0, launched.stdout + launched.stderr
     wait_for_ticket_status(installed_commands, harness, '75', 'awaiting-integration')
     events = read_worldline(harness / '.graphtraj/state', harness)
-    submitted = [event for event in events if event['kind'] == 'result-submitted']
+    submitted = [event for event in events if event['event'] == 'result-submitted']
     assert submitted, launched.stdout + launched.stderr
     assert submitted[0]['role'] == 'engineer'
     assert (harness / submitted[0]['evidence_refs'][0]).read_text().startswith('Candidate commit:')
-    accepted = [event for event in events if event['kind'] == 'team-round-accepted']
+    accepted = [event for event in events if event['event'] == 'team-round-accepted']
     assert launched.returncode == 0, launched.stdout + launched.stderr
     assert accepted[-1]['submission_id'] == submitted[-1]['event_id']
     assert accepted[-1]['candidate'] == submitted[-1]['candidate']

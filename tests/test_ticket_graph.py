@@ -150,7 +150,7 @@ def test_installed_command_registers_an_accepted_issue_as_a_ticket(
         for line in path.read_text(encoding="utf-8").splitlines()
     ]
     assert len(events) == 1
-    assert events[0]["kind"] == "ticket-registered"
+    assert events[0]["event"] == "ticket-registered"
     assert events[0]["ticket_id"] == "73"
     assert events[0]["evidence_refs"] == [
         ".graphtraj/state/tickets/73-ticket-readiness/ticket.md"
@@ -642,7 +642,7 @@ def test_installed_command_records_a_validated_ticket_state_change(
 
     assert result.returncode == 0, result.stderr
     event = yaml.safe_load(result.stdout)
-    assert event["kind"] == "ticket-state-changed"
+    assert event["event"] == "ticket-state-changed"
     assert event["from_status"] == "pending"
     assert event["to_status"] == "ready"
     assert event["active_team_ordinal"] is None
@@ -650,7 +650,7 @@ def test_installed_command_records_a_validated_ticket_state_change(
     assert set(event) == {
         "event_id",
         "captured_at",
-        "kind",
+        "event",
         "caused_by_event_ids",
         "evidence_refs",
         "ticket_id",

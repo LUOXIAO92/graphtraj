@@ -214,7 +214,7 @@ def _append_worldline_reference(ticket: DeliveredTicket, evidence: Path) -> dict
     event.write_text(
         yaml.safe_dump(
             {
-                "kind": "cleanup-evidence-recorded",
+                "event": "cleanup-evidence-recorded",
                 "caused_by_event_ids": [],
                 "evidence_refs": [evidence.relative_to(ticket.root).as_posix()],
             },

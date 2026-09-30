@@ -350,7 +350,7 @@ def test_sampled_stop_continues_original_researcher_with_unchanged_accounting(
         trace = Path(original['trace_file']).read_bytes()
         decision = root / 'continue.yml'
         decision.write_text(yaml.safe_dump({
-            'kind': 'ticket-continuation-decided', 'ticket_id': '154',
+            'event': 'ticket-continuation-decided', 'ticket_id': '154',
             'caused_by_event_ids': [events(root)[-1]['event_id']],
             'evidence_refs': [str(Path(original['trace_file']).relative_to(root))],
             'decision': 'Continue within the original task allowance',
@@ -400,7 +400,7 @@ def test_sampled_stop_continues_original_researcher_with_unchanged_accounting(
             original_launch)['adapter_request']['session_parameters']
         result = yaml.safe_load(command(installed_commands, root, env, 'reports', alias).stdout)
         assert len(result['submissions']) == 1
-        continuation = next(event for event in events(root) if event['kind'] == 'team-continuation-started')
+        continuation = next(event for event in events(root) if event['event'] == 'team-continuation-started')
         assert continuation['caused_by_event_ids'] == [decision_id]
     finally:
         Path(env['RECOVERY_RELEASE']).touch()

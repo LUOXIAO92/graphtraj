@@ -65,7 +65,7 @@ def _integrate(
     candidate = record["current_candidate"]
     events = read_worldline(state, root)
     acceptance = next((event for event in reversed(events) if (
-        event["kind"] == "team-round-accepted"
+        event["event"] == "team-round-accepted"
         and event.get("ticket_id") == ticket_id
         and event.get("candidate") == candidate
         and event.get("team_ordinal") == record["active_team_ordinal"]
@@ -97,7 +97,7 @@ def _integrate(
         raise ValueError("Integration requires acceptance of the current candidate")
     escalated_integrations = {
         event.get("ticket_id") for event in events
-        if event["kind"] == "ticket-integration-escalated"
+        if event["event"] == "ticket-integration-escalated"
     }
     if any(other_id != ticket_id and (
         other["status"] in {"integrating", "resolving-integration"}
@@ -112,18 +112,18 @@ def _integrate(
                               or (dev / _git(dev, "rev-parse", "--git-path", "MERGE_HEAD")).exists()):
         raise ValueError("The dev Integration Worktree must be clean")
     before = _git(dev, "rev-parse", "HEAD")
-    predecessor = next((event for event in reversed(events) if event.get("ticket_id") == ticket_id and event["kind"].startswith("ticket-integration-")), acceptance)
+    predecessor = next((event for event in reversed(events) if event.get("ticket_id") == ticket_id and event["event"].startswith("ticket-integration-")), acceptance)
     if resolving and diagnosis is None:
         conflict = next(event for event in reversed(events)
                         if event.get('ticket_id') == ticket_id
-                        and event['kind'] == 'ticket-integration-conflict-started')
+                        and event['event'] == 'ticket-integration-conflict-started')
         submitted = next((event for event in reversed(events)
-                          if event['kind'] == 'result-submitted' and event.get('ticket_id') == ticket_id
+                          if event['event'] == 'result-submitted' and event.get('ticket_id') == ticket_id
                           and event.get('team_ordinal') == record['active_team_ordinal']
                           and event['event_id'] > conflict['event_id']), None)
         decision = next((event for event in reversed(events)
                          if submitted is not None and event.get('submission_id') == submitted['event_id']
-                         and event['kind'] == 'team-round-accepted'), None)
+                         and event['event'] == 'team-round-accepted'), None)
         if decision is None or submitted['candidate'] != before:
             raise ValueError("Integration requires acceptance of the latest committed resolution")
         mapping = read_alias_mapping(runner, submitted['alias'])[0]
@@ -137,7 +137,7 @@ def _integrate(
     if recovering:
         if confirmed_commit != before:
             raise ValueError("Recovery requires explicit confirmation of the committed resolution")
-        if (diagnosis is not None or predecessor["kind"] != "ticket-integration-escalated"
+        if (diagnosis is not None or predecessor["event"] != "ticket-integration-escalated"
             or predecessor.get("candidate") != candidate
             or predecessor.get("validation_command") != list(validation_command)):
             raise ValueError("Recovery requires the retained accepted candidate and the same integration validation")
@@ -149,7 +149,7 @@ def _integrate(
         except GitRepositoryError as error:
             raise ValueError("Recovery requires the accepted candidate and retained dev commit in HEAD") from error
     if diagnosis is not None:
-        if (not diagnosis.strip() or predecessor["kind"] != (
+        if (not diagnosis.strip() or predecessor["event"] != (
                 "ticket-integration-escalated" if retrying else "ticket-integration-failed")
             or predecessor.get("conflict_kind") not in {"textual", "semantic"}
             or predecessor.get("candidate") != candidate or predecessor.get("dev_commit") != before
@@ -162,7 +162,7 @@ def _integrate(
 
             require_unestablished_resolution(configuration, record, events, batch.tasks[0], caller)
     started = _record(configuration, directory, record, "integrating" if diagnosis is None else "resolving-integration", {
-        "kind": "ticket-integration-started" if diagnosis is None else "ticket-integration-conflict-started",
+        "event": "ticket-integration-started" if diagnosis is None else "ticket-integration-conflict-started",
         "caused_by_event_ids": [predecessor["event_id"]] + ([decision["event_id"]] if resolving and diagnosis is None else []),
         "alias": caller,
         "session": read_alias_mapping(runner, caller)[0]["session"] if caller is not None else None,
@@ -223,7 +223,7 @@ def _integrate(
         mapping, _ = read_alias_mapping(runner, resolution["alias"])
         evidence_refs.append(Path(mapping["trace_file"]).relative_to(root).as_posix())
         resolution["submissions"] = [event for event in read_worldline(state, root)
-                                     if event['kind'] == 'result-submitted'
+                                     if event['event'] == 'result-submitted'
                                      and event.get('alias') == resolution['alias']
                                      and event['event_id'] > started['event_id']]
     if resolving and diagnosis is None:
@@ -234,7 +234,7 @@ def _integrate(
         resolution and resolution.get('launch_status') != 'registered' and not resolution.get('submissions')
     ) else "resolving-integration" if resolution or resolving else "integrating")
     integrated = _record(configuration, directory, record, status, {
-        "kind": ("ticket-integration-conflict-resolved" if resolving else "ticket-integrated") if succeeded else "ticket-integration-escalated" if status == "escalated" else "ticket-integration-conflict-dispatched" if resolution else "ticket-integration-failed",
+        "event": ("ticket-integration-conflict-resolved" if resolving else "ticket-integrated") if succeeded else "ticket-integration-escalated" if status == "escalated" else "ticket-integration-conflict-dispatched" if resolution else "ticket-integration-failed",
         "caused_by_event_ids": [started["event_id"]],
         "evidence_refs": evidence_refs,
         "candidate": candidate,
@@ -252,7 +252,7 @@ def _integrate(
                 and ticket_id in dependent["dependencies"]
                 and all(current[blocker][1]["status"] == "integrated" for blocker in dependent["dependencies"])):
                 _record(configuration, dependent_directory, dependent, "ready", {
-                    "kind": "ticket-dependency-unlocked",
+                    "event": "ticket-dependency-unlocked",
                     "caused_by_event_ids": [integrated["event_id"]],
                     "evidence_refs": integrated["evidence_refs"],
                 })

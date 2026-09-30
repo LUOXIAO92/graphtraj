@@ -50,8 +50,8 @@ The default resumes existing roots with a generic continuation message. A revise
 Ticket or causal event alone does not deliver new execution limits. For an
 explicitly restricted sampled-stop recovery, restore permission with
 `continue --budget-only`, then use `send` to deliver the allowed work, prohibited
-work, deadline and actual causal event ID to the original root. Use the returned
-continuation event for that second call. Check each result; restoring permission
+work, any explicitly authorized deadline and actual causal event ID to the
+original root. Use the returned continuation event for that second call. Check each result; restoring permission
 does not mean the Session has resumed. Manual subtree stops still reject this
 sequence and must not be bypassed.
 

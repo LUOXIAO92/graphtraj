@@ -163,65 +163,34 @@ operation. Without a selected or inherited channel, budget accounting and
 parent notices remain retained and Python produces no terminal output; the
 CLI selects stderr. Conflict integration retains notices in its evidence log.
 
-For a Codex Main, `agent-runner` and the MCP server automatically bind that same
-caller channel when the caller provides its Codex thread identity
-(`CODEX_THREAD_ID`, or `params._meta.threadId` for a tool request).
-`CodexMainRecovery` ignores ordinary estimate/allowance notices and retains only
-a sampled stop: the deterministic stop identity, the stop's own absolute instant
-with its explicit UTC offset, the elapsed work duration as a separate
-expression, and the configured stop instruction (if nonempty). The document the awaited call returns carries that stop
-as `stop_deliveries`, and the delivery instant is stamped when the call returns,
-so Main handles the event inside its current turn instead of after the turn
-ends. A delayed stop keeps the instant it actually happened and never reports
-itself as just-happening. Nothing is queued into Main's native input, no second
-Main or Driver is created, and the binding never continues the Ticket or clears
-budget accounting automatically.
+Task events use the existing Session connection. A mapped Agent notifies its
+actual direct parent; a root Agent can notify the parent Session retained by its
+owning host. A running parent receives input in its current turn, while an idle
+parent continues in that same Session. Completion, failure, result submission,
+approval/input requests and budget notices use the four-field message described
+in the Python host binding below, including events produced after `send` returns.
+A send acknowledgement, recorded event or channel write does not prove the
+parent processed it. Approval/input requests still need an explicit reply.
+Runner enforces stopping independently of notification delivery.
 
-One delivery is retained per stop: a repeated stop notice or a repeated call
-keeps the same stop identity without delivering again. Retained failure stays
-visible - a caller-channel or delivery error inside the caller's lifetime is
-raised by the recovery binding and remains chained to a wrapped Runner error.
-Without the caller's Codex identity, Runner keeps its ordinary
-inherited-channel or stderr behavior.
-
-A stop sampled after the call that was awaiting it has already returned has no
-in-band carrier: the resumed Worker keeps the caller channel, but that call
-cannot be answered twice. Such a stop is retained in the Ticket's
-`execution-budget.yml` and reported to the Session's recorded parent; it is not
-placed in Main's input box.
+Hosts without the event receiver retain their existing caller-channel behavior.
+For a Codex caller identified by `CODEX_THREAD_ID` or a tool's
+`params._meta.threadId`, the awaited call can return a sampled stop in
+`stop_deliveries`. It preserves the stop identity and actual absolute stop time;
+the call's return time is a separate delivery instant. Ordinary estimate and
+allowance notices retain their existing channel/accounting behavior. This
+in-band result cannot answer a call twice or wake an arbitrary conversation
+after it has returned. To receive later events, the host must keep the explicit
+receiver binding described below alive. Neither path creates another Main,
+continues a Ticket budget or changes user Runtime settings automatically.
 
 `agent-runner send --reports-only` collects a report a Session already holds.
 It resumes that Session read-only without attaching the budget monitor, so
 returning existing evidence advances no stopping check, repeats no sampled stop
 and delivers no new stop instruction. Every other `send` and `continue` keeps
-the Ticket under its budget control, and this mode changes no accounting,
-identity or stop history.
-
-```python
-from pathlib import Path
-
-from graphtraj.execution.execution_budget import budget_notice_output
-from graphtraj.execution.runner_launch import launch_batch
-from graphtraj.runtimes.codex.app_server import CodexMainRecovery
-
-
-def launch_from_codex_main(
-    batch,
-    harness: Path,
-):
-    recovery = CodexMainRecovery.from_environment(harness)
-    if recovery is None:
-        return launch_batch(batch, harness)
-    with recovery:
-        with budget_notice_output(recovery.notice_fd):
-            return launch_batch(batch, harness)
-```
-
-The environment thread identity only selects that same caller channel. A CLI
-message, `thread/resume`, `thread/queue/add` or a second Main driver is not
-used. Preserve the host's existing configuration and permissions; the delivery
-adds no role or Skill discovery configuration. The delivered fields and the
-late-stop boundary are in the Codex-only recovery reference.
+the Ticket under its budget control; this mode changes no accounting, identity
+or stop history. Restricted recovery instructions must be delivered through the
+actual supported execution channel, not merely attached to a revised Ticket.
 
 ## GraphTraj overview and method guides
 
@@ -920,6 +889,46 @@ reply = callback({"action": "execute", "feature": "ticket_graph", "arguments": {
 print(reply.document, reply.failed)
 ```
 
+For task events, an owning Python host can retain its existing parent Session
+connection through the tool binding:
+
+```python
+callback = bind(
+    cwd=Path("/absolute/path/to/harness-project-root"),
+    event_receiver=forward_to_parent,
+)
+# Register callback in the host's tool API and retain it across tool calls.
+# forward_to_parent uses the host's existing Session client.
+# When the host has finished receiving all Agent events:
+callback.close()
+```
+
+The host supplies `forward_to_parent`; it forwards to the Session that the host
+already owns. A running parent receives input in its current turn; an idle
+parent continues in that same Session. The receiver binding stays with the
+original Agent, so a later tool caller cannot retarget its events. Mapped child
+Agents continue to notify their actual direct parent. Model arguments cannot
+supply the receiver or grant caller authority.
+
+Each message contains exactly `source` (`graphtraj`), `alias`, `event` and
+`message`. The alias is the existing Agent identity; the event value and content
+come from the recorded operation. Ordinary user input keeps its Runtime form.
+Completion, failure, result submission, approval/input requests and budget
+notices use this path, including results produced after `send` returns. A send
+acknowledgement or callback return confirms forwarding; parent processing needs
+separate evidence. Pending approval/input requests still require an explicit reply.
+
+Keep the returned binding alive across tool calls and close it when the owning
+host ends that receiving lifetime. Asynchronous hosts should close it off their
+client event loop. Temporary delivery failures receive bounded retries and
+retain concrete errors; a closed or persistently refusing receiver can remain
+undelivered. Runner stopping proceeds independently of notification delivery.
+This uses the existing private Worker transport and the host's existing client;
+it does not create another Main, change user Runtime settings or start a
+separate messaging service. A terminal, GUI or process bridge without this host
+attachment retains its existing result/channel behavior. This binding does not
+inject events into an arbitrary already-running conversation.
+
 The host supplies the project directory, optional `allowed_features` restriction
 and actual caller context. These are not model arguments or a substitute for
 existing ownership checks. Unknown Agent identity does not become Main. The
@@ -993,12 +1002,12 @@ authority are unchanged. Registry extensions belong to
 a dependency of CLI, Python, local bridge or native callbacks.
 
 A Codex host can supply its actual calling thread through `params._meta.threadId`
-for the existing caller-notice binding. The awaited call can return an enforced
-stop in `stop_deliveries`, with the retained stop identity, actual stop time and
-elapsed duration. Other callers retain the generic notice behavior. This does
-not queue an unsolicited message into Main, prove Agent receipt from a channel
-write, or solve event delivery after the original call has returned. Preserve the
-notification and same-Session limits described above.
+for the existing in-band caller-notice binding. The awaited call can return an
+enforced stop in `stop_deliveries`, preserving the stop identity, actual stop time
+and elapsed duration. A thread ID alone does not attach a persistent event
+receiver or prove Agent processing. A host that needs delivery after the tool
+call returns uses the owning Session/receiver binding above; MCP compatibility
+is a separate projection and does not provide that connection by itself.
 
 ## Evidence and limits
 
@@ -1008,6 +1017,30 @@ Batches and the sharded Project Worldline connect the causal history.
 Readiness and ledger-shaped views are generated on request; they are not
 additional persisted state. Session aliases identify historical conversations,
 not processes or invocation counters.
+
+New Project Worldline records use the top-level `event` field for the event type.
+The time-shaped `event_id`, `captured_at`, causal IDs, type values and evidence
+keep their meaning. This storage envelope differs from the four-field Session
+message, whose existing alias already identifies the Agent and Ticket.
+
+For an existing current Project Worldline written with `kind`, stop its old
+writers before upgrading and run the one-time script from the reviewed source
+checkout against the explicitly selected directory:
+
+```text
+python scripts/migrate_worldline_event_field.py /path/to/harness/.graphtraj/state/worldline
+```
+
+The script changes only each record's top-level `kind` key to `event` in the
+selected JSONL shards. It validates all shards before writing and replaces each
+changed file atomically. IDs, timestamps, causal links, values and nested fields
+remain unchanged. Already migrated records are unchanged on repeated runs;
+records containing both keys are refused. New core readers do not keep a
+permanent `kind` fallback. Preserve the old installation and retained Session
+records; upgrading commands does not update existing Drivers or their captured
+configuration. Resume work with the accepted new installation only after the
+selected current Worldline has been migrated. Historical Run-local directories
+are outside this script's selected current-state scope.
 
 Historical `state/<run-id>` directories are left byte-for-byte untouched.
 GraphTraj does not migrate them, read them as fallback or offer compatibility

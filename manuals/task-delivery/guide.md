@@ -48,6 +48,17 @@ Use assigned report destinations. No role-specific filename or prose format is a
 universal submission or acceptance condition. Session completion alone does not
 accept or finish a Ticket.
 
+Task notices identify their existing Agent alias and carry the recorded event
+and message, with `source: graphtraj`. They do not need duplicate Ticket or
+Session identity fields. A mapped Agent notifies its actual direct parent; root
+notifications require the owning host's existing parent Session connection.
+Keep that host binding alive while Agents can still produce events, including
+after an individual tool call or `send` acknowledgement returns. The selected
+Runtime delivers input to the parent's current turn or continues its idle
+Session. A channel write or forwarding acknowledgement is not evidence that
+the parent processed the event. Handle the event's result or explicit request
+through the existing result/reply operation.
+
 The authorized parent or task-authorized caller assesses the submitted version
 against the task's criteria, reusing valid evidence. Use `decide-result` to record
 the exact submission/version, accepted or rejected decision, reason and evidence.

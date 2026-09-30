@@ -245,9 +245,12 @@ class CodexAppServer:
         """Open stdio and perform initialize/initialized before Session operations."""
         if self._opened or self._closed:
             raise CodexAdapterError('RUNTIME_LIFECYCLE_INVALID', 'The connection cannot be opened twice.')
-        _reject_legacy_user_sandbox_config(
-            Path(self._environment.get('CODEX_HOME', Path.home() / '.codex'))
-        )
+        # A proxy does not launch or configure a service. Its existing host owns
+        # configuration and permissions; do not read or override them here.
+        if self._command[1:3] != ('app-server', 'proxy'):
+            _reject_legacy_user_sandbox_config(
+                Path(self._environment.get('CODEX_HOME', Path.home() / '.codex'))
+            )
         self._opened = True
         try:
             self._process = await asyncio.create_subprocess_exec(
@@ -494,6 +497,23 @@ class CodexAppServer:
         else:
             self._active.pop(session.thread_id, None)
         return execution
+
+    async def send_host_event(self, thread_id: str, event: dict[str, str]) -> dict:
+        """Start or steer an already-loaded host thread with genuine tool output.
+
+        The host enforces direct-input and provider checks. No settings, native
+        user input, Session creation or resume request accompanies this event.
+        The reply acknowledges submission, not the parent's processing.
+        """
+        result = await self._call('turn/start', {
+            'threadId': _native_id(thread_id), 'input': [],
+            'toolOutput': {'name': 'graphtraj', 'output': json.dumps(event, ensure_ascii=False)},
+        })
+        try:
+            _native_turn(result.get('turn'))
+        except ValueError as error:
+            raise self._protocol_failure(f'turn/start: {error}') from error
+        return result
 
     async def send_input(self, execution: CodexExecution, prompt: str) -> None:
         """Steer exactly the expected active native execution."""

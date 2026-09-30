@@ -17,11 +17,11 @@ from graphtraj.execution.runner_process import OPERATION_TIMEOUT_SECONDS
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 
 
-_parent_connection: ContextVar[str | None] = ContextVar('parent_connection', default=None)
+_parent_connection: ContextVar[str | dict | None] = ContextVar('parent_connection', default=None)
 
 
 @contextmanager
-def parent_connection(address: str) -> Iterator[None]:
+def parent_connection(address: str | dict | None) -> Iterator[None]:
     """Bind the owning host's existing receiver to launches in this call only."""
     token = _parent_connection.set(address)
     try:
@@ -30,9 +30,15 @@ def parent_connection(address: str) -> Iterator[None]:
         _parent_connection.reset(token)
 
 
-def current_parent_connection() -> str | None:
+def current_parent_connection() -> str | dict | None:
     """Return trusted host context, never a model-supplied operation parameter."""
     return _parent_connection.get()
+
+
+def inherited_parent_connection() -> str | dict | None:
+    """Decode the launcher's private environment, retaining old callback addresses."""
+    address = os.environ.get('GRAPHTRAJ_PARENT_CONNECTION')
+    return json.loads(address) if address and address.startswith('{') else address
 
 
 @contextmanager
@@ -85,8 +91,16 @@ def session_operation(mapping: dict, operation: str, **arguments: object) -> dic
         raise RunnerError('operation-failed', 'The mapped Session control identity is invalid.') from error
 
 
-def connection_operation(address: str, document: dict) -> dict:
+def connection_operation(address: str | dict, document: dict) -> dict:
     """Exchange one request with an existing owner, retaining acknowledgement semantics."""
+    if isinstance(address, dict):
+        from graphtraj.runtimes.runtime_adapter import select_runtime_adapter
+
+        try:
+            return select_runtime_adapter(address['runtime']).send_host_event(address, document)
+        except RuntimeAdapterError as error:
+            raise RunnerError(error.code, error.message) from error
+
     try:
         with tempfile.TemporaryDirectory(dir=address) as directory:
             request = Path(directory) / 'request.tmp'

@@ -35,7 +35,9 @@ from graphtraj.execution.runner_batch import (
     valid_ticket_id,
 )
 from graphtraj.execution.runner_capacity import capacity_positions
-from graphtraj.execution.runner_connection import current_parent_connection
+from graphtraj.execution.runner_connection import (
+    current_parent_connection, inherited_parent_connection, parent_connection,
+)
 from graphtraj.execution.runner_io import write_yaml_durably
 from graphtraj.execution.runner_heartbeat import execution_start_lock, ownership_is_held
 from graphtraj.execution.runner_models import (
@@ -166,7 +168,9 @@ def launch_team_batch(batch: Batch, cwd: Path) -> LaunchResponse:
     """Execute the selected authorized roles through the common task driver."""
     project = discover_project(cwd, require_clean_integration=False)
     _require_dispatch_roles(project, batch, None)
-    return _run_batch_workers(project, batch)
+    host = current_parent_connection() or runtime_adapter.current_host_connection()
+    with parent_connection(host):
+        return _run_batch_workers(project, batch)
 
 
 def continue_stopped_ticket(
@@ -349,7 +353,9 @@ def _run_batch_workers(
                     environment.pop("GRAPHTRAJ_PARENT_CONNECTION", None)
                     host = current_parent_connection()
                     if not parent_alias and host is not None:
-                        environment["GRAPHTRAJ_PARENT_CONNECTION"] = host
+                        environment["GRAPHTRAJ_PARENT_CONNECTION"] = (
+                            json.dumps(host) if isinstance(host, dict) else host
+                        )
                     if notice_fd is not None:
                         environment["GRAPHTRAJ_BUDGET_NOTICE_FD"] = str(notice_fd)
                     worker = subprocess.Popen(
@@ -786,7 +792,7 @@ def _execute_agent(
                     "role_reference": reference,
                     "parent": parent_alias,
                     "parent_connection": (
-                        current_parent_connection() or os.environ.get("GRAPHTRAJ_PARENT_CONNECTION")
+                        current_parent_connection() or inherited_parent_connection()
                     ) if parent_alias is None else None,
                     "retained_batch_file": str(retained_batch),
                     "worktree_path": str(worktree),

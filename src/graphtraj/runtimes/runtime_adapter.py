@@ -136,6 +136,9 @@ class RuntimePreparationAdapter(Protocol):
 class RuntimeAdapter(RuntimePreparationAdapter, Protocol):
     """Prepare Context and own managed execution for the selected Runtime."""
 
+    def send_host_event(self, connection: Mapping[str, Any], event: dict[str, str]) -> dict:
+        """Forward an event to the captured owning host, without creating a Session."""
+
     def read_session_identity(self, session_directory: Path) -> str:
         """Attest the native Session identity from its retained Runtime record."""
 
@@ -188,6 +191,13 @@ class RuntimeAdapter(RuntimePreparationAdapter, Protocol):
         is available, before acknowledging execution to the caller. A resumed
         owner must retain expected_session. Callbacks may refuse execution.
         """
+
+
+def current_host_connection() -> dict | None:
+    """Capture supported host context at the trusted root launch boundary."""
+    from graphtraj.runtimes.codex.host_events import current_connection
+
+    return current_connection()
 
 
 def select_runtime_adapter(runtime: str) -> RuntimeAdapter:

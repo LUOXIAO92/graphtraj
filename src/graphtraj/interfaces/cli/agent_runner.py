@@ -316,6 +316,7 @@ def replace(alias: str, actor: str | None, caused_by_event_id: tuple[str, ...]) 
 @click.option("--caused-by-event-id", multiple=True)
 @click.option("--additional-minutes", type=float)
 @click.option("--restore-active", is_flag=True, default=None)
+@click.option("--resume/--no-resume", default=None)
 @click.option("--retry-event-id")
 def recover(
     alias: str,
@@ -326,13 +327,14 @@ def recover(
     caused_by_event_id: tuple[str, ...],
     additional_minutes: float | None,
     restore_active: bool | None,
+    resume: bool | None,
     retry_event_id: str | None,
 ) -> None:
     """Request concrete native-approved recovery, or retry an applied repair."""
     arguments = {key: value for key, value in {
         'alias': alias, 'reason': reason, 'instruction': instruction,
         'allowed_scope': allowed_scope, 'forbidden_scope': forbidden_scope,
-        'additional_minutes': additional_minutes, 'restore_active': restore_active,
+        'additional_minutes': additional_minutes, 'restore_active': restore_active, 'resume': resume,
         'retry_event_id': retry_event_id,
     }.items() if value is not None}
     if caused_by_event_id:
@@ -344,6 +346,31 @@ def recover(
     _emit_result(result.document)
     if result.failed:
         raise click.exceptions.Exit(1)
+
+
+@main.command("recover-apply")
+@click.option("--proposal", required=True, help="Exact JSON proposal returned by recover; do not edit it.")
+def recover_apply(proposal: str) -> None:
+    """Execute the exact recovery command through the requested native reviewer.
+
+    Use only the native execution request returned by recover or the shared
+    approved_recovery tool. This command is its public execution boundary, not
+    an approval request or an approval override. No model-visible apply feature
+    exists. The caller relationship, retained authority, supported changes and
+    current snapshot are checked again before applying the repair.
+    """
+    from graphtraj.execution.approved_recovery import apply_approved_recovery
+
+    try:
+        value = json.loads(proposal)
+        if not isinstance(value, dict) or set(value) != {'request', 'before', 'after', 'authority'}:
+            raise ValueError('Expected the exact recovery proposal returned by recover.')
+        result = apply_approved_recovery(value, Path.cwd().resolve())
+    except (RunnerError, OSError, ValueError, KeyError, TypeError, yaml.YAMLError) as error:
+        _fail(error if isinstance(error, RunnerError) else RunnerError('invalid-input', str(error)))
+    # Native review needs the structured applied/stale/failure result, including
+    # a repair that succeeded before continuation failed; do not discard stdout.
+    _emit_result(result)
 
 
 @main.command("continue", cls=OperationCommand, feature="continue")

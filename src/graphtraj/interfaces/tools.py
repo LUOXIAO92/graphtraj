@@ -821,7 +821,9 @@ register_tool(
     'approved_recovery',
     'Prepare exact administrative and time repairs for native approval, then resume the original '
     'Session with explicit scope. No state changes before approval. Retry an applied recovery '
-    'using only alias and retry_event_id; time is never added twice. Equivalent to `agent-runner recover`.',
+    'using only alias and retry_event_id; time is never added twice. Administrative repair alone '
+    'preserves budget stops. The returned native execution runs `agent-runner recover-apply`; '
+    'execute it only through the requested native review. Equivalent to `agent-runner recover`.',
     {'type': 'object', 'properties': {
         'alias': {'type': 'string'},
         'reason': {'type': 'string'},
@@ -831,6 +833,7 @@ register_tool(
         'caused_by_event_ids': {'type': 'array', 'items': {'type': 'string'}},
         'additional_minutes': {'type': 'number', 'description': 'Explicit time increment; preserves original clock and randomized allowance.'},
         'restore_active': {'type': 'boolean', 'description': 'Correct Ticket/Team administrative state and reopen the same Round for authorized work.'},
+        'resume': {'type': 'boolean', 'description': 'Resume the original Session after repair (default true). False applies administrative repair without changing stops or sending input.'},
         'retry_event_id': {'type': 'string', 'description': 'Applied recovery event; retry continuation without another repair.'},
     }, 'required': ['alias'], 'additionalProperties': False},
     recover_execution, manual_ref='manuals/task-delivery/guide.md',

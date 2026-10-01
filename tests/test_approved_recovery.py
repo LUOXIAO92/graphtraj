@@ -75,7 +75,11 @@ class NativeApproval:
             self.before_apply()
         if self.mode in {'denied', 'failed'}:
             raise RunnerError('native-approval-' + self.mode, self.mode)
-        return recovery.apply_approved_recovery(proposal, self.root)
+        with pytest.MonkeyPatch.context() as context:
+            context.chdir(self.root)
+            result = CliRunner().invoke(main, command[1:])
+        assert result.exit_code == 0, result.output
+        return yaml.safe_load(result.output)
 
 
 def test_recovered_unchanged_result_returns_to_integration(
@@ -228,7 +232,11 @@ def test_approved_integrated_repair_retains_history_and_retries_once(
     assert len(adapter.proposals) == 1
     assert yaml.safe_load((ticket / 'execution-budget.yml').read_text()) == after
     # Reexecuting the exact already-approved command also cannot add time.
-    assert recovery.apply_approved_recovery(result['proposal'], root)['recovery_status'] == 'resumed'
+    with monkeypatch.context() as context:
+        context.chdir(root)
+        repeated = CliRunner().invoke(main, ['recover-apply', '--proposal', json.dumps(result['proposal'])])
+    assert repeated.exit_code == 0, repeated.output
+    assert yaml.safe_load(repeated.output)['recovery_status'] == 'resumed'
     assert yaml.safe_load((ticket / 'execution-budget.yml').read_text()) == after
 
 
@@ -528,3 +536,167 @@ def test_administrative_recovery_preserves_an_already_usable_status(
     result = invoke(root, {**arguments, 'additional_minutes': 0, 'reason': 'Continue existing review scope.'})
     assert result['recovery_status'] == 'requires-native-approval'
     assert result['proposal']['before'] == result['proposal']['after']
+
+
+@pytest.mark.parametrize('resume', [False, True])
+def test_zero_time_recovery_preserves_budget_stop(
+    target: tuple, monkeypatch: pytest.MonkeyPatch, resume: bool,
+) -> None:
+    """Administrative repair reopens the same Round without authorizing execution."""
+    root, ticket, mapping, arguments = target
+    budget_path = ticket / 'execution-budget.yml'
+    budget = yaml.safe_load(budget_path.read_text())
+    budget.update(stopped=True, stopping_checks=3, notifications=['stochastic_stop:3'])
+    budget_path.write_text(yaml.safe_dump(budget))
+    stop_path = root / '.graphtraj/runner/sessions' / mapping['alias'] / 'stop.yml'
+    stop = {'alias': mapping['alias'], 'reason': 'budget_stopped', 'resumed': False}
+    stop_path.write_text(yaml.safe_dump(stop))
+    adapter = NativeApproval(root, 'automatic')
+    monkeypatch.setattr(recovery.runtime_adapter, 'select_runtime_adapter', lambda runtime: adapter)
+
+    def unexpected_send(*args: object, **kwargs: object) -> dict:
+        """A budget stop must prevent any native continuation."""
+        pytest.fail('Administrative recovery sent execution input.')
+
+    monkeypatch.setattr(recovery, '_send_session_locked', unexpected_send)
+    result = invoke(root, {**arguments, 'additional_minutes': 0, 'resume': resume})
+    assert result['applied'] is True
+    assert result['recovery_status'] == ('resume-failed' if resume else 'applied')
+    if resume:
+        assert result['error']['code'] == 'subtree-stopped'
+    assert yaml.safe_load(budget_path.read_text()) == budget
+    assert yaml.safe_load(stop_path.read_text()) == stop
+    assert yaml.safe_load((ticket / 'ticket.yml').read_text())['status'] == 'implementing'
+    assert yaml.safe_load((ticket / 'teams/1/team.yml').read_text())['status'] == 'active'
+    assert (ticket / 'teams/1/rounds/1').stat().st_mode & 0o200
+    assert sorted(path.name for path in (ticket / 'teams/1/rounds').iterdir()) == ['1']
+    retry = invoke(root, {'alias': mapping['alias'], 'retry_event_id': result['recovery_event_id']})
+    assert retry['recovery_status'] == result['recovery_status']
+    assert yaml.safe_load(budget_path.read_text()) == budget
+
+
+def test_public_execution_rejects_changed_proposal_and_wrong_caller(
+    target: tuple, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The command cannot turn its recovery payload into arbitrary state edits."""
+    root, ticket, mapping, arguments = target
+    prepared = invoke(root, arguments)
+    proposal = prepared['proposal']
+    before = (ticket / 'ticket.yml').read_bytes()
+    monkeypatch.chdir(root)
+    changed = copy.deepcopy(proposal)
+    changed['after']['budget']['started_at'] = 0
+    result = CliRunner().invoke(main, ['recover-apply', '--proposal', json.dumps(changed)])
+    assert result.exit_code != 0
+    assert 'invalid-input' in result.output
+    assert (ticket / 'ticket.yml').read_bytes() == before
+    child = next(member['session_ref'] for member in proposal['before']['team']['members'].values()
+                 if member['session_ref'] != mapping['alias'])
+    with runtime_caller(root / '.graphtraj/runner', child):
+        result = CliRunner().invoke(main, ['recover-apply', '--proposal', json.dumps(proposal)])
+    assert result.exit_code != 0
+    assert 'authority-denied' in result.output
+    assert (ticket / 'ticket.yml').read_bytes() == before
+    raw = local_tool.bind(root)({'action': 'execute', 'feature': 'apply_approved_recovery',
+                                 'arguments': {'proposal': proposal}})
+    assert raw.failed
+
+
+def test_cli_administrative_request_matches_shared_tool(target: tuple, monkeypatch: pytest.MonkeyPatch) -> None:
+    """CLI and tool prepare identical explicit administrative-only recovery."""
+    root, _, _, arguments = target
+    monkeypatch.chdir(root)
+    request = {**arguments, 'additional_minutes': 0, 'resume': False}
+    tool = invoke(root, request)
+    command = ['recover', arguments['alias'], '--no-resume', '--restore-active']
+    for key in ('reason', 'instruction', 'allowed_scope', 'forbidden_scope', 'additional_minutes'):
+        command.extend(['--' + key.replace('_', '-'), str(request[key])])
+    command.extend(['--caused-by-event-id', arguments['caused_by_event_ids'][0]])
+    cli = CliRunner().invoke(main, command)
+    assert cli.exit_code == 0, cli.output
+    assert yaml.safe_load(cli.output)['proposal'] == tool['proposal']
+    native_command = shlex.split(tool['native_execution']['arguments']['cmd'])
+    assert Path(native_command[0]).name == 'agent-runner'
+    assert native_command[1] == 'recover-apply'
+    assert json.loads(native_command[3]) == tool['proposal']
+
+
+@pytest.mark.parametrize('decision', ['allow', 'deny', 'cancel', 'error'])
+def test_native_review_runs_public_administrative_execution(
+    target: tuple,
+    installed_commands: InstalledCommands,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    decision: str,
+) -> None:
+    """The native execution peer approves or refuses the actual public command."""
+    root, ticket, _, arguments = target
+    monkeypatch.chdir(root)
+    monkeypatch.setattr(recovery.sys, 'executable', str(installed_commands.runner.with_name('python')))
+    wrapper = tmp_path / 'native-review'
+    wrapper.write_text(
+        f'#!{sys.executable}\nimport os, sys\n' +
+        ('os.execv(sys.argv[1], sys.argv[2:])\n' if decision == 'allow' else
+         f'print({decision!r}, file=sys.stderr); sys.exit(1)\n')
+    )
+    wrapper.chmod(0o755)
+    before = (ticket / 'ticket.yml').read_bytes()
+    budget = (ticket / 'execution-budget.yml').read_bytes()
+    events = read_worldline(ticket.parent.parent, root)
+    channel, peer = socket.socketpair()
+    with channel, peer:
+        monkeypatch.setenv('CODEX_ESCALATE_SOCKET', str(channel.fileno()))
+        monkeypatch.setenv('EXEC_WRAPPER', str(wrapper))
+        request = {**arguments, 'additional_minutes': 0, 'resume': False}
+        if decision == 'allow':
+            result = invoke(root, request)
+            assert result['recovery_status'] == 'applied'
+            assert result['applied'] is True
+            assert yaml.safe_load((ticket / 'ticket.yml').read_text())['status'] == 'implementing'
+        else:
+            with pytest.raises(RunnerError, match=decision):
+                invoke(root, request)
+            assert (ticket / 'ticket.yml').read_bytes() == before
+            assert read_worldline(ticket.parent.parent, root) == events
+    assert (ticket / 'execution-budget.yml').read_bytes() == budget
+
+
+def test_administrative_restore_allows_separate_budget_only_continue(
+    target: tuple, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An existing authorized continuation can clear a sampled stop without time."""
+    root, ticket, _, arguments = target
+    budget_path = ticket / 'execution-budget.yml'
+    budget = yaml.safe_load(budget_path.read_text())
+    budget.update(stopped=True, stopping_checks=3, notifications=['stochastic_stop:3'])
+    budget_path.write_text(yaml.safe_dump(budget))
+    adapter = NativeApproval(root, 'automatic')
+    monkeypatch.setattr(recovery.runtime_adapter, 'select_runtime_adapter', lambda runtime: adapter)
+    result = invoke(root, {**arguments, 'additional_minutes': 0, 'resume': False})
+    assert result['recovery_status'] == 'applied'
+    assert yaml.safe_load(budget_path.read_text()) == budget
+    monkeypatch.chdir(root)
+    continued = CliRunner().invoke(main, ['continue', '--ticket-id', '83', '--budget-only',
+                                         '--caused-by-event-id', result['recovery_event_id']])
+    assert continued.exit_code == 0, continued.output
+    assert yaml.safe_load(continued.output)['tasks'] == []
+    assert yaml.safe_load(budget_path.read_text()) == {**budget, 'stopped': False}
+
+
+def test_retry_of_retained_request_without_resume_field_does_not_add_time(
+    target: tuple, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Older applied requests remain idempotent after adding the resume option."""
+    root, ticket, mapping, arguments = target
+    proposal = invoke(root, arguments)['proposal']
+    proposal['request'].pop('resume')
+    monkeypatch.chdir(root)
+    monkeypatch.setattr(recovery, '_send_session_locked', lambda *args, **kwargs: {'session': mapping['session']})
+    applied = CliRunner().invoke(main, ['recover-apply', '--proposal', json.dumps(proposal)])
+    assert applied.exit_code == 0, applied.output
+    event_id = yaml.safe_load(applied.output)['recovery_event_id']
+    before = (ticket / 'execution-budget.yml').read_bytes()
+    retried = invoke(root, arguments)
+    assert retried['recovery_status'] == 'resumed'
+    assert retried['recovery_event_id'] == event_id
+    assert (ticket / 'execution-budget.yml').read_bytes() == before

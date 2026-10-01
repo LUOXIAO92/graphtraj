@@ -62,19 +62,49 @@ def approved_recovery(arguments: dict, cwd: Path) -> dict:
     if (isinstance(minutes, bool) or not isinstance(minutes, (int, float))
             or not math.isfinite(minutes) or minutes < 0):
         raise RunnerError('invalid-input', 'additional_minutes must be a finite nonnegative increment.')
-    request = {**arguments, 'additional_minutes': minutes, 'restore_active': arguments.get('restore_active', False)}
+    request = {**arguments, 'additional_minutes': minutes,
+               'restore_active': arguments.get('restore_active', False),
+               'resume': arguments.get('resume', True)}
     events = read_worldline(project.state_directory, project.harness_root)
     previous = next((event for event in reversed(events) if event['event'] == 'recovery-applied'
-                     and event.get('alias') == alias and event['proposal']['request'] == request), None)
+                     and event.get('alias') == alias
+                     and {**event['proposal']['request'],
+                          'resume': event['proposal']['request'].get('resume', True)} == request), None)
     if previous is not None:
         return _resume(project, previous)
     before, _ = _snapshot(project, alias)
+    after = _repair_snapshot(project, before, request)
+    proposal = {
+        'request': request, 'before': before, 'after': after,
+        'authority': [event for event in events if event['event_id'] in causes],
+    }
+    # Native review executes the installed public command with the exact values.
+    command = [str(Path(sys.executable).with_name('agent-runner')), 'recover-apply',
+               '--proposal', json.dumps(proposal, ensure_ascii=False)]
+    caller = caller_alias(project.runner_directory)
+    runtime = read_alias_mapping(project.runner_directory, caller)[0]['runtime'] if caller else caller_runtime()
+    if runtime is None:
+        raise RunnerError('native-approval-unavailable', 'The calling Runtime is unknown; recovery was not applied.')
+    try:
+        adapter = runtime_adapter.select_runtime_adapter(runtime)
+        result = adapter.native_recovery_approval(command, proposal)
+    except (runtime_adapter.RuntimeAdapterError, AttributeError) as error:
+        raise RunnerError('native-approval-unavailable', str(error)) from error
+    if not isinstance(result, dict) or 'recovery_status' not in result:
+        raise RunnerError('native-approval-failed', 'The native recovery returned no execution result.')
+    return {**result, 'proposal': proposal}
+
+
+def _repair_snapshot(project: Any, before: dict, request: dict) -> dict:
+    """Derive the only permitted repair, preserving stops for administrative work."""
     after = copy.deepcopy(before)
-    if arguments.get('restore_active', False):
+    minutes = request.get('additional_minutes', 0)
+    resume = request.get('resume', True)
+    if request.get('restore_active', False):
         if before['ticket']['replaced_by']:
             raise RunnerError('invalid-input', 'A replaced Ticket requires task-graph revision.')
         after['ticket']['active'] = True
-        if Path(mapping['worktree_path']) == project.integration_worktree:
+        if Path(before['mapping']['worktree_path']) == project.integration_worktree:
             after['ticket']['status'] = 'resolving-integration'
         elif after['ticket']['status'] not in {'implementing', 'reviewing', 'reworking'}:
             after['ticket']['status'] = 'implementing'
@@ -84,37 +114,17 @@ def approved_recovery(arguments: dict, cwd: Path) -> dict:
         after['round_mode'] |= 0o200
     if minutes and before['budget'] is None:
         raise RunnerError('invalid-input', 'Time extension requires existing execution accounting.')
-    if after['budget'] is not None:
-        if minutes:
-            after['budget']['approved_minutes'] = after['budget'].get('approved_minutes', 0) + minutes
-        after['budget']['stopped'] = False
-    # Keep the stop record and its cause; only its execution prohibition changes.
-    if after['stop'] is not None:
+    if minutes:
+        after['budget']['approved_minutes'] = after['budget'].get('approved_minutes', 0) + minutes
+        if resume:
+            after['budget']['stopped'] = False
+    budget_stopped = after['budget'] is not None and after['budget'].get('stopped', False)
+    # Administrative reopening grants neither execution permission nor more time.
+    if resume and not budget_stopped and after['stop'] is not None:
         after['stop']['resumed'] = True
     if not after['ticket']['active'] or after['team']['status'] != 'active':
         raise RunnerError('team-not-active', 'This recovery needs restore_active to repair administrative state.')
-    proposal = {
-        'request': request, 'before': before, 'after': after,
-        'authority': [event for event in events if event['event_id'] in causes],
-    }
-    # The approved command carries values, never arbitrary writable paths.
-    script = (
-        'from pathlib import Path; import yaml; '
-        'from graphtraj.execution.approved_recovery import apply_approved_recovery; '
-        f'print(yaml.safe_dump(apply_approved_recovery({proposal!r}, Path({str(project.harness_root)!r})), sort_keys=False))'
-    )
-    caller = caller_alias(project.runner_directory)
-    runtime = read_alias_mapping(project.runner_directory, caller)[0]['runtime'] if caller else caller_runtime()
-    if runtime is None:
-        raise RunnerError('native-approval-unavailable', 'The calling Runtime is unknown; recovery was not applied.')
-    try:
-        adapter = runtime_adapter.select_runtime_adapter(runtime)
-        result = adapter.native_recovery_approval([sys.executable, '-I', '-c', script], proposal)
-    except (runtime_adapter.RuntimeAdapterError, AttributeError) as error:
-        raise RunnerError('native-approval-unavailable', str(error)) from error
-    if not isinstance(result, dict) or 'recovery_status' not in result:
-        raise RunnerError('native-approval-failed', 'The native recovery returned no execution result.')
-    return {**result, 'proposal': proposal}
+    return after
 
 
 def _snapshot(project: Any, alias: str, *, worldline_locked: bool = False) -> tuple[dict, dict]:
@@ -156,15 +166,39 @@ def _differences(expected: Any, actual: Any, prefix: str = '') -> list[dict]:
 def apply_approved_recovery(proposal: dict, cwd: Path) -> dict:
     """Apply only the native-reviewed snapshot, atomically with its Worldline fact.
 
-    This is the native execution payload, not a second public operation. The
+    The public recover-apply command is executed by the native reviewer. The
     execution, Ticket, budget and Worldline locks serialize existing writers.
     A repeated approved payload uses its retained applied event without adding time.
     """
     project = discover_project(cwd, require_clean_integration=False)
     alias = proposal['request']['alias']
-    digest = hashlib.sha256(json.dumps(proposal, sort_keys=True).encode()).hexdigest()
     mapping, _ = read_alias_mapping(project.runner_directory, alias)
     require_direct_authority(project.runner_directory, alias, mapping)
+    # Validate command inputs independently of the preparing process. A proposal
+    # cannot widen the supported repair into arbitrary Ticket/Team/file changes.
+    from graphtraj.interfaces.gateway import _validate
+    from graphtraj.interfaces.tools import TOOLS
+
+    _validate(proposal['request'], TOOLS['approved_recovery'].input_schema, 'proposal.request')
+    request = proposal['request']
+    if 'retry_event_id' in request:
+        raise RunnerError('invalid-input', 'An execution proposal cannot contain a retry.')
+    for field in ('reason', 'instruction', 'allowed_scope', 'forbidden_scope'):
+        if not isinstance(request.get(field), str) or not request[field].strip():
+            raise RunnerError('invalid-input', f'{field} must be explicit nonempty text.')
+    minutes = request.get('additional_minutes', 0)
+    if not math.isfinite(minutes) or minutes < 0:
+        raise RunnerError('invalid-input', 'additional_minutes must be a finite nonnegative increment.')
+    causes = tuple(request.get('caused_by_event_ids', ()))
+    if not causes or len(set(causes)) != len(causes):
+        raise RunnerError('invalid-input', 'Recovery requires unique authority event references.')
+    _require_project_events(cwd, causes)
+    events = read_worldline(project.state_directory, project.harness_root)
+    authority = [event for event in events if event['event_id'] in causes]
+    if (proposal['authority'] != authority
+            or proposal['after'] != _repair_snapshot(project, proposal['before'], request)):
+        raise RunnerError('invalid-input', 'The proposal differs from the supported recovery and retained authority.')
+    digest = hashlib.sha256(json.dumps(proposal, sort_keys=True).encode()).hexdigest()
     _, paths = _snapshot(project, alias)
     with execution_start_lock(project.runner_directory):
         lock = _lock(project.state_directory / 'tickets', exclusive=True)
@@ -234,6 +268,8 @@ def _resume(project: Any, applied: dict) -> dict:
     result = {'recovery_status': 'resume-failed', 'applied': True,
               'recovery_event_id': applied['event_id'],
               'changes': _differences(applied['proposal']['before'], applied['proposal']['after'])}
+    if not applied['proposal']['request'].get('resume', True):
+        return {**result, 'recovery_status': 'applied'}
     try:
         _, directory = read_alias_mapping(project.runner_directory, applied['alias'])
         with (directory / 'launch.yml').open('rb') as lock:

@@ -113,6 +113,18 @@ Where execution permission still admits the Session,
 explicit instruction and causal event. It grants no implementation window and
 does not bypass a manual subtree stop. Use the selected Runtime's actual notification channel and report a delivery failure through the caller.
 
+## Return an accepted artifact to integration after recovery
+
+When authorized recovery work leaves the committed artifact unchanged, the
+original executing Session can write its new verification evidence and use
+`submit-result` with the same commit. Its actual parent accepts that new
+submission ID with `decide-result`, then the accepted result can be integrated
+through `graphtraj ticket integrate`. The original submission and acceptance
+remain historical facts. Do not decide the old submission a second time or
+manufacture an empty commit, a rejection or another Round to change the state.
+A new submission describes completed recovery work; it does not waive its
+required verification, ownership or budget constraints.
+
 ## Adopt retained results
 
 A genuinely assigned successor may submit an unchanged committed artifact as its
@@ -131,6 +143,14 @@ permit cross-level messages, approvals or replacement. Confirm the target and
 all descendants have stopped before replacing it. Replacement requires the
 actual direct parent or user; preserve the Runtime's native approval mechanism
 when the requested relationship requires it. An actor flag grants no authority.
+
+A replacement root retains the original owning host's notification connection.
+If that root has no recorded connection, replacement uses the caller's existing
+host binding or the Runtime's actual host context when available. The replacement
+is a new entity; it preserves the old Session and records. Use the public
+replacement operation in the actual owning Main context, then verify that its
+resulting events reach and are processed by Main. A successful replacement call
+or a hook allowing Main to wait does not prove later notification delivery.
 
 Use public control/replacement operations and report a missing capability through
 the direct parent. Retain prior Sessions and useful evidence and give the new

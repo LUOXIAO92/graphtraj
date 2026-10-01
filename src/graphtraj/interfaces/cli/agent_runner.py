@@ -348,17 +348,18 @@ def recover(
         raise click.exceptions.Exit(1)
 
 
-@main.command("recover-apply")
-@click.option("--proposal", required=True, help="Exact JSON proposal returned by recover; do not edit it.")
-def recover_apply(proposal: str) -> None:
-    """Execute the exact recovery command through the requested native reviewer.
+class RecoveryApplyCommand(click.Command):
+    """Project recovery help without exposing its native executable as a tool."""
 
-    Use only the native execution request returned by recover or the shared
-    approved_recovery tool. This command is its public execution boundary, not
-    an approval request or an approval override. No model-visible apply feature
-    exists. The caller relationship, retained authority, supported changes and
-    current snapshot are checked again before applying the repair.
-    """
+    feature = 'approved_recovery'
+    get_short_help_str = OperationCommand.get_short_help_str
+    format_help_text = OperationCommand.format_help_text
+
+
+@main.command("recover-apply", cls=RecoveryApplyCommand)
+@click.option("--proposal", required=True)
+def recover_apply(proposal: str) -> None:
+    """Execute the exact recovery proposal through the requested native reviewer."""
     from graphtraj.execution.approved_recovery import apply_approved_recovery
 
     try:

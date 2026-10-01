@@ -291,3 +291,29 @@ def test_literal_help_value_keeps_execution_resources(monkeypatch: pytest.Monkey
     result = CliRunner().invoke(agent_runner.main, ["send", "child", "--instruction", "--help"])
     assert result.exit_code == 0, result.output
     assert not active
+
+
+
+def test_native_recovery_command_reuses_shared_help_without_raw_tool(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Native execution help follows the same mutable definition as recovery."""
+    manual = tmp_path / 'recovery.md'
+    original = tools.TOOLS['approved_recovery']
+    monkeypatch.setitem(tools.TOOLS, 'approved_recovery', replace(
+        original, description='Shared recovery description', manual_ref=str(manual),
+        examples=({'sample': 'shared-recovery-example'},),
+    ))
+    for revision in ('first', 'second'):
+        manual.write_text(f'Recovery instructions {revision}')
+        described = gateway.handle_request({'action': 'describe', 'feature': 'approved_recovery'})
+        result = CliRunner().invoke(agent_runner.main, ['recover-apply', '--help'])
+        assert result.exit_code == 0, result.output
+        assert described.document['description'] in result.output
+        assert described.document['manual'] in result.output
+        assert 'shared-recovery-example' in result.output
+        assert '--proposal TEXT' in result.output
+        for name in original.input_schema['properties']:
+            assert name in result.output
+    discovered = gateway.handle_request({'action': 'discover'})
+    assert 'apply_approved_recovery' not in {item['feature'] for item in discovered.document['features']}

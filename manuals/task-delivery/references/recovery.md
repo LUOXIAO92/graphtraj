@@ -39,12 +39,28 @@ being requested, and `restore_active` when the retained administrative state
 needs repair. The proposal retains the original clock, randomized allowance,
 stop history, source acceptance, Git integration and Session identity.
 
+Use `--no-resume` (shared `resume: false`) when only the administrative repair
+should run. In particular, restoring a closed Team's delivery state without
+adding time must preserve its budget stop. After the approved repair succeeds,
+explicitly authorized sampled-stop continuation can use the existing public
+`continue` operation. Do not treat an administrative repair as permission for
+the original execution to run.
+The administrative-only result is `applied`, with the actual changes and
+`recovery_event_id`. It does not claim that continuation occurred. Adding zero
+minutes does not clear a budget stop when continuation is requested either.
+
 `requires-native-approval` means the result contains a pending native execution
 request. It is not approval and has not applied the repair. Submit that exact
 returned request through the Runtime's configured human or automatic reviewer.
 Existing authority references are evidence for that reviewer, not approval
 tokens the model can manufacture. Preserve the proposed command and scope;
 denial or approval failure does not authorize an alternate execution path.
+
+The request executes the installed `agent-runner recover-apply` public command
+with the exact proposal. The shared `approved_recovery` operation retains
+preparation and retry; it does not expose an unchecked apply tool.
+This is the approval execution boundary, not an alternative to approval. Do
+not replace it with a temporary script or direct internal Python invocation.
 
 After approval, read the actual result. `stale` means the approved snapshot no
 longer matches the state to repair. `resume-failed` or `resume-stale` means the

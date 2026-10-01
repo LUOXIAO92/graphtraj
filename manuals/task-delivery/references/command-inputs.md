@@ -81,19 +81,34 @@ Use the alias of the original Session with the exact repair reason, permitted
 work and continuation instruction:
 
 ```text
-agent-runner recover <alias> --reason <reason> --instruction <continuation> --allowed-scope <allowed-work> --forbidden-scope <excluded-work> --caused-by-event-id <actual-authority-event> [--additional-minutes <increment>] [--restore-active]
+agent-runner recover <alias> --reason <reason> --instruction <continuation> --allowed-scope <allowed-work> --forbidden-scope <excluded-work> --caused-by-event-id <actual-authority-event> [--additional-minutes <increment>] [--restore-active] [--no-resume]
 ```
 
 Repeat `--caused-by-event-id` for additional actual causal references. The
 shared `approved_recovery` operation uses `alias`, `reason`, `instruction`,
 `allowed_scope`, `forbidden_scope`, `caused_by_event_ids`, optional
-`additional_minutes` and optional `restore_active` with the same semantics.
+`additional_minutes`, `restore_active` and `resume` with the same semantics.
+`resume` defaults to true; CLI `--no-resume` sets it to false for a repair that
+must leave the original execution stopped.
 
 The initial `requires-native-approval` result contains a concrete native
 execution request. Submit that exact request to the selected Runtime's existing
 human or automatic approval mechanism. Receiving it, or citing an authority
 event, is not permission to execute it by another route. No repair is applied
-before the approved execution runs.
+before the approved execution runs. The request uses the installed public
+`agent-runner recover-apply --proposal <exact-JSON-proposal>` command. Keep
+`approved_recovery` as the shared preparation and retry operation. Preserve the
+exact prepared proposal and submit its execution through native approval;
+neither knowing this command nor supplying a proposal grants approval. Callers
+do not need to import or invoke an internal Python function.
+
+For administrative repair only, use `--restore-active --no-resume` without a
+time increment. This restores the retained delivery state while preserving the
+budget stop. Restoring delivery state does not itself authorize execution;
+use the existing public budget continuation only with explicit authorization.
+An `applied` result reports the repair and its `recovery_event_id`; it does not
+mean the Session resumed. A zero-minute administrative repair never clears a
+budget stop, even if continuation was requested.
 
 Keep the returned applied changes and `recovery_event_id`. A `stale` result
 does not apply an outdated proposal. For `resume-stale` or `resume-failed`,

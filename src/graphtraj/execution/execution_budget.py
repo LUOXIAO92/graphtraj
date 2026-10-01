@@ -510,10 +510,11 @@ def _read_usage(
         state["parent_notices"] = state.pop("leader_notices")
     if (
         not isinstance(state, dict)
-        or set(state) != {
+        or set(state) - {"approved_minutes"} != {
             "started_at", "budget", "sessions", "corrections", "notifications",
             "allowance_minutes", "stopping_checks", "stopped", "parent_notices",
         }
+        or not _nonnegative_number(state.get("approved_minutes", 0))
         or not _nonnegative_number(state["started_at"])
         or not isinstance(state["budget"], dict)
         or not isinstance(state["sessions"], dict)
@@ -565,7 +566,7 @@ def _new_notices(
         "corrections": state["corrections"],
     }
     exceeded = []
-    estimated = definition["estimated_minutes"]["total"]
+    estimated = definition["estimated_minutes"]["total"] + state.get("approved_minutes", 0)
     allowance = state["allowance_minutes"]
     seen = set(state["notifications"])
     if elapsed >= estimated:

@@ -294,6 +294,45 @@ def replace(alias: str, actor: str | None, caused_by_event_id: tuple[str, ...]) 
     _emit_result(response)
 
 
+@main.command("recover", cls=OperationCommand, feature="approved_recovery")
+@click.argument("alias")
+@click.option("--reason")
+@click.option("--instruction")
+@click.option("--allowed-scope")
+@click.option("--forbidden-scope")
+@click.option("--caused-by-event-id", multiple=True)
+@click.option("--additional-minutes", type=float)
+@click.option("--restore-active", is_flag=True, default=None)
+@click.option("--retry-event-id")
+def recover(
+    alias: str,
+    reason: str | None,
+    instruction: str | None,
+    allowed_scope: str | None,
+    forbidden_scope: str | None,
+    caused_by_event_id: tuple[str, ...],
+    additional_minutes: float | None,
+    restore_active: bool | None,
+    retry_event_id: str | None,
+) -> None:
+    """Request concrete native-approved recovery, or retry an applied repair."""
+    arguments = {key: value for key, value in {
+        'alias': alias, 'reason': reason, 'instruction': instruction,
+        'allowed_scope': allowed_scope, 'forbidden_scope': forbidden_scope,
+        'additional_minutes': additional_minutes, 'restore_active': restore_active,
+        'retry_event_id': retry_event_id,
+    }.items() if value is not None}
+    if caused_by_event_id:
+        arguments['caused_by_event_ids'] = list(caused_by_event_id)
+    try:
+        result = invoke_tool('approved_recovery', arguments, cwd=Path.cwd().resolve())
+    except (RunnerError, OSError, ValueError, yaml.YAMLError) as error:
+        _fail(error if isinstance(error, RunnerError) else RunnerError('operation-failed', str(error)))
+    _emit_result(result.document)
+    if result.failed:
+        raise click.exceptions.Exit(1)
+
+
 @main.command("continue", cls=OperationCommand, feature="continue")
 @click.option("--ticket-id")
 @click.option("--caused-by-event-id", multiple=True)

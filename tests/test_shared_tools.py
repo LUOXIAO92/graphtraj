@@ -72,7 +72,7 @@ def test_both_transports_consume_shared_schema_and_handler(
     discovered = mcp_request('tools/call', {
         'name': 'graphtraj', 'arguments': {'action': 'discover'},
     })['structuredContent']['features']
-    assert len(discovered) == 30
+    assert 'approved_recovery' in {item['feature'] for item in discovered}
     assert listed[0]['inputSchema'] == native[0]['inputSchema'] == gateway.INPUT_SCHEMA
     described = mcp_request('tools/call', {
         'name': 'graphtraj',

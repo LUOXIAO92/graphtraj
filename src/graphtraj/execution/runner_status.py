@@ -337,7 +337,8 @@ def require_execution_allowed(
     seen: set[str] = set()
     while current is not None and current not in seen:
         seen.add(current)
-        if (runner_directory / "sessions" / current / "stop.yml").exists():
+        stop_file = runner_directory / "sessions" / current / "stop.yml"
+        if stop_file.exists() and yaml.safe_load(stop_file.read_text()).get("resumed") is not True:
             raise RunnerError(
                 "subtree-stopped", f"{alias} belongs to stopped subtree {current}.",
             )

@@ -786,6 +786,36 @@ register_tool(
 )
 
 
+def recover_execution(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> ToolResult:
+    """Prepare native approval or retry the same applied recovery."""
+    from graphtraj.execution.approved_recovery import approved_recovery
+
+    result = approved_recovery(dict(arguments), cwd or Path.cwd())
+    return ToolResult(result, failed=result['recovery_status'] in {
+        'stale', 'resume-stale', 'resume-failed',
+    })
+
+
+register_tool(
+    'approved_recovery',
+    'Prepare exact administrative and time repairs for native approval, then resume the original '
+    'Session with explicit scope. No state changes before approval. Retry an applied recovery '
+    'using only alias and retry_event_id; time is never added twice. Equivalent to `agent-runner recover`.',
+    {'type': 'object', 'properties': {
+        'alias': {'type': 'string'},
+        'reason': {'type': 'string'},
+        'instruction': {'type': 'string'},
+        'allowed_scope': {'type': 'string'},
+        'forbidden_scope': {'type': 'string'},
+        'caused_by_event_ids': {'type': 'array', 'items': {'type': 'string'}},
+        'additional_minutes': {'type': 'number', 'description': 'Explicit time increment; preserves original clock and randomized allowance.'},
+        'restore_active': {'type': 'boolean', 'description': 'Correct Ticket/Team administrative state and reopen the same Round for authorized work.'},
+        'retry_event_id': {'type': 'string', 'description': 'Applied recovery event; retry continuation without another repair.'},
+    }, 'required': ['alias'], 'additionalProperties': False},
+    recover_execution, manual_ref='manuals/task-delivery/guide.md',
+)
+
+
 def read_reports(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> ToolResult:
     """Read the declared reports of an authorized direct child."""
     return ToolResult(read_session_reports(_string_argument(arguments, 'alias'), cwd or Path.cwd()))
@@ -976,6 +1006,7 @@ _CLI = {
     "swarm": (("agent-runner", "--swarm-input"), {"swarm_input": ("", "yaml")}),
     "send_instruction": (("agent-runner", "send"), {"caused_by_event_id": ("caused_by_event_ids", "value")}),
     "interrupt": (("agent-runner", "interrupt"), {}),
+    "approved_recovery": (("agent-runner", "recover"), {"caused_by_event_id": ("caused_by_event_ids", "value")}),
     "continue": (("agent-runner", "continue"), {"caused_by_event_id": ("caused_by_event_ids", "value")}),
     "pending_requests": (("agent-runner", "requests"), {}),
     "reply_to_request": (("agent-runner", "reply"), {

@@ -111,6 +111,14 @@ class RuntimePreparationAdapter(Protocol):
         rejection and execution failure must raise without local fallback.
         """
 
+    def native_recovery_approval(self, command: Sequence[str], proposal: dict) -> dict:
+        """Review and execute exact recovery through the user's selected native route.
+
+        The proposal contains before/after values and existing authority references.
+        Return an execution result or a native execution request. Missing capability,
+        denial and failure must raise; none permits unreviewed local execution.
+        """
+
     def preflight_runtime_context(
         self,
         *,

@@ -432,6 +432,7 @@ def _send_session_locked(
     reports_only: bool = False,
     system_notice: bool = False,
     retain_notice_channel: bool = False,
+    require_budget_permission: bool = False,
 ) -> Dict[str, str]:
     """Deliver input or restore the retained Context under the alias lock.
 
@@ -477,6 +478,11 @@ def _send_session_locked(
         else None
     )
     stopped = monitor is not None and monitor.is_stopped()
+    if stopped and require_budget_permission:
+        raise RunnerError(
+            "execution-budget-stopped",
+            "The Ticket stopped again before approved recovery could resume it.",
+        )
     from graphtraj.teams.team_replacement import require_active_session
 
     require_active_session(

@@ -120,14 +120,19 @@ def test_capture_and_native_refusal(tmp_path: Path, monkeypatch: pytest.MonkeyPa
 
 
 @pytest.mark.parametrize('entry', ['cli', 'json-line'])
+@pytest.mark.parametrize(('operation', 'capture_host'), [
+    ('send', True), ('replace', True), ('replace', False),
+])
 def test_root_completion_after_entry_and_send_exit(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
     fake_codex: FakeCodex,
     tmp_path: Path,
     entry: str,
+    operation: str,
+    capture_host: bool,
 ) -> None:
-    """CLI live delivery and JSON-line post-exit delivery retain the send destination."""
+    """Steering and replacement retain the original host after its entry exits."""
     root, _, _, environment = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path,
     )
@@ -144,6 +149,8 @@ def test_root_completion_after_entry_and_send_exit(
     environment.update({'CODEX_THREAD_ID': 'original-host',
                         'CODEX_HOME':str(tmp_path / 'owning-home'),
                         'HOST_TEST_ROOT':str(tmp_path)})
+    if not capture_host:
+        environment.pop('CODEX_THREAD_ID')
     batch = {'tasks': [{'ticket_id': '76', 'role': 'researcher', 'instruction': 'wait for release'}]}
     batch_file = tmp_path / 'batch.yml'
     batch_file.write_text(yaml.safe_dump(batch))
@@ -174,24 +181,65 @@ def test_root_completion_after_entry_and_send_exit(
         if entry == 'json-line':
             assert not (tmp_path / 'completed-received').exists()
             (tmp_path / 'release').touch()
-        wait_for_file(tmp_path / 'completed-received', timeout=15)
-        initial = json.loads((tmp_path / 'completed-received').read_text())
-        assert initial['alias'] == alias and initial['source'] == 'graphtraj'
+        if capture_host:
+            wait_for_file(tmp_path / 'completed-received', timeout=15)
+            initial = json.loads((tmp_path / 'completed-received').read_text())
+            assert initial['alias'] == alias and initial['source'] == 'graphtraj'
+        else:
+            wait_for_file(root / '.graphtraj/runner/sessions' / alias / 'execution.yml')
+            assert not (tmp_path / 'completed-received').exists()
         (tmp_path / 'release').unlink()
-        (tmp_path / 'completed-received').unlink()
+        (tmp_path / 'completed-received').unlink(missing_ok=True)
         events = [json.loads(line) for shard in (root / '.graphtraj/state/worldline').glob('*.jsonl')
                   for line in shard.read_text().splitlines()]
-        changed = dict(environment, CODEX_THREAD_ID='different-caller', CODEX_HOME=str(tmp_path / 'other-home'))
-        sent = run_process([str(installed_commands.runner), 'send', alias, '--instruction', 'later',
-                            '--caused-by-event-id', events[-1]['event_id']], cwd=root, env=changed, timeout=30)
-        assert sent.returncode == 0, sent.stdout + sent.stderr
-        assert yaml.safe_load(sent.stdout)['send_status'] == 'sent'
-        assert not (tmp_path / 'completed-received').exists()
+        changed = dict(environment,
+                       CODEX_THREAD_ID='different-caller' if capture_host else 'original-host',
+                       CODEX_HOME=str(tmp_path / ('other-home' if capture_host else 'owning-home')))
+        if operation == 'replace':
+            original_alias = alias
+            original_file = root / '.graphtraj/runner/sessions' / alias / 'mapping.yml'
+            original_bytes = original_file.read_bytes()
+            original_mode = original_file.stat().st_mode
+            stopped = run_process([str(installed_commands.runner), 'interrupt', alias],
+                                  cwd=root, env=environment, timeout=30)
+            assert stopped.returncode == 0, stopped.stdout + stopped.stderr
+            # The CLI owns a notice channel and waits for the new execution.
+            (tmp_path / 'release').touch()
+            sent = run_process([str(installed_commands.runner), 'replace', alias,
+                                '--caused-by-event-id', events[-1]['event_id']],
+                               cwd=root, env=changed, timeout=30)
+            assert sent.returncode == 0, sent.stdout + sent.stderr
+            alias = yaml.safe_load(sent.stdout)['replacement_alias']
+            assert alias != original_alias
+            replacement = root / '.graphtraj/runner/sessions' / alias / 'mapping.yml'
+            wait_for_file(replacement)
+            connection = yaml.safe_load(replacement.read_text())['parent_connection']
+            if capture_host:
+                assert connection == yaml.safe_load(original_bytes)['parent_connection']
+            else:
+                assert yaml.safe_load(original_bytes)['parent_connection'] is None
+                assert connection == {'runtime': 'codex', 'session': 'original-host',
+                                      'codex_home': str(tmp_path / 'owning-home')}
+            assert original_file.read_bytes() == original_bytes
+            assert original_file.stat().st_mode == original_mode
+            # A native host descriptor remains valid through public mapping reads.
+            status = run_process([str(installed_commands.runner), 'status', alias],
+                                 cwd=root, env=changed, timeout=30)
+            assert status.returncode == 0, status.stdout + status.stderr
+            assert yaml.safe_load(status.stdout)['aliases'][0]['alias'] == alias
+        else:
+            sent = run_process([str(installed_commands.runner), 'send', alias, '--instruction', 'later',
+                                '--caused-by-event-id', events[-1]['event_id']], cwd=root, env=changed, timeout=30)
+            assert sent.returncode == 0, sent.stdout + sent.stderr
+            assert yaml.safe_load(sent.stdout)['send_status'] == 'sent'
+        if operation == 'send':
+            assert not (tmp_path / 'completed-received').exists()
         (tmp_path / 'release').touch()
         wait_for_file(tmp_path / 'completed-received', timeout=15)
         wire = [json.loads(line) for line in (tmp_path / 'wire.jsonl').read_text().splitlines()]
         turns = [item for item in wire if item['request']['method'] == 'turn/start']
-        assert len(turns) == 2
+        assert len([item for item in turns if json.loads(item['request']['params']['toolOutput']['output'])['event'] == 'completed']) == (2 if capture_host else 1)
+        assert json.loads((tmp_path / 'completed-received').read_text())['alias'] == alias
         assert {item['home'] for item in turns} == {str(tmp_path / 'owning-home')}
     finally:
         (tmp_path / 'release').touch()

@@ -9,6 +9,7 @@ from pathlib import Path
 from graphtraj.configuration.project_roles import configured_role_name
 from graphtraj.execution.runner_batch import read_session_task
 from graphtraj.execution.runner_control import _require_project_events, _session_report_paths
+from graphtraj.execution.runner_connection import current_parent_connection, parent_connection
 from graphtraj.execution.runner_models import Project, RunnerError
 from graphtraj.workspace.runner_project import discover_project, run_git
 from graphtraj.execution.runner_status import (
@@ -22,6 +23,7 @@ from graphtraj.teams.team_round import (
 )
 from graphtraj.graph.ticket_graph import _load_states
 from graphtraj.graph.delivery_state import read_team
+from graphtraj.runtimes import runtime_adapter
 
 
 def require_active_session(
@@ -122,16 +124,21 @@ def _replace_stopped_session(
         f"{path.name}:\n{path.read_text(encoding='utf-8')}"
         for path in _session_report_paths(alias, cwd) if path.is_file()
     )
-    replacement, _ = _run_agent(
-        project, task, task.role, worktree, directory, traces,
-        None, None, None, mapping["parent"], retained,
-        "Continue this Team seat from previous Session {0} and Trace {1}.\n"
-        "Accepted Ticket and constraints:\n{2}\n"
-        "Current commit: {3}\n"
-        "Valid retained evidence: {1}\n"
-        "Previous Session reports supplied by the authorized replacement:\n{5}\n"
-        "Remaining work: continue only the current {4} Team seat, preserving closed Team Round evidence."
-        .format(alias, prior_trace, task.ticket_content, current_commit, task.role, reports),
-        register_member=True, replaces_alias=alias, wait_for_completion=False,
-    )
+    # Replacing a root seat keeps its owning host, including when native
+    # approval executes outside that host's original calling context.
+    host = (mapping.get("parent_connection") or current_parent_connection()
+            or (runtime_adapter.current_host_connection() if mapping["parent"] is None else None))
+    with parent_connection(host):
+        replacement, _ = _run_agent(
+            project, task, task.role, worktree, directory, traces,
+            None, None, None, mapping["parent"], retained,
+            "Continue this Team seat from previous Session {0} and Trace {1}.\n"
+            "Accepted Ticket and constraints:\n{2}\n"
+            "Current commit: {3}\n"
+            "Valid retained evidence: {1}\n"
+            "Previous Session reports supplied by the authorized replacement:\n{5}\n"
+            "Remaining work: continue only the current {4} Team seat, preserving closed Team Round evidence."
+            .format(alias, prior_trace, task.ticket_content, current_commit, task.role, reports),
+            register_member=True, replaces_alias=alias, wait_for_completion=False,
+        )
     return {"alias": alias, "replacement_alias": replacement, "team_ordinal": generation}

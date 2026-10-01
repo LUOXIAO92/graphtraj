@@ -16,6 +16,7 @@ from click.testing import CliRunner
 from conftest import FakeCodex, InstalledCommands, run_process, wait_for_file
 from graphtraj.execution import approved_recovery as recovery
 from graphtraj.execution.runner_models import RunnerError
+from graphtraj.execution.runner_status import runtime_caller
 from graphtraj.graph.delivery_worldline import read_worldline
 from graphtraj.interfaces import local_tool
 from graphtraj.interfaces.cli.agent_runner import main
@@ -75,6 +76,107 @@ class NativeApproval:
         if self.mode in {'denied', 'failed'}:
             raise RunnerError('native-approval-' + self.mode, self.mode)
         return recovery.apply_approved_recovery(proposal, self.root)
+
+
+def test_recovered_unchanged_result_returns_to_integration(
+    target: tuple, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """New recovery evidence can be accepted at the same commit and Round."""
+    root, ticket, mapping, arguments = target
+    state = ticket.parent.parent
+    runner = root / '.graphtraj/runner'
+
+    def execute(feature: str, arguments: dict) -> dict:
+        """Exercise the registered single-tool entry under the test caller binding."""
+        return local_tool.bind(root)({
+            'action': 'execute', 'feature': feature, 'arguments': arguments,
+        }).document
+
+    execute('interrupt', {'alias': mapping['alias']})
+    before = read_worldline(state, root)
+    accepted = next(event for event in reversed(before) if event['event'] == 'team-round-accepted')
+    original = next(event for event in before if event['event_id'] == accepted['submission_id'])
+    candidate = original['candidate']
+    original_evidence = {ref: (root / ref).read_bytes() for ref in original['evidence_refs']}
+    dev = Path(mapping['worktree_path']).parent / 'dev'
+    dev_commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=dev, text=True).strip()
+    author = yaml.safe_load((runner / 'sessions' / original['alias'] / 'mapping.yml').read_text())
+    adapter = NativeApproval(root, 'automatic')
+    monkeypatch.setattr(recovery.runtime_adapter, 'select_runtime_adapter', lambda runtime: adapter)
+    received = []
+
+    def resume(*args: object, **kwargs: object) -> dict:
+        """Capture the recovered Session's actual continuation payload."""
+        received.append(json.loads(args[1]))
+        assert args[3]['session'] == mapping['session']
+        return {'alias': args[0], 'session': mapping['session'], 'send_status': 'sent'}
+
+    monkeypatch.setattr(recovery, '_send_session_locked', resume)
+    recovered = invoke(root, {**arguments, 'additional_minutes': 0})
+    assert recovered['recovery_status'] == 'resumed'
+    assert received[0]['allowed_scope'] == arguments['allowed_scope']
+    assert recovered['recovery_event_id'] in received[0]['caused_by_event_ids']
+    assert recovered['proposal']['before']['budget'] == recovered['proposal']['after']['budget']
+    retained = read_worldline(state, root)
+    old_decision = {
+        'submission_id': original['event_id'], 'commit': candidate, 'decision': 'accepted',
+        'reason': 'Recovery checks completed.', 'evidence_refs': original['evidence_refs'],
+    }
+    integration = {'ticket_id': '83', 'validation_command': [
+        sys.executable, '-c',
+        "from pathlib import Path; assert Path('TEAM_ROUND_DELIVERED.txt').read_text() == 'complete team round\\n'",
+    ]}
+    with runtime_caller(runner, author['parent']):
+        with pytest.raises(ValueError):
+            execute('decide_result', old_decision)
+        with pytest.raises(ValueError):
+            execute('ticket_integrate', integration)
+    assert read_worldline(state, root) == retained
+
+    # This is a new result of the authorized recovery work, not another decision
+    # on the old submission. Neither a source commit nor a new Round is needed.
+    # Parent notification transport is covered separately; do not wake another
+    # fixture execution while assessing this retained result.
+    monkeypatch.setattr('graphtraj.execution.runner_control.deliver_parent_event',
+                        lambda *args: {'delivery': 'received'})
+    with runtime_caller(runner, original['alias']):
+        report = execute('submit_report', {
+            'name': Path(author['report_files'][0]).name,
+            'text': 'Authorized recovery checks completed; the accepted artifact is unchanged.',
+        })['report']
+        submitted = execute('submit_result', {
+            'commit': candidate, 'result_refs': original['result_refs'],
+            'evidence_refs': [report], 'completion': 'Recovery verification completed without source changes.',
+        })
+    assert submitted['event_id'] != original['event_id']
+    assert submitted['round'] == original['round']
+    assert submitted['alias'] == original['alias']
+    assert submitted['session'] == original['session']
+    decision = {**old_decision, 'submission_id': submitted['event_id'],
+                'evidence_refs': submitted['evidence_refs']}
+    retained = read_worldline(state, root)
+    with runtime_caller(runner, original['alias']), pytest.raises(RunnerError):
+        execute('decide_result', decision)
+    with runtime_caller(runner, author['parent']):
+        with pytest.raises(ValueError):
+            execute('decide_result', {**decision, 'commit': '0' * 40})
+        assert read_worldline(state, root) == retained
+        fresh = execute('decide_result', decision)
+        integrated = execute('ticket_integrate', integration)
+    assert integrated['status'] == 'integrated'
+    assert integrated['candidate'] == candidate
+    after = read_worldline(state, root)
+    assert after[:len(before)] == before
+    assert accepted in after and fresh in after
+    assert sorted(path.name for path in (ticket / 'teams/1/rounds').iterdir()) == ['1']
+    assert subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=author['worktree_path'], text=True).strip() == candidate
+    assert yaml.safe_load((ticket / 'execution-budget.yml').read_text()) == recovered['proposal']['after']['budget']
+
+    assert all((root / ref).read_bytes() == content for ref, content in original_evidence.items())
+    assert subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=dev, text=True).strip() == dev_commit
+    stop = recovered['proposal']['before']['stop']
+    assert stop is not None
+    assert yaml.safe_load((runner / 'sessions' / mapping['alias'] / 'stop.yml').read_text()) == {**stop, 'resumed': True}
 
 
 @pytest.mark.parametrize('mode', ['human', 'automatic', 'existing-authority'])

@@ -21,6 +21,15 @@ from graphtraj.runtimes.codex.app_server import CodexAppServer, CodexServerReque
 from graphtraj.runtimes.codex.stop_hook import main as stop_hook
 
 
+def test_binding_description_delivers_manual(tmp_path: Path) -> None:
+    """Describe the binding without Main authority or executing a native hook."""
+    result = bind(tmp_path)({'action': 'describe', 'feature': 'bind_main_finalize'})
+
+    assert not result.failed
+    assert result.document['manual']
+    assert result.document['input_schema']['required'] == ['summary_issue']
+
+
 PEER = r'''
 import json, os, sys
 from pathlib import Path

@@ -1038,6 +1038,7 @@ register_tool(
     {'type': 'object', 'properties': {'summary_issue': {'type': 'string'}},
      'required': ['summary_issue'], 'additionalProperties': False},
     bind_main_finalize,
+    manual_ref="manuals/task-delivery/guide.md",
 )
 TOOLS['bind_main_finalize'] = replace(
     TOOLS['bind_main_finalize'], cli_path=('graphtraj', 'bind-finalize'),

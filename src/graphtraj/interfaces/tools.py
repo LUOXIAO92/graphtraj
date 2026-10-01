@@ -455,6 +455,27 @@ def read_alias_status(
     return ToolResult(response.document, failed=not response.succeeded)
 
 
+def read_parent_status(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> ToolResult:
+    """Observe only the caller root's recorded Runtime host parent."""
+    from graphtraj.execution.parent_status import parent_status
+
+    result = parent_status(cwd or Path.cwd(), arguments.get('timeout_seconds', 0))
+    return ToolResult(result, failed=result['outcome'] in {'timeout', 'error'})
+
+
+register_tool(
+    'parent_status',
+    'Read a root Agent\'s recorded owning host activity and latest turn metadata, optionally '
+    'waiting a finite interval for native idle within the caller\'s remaining execution budget. '
+    'No input is sent. Main cannot wait on itself.',
+    {'type': 'object', 'properties': {
+        'timeout_seconds': {'type': 'number', 'default': 0,
+                            'description': 'Zero reads once; a finite positive timeout waits for idle. Choose within the remaining execution budget.'},
+    }, 'additionalProperties': False},
+    read_parent_status, manual_ref='manuals/task-delivery/guide.md',
+)
+
+
 def _string_argument(arguments: Mapping[str, Any], name: str) -> str:
     """Return one required string argument without restating the operation."""
 
@@ -1003,6 +1024,7 @@ _CLI = {
     }),
     "ticket_integrate": (("graphtraj", "ticket", "integrate"), {"role": ("role", "yaml-value")}),
     "alias_status": (("agent-runner", "status"), {}),
+    "parent_status": (("agent-runner", "parent-status"), {}),
     "swarm": (("agent-runner", "--swarm-input"), {"swarm_input": ("", "yaml")}),
     "send_instruction": (("agent-runner", "send"), {"caused_by_event_id": ("caused_by_event_ids", "value")}),
     "interrupt": (("agent-runner", "interrupt"), {}),

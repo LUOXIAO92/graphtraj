@@ -673,6 +673,51 @@ class CodexAppServer:
             raise self._protocol_failure('thread/read returned a different native Session.')
         return thread
 
+    async def subscribe_host(self, thread_id: str) -> None:
+        """Rejoin an already-loaded host to receive its native lifecycle events.
+
+        Codex's public resume operation rejoins a loaded thread. Supply no
+        history, settings or input; refuse an unloaded host rather than asking
+        to restore it. The server still owns admission and provider checks.
+        """
+        thread = await self.read_thread(thread_id)
+        if thread.get('status', {}).get('type') not in {'active', 'idle'}:
+            raise CodexAdapterError('RUNTIME_REQUEST_INVALID', 'The owning host is not loaded and available.')
+        response = await self._call('thread/resume', {
+            'threadId': _native_id(thread_id), 'excludeTurns': True,
+        })
+        joined = response.get('thread')
+        if not isinstance(joined, dict) or joined.get('id') != thread_id:
+            raise self._protocol_failure('Host subscription returned a different native Session.')
+
+    async def read_host_status(self, thread_id: str) -> dict[str, Any]:
+        """Read host activity and latest turn metadata without conversation items.
+
+        These are successive native observations, not an atomic snapshot.
+        Rechecking activity after the turn read avoids treating an earlier idle
+        observation as proof that a subsequently active host is still idle.
+        """
+        response = await self._call('thread/turns/list', {
+            'threadId': _native_id(thread_id), 'limit': 1, 'itemsView': 'notLoaded',
+        })
+        turns = response.get('data')
+        if not isinstance(turns, list):
+            raise self._protocol_failure('Host turn metadata is unavailable.')
+        turn = None
+        if turns:
+            latest = turns[0]
+            if (not isinstance(latest, dict) or not isinstance(latest.get('id'), str)
+                    or latest.get('status') not in {'inProgress', 'completed', 'interrupted', 'failed'}):
+                raise self._protocol_failure('Invalid host turn metadata.')
+            turn = {key: latest[key] for key in ('id', 'status')}
+        thread = await self.read_thread(thread_id)
+        status = thread.get('status')
+        if not isinstance(status, dict) or status.get('type') not in {
+            'active', 'idle', 'notLoaded', 'systemError',
+        }:
+            raise self._protocol_failure('Host activity is unavailable.')
+        return {'session': thread_id, 'activity': status['type'], 'turn': turn}
+
     async def fork_session(self, parent: dict[str, Any]) -> CodexSession:
         """Fork native history with the source's current model/provider unchanged.
 

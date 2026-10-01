@@ -72,7 +72,7 @@ class OperationCommand(click.Command):
         """Open Runner resources only after Click has handled help and parsing."""
         tool = TOOLS[self.feature]
         if tool.cli_path[0] == "agent-runner" and self.feature not in {
-            "alias_status", "pending_requests", "session_reports",
+            "alias_status", "parent_status", "pending_requests", "session_reports",
         }:
             from graphtraj.interfaces.cli.agent_runner import _budget_notices
 

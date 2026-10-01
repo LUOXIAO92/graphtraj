@@ -163,6 +163,19 @@ def main_session(instruction_file: Path, resume: str | None) -> None:
         _fail(RunnerError('invalid-input', str(error)))
 
 
+@main.command(cls=OperationCommand, feature="parent_status")
+@click.option('--timeout-seconds', default=0.0, type=float)
+def parent_status(timeout_seconds: float) -> None:
+    """Observe the root caller's owning host without sending it input."""
+    try:
+        result = invoke_tool('parent_status', {'timeout_seconds': timeout_seconds}, cwd=Path.cwd().resolve())
+    except (RunnerError, ValueError) as error:
+        _fail(RunnerError(getattr(error, 'code', 'invalid-input'), str(error)))
+    _emit_result(result.document)
+    if result.failed:
+        raise SystemExit(1)
+
+
 @main.command(cls=OperationCommand, feature="alias_status")
 @click.argument("aliases", nargs=-1, required=False)
 @click.option(

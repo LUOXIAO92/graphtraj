@@ -171,6 +171,9 @@ class RuntimeAdapter(RuntimePreparationAdapter, Protocol):
     def send_host_event(self, connection: Mapping[str, Any], event: dict[str, str]) -> dict:
         """Forward an event to the captured owning host, without creating a Session."""
 
+    def parent_host_status(self, connection: Mapping[str, Any], timeout_seconds: float) -> dict:
+        """Observe a captured host, optionally waiting within a bounded interval."""
+
     def read_session_identity(self, session_directory: Path) -> str:
         """Attest the native Session identity from its retained Runtime record."""
 

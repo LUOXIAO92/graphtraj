@@ -18,14 +18,54 @@ report delivery through the direct relationship, not repeated implementation or
 Review. Read the current state before requesting a transition; Runtime recovery
 or scope correction alone does not establish an implementation rejection or
 require another Round. Use the public operation that admits the retained state.
-If none does, return the exact unsupported transition and retained evidence to
-the parent rather than manufacturing a Round or editing private state files.
+When continuation requires administrative or time repair, use the approved
+recovery entry below instead of cycling through incompatible state transitions.
+Return an unavailable capability or rejected repair to the actual parent with
+its evidence; do not manufacture a Round or edit private state files.
 
 For a confirmed implementation defect, cite its accepted requirement and actual
 violation. Keep the correction with its responsible executor. Reuse unchanged
 checks and reviews, verify only the affected correction and submit the new
 version through the common result protocol. A new Round or Session does not
 reset project-specific validation limits or expand the task's budget.
+
+## Recover through the selected native approval
+
+Use `agent-runner recover <alias>` or the shared `approved_recovery` operation
+to prepare one concrete repair and continuation of the original Session. Supply
+the reason, continuation instruction, allowed and forbidden scope, and actual
+causal event IDs. Include `additional_minutes` only for the time increment
+being requested, and `restore_active` when the retained administrative state
+needs repair. The proposal retains the original clock, randomized allowance,
+stop history, source acceptance, Git integration and Session identity.
+
+`requires-native-approval` means the result contains a pending native execution
+request. It is not approval and has not applied the repair. Submit that exact
+returned request through the Runtime's configured human or automatic reviewer.
+Existing authority references are evidence for that reviewer, not approval
+tokens the model can manufacture. Preserve the proposed command and scope;
+denial or approval failure does not authorize an alternate execution path.
+
+After approval, read the actual result. `stale` means the approved snapshot no
+longer matches the state to repair. `resume-failed` or `resume-stale` means the
+result must be examined for already-applied changes and the continuation
+failure; do not assume nothing happened or add the time again. `resumed`
+confirms the reported continuation outcome, not completion of its work.
+The resumed instruction carries the latest allowed and forbidden scope and
+actual causal IDs to the original Session.
+
+If a repair was applied but continuation needs retry, use only the original
+alias and returned `recovery_event_id` as `retry_event_id`:
+
+```text
+agent-runner recover <alias> --retry-event-id <applied-recovery-event>
+```
+
+This retries the retained continuation rather than applying another repair or
+time increment. Changed circumstances requiring a different repair need a new
+concrete proposal through the same approval mechanism. Existing authority,
+relationship, stop and permission checks still apply. For full parameters see
+[command inputs](command-inputs.md#approved-recovery).
 
 ## Budget stops
 
@@ -40,7 +80,8 @@ assessment. Apply any user-selected stop instruction within its authorized scope
 particular Skill is not a prerequisite for receiving or handling a stop. A notice, recovery,
 report collection or replacement does not authorize extra execution time.
 
-After actual authorization, the supported sampled-stop continuation is:
+For a sampled stop that needs no additional administrative or time repair, the
+existing narrow continuation after actual authorization remains:
 
 ```text
 agent-runner continue --ticket-id <id> --caused-by-event-id <authorization-or-decision-event>

@@ -63,6 +63,41 @@ report filename grants neither authority nor completion. Preserve previous
 submissions, decisions and evidence. A missing acceptance fact must come from
 its authorized owner, not inferred text or direct state-file edits.
 
+## Approved recovery
+
+Use the alias of the original Session with the exact repair reason, permitted
+work and continuation instruction:
+
+```text
+agent-runner recover <alias> --reason <reason> --instruction <continuation> --allowed-scope <allowed-work> --forbidden-scope <excluded-work> --caused-by-event-id <actual-authority-event> [--additional-minutes <increment>] [--restore-active]
+```
+
+Repeat `--caused-by-event-id` for additional actual causal references. The
+shared `approved_recovery` operation uses `alias`, `reason`, `instruction`,
+`allowed_scope`, `forbidden_scope`, `caused_by_event_ids`, optional
+`additional_minutes` and optional `restore_active` with the same semantics.
+
+The initial `requires-native-approval` result contains a concrete native
+execution request. Submit that exact request to the selected Runtime's existing
+human or automatic approval mechanism. Receiving it, or citing an authority
+event, is not permission to execute it by another route. No repair is applied
+before the approved execution runs.
+
+Keep the returned applied changes and `recovery_event_id`. A `stale` result
+does not apply an outdated proposal. For `resume-stale` or `resume-failed`,
+inspect which changes were already applied and the actual continuation failure.
+Retry an applied recovery using only the original alias and its event:
+
+```text
+agent-runner recover <alias> --retry-event-id <applied-recovery-event>
+```
+
+The corresponding tool arguments are `alias` and `retry_event_id`; do not add
+another time increment or repair request to that retry. `resumed` reports the
+continuation outcome, not that the task is complete. See
+[recovery decisions](recovery.md#recover-through-the-selected-native-approval)
+for retained history, native rejection and changed-state handling.
+
 ## Integrate accepted files
 
 ```text

@@ -258,8 +258,9 @@ def _resume_locked(project: Any, applied: dict, directory: Path) -> dict:
     current, _ = _snapshot(project, alias)
     expected = {**proposal['after'], 'latest_ticket_event': applied['event_id']}
     differences = _differences(expected, current)
-    # A failed native startup can change transport identity, never Session ownership.
-    for key in ('execution_id', 'worker_pid', 'runtime_pid'):
+    # Native startup replaces transport and clears the terminal summary before
+    # turn admission. These changes do not alter Session ownership or authority.
+    for key in ('execution_id', 'worker_pid', 'runtime_pid', 'control_directory', 'last_outcome'):
         differences = [item for item in differences if item['field'] != 'mapping.' + key]
     if differences:
         return {**result, 'recovery_status': 'resume-stale', 'differences': differences}

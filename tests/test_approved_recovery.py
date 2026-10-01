@@ -189,12 +189,14 @@ def test_codex_prepares_native_review_without_writes_and_cli_matches(target: tup
     assert (ticket / 'ticket.yml').read_bytes() == before
 
 
+@pytest.mark.parametrize('fail_start', [False, True])
 def test_native_approved_command_reaches_original_session_with_exact_scope(
     target: tuple,
     installed_commands: InstalledCommands,
     fake_codex: FakeCodex,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    fail_start: bool,
 ) -> None:
     """Execute the real Adapter/Worker resume path using the native protocol peer."""
     root, ticket, mapping, arguments = target
@@ -210,6 +212,19 @@ def test_native_approved_command_reaches_original_session_with_exact_scope(
         f"Path({str(received)!r}).write_text(json.dumps({{'argv': sys.argv, 'instruction': runtime_prompt}}))\n"
         "lifecycle_action = None",
     )
+    if fail_start:
+        original_peer = Path(__file__).with_name('runner_codex_peer.py')
+        peer = tmp_path / 'fail-first-turn.py'
+        marker = tmp_path / 'turn-start-failed'
+        peer.write_text(original_peer.read_text().replace(
+            "    elif method == 'turn/start':\n",
+            "    elif method == 'turn/start':\n"
+            f"        if resumed and not Path({str(marker)!r}).exists():\n"
+            f"            Path({str(marker)!r}).touch()\n"
+            "            emit({'id': request['id'], 'error': {'code': -32000, 'message': 'controlled turn/start failure'}})\n"
+            "            continue\n",
+        ))
+        script = script.replace(str(original_peer), str(peer))
     fake_codex.executable.write_text(script)
     # The public stop and budget stop are separate restrictions, both retained.
     stopped = run_process([str(installed_commands.runner), 'interrupt', mapping['alias']], cwd=root)
@@ -225,6 +240,15 @@ def test_native_approved_command_reaches_original_session_with_exact_scope(
                               env=dict(os.environ), timeout=30)
     assert executed.returncode == 0, executed.stderr
     result = yaml.safe_load(executed.stdout)
+    if fail_start:
+        assert result['recovery_status'] == 'resume-failed', result
+        assert result['applied'] is True
+        assert not received.exists()
+        directory = root / '.graphtraj/runner/sessions' / mapping['alias']
+        failed_mapping = yaml.safe_load((directory / 'mapping.yml').read_text())
+        assert failed_mapping['session'] == mapping['session']
+        assert failed_mapping['control_directory'] != mapping['control_directory']
+        result = invoke(root, {'alias': mapping['alias'], 'retry_event_id': result['recovery_event_id']})
     assert result['recovery_status'] == 'resumed', result
     wait_for_file(received)
     observation = json.loads(received.read_text())

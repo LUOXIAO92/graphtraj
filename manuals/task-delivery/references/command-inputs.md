@@ -63,6 +63,18 @@ report filename grants neither authority nor completion. Preserve previous
 submissions, decisions and evidence. A missing acceptance fact must come from
 its authorized owner, not inferred text or direct state-file edits.
 
+## Observe the owning host
+
+From a bound root Agent, `agent-runner parent-status` reads its recorded host
+parent's activity and latest turn metadata once. The shared `parent_status`
+operation takes `timeout_seconds`, defaulting to zero. A finite positive value,
+also available as CLI `--timeout-seconds`, waits for native idle events up to
+that duration. Keep the wait within the execution budget. No alias, recipient
+or connection override is accepted, and no input is sent to the parent.
+Timeout and observation errors are returned as failures, not successful idle
+observations. Main and children without a recorded Runtime host parent cannot
+use this operation to choose another Session to observe.
+
 ## Approved recovery
 
 Use the alias of the original Session with the exact repair reason, permitted

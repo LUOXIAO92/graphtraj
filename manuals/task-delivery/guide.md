@@ -59,6 +59,15 @@ Session. A channel write or forwarding acknowledgement is not evidence that
 the parent processed the event. Handle the event's result or explicit request
 through the existing result/reply operation.
 
+A root Agent can use `agent-runner parent-status` or `parent_status` to observe
+its recorded owning host without sending input. With a positive finite timeout,
+the operation waits on native events for that host to become idle. Choose the
+timeout within the remaining execution budget. The caller supplies no parent
+identity or connection; Main cannot synchronously wait for its own turn to end.
+An unavailable operation, timeout or failed observation is not proof of idle.
+After observing idle, notification validation still needs an ordinary event to
+reach the same Main and be handled there.
+
 The authorized parent or task-authorized caller assesses the submitted version
 against the task's criteria, reusing valid evidence. Use `decide-result` to record
 the exact submission/version, accepted or rejected decision, reason and evidence.

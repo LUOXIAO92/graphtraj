@@ -92,6 +92,27 @@ A failed integration or necessary check does not complete the Ticket or unlock i
 successors. Finish when the accepted scope is integrated or authorized progress is
 blocked; report exact results and remaining obstacles.
 
+## Main finalize checking
+
+For a supported owning Runtime, `graphtraj bind-finalize --summary-issue <ref>`
+or the shared `bind_main_finalize` operation returns a Main binding and native
+hook material. Review and adopt that material through the existing Runtime
+configuration. It applies to the bound Main, not every Agent sharing a project
+or prompt. Binding preparation alone is not installation or observed receipt.
+
+The completion checker uses the inherited native context and Main's actual
+model, with the summary Issue, current DAG and referenced Tickets as the state
+authority. Completed work or legitimate waiting for an execution, event or
+approval permits Main to finish its turn. Actionable unfinished nodes return
+an exception to the same Main. Keep real user stops and execution limits;
+the check grants no approval, time extension or acceptance. Unreadable state or
+checker errors remain explicit failures, not a completed-task conclusion.
+
+Ordinary children and the checker itself do not run Main's finalize hook.
+This task-state check does not add automatic code Review or another task ledger.
+Verify actual host behavior after adopting a fixed installation and report only
+observable context, model and optional cache-usage evidence.
+
 ## Limits and recovery
 
 Honor the existing Ticket budget and Runner's enforced stop. Budget notices go to

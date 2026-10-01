@@ -29,6 +29,7 @@ where = ["src"]
 [tool.setuptools.package-data]
 graphtraj = [
     "runtimes/codex/policy/*",
+    "prompts/*.md",
 ]
 
 # Method guides are delivered data, not importable package resources and not

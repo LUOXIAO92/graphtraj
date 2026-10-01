@@ -505,6 +505,35 @@ decision before integration completes.
 Cleanup verifies integration and a clean disposable Worktree, removes safe
 live mappings and the Ticket Worktree/branch, and preserves durable evidence.
 
+## Main completion checks
+
+From the existing owning Main context, bind a summary Issue or equivalent task
+reference:
+
+```sh
+graphtraj bind-finalize --summary-issue '<summary-issue-reference>'
+```
+
+The shared tool operation is `bind_main_finalize` with `summary_issue`. The
+result provides the binding and native hook material for review and adoption;
+returning that material does not install it or prove that the current host has
+run it. Adopt it through the Runtime's supported hook configuration while
+preserving existing settings and permissions.
+
+The hook is scoped to its actual Main. It delegates a state check using the
+Main's available native context and current model, then checks the summary
+Issue, DAG and referenced Tickets. Completed work and legitimate waiting may
+finish the turn. Actionable unfinished nodes are returned to the same Main so
+it continues. Ordinary children and the checker do not acquire a recursive
+completion hook; user interruption and execution limits remain effective.
+
+The checker does not redo code review or reconstruct requirements from native
+Traces. Reference or checker failures are not completion evidence. Native
+inheritance can preserve a reusable prompt prefix, but cache reuse is not a
+correctness condition or guaranteed saving. Current-host operation must be
+verified after adopting a fixed installation; controlled interface checks and
+hook material alone do not establish it.
+
 ## Runtime Adapter boundary
 
 The task graph, Session ownership, result decisions, budgets and retained history

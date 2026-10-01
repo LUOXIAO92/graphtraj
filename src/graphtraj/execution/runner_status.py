@@ -31,7 +31,8 @@ def runtime_caller(runner_directory: Path, identity: str | None) -> Iterator[Non
 
     This is not a CLI/MCP identity input. Native helpers use their actual thread
     ID, which cannot match a formal alias, and receive summary-only observation.
-    The Adapter verifies their native parent chain before entering this scope.
+    The Adapter verifies their native parent chain or its own creation-time
+    Session binding before entering this scope.
     """
     token = _runtime_caller.set((runner_directory.resolve(), identity))
     try:

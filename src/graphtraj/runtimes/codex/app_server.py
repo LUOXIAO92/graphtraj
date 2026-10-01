@@ -230,6 +230,7 @@ class CodexAppServer:
         self._sequence = 0
         self._sessions: dict[str, CodexSession] = {}
         self._thread_parents: dict[str, str | None] = {}
+        self._token_usage: dict[str, dict[str, Any]] = {}
         self._resuming: set[str] = set()
         self._turns: dict[tuple[str, str], _ExecutionState] = {}
         self._active: dict[str, str | None] = {}
@@ -662,6 +663,61 @@ class CodexAppServer:
         self._thread_parents[thread_id] = parent
         return parent
 
+    async def read_thread(self, thread_id: str) -> dict[str, Any]:
+        """Read native identity and current settings without conversation content."""
+        response = await self._call('thread/read', {
+            'threadId': _native_id(thread_id), 'includeTurns': False,
+        })
+        thread = response.get('thread')
+        if not isinstance(thread, dict) or thread.get('id') != thread_id:
+            raise self._protocol_failure('thread/read returned a different native Session.')
+        return thread
+
+    async def fork_session(self, parent: dict[str, Any]) -> CodexSession:
+        """Fork native history with the source's current model/provider unchanged.
+
+        The caller binds the returned handle to its actual Main before starting
+        execution. Fork lineage is checked, never represented as native parent
+        metadata. No private rollout or replacement instructions are supplied.
+        """
+        if any(not isinstance(parent.get(k), str) or not parent[k]
+               for k in ('id', 'model', 'modelProvider')):
+            raise CodexAdapterError('RUNTIME_REQUEST_INVALID', 'Main model metadata is unavailable.')
+        response = await self._call('thread/fork', {
+            'threadId': parent['id'], 'model': parent['model'],
+            'modelProvider': parent['modelProvider'], 'excludeTurns': True,
+        })
+        thread = response.get('thread')
+        if (not isinstance(thread, dict) or not isinstance(thread.get('id'), str)
+                or not thread['id'] or thread['id'] == parent['id']
+                or thread['id'] in self._sessions
+                or thread.get('forkedFromId') != parent['id']
+                or response.get('model') != parent['model']
+                or response.get('modelProvider') != parent['modelProvider']):
+            raise self._protocol_failure('thread/fork did not preserve the bound source and model.')
+        session = CodexSession(thread['id'], None)
+        self._sessions[session.thread_id] = session
+        return session
+
+    async def is_current_turn(self, session: str, turn: str) -> bool:
+        """Check the exact live turn without loading dialogue or execution items."""
+        thread = await self.read_thread(session)
+        if thread.get('status', {}).get('type') != 'active':
+            return False
+        response = await self._call('thread/turns/list', {
+            'threadId': session, 'limit': 1, 'itemsView': 'notLoaded',
+        })
+        turns = response.get('data')
+        if not isinstance(turns, list) or not turns or not isinstance(turns[0], dict):
+            raise self._protocol_failure('The active Main turn could not be verified.')
+        return turns[0].get('id') == turn and turns[0].get('status') == 'inProgress'
+
+    def token_usage(self, session: CodexSession) -> dict[str, Any] | None:
+        """Return only usage actually delivered by the native host, if available."""
+        self._require_session(session)
+        usage = self._token_usage.get(session.thread_id)
+        return json.loads(json.dumps(usage)) if usage is not None else None
+
     async def next_notification(self, *, timeout: float | None = None) -> dict[str, Any]:
         """Receive a raw native notification; one observer drains this connection.
 
@@ -809,6 +865,9 @@ class CodexAppServer:
                     state.last_message = item['text']
             elif message['method'] == 'turn/completed':
                 self._complete(_native_id(params['threadId']), _native_turn(params['turn']))
+            elif message['method'] == 'thread/tokenUsage/updated':
+                if isinstance(params.get('tokenUsage'), dict):
+                    self._token_usage[_native_id(params['threadId'])] = params['tokenUsage']
             self._notifications.put_nowait(message)
         else:
             if ('result' in message) == ('error' in message):

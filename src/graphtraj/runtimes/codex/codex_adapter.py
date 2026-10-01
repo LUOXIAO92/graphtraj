@@ -14,7 +14,7 @@ import tomllib
 import threading
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Tuple
+from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
 
 import yaml
 
@@ -323,6 +323,42 @@ class CodexRuntimeAdapter:
         from graphtraj.runtimes.codex.host_events import current_connection
 
         return current_connection()
+
+    def verify_finalize_main(self, connection: dict) -> str:
+        """Verify the captured Main through the owning Codex daemon."""
+        from graphtraj.runtimes.codex.finalize import verify_main
+
+        return verify_main(connection)
+
+    def finalize_hook(self, path: Path, binding: dict) -> dict:
+        """Return the supported command Stop carrier for this exact Main."""
+        from graphtraj.runtimes.codex.finalize import hook
+
+        return hook(path, binding)
+
+    def finalize_event(self, binding: dict, event: dict) -> dict | None:
+        """Filter native Stops before Runner creates any checker."""
+        from graphtraj.runtimes.codex.finalize import event_context
+
+        return event_context(binding, event)
+
+    def check_main_finalize(
+        self,
+        binding: dict,
+        context: dict,
+        prompt: str,
+        created: Callable[[str], None],
+    ) -> dict | None:
+        """Run the same-model native fork using the actual owning connection."""
+        from graphtraj.runtimes.codex.finalize import check
+
+        return check(binding, context, prompt, created)
+
+    def finalize_response(self, result: dict | None, continued: bool) -> dict:
+        """Render native continuation, including bounded error handling."""
+        from graphtraj.runtimes.codex.finalize import response
+
+        return response(result, continued)
 
     def send_host_event(self, connection: Mapping[str, Any], event: dict[str, str]) -> dict:
         """Use the existing host daemon rather than a short-lived caller receiver."""

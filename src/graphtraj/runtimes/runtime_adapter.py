@@ -139,6 +139,27 @@ class RuntimeAdapter(RuntimePreparationAdapter, Protocol):
     def current_host_connection(self) -> dict | None:
         """Capture this Runtime's owning host, or None when no host is available."""
 
+    def verify_finalize_main(self, connection: dict) -> str:
+        """Verify the captured Main host and return its native Session identity."""
+
+    def finalize_hook(self, path: Path, binding: dict) -> dict:
+        """Return host-specific adoption material for an already captured binding."""
+
+    def finalize_event(self, binding: dict, event: dict) -> dict | None:
+        """Normalize an actual owning-host end event, ignoring unrelated events."""
+
+    def check_main_finalize(
+        self,
+        binding: dict,
+        context: dict,
+        prompt: str,
+        created: Callable[[str], None],
+    ) -> dict | None:
+        """Fork native context and bind the child before appending its check task."""
+
+    def finalize_response(self, result: dict | None, continued: bool) -> dict:
+        """Translate a check or bounded failure into the native host's end response."""
+
     def send_host_event(self, connection: Mapping[str, Any], event: dict[str, str]) -> dict:
         """Forward an event to the captured owning host, without creating a Session."""
 

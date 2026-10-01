@@ -993,6 +993,26 @@ for _name, (_path, _parameters) in _CLI.items():
     TOOLS[_name] = replace(TOOLS[_name], cli_path=_path, cli_parameters=_parameters)
 
 
+
+def bind_main_finalize(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> ToolResult:
+    """Bind the root caller's actual host without accepting model identity fields."""
+    from graphtraj.execution.main_finalize import bind_main_finalize as bind
+
+    return ToolResult(bind(_string_argument(arguments, 'summary_issue'), cwd or Path.cwd()))
+
+
+register_tool(
+    'bind_main_finalize',
+    'Bind Main completion checking to the current host and return its hook configuration.',
+    {'type': 'object', 'properties': {'summary_issue': {'type': 'string'}},
+     'required': ['summary_issue'], 'additionalProperties': False},
+    bind_main_finalize,
+)
+TOOLS['bind_main_finalize'] = replace(
+    TOOLS['bind_main_finalize'], cli_path=('graphtraj', 'bind-finalize'),
+)
+
+
 # Method-only features carry the guide's own frontmatter description and no
 # executable action. Their identifiers are the delivered guide directory names,
 # so the registry stays the only catalog of feature identifiers.

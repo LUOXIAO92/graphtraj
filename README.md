@@ -230,6 +230,13 @@ it; stop when the selected executor can handle the node within its resources.
 Difficult reasoning is not automatically made easy by more task nodes. The
 Agent organization tree and the task dependency graph describe different things.
 
+Use `agent-runner retire` to release a stopped Agent from its task without
+deleting the shared Worktree or its native Session and retained evidence.
+The Agent and its entire descendant subtree must have stopped; an active or
+unconfirmed execution prevents retirement. Ask the direct child to stop and
+hand off its work normally, or interrupt the subtree when necessary before
+retiring it. An interrupted or failed execution alone does not retire an Agent.
+
 A stopped Team member is replaced with `agent-runner replace <member-alias>
 --caused-by-event-id <event-id>`; the Runner's recorded direct parent or the
 user supplies the authority. The replacement starts a new Session for that
@@ -502,8 +509,13 @@ the integration command accepts `--resolve-conflict <diagnosis>` to dispatch
 an explicitly selected role (`--role <configured role reference or inline
 role>`). The selected executor submits its resolved version for an authorized
 decision before integration completes.
-Cleanup verifies integration and a clean disposable Worktree, removes safe
-live mappings and the Ticket Worktree/branch, and preserves durable evidence.
+Replacement composes retirement with the existing role registration operation.
+If registration fails after retirement, the failure preserves that distinction
+and can be retried without resuming the retired Agent.
+Cleanup verifies integration and a clean disposable Worktree, retires the
+Ticket's Agents, then removes the unused Ticket Worktree/branch. Retirement
+removes active mappings while preserving durable evidence and original parent
+relationships; it does not remove a Worktree still used by another execution.
 
 ## Main completion checks
 

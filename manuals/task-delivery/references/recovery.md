@@ -153,6 +153,13 @@ reports, and is not permission to claim another Agent's work or checks as its ow
 
 ## Stop and replace
 
+Retirement releases an Agent from its task and removes its active mapping while
+retaining its native Session, evidence and original parent relationships. Use
+the public `retire` operation only after the target and its entire descendant
+subtree have stopped. Active or unconfirmed execution prevents retirement;
+retirement does not implicitly interrupt work or delete the shared Worktree.
+An interrupted or failed execution alone is not retirement.
+
 Ask the direct child to stop when possible; interrupt an out-of-control
 descendant subtree through Runner when needed. That control exception does not
 permit cross-level messages, approvals or replacement. Confirm the target and
@@ -161,6 +168,12 @@ actual direct parent or user; preserve the Runtime's native approval mechanism
 when the requested relationship requires it. An actor flag grants no authority.
 
 A replacement root retains the original owning host's notification connection.
+Replacement composes retirement and the existing role registration operation.
+If registration fails after retirement, handle the reported partial outcome
+through the public retry path; do not resume the retired Agent or claim that
+replacement succeeded. Ticket cleanup uses the same retirement operation before
+removing an unused Worktree and branch.
+
 If that root has no recorded connection, replacement uses the caller's existing
 host binding or the Runtime's actual host context when available. The replacement
 is a new entity; it preserves the old Session and records. Use the public

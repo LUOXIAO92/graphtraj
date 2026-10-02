@@ -319,15 +319,22 @@ class CodexManagedExecution:
             raise RuntimeAdapterError('native-approval-unavailable',
                                       'The selected native automatic reviewer has no recovery callback.')
         response = asyncio.get_running_loop().create_future()
-        details = {'session': self.execution.thread_id, 'execution_id': self.execution.turn_id,
-                   'request_id': token, 'request_token': token,
-                   'method': 'graphtraj/recoveryApproval', 'params': proposal}
+        from graphtraj.execution.approved_recovery import _differences
+
+        # Keep the exact snapshot in this pending call; disclose only the action
+        # and concrete changed values needed for the user's decision.
+        summary = {'request': proposal['request'],
+                   'changes': _differences(proposal['before'], proposal['after'])}
+        identity = {'session': self.execution.thread_id, 'execution_id': self.execution.turn_id,
+                    'request_id': token, 'request_token': token,
+                    'method': 'graphtraj/recoveryApproval'}
+        details = {**identity, 'params': summary}
         self.recovery_requests[token] = (details, response)
         try:
             receipt = await asyncio.to_thread(
                 notify_direct_parent, self.directory,
-                'Recovery needs an explicit user decision through the pending-request reply: '
-                + json.dumps(details, ensure_ascii=False), details,
+                'Recovery needs an explicit user decision through the pending-request reply:\n'
+                + json.dumps(details, ensure_ascii=False), identity,
             )
             if receipt['delivery'] != 'received':
                 raise RuntimeAdapterError('native-approval-unavailable', 'The selected user review channel is unavailable.')

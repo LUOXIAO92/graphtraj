@@ -805,3 +805,43 @@ def test_managed_user_recovery_waits_for_existing_reply_channel(
         worker.result.cancel()
 
     asyncio.run(exercise())
+
+
+def test_parent_interrupt_recovery_reuses_existing_authority(
+    target: tuple, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A real parent's ordinary interrupt does not require buying authority again."""
+    root, ticket, parent, arguments = target
+    runner = root / '.graphtraj/runner'
+    child = next(yaml.safe_load(path.read_text()) for path in (runner / 'sessions').glob('*/mapping.yml')
+                 if yaml.safe_load(path.read_text()).get('parent') == parent['alias'])
+    before_budget = (ticket / 'execution-budget.yml').read_bytes()
+    sent = []
+
+    def unexpected_review(proposal: dict) -> dict:
+        """Fail if clearing the ordinary interrupt creates a redundant approval."""
+        pytest.fail('Ordinary parent interruption revoked existing authority.')
+
+    def resume(*args: object, **kwargs: object) -> dict:
+        """Observe the original child's identity and retained task constraints."""
+        assert args[3]['session'] == child['session']
+        sent.append(json.loads(args[1]))
+        return {'session': child['session']}
+
+    monkeypatch.setattr(recovery, '_send_session_locked', resume)
+    call = local_tool.bind(root, recovery_reviewer=unexpected_review)
+    with runtime_caller(runner, parent['alias']):
+        stopped = call({'action': 'execute', 'feature': 'interrupt',
+                        'arguments': {'alias': child['alias']}}).document
+        assert stopped['interrupt_status'] == 'interrupted'
+        stop_file = runner / 'sessions' / child['alias'] / 'stop.yml'
+        before_stop = yaml.safe_load(stop_file.read_text())
+        result = call({'action': 'execute', 'feature': 'approved_recovery', 'arguments': {
+            **arguments, 'alias': child['alias'], 'additional_minutes': 0,
+            'forbidden_scope': 'Retain the user directive: do not deploy or purchase more time.',
+        }}).document
+    assert result['recovery_status'] == 'resumed'
+    assert (ticket / 'execution-budget.yml').read_bytes() == before_budget
+    assert yaml.safe_load(stop_file.read_text()) == {**before_stop, 'resumed': True}
+    assert sent[0]['forbidden_scope'] == 'Retain the user directive: do not deploy or purchase more time.'
+    assert 'proposal' not in result and 'native_execution' not in result

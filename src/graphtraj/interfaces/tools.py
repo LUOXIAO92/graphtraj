@@ -819,8 +819,8 @@ def recover_execution(arguments: Mapping[str, Any], *, cwd: Path | None = None) 
 
 register_tool(
     'approved_recovery',
-    'Recover the original Session within existing authority. New spending or lifting an explicit '
-    'stop requires the selected reviewer; refusal or review failure applies nothing. '
+    'Recover the original Session within existing authority. New spending '
+    'requires the selected reviewer; refusal or review failure applies nothing. '
     'The same call applies the reviewed change and continues with explicit scope. '
     'Retry with alias and retry_event_id never adds time twice. '
     'Equivalent to `agent-runner recover`.',

@@ -31,7 +31,8 @@ from graphtraj.workspace.runner_project import discover_project
 def approved_recovery(arguments: dict, cwd: Path) -> dict:
     """Prepare a reviewable repair, or retry continuation of an applied repair.
 
-    Only new spending and lifting an explicit stop require review. The decision
+    Only new spending requires review; interruption does not revoke authority.
+    Explicit user directives still constrain the authorized task. The decision
     stays inside this call; supplied authority references are never approval.
     Retry references the applied Worldline event and cannot extend time again.
     """
@@ -78,8 +79,7 @@ def approved_recovery(arguments: dict, cwd: Path) -> dict:
         'authority': [event for event in events if event['event_id'] in causes],
     }
     require_stopped_subtree(project.runner_directory, alias)
-    lifts_stop = before['stop'] != after['stop']
-    if minutes or lifts_stop:
+    if minutes:
         try:
             reviewer = runtime_adapter.current_recovery_reviewer()
             if reviewer is not None:

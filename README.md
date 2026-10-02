@@ -890,19 +890,22 @@ initializing; use native activity notifications when timing active control.
 
 Local hosts, fresh managed native Sessions and the optional MCP server expose
 one tool named `graphtraj`. Its small outer schema has `action`, optional `query`,
-`feature` and `arguments`; each action uses only its applicable fields. Operation
+`feature`, `schema` and `arguments`; each action uses only its applicable fields. Operation
 schemas are disclosed for the selected feature, not registered as more tools or
 combined into one large schema union.
 
 | Request | Example | Result |
 | --- | --- | --- |
 | Discover | `{"action":"discover","query":"task"}` | Relevant feature identifiers and short descriptions. Omit query for the compact directory. |
-| Describe | `{"action":"describe","feature":"task-breakdown"}` | Selected guide, schema, examples and call information. Method-only features have no executable call. |
+| Describe | `{"action":"describe","feature":"task-breakdown"}` | Feature identity, short description and readable absolute guide reference. Read the file when needed. |
+| Describe parameters | `{"action":"describe","feature":"ticket_register","schema":true}` | Only the selected feature's input schema. |
 | Execute | `{"action":"execute","feature":"ticket_graph","arguments":{}}` | The existing operation's result under the actual caller's authority. |
 
 The shared registry is `graphtraj.interfaces.tools`; the gateway is
 `graphtraj.interfaces.gateway`. The delivered registry contains 25 operations
-and five method-only guides. A host can expose a subset. Discovery does not
+and five method-only guides. A host can expose a subset. Default describe does
+not expand the guide, schema, examples or call object. Method-only features
+provide guidance without an executable operation. Discovery does not
 execute tasks, and known authorized operations can be called directly without a
 prior describe step. Invalid parameters produce a local error; the host can
 correct them and use the same tool again. Missing guide material is reported
@@ -982,6 +985,7 @@ exchanges one JSON request/response per line. For an existing configured project
 graphtraj-tool <<'JSONL'
 {"action":"discover","query":"graph"}
 {"action":"describe","feature":"ticket_graph"}
+{"action":"describe","feature":"ticket_graph","schema":true}
 {"action":"execute","feature":"ticket_graph","arguments":{}}
 JSONL
 ```

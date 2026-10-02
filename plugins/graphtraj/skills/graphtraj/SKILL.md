@@ -7,8 +7,9 @@ description: Use GraphTraj to plan task dependencies, coordinate execution and f
 
 GraphTraj connects tasks through the results they need and retains the execution
 history. Use the available `graphtraj` tool to discover the feature matching the
-current need, then describe that feature for its guide, parameters and examples.
-Read the selected material; other methods remain available on demand.
+current need. Describe that feature to obtain its readable guide reference;
+read the referenced file when needed. To request parameters, send describe with
+`schema: true`, which returns only that feature's input schema.
 
 Execute an operation using its returned schema and the existing authorization.
 A method can provide guidance without an executable action. Previously known

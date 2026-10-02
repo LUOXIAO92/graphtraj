@@ -9,6 +9,10 @@ Read the project's guidance, current task graph and accepted requirements. Use
 the configured paths, roles, Runtime settings and execution limits. Run Harness
 commands from the Harness Project Root.
 
+The shared tool's default describe returns a readable guide reference. Read that
+file as needed; request describe with `schema: true` for the selected operation's
+parameters. Known authorized operations need no prior describe call.
+
 ## Assign ready work
 
 Select tasks whose required predecessor results are integrated. Read the current

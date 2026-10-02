@@ -36,9 +36,9 @@ SERVER_INFO      = {"name": "graphtraj", "version": "0.1.0"}
 
 MCP_TOOL_NAME        = "graphtraj"
 MCP_TOOL_DESCRIPTION = (
-    "Discover, read the manual for, or run a GraphTraj feature. Send "
+    "Discover, describe, or run a GraphTraj feature. Send "
     "action=discover to list features, action=describe for one feature's "
-    "manual and input schema, and action=execute to run it."
+    "guide reference (schema=true requests only its parameters), and action=execute to run it."
 )
 
 PARSE_ERROR      = -32700

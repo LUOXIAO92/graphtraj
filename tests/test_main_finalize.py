@@ -26,8 +26,9 @@ def test_binding_description_delivers_manual(tmp_path: Path) -> None:
     result = bind(tmp_path)({'action': 'describe', 'feature': 'bind_main_finalize'})
 
     assert not result.failed
-    assert result.document['manual']
-    assert result.document['input_schema']['required'] == ['summary_issue']
+    assert Path(result.document['manual_ref']).read_text(encoding='utf-8')
+    parameters = bind(tmp_path)({'action': 'describe', 'feature': 'bind_main_finalize', 'schema': True})
+    assert parameters.document['input_schema']['required'] == ['summary_issue']
 
 
 PEER = r'''

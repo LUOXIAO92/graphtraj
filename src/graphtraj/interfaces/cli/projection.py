@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from copy import copy
 import json
+from pathlib import Path
 from typing import Any
 
 import click
@@ -114,13 +115,18 @@ class OperationCommand(click.Command):
         return parameters
 
     def format_help_text(self, ctx: click.Context, formatter: click.HelpFormatter) -> None:
-        """Read the same selected manual, examples and schema as gateway describe."""
+        """Render requested usage from the registered material and schema."""
         document = handle_request({"action": "describe", "feature": self.feature}).document
         formatter.write_paragraph()
         formatter.write_text(document["description"])
-        if document.get("manual"):
-            formatter.write_paragraph()
-            formatter.write_text(document["manual"])
+        if document.get("manual_ref"):
+            try:
+                manual = Path(document["manual_ref"]).read_text(encoding="utf-8")
+            except (OSError, UnicodeError) as error:
+                document["error"] = str(error)
+            else:
+                formatter.write_paragraph()
+                formatter.write_text(manual)
         if document.get("error"):
             formatter.write_paragraph()
             formatter.write_text(document["error"])
@@ -132,10 +138,10 @@ class OperationCommand(click.Command):
                 name, encoding = tool.cli_parameters.get(parameter.name, (parameter.name, "value"))
                 form = ", ".join(parameter.opts)
                 formatter.write_text(f"{form}: {name or '$'} ({encoding})")
-            formatter.write_text("\b\n" + json.dumps(document["input_schema"], ensure_ascii=False, indent=2))
-        if document["examples"]:
+            formatter.write_text("\b\n" + json.dumps(tool.input_schema, ensure_ascii=False, indent=2))
+        if tool.examples:
             with formatter.section("Examples"):
-                for example in document["examples"]:
+                for example in tool.examples:
                     formatter.write_text(json.dumps(example, ensure_ascii=False))
 
 

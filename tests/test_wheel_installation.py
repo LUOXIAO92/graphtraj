@@ -306,11 +306,10 @@ def test_installed_tool_reads_the_delivered_guide_from_another_directory(
         "task-breakdown"
     ]
     described = replies[1]["result"]
-    assert described["call"] is None
-    assert described["manual"] == (
+    assert set(described) == {"feature", "description", "manual_ref"}
+    assert Path(described["manual_ref"]).read_text(encoding="utf-8") == (
         Path(__file__).resolve().parents[1] / "manuals/task-breakdown/guide.md"
     ).read_text(encoding="utf-8")
-    assert described["manual_ref"] == "manuals/task-breakdown/guide.md"
-    assert replies[2]["result"]["manual"] == described["manual"]
-    assert replies[2]["result"]["manual_ref"] == "manuals/task-breakdown/guide.md"
+    assert Path(described["manual_ref"]).is_absolute()
+    assert replies[2]["result"]["manual_ref"] == described["manual_ref"]
     assert replies[3]["result"] == {"tickets": []}

@@ -192,10 +192,10 @@ def test_cli_accepts_code_as_actual_parent_and_mcp_exposes_same_operation(tmp_pa
     mcp.serve(io.StringIO(json.dumps({
         'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call',
         'params': {'name': 'graphtraj', 'arguments': {
-            'action': 'describe', 'feature': 'decide_result'}},
+            'action': 'describe', 'feature': 'decide_result', 'schema': True}},
     }) + '\n'), output)
     descriptor = json.loads(output.getvalue())['result']['structuredContent']
-    native = native_request(tmp_path, 'graphtraj', {'action': 'describe', 'feature': 'decide_result'})
+    native = native_request(tmp_path, 'graphtraj', {'action': 'describe', 'feature': 'decide_result', 'schema': True})
     assert descriptor['input_schema'] == json.loads(native['contentItems'][0]['text'])['input_schema']
 
 

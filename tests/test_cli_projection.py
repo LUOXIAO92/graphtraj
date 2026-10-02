@@ -49,7 +49,7 @@ def test_every_operation_help_uses_selected_gateway_material(
         result = CliRunner().invoke(command, [*selected_args, "--help"])
         assert result.exit_code == 0, result.output
         assert described.document["description"] in result.output
-        assert described.document["manual"] in result.output
+        assert Path(described.document["manual_ref"]).read_text(encoding="utf-8") in result.output
         assert "shared-example" in result.output
         for name in tool.input_schema.get("properties", {}):
             assert name in result.output
@@ -110,7 +110,7 @@ def test_schema_change_updates_help_describe_and_scalar_input(
         monkeypatch.setitem(tools.TOOLS, "alias_status", replace(
             original, input_schema=schema, handler=handler,
         ))
-        described = gateway.handle_request({"action": "describe", "feature": "alias_status"})
+        described = gateway.handle_request({"action": "describe", "feature": "alias_status", "schema": True})
         assert described.document["input_schema"] == schema
         help_result = CliRunner().invoke(agent_runner.main, ["status", "--help"])
         assert help_result.exit_code == 0, help_result.output
@@ -152,7 +152,7 @@ def test_file_content_uses_same_nested_schema_as_gateway(
     for value in ("210", 211, 210):
         arguments = {**document, "ticket_id": value}
         path.write_text(yaml.safe_dump(arguments))
-        described = gateway.handle_request({"action": "describe", "feature": "ticket_register"})
+        described = gateway.handle_request({"action": "describe", "feature": "ticket_register", "schema": True})
         assert described.document["input_schema"] == schema
         result = CliRunner().invoke(graphtraj.main, ["ticket", "register", "--ticket-file", str(path)])
         assert result.exit_code == (0 if value == 210 else 2), result.output
@@ -254,7 +254,7 @@ def test_changed_enum_replaces_existing_click_choice(monkeypatch: pytest.MonkeyP
     monkeypatch.setitem(tools.TOOLS, "decide_result", replace(original, input_schema=schema, handler=handler))
     command = ["decide-result", "--submission-id", "submission", "--commit", "commit",
                "--reason", "reason", "--evidence-ref", "evidence"]
-    described = gateway.handle_request({"action": "describe", "feature": "decide_result"})
+    described = gateway.handle_request({"action": "describe", "feature": "decide_result", "schema": True})
     assert described.document["input_schema"]["properties"]["decision"]["enum"] == ["fixture-decision"]
     for choice, code in (("accepted", 2), ("fixture-decision", 0)):
         result = CliRunner().invoke(agent_runner.main, [*command, "--decision", choice])
@@ -310,7 +310,7 @@ def test_native_recovery_command_reuses_shared_help_without_raw_tool(
         result = CliRunner().invoke(agent_runner.main, ['recover', '--help'])
         assert result.exit_code == 0, result.output
         assert described.document['description'] in result.output
-        assert described.document['manual'] in result.output
+        assert Path(described.document['manual_ref']).read_text(encoding='utf-8') in result.output
         assert 'shared-recovery-example' in result.output
         assert '--retry-event-id' in result.output
         for name in original.input_schema['properties']:

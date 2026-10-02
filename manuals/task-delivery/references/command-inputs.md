@@ -97,8 +97,10 @@ including an ordinary parent interruption, does not require another approval.
 Additional spending requires the selected reviewer; refusal or review failure
 does not apply the unapproved repair. There is no separate `recover-apply`
 command, caller-supplied approval flag or proposal execution step. Codex HTTP
-review reuses `codex.approval`; human review uses the existing request/reply
-channel. An unavailable selected reviewer is reported rather than bypassed.
+review reuses `codex.approval`. Managed Codex executions configured for human
+review use the existing request/reply channel. Plain CLI calls require the
+selected HTTP route; other local hosts must bind an actual selected reviewer.
+An unavailable selected reviewer is reported rather than bypassed.
 
 For administrative repair only, use `--restore-active --no-resume` without a
 time increment. This restores the retained delivery state while preserving the

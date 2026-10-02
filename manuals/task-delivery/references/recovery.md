@@ -58,13 +58,16 @@ unapproved repair unapplied. Causal references and caller-supplied claims are
 not approval tokens.
 
 For Codex, configured HTTP review uses the existing `codex.approval` settings,
-including role overrides. Human review uses the existing pending request and
-reply channel. A host-bound reviewer must actually be available; selecting a
+including role overrides. Managed Codex executions configured for human review
+use the existing pending request and reply channel. Plain CLI calls require
+the selected HTTP route; other local hosts must bind an actual selected reviewer.
+A host-bound reviewer must actually be available; selecting a
 native reviewer without a callable host route does not grant approval. HTTP
 review is not evidence that Codex's native automatic reviewer ran. Do not
 replace an unavailable route with a temporary script or internal Python call.
 
-After approval, read the actual result. `stale` means the approved snapshot no
+Read the actual recovery result, whether review was required or existing
+authority was reused. `stale` means the retained snapshot no
 longer matches the state to repair. `resume-failed` or `resume-stale` means the
 result must be examined for already-applied changes and the continuation
 failure; do not assume nothing happened or add the time again. `resumed`

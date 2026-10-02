@@ -473,7 +473,8 @@ async def run_native_operation(
                 raise RunnerError('authority-denied', 'Native caller is outside this Session subtree.')
         # Method-only features have no handler, so disclosing them adds
         # readable guidance without adding executable capability.
-        allowed_features = set(NATIVE_RUNNER_TOOLS.values()) | set(METHOD_FEATURE_NAMES) | {'parent_status'}
+        allowed_features = (set(NATIVE_RUNNER_TOOLS.values()) | set(METHOD_FEATURE_NAMES)
+                            | {'parent_status', 'retire', 'replace', 'cleanup'})
         if name == 'graphtraj':
             feature = arguments.get('feature')
             action = arguments.get('action')

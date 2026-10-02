@@ -187,7 +187,9 @@ def test_external_inline_resources_survive_recovery(
         assert current['parent'] == original['parent']
         assert current['role_reference'] == original['role_reference'] == 'researcher'
         assert batch_file.read_bytes() == batch_before
-        assert (directory / 'launch.yml').read_bytes() == launch_before
+        retained_directory = (directory if operation == 'send'
+                              else Path(original['trace_file']).parent / 'runner')
+        assert (retained_directory / 'launch.yml').read_bytes() == launch_before
         assert current['retained_batch_file'] == str(batch_file)
         if operation == 'send':
             assert current['session'] == original['session']

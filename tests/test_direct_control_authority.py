@@ -47,6 +47,14 @@ def _controlled_codex(fake_codex: FakeCodex) -> None:
         1,
     )
     injection = (
+        # This scenario keeps reviewers running while exercising control. A
+        # probe completion notice must not advance the delivery fixture into
+        # acceptance and freeze the reports the probes still need.
+        "stage_file = Path.cwd() / '.scratch' / 'leader-stage-1'\n"
+        "if (os.environ.get('GRAPHTRAJ_ROLE') == 'team-leader' and stage_file.exists()\n"
+        "    and int(stage_file.read_text()) >= 2 and runtime_prompt\n"
+        "    and '\"source\": \"graphtraj\"' in runtime_prompt):\n"
+        "    raise SystemExit(0)\n"
         "role_hold = os.environ.get('HOLD_FILE_' + os.environ.get('GRAPHTRAJ_ROLE', '').replace('-', '_').upper())\n"
         "if role_hold is not None:\n"
         "    while not Path(role_hold).exists():\n"
@@ -74,11 +82,7 @@ def _controlled_codex(fake_codex: FakeCodex) -> None:
 
 def _mapping(root: Path, alias: str) -> dict:
     """Read the Runner's own record for one Session alias."""
-    return yaml.safe_load(
-        (
-            root / ".graphtraj" / "runner" / "sessions" / alias / "mapping.yml"
-        ).read_text(encoding="utf-8")
-    )
+    return runner_status.read_alias_mapping(root / ".graphtraj/runner", alias)[0]
 
 
 def _role_alias(root: Path, role: str, timeout: float = 60.0) -> str:
@@ -220,6 +224,26 @@ def _probe(
         time.sleep(0.02)
     else:
         raise AssertionError("The Session did not finish its control probes")
+    if forward_to is not None:
+        # This deterministic peer acknowledges steering but does not execute
+        # another scenario on that input. Wait for the forwarded probe's
+        # completion notice to finish before sending the next parent scenario.
+        execution = next(entry['issuer_execution_id'] for entry in entries
+                         if 'issuer_execution_id' in entry)
+        notices = root / '.graphtraj/runner/sessions' / forward_to / 'parent-notices.jsonl'
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
+            received = next((item for item in _records(notices)
+                             if item.get('identity', {}).get('execution_id') == execution
+                             and item.get('delivery') == 'received'), None)
+            if received is not None:
+                status = _status(commands, root, environment, alias)
+                if (status['activity'] == 'idle'
+                        and status['execution_id'] == received['parent_execution_id']):
+                    break
+            time.sleep(0.02)
+        else:
+            raise AssertionError('The forwarded probe completion was not processed')
     return {entry["probe"]: entry for entry in entries if entry["probe"] != "probes-complete"}
 
 

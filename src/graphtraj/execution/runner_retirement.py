@@ -19,8 +19,12 @@ from graphtraj.graph.ticket_graph import _load_states
 from graphtraj.workspace.runner_project import discover_project
 
 
-def retire_session(alias: str, cwd: Path) -> dict:
-    """Review and retire a stopped member inside this public operation."""
+def retire_session(alias: str, cwd: Path, *, replacement: dict | None = None) -> dict:
+    """Review and retire a stopped member inside this public operation.
+
+    The replacement caller supplies its concrete registration as part of the
+    same review. This context is not a public tool argument or approval flag.
+    """
     project = discover_project(cwd, require_clean_integration=False)
     mapping, directory = read_alias_mapping(project.runner_directory, alias)
     require_stopped_subtree(project.runner_directory, alias)
@@ -35,9 +39,12 @@ def retire_session(alias: str, cwd: Path) -> dict:
         if runtime != 'pi':
             retired = bool(yaml.safe_load((directory / 'session.yml').read_text()).get('retirement'))
             proposal = {
-                'request': {'operation': 'retire', 'alias': alias},
+                'request': {'operation': 'replace' if replacement is not None else 'retire',
+                            'alias': alias,
+                            **({'registration': replacement} if replacement is not None else {})},
                 'before': {'mapping': None if retired else mapping, 'retired': retired},
-                'after': {'mapping': None, 'retired': True},
+                'after': {'mapping': None, 'retired': True,
+                          **({'registration': replacement} if replacement is not None else {})},
                 'caller': caller, 'parent': mapping.get('parent'),
                 'preserved': ['Session', 'Trace', 'parent relationships', 'Worktree'],
             }

@@ -35,7 +35,17 @@ def test_public_retirement_review(
     def review(proposal: dict) -> dict:
         """Act as the selected host callback and inspect the concrete proposal."""
         assert (directory / 'mapping.yml').read_bytes() == before
-        assert proposal['request'] == {'operation': 'retire', 'alias': alias}
+        assert proposal['request']['operation'] == operation
+        assert proposal['request']['alias'] == alias
+        if operation == 'replace':
+            registration = proposal['request']['registration']
+            assert registration['role'] == child['role']
+            assert registration['parent'] == child['parent']
+            assert registration['replaces'] == alias
+            assert registration['team_ordinal'] == child['team_generation']
+            assert proposal['after']['registration'] == registration
+        else:
+            assert 'registration' not in proposal['request']
         assert proposal['parent'] == child['parent']
         assert proposal['caller'] is None
         observed.append(proposal)

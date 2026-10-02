@@ -305,7 +305,7 @@ def fake_codex(tmp_path: Path) -> FakeCodex:
         "    elif role == 'team-leader':\n"
         "        from graphtraj.interfaces import tools\n"
         "        assigned = tools.read_reports({'alias': os.environ['GRAPHTRAJ_PARENT_ALIAS']}, cwd=Path(os.environ['GRAPHTRAJ_HARNESS_ROOT'])).document\n"
-        "        paths = [item['path'] for item in assigned['reports']] + assigned['missing_reports']\n"
+        "        paths = [item['path'] for item in assigned['reports']] + assigned.get('missing_reports', [])\n"
         "        leader_report = Path(paths[0])\n"
         "        counter = Path.cwd() / '.scratch' / ('leader-stage-' + ordinal)\n"
         "        stage = int(counter.read_text()) if counter.exists() else 0\n"

@@ -136,7 +136,12 @@ def _replace_member(alias: str, caused_by_event_ids: tuple[str, ...], cwd: Path)
     # Replacing a root seat keeps its original owning host.
     host = (mapping.get("parent_connection") or current_parent_connection()
             or (runtime_adapter.current_host_connection() if mapping["parent"] is None else None))
-    retire_session(alias, cwd)
+    retire_session(alias, cwd, replacement={
+        'role': task.role, 'role_reference': task.role_reference,
+        'parent': mapping['parent'], 'ticket_id': mapping['ticket_id'],
+        'team_ordinal': generation, 'member': seat, 'replaces': alias,
+        'worktree_path': str(worktree), 'caused_by_event_ids': list(caused_by_event_ids),
+    })
     try:
         with parent_connection(host):
             replacement, _ = _run_agent(

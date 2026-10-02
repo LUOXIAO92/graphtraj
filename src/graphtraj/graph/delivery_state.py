@@ -74,6 +74,7 @@ def apply_delivery_state_request(
         "rework": _COMMON,
         "retiring": _COMMON | {"actor"},
         "retired": _COMMON | {"session_ref", "trace_ref"},
+        "retire-member": _COMMON | {"member", "session_ref"},
         "replace-member": _COMMON | {"member", "role", "session_ref"},
     }
     if (
@@ -145,7 +146,7 @@ def apply_delivery_state_request(
             raise ValueError("Team generation 1 does not exist")
         team_update = read_team(team_file)
         round_ordinal = team_update["current_round"]
-        if team_update["status"] != "active" and phase != "retired":
+        if team_update["status"] != "active" and phase not in {"retired", "retire-member"}:
             raise ValueError("The Team has stopped starting new work")
         if phase == "retiring":
             if request["actor"] not in {"main", "user"} or os.environ.get("GRAPHTRAJ_ROLE"):
@@ -164,6 +165,21 @@ def apply_delivery_state_request(
                 raise ValueError("Retirement must retain the member Trace")
             team_update.update(status="retired", final_session_ref=request["session_ref"], final_trace_ref=expected_trace)
             kind = "team-retired"
+        elif phase == "retire-member":
+            # Only the authorized Runner retirement may release a member. The
+            # public semantic-state input cannot manufacture its Session record.
+            mapping, session_directory = read_alias_mapping(
+                discover_runner_directory(harness_root), request["session_ref"],
+            )
+            retirement = yaml.safe_load((session_directory / "session.yml").read_text()).get("retirement")
+            if (not retirement or retirement["mapping"] != mapping
+                    or mapping["ticket_id"] != ticket_id or mapping["team_generation"] != ordinal):
+                raise ValueError("Member retirement requires the Runner's retained Session binding")
+            member = team_update["members"].get(request["member"])
+            if member is None or member["session_ref"] != request["session_ref"]:
+                raise ValueError("Retirement must identify the current member")
+            member["session_ref"] = None
+            kind = "team-member-retired"
         elif phase == "replace-member":
             member = request["member"]
             if not isinstance(member, str) or member not in team_update["members"]:

@@ -10,9 +10,10 @@ from pathlib import Path
 import pytest
 import yaml
 
-from conftest import FakeCodex, InstalledCommands, run_process
+from conftest import FakeCodex, InstalledCommands, run_process, wait_for_file
 from runner_fixtures import configure_harness
 from test_ticket_graph import _change_status, _register, _ticket
+from test_task_recovery import installed_commands
 
 
 @dataclass(frozen=True)
@@ -43,6 +44,11 @@ def _deliver_ticket(
     root, worktrees, _, environment = configure_harness(
         commands, repository, fake_codex, tmp_path
     )
+    roles_file = root / '.graphtraj/roles.yml'
+    roles = yaml.safe_load(roles_file.read_text())
+    roles['roles']['failed_start'] = dict(roles['roles']['coding_team']['engineer'])
+    roles['role_tree'] = {'coding-team.engineer': {}, 'failed_start': {}}
+    roles_file.write_text(yaml.safe_dump(roles))
     ticket_id = "85"
     ticket_name = "cleanup-integrated-ticket"
     _register(commands, root, _ticket(ticket_id, ticket_name))
@@ -55,7 +61,7 @@ def _deliver_ticket(
                     {
                         "ticket_id": ticket_id,
                         "ticket_name": ticket_name,
-                        "role": "team-leader",
+                        "role": "coding-team.engineer",
                     }
                 ]
             },
@@ -69,6 +75,10 @@ def _deliver_ticket(
             environment["FAKE_CODEX_UNSUPPORTED"] = "1"
         else:
             environment.update(FAKE_CODEX_EVENTS="[]", FAKE_CODEX_EXIT_CODE="1")
+        if terminal_failed_start:
+            failed_batch = yaml.safe_load(batch.read_text())
+            failed_batch['tasks'][0]['role'] = 'failed_start'
+            batch.write_text(yaml.safe_dump(failed_batch))
         failed = run_process(
             [str(commands.runner), "--swarm-input", str(batch)],
             cwd=root,
@@ -76,6 +86,9 @@ def _deliver_ticket(
             timeout=15,
         )
         assert failed.returncode == 1
+        if terminal_failed_start:
+            failed_batch['tasks'][0]['role'] = 'coding-team.engineer'
+            batch.write_text(yaml.safe_dump(failed_batch))
         sessions = root / ".graphtraj" / "runner" / "sessions"
         if failed_start:
             assert not sessions.exists() or not list(sessions.iterdir())
@@ -107,7 +120,17 @@ def _deliver_ticket(
         env=environment,
         timeout=15,
     )
-    assert launched.returncode == 0, launched.stderr
+    assert launched.returncode == 0, launched.stdout + launched.stderr
+    alias = yaml.safe_load(launched.stdout)['tasks'][0]['alias']
+    wait_for_file(root / '.graphtraj/runner/sessions' / alias / 'execution.yml')
+    reported = run_process([str(commands.runner), 'reports', alias], cwd=root, env=environment)
+    submission = yaml.safe_load(reported.stdout)['submissions'][-1]
+    accepted = run_process([
+        str(commands.runner), 'decide-result', '--submission-id', submission['event_id'],
+        '--commit', submission['candidate'], '--decision', 'accepted', '--reason', 'Fixture task completed',
+        '--evidence-ref', submission['evidence_refs'][0],
+    ], cwd=root, env=environment)
+    assert accepted.returncode == 0, accepted.stdout + accepted.stderr
 
     state = root / ".graphtraj" / "state"
     ticket_directory = state / "tickets" / (ticket_id + "-" + ticket_name)
@@ -170,16 +193,10 @@ def integrated_ticket(
 
 
 def _cleanup(ticket: DeliveredTicket):
+    """Exercise cleanup through the installed CLI in this isolated fixture."""
     return run_process(
-        [
-            str(ticket.commands.runner),
-            "cleanup",
-            "--ticket-id",
-            ticket.ticket_id,
-        ],
-        cwd=ticket.root,
-        env=ticket.environment,
-        timeout=15,
+        [str(ticket.commands.runner), "cleanup", "--ticket-id", ticket.ticket_id],
+        cwd=ticket.root, env=ticket.environment, timeout=15,
     )
 
 
@@ -207,6 +224,23 @@ def _durable_contents(ticket: DeliveredTicket) -> dict[str, bytes]:
         for path in root.rglob("*")
         if path.is_file() and not path.is_symlink()
     }
+
+
+def _assert_durable_contents(ticket: DeliveredTicket, before: dict[str, bytes]) -> None:
+    """Keep all evidence; only current member references and appended events change."""
+    after = _durable_contents(ticket)
+    for name, content in before.items():
+        if name.endswith('/team.yml'):
+            original = yaml.safe_load(content)
+            current = yaml.safe_load(after[name])
+            assert {**original, 'members': current['members']} == current
+            assert {name: member['role'] for name, member in original['members'].items()} == {
+                name: member['role'] for name, member in current['members'].items()
+            }
+        elif '/worldline/' in name:
+            assert after[name].startswith(content)
+        else:
+            assert after[name] == content
 
 
 def _append_worldline_reference(ticket: DeliveredTicket, evidence: Path) -> dict:
@@ -262,8 +296,8 @@ def test_installed_cleanup_uses_only_ticket_identity_and_preserves_trajectory(
         ["git", "show-ref", "--verify", "--quiet", "refs/heads/" + ticket.branch],
         cwd=ticket.repository,
     ).returncode == 1
-    assert all(not path.exists() for path in mappings)
-    assert _durable_contents(ticket) == durable_before
+    assert all(not (path / "mapping.yml").exists() for path in mappings)
+    _assert_durable_contents(ticket, durable_before)
     assert historical_marker.read_text(encoding="utf-8") == "historical evidence\n"
 
     repeated = _cleanup(ticket)
@@ -272,7 +306,7 @@ def test_installed_cleanup_uses_only_ticket_identity_and_preserves_trajectory(
     repeated_document = yaml.safe_load(repeated.stdout)
     assert repeated_document["cleanup_status"] == "already-cleaned"
     assert "run_id" not in repeated_document
-    assert _durable_contents(ticket) == durable_before
+    _assert_durable_contents(ticket, durable_before)
     assert historical_marker.read_text(encoding="utf-8") == "historical evidence\n"
 
 
@@ -289,7 +323,7 @@ def test_installed_cleanup_allows_missing_worldline_evidence(
     document = yaml.safe_load(result.stdout)
     assert document["cleanup_status"] == "cleaned"
     assert not ticket.worktree.exists()
-    assert all(not path.exists() for path in mappings)
+    assert all(not (path / "mapping.yml").exists() for path in mappings)
     read_after_cleanup = run_process(
         [str(ticket.commands.product), "worldline", "read"],
         cwd=ticket.root,
@@ -357,9 +391,9 @@ def test_installed_cleanup_removes_historical_preflight_allocation_after_integra
         cwd=ticket.repository,
     ).returncode == 1
     assert all(not session.exists() for session in failed_sessions)
-    assert all(not mapping.exists() for mapping in mappings)
+    assert all(not (mapping / "mapping.yml").exists() for mapping in mappings)
     assert trace.read_bytes() == b""
-    assert _durable_contents(ticket) == durable_before
+    _assert_durable_contents(ticket, durable_before)
 
     repeated = _cleanup(ticket)
 
@@ -367,7 +401,7 @@ def test_installed_cleanup_removes_historical_preflight_allocation_after_integra
     assert yaml.safe_load(repeated.stdout)["cleanup_status"] == "already-cleaned"
 
 
-def test_installed_cleanup_removes_a_terminal_unmapped_startup_failure_after_integration(
+def test_installed_cleanup_retains_a_terminal_unmapped_startup_failure_after_integration(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
     fake_codex: FakeCodex,
@@ -419,7 +453,7 @@ def test_installed_cleanup_removes_a_terminal_unmapped_startup_failure_after_int
     assert document["cleanup_status"] == "cleaned"
     assert set(ticket.failed_start_aliases) <= set(document["aliases_removed"])
     assert all(not session.exists() for session in failed_sessions)
-    assert _durable_contents(ticket) == durable_before
+    _assert_durable_contents(ticket, durable_before)
 
 
 def test_installed_cleanup_refuses_an_unattributed_session_record_without_partial_cleanup(
@@ -598,3 +632,28 @@ def test_installed_cleanup_refuses_noncanonical_ticket_resources_without_partial
         ["git", "show-ref", "--verify", "--quiet", "refs/heads/" + ticket.branch],
         cwd=ticket.repository,
     ).returncode == 0
+
+
+def test_cleanup_preserves_shared_worktree_with_another_ticket_execution(
+    integrated_ticket: DeliveredTicket,
+) -> None:
+    """An unrelated active mapping using the same Worktree prevents deletion."""
+    ticket = integrated_ticket
+    original = _ticket_mappings(ticket)[0]
+    mapping = yaml.safe_load((original / 'mapping.yml').read_text())
+    alias = '86-other_ticket-handover0-researcher@shared'
+    foreign = original.parent / alias
+    foreign.mkdir()
+    mapping.update(alias=alias, ticket_id='86', parent=None,
+                   worktree_path=str(ticket.worktree), worker_pid=os.getpid(), runtime_pid=os.getpid())
+    (foreign / 'mapping.yml').write_text(yaml.safe_dump(mapping))
+    before = (foreign / 'mapping.yml').read_bytes()
+
+    result = _cleanup(ticket)
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert yaml.safe_load(result.stdout)['error']['code'] == 'worktree-busy'
+    assert ticket.worktree.is_dir()
+    assert (foreign / 'mapping.yml').read_bytes() == before
+    assert not (foreign / 'stop.yml').exists()
+    assert all((directory / 'mapping.yml').exists() for directory in _ticket_mappings(ticket))

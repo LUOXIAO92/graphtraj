@@ -1142,7 +1142,9 @@ def _agent_alias(project: Any, task: Task, role: str, generation: int = 1) -> st
     while True:
         entity = role_name if suffix == 1 else "{0}_{1}".format(role_name, suffix)
         alias = prefix + entity
-        if not (project.runner_directory / "sessions" / alias).exists():
+        retained = (project.state_directory / "tickets" / (task.ticket_id + "-" + task.ticket_name)
+                    / "teams" / str(generation) / "traces" / alias)
+        if not (project.runner_directory / "sessions" / alias).exists() and not retained.exists():
             return alias
         suffix += 1
 

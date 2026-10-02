@@ -18,6 +18,7 @@ PUBLIC_ERROR_CODES = frozenset(
         "replacement-not-stopped",
         "team-not-active",
         "seat-replaced",
+        "session-retired",
         "insufficient-capacity",
         "invalid-config",
         "unsupported-runtime",

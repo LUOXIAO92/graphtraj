@@ -199,7 +199,6 @@ def test_root_completion_after_entry_and_send_exit(
             original_alias = alias
             original_file = root / '.graphtraj/runner/sessions' / alias / 'mapping.yml'
             original_bytes = original_file.read_bytes()
-            original_mode = original_file.stat().st_mode
             stopped = run_process([str(installed_commands.runner), 'interrupt', alias],
                                   cwd=root, env=environment, timeout=30)
             assert stopped.returncode == 0, stopped.stdout + stopped.stderr
@@ -220,8 +219,9 @@ def test_root_completion_after_entry_and_send_exit(
                 assert yaml.safe_load(original_bytes)['parent_connection'] is None
                 assert connection == {'runtime': 'codex', 'session': 'original-host',
                                       'codex_home': str(tmp_path / 'owning-home')}
-            assert original_file.read_bytes() == original_bytes
-            assert original_file.stat().st_mode == original_mode
+            assert not original_file.exists()
+            retained = yaml.safe_load((Path(yaml.safe_load(original_bytes)['trace_file']).parent / 'runner/session.yml').read_text())
+            assert retained['retirement']['mapping'] == yaml.safe_load(original_bytes)
             # A native host descriptor remains valid through public mapping reads.
             status = run_process([str(installed_commands.runner), 'status', alias],
                                  cwd=root, env=changed, timeout=30)

@@ -282,6 +282,17 @@ def interrupt(alias: str) -> None:
     _emit_result(response)
 
 
+@main.command(cls=OperationCommand, feature="retire")
+@click.argument("alias")
+def retire(alias: str) -> None:
+    """Retire a stopped member while preserving its Session and evidence."""
+    try:
+        response = invoke_tool("retire", {"alias": alias}, cwd=Path.cwd().resolve())
+    except (RunnerError, OSError, ValueError, yaml.YAMLError) as error:
+        _fail(error if isinstance(error, RunnerError) else RunnerError("operation-failed", str(error)), alias=alias)
+    _emit_result(response.document)
+
+
 @main.command(cls=OperationCommand, feature="replace")
 @click.argument("alias")
 @click.option(
@@ -305,6 +316,8 @@ def replace(alias: str, actor: str | None, caused_by_event_id: tuple[str, ...]) 
             error = RunnerError("operation-failed", str(error))
         _fail(error, alias=alias)
     _emit_result(response)
+    if "error" in response:
+        raise click.exceptions.Exit(1)
 
 
 @main.command("recover", cls=OperationCommand, feature="approved_recovery")

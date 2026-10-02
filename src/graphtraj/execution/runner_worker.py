@@ -365,14 +365,14 @@ def _register_created_member(
         team = read_team(team_file)
         member = assignment["member"]
         if assignment["replaces"] is not None:
-            previous, _ = read_alias_mapping(project.runner_directory, assignment["replaces"])
+            previous, previous_directory = read_alias_mapping(project.runner_directory, assignment["replaces"])
             if any(previous[key] != mapping[key] for key in ("parent", "ticket_id", "team_generation", "role")):
                 raise ValueError("Replacement must retain the actual parent and task binding")
-            member = next((name for name, entry in team["members"].items()
-                           if entry["session_ref"] == assignment["replaces"]), None)
-            if member is None:
-                raise ValueError("Replacement must identify a current actual member")
-            phase = "replace-member"
+            retirement = yaml.safe_load((previous_directory / "session.yml").read_text()).get("retirement")
+            member = retirement["member"] if retirement else None
+            if member not in team["members"] or team["members"][member]["session_ref"] is not None:
+                raise ValueError("Replacement must identify a vacant retired member")
+            phase = "member"
         else:
             phase = "member"
             if member in team["members"] and team["members"][member]["session_ref"] is not None:

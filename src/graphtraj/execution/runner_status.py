@@ -298,14 +298,15 @@ def require_stopped_subtree(runner_directory: Path, alias: str) -> None:
     # The target must always be an established, valid Session. Other allocated
     # directories may precede launch or retain a confirmed startup failure.
     mappings = {alias: read_alias_mapping(runner_directory, alias)}
-    for path in (runner_directory / "sessions").iterdir():
-        if path.name == alias:
+    for path in [*(runner_directory / "sessions").iterdir(), *retained_session_directories(runner_directory)]:
+        name = path.parent.name if path.name == "runner" else path.name
+        if name == alias:
             continue
         if not path.is_dir() and not path.is_symlink():
             continue
         if _unstarted_allocation(path) or _terminal_unestablished_launch(path):
             continue
-        mappings[path.name] = read_alias_mapping(runner_directory, path.name)
+        mappings[name] = read_alias_mapping(runner_directory, name)
     pending = [alias]
     seen: set[str] = set()
     while pending:
@@ -314,7 +315,7 @@ def require_stopped_subtree(runner_directory: Path, alias: str) -> None:
             continue
         seen.add(current)
         mapping, directory = mappings[current]
-        if _status_session(mapping, directory, current)["activity"] != "idle":
+        if _status_session(mapping, directory, current, respond_to_abnormal=False)["activity"] != "idle":
             raise RunnerError(
                 "replacement-not-stopped",
                 "The target and all descendants must be stopped before replacement.",
@@ -338,7 +339,10 @@ def require_execution_allowed(
     seen: set[str] = set()
     while current is not None and current not in seen:
         seen.add(current)
-        stop_file = runner_directory / "sessions" / current / "stop.yml"
+        record_file = session_record_directory(runner_directory, current) / "session.yml"
+        if record_file.is_file() and yaml.safe_load(record_file.read_text()).get("retirement"):
+            raise RunnerError("session-retired", f"{alias} belongs to retired subtree {current}.")
+        stop_file = session_record_directory(runner_directory, current) / "stop.yml"
         if stop_file.exists() and yaml.safe_load(stop_file.read_text()).get("resumed") is not True:
             raise RunnerError(
                 "subtree-stopped", f"{alias} belongs to stopped subtree {current}.",
@@ -537,7 +541,9 @@ def _recorded_sessions(
     if session_root.is_symlink() or not session_root.is_dir():
         return {}, []
     try:
-        entries = sorted(os.listdir(session_root))
+        entries = sorted(set(os.listdir(session_root)) | {
+            directory.parent.name for directory in retained_session_directories(runner_directory)
+        })
     except OSError:
         return {}, []
     records: Dict[str, Dict[str, Any]] = {}
@@ -647,8 +653,13 @@ def session_occupied(alias: str, owning: Mapping[str, Any] | None) -> RunnerErro
 
 
 def _status_session(
-    mapping: Dict[str, Any], session_directory: Path, alias: str
+    mapping: Dict[str, Any],
+    session_directory: Path,
+    alias: str,
+    *,
+    respond_to_abnormal: bool = True,
 ) -> Dict[str, str]:
+    """Read execution activity, optionally handling abnormality during observation."""
     identity = {"alias": alias}
     if "execution_id" in mapping:
         identity.update(session=mapping["session"], execution_id=mapping["execution_id"])
@@ -666,7 +677,7 @@ def _status_session(
             return {**identity, "activity": "idle",
                     "last_outcome": read_terminal_outcome(execution_file)}
         unresponsive = _unresponsive_status(mapping, session_directory)
-        if unresponsive["activity"] == "abnormal":
+        if unresponsive["activity"] == "abnormal" and respond_to_abnormal:
             # The judged abnormality is answered here, as part of the judgement
             # the Runner already makes: the Session's direct parent is notified
             # and its subtree stops, both without the lost Agent forwarding
@@ -773,13 +784,37 @@ def _numstat_file(entry: bytes) -> Dict[str, Any]:
     }
 
 
+def retained_session_directories(runner_directory: Path) -> list[Path]:
+    """Locate retired Session records within the existing durable Ticket Traces."""
+    from graphtraj.configuration.project_configuration import load_project_configuration
+    from graphtraj.workspace.runner_project import discover_project_root
+
+    try:
+        configuration = load_project_configuration(discover_project_root(runner_directory))
+    except (OSError, ValueError, RunnerError):
+        return []
+    return [directory for directory in (configuration.state / "tickets").glob("*/teams/*/traces/*/runner")
+            if (directory / "session.yml").is_file()]
+
+
+def session_record_directory(runner_directory: Path, alias: str) -> Path:
+    """Resolve an active entity or its retained Trace records without a new registry."""
+    active = runner_directory / "sessions" / alias
+    if active.exists():
+        return active
+    for directory in retained_session_directories(runner_directory):
+        if directory.parent.name == alias:
+            return directory
+    return active
+
+
 def read_alias_mapping(
     runner_directory: Path, alias: str
 ) -> Tuple[Dict[str, Any], Path]:
     if not ALIAS.fullmatch(alias):
         raise _alias_not_found()
     session_root = runner_directory / "sessions"
-    session_directory = session_root / alias
+    session_directory = session_record_directory(runner_directory, alias)
     mapping_file = session_directory / "mapping.yml"
     if session_root.is_symlink():
         raise _invalid_mapping()
@@ -787,11 +822,15 @@ def read_alias_mapping(
         raise _alias_not_found()
     if session_directory.is_symlink() or not session_directory.is_dir():
         raise _invalid_mapping()
-    if mapping_file.is_symlink() or not mapping_file.is_file():
+    if mapping_file.is_symlink():
         raise _invalid_mapping()
     try:
-        mapping = yaml.safe_load(mapping_file.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, yaml.YAMLError) as error:
+        if mapping_file.is_file():
+            mapping = yaml.safe_load(mapping_file.read_text(encoding="utf-8"))
+        else:
+            record = yaml.safe_load((session_directory / "session.yml").read_text(encoding="utf-8"))
+            mapping = record["retirement"]["mapping"]
+    except (OSError, UnicodeError, KeyError, TypeError, yaml.YAMLError) as error:
         raise _invalid_mapping() from error
     if not _valid_mapping(mapping, alias):
         raise _invalid_mapping()

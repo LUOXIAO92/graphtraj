@@ -55,7 +55,7 @@ def test_replacing_parent_keeps_old_descendants_stopped_and_bound_to_old_session
         assert (residue / 'events.jsonl').read_bytes() == b''
         assert yaml.safe_load((runner / child / 'mapping.yml').read_text()) == original_child
         assert original_child['parent'] == alias
-        assert (runner / alias / 'stop.yml').read_bytes() == marker
+        assert (root / '.graphtraj/state/tickets/154-recovery/teams/1/traces' / alias / 'runner/stop.yml').read_bytes() == marker
         reports = yaml.safe_load(command(installed_commands, root, env, 'reports', successor).stdout)
         assert reports['submissions']  # model-side ownership assertion completed
         team = yaml.safe_load((root / '.graphtraj/state/tickets/154-recovery/teams/1/team.yml').read_text())
@@ -76,7 +76,7 @@ def test_replacing_parent_keeps_old_descendants_stopped_and_bound_to_old_session
         assert current_successor['session'] == original_successor['session']
         assert current_successor['execution_id'] != original_successor['execution_id']
         assert yaml.safe_load((runner / child / 'mapping.yml').read_text()) == original_child
-        assert (runner / alias / 'stop.yml').read_bytes() == marker
+        assert (root / '.graphtraj/state/tickets/154-recovery/teams/1/traces' / alias / 'runner/stop.yml').read_bytes() == marker
         after = yaml.safe_load((ticket / 'execution-budget.yml').read_text())
         assert not after['stopped']
         for field in ('started_at', 'allowance_minutes', 'sessions', 'stopping_checks'):

@@ -12,6 +12,9 @@ from typing import Any
 import yaml
 
 from graphtraj.execution.runner_batch import valid_ticket_id
+from graphtraj.execution.runner_heartbeat import execution_start_lock
+from graphtraj.execution.runner_retirement import retire_session
+from graphtraj.execution.runner_status import read_alias_mapping, require_stopped_subtree
 from graphtraj.execution.runner_models import CleanupResponse, Project, RunnerError
 from graphtraj.workspace.runner_project import (
     discover_project,
@@ -149,7 +152,7 @@ def _cleanup(target: CleanupTarget) -> CleanupResponse:
     )
     worktree_exists = os.path.lexists(str(target.worktree))
     if not branch_exists and not worktree_exists and not path_records and not branch_records:
-        if mappings:
+        if any((directory / "mapping.yml").is_file() for directory in mappings):
             return _refused(
                 target,
                 "cleanup-ownership-mismatch",
@@ -204,12 +207,32 @@ def _cleanup(target: CleanupTarget) -> CleanupResponse:
 
     completed_actions: list[str] = []
     try:
-        run_git(target.project.repository, "worktree", "remove", str(target.worktree))
+        for directory in mappings:
+            if (directory / "mapping.yml").is_file():
+                retirement = retire_session(directory.name, target.project.harness_root)
+                if retirement.get("retire_status") != "retired":
+                    return _refused(
+                        target, "authority-denied", "Native retirement approval is still required.",
+                        {"retirement": retirement, "completed_actions": completed_actions},
+                    )
+                completed_actions.append("retired:" + directory.name)
+            else:
+                trace = next(target.ticket_directory.glob("teams/*/traces/" + directory.name))
+                directory.rename(trace / "runner")
+        completed_actions.append("members-retired")
+        # A shared Worktree user can start between the initial check and retirement.
+        # Hold the same lock as every execution startup through resource deletion.
+        with execution_start_lock(target.project.runner_directory):
+            _, errors, busy = _ticket_mappings(target)
+            if errors or busy:
+                return _refused(target, "worktree-busy", "The Worktree is still in use.",
+                                {"aliases": busy, "mapping_mismatches": errors,
+                                 "completed_actions": completed_actions})
+            run_git(target.project.repository, "worktree", "remove", str(target.worktree))
         if os.path.lexists(str(target.worktree)):
             raise OSError("Ticket Worktree path still exists")
         completed_actions.append("worktree-removed")
-        for mapping in mappings:
-            shutil.rmtree(mapping)
+        # Session directories retain original launch, native Session and result records.
         completed_actions.append("mappings-removed")
         _delete_branch_if_dev_unchanged(target, ticket_commit)
         completed_actions.append("branch-removed")
@@ -271,6 +294,15 @@ def _ticket_mappings(
                 errors.append(directory.name)
             continue
         if not mapping_file.is_file() or mapping_file.is_symlink():
+            record_file = directory / "session.yml"
+            if record_file.is_file() and not record_file.is_symlink():
+                try:
+                    record = yaml.safe_load(record_file.read_text())
+                    if record.get("retirement"):
+                        read_alias_mapping(target.project.runner_directory, directory.name)
+                        continue
+                except (OSError, ValueError, TypeError, RunnerError, yaml.YAMLError):
+                    pass
             if alias_candidate:
                 match = unstarted_alias.fullmatch(directory.name)
                 if match is not None and _unstarted_session_directory(
@@ -290,6 +322,12 @@ def _ticket_mappings(
             if alias_candidate:
                 errors.append(directory.name)
             continue
+        shares_worktree = mapping.get("worktree_path") == str(target.worktree)
+        if shares_worktree:
+            try:
+                require_stopped_subtree(target.project.runner_directory, directory.name)
+            except RunnerError:
+                busy.append(directory.name)
         if mapping.get("ticket_id") != target.ticket_id or "run_id" in mapping:
             if alias_candidate:
                 errors.append(directory.name)

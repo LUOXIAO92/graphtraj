@@ -928,12 +928,20 @@ def replace_session_execution(
     """Replace a stopped member using the existing real-caller authorization."""
     from graphtraj.teams.team_replacement import replace_session
 
-    return ToolResult(replace_session(
+    result = replace_session(
         _string_argument(arguments, "alias"),
         _optional_string_argument(arguments, "actor"),
         _string_list_argument(arguments, "caused_by_event_ids"),
         cwd or Path.cwd(),
-    ))
+    )
+    return ToolResult(result, failed="error" in result)
+
+
+def retire_session_execution(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> ToolResult:
+    """Retire a stopped subtree's target, preserving its Session and Worktree."""
+    from graphtraj.execution.runner_retirement import retire_session
+
+    return ToolResult(retire_session(_string_argument(arguments, "alias"), cwd or Path.cwd()))
 
 
 def cleanup_ticket_execution(
@@ -968,6 +976,14 @@ def run_codex_main(
     ))
 
 
+register_tool(
+    "retire",
+    "Retire one member after its entire subtree stops; preserve Sessions, evidence and Worktree.",
+    {"type": "object", "properties": {"alias": {"type": "string"}},
+     "required": ["alias"], "additionalProperties": False},
+    retire_session_execution,
+    manual_ref="manuals/task-delivery/guide.md",
+)
 register_tool(
     "replace",
     "Replace one stopped actual member while preserving its Team and evidence. "
@@ -1041,6 +1057,7 @@ _CLI = {
     "submit_report": (("agent-runner", "submit-report"), {}),
     "submit_result": (("agent-runner", "submit-result"), {}),
     "decide_result": (("agent-runner", "decide-result"), {}),
+    "retire": (("agent-runner", "retire"), {}),
     "replace": (("agent-runner", "replace"), {"caused_by_event_id": ("caused_by_event_ids", "value")}),
     "cleanup": (("agent-runner", "cleanup"), {}),
     "main": (("agent-runner", "main"), {"instruction_file": ("instruction", "text")}),

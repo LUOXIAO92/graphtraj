@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import sys
 import fcntl
 
 import yaml
@@ -14,11 +13,10 @@ from graphtraj.execution.runner_batch import read_session_task
 from graphtraj.execution.runner_control import _require_project_events, _session_report_paths
 from graphtraj.execution.runner_connection import current_parent_connection, parent_connection
 from graphtraj.execution.runner_models import Project, RunnerError
-from graphtraj.execution.runner_retirement import _retire_session
+from graphtraj.execution.runner_retirement import retire_session
 from graphtraj.workspace.runner_project import discover_project, run_git
 from graphtraj.execution.runner_status import (
     read_alias_mapping,
-    require_replacement_authority,
     require_stopped_subtree,
 )
 from graphtraj.teams.team_round import (
@@ -67,30 +65,13 @@ def replace_session(
     the retained actor argument grants no authority. Every role uses the same
     actual-member replacement path.
     """
-    project = discover_project(cwd, require_clean_integration=False)
-    mapping, _ = read_alias_mapping(project.runner_directory, alias)
-    # Native approval executes the concrete remaining operation, not a replay of
-    # the public entry or a command carrying an approved/skip-authority flag.
-    script = (
-        "from pathlib import Path; import yaml; "
-        "from graphtraj.teams.team_replacement import _replace_stopped_session; "
-        "print(yaml.safe_dump(_replace_stopped_session("
-        + repr(alias) + ", " + repr(actor) + ", "
-        + repr(tuple(caused_by_event_ids)) + ", Path(" + repr(str(cwd))
-        + ")), sort_keys=False))"
-    )
-    result = require_replacement_authority(
-        project.runner_directory, alias, mapping, [sys.executable, "-I", "-c", script]
-    )
-    if result is not None:
-        return result
     return _replace_stopped_session(alias, actor, caused_by_event_ids, cwd)
 
 
 def _replace_stopped_session(
     alias: str, actor: str | None, caused_by_event_ids: tuple[str, ...], cwd: Path
 ) -> dict:
-    """Perform the replacement after relation/native approval; recheck stopped state."""
+    """Check stopped state and serialize retirement plus member registration."""
     project = discover_project(cwd, require_clean_integration=False)
     _, directory = read_alias_mapping(project.runner_directory, alias)
     require_stopped_subtree(project.runner_directory, alias)
@@ -152,11 +133,15 @@ def _replace_member(alias: str, caused_by_event_ids: tuple[str, ...], cwd: Path)
         f"{path.name}:\n{path.read_text(encoding='utf-8')}"
         for path in _session_report_paths(alias, cwd) if path.is_file()
     )
-    # Replacing a root seat keeps its owning host, including when native
-    # approval executes outside that host's original calling context.
+    # Replacing a root seat keeps its original owning host.
     host = (mapping.get("parent_connection") or current_parent_connection()
             or (runtime_adapter.current_host_connection() if mapping["parent"] is None else None))
-    _retire_session(alias, cwd)
+    retire_session(alias, cwd, replacement={
+        'role': task.role, 'role_reference': task.role_reference,
+        'parent': mapping['parent'], 'ticket_id': mapping['ticket_id'],
+        'team_ordinal': generation, 'member': seat, 'replaces': alias,
+        'worktree_path': str(worktree), 'caused_by_event_ids': list(caused_by_event_ids),
+    })
     try:
         with parent_connection(host):
             replacement, _ = _run_agent(

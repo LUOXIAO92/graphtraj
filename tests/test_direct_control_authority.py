@@ -47,6 +47,14 @@ def _controlled_codex(fake_codex: FakeCodex) -> None:
         1,
     )
     injection = (
+        # This scenario keeps reviewers running while exercising control. A
+        # probe completion notice must not advance the delivery fixture into
+        # acceptance and freeze the reports the probes still need.
+        "stage_file = Path.cwd() / '.scratch' / 'leader-stage-1'\n"
+        "if (os.environ.get('GRAPHTRAJ_ROLE') == 'team-leader' and stage_file.exists()\n"
+        "    and int(stage_file.read_text()) >= 2 and runtime_prompt\n"
+        "    and '\"source\": \"graphtraj\"' in runtime_prompt):\n"
+        "    raise SystemExit(0)\n"
         "role_hold = os.environ.get('HOLD_FILE_' + os.environ.get('GRAPHTRAJ_ROLE', '').replace('-', '_').upper())\n"
         "if role_hold is not None:\n"
         "    while not Path(role_hold).exists():\n"
@@ -74,11 +82,7 @@ def _controlled_codex(fake_codex: FakeCodex) -> None:
 
 def _mapping(root: Path, alias: str) -> dict:
     """Read the Runner's own record for one Session alias."""
-    return yaml.safe_load(
-        (
-            root / ".graphtraj" / "runner" / "sessions" / alias / "mapping.yml"
-        ).read_text(encoding="utf-8")
-    )
+    return runner_status.read_alias_mapping(root / ".graphtraj/runner", alias)[0]
 
 
 def _role_alias(root: Path, role: str, timeout: float = 60.0) -> str:
@@ -220,6 +224,26 @@ def _probe(
         time.sleep(0.02)
     else:
         raise AssertionError("The Session did not finish its control probes")
+    if forward_to is not None:
+        # This deterministic peer acknowledges steering but does not execute
+        # another scenario on that input. Wait for the forwarded probe's
+        # completion notice to finish before sending the next parent scenario.
+        execution = next(entry['issuer_execution_id'] for entry in entries
+                         if 'issuer_execution_id' in entry)
+        notices = root / '.graphtraj/runner/sessions' / forward_to / 'parent-notices.jsonl'
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
+            received = next((item for item in _records(notices)
+                             if item.get('identity', {}).get('execution_id') == execution
+                             and item.get('delivery') == 'received'), None)
+            if received is not None:
+                status = _status(commands, root, environment, alias)
+                if (status['activity'] == 'idle'
+                        and status['execution_id'] == received['parent_execution_id']):
+                    break
+            time.sleep(0.02)
+        else:
+            raise AssertionError('The forwarded probe completion was not processed')
     return {entry["probe"]: entry for entry in entries if entry["probe"] != "probes-complete"}
 
 
@@ -242,18 +266,10 @@ def _assert_denied(entry: dict) -> None:
     assert entry["document"]["error"]["code"] == "authority-denied", entry
 
 
-def _assert_native_approval(entry: dict) -> None:
-    """One non-direct replacement yields its caller Runtime's execution request.
-
-    GraphTraj judges the recorded relation first, so the request names the exact
-    remaining operation and grants no authority; only that Runtime executes it.
-    """
-    assert entry["returncode"] == 0, entry
-    document = entry["document"]
-    assert document["replacement_status"] == "requires-native-approval", entry
-    arguments = document["native_execution"]["arguments"]
-    assert arguments["sandbox_permissions"] == "require_escalated", entry
-    assert entry["arguments"][0] in arguments["cmd"], entry
+def _assert_replacement_not_stopped(entry: dict) -> None:
+    """Running targets are refused before any selected retirement review."""
+    assert entry["returncode"] == 1, entry
+    assert entry["document"]["error"]["code"] == "replacement-not-stopped", entry
 
 
 def _assert_denied_after_authority(entry: dict) -> None:
@@ -425,20 +441,18 @@ def test_control_entries_follow_recorded_direct_ownership(
     ):
         _assert_denied(peers[name])
 
-    # A replacement outside the caller's direct relation is not refused here.
-    # GraphTraj judges the recorded relation and yields this one operation to
-    # the calling Runtime's own approval; the carried --actor value and a
-    # dropped or forged projection change neither verdict nor the seats.
+    # Running targets are refused before review; actor text and forged
+    # environment cannot bypass the stopped-subtree requirement.
     for name in (
         "replace-sibling-reviewer", "replace-parent-leader",
         "replace-parent-leader-user-actor", "replace-parent-leader-cleared-env",
         "replace-sibling-reviewer-forged-env",
     ):
-        _assert_native_approval(peers[name])
+        _assert_replacement_not_stopped(peers[name])
 
     # A Team Leader controls its direct children only, and its own subtree for
     # interruption. Its direct child seat is replaced outright, while a target
-    # outside that relation yields the Leader's own Runtime approval request.
+    # outside that relation still requires a stopped subtree and selected review.
     _assert_full(children["status-self"], leader)
     assert children["status-self"]["document"]["aliases"][0]["execution_id"] == children["status-self"]["issuer_execution_id"]
     _assert_full(children["status-child-engineer"], engineer)
@@ -464,7 +478,7 @@ def test_control_entries_follow_recorded_direct_ownership(
         "send-other-branch-cleared-env",
     ):
         _assert_denied(children[name])
-    _assert_native_approval(children["replace-other-branch"])
+    _assert_replacement_not_stopped(children["replace-other-branch"])
     _assert_summary(children["status-other-branch-cleared-env"], other, "running")
     replacement = children["replace-child-engineer"]["document"]
     assert children["replace-child-engineer"]["returncode"] == 0, replacement
@@ -520,8 +534,8 @@ def test_control_entries_follow_recorded_direct_ownership(
         assert refused.returncode == 1, refused.stdout + refused.stderr
         assert yaml.safe_load(refused.stdout)["error"]["code"] == "authority-denied", refused.stdout
     # A member seat outside Main's direct relation is never replaced here: an
-    # ordinary entry refuses it, and the replacement entry yields this one
-    # operation to the calling Runtime's approval without changing the seat.
+    # ordinary entry refuses it, and retirement requires its selected reviewer
+    # after the stopped-subtree guard, without changing the seat.
     for actor in ("main", "user"):
         refused = run_process(
             [str(installed_commands.runner), "replace", seat, "--actor", actor,
@@ -529,13 +543,10 @@ def test_control_entries_follow_recorded_direct_ownership(
             cwd=root, env=control_environment, timeout=30,
         )
         document = yaml.safe_load(refused.stdout)
-        if refused.returncode == 0:
-            assert document["replacement_status"] == "requires-native-approval", refused.stdout
-        else:
-            assert refused.returncode == 1, refused.stdout + refused.stderr
-            assert document["error"]["code"] in {
-                "authority-denied", "native-approval-unavailable",
-            }, refused.stdout
+        assert refused.returncode == 1, refused.stdout + refused.stderr
+        assert document["error"]["code"] in {
+            "authority-denied", "native-approval-unavailable", "replacement-not-stopped",
+        }, refused.stdout
     assert yaml.safe_load(team_file.read_text(encoding="utf-8"))["members"]["engineer"]["session_ref"] == seat
 
 

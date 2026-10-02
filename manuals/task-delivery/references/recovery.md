@@ -165,6 +165,13 @@ subtree have stopped. Active or unconfirmed execution prevents retirement;
 retirement does not implicitly interrupt work or delete the shared Worktree.
 An interrupted or failed execution alone is not retirement.
 
+When the caller's relationship requires approval, the public retirement
+operation obtains the selected Runtime review and executes only after approval.
+Callers do not run an internal Python bridge or supply an approval flag. A
+refusal or review error leaves that retirement unapplied. Cleanup and replacement
+use the same retirement operation and retain completed steps if a later step
+fails; retry through their public entries without reviving retired members.
+
 Ask the direct child to stop when possible; interrupt an out-of-control
 descendant subtree through Runner when needed. That control exception does not
 permit cross-level messages, approvals or replacement. Confirm the target and

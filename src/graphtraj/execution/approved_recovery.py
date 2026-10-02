@@ -80,23 +80,28 @@ def approved_recovery(arguments: dict, cwd: Path) -> dict:
     }
     require_stopped_subtree(project.runner_directory, alias)
     if minutes:
-        try:
-            reviewer = runtime_adapter.current_recovery_reviewer()
-            if reviewer is not None:
-                decision = reviewer(proposal)
-            else:
-                caller = caller_alias(project.runner_directory)
-                runtime = (read_alias_mapping(project.runner_directory, caller)[0]['runtime']
-                           if caller else caller_runtime())
-                if runtime is None:
-                    raise RunnerError('native-approval-unavailable', 'The calling Runtime is unknown.')
-                adapter = runtime_adapter.select_runtime_adapter(runtime)
-                decision = adapter.native_recovery_approval(proposal, cwd)
-        except (runtime_adapter.RuntimeAdapterError, AttributeError) as error:
-            raise RunnerError(getattr(error, 'code', 'native-approval-unavailable'), str(error)) from error
+        decision = review_proposal(proposal, cwd, project.runner_directory)
         if decision != {'decision': 'accept'}:
             raise RunnerError('recovery-denied', 'Recovery was not approved; no repair was applied.')
     return _apply_recovery(proposal, cwd)
+
+
+def review_proposal(proposal: dict, cwd: Path, runner_directory: Path) -> dict:
+    """Obtain the owning host's selected decision without exposing approval inputs."""
+    try:
+        reviewer = runtime_adapter.current_recovery_reviewer()
+        if reviewer is not None:
+            return reviewer(proposal)
+        else:
+            caller = caller_alias(runner_directory)
+            runtime = (read_alias_mapping(runner_directory, caller)[0]['runtime']
+                       if caller else caller_runtime())
+            if runtime is None:
+                raise RunnerError('native-approval-unavailable', 'The calling Runtime is unknown.')
+            adapter = runtime_adapter.select_runtime_adapter(runtime)
+            return adapter.native_recovery_approval(proposal, cwd)
+    except (runtime_adapter.RuntimeAdapterError, AttributeError) as error:
+        raise RunnerError(getattr(error, 'code', 'native-approval-unavailable'), str(error)) from error
 
 
 def _repair_snapshot(project: Any, before: dict, request: dict) -> dict:

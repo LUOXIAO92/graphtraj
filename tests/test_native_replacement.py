@@ -168,107 +168,49 @@ def test_external_runtime_uses_executable_not_environment(monkeypatch) -> None:
     assert replacement.caller_runtime() is None
 
 
-def test_public_non_direct_replacement_returns_native_request(tmp_path: Path, monkeypatch) -> None:
-    """The public entry checks ownership and yields without changing the seat."""
-    root = tmp_path / "runner"
-    parent = "132-ticket-handover0-team_leader@leader"
-    child = "132-ticket-handover0-engineer@child"
-    _record_direct_session(root, parent, "team-leader", None)
-    _record_direct_session(root, child, "engineer", parent)
-    monkeypatch.setattr(team_replacement, "discover_project", lambda *a, **k: SimpleNamespace(runner_directory=root))
-    monkeypatch.setattr(runner_status, "caller_alias", lambda directory: None)
-    monkeypatch.setattr(replacement, "caller_runtime", lambda: "codex")
-    monkeypatch.delenv("CODEX_ESCALATE_SOCKET", raising=False)
-    def unexpected_execution(*args):
-        """Fail if requesting approval executes the operation locally."""
-        pytest.fail("replacement ran before native execution")
-    monkeypatch.setattr(team_replacement, "_replace_stopped_session", unexpected_execution)
-    result = team_replacement.replace_session(child, "main", ("cause",), tmp_path)
-    assert result["replacement_status"] == "requires-native-approval"
-    assert result["native_execution"]["arguments"]["sandbox_permissions"] == "require_escalated"
-
-
 @pytest.mark.parametrize("activity", ["idle", "running", "unreachable"])
-@pytest.mark.parametrize("capability", [
-    "allow", "absent", "request", "deny", "cancel", "channel-failure",
-    "unknown", "no-result", "direct",
-])
-def test_selected_capability_controls_public_replacement(
+@pytest.mark.parametrize("decision", ["decline", "error", "missing"])
+def test_selected_reviewer_refusal_preserves_retirement(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    capability: str,
     activity: str,
+    decision: str,
 ) -> None:
-    """A non-Codex provider controls approval, but cannot bypass stopped checks."""
+    """An Adapter decision cannot bypass stopped checks or authorize on errors."""
+    from graphtraj.execution import approved_recovery, runner_retirement
+    from graphtraj.interfaces import local_tool
+
     root = tmp_path / "runner"
     parent = "132-ticket-handover0-team_leader@leader"
     child = "132-ticket-handover0-engineer@child"
-    _record_direct_session(root, parent, "team-leader", None)
-    _record_direct_session(root, child, "engineer", parent)
-    # Both Sessions use an injected Runtime with no Codex objects or tool shape.
-    for alias in (parent, child):
-        path = root / "sessions" / alias / "mapping.yml"
-        mapping = yaml.safe_load(path.read_text())
-        mapping["runtime"] = "test-runtime"
-        path.write_text(yaml.safe_dump(mapping))
-        if alias == parent or activity == "idle":
-            (path.parent / "execution.yml").write_text("outcome: completed\n")
+    for alias, role, owner in ((parent, "team-leader", None), (child, "engineer", parent)):
+        _record_direct_session(root, alias, role, owner)
+        (root / "sessions" / alias / "session.yml").write_text("{}\n")
+        if activity == "idle":
+            (root / "sessions" / alias / "execution.yml").write_text("outcome: completed\n")
     retained = {path: path.read_bytes() for path in root.rglob("*") if path.is_file()}
-    monkeypatch.setattr(team_replacement, "discover_project", lambda *a, **k: SimpleNamespace(runner_directory=root))
-    monkeypatch.setattr(runner_status, "caller_alias", lambda directory: parent if capability == "direct" else child)
+    monkeypatch.setattr(runner_retirement, "discover_project",
+                        lambda *a, **k: SimpleNamespace(runner_directory=root))
+    monkeypatch.setattr(runner_retirement, "caller_alias", lambda directory: child)
+    monkeypatch.setattr(approved_recovery, "caller_alias", lambda directory: child)
     monkeypatch.setattr(runner_status, "session_operation", lambda *a: {"activity": activity})
-    monkeypatch.setenv("GRAPHTRAJ_RUNTIME", "pi")
-    selected = []
     invoked = []
-    request = {"replacement_status": "requires-native-approval", "test_request": "confirm"}
-
-    def execute(command: list[str]) -> dict:
-        """Execute the actual continuation only when this provider allows it."""
-        invoked.append(command)
-        if capability in {"deny", "cancel", "channel-failure"}:
-            code = "native-approval-unavailable" if capability == "channel-failure" else "native-replacement-failed"
-            raise RunnerError(code, capability)
-        if capability == "request":
-            return request
-        if capability == "no-result":
-            return None  # A broken provider must not trigger local execution.
-        # Run the exact remaining Python operation in process to retain the
-        # controlled project discovery; real stopped-subtree checks still run.
-        exec(command[-1], {})
-        pytest.fail("empty causes should stop before replacement mutation")
 
     class TestAdapter:
-        """Expose only the capability consumed by this control operation."""
+        """Represent the selected Adapter without any executable bridge."""
 
-        def native_replacement_approval(self) -> runtime_adapter.NativeReplacement | None:
-            """Declare known absence explicitly; unknown capability is an error."""
-            if capability == "unknown":
-                raise runtime_adapter.RuntimeAdapterError("CAPABILITY_UNKNOWN", "unknown")
-            return None if capability == "absent" else execute
+        def native_recovery_approval(self, proposal: dict, cwd: Path) -> dict:
+            """Return refusal or an unavailable/invalid decision."""
+            invoked.append(proposal)
+            if decision == "error":
+                raise runtime_adapter.RuntimeAdapterError("review-failed", "unavailable")
+            return {} if decision == "missing" else {"decision": "decline"}
 
-    def select(name: str) -> TestAdapter:
-        """Use the same selector as preparation and verify the recorded Runtime."""
-        selected.append(name)
-        assert name == "test-runtime"
-        return TestAdapter()
-
-    monkeypatch.setattr(runtime_adapter, "select_runtime_adapter", select)
-    # Actor text has no authority. Empty causes stop an allowed operation at
-    # the next public validation boundary, before any seat or Session changes.
-    target = child if capability == "direct" else parent
-    if capability == "request":
-        assert team_replacement.replace_session(target, "user", (), tmp_path) == request
-    else:
-        expected = {
-            "deny": "native-replacement-failed",
-            "cancel": "native-replacement-failed",
-            "channel-failure": "native-approval-unavailable",
-            "unknown": "native-approval-unavailable",
-            "no-result": "operation-failed",
-        }.get(capability, "invalid-input" if activity == "idle" else "replacement-not-stopped")
-        with pytest.raises(RunnerError) as failure:
-            team_replacement.replace_session(target, "user", (), tmp_path)
-        assert failure.value.code == expected
-    assert selected == ([] if capability == "direct" else ["test-runtime"])
-    assert len(invoked) == (0 if capability in {"direct", "absent", "unknown"} else 1)
+    monkeypatch.setattr(runtime_adapter, "select_runtime_adapter", lambda runtime: TestAdapter())
+    with pytest.raises(RunnerError) as failure:
+        local_tool.bind(tmp_path)({'action': 'execute', 'feature': 'retire',
+                                   'arguments': {'alias': parent}})
+    expected = ("review-failed" if decision == "error" else "retirement-denied")
+    assert failure.value.code == (expected if activity == "idle" else "replacement-not-stopped")
+    assert len(invoked) == (1 if activity == "idle" else 0)
     assert {path: path.read_bytes() for path in root.rglob("*") if path.is_file()} == retained

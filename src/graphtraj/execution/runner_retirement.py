@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 import yaml
 
 from graphtraj.execution.runner_heartbeat import execution_start_lock
 from graphtraj.execution.runner_io import write_yaml_durably
-from graphtraj.execution.runner_models import Project
+from graphtraj.execution.runner_models import Project, RunnerError
+from graphtraj.execution.approved_recovery import review_proposal
 from graphtraj.execution.runner_status import (
-    read_alias_mapping, require_replacement_authority, require_stopped_subtree,
+    caller_alias, is_direct_owner, read_alias_mapping, require_stopped_subtree,
 )
 from graphtraj.graph.delivery_state import apply_delivery_state_request, read_team
 from graphtraj.graph.delivery_worldline import read_worldline
@@ -20,19 +20,30 @@ from graphtraj.workspace.runner_project import discover_project
 
 
 def retire_session(alias: str, cwd: Path) -> dict:
-    """Authorize retirement through the same native boundary as replacement."""
+    """Review and retire a stopped member inside this public operation."""
     project = discover_project(cwd, require_clean_integration=False)
-    mapping, _ = read_alias_mapping(project.runner_directory, alias)
-    script = (
-        "from pathlib import Path; import yaml; "
-        "from graphtraj.execution.runner_retirement import _retire_session; "
-        "print(yaml.safe_dump(_retire_session(" + repr(alias)
-        + ", Path(" + repr(str(cwd)) + ")), sort_keys=False))"
-    )
-    result = require_replacement_authority(
-        project.runner_directory, alias, mapping, [sys.executable, "-I", "-c", script],
-    )
-    return result if result is not None else _retire_session(alias, cwd)
+    mapping, directory = read_alias_mapping(project.runner_directory, alias)
+    require_stopped_subtree(project.runner_directory, alias)
+    caller = caller_alias(project.runner_directory)
+    if not is_direct_owner(caller, mapping):
+        from graphtraj.runtimes.replacement import caller_runtime
+
+        runtime = (read_alias_mapping(project.runner_directory, caller)[0]['runtime']
+                   if caller is not None else caller_runtime())
+        # Keep the supported Runtime with no approval mechanism distinct from
+        # an unavailable or refusing selected reviewer.
+        if runtime != 'pi':
+            retired = bool(yaml.safe_load((directory / 'session.yml').read_text()).get('retirement'))
+            proposal = {
+                'request': {'operation': 'retire', 'alias': alias},
+                'before': {'mapping': None if retired else mapping, 'retired': retired},
+                'after': {'mapping': None, 'retired': True},
+                'caller': caller, 'parent': mapping.get('parent'),
+                'preserved': ['Session', 'Trace', 'parent relationships', 'Worktree'],
+            }
+            if review_proposal(proposal, cwd, project.runner_directory) != {'decision': 'accept'}:
+                raise RunnerError('retirement-denied', 'Retirement was not approved; no retirement was applied.')
+    return _retire_session(alias, cwd)
 
 
 def _retire_session(alias: str, cwd: Path) -> dict:

@@ -819,11 +819,11 @@ def recover_execution(arguments: Mapping[str, Any], *, cwd: Path | None = None) 
 
 register_tool(
     'approved_recovery',
-    'Prepare exact administrative and time repairs for native approval, then resume the original '
-    'Session with explicit scope. No state changes before approval. Retry an applied recovery '
-    'using only alias and retry_event_id; time is never added twice. Administrative repair alone '
-    'preserves budget stops. The returned native execution runs `agent-runner recover-apply`; '
-    'execute it only through the requested native review. Equivalent to `agent-runner recover`.',
+    'Recover the original Session within existing authority. New spending or lifting an explicit '
+    'stop requires the selected reviewer; refusal or review failure applies nothing. '
+    'The same call applies the reviewed change and continues with explicit scope. '
+    'Retry with alias and retry_event_id never adds time twice. '
+    'Equivalent to `agent-runner recover`.',
     {'type': 'object', 'properties': {
         'alias': {'type': 'string'},
         'reason': {'type': 'string'},

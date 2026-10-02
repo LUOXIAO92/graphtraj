@@ -307,12 +307,12 @@ def test_native_recovery_command_reuses_shared_help_without_raw_tool(
     for revision in ('first', 'second'):
         manual.write_text(f'Recovery instructions {revision}')
         described = gateway.handle_request({'action': 'describe', 'feature': 'approved_recovery'})
-        result = CliRunner().invoke(agent_runner.main, ['recover-apply', '--help'])
+        result = CliRunner().invoke(agent_runner.main, ['recover', '--help'])
         assert result.exit_code == 0, result.output
         assert described.document['description'] in result.output
         assert described.document['manual'] in result.output
         assert 'shared-recovery-example' in result.output
-        assert '--proposal TEXT' in result.output
+        assert '--retry-event-id' in result.output
         for name in original.input_schema['properties']:
             assert name in result.output
     discovered = gateway.handle_request({'action': 'discover'})

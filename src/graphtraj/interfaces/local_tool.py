@@ -59,6 +59,7 @@ def bind(
     allowed_features: Collection[str] | None = None,
     *,
     event_receiver: Callable[[dict[str, str]], None] | None = None,
+    recovery_reviewer: Callable[[dict], dict] | None = None,
 ) -> Callable[[Mapping[str, Any]], ToolResult]:
     """Return the tool callback bound to one trusted host launch context.
 
@@ -67,10 +68,23 @@ def bind(
     With ``event_receiver``, the returned HostTool retains the host callback
     across tool calls until explicitly closed. The callback uses the host's
     existing client; its return acknowledges forwarding, not Agent processing.
+    ``recovery_reviewer`` must invoke that host's actual selected reviewer and
+    return its accept/decline decision; it is never a model-supplied argument.
     """
     if event_receiver is not None:
-        return HostTool(cwd or Path.cwd(), allowed_features, event_receiver)
-    return partial(gateway.handle_request, cwd=cwd, allowed_features=allowed_features)
+        return HostTool(cwd or Path.cwd(), allowed_features, event_receiver, recovery_reviewer)
+    callback = partial(gateway.handle_request, cwd=cwd, allowed_features=allowed_features)
+    if recovery_reviewer is None:
+        return callback
+
+    def review_bound(request: Mapping[str, Any]) -> ToolResult:
+        """Use the host's actual reviewer without exposing a model approval flag."""
+        from graphtraj.runtimes.runtime_adapter import recovery_review
+
+        with recovery_review(recovery_reviewer):
+            return callback(request)
+
+    return review_bound
 
 
 class HostTool:
@@ -87,9 +101,11 @@ class HostTool:
         cwd: Path,
         allowed_features: Collection[str] | None,
         receiver: Callable[[dict[str, str]], None],
+        recovery_reviewer: Callable[[dict], dict] | None = None,
     ) -> None:
         """Open the existing private control transport for this trusted callback."""
         self.cwd = cwd
+        self.recovery_reviewer = recovery_reviewer
         self.allowed_features = allowed_features
         self.closed = False
         directory = discover_runner_directory(cwd)
@@ -114,7 +130,9 @@ class HostTool:
         """Run one ordinary tool request without shortening the receiver lifetime."""
         if self.closed:
             raise RunnerError('operation-failed', 'The owning host event binding is closed.')
-        with parent_connection(self.address):
+        from graphtraj.runtimes.runtime_adapter import recovery_review
+
+        with parent_connection(self.address), recovery_review(self.recovery_reviewer):
             return gateway.handle_request(request, cwd=self.cwd, allowed_features=self.allowed_features)
 
     def close(self) -> None:

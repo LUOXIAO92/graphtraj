@@ -361,32 +361,6 @@ def recover(
         raise click.exceptions.Exit(1)
 
 
-class RecoveryApplyCommand(click.Command):
-    """Project recovery help without exposing its native executable as a tool."""
-
-    feature = 'approved_recovery'
-    get_short_help_str = OperationCommand.get_short_help_str
-    format_help_text = OperationCommand.format_help_text
-
-
-@main.command("recover-apply", cls=RecoveryApplyCommand)
-@click.option("--proposal", required=True)
-def recover_apply(proposal: str) -> None:
-    """Execute the exact recovery proposal through the requested native reviewer."""
-    from graphtraj.execution.approved_recovery import apply_approved_recovery
-
-    try:
-        value = json.loads(proposal)
-        if not isinstance(value, dict) or set(value) != {'request', 'before', 'after', 'authority'}:
-            raise ValueError('Expected the exact recovery proposal returned by recover.')
-        result = apply_approved_recovery(value, Path.cwd().resolve())
-    except (RunnerError, OSError, ValueError, KeyError, TypeError, yaml.YAMLError) as error:
-        _fail(error if isinstance(error, RunnerError) else RunnerError('invalid-input', str(error)))
-    # Native review needs the structured applied/stale/failure result, including
-    # a repair that succeeded before continuation failed; do not discard stdout.
-    _emit_result(result)
-
-
 @main.command("continue", cls=OperationCommand, feature="continue")
 @click.option("--ticket-id")
 @click.option("--caused-by-event-id", multiple=True)

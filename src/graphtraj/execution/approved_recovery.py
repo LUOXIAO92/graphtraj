@@ -7,7 +7,6 @@ import fcntl
 import hashlib
 import json
 import math
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -32,8 +31,8 @@ from graphtraj.workspace.runner_project import discover_project
 def approved_recovery(arguments: dict, cwd: Path) -> dict:
     """Prepare a reviewable repair, or retry continuation of an applied repair.
 
-    Native approval executes the exact prepared command; this entry has no
-    approved flag and never interprets supplied authority references as approval.
+    Only new spending and lifting an explicit stop require review. The decision
+    stays inside this call; supplied authority references are never approval.
     Retry references the applied Worldline event and cannot extend time again.
     """
     project = discover_project(cwd, require_clean_integration=False)
@@ -78,21 +77,26 @@ def approved_recovery(arguments: dict, cwd: Path) -> dict:
         'request': request, 'before': before, 'after': after,
         'authority': [event for event in events if event['event_id'] in causes],
     }
-    # Native review executes the installed public command with the exact values.
-    command = [str(Path(sys.executable).with_name('agent-runner')), 'recover-apply',
-               '--proposal', json.dumps(proposal, ensure_ascii=False)]
-    caller = caller_alias(project.runner_directory)
-    runtime = read_alias_mapping(project.runner_directory, caller)[0]['runtime'] if caller else caller_runtime()
-    if runtime is None:
-        raise RunnerError('native-approval-unavailable', 'The calling Runtime is unknown; recovery was not applied.')
-    try:
-        adapter = runtime_adapter.select_runtime_adapter(runtime)
-        result = adapter.native_recovery_approval(command, proposal)
-    except (runtime_adapter.RuntimeAdapterError, AttributeError) as error:
-        raise RunnerError('native-approval-unavailable', str(error)) from error
-    if not isinstance(result, dict) or 'recovery_status' not in result:
-        raise RunnerError('native-approval-failed', 'The native recovery returned no execution result.')
-    return {**result, 'proposal': proposal}
+    require_stopped_subtree(project.runner_directory, alias)
+    lifts_stop = before['stop'] != after['stop']
+    if minutes or lifts_stop:
+        try:
+            reviewer = runtime_adapter.current_recovery_reviewer()
+            if reviewer is not None:
+                decision = reviewer(proposal)
+            else:
+                caller = caller_alias(project.runner_directory)
+                runtime = (read_alias_mapping(project.runner_directory, caller)[0]['runtime']
+                           if caller else caller_runtime())
+                if runtime is None:
+                    raise RunnerError('native-approval-unavailable', 'The calling Runtime is unknown.')
+                adapter = runtime_adapter.select_runtime_adapter(runtime)
+                decision = adapter.native_recovery_approval(proposal, cwd)
+        except (runtime_adapter.RuntimeAdapterError, AttributeError) as error:
+            raise RunnerError(getattr(error, 'code', 'native-approval-unavailable'), str(error)) from error
+        if decision != {'decision': 'accept'}:
+            raise RunnerError('recovery-denied', 'Recovery was not approved; no repair was applied.')
+    return _apply_recovery(proposal, cwd)
 
 
 def _repair_snapshot(project: Any, before: dict, request: dict) -> dict:
@@ -163,19 +167,19 @@ def _differences(expected: Any, actual: Any, prefix: str = '') -> list[dict]:
     return [] if expected == actual else [{'field': prefix, 'expected': expected, 'actual': actual}]
 
 
-def apply_approved_recovery(proposal: dict, cwd: Path) -> dict:
-    """Apply only the native-reviewed snapshot, atomically with its Worldline fact.
+def _apply_recovery(proposal: dict, cwd: Path) -> dict:
+    """Apply the authorized snapshot atomically with its Worldline fact.
 
-    The public recover-apply command is executed by the native reviewer. The
-    execution, Ticket, budget and Worldline locks serialize existing writers.
+    Called only by recovery after required review. The execution, Ticket,
+    budget and Worldline locks serialize existing writers.
     A repeated approved payload uses its retained applied event without adding time.
     """
     project = discover_project(cwd, require_clean_integration=False)
     alias = proposal['request']['alias']
     mapping, _ = read_alias_mapping(project.runner_directory, alias)
     require_direct_authority(project.runner_directory, alias, mapping)
-    # Validate command inputs independently of the preparing process. A proposal
-    # cannot widen the supported repair into arbitrary Ticket/Team/file changes.
+    # Recheck authority and state after review; the repair must still describe
+    # the exact supported changes when it reaches the mutation locks.
     from graphtraj.interfaces.gateway import _validate
     from graphtraj.interfaces.tools import TOOLS
 

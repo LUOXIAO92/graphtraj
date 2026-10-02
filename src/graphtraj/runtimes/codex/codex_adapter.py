@@ -472,15 +472,11 @@ class CodexRuntimeAdapter:
             pass
         return "\n".join(diagnostic for diagnostic in diagnostics if diagnostic)
 
-    def native_recovery_approval(self, command: Sequence[str], proposal: dict) -> dict:
-        """Use the caller's actual native reviewer, including existing authority."""
-        from graphtraj.runtimes.codex.native_approval import execute_native_operation
+    def native_recovery_approval(self, proposal: dict, cwd: Path) -> dict:
+        """Review recovery through the bound host or configured HTTP reviewer."""
+        from graphtraj.runtimes.codex.approval import review_recovery
 
-        return execute_native_operation(
-            command, "recovery",
-            "Apply and resume only this exact recovery: " + json.dumps(proposal, ensure_ascii=False),
-            "recovery_status",
-        )
+        return review_recovery(proposal, cwd)
 
     def native_replacement_approval(self) -> NativeReplacement:
         """Return Codex native execution; a missing channel never means no approval."""

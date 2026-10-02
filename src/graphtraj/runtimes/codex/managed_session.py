@@ -102,6 +102,7 @@ class CodexManagedExecution:
         self.operations: set[asyncio.Task] = set()
         self.outcome: dict | None = None
         self.requests: dict[str, tuple[CodexServerRequest, asyncio.Future[dict]]] = {}
+        self.recovery_requests: dict[str, tuple[dict, asyncio.Future[dict]]] = {}
 
     @property
     def execution_id(self) -> str | None:
@@ -237,6 +238,16 @@ class CodexManagedExecution:
         if request['operation'] == 'requests':
             return {'requests': self._pending_requests() if not self.result.done() else []}
         if request['operation'] == 'reply':
+            pending = self.recovery_requests.get(request['request_token'])
+            if pending is not None:
+                details, response = pending
+                if response.done() or self.result.done():
+                    raise RuntimeAdapterError('operation-failed', 'Recovery review is no longer pending.')
+                decision = request['response']
+                if decision not in ({'decision': 'accept'}, {'decision': 'decline'}):
+                    raise RuntimeAdapterError('invalid-input', 'Return an explicit accept or decline decision.')
+                response.set_result(decision)
+                return {'request_id': details['request_id'], 'reply_status': 'submitted'}
             pending = self.requests.get(request['request_token'])
             if pending is None or pending[1].done() or self.result.done():
                 raise RuntimeAdapterError('operation-failed', 'The native request is no longer pending.')
@@ -283,8 +294,51 @@ class CodexManagedExecution:
         cwd = Path(self.context.session_document()['adapter_request']['cwd'])
         return await run_native_operation(
             self.adapter, self.native_session, self.directory.name,
-            discover_project_root(cwd), request,
+            discover_project_root(cwd), request, recovery_reviewer=self._review_recovery_sync,
         )
+
+    def _review_recovery_sync(self, proposal: dict) -> dict:
+        """Bridge the tool worker to this existing execution's selected reviewer."""
+        return asyncio.run_coroutine_threadsafe(self._review_recovery(proposal), self.loop).result()
+
+    async def _review_recovery(self, proposal: dict) -> dict:
+        """Review a host action; never present it as a native Codex request."""
+        assert self.execution is not None and self.result is not None
+        token = uuid.uuid4().hex
+        context = {
+            **self._approval_context(), 'request_id': token,
+            'method': 'graphtraj/recoveryApproval', 'request': proposal,
+            'allowed_decisions': ['accept', 'decline'], 'authorization': self.prompt,
+            'developer_instructions': self.context.session_document()['adapter_request'].get('developerInstructions'),
+        }
+        if self.approval is not None:
+            return await review_request(self.approval, context)
+        params = self.context.session_document()['adapter_request']
+        reviewer = params.get('approvalsReviewer', params.get('config', {}).get('approvals_reviewer', 'user'))
+        if reviewer != 'user':
+            raise RuntimeAdapterError('native-approval-unavailable',
+                                      'The selected native automatic reviewer has no recovery callback.')
+        response = asyncio.get_running_loop().create_future()
+        details = {'session': self.execution.thread_id, 'execution_id': self.execution.turn_id,
+                   'request_id': token, 'request_token': token,
+                   'method': 'graphtraj/recoveryApproval', 'params': proposal}
+        self.recovery_requests[token] = (details, response)
+        try:
+            receipt = await asyncio.to_thread(
+                notify_direct_parent, self.directory,
+                'Recovery needs an explicit user decision through the pending-request reply: '
+                + json.dumps(details, ensure_ascii=False), details,
+            )
+            if receipt['delivery'] != 'received':
+                raise RuntimeAdapterError('native-approval-unavailable', 'The selected user review channel is unavailable.')
+            done, _ = await asyncio.wait((response, self.result), return_when=asyncio.FIRST_COMPLETED)
+            if self.result in done:
+                raise RuntimeAdapterError('operation-failed', 'Execution ended before recovery review completed.')
+            return response.result()
+        finally:
+            self.recovery_requests.pop(token, None)
+            if not response.done():
+                response.cancel()
 
     async def _notify_direct_parent(self, request: CodexServerRequest, token: str) -> None:
         """Tell the recorded direct parent about this request before the turn waits.
@@ -418,7 +472,7 @@ class CodexManagedExecution:
                 'method': native.method, 'params': native.params,
             }
             for token, (native, response) in self.requests.items() if not response.done()
-        ]
+        ] + [details for details, response in self.recovery_requests.values() if not response.done()]
 
     def terminate(self) -> bool:
         """Schedule native interruption for a Worker termination/budget signal."""
@@ -442,6 +496,8 @@ async def run_native_operation(
     root_alias: str | None,
     root: Path,
     request: CodexServerRequest,
+    *,
+    recovery_reviewer: Callable[[dict], dict] | None = None,
 ) -> dict:
     """Route an owned native callback, preserving the Runtime's issuing identity."""
     from graphtraj.execution.runner_models import RunnerError
@@ -474,7 +530,7 @@ async def run_native_operation(
         # Method-only features have no handler, so disclosing them adds
         # readable guidance without adding executable capability.
         allowed_features = (set(NATIVE_RUNNER_TOOLS.values()) | set(METHOD_FEATURE_NAMES)
-                            | {'parent_status', 'retire', 'replace', 'cleanup'})
+                            | {'parent_status', 'retire', 'replace', 'cleanup', 'approved_recovery'})
         if name == 'graphtraj':
             feature = arguments.get('feature')
             action = arguments.get('action')
@@ -491,7 +547,9 @@ async def run_native_operation(
 
         def operate() -> ToolResult:
             """Reuse public validation/control without process-based authorization."""
-            with runtime_caller(discover_runner_directory(root), identity):
+            from graphtraj.runtimes.runtime_adapter import recovery_review
+
+            with runtime_caller(discover_runner_directory(root), identity), recovery_review(recovery_reviewer):
                 if name == 'graphtraj':
                     return handle_request(arguments, cwd=root, allowed_features=allowed_features)
                 return tool.handler(arguments, cwd=root)

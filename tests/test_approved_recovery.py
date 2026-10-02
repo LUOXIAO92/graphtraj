@@ -3,8 +3,6 @@
 import copy
 import json
 import os
-import shlex
-import socket
 import subprocess
 import sys
 from pathlib import Path
@@ -20,8 +18,8 @@ from graphtraj.execution.runner_status import runtime_caller
 from graphtraj.graph.delivery_worldline import read_worldline
 from graphtraj.interfaces import local_tool
 from graphtraj.interfaces.cli.agent_runner import main
-from graphtraj.runtimes.codex.codex_adapter import CodexRuntimeAdapter
 from test_ticket_integration import accepted_ticket
+from test_codex_app_server import peer
 
 
 @pytest.fixture
@@ -57,6 +55,12 @@ def invoke(root: Path, arguments: dict) -> dict:
     return result.document
 
 
+def applied_proposal(root: Path, result: dict) -> dict:
+    """Read the retained evidence identified by the compact recovery result."""
+    return next(event['proposal'] for event in read_worldline(root / '.graphtraj/state', root)
+                if event['event_id'] == result['recovery_event_id'])
+
+
 class NativeApproval:
     """A Runtime without Codex fields executes only its explicitly allowed payload."""
 
@@ -66,7 +70,7 @@ class NativeApproval:
         self.proposals = []
         self.before_apply = None
 
-    def native_recovery_approval(self, command: list[str], proposal: dict) -> dict:
+    def native_recovery_approval(self, proposal: dict, cwd: Path) -> dict:
         """Observe unchanged state before simulating the actual native decision."""
         current, _ = recovery._snapshot(recovery.discover_project(self.root, require_clean_integration=False), proposal['request']['alias'])
         assert current == proposal['before']
@@ -75,11 +79,7 @@ class NativeApproval:
             self.before_apply()
         if self.mode in {'denied', 'failed'}:
             raise RunnerError('native-approval-' + self.mode, self.mode)
-        with pytest.MonkeyPatch.context() as context:
-            context.chdir(self.root)
-            result = CliRunner().invoke(main, command[1:])
-        assert result.exit_code == 0, result.output
-        return yaml.safe_load(result.output)
+        return {'decision': 'accept'}
 
 
 def test_recovered_unchanged_result_returns_to_integration(
@@ -120,7 +120,7 @@ def test_recovered_unchanged_result_returns_to_integration(
     assert recovered['recovery_status'] == 'resumed'
     assert received[0]['allowed_scope'] == arguments['allowed_scope']
     assert recovered['recovery_event_id'] in received[0]['caused_by_event_ids']
-    assert recovered['proposal']['before']['budget'] == recovered['proposal']['after']['budget']
+    assert applied_proposal(root, recovered)['before']['budget'] == applied_proposal(root, recovered)['after']['budget']
     retained = read_worldline(state, root)
     old_decision = {
         'submission_id': original['event_id'], 'commit': candidate, 'decision': 'accepted',
@@ -174,11 +174,11 @@ def test_recovered_unchanged_result_returns_to_integration(
     assert accepted in after and fresh in after
     assert sorted(path.name for path in (ticket / 'teams/1/rounds').iterdir()) == ['1']
     assert subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=author['worktree_path'], text=True).strip() == candidate
-    assert yaml.safe_load((ticket / 'execution-budget.yml').read_text()) == recovered['proposal']['after']['budget']
+    assert yaml.safe_load((ticket / 'execution-budget.yml').read_text()) == applied_proposal(root, recovered)['after']['budget']
 
     assert all((root / ref).read_bytes() == content for ref, content in original_evidence.items())
     assert subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=dev, text=True).strip() == dev_commit
-    stop = recovered['proposal']['before']['stop']
+    stop = applied_proposal(root, recovered)['before']['stop']
     assert stop is not None
     assert yaml.safe_load((runner / 'sessions' / mapping['alias'] / 'stop.yml').read_text()) == {**stop, 'resumed': True}
 
@@ -207,7 +207,7 @@ def test_approved_integrated_repair_retains_history_and_retries_once(
     after = yaml.safe_load((ticket / 'execution-budget.yml').read_text())
     assert after == {**original, 'approved_minutes': 7, 'stopped': False}
     state = yaml.safe_load((ticket / 'ticket.yml').read_text())
-    assert state['current_candidate'] == result['proposal']['before']['ticket']['current_candidate']
+    assert state['current_candidate'] == applied_proposal(root, result)['before']['ticket']['current_candidate']
     assert state['status'] == 'implementing'
     assert read_worldline(ticket.parent.parent, root)[:len(before_events)] == before_events
     assert sorted(path.name for path in (ticket / 'teams/1/rounds').iterdir()) == ['1']
@@ -230,13 +230,6 @@ def test_approved_integrated_repair_retains_history_and_retries_once(
     assert len(sent) == 2
     assert invoke(root, arguments)['recovery_status'] == 'resumed'
     assert len(adapter.proposals) == 1
-    assert yaml.safe_load((ticket / 'execution-budget.yml').read_text()) == after
-    # Reexecuting the exact already-approved command also cannot add time.
-    with monkeypatch.context() as context:
-        context.chdir(root)
-        repeated = CliRunner().invoke(main, ['recover-apply', '--proposal', json.dumps(result['proposal'])])
-    assert repeated.exit_code == 0, repeated.output
-    assert yaml.safe_load(repeated.output)['recovery_status'] == 'resumed'
     assert yaml.safe_load((ticket / 'execution-budget.yml').read_text()) == after
 
 
@@ -275,28 +268,6 @@ def test_postapproval_race_returns_exact_differences(target: tuple, monkeypatch:
     assert 'approved_minutes' not in yaml.safe_load((ticket / 'execution-budget.yml').read_text())
 
 
-def test_codex_prepares_native_review_without_writes_and_cli_matches(target: tuple, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Both public surfaces prepare the same exact review without granting authority."""
-    root, ticket, _, arguments = target
-    monkeypatch.chdir(root)
-    before = (ticket / 'ticket.yml').read_bytes()
-    tool = invoke(root, arguments)
-    command = ['recover', arguments['alias']]
-    for key in ('reason', 'instruction', 'allowed_scope', 'forbidden_scope', 'additional_minutes'):
-        command.extend(['--' + key.replace('_', '-'), str(arguments[key])])
-    command.extend(['--restore-active', '--caused-by-event-id', arguments['caused_by_event_ids'][0]])
-    cli = CliRunner().invoke(main, command)
-    assert cli.exit_code == 0, cli.output
-    result = yaml.safe_load(cli.output)
-    assert result['proposal'] == tool['proposal']
-    assert tool['recovery_status'] == 'requires-native-approval'
-    assert tool['native_execution']['arguments']['sandbox_permissions'] == 'require_escalated'
-    assert (ticket / 'ticket.yml').read_bytes() == before
-    monkeypatch.setenv('CODEX_ESCALATE_SOCKET', 'broken')
-    with pytest.raises(RunnerError) as error:
-        invoke(root, arguments)
-    assert error.value.code == 'native-approval-unavailable'
-    assert (ticket / 'ticket.yml').read_bytes() == before
 
 
 @pytest.mark.parametrize('fail_start', [False, True])
@@ -310,7 +281,6 @@ def test_native_approved_command_reaches_original_session_with_exact_scope(
 ) -> None:
     """Execute the real Adapter/Worker resume path using the native protocol peer."""
     root, ticket, mapping, arguments = target
-    monkeypatch.setattr(recovery.sys, 'executable', str(installed_commands.runner.with_name('python')))
     monkeypatch.setenv('PATH', str(fake_codex.executable.parent) + os.pathsep + os.environ['PATH'])
     monkeypatch.setenv('HOME', str(tmp_path / 'operator-home'))
     monkeypatch.setenv('FAKE_CODEX_LOG', str(fake_codex.log_file))
@@ -343,13 +313,11 @@ def test_native_approved_command_reaches_original_session_with_exact_scope(
     before = yaml.safe_load(budget_path.read_text())
     before.update(stopped=True, stopping_checks=3, notifications=['stochastic_stop:3'])
     budget_path.write_text(yaml.safe_dump(before))
-    request = invoke(root, arguments)
+    from graphtraj.runtimes.runtime_adapter import recovery_review
+
     assert not received.exists()
-    native = request['native_execution']['arguments']
-    executed = subprocess.run(shlex.split(native['cmd']), cwd=root, capture_output=True, text=True,
-                              env=dict(os.environ), timeout=30)
-    assert executed.returncode == 0, executed.stderr
-    result = yaml.safe_load(executed.stdout)
+    with recovery_review(lambda proposal: {'decision': 'accept'}):
+        result = invoke(root, arguments)
     if fail_start:
         assert result['recovery_status'] == 'resume-failed', result
         assert result['applied'] is True
@@ -382,30 +350,6 @@ def test_native_approved_command_reaches_original_session_with_exact_scope(
     assert yaml.safe_load(budget_path.read_text())['approved_minutes'] == 7
 
 
-@pytest.mark.parametrize('decision', ['allow', 'deny', 'cancel', 'error'])
-def test_codex_native_wrapper_executes_only_reviewed_recovery(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, decision: str,
-) -> None:
-    """Review and execution remain native, including refusal without fallback."""
-    wrapper = tmp_path / 'native-review'
-    wrapper.write_text(
-        f'#!{sys.executable}\nimport os, sys\n' +
-        ('os.execv(sys.argv[1], sys.argv[2:])\n' if decision == 'allow' else
-         f'print({decision!r}, file=sys.stderr); sys.exit(1)\n')
-    )
-    wrapper.chmod(0o755)
-    marker = tmp_path / 'applied'
-    command = [sys.executable, '-c', f'from pathlib import Path; Path({str(marker)!r}).touch(); print("recovery_status: resumed")']
-    channel, peer = socket.socketpair()
-    with channel, peer:
-        monkeypatch.setenv('CODEX_ESCALATE_SOCKET', str(channel.fileno()))
-        monkeypatch.setenv('EXEC_WRAPPER', str(wrapper))
-        if decision == 'allow':
-            assert CodexRuntimeAdapter().native_recovery_approval(command, {'authority': ['existing']}) == {'recovery_status': 'resumed'}
-        else:
-            with pytest.raises(RunnerError, match=decision):
-                CodexRuntimeAdapter().native_recovery_approval(command, {'authority': ['existing']})
-    assert marker.exists() is (decision == 'allow')
 
 
 def test_approved_increment_changes_stop_threshold_without_resetting_clock(
@@ -457,9 +401,9 @@ def test_recovery_reactivates_original_team_without_fabricating_new_round(target
     team = read_team(ticket / 'teams/1/team.yml')
     assert team['status'] == 'active'
     assert team['current_round'] == 1
-    assert result['proposal']['before']['team']['status'] == 'retired'
+    assert applied_proposal(root, result)['before']['team']['status'] == 'retired'
     assert retired in read_worldline(state, root)
-    assert result['proposal']['after']['team']['members'] == result['proposal']['before']['team']['members']
+    assert applied_proposal(root, result)['after']['team']['members'] == applied_proposal(root, result)['before']['team']['members']
 
 
 def test_retry_does_not_override_a_new_stop(
@@ -534,8 +478,9 @@ def test_administrative_recovery_preserves_an_already_usable_status(
     })
     monkeypatch.setattr(recovery.runtime_adapter, 'select_runtime_adapter', selector)
     result = invoke(root, {**arguments, 'additional_minutes': 0, 'reason': 'Continue existing review scope.'})
-    assert result['recovery_status'] == 'requires-native-approval'
-    assert result['proposal']['before'] == result['proposal']['after']
+    assert result['recovery_status'] == 'resumed'
+    assert result['changes'] == []
+    assert len(adapter.proposals) == 1
 
 
 @pytest.mark.parametrize('resume', [False, True])
@@ -575,31 +520,6 @@ def test_zero_time_recovery_preserves_budget_stop(
     assert yaml.safe_load(budget_path.read_text()) == budget
 
 
-def test_public_execution_rejects_changed_proposal_and_wrong_caller(
-    target: tuple, monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """The command cannot turn its recovery payload into arbitrary state edits."""
-    root, ticket, mapping, arguments = target
-    prepared = invoke(root, arguments)
-    proposal = prepared['proposal']
-    before = (ticket / 'ticket.yml').read_bytes()
-    monkeypatch.chdir(root)
-    changed = copy.deepcopy(proposal)
-    changed['after']['budget']['started_at'] = 0
-    result = CliRunner().invoke(main, ['recover-apply', '--proposal', json.dumps(changed)])
-    assert result.exit_code != 0
-    assert 'invalid-input' in result.output
-    assert (ticket / 'ticket.yml').read_bytes() == before
-    child = next(member['session_ref'] for member in proposal['before']['team']['members'].values()
-                 if member['session_ref'] != mapping['alias'])
-    with runtime_caller(root / '.graphtraj/runner', child):
-        result = CliRunner().invoke(main, ['recover-apply', '--proposal', json.dumps(proposal)])
-    assert result.exit_code != 0
-    assert 'authority-denied' in result.output
-    assert (ticket / 'ticket.yml').read_bytes() == before
-    raw = local_tool.bind(root)({'action': 'execute', 'feature': 'apply_approved_recovery',
-                                 'arguments': {'proposal': proposal}})
-    assert raw.failed
 
 
 def test_cli_administrative_request_matches_shared_tool(target: tuple, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -614,51 +534,10 @@ def test_cli_administrative_request_matches_shared_tool(target: tuple, monkeypat
     command.extend(['--caused-by-event-id', arguments['caused_by_event_ids'][0]])
     cli = CliRunner().invoke(main, command)
     assert cli.exit_code == 0, cli.output
-    assert yaml.safe_load(cli.output)['proposal'] == tool['proposal']
-    native_command = shlex.split(tool['native_execution']['arguments']['cmd'])
-    assert Path(native_command[0]).name == 'agent-runner'
-    assert native_command[1] == 'recover-apply'
-    assert json.loads(native_command[3]) == tool['proposal']
+    assert yaml.safe_load(cli.output) == tool
+    assert 'proposal' not in tool and 'native_execution' not in tool
 
 
-@pytest.mark.parametrize('decision', ['allow', 'deny', 'cancel', 'error'])
-def test_native_review_runs_public_administrative_execution(
-    target: tuple,
-    installed_commands: InstalledCommands,
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    decision: str,
-) -> None:
-    """The native execution peer approves or refuses the actual public command."""
-    root, ticket, _, arguments = target
-    monkeypatch.chdir(root)
-    monkeypatch.setattr(recovery.sys, 'executable', str(installed_commands.runner.with_name('python')))
-    wrapper = tmp_path / 'native-review'
-    wrapper.write_text(
-        f'#!{sys.executable}\nimport os, sys\n' +
-        ('os.execv(sys.argv[1], sys.argv[2:])\n' if decision == 'allow' else
-         f'print({decision!r}, file=sys.stderr); sys.exit(1)\n')
-    )
-    wrapper.chmod(0o755)
-    before = (ticket / 'ticket.yml').read_bytes()
-    budget = (ticket / 'execution-budget.yml').read_bytes()
-    events = read_worldline(ticket.parent.parent, root)
-    channel, peer = socket.socketpair()
-    with channel, peer:
-        monkeypatch.setenv('CODEX_ESCALATE_SOCKET', str(channel.fileno()))
-        monkeypatch.setenv('EXEC_WRAPPER', str(wrapper))
-        request = {**arguments, 'additional_minutes': 0, 'resume': False}
-        if decision == 'allow':
-            result = invoke(root, request)
-            assert result['recovery_status'] == 'applied'
-            assert result['applied'] is True
-            assert yaml.safe_load((ticket / 'ticket.yml').read_text())['status'] == 'implementing'
-        else:
-            with pytest.raises(RunnerError, match=decision):
-                invoke(root, request)
-            assert (ticket / 'ticket.yml').read_bytes() == before
-            assert read_worldline(ticket.parent.parent, root) == events
-    assert (ticket / 'execution-budget.yml').read_bytes() == budget
 
 
 def test_administrative_restore_allows_separate_budget_only_continue(
@@ -683,20 +562,246 @@ def test_administrative_restore_allows_separate_budget_only_continue(
     assert yaml.safe_load(budget_path.read_text()) == {**budget, 'stopped': False}
 
 
-def test_retry_of_retained_request_without_resume_field_does_not_add_time(
-    target: tuple, monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Older applied requests remain idempotent after adding the resume option."""
+def test_existing_authority_never_calls_reviewer(target: tuple, monkeypatch: pytest.MonkeyPatch) -> None:
+    """An ordinary interrupted continuation uses its existing budget and identity."""
     root, ticket, mapping, arguments = target
-    proposal = invoke(root, arguments)['proposal']
-    proposal['request'].pop('resume')
-    monkeypatch.chdir(root)
-    monkeypatch.setattr(recovery, '_send_session_locked', lambda *args, **kwargs: {'session': mapping['session']})
-    applied = CliRunner().invoke(main, ['recover-apply', '--proposal', json.dumps(proposal)])
-    assert applied.exit_code == 0, applied.output
-    event_id = yaml.safe_load(applied.output)['recovery_event_id']
     before = (ticket / 'execution-budget.yml').read_bytes()
-    retried = invoke(root, arguments)
-    assert retried['recovery_status'] == 'resumed'
-    assert retried['recovery_event_id'] == event_id
+    sent = []
+
+    def unexpected_review(proposal: dict) -> dict:
+        """Fail if a no-cost continuation tries to obtain new authority."""
+        pytest.fail('Existing authority requested another review.')
+
+    def resume(*args: object, **kwargs: object) -> dict:
+        """Observe the original Session and concrete current continuation scope."""
+        sent.append(json.loads(args[1]))
+        assert args[3]['session'] == mapping['session']
+        return {'session': mapping['session']}
+
+    monkeypatch.setattr(recovery, '_send_session_locked', resume)
+    result = local_tool.bind(root, recovery_reviewer=unexpected_review)({
+        'action': 'execute', 'feature': 'approved_recovery',
+        'arguments': {**arguments, 'additional_minutes': 0},
+    }).document
+    assert result['recovery_status'] == 'resumed'
     assert (ticket / 'execution-budget.yml').read_bytes() == before
+    assert sent[0]['allowed_scope'] == arguments['allowed_scope']
+    assert 'proposal' not in result and 'native_execution' not in result
+
+
+@pytest.mark.parametrize('decision', ['accept', 'decline', 'error'])
+def test_bound_host_decides_inside_recover(
+    target: tuple, monkeypatch: pytest.MonkeyPatch, decision: str,
+) -> None:
+    """A trusted host's decision completes the original call or leaves state untouched."""
+    root, ticket, _, arguments = target
+    before = (ticket / 'execution-budget.yml').read_bytes()
+    events = read_worldline(ticket.parent.parent, root)
+    observed = []
+
+    def review(proposal: dict) -> dict:
+        """Represent the selected host UI, not a model-supplied approved flag."""
+        assert (ticket / 'execution-budget.yml').read_bytes() == before
+        observed.append(proposal)
+        if decision == 'error':
+            raise recovery.runtime_adapter.RuntimeAdapterError('review-failed', 'Host unavailable')
+        return {'decision': decision}
+
+    monkeypatch.setattr(recovery, 'caller_runtime', lambda: None)
+    call = local_tool.bind(root, recovery_reviewer=review)
+    request = {'action': 'execute', 'feature': 'approved_recovery',
+               'arguments': {**arguments, 'resume': False}}
+    if decision == 'accept':
+        result = call(request).document
+        assert result['recovery_status'] == 'applied'
+        assert yaml.safe_load((ticket / 'execution-budget.yml').read_text())['approved_minutes'] == 7
+    else:
+        with pytest.raises(RunnerError):
+            call(request)
+        assert (ticket / 'execution-budget.yml').read_bytes() == before
+        assert read_worldline(ticket.parent.parent, root) == events
+    assert len(observed) == 1
+
+
+@pytest.mark.parametrize('decision', ['accept', 'decline', 'wrong-request', 'error'])
+def test_selected_http_reviewer_controls_recovery(
+    target: tuple, monkeypatch: pytest.MonkeyPatch, decision: str,
+) -> None:
+    """Exercise the real HTTP adapter envelope with a controlled provider response."""
+    from io import BytesIO
+    from graphtraj.runtimes.codex import approval
+
+    root, ticket, _, arguments = target
+    config_file = root / '.graphtraj/config.yml'
+    config = yaml.safe_load(config_file.read_text())
+    config['codex'] = {'approval': {'model': 'selected-reviewer',
+                                  'base_url': 'https://review.example/v1',
+                                  'api_key_env': 'RECOVERY_TEST_KEY'}}
+    config_file.write_text(yaml.safe_dump(config))
+    monkeypatch.setenv('RECOVERY_TEST_KEY', 'controlled-test-key')
+    before = (ticket / 'execution-budget.yml').read_bytes()
+    calls = []
+
+    class Provider:
+        """Intercept only HTTP; keep route selection, validation and repair real."""
+
+        def open(self, request: object, timeout: int) -> BytesIO:
+            """Return one selected reviewer's response or a transport error."""
+            body = json.loads(request.data)
+            context = json.loads(body['messages'][1]['content'])
+            calls.append(body)
+            assert body['model'] == 'selected-reviewer'
+            assert context['method'] == 'graphtraj/recoveryApproval'
+            assert context['request']['request']['additional_minutes'] == 7
+            assert (ticket / 'execution-budget.yml').read_bytes() == before
+            if decision == 'error':
+                raise OSError('Controlled transport failure')
+            reply = {'request_id': context['request_id'], 'decision': decision, 'rationale': 'Controlled decision'}
+            if decision == 'wrong-request':
+                reply.update(request_id='another-request', decision='accept')
+            return BytesIO(json.dumps({'choices': [{'finish_reason': 'stop',
+                            'message': {'content': json.dumps(reply)}}]}).encode())
+
+    monkeypatch.setattr(approval, 'build_opener', lambda *args: Provider())
+    request = {**arguments, 'resume': False}
+    if decision == 'accept':
+        result = invoke(root, request)
+        assert result['recovery_status'] == 'applied'
+        assert invoke(root, request) == result
+    else:
+        with pytest.raises(RunnerError):
+            invoke(root, request)
+        assert (ticket / 'execution-budget.yml').read_bytes() == before
+    assert len(calls) == 1
+
+
+def test_recovery_rejects_public_bypasses(target: tuple, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Neither an executable apply command, unsigned proposal nor approved flag grants authority."""
+    root, ticket, mapping, arguments = target
+    monkeypatch.chdir(root)
+    before = (ticket / 'execution-budget.yml').read_bytes()
+    removed = CliRunner().invoke(main, ['recover-apply', '--proposal', '{}'])
+    assert removed.exit_code != 0
+    call = local_tool.bind(root)
+    for request in (
+        {'feature': 'apply_approved_recovery', 'arguments': {'proposal': arguments}},
+        {'feature': 'approved_recovery', 'arguments': {**arguments, 'approved': True}},
+    ):
+        assert call({'action': 'execute', **request}).failed
+    with runtime_caller(root / '.graphtraj/runner', 'unrelated@e1'):
+        with pytest.raises(RunnerError) as error:
+            invoke(root, arguments)
+    assert error.value.code == 'authority-denied'
+    assert (ticket / 'execution-budget.yml').read_bytes() == before
+
+
+@pytest.mark.parametrize('issuer', ['owner', 'helper', 'outsider'])
+def test_native_gateway_recovery_keeps_real_caller_boundary(
+    target: tuple, monkeypatch: pytest.MonkeyPatch, issuer: str,
+) -> None:
+    """The native gateway exposes recovery only to its actual owning caller."""
+    import asyncio
+    from graphtraj.runtimes.codex.app_server import CodexServerRequest
+    from graphtraj.runtimes.codex.managed_session import run_native_operation
+
+    root, ticket, _, arguments = target
+    before = (ticket / 'execution-budget.yml').read_bytes()
+    reviewed = []
+
+    class ParentLookup:
+        """Supply controlled native ancestry, leaving business authorization real."""
+
+        async def read_thread_parent(self, thread: str) -> str | None:
+            """Only the helper belongs to this owner."""
+            return 'owner' if thread == 'helper' else None
+
+    def review(proposal: dict) -> dict:
+        """Observe the same gated recovery through its bound native host."""
+        reviewed.append(proposal)
+        return {'decision': 'accept'}
+
+    request = CodexServerRequest('native-recovery', 'item/tool/call', {
+        'threadId': issuer, 'turnId': 'turn', 'tool': 'graphtraj',
+        'arguments': {'action': 'execute', 'feature': 'approved_recovery',
+                      'arguments': {**arguments, 'resume': False}},
+    })
+    result = asyncio.run(run_native_operation(ParentLookup(), 'owner', None, root, request,
+                                             recovery_reviewer=review))
+    document = json.loads(result['contentItems'][0]['text'])
+    if issuer == 'owner':
+        assert result['success'], document
+        assert document['recovery_status'] == 'applied'
+        assert len(reviewed) == 1
+    else:
+        assert not result['success']
+        assert document['error']['code'] == 'authority-denied'
+        assert not reviewed
+        assert (ticket / 'execution-budget.yml').read_bytes() == before
+
+
+@pytest.mark.parametrize('decision', ['accept', 'decline'])
+def test_managed_user_recovery_waits_for_existing_reply_channel(
+    target: tuple, peer: Path, monkeypatch: pytest.MonkeyPatch, decision: str,
+) -> None:
+    """The owning host keeps recovery pending until its explicit user reply arrives."""
+    import asyncio
+    from graphtraj.runtimes.codex import managed_session
+    from graphtraj.runtimes.codex.app_server import CodexExecution, CodexServerRequest
+    from test_codex_app_server import context
+
+    root, ticket, mapping, arguments = target
+    directory = root / '.graphtraj/runner/sessions' / mapping['alias']
+    child = next(yaml.safe_load(path.read_text()) for path in directory.parent.glob('*/mapping.yml')
+                 if yaml.safe_load(path.read_text()).get('parent') == mapping['alias'])
+    request = {**arguments, 'alias': child['alias'], 'resume': False}
+    before = (ticket / 'execution-budget.yml').read_bytes()
+
+    async def exercise() -> None:
+        """Enter the production native gateway and reply through public Runtime control."""
+        resolved = context(root, peer)
+        worker = managed_session.CodexManagedExecution(
+            resolved.launch_document()['adapter_request'], 'Use only the authorized task budget.',
+            directory, lambda *_: None, resolved.evidence_document(), root / 'no-trace',
+        )
+        worker.loop = asyncio.get_running_loop()
+        worker.execution = CodexExecution(mapping['session'], 'controlled-turn')
+        worker.native_session = mapping['session']
+        worker.adapter = object()
+        worker.result = worker.loop.create_future()
+        notified = asyncio.Event()
+
+        def notice(*args: object) -> dict:
+            """Acknowledge presentation, without approving the recovery."""
+            worker.loop.call_soon_threadsafe(notified.set)
+            return {'delivery': 'received'}
+
+        monkeypatch.setattr(managed_session, 'notify_direct_parent', notice)
+        native = CodexServerRequest('recovery-tool', 'item/tool/call', {
+            'threadId': mapping['session'], 'turnId': 'controlled-turn', 'tool': 'graphtraj',
+            'arguments': {'action': 'execute', 'feature': 'approved_recovery', 'arguments': request},
+        })
+        running = asyncio.create_task(worker._native_runner_request(native))
+        await asyncio.wait_for(notified.wait(), 5)
+        identity = {'session': mapping['session'], 'execution_id': 'controlled-turn'}
+        pending = await asyncio.to_thread(worker.operate, {**identity, 'operation': 'requests'})
+        assert len(pending['requests']) == 1
+        details = pending['requests'][0]
+        assert details['method'] == 'graphtraj/recoveryApproval'
+        assert details['params']['request']['alias'] == child['alias']
+        assert (ticket / 'execution-budget.yml').read_bytes() == before
+        assert not running.done()
+        await asyncio.to_thread(worker.operate, {
+            **identity, 'operation': 'reply', 'request_token': details['request_token'],
+            'response': {'decision': decision},
+        })
+        response = await asyncio.wait_for(running, 5)
+        document = json.loads(response['contentItems'][0]['text'])
+        assert response['success'] is (decision == 'accept'), document
+        if decision == 'decline':
+            assert (ticket / 'execution-budget.yml').read_bytes() == before
+        else:
+            assert document['recovery_status'] == 'applied'
+        assert not (await asyncio.to_thread(worker.operate, {**identity, 'operation': 'requests'}))['requests']
+        worker.result.cancel()
+
+    asyncio.run(exercise())

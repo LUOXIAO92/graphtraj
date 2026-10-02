@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, Literal, Mapping, Protocol, Sequence, TypedDict
 
@@ -11,6 +13,22 @@ if TYPE_CHECKING:
 
 SessionStarted = Callable[[str, int], None]
 NativeReplacement = Callable[[Sequence[str]], dict]
+_recovery_reviewer: ContextVar[Callable[[dict], dict] | None] = ContextVar('recovery_reviewer', default=None)
+
+
+@contextmanager
+def recovery_review(reviewer: Callable[[dict], dict] | None):
+    """Bind the trusted host's selected reviewer, never a model request field."""
+    token = _recovery_reviewer.set(reviewer)
+    try:
+        yield
+    finally:
+        _recovery_reviewer.reset(token)
+
+
+def current_recovery_reviewer() -> Callable[[dict], dict] | None:
+    """Return the reviewer bound by this call's owning host."""
+    return _recovery_reviewer.get()
 
 
 class RuntimeExecutionResult(TypedDict):
@@ -111,12 +129,11 @@ class RuntimePreparationAdapter(Protocol):
         rejection and execution failure must raise without local fallback.
         """
 
-    def native_recovery_approval(self, command: Sequence[str], proposal: dict) -> dict:
-        """Review and execute exact recovery through the user's selected native route.
+    def native_recovery_approval(self, proposal: dict, cwd: Path) -> dict:
+        """Return the selected reviewer's decision for this exact recovery.
 
-        The proposal contains before/after values and existing authority references.
-        Return an execution result or a native execution request. Missing capability,
-        denial and failure must raise; none permits unreviewed local execution.
+        No mutation or executable proposal is returned. Missing capability,
+        refusal and errors must never permit an unreviewed repair.
         """
 
     def preflight_runtime_context(

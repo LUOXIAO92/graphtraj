@@ -145,3 +145,47 @@ async def review_request(route: dict, context: dict) -> dict:
             'RUNTIME_REQUEST_FAILED', 'Approval call failed: ' + type(error).__name__,
             terminal_confirmed=False,
         ) from error
+
+
+def review_recovery(proposal: dict, cwd: Path) -> dict:
+    """Review a host recovery action without inventing a native Codex request.
+
+    Managed and local hosts bind their selected reviewer. CLI callers reuse the
+    configured role/project HTTP route. A missing route fails closed; it never
+    silently substitutes human review for native automatic review.
+    """
+    import uuid
+
+    import yaml
+
+    from graphtraj.configuration.project_configuration import load_project_configuration
+    from graphtraj.configuration.project_roles import load_project_roles
+    from graphtraj.execution.runner_batch import read_session_task
+    from graphtraj.execution.runner_status import caller_alias, read_alias_mapping
+    from graphtraj.workspace.runner_project import discover_project
+
+    project = discover_project(cwd, require_clean_integration=False)
+    defaults = load_project_configuration(project.harness_root).codex
+    caller = caller_alias(project.runner_directory)
+    settings = None
+    context = {}
+    custom = False
+    if caller:
+        mapping, directory = read_alias_mapping(project.runner_directory, caller)
+        task = read_session_task(mapping, project.harness_root)
+        role = task.inline_preset or load_project_roles(project.harness_root).preset(
+            mapping.get('role_reference') or mapping['role'])
+        settings = role.codex
+        launch = yaml.safe_load((directory / 'launch.yml').read_text())
+        params = launch['adapter_request']['session_parameters']
+        custom = params.get('config', {}).get('model_provider', 'openai') != 'openai'
+        context = {'task': task.ticket_content, 'instruction': task.instruction,
+                   'developer_instructions': params.get('developerInstructions')}
+    route = approval_route(settings, custom=custom, defaults=defaults)
+    if route is None:
+        raise RuntimeAdapterError('native-approval-unavailable',
+                                  'Recovery requires the selected reviewer to be bound by the host.')
+    return asyncio.run(review_request(route, {
+        **context, 'request_id': uuid.uuid4().hex, 'method': 'graphtraj/recoveryApproval',
+        'request': proposal, 'allowed_decisions': ['accept', 'decline'],
+    }))

@@ -29,10 +29,10 @@ checks and reviews, verify only the affected correction and submit the new
 version through the common result protocol. A new Round or Session does not
 reset project-specific validation limits or expand the task's budget.
 
-## Recover through the selected native approval
+## Recover with the selected reviewer
 
 Use `agent-runner recover <alias>` or the shared `approved_recovery` operation
-to prepare one concrete repair and continuation of the original Session. Supply
+to perform one concrete repair and continuation of the original Session. Supply
 the reason, continuation instruction, allowed and forbidden scope, and actual
 causal event IDs. Include `additional_minutes` only for the time increment
 being requested, and `restore_active` when the retained administrative state
@@ -49,18 +49,20 @@ The administrative-only result is `applied`, with the actual changes and
 `recovery_event_id`. It does not claim that continuation occurred. Adding zero
 minutes does not clear a budget stop when continuation is requested either.
 
-`requires-native-approval` means the result contains a pending native execution
-request. It is not approval and has not applied the repair. Submit that exact
-returned request through the Runtime's configured human or automatic reviewer.
-Existing authority references are evidence for that reviewer, not approval
-tokens the model can manufacture. Preserve the proposed command and scope;
-denial or approval failure does not authorize an alternate execution path.
+Recovery within existing spending authority does not need another approval
+merely because a parent interrupted the Session. Additional spending requires
+the selected human or automatic reviewer. The same recovery operation requests
+that decision and executes after approval; callers do not transport a proposal
+or invoke a second apply command. A rejected or failed review leaves the
+unapproved repair unapplied. Causal references and caller-supplied claims are
+not approval tokens.
 
-The request executes the installed `agent-runner recover-apply` public command
-with the exact proposal. The shared `approved_recovery` operation retains
-preparation and retry; it does not expose an unchecked apply tool.
-This is the approval execution boundary, not an alternative to approval. Do
-not replace it with a temporary script or direct internal Python invocation.
+For Codex, configured HTTP review uses the existing `codex.approval` settings,
+including role overrides. Human review uses the existing pending request and
+reply channel. A host-bound reviewer must actually be available; selecting a
+native reviewer without a callable host route does not grant approval. HTTP
+review is not evidence that Codex's native automatic reviewer ran. Do not
+replace an unavailable route with a temporary script or internal Python call.
 
 After approval, read the actual result. `stale` means the approved snapshot no
 longer matches the state to repair. `resume-failed` or `resume-stale` means the
@@ -79,7 +81,7 @@ agent-runner recover <alias> --retry-event-id <applied-recovery-event>
 
 This retries the retained continuation rather than applying another repair or
 time increment. Changed circumstances requiring a different repair need a new
-concrete proposal through the same approval mechanism. Existing authority,
+request through the same recovery operation. Existing authority,
 relationship, stop and permission checks still apply. For full parameters see
 [command inputs](command-inputs.md#approved-recovery).
 

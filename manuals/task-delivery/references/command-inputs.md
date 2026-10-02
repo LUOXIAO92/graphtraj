@@ -91,16 +91,14 @@ shared `approved_recovery` operation uses `alias`, `reason`, `instruction`,
 `resume` defaults to true; CLI `--no-resume` sets it to false for a repair that
 must leave the original execution stopped.
 
-The initial `requires-native-approval` result contains a concrete native
-execution request. Submit that exact request to the selected Runtime's existing
-human or automatic approval mechanism. Receiving it, or citing an authority
-event, is not permission to execute it by another route. No repair is applied
-before the approved execution runs. The request uses the installed public
-`agent-runner recover-apply --proposal <exact-JSON-proposal>` command. Keep
-`approved_recovery` as the shared preparation and retry operation. Preserve the
-exact prepared proposal and submit its execution through native approval;
-neither knowing this command nor supplying a proposal grants approval. Callers
-do not need to import or invoke an internal Python function.
+This one operation obtains any required human or automatic review and then
+executes the approved repair. Recovery within existing spending authority,
+including an ordinary parent interruption, does not require another approval.
+Additional spending requires the selected reviewer; refusal or review failure
+does not apply the unapproved repair. There is no separate `recover-apply`
+command, caller-supplied approval flag or proposal execution step. Codex HTTP
+review reuses `codex.approval`; human review uses the existing request/reply
+channel. An unavailable selected reviewer is reported rather than bypassed.
 
 For administrative repair only, use `--restore-active --no-resume` without a
 time increment. This restores the retained delivery state while preserving the
@@ -122,7 +120,7 @@ agent-runner recover <alias> --retry-event-id <applied-recovery-event>
 The corresponding tool arguments are `alias` and `retry_event_id`; do not add
 another time increment or repair request to that retry. `resumed` reports the
 continuation outcome, not that the task is complete. See
-[recovery decisions](recovery.md#recover-through-the-selected-native-approval)
+[recovery decisions](recovery.md#recover-with-the-selected-reviewer)
 for retained history, native rejection and changed-state handling.
 
 ## Integrate accepted files

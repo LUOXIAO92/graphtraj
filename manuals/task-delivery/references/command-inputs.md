@@ -51,6 +51,17 @@ agent-runner submit-result --commit <commit> --result-ref <result-path> --comple
 
 Use the Session's assigned report/result destinations and actual task binding.
 Keep unresolved work explicit. A report does not substitute for the submission.
+For versioned results, `result_refs` must name files or directories present in
+the submitted commit. Put retained reports, test logs and installation evidence
+in `evidence_refs`; a report stored outside Git is not a committed result path.
+
+Within a managed Session, use the public CLI through the host connection prepared
+by the Runner. The host verifies the caller and applies the same operation and
+authority checks as the native tool. This does not permit direct access to
+private control records or caller-selected identity. A refused or broken prepared
+connection must not fall back to executing the operation with broader authority.
+Installing a new CLI alone does not establish adoption by an existing Session;
+use supported Runner preparation and verify an actual call in that Session.
 
 The authorized caller assesses that submitted version and records its decision:
 

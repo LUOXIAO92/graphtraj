@@ -207,7 +207,7 @@ def test_installed_mcp_server_discovers_tools_and_reads_the_same_graph_as_the_cl
         # the selected feature's schemas and not a second flat tool list.
         assert descriptor["inputSchema"] == gateway.INPUT_SCHEMA
         assert set(descriptor["inputSchema"]["properties"]) == {
-            "action", "query", "feature", "arguments",
+            "action", "query", "feature", "arguments", "schema",
         }
 
         # discover and describe are reached through the same single tool.
@@ -226,11 +226,14 @@ def test_installed_mcp_server_discovers_tools_and_reads_the_same_graph_as_the_cl
         })["result"]
         description = described["structuredContent"]
         assert description["feature"] == "ticket_graph"
-        assert description["input_schema"] == tools.TOOLS["ticket_graph"].input_schema
-        assert description["call"] == {
-            "action": "execute", "feature": "ticket_graph", "arguments": {},
-        }
-        assert {"examples", "manual_ref", "manual"} <= set(description)
+        assert set(description) == {"feature", "description", "manual_ref"}
+        reference = Path(description["manual_ref"])
+        assert reference.is_absolute() and reference.read_text(encoding="utf-8")
+        parameters = server.request("tools/call", {
+            "name": MCP_TOOL_NAME,
+            "arguments": {"action": "describe", "feature": "ticket_graph", "schema": True},
+        })["result"]
+        assert parameters["structuredContent"] == {"input_schema": tools.TOOLS["ticket_graph"].input_schema}
         assert described["isError"] is ("error" in description)
 
         call = server.call("ticket_graph", {})

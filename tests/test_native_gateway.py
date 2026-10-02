@@ -52,9 +52,10 @@ def test_native_gateway_disclosure_execution_and_correction(
         }, True),
         ({'action': 'describe', 'feature': 'alias_status'}, {
             'feature': 'alias_status', 'description': status.description,
-            'input_schema': status.input_schema, 'examples': list(status.examples),
-            'manual_ref': str(manual), 'manual': 'Fixture status manual',
-            'call': {'action': 'execute', 'feature': 'alias_status', 'arguments': {}},
+            'manual_ref': str(manual),
+        }, True),
+        ({'action': 'describe', 'feature': 'alias_status', 'schema': True}, {
+            'input_schema': status.input_schema,
         }, True),
         ({'action': 'execute', 'feature': 'alias_status',
           'arguments': {'operation_total': 'yes'}}, {
@@ -245,8 +246,8 @@ def test_native_gateway_discloses_method_guides_without_widening_execution(
                     issuer, {'action': 'describe', 'feature': 'task-delivery'},
                 )
                 assert success
-                assert described['manual'] == guide.read_text(encoding='utf-8')
-                assert described['call'] is None
+                assert Path(described['manual_ref']).read_text(encoding='utf-8') == guide.read_text(encoding='utf-8')
+                assert set(described) == {'feature', 'description', 'manual_ref'}
 
             for feature in ('ticket_register', 'task-delivery'):
                 document, success = await call('helper', {

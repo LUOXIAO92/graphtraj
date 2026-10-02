@@ -16,6 +16,10 @@ INPUT_SCHEMA: dict[str, Any] = {
         "action": {"type": "string", "enum": ["discover", "describe", "execute"]},
         "query": {"type": "string"},
         "feature": {"type": "string"},
+        "schema": {
+            "type": "boolean", "default": False,
+            "description": "For describe only: return the selected input schema instead of guide references.",
+        },
         "arguments": {"type": "object"},
     },
     "required": ["action"],
@@ -118,7 +122,9 @@ def handle_request(
 
     Manual references are local UTF-8 paths. An absolute reference is read as
     given; a relative one resolves to the distribution's delivered data
-    location, never to ``cwd``. Only describe reads them. Execution needs no
+    location, never to ``cwd``. Default describe checks and returns the readable
+    reference; ``schema=true`` returns only the selected input schema without
+    reading material. Execution needs no
     prior help request or material. Handlers accepting ``cwd`` receive it; older
     ambient-directory handlers keep their existing calling convention. Business
     exceptions remain host-owned.
@@ -129,6 +135,8 @@ def handle_request(
         fields = {"action", "query"} if action == "discover" else {"action", "feature"}
         if action == "execute":
             fields.add("arguments")
+        if action == "describe":
+            fields.add("schema")
         for name in request.keys() - fields:
             raise ValueError(f"request.{name}: not valid for {action}")
         if action != "discover" and "feature" not in request:
@@ -157,21 +165,19 @@ def handle_request(
         return ToolResult({"error": f"Unknown feature: {feature}"}, failed=True)
 
     if action == "describe":
+        if request.get("schema", False):
+            return ToolResult({"input_schema": tool.input_schema})
         document = {
             "feature": tool.name,
             "description": tool.description,
-            "input_schema": tool.input_schema,
-            "examples": list(tool.examples),
-            "manual_ref": tool.manual_ref,
-            "manual": None,
-            "call": {"action": "execute", "feature": tool.name, "arguments": {}}
-            if tool.handler is not None else None,
         }
         if tool.manual_ref is None:
             document["error"] = f"No manual reference for feature: {feature}"
         else:
             try:
-                document["manual"] = _manual_path(tool.manual_ref).read_text(encoding="utf-8")
+                path = _manual_path(tool.manual_ref).resolve()
+                path.read_text(encoding="utf-8")
+                document["manual_ref"] = str(path)
             except (OSError, UnicodeError) as error:
                 document["error"] = f"Cannot read manual {tool.manual_ref}: {error}"
         return ToolResult(document, failed="error" in document)

@@ -53,7 +53,7 @@ def test_descriptor_registers_one_tool_over_the_shared_schema() -> None:
     assert descriptor["description"] == local_tool.TOOL_DESCRIPTION
     assert descriptor["input_schema"] is gateway.INPUT_SCHEMA
     assert set(descriptor["input_schema"]["properties"]) == {
-        "action", "query", "feature", "arguments",
+        "action", "query", "feature", "arguments", "schema",
     }
 
 
@@ -65,8 +65,10 @@ def test_python_binding_discovers_describes_reads_and_writes(project: Path) -> N
     assert discovered.document["features"][0]["feature"] == "ticket_graph"
 
     described = call({"action": "describe", "feature": "ticket_graph"})
-    assert described.document["manual"] == "Fixture manual for ticket_graph."
-    assert described.document["input_schema"] == tools.TOOLS["ticket_graph"].input_schema
+    assert Path(described.document["manual_ref"]).read_text() == "Fixture manual for ticket_graph."
+    assert set(described.document) == {"feature", "description", "manual_ref"}
+    parameters = call({"action": "describe", "feature": "ticket_graph", "schema": True})
+    assert parameters.document == {"input_schema": tools.TOOLS["ticket_graph"].input_schema}
 
     assert call({"action": "execute", "feature": "ticket_graph", "arguments": {}}).document == {"tickets": []}
     written = call({"action": "execute", "feature": "ticket_register", "arguments": ISSUE})
@@ -148,7 +150,7 @@ def test_bridge_answers_bad_requests_and_keeps_serving(project: Path) -> None:
     assert replies[2] == {"failed": True, "error": "Invalid request"}
     assert replies[3]["failed"] and "error" in replies[3]["result"]
     assert replies[4]["failed"] and "Unknown feature" in replies[4]["result"]["error"]
-    assert replies[5]["result"]["manual"] == "Fixture manual for ticket_graph."
+    assert Path(replies[5]["result"]["manual_ref"]).read_text() == "Fixture manual for ticket_graph."
     assert replies[6]["result"] == {"tickets": []}
     assert not replies[7]["failed"]
     assert Path(replies[7]["result"]["ticket_directory"]).is_dir()
@@ -200,7 +202,7 @@ sys.stderr.write("mcp_imported={0}\\n".format("graphtraj.interfaces.mcp" in sys.
     replies = [json.loads(line) for line in completed.stdout.splitlines()]
     assert replies[0] == {"failed": True, "error": "Parse error"}
     assert replies[1]["result"]["features"][0]["feature"] == "ticket_graph"
-    assert replies[2]["result"]["manual"] == "Fixture manual for ticket_graph."
+    assert Path(replies[2]["result"]["manual_ref"]).read_text() == "Fixture manual for ticket_graph."
     assert replies[3]["result"] == {"tickets": []}
     assert not replies[4]["failed"]
     # The write landed in the host's launch directory, not the test process one.

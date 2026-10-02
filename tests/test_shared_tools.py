@@ -77,10 +77,10 @@ def test_both_transports_consume_shared_schema_and_handler(
     assert listed[0]['inputSchema'] == native[0]['inputSchema'] == gateway.INPUT_SCHEMA
     described = mcp_request('tools/call', {
         'name': 'graphtraj',
-        'arguments': {'action': 'describe', 'feature': 'alias_status'},
+        'arguments': {'action': 'describe', 'feature': 'alias_status', 'schema': True},
     })['structuredContent']
     native_description = native_request(tmp_path, 'graphtraj', {
-        'action': 'describe', 'feature': 'alias_status',
+        'action': 'describe', 'feature': 'alias_status', 'schema': True,
     })
     assert described['input_schema'] == schema
     assert json.loads(native_description['contentItems'][0]['text'])['input_schema'] == schema

@@ -29,6 +29,13 @@ def _budget_notices() -> Iterator[None]:
     to the turn that is waiting for it.
     """
     global _MAIN_RECOVERY
+    from graphtraj.interfaces.hosted_cli import CONNECTION_ENV
+
+    if CONNECTION_ENV in os.environ:
+        # The existing Worker owns budget delivery and native approval for a
+        # forwarded call; do not open another Runtime from the sandboxed CLI.
+        yield
+        return
     descriptor, owned = caller_notice_fd()
     if descriptor is None:
         from graphtraj.runtimes.codex.app_server import CodexMainRecovery

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import shlex
 import subprocess
 from pathlib import Path
 from typing import Dict, List
@@ -205,9 +206,15 @@ def run_git(
             capture_output=True,
         )
     except OSError as error:
-        raise RunnerError("GIT_FAILED", "A required Git operation failed.") from error
+        raise RunnerError(
+            "GIT_FAILED", f"{shlex.join(['git', *arguments])} in {repository}: {error}",
+        ) from error
     if result.returncode != 0:
-        raise RunnerError("GIT_FAILED", "A required Git operation failed.")
+        raise RunnerError(
+            "GIT_FAILED",
+            f"{shlex.join(['git', *arguments])} in {repository} exited {result.returncode}: "
+            + result.stderr.strip()[:2000],
+        )
     return result.stdout.strip()
 
 

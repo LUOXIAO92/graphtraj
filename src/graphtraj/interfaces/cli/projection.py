@@ -29,6 +29,13 @@ def invoke_tool(feature: str, arguments: dict[str, Any], **context: Any) -> Tool
         _validate(arguments, TOOLS[feature].input_schema, "arguments")
     except ValueError as error:
         raise click.UsageError(str(error)) from error
+    from graphtraj.interfaces.hosted_cli import forward_cli
+
+    forwarded = forward_cli(feature, arguments, context.get('cwd') or Path.cwd())
+    if forwarded is not None:
+        if forwarded.failed and 'error' in forwarded.document:
+            raise click.ClickException(str(forwarded.document.get('error', 'Host operation failed.')))
+        return forwarded
     return TOOLS[feature].handler(arguments, **context)
 
 

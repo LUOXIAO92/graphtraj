@@ -122,6 +122,8 @@ def submit_session_result(
         path = Path(reference)
         if path.is_absolute() or '..' in path.parts or reference.startswith('-'):
             raise ValueError('Result files must be Worktree-relative.')
+        if path.parts and path.parts[0] == '.state':
+            raise ValueError('Assigned reports belong in evidence_refs; result_refs must name committed files.')
         if run_git(worktree, 'cat-file', '-t', f'{commit}:{reference}') != 'blob':
             raise ValueError('Result references must name committed files.')
         return reference

@@ -7,6 +7,7 @@ import os
 import json
 import uuid
 from concurrent.futures import CancelledError
+from contextlib import ExitStack
 from pathlib import Path
 from typing import Callable
 
@@ -116,6 +117,23 @@ class CodexManagedExecution:
     async def _run(self) -> dict:
         """Retain identity from the Session handle and outcomes from native turns."""
         self.loop = asyncio.get_running_loop()
+        connections = ExitStack()
+        # Only a formal Worker has a creation callback that binds its native
+        # Session to Runner ownership before the first Agent turn.
+        if self.created is not None:
+            from graphtraj.interfaces.hosted_cli import CONNECTION_ENV, cli_connection
+            from graphtraj.workspace.runner_project import discover_project_root
+
+            request = self.context.launch_document()['adapter_request']
+            root = discover_project_root(Path(request['worktree_path']))
+            address = connections.enter_context(cli_connection(
+                root, self.directory.name, native_operation_features(), self._review_recovery_sync,
+            ))
+            config = request['session_parameters']['config']
+            profile = config['permissions'][config['default_permissions']]
+            profile['filesystem'][address] = 'write'
+            config.setdefault('shell_environment_policy', {}).setdefault('set', {})[CONNECTION_ENV] = address
+            self.context = restore_codex_context(request, self.context.evidence_document())
         adapter = CodexAppServer(cwd=Path(self.context.session_document()['adapter_request']['cwd']),
                                  command=self.command, request_timeout=5,
                                  on_request=self._request, request_handler_timeout=None,
@@ -172,6 +190,7 @@ class CodexManagedExecution:
                 raise
             raise RuntimeAdapterError(error.code, error.message) from error
         finally:
+            await asyncio.to_thread(connections.close)
             if observer is not None:
                 observer.cancel()
                 await asyncio.gather(observer, return_exceptions=True)
@@ -536,8 +555,7 @@ async def run_native_operation(
                 raise RunnerError('authority-denied', 'Native caller is outside this Session subtree.')
         # Method-only features have no handler, so disclosing them adds
         # readable guidance without adding executable capability.
-        allowed_features = (set(NATIVE_RUNNER_TOOLS.values()) | set(METHOD_FEATURE_NAMES)
-                            | {'parent_status', 'retire', 'replace', 'cleanup', 'approved_recovery'})
+        allowed_features = native_operation_features()
         if name == 'graphtraj':
             feature = arguments.get('feature')
             action = arguments.get('action')
@@ -573,3 +591,12 @@ async def run_native_operation(
         'contentItems': [{'type': 'inputText', 'text': json.dumps(document)}],
         'success': success,
     }
+
+
+def native_operation_features() -> set[str]:
+    """Share the managed host's allowed operations across native tools and CLI."""
+    from graphtraj.interfaces.tools import METHOD_FEATURE_NAMES
+    from graphtraj.runtimes.codex.codex_adapter import NATIVE_RUNNER_TOOLS
+
+    return (set(NATIVE_RUNNER_TOOLS.values()) | set(METHOD_FEATURE_NAMES)
+            | {'parent_status', 'retire', 'replace', 'cleanup', 'approved_recovery'})

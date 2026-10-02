@@ -119,10 +119,18 @@ def caller_alias(runner_directory: Path) -> str | None:
         if native[0] != runner_directory.resolve():
             raise _authority_denied()
         return native[1]
+    return process_caller_alias(runner_directory, os.getpid())
+
+
+def process_caller_alias(runner_directory: Path, pid: int) -> str | None:
+    """Resolve an OS-observed process through the existing live ownership records.
+
+    Transport hosts must obtain ``pid`` from the kernel, never request fields.
+    """
     owners = _live_session_owners(runner_directory)
     if not owners:
         return None
-    for pid in process_ancestors(os.getpid()):
+    for pid in process_ancestors(pid):
         alias = owners.get(pid)
         if alias is not None:
             return alias

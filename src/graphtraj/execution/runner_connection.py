@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 import json
+import ctypes
+import fcntl
 import os
+import stat
+import sys
 import tempfile
 import threading
 import time
@@ -42,28 +46,27 @@ def inherited_parent_connection() -> str | dict | None:
 
 
 @contextmanager
-def worker_connection(directory: Path, operate: Callable[[dict], dict]) -> Iterator[str]:
+def worker_connection(
+    directory: Path,
+    operate: Callable[[dict], dict],
+    *,
+    authenticate: Callable[[int], None] | None = None,
+) -> Iterator[str]:
     """Serve local requests without requiring a listening network/socket permission."""
     stop = threading.Event()
     with tempfile.TemporaryDirectory(prefix='control-', dir=directory) as address:
         def serve() -> None:
             """Publish complete responses while native work continues on its own loop."""
             while not stop.is_set():
-                for request_file in Path(address).glob('*/request.json'):
+                for entry in Path(address).iterdir():
                     try:
-                        request = json.loads(request_file.read_text())
-                        request_file.unlink()
-                        result = operate(request)
-                    except RuntimeAdapterError as error:
-                        result = {'error': {'code': error.code, 'message': error.message}}
-                    except (OSError, ValueError, KeyError, TypeError) as error:
-                        result = {'error': {'code': 'operation-failed', 'message': str(error)}}
-                    try:
-                        pending = request_file.with_name('response.tmp')
-                        pending.write_text(json.dumps(result))
-                        os.replace(pending, request_file.with_name('response.json'))
+                        descriptor = os.open(entry, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
                     except OSError:
-                        pass  # Caller EOF does not cancel an accepted native operation.
+                        continue
+                    try:
+                        _answer_request(descriptor, operate, authenticate)
+                    finally:
+                        os.close(descriptor)
                 stop.wait(0.01)
 
         thread = threading.Thread(target=serve, daemon=True)
@@ -80,6 +83,44 @@ def worker_connection(directory: Path, operate: Callable[[dict], dict]) -> Itera
                 time.sleep(0.01)
 
 
+def _answer_request(
+    directory: int,
+    operate: Callable[[dict], dict],
+    authenticate: Callable[[int], None] | None,
+) -> None:
+    """Pin the request directory and never follow caller-controlled file links."""
+    try:
+        descriptor = os.open('request.json', os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory)
+    except OSError:
+        return
+    try:
+        with os.fdopen(descriptor) as stream:
+            metadata = os.fstat(stream.fileno())
+            if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
+                raise ValueError('A control request must be a regular file with one link.')
+            if authenticate is not None:
+                authenticate(record_lock_owner(stream.fileno()))
+            request = json.load(stream)
+        os.unlink('request.json', dir_fd=directory)
+        result = operate(request)
+    except (RunnerError, RuntimeAdapterError) as error:
+        result = {'error': {'code': error.code, 'message': error.message}}
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        result = {'error': {'code': 'operation-failed', 'message': str(error)}}
+    try:
+        descriptor = os.open('response.tmp', os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                             0o600, dir_fd=directory)
+        with os.fdopen(descriptor, 'w') as stream:
+            json.dump(result, stream)
+        os.replace('response.tmp', 'response.json', src_dir_fd=directory, dst_dir_fd=directory)
+        try:
+            os.unlink('request.json', dir_fd=directory)
+        except FileNotFoundError:
+            pass
+    except OSError:
+        pass  # Caller EOF does not cancel an accepted native operation.
+
+
 def session_operation(mapping: dict, operation: str, **arguments: object) -> dict:
     """Ask the owner to control the exact mapped native execution and await its reply."""
     try:
@@ -91,7 +132,9 @@ def session_operation(mapping: dict, operation: str, **arguments: object) -> dic
         raise RunnerError('operation-failed', 'The mapped Session control identity is invalid.') from error
 
 
-def connection_operation(address: str | dict, document: dict) -> dict:
+def connection_operation(
+    address: str | dict, document: dict, *, authenticate: bool = False,
+) -> dict:
     """Exchange one request with an existing owner, retaining acknowledgement semantics."""
     if isinstance(address, dict):
         from graphtraj.runtimes.runtime_adapter import select_runtime_adapter
@@ -104,15 +147,19 @@ def connection_operation(address: str | dict, document: dict) -> dict:
     try:
         with tempfile.TemporaryDirectory(dir=address) as directory:
             request = Path(directory) / 'request.tmp'
-            request.write_text(json.dumps(document))
-            os.replace(request, request.with_suffix('.json'))
-            response_file = Path(directory) / 'response.json'
-            deadline = time.monotonic() + OPERATION_TIMEOUT_SECONDS
-            while not response_file.is_file():
-                if time.monotonic() >= deadline:
-                    raise TimeoutError('Session control timed out; delivery is unconfirmed.')
-                time.sleep(0.01)
-            response = json.loads(response_file.read_text())
+            with request.open('w') as stream:
+                if authenticate:
+                    fcntl.lockf(stream, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                stream.write(json.dumps(document))
+                stream.flush()
+                os.replace(request, request.with_suffix('.json'))
+                response_file = Path(directory) / 'response.json'
+                deadline = time.monotonic() + OPERATION_TIMEOUT_SECONDS
+                while not response_file.is_file():
+                    if time.monotonic() >= deadline:
+                        raise TimeoutError('Session control timed out; delivery is unconfirmed.')
+                    time.sleep(0.01)
+                response = json.loads(response_file.read_text())
         if 'error' in response:
             raise RunnerError(response['error']['code'], response['error']['message'])
         return response
@@ -120,3 +167,30 @@ def connection_operation(address: str | dict, document: dict) -> dict:
         raise RunnerError(
             'operation-failed', 'The mapped Session owner did not acknowledge the operation: ' + str(error),
         ) from error
+
+
+def record_lock_owner(descriptor: int) -> int:
+    """Read the POSIX write-lock owner from the kernel, failing closed elsewhere.
+
+    Darwin and Linux use different native ``struct flock`` field orderings.
+    The client holds a whole-file lock until it consumes the host response.
+    """
+    if sys.platform == 'darwin':
+        fields = [('start', ctypes.c_int64), ('length', ctypes.c_int64),
+                  ('pid', ctypes.c_int), ('type', ctypes.c_short), ('whence', ctypes.c_short)]
+    elif sys.platform.startswith('linux'):
+        fields = [('type', ctypes.c_short), ('whence', ctypes.c_short),
+                  ('start', ctypes.c_int64), ('length', ctypes.c_int64), ('pid', ctypes.c_int)]
+    else:
+        raise RunnerError('authority-denied', 'This platform cannot verify CLI request ownership.')
+
+    class FileLock(ctypes.Structure):
+        """Native ABI record used only for F_GETLK, never caller supplied data."""
+        _fields_ = fields
+
+    query = FileLock()
+    query.type = fcntl.F_WRLCK
+    owner = FileLock.from_buffer_copy(fcntl.fcntl(descriptor, fcntl.F_GETLK, bytes(query)))
+    if owner.type != fcntl.F_WRLCK or owner.pid <= 0:
+        raise RunnerError('authority-denied', 'The CLI request has no live kernel-verified owner.')
+    return owner.pid

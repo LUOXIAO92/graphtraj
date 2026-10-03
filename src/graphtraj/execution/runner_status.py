@@ -312,7 +312,8 @@ def require_stopped_subtree(runner_directory: Path, alias: str) -> None:
             continue
         if not path.is_dir() and not path.is_symlink():
             continue
-        if _unstarted_allocation(path) or _terminal_unestablished_launch(path):
+        if (_unstarted_allocation(path) or _terminal_unestablished_launch(path)
+                or _unestablished_root_launch(path)):
             continue
         mappings[name] = read_alias_mapping(runner_directory, name)
     pending = [alias]
@@ -376,6 +377,33 @@ def _unstarted_allocation(directory: Path) -> bool:
         and not entries[0].is_symlink()
         and entries[0].is_file()
         and entries[0].stat().st_size == 0
+    )
+
+
+def _unestablished_root_launch(directory: Path) -> bool:
+    """Exclude an authoritative root allocation without certifying it stopped.
+
+    Runner retains launch parentage before native creation. An explicit root
+    cannot descend from the valid target. Missing parentage or any established
+    identity still requires strict mapping validation.
+    """
+    if directory.is_symlink() or any(
+        os.path.lexists(directory / name)
+        for name in ("mapping.yml", "session.yml", "native-session.yml", "execution.yml")
+    ):
+        return False
+    launch_file = directory / "launch.yml"
+    if launch_file.is_symlink() or not launch_file.is_file():
+        return False
+    try:
+        launch = yaml.safe_load(launch_file.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, yaml.YAMLError):
+        return False
+    return (
+        isinstance(launch, dict) and launch.get("operation") == "launch"
+        and isinstance(launch.get("mapping"), dict)
+        and launch["mapping"].get("alias") == directory.name
+        and "parent" in launch["mapping"] and launch["mapping"]["parent"] is None
     )
 
 

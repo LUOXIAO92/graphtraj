@@ -271,6 +271,10 @@ def select_runtime_adapter(runtime: str) -> RuntimeAdapter:
         from graphtraj.runtimes.codex.codex_adapter import CodexRuntimeAdapter
 
         return CodexRuntimeAdapter()
+    if runtime == "pi":
+        from graphtraj.runtimes.pi.pi_adapter import PiRuntimeAdapter
+
+        return PiRuntimeAdapter()
     raise RuntimeAdapterError(
         "RUNTIME_UNSUPPORTED",
         "The selected Agent Runtime is not supported by this Runner.",
@@ -280,11 +284,8 @@ def select_runtime_adapter(runtime: str) -> RuntimeAdapter:
 def native_replacement_approval(runtime: str | None) -> NativeReplacement | None:
     """Resolve approval capability without treating unsupported Runtimes as absent.
 
-    pi's previously supported absence is retained here without pretending it has
-    a launch Adapter. Every implemented Runtime uses the shared Adapter selector.
+    Every implemented Runtime reports its native capability through its Adapter.
     """
-    if runtime == "pi":
-        return None
     if runtime is None:
         raise RuntimeAdapterError("RUNTIME_UNSUPPORTED", "The calling Runtime is unknown.")
     return select_runtime_adapter(runtime).native_replacement_approval()

@@ -426,7 +426,10 @@ class PiManagedExecution:
                     raise RuntimeAdapterError('operation-failed', 'Pi is stopping; input was not queued.')
                 if not self.prompt_started:
                     raise RuntimeAdapterError('operation-failed', 'Pi is still accepting its initial prompt.')
-                self._rpc('steer', message=request['instruction'])
+                # Native prompt queues during streaming and starts a run if Pi
+                # settled before Runner consumed its final event. Bare steer
+                # would leave an idle Session with an undelivered queue.
+                self._rpc('prompt', message=request['instruction'], streamingBehavior='steer')
                 return {}
             if operation != 'interrupt':
                 raise RuntimeAdapterError('invalid-input', 'Unknown Pi operation.')

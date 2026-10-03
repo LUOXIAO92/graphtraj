@@ -166,6 +166,30 @@ def test_pi_active_input_and_independent_confirmed_stop(tmp_path: Path, pi_envir
         assert 'wait-a' in resumed.run()['last_agent_message']
 
 
+def test_pi_input_at_native_settlement(tmp_path: Path, pi_environment: dict) -> None:
+    """Input reaching an already idle Pi must start work rather than strand a queue."""
+    result_project(tmp_path)
+    with ExitStack() as stack, ThreadPoolExecutor(max_workers=1) as pool:
+        turn, ready, trace = execution(tmp_path, pi_environment, 'research@x1', 'settled-race', stack)
+        future = pool.submit(turn.run)
+        wait_started(turn, ready)
+        marker = trace.with_suffix('.pi') / 'idle-marker'
+        deadline = time.monotonic() + 5
+        while not marker.exists() and time.monotonic() < deadline:
+            time.sleep(0.005)
+        try:
+            assert marker.exists()
+            turn.operate({'operation': 'send', 'session': turn.session,
+                          'execution_id': turn.execution_id, 'instruction': 'after-settled'})
+            result = future.result(timeout=3)
+            assert result['outcome'] == 'completed'
+            assert 'after-settled' in result['last_agent_message']
+        finally:
+            if not future.done():
+                turn.terminate()
+                future.result(timeout=5)
+
+
 def test_pi_dialog_and_provider_error(tmp_path: Path, pi_environment: dict, monkeypatch: pytest.MonkeyPatch) -> None:
     """Status notifications are harmless; actual dialogs wait for explicit replies."""
     result_project(tmp_path)

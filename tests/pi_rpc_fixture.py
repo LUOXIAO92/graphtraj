@@ -71,6 +71,11 @@ def main() -> None:
         emit({'type': 'message_end', 'message': message})
         queued.clear()
         active = False
+        if text == 'settled-race':
+            # Delay delivery of the prior settlement until the next command;
+            # native steer queues even when no run remains to consume it.
+            (session_file.parent / 'idle-marker').touch()
+            return
         emit({'type': 'agent_settled'})
 
     emit({'type': 'extension_ui_request', 'id': 'status', 'method': 'setStatus', 'statusText': 'sandboxed'})
@@ -84,6 +89,13 @@ def main() -> None:
                                 'isStreaming': active, 'isCompacting': False,
                                 'pendingMessageCount': len(queued)}
         elif kind == 'prompt':
+            if active and request.get('streamingBehavior') == 'steer':
+                queued.append(request['message'])
+                if request['message'] == 'finish':
+                    stop.set()
+                response['data'] = {'disposition': 'queued'}
+                emit(response)
+                continue
             stop.clear()
             active = True
             text = request['message']
@@ -95,6 +107,8 @@ def main() -> None:
             continue
         elif kind == 'steer':
             queued.append(request['message'])
+            if not active:
+                emit({'type': 'agent_settled'})
             if request['message'] == 'finish':
                 stop.set()
             response['data'] = {'disposition': 'queued'}

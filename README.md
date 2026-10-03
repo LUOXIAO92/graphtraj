@@ -100,6 +100,44 @@ current rules in the Worktree-local copy, refreshed when setup or Worktree
 preparation runs. Setup migrates the old installer's complete shared ignore
 rule group; standalone user rules remain unchanged.
 
+## DeepSeek Harness child Agents
+
+The `dsh` Runtime uses the installed DeepSeek Harness backend through its
+authenticated HTTP and WebSocket interfaces. The qualified version is
+DSH `0.2.0-rc.2`; `dsh` and the installed GraphTraj commands must be available
+to the execution host. Configure a child role in `.graphtraj/roles.yml`, for
+example:
+
+```yaml
+roles:
+  dsh_assistant:
+    runtime: dsh
+    model: deepseek-official/deepseek-flash
+    base_url: https://api.deepseek.com/anthropic
+    api_key_env: DEEPSEEK_API_KEY
+    reasoning_effort: high
+    worktree_access: write
+    reports: [result.md]
+role_tree:
+  dsh_assistant: {}
+```
+
+Keep the credential in the referenced environment variable. The optional
+`base_url` is the Messages API base; reasoning effort supports `off`, `low`,
+`high` and `max`. Use ordinary public dispatch and Session control operations.
+Each Agent owns a separate backend service so the existing process-based
+public CLI identity can distinguish callers. Interrupting or retiring one
+Agent leaves unrelated services alone, and retained native Trace remains
+available after task cleanup.
+
+DSH's native file tools permit reads outside the Worktree. Its official write
+sandbox remains enabled, and GraphTraj public report operations still check
+caller identity, hierarchy and report access. The host must support DSH's
+native subprocess sandbox for Bash tools. Native interactive approval or user
+input requests return an explicit unsupported result and stop that execution.
+DSH Main/finalize hosting, native cross-level host approval and tightening an
+existing writable Session to reports-only mode are unsupported.
+
 ## Python operations
 
 The CLI calls the Python operations below. Import them from their owning

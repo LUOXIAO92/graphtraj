@@ -102,6 +102,7 @@ def test_recorded_runtime_controls_native_stage(tmp_path: Path, monkeypatch, run
 
 @pytest.mark.parametrize("residue", [
     "terminal", "empty", "events", "mapping", "launch", "owner", "nonempty-events",
+    "uncertain-root", "uncertain-descendant", "unknown-parent",
 ])
 @pytest.mark.parametrize("child_activity", ["idle", "running", "unreachable"])
 def test_public_replacement_checks_descendants_with_failed_launch_residue(
@@ -110,7 +111,7 @@ def test_public_replacement_checks_descendants_with_failed_launch_residue(
     child_activity: str,
     residue: str,
 ) -> None:
-    """Only unstarted residue is exempt; live or uncertain descendants still block."""
+    """Unrelated roots do not block; actual or possible uncertain descendants do."""
     root = tmp_path / "runner"
     parent = "132-ticket-handover0-team_leader@leader"
     child = "132-ticket-handover0-engineer@child"
@@ -132,7 +133,18 @@ def test_public_replacement_checks_descendants_with_failed_launch_residue(
         terminal_confirmed=True,
     ))
     (failed / "launch-error.yml").write_text(failure)
-    if residue != "terminal":
+    if residue in {"uncertain-root", "uncertain-descendant", "unknown-parent"}:
+        launch = yaml.safe_load((failed / "launch.yml").read_text())
+        if residue == "uncertain-descendant":
+            launch["mapping"]["parent"] = child
+        elif residue == "unknown-parent":
+            del launch["mapping"]["parent"]
+        (failed / "launch.yml").write_text(yaml.safe_dump(launch))
+        (failed / "launch-error.yml").write_text(yaml.safe_dump(runtime_launch_failure(
+            "RUNTIME_SHUTDOWN_FAILED", "Native stop is unconfirmed.", "",
+            terminal_confirmed=False,
+        )))
+    elif residue != "terminal":
         (failed / "launch-error.yml").unlink()
         if residue != "launch":
             (failed / "launch.yml").unlink()
@@ -152,7 +164,7 @@ def test_public_replacement_checks_descendants_with_failed_launch_residue(
         # after the stopped-subtree check, without creating a replacement.
         team_replacement.replace_session(parent, "user", (), tmp_path)
     expected = "invalid-input" if child_activity == "idle" else "replacement-not-stopped"
-    if residue in {"mapping", "launch", "owner", "nonempty-events"}:
+    if residue in {"mapping", "owner", "nonempty-events", "uncertain-descendant", "unknown-parent"}:
         expected = "operation-failed"
     assert error.value.code == expected
     assert {path.name: path.read_bytes() for path in failed.iterdir()} == retained

@@ -15,6 +15,10 @@ def main() -> None:
     if '--version' in sys.argv:
         print('1.0.0-fixture')
         return
+    if os.environ.get('PI_FIXTURE_STARTUP_FAILURE'):
+        print('PermissionError: fixture startup resource denied; Bearer fixture-token', file=sys.stderr)
+        print(os.environ.get('DEEPSEEK_API_KEY', ''), file=sys.stderr)
+        raise SystemExit(71)
     session_file = Path(sys.argv[sys.argv.index('--session') + 1])
     provider = sys.argv[sys.argv.index('--provider') + 1]
     model = sys.argv[sys.argv.index('--model') + 1]

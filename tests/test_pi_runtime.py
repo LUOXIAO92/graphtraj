@@ -122,6 +122,27 @@ def test_pi_config_dependency_and_host_limits(tmp_path: Path, pi_environment: di
         context(tmp_path, pi_environment)
 
 
+def test_pi_startup_failure_preserves_diagnostics(tmp_path: Path, pi_environment: dict, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A pre-binding native exit retains its cause without claiming cleanup or exposing credentials."""
+    result_project(tmp_path)
+    monkeypatch.setenv('PI_FIXTURE_STARTUP_FAILURE', '1')
+    monkeypatch.setenv('DEEPSEEK_API_KEY', 'fixture-private-key')
+    with ExitStack() as stack:
+        turn, ready, _ = execution(tmp_path, pi_environment, 'research@x1', 'unused', stack)
+        (turn.directory / 'stderr.log').write_text('old execution stderr must stay private\n')
+        with pytest.raises(RuntimeAdapterError) as caught:
+            turn.run()
+    message = str(caught.value)
+    assert caught.value.terminal_confirmed is False
+    assert 'Original error [RUNTIME_' in message
+    assert 'PermissionError: fixture startup resource denied' in message
+    assert 'Native process exit: 71' in message
+    assert 'fixture-private-key' not in message
+    assert 'fixture-token' not in message
+    assert 'old execution stderr' not in message
+    assert not ready.is_set()
+
+
 def test_pi_continuation_and_native_trace(tmp_path: Path, pi_environment: dict) -> None:
     """Same native Session and original context survive a new Worker invocation."""
     result_project(tmp_path)

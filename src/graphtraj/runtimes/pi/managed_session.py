@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import queue
+import re
 import signal
 import subprocess
 import sys
@@ -232,6 +233,7 @@ class PiManagedExecution:
                 Path(self.request['harness_root']), self.directory.name, native_operation_features()))
             argv, env = self._prepare(address)
             stderr = resources.enter_context((self.directory / 'stderr.log').open('a', encoding='utf-8'))
+            stderr_offset = stderr.tell()
             try:
                 self.proc = subprocess.Popen(argv, cwd=self.request['worktree_path'], env=env,
                                              stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=stderr,
@@ -296,6 +298,7 @@ class PiManagedExecution:
                                 raise RuntimeAdapterError('RUNTIME_PROVIDER_FAILED', failure)
                             return self._result('interrupted' if self.stopping.is_set() or native_aborted else 'completed', last)
             finally:
+                original_error = sys.exc_info()[1]
                 # Native abort owns tools/queues. Closing the transport and reaping
                 # this exact process follows it, and never targets another Session.
                 native_idle = self.outcome is not None
@@ -324,18 +327,42 @@ class PiManagedExecution:
                                 os.killpg(self.proc.pid, signal.SIGKILL)
                                 self.proc.wait(timeout=5)
                     if self.proc is not None and not native_idle:
-                        raise RuntimeAdapterError('RUNTIME_SHUTDOWN_FAILED',
-                                                  'Pi native stop is unconfirmed; inspect retained RPC diagnostics.',
-                                                  terminal_confirmed=False)
+                        raise self._shutdown_failure(original_error, stderr_offset)
                 except (OSError, subprocess.TimeoutExpired) as error:
-                    raise RuntimeAdapterError('RUNTIME_SHUTDOWN_FAILED', 'Pi stop is unconfirmed.',
-                                              terminal_confirmed=False) from error
+                    raise self._shutdown_failure(original_error or error, stderr_offset) from error
                 finally:
                     if reader is not None:
                         reader.join(timeout=5)
                     if hasattr(self, 'native_trace'):
                         self._retain_trace()
                     self.done.set()
+
+    def _shutdown_failure(self, cause: BaseException | None, stderr_offset: int) -> RuntimeAdapterError:
+        """Expose this launch's cause through Runner without certifying native stop."""
+        details = 'Pi native stop is unconfirmed.'
+        if cause is not None:
+            details += f' Original error [{getattr(cause, "code", type(cause).__name__)}]: {cause}'
+        if self.proc is not None:
+            details += f' Native process exit: {self.proc.poll()}.'
+        # Startup stderr is otherwise unreachable when no Session mapping could
+        # be bound. Do not expose older executions or task-generated stderr.
+        if not self.prompt_started:
+            try:
+                with (self.directory / 'stderr.log').open('rb') as stream:
+                    stream.seek(stderr_offset)
+                    diagnostic = stream.read(8192).decode('utf-8', errors='replace')
+                if diagnostic.strip():
+                    details += '\nStartup stderr: ' + diagnostic.strip()
+            except OSError:
+                details += ' Startup stderr unavailable.'
+        for name, value in os.environ.items():
+            if value and (name == self.request.get('api_key_env')
+                          or any(part in name.upper() for part in ('KEY', 'TOKEN', 'SECRET', 'PASSWORD', 'CREDENTIAL'))):
+                details = details.replace(value, '[REDACTED]')
+        details = re.sub(r'(?i)(bearer\s+)[^\s"\']+', r'\1[REDACTED]', details)
+        details = re.sub(r'(https?://)[^\s/@]+:[^\s/@]+@', r'\1[REDACTED]@', details)
+        details = re.sub(r'(https?://[^\s?]+)\?[^\s]+', r'\1?[REDACTED]', details)
+        return RuntimeAdapterError('RUNTIME_SHUTDOWN_FAILED', details, terminal_confirmed=False)
 
     def _result(self, outcome: str, last: str | None) -> dict:
         """Publish a terminal result only after native idle and empty queue."""

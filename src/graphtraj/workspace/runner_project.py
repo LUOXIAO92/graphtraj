@@ -22,7 +22,7 @@ from graphtraj.configuration.project_configuration import (
 from graphtraj.configuration.project_roles import ProjectRolesError, load_project_roles
 
 
-ALLOWLISTED_RUNTIMES = frozenset({"codex"})
+ALLOWLISTED_RUNTIMES = frozenset({"codex", "pi"})
 
 
 def provision_worktree(
@@ -264,7 +264,7 @@ def runtime_executable(runtime_name: str) -> Path:
     if executable is None:
         raise RunnerError(
             "RUNTIME_EXECUTABLE_INVALID",
-            "The configured Codex Runtime executable is unavailable.",
+            "The selected Agent Runtime executable is unavailable.",
         )
     resolved = _resolve_path(
         Path(executable),

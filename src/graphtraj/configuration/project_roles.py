@@ -45,6 +45,7 @@ class RolePreset:
     allow_runtime_swarm: bool = False
     reasoning_effort: str | None = None
     codex: Mapping[str, object] | None = None
+    pi: Mapping[str, object] | None = None
     instructions: str | None = None
     worktree_access: str = "write"
     reports: tuple[str, ...] = ()
@@ -357,7 +358,7 @@ def _role_preset(
         return None
     initial_count = len(diagnostics)
     allowed = _REQUIRED_FIELDS | _CONNECTION_FIELDS | {
-        "reasoning_effort", "codex", "allow_runtime_swarm", "instructions",
+        "reasoning_effort", "codex", "pi", "allow_runtime_swarm", "instructions",
         "worktree_access", "reports",
     }
     if "instructions" in entry and (
@@ -382,6 +383,8 @@ def _role_preset(
         diagnostics.append(f"{name}.reports must contain distinct safe names.")
     if "codex" in entry and not isinstance(entry["codex"], dict):
         diagnostics.append("{0}.codex must be a mapping.".format(name))
+    if "pi" in entry and not isinstance(entry["pi"], dict):
+        diagnostics.append("{0}.pi must be a mapping.".format(name))
     for field in entry:
         if field in {"skills", "harness_skills", "required_skills"}:
             diagnostics.append(
@@ -430,6 +433,7 @@ def _role_preset(
         return None
     return RolePreset(
         codex=entry.get("codex"),
+        pi=entry.get("pi"),
         runtime=str(entry["runtime"]),
         model=str(entry["model"]),
         base_url=str(entry["base_url"]) if "base_url" in entry else None,

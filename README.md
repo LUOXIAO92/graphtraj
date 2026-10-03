@@ -1129,7 +1129,7 @@ Historical `state/<run-id>` directories are left byte-for-byte untouched.
 GraphTraj does not migrate them, read them as fallback or offer compatibility
 for the old project command, Run-based Batch syntax or configuration sources.
 
-The current Adapter supports Codex. Dispatched Agents use Runner for formal
+Child-Agent Adapters support Codex and DeepSeek Harness. Dispatched Agents use Runner for formal
 task work. A role configured with `allow_runtime_swarm`
 may use Runtime-native helpers only for temporary read-only investigation;
 those helpers cannot occupy a Team seat, have no independent GraphTraj Trace,
@@ -1168,7 +1168,8 @@ paid-model acceptance. Retained initial fixture failures and earlier environment
 limitations are not relabeled as passes.
 
 The plugin/native callback limitations above remain. Alternate Runtime objects
-are test inputs rather than a second production backend. A separately recorded
+in those earlier controlled checks were test inputs; DeepSeek Harness support
+and its current limits are documented above. A separately recorded
 failure to notify and wake the responsible Agent promptly across task events
 remains open; successful channel writes, retained stop records and controlled
 receipt tests do not establish that broader behavior.

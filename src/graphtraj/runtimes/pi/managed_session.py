@@ -57,6 +57,7 @@ class PiManagedExecution:
         self.outcome: dict | None = None
         self.transport_closed = threading.Event()
         self.prompt_started = False
+        self.stderr_reader: threading.Thread | None = None
 
     @property
     def execution_id(self) -> str:
@@ -236,8 +237,18 @@ class PiManagedExecution:
             stderr_offset = stderr.tell()
             try:
                 self.proc = subprocess.Popen(argv, cwd=self.request['worktree_path'], env=env,
-                                             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=stderr,
+                                             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                              text=True, bufsize=1, start_new_session=True)
+
+                def retain_stderr() -> None:
+                    """Keep private log files host-side; Node must be able to stat its stdio."""
+                    assert self.proc is not None
+                    for line in self.proc.stderr:
+                        stderr.write(line)
+                        stderr.flush()
+
+                self.stderr_reader = threading.Thread(target=retain_stderr, daemon=True)
+                self.stderr_reader.start()
                 reader = threading.Thread(target=self._read, daemon=True)
                 reader.start()
                 state = self._rpc('get_state')
@@ -331,6 +342,8 @@ class PiManagedExecution:
                 except (OSError, subprocess.TimeoutExpired) as error:
                     raise self._shutdown_failure(original_error or error, stderr_offset) from error
                 finally:
+                    if self.stderr_reader is not None:
+                        self.stderr_reader.join(timeout=5)
                     if reader is not None:
                         reader.join(timeout=5)
                     if hasattr(self, 'native_trace'):
@@ -339,6 +352,8 @@ class PiManagedExecution:
 
     def _shutdown_failure(self, cause: BaseException | None, stderr_offset: int) -> RuntimeAdapterError:
         """Expose this launch's cause through Runner without certifying native stop."""
+        if self.stderr_reader is not None:
+            self.stderr_reader.join(timeout=5)
         details = 'Pi native stop is unconfirmed.'
         if cause is not None:
             details += f' Original error [{getattr(cause, "code", type(cause).__name__)}]: {cause}'

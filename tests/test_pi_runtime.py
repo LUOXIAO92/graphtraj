@@ -143,6 +143,15 @@ def test_pi_startup_failure_preserves_diagnostics(tmp_path: Path, pi_environment
     assert not ready.is_set()
 
 
+def test_pi_private_stderr_is_not_inherited(tmp_path: Path, pi_environment: dict, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Native stdio metadata access must not require reading a private Runner file."""
+    result_project(tmp_path)
+    monkeypatch.setenv('PI_FIXTURE_PIPE_STDERR', '1')
+    with ExitStack() as stack:
+        turn, _, _ = execution(tmp_path, pi_environment, 'research@x1', 'pipe-stderr', stack)
+        assert turn.run()['outcome'] == 'completed'
+
+
 def test_pi_continuation_and_native_trace(tmp_path: Path, pi_environment: dict) -> None:
     """Same native Session and original context survive a new Worker invocation."""
     result_project(tmp_path)

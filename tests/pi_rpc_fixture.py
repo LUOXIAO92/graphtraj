@@ -2,6 +2,7 @@
 
 import json
 import os
+import stat
 from pathlib import Path
 import subprocess
 import sys
@@ -15,6 +16,9 @@ def main() -> None:
     if '--version' in sys.argv:
         print('1.0.0-fixture')
         return
+    if os.environ.get('PI_FIXTURE_PIPE_STDERR') and not stat.S_ISFIFO(os.fstat(2).st_mode):
+        print('fixture refuses private regular-file stderr', file=sys.stderr)
+        raise SystemExit(71)
     if os.environ.get('PI_FIXTURE_STARTUP_FAILURE'):
         print('PermissionError: fixture startup resource denied; Bearer fixture-token', file=sys.stderr)
         print(os.environ.get('DEEPSEEK_API_KEY', ''), file=sys.stderr)

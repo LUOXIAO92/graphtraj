@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Callable, Collection, Iterator
+from typing import Any, Callable, Collection, Iterator, Mapping
 
 from graphtraj.execution.runner_connection import connection_operation, worker_connection
 from graphtraj.execution.runner_models import RunnerError
@@ -60,6 +60,11 @@ def forward_cli(feature: str, arguments: dict, cwd: Path) -> ToolResult | None:
     The environment locates a channel but grants no identity. Removing it leaves
     ordinary CLI identity checks in place, including inaccessible-record denial.
     """
+    return forward_request({'action': 'execute', 'feature': feature, 'arguments': arguments}, cwd)
+
+
+def forward_request(request: Mapping[str, Any], cwd: Path) -> ToolResult | None:
+    """Forward the public discovery/operation envelope over the same bound channel."""
     address = os.environ.get(CONNECTION_ENV)
     if address is None:
         return None
@@ -67,6 +72,6 @@ def forward_cli(feature: str, arguments: dict, cwd: Path) -> ToolResult | None:
         raise RunnerError('operation-unavailable', 'The Session CLI host connection is unavailable.')
     response = connection_operation(address, {
         'cwd': str(cwd.resolve()),
-        'request': {'action': 'execute', 'feature': feature, 'arguments': arguments},
+        'request': request,
     }, authenticate=True)
     return ToolResult(response['document'], failed=response['failed'])

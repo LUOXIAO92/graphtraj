@@ -165,9 +165,17 @@ def answer(
     if not isinstance(request, dict):
         return {"failed": True, "error": "Invalid request"}
     try:
-        result = gateway.handle_request(
-            request, cwd=cwd, allowed_features=allowed_features
-        )
+        from graphtraj.interfaces.hosted_cli import forward_request
+
+        result = None
+        if request.get('action') == 'execute' and (
+            allowed_features is None or request.get('feature') in allowed_features
+        ):
+            result = forward_request(request, cwd or Path.cwd())
+        if result is None:
+            result = gateway.handle_request(
+                request, cwd=cwd, allowed_features=allowed_features
+            )
     except Exception as error:
         # Business rejections stay host-owned; the bridge reports them instead
         # of ending the session, so a call after a rejection still works.

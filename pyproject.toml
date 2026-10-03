@@ -29,6 +29,7 @@ where = ["src"]
 [tool.setuptools.package-data]
 graphtraj = [
     "runtimes/codex/policy/*",
+    "runtimes/dsh/*.mjs",
     "prompts/*.md",
 ]
 

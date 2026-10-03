@@ -1,0 +1,350 @@
+"""DSH native lifecycle through the selected Runtime and public CLI boundaries."""
+
+from contextlib import nullcontext
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+import threading
+import time
+import io
+from typing import Any
+
+import pytest
+import yaml
+
+from graphtraj.configuration.project_roles import RolePreset
+from graphtraj.configuration.role_definitions import ResolvedChildRole
+from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError, select_runtime_adapter
+
+
+def request(tmp_path: Path) -> dict:
+    """Provide nonsecret native launch inputs to the public Runtime contract."""
+    return {
+        'executable': 'dsh', 'package': '/installed/dsh/package.json', 'tool': 'graphtraj-tool',
+        'worktree_path': str(tmp_path), 'harness_root': str(tmp_path),
+        'provider': 'deepseek-official', 'model': 'deepseek-flash',
+        'reasoning_effort': 'low', 'api_key_env': 'DSH_TEST_KEY',
+        'base_url': 'https://api.deepseek.com/anthropic', 'sandbox': 'workspace-write',
+        'instructions': 'Assigned responsibility', 'reports': ['.state/report.md'],
+    }
+
+
+class NativePeer:
+    """Controlled native service, including cancel ACK before actual quiescence."""
+
+    instances = []
+
+    def __init__(self, executable: str, cwd: Path, environment: dict) -> None:
+        """Start with independent per-service state and a raw native record."""
+        self.process = type('Process', (), {'pid': os.getpid()})()
+        self.calls = []
+        self.frames = []
+        self.running = False
+        self.inbox = {'next-turn': [], 'next-step': []}
+        self.cancelled = threading.Event()
+        self.release_cancel = threading.Event()
+        self.reason = 'completed'
+        self.closed = False
+        self.session = 'native-dsh'
+        home = Path(environment['DSH_HOME'])
+        config = yaml.safe_load((home / 'profiles/web/cordis.patch.yml').read_text())
+        root = next(row['config']['root'] for row in config if row.get('id') == 'session-persistence-jsonl')
+        log = Path(root) / 'workspace' / self.session / 'v4.jsonl'
+        log.parent.mkdir(parents=True)
+        log.write_text('{"type":"session/header","data":{"id":"native-dsh"}}\n')
+        self.instances.append(self)
+
+    def start(self) -> None:
+        """The fixture service is ready without invoking a model."""
+
+    def follow(self, session: str) -> dict:
+        """Observe this exact session before input."""
+        self.calls.append(('follow', session))
+        return {'type': 'snapshot'}
+
+    def rpc(self, method: str, body: dict | None = None) -> dict:
+        """Respond using native receipts, inbox and running-state shapes."""
+        self.calls.append((method, body))
+        if method == 'session/create':
+            return {'sessionId': body.get('sessionId', self.session)}
+        if method == 'session/projections':
+            return {'values': {'inbox': self.inbox}}
+        if method == 'session/list':
+            if self.cancelled.is_set() and self.release_cancel.is_set():
+                self.running = False
+            return {'items': [{'sessionId': self.session, 'running': self.running}]}
+        if method == 'session/prompt':
+            self.running = True
+        if method == 'session/updateQueue':
+            for key in self.inbox:
+                self.inbox[key] = [value for value in self.inbox[key] if value['id'] != body['itemId']]
+        if method == 'session/cancel':
+            assert not any(self.inbox.values())
+            self.cancelled.set()
+        return {'accepted': True}
+
+    def receive(self, timeout: float = 1) -> dict:
+        """Deliver explicitly scheduled native events, never promote prompt receipts."""
+        time.sleep(0.005)
+        if self.frames:
+            kind = self.frames.pop(0)
+            if kind == 'turn/end':
+                self.running = False
+            return {'type': 'event', 'event': {'type': kind, 'data': {
+                'reason': {'kind': self.reason},
+                'message': {'content': [{'type': 'text', 'text': 'Native response'}]},
+            }}}
+        return {}
+
+    def close(self) -> None:
+        """Only this native service is closed."""
+        self.closed = True
+
+
+@pytest.fixture
+def peer(monkeypatch: pytest.MonkeyPatch) -> list:
+    """Replace only the native service and unrelated host-channel creation."""
+    from graphtraj.runtimes.dsh import execution
+    from graphtraj.interfaces import hosted_cli
+
+    NativePeer.instances = []
+    monkeypatch.setattr(execution, 'DshService', NativePeer)
+    monkeypatch.setattr(hosted_cli, 'cli_connection', lambda *args: nullcontext('/bound-channel'))
+    return NativePeer.instances
+
+
+def run_turn(tmp_path: Path, *, expected: str | None = None, trace_file: Path | None = None) -> tuple:
+    """Run the public RuntimeTurn asynchronously so controls overlap active work."""
+    bindings = []
+    turn = select_runtime_adapter('dsh').managed_execution(
+        request(tmp_path), 'Original instruction', tmp_path,
+        lambda session, pid: bindings.append(('started', session)), {},
+        trace_file=trace_file or tmp_path / 'trace.jsonl', expected_session=expected,
+        session_created=lambda session, pid: bindings.append(('created', session)),
+    )
+    outcome = {}
+
+    def execute() -> None:
+        """Retain the public result or exact adapter failure."""
+        try:
+            outcome['result'] = turn.run()
+        except Exception as error:
+            outcome['error'] = error
+
+    thread = threading.Thread(target=execute)
+    thread.start()
+    deadline = time.monotonic() + 3
+    while len(bindings) < 2 and time.monotonic() < deadline and thread.is_alive():
+        time.sleep(0.005)
+    assert bindings == [('created', expected or 'native-dsh'), ('started', expected or 'native-dsh')]
+    return turn, thread, outcome
+
+
+def test_receipt_active_input_and_native_completion(tmp_path: Path, peer: list) -> None:
+    """A prompt ACK stays running; active input targets the same native Session."""
+    turn, thread, outcome = run_turn(tmp_path, expected='native-dsh')
+    assert thread.is_alive() and not outcome
+    identity = {'session': turn.session, 'execution_id': turn.execution_id}
+    turn.operate({**identity, 'operation': 'send', 'instruction': 'Remember followup'})
+    prompts = [body for method, body in peer[0].calls if method == 'session/prompt']
+    assert [body['mode'] for body in prompts] == ['queue', 'steer']
+    assert {body['sessionId'] for body in prompts} == {'native-dsh'}
+    with pytest.raises(RuntimeAdapterError):
+        turn.operate({**identity, 'session': 'other', 'operation': 'send', 'instruction': 'wrong'})
+    peer[0].frames.extend(['assistant/message', 'turn/end'])
+    thread.join(3)
+    assert outcome['result']['outcome'] == 'completed'
+    assert outcome['result']['last_agent_message'] == 'Native response'
+    assert peer[0].closed and (tmp_path / 'trace.jsonl').is_symlink()
+
+
+def test_cancel_drains_both_queues_and_waits_for_native_stop(tmp_path: Path, peer: list) -> None:
+    """Cancellation cannot acknowledge stopped until the native Agent is idle."""
+    turn, thread, outcome = run_turn(tmp_path)
+    service = peer[0]
+    service.inbox = {'next-turn': [{'id': 'queued'}], 'next-step': [{'id': 'steered'}]}
+    stop = {}
+
+    def interrupt() -> None:
+        """Capture the public control return separately from run's terminal result."""
+        stop['result'] = turn.operate({'session': turn.session, 'execution_id': turn.execution_id,
+                                      'operation': 'interrupt'})
+
+    control = threading.Thread(target=interrupt)
+    control.start()
+    assert service.cancelled.wait(3)
+    assert control.is_alive() and thread.is_alive() and not stop
+    with pytest.raises(RuntimeAdapterError):
+        turn.operate({'session': turn.session, 'execution_id': turn.execution_id,
+                      'operation': 'send', 'instruction': 'Must not restart'})
+    service.release_cancel.set()
+    thread.join(3)
+    control.join(3)
+    assert outcome['result']['outcome'] == 'interrupted'
+    assert stop == {'result': {}} and service.closed
+
+
+@pytest.mark.parametrize('reason', ['error', 'cancelled'])
+def test_native_error_is_not_success(reason: str, tmp_path: Path, peer: list) -> None:
+    """Native turn/end reason wins over transport receipts and client exit codes."""
+    turn, thread, outcome = run_turn(tmp_path)
+    peer[0].reason = reason
+    peer[0].frames.append('turn/end')
+    thread.join(3)
+    assert outcome['error'].code == 'RUNTIME_EXECUTION_FAILED'
+    assert peer[0].closed
+
+
+def test_native_approval_fails_explicitly_and_stops(tmp_path: Path, peer: list) -> None:
+    """Unsupported interaction is never discarded as successful completion."""
+    turn, thread, outcome = run_turn(tmp_path)
+    peer[0].frames.append('approval/asked')
+    peer[0].release_cancel.set()
+    thread.join(3)
+    assert outcome['error'].code == 'RUNTIME_REQUEST_UNHANDLED'
+    assert peer[0].cancelled.is_set() and peer[0].closed
+
+
+def test_lost_host_connection_is_failure_and_reaps_owned_service(
+    tmp_path: Path, peer: list, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A lost event channel cannot become completion or leave its model running."""
+    turn, thread, outcome = run_turn(tmp_path)
+
+    def disconnected(timeout: float = 1) -> dict:
+        """Inject the native transport's explicit connection-closed failure."""
+        raise RuntimeAdapterError('RUNTIME_CONNECTION_CLOSED', 'DSH Session connection failed.')
+
+    monkeypatch.setattr(peer[0], 'receive', disconnected)
+    thread.join(3)
+    assert outcome['error'].code == 'RUNTIME_CONNECTION_CLOSED'
+    assert 'result' not in outcome and peer[0].closed
+    assert (tmp_path / 'trace.jsonl').is_file()
+
+
+def test_two_owned_services_stop_independently(tmp_path: Path, peer: list) -> None:
+    """Stopping one Agent cannot stop a second service or finish its work."""
+    left = tmp_path / 'left'
+    right = tmp_path / 'right'
+    left.mkdir()
+    right.mkdir()
+    a, at, ar = run_turn(left)
+    b, bt, br = run_turn(right)
+    peer[0].release_cancel.set()
+    a.terminate()
+    at.join(3)
+    assert ar['result']['outcome'] == 'interrupted'
+    assert bt.is_alive() and not peer[1].closed and not br
+    peer[1].frames.append('turn/end')
+    bt.join(3)
+    assert br['result']['outcome'] == 'completed'
+
+
+def test_native_trace_survives_control_directory_retirement(tmp_path: Path, peer: list) -> None:
+    """Runner may move control records without losing the immutable native history."""
+    control = tmp_path / 'control'
+    control.mkdir()
+    trace = tmp_path / 'traces' / 'events.jsonl'
+    turn, thread, outcome = run_turn(control, trace_file=trace)
+    peer[0].frames.append('turn/end')
+    thread.join(3)
+    assert outcome['result']['outcome'] == 'completed'
+    content = trace.read_bytes()
+    control.rename(tmp_path / 'retired')
+    assert trace.read_bytes() == content
+
+
+def test_public_json_cli_uses_host_identity_and_report_checks(tmp_path: Path) -> None:
+    """The native tool's public CLI cannot impersonate another Session via arguments/env."""
+    from graphtraj.execution.runner_heartbeat import hold_ownership
+    from graphtraj.interfaces.hosted_cli import cli_connection, CONNECTION_ENV
+    from graphtraj.runtimes.codex.managed_session import native_operation_features
+    from test_result_submission import result_project
+    from test_hosted_cli import own_process
+
+    runner, _, _ = result_project(tmp_path)
+    directory = own_process(runner)
+    with hold_ownership(directory, os.getpid()), cli_connection(
+        tmp_path, 'research@x1', native_operation_features(),
+    ) as address:
+        result = subprocess.run(
+            [sys.executable, '-c', 'from graphtraj.interfaces.local_tool import main; main()'],
+            cwd=tmp_path, env={**os.environ, CONNECTION_ENV: address,
+                              'GRAPHTRAJ_CALLER_ALIAS': 'research@x2',
+                              'PYTHONPATH': str(Path(__file__).resolve().parents[1] / 'src')},
+            input=json.dumps({'action': 'execute', 'feature': 'session_reports',
+                              'arguments': {'alias': 'research@x2'}}) + '\n',
+            text=True, capture_output=True, timeout=20,
+        )
+    assert result.returncode == 0
+    document = json.loads(result.stdout)
+    assert document['failed']
+    assert document.get('error') and 'reports' not in document
+
+
+def test_native_remote_envelopes_and_authentication_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The installed Remote's list argument differs from Session mutation arguments."""
+    from graphtraj.runtimes.dsh.service import DshService
+    import urllib.request
+    import urllib.error
+
+    service = DshService('dsh', tmp_path, {})
+    service.origin = 'http://127.0.0.1:1'
+    service.cookie = 'test-cookie=not-a-real-credential'
+    fail = False
+
+    class Remote:
+        """Validate generated native HTTP envelopes at the transport boundary."""
+
+        def open(self, call: Any, timeout: float) -> io.StringIO:
+            """Return a native result only for an authenticated valid argument shape."""
+            if fail:
+                raise urllib.error.HTTPError(call.full_url, 401, 'Unauthorized', {}, None)
+            assert call.get_header('Cookie') == service.cookie
+            assert call.get_header('Origin') == service.origin
+            body = json.loads(call.data)
+            key = '_request' if body['method'] == 'session/list' else 'request'
+            assert body['payload']['args'] == {key: {}}
+            return io.StringIO(json.dumps({'rpcId': body['rpcId'], 'result': {'ok': True, 'value': {'accepted': True}}}))
+
+    monkeypatch.setattr(urllib.request, 'build_opener', lambda *args: Remote())
+    assert service.rpc('session/list', {}) == {'accepted': True}
+    assert service.rpc('session/create', {}) == {'accepted': True}
+    fail = True
+    with pytest.raises(RuntimeAdapterError) as rejected:
+        service.rpc('session/list', {})
+    assert rejected.value.code == 'RUNTIME_CONNECTION_FAILED'
+    assert service.cookie not in str(rejected.value)
+
+
+def test_dsh_role_projection_keeps_secrets_out_of_launch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Runtime selection translates access/model without persisting inherited secrets."""
+    import shutil
+
+    package = tmp_path / 'dsh'
+    (package / 'lib').mkdir(parents=True)
+    (package / 'package.json').write_text('{"version":"0.2.0-rc.2"}')
+    monkeypatch.setattr(shutil, 'which', lambda name: str(package / 'lib' / 'bin.js')
+                        if name == 'dsh' else '/installed/graphtraj-tool')
+    monkeypatch.setenv('DSH_TEST_KEY', 'never-persist-this-secret')
+    role = ResolvedChildRole('author', 'Task responsibility', RolePreset(
+        runtime='dsh', model='deepseek-official/deepseek-flash', base_url=None,
+        api_key_env='DSH_TEST_KEY', worktree_access='read', reasoning_effort='max',
+    ))
+    context = select_runtime_adapter('dsh').preflight_runtime_context(
+        harness_root=tmp_path, git_common_directory=tmp_path / '.git', role=role,
+        worktree=tmp_path / 'work', evidence=tmp_path / 'state', requested_skills=(),
+        report_files=(Path('.state/evidence.md'),),
+    ).finalize()
+    launch = context.launch_document()
+    assert launch['adapter_request']['sandbox'] == 'read-only'
+    assert launch['adapter_request']['reasoning_effort'] == 'max'
+    assert launch['adapter_request']['base_url'] == 'https://api.deepseek.com/anthropic'
+    assert 'never-persist-this-secret' not in json.dumps(launch)
+    assert context.evidence_document()['native_read_isolation'] is False

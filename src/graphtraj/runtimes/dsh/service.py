@@ -1,0 +1,176 @@
+"""Own one authenticated DSH service without retaining launch credentials."""
+
+from __future__ import annotations
+
+import http.cookiejar
+import json
+import os
+from pathlib import Path
+import queue
+import re
+import signal
+import subprocess
+import threading
+import time
+import urllib.error
+import urllib.request
+import uuid
+
+from websockets.sync.client import connect
+
+from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
+
+
+class DshService:
+    """Keep launch tokens/cookies in memory and reap only our own service.
+
+    One service per Agent preserves the existing CLI's process-based caller
+    identity. Sharing a service PID would alias different GraphTraj Agents.
+    This is a Session worker resource, not a user-owned/global daemon.
+    """
+
+    def __init__(self, executable: str, cwd: Path, environment: dict[str, str]) -> None:
+        """Capture launch settings without starting any native work."""
+        self.executable = executable
+        self.cwd = cwd
+        self.environment = environment
+        self.process: subprocess.Popen | None = None
+        self.origin = ''
+        self.cookie = ''
+        self.socket = None
+
+    def start(self) -> None:
+        """Launch an owned Web backend and exchange its single-use launch token."""
+        urls: queue.Queue[str | None] = queue.Queue()
+        try:
+            self.process = subprocess.Popen(
+                [self.executable, 'web', '--no-open', '--port', '0'],
+                cwd=self.cwd, env=self.environment,
+                stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT, start_new_session=True,
+                text=True, bufsize=1,
+            )
+        except OSError as error:
+            raise RuntimeAdapterError('RUNTIME_START_FAILED', 'Cannot start DSH.') from error
+
+        def drain() -> None:
+            """Consume native startup output without publishing authentication URLs."""
+            assert self.process is not None and self.process.stdout is not None
+            for line in self.process.stdout:
+                clean = re.sub(r'\x1b\[[0-9;]*m', '', line)
+                match = re.search(r'https?://(?:127\.0\.0\.1|localhost):\d+/[^\s]*token=[^\s]+', clean)
+                if match:
+                    urls.put(match.group())
+            urls.put(None)
+
+        threading.Thread(target=drain, daemon=True).start()
+        try:
+            launch = urls.get(timeout=45)
+            if launch is None:
+                raise RuntimeAdapterError('RUNTIME_START_FAILED', 'DSH exited before authentication.')
+            parsed = urllib.parse.urlsplit(launch)
+            self.origin = f'{parsed.scheme}://{parsed.netloc}'
+            jar = http.cookiejar.CookieJar()
+            opener = urllib.request.build_opener(
+                urllib.request.ProxyHandler({}), urllib.request.HTTPCookieProcessor(jar),
+            )
+            with opener.open(launch, timeout=15) as response:
+                response.read(1)
+            self.cookie = '; '.join(f'{item.name}={item.value}' for item in jar)
+            if not self.cookie:
+                raise RuntimeAdapterError('RUNTIME_AUTH_FAILED', 'DSH returned no authenticated cookie.')
+        except RuntimeAdapterError:
+            raise
+        except Exception:
+            # Native authentication failures can contain the launch URL. Do
+            # not retain even an exception-chain copy of that credential.
+            raise RuntimeAdapterError('RUNTIME_CONNECTION_FAILED', 'DSH launch/authentication failed.') from None
+
+    def rpc(self, method: str, request: dict | None = None) -> dict:
+        """Call the native Remote envelope; a successful response is only a receipt."""
+        rpc_id = uuid.uuid4().hex
+        body = {
+            'type': 'client-request', 'rpcId': rpc_id, 'method': method,
+            'payload': {'args': {} if request is None else {
+                '_request' if method == 'session/list' else 'request': request,
+            }},
+        }
+        call = urllib.request.Request(
+            self.origin + '/api/' + method, data=json.dumps(body).encode(),
+            headers={'Content-Type': 'application/json', 'Cookie': self.cookie, 'Origin': self.origin},
+        )
+        try:
+            with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(call, timeout=20) as response:
+                document = json.load(response)
+            if document.get('rpcId') != rpc_id:
+                raise ValueError('Mismatched native response')
+            result = document['result']
+            if not result['ok']:
+                code = result.get('error', {}).get('code', 'unknown')
+                # Only the native code, never returned URL/header/body text.
+                raise RuntimeAdapterError('RUNTIME_REQUEST_FAILED', f'DSH {method} failed ({code}).')
+            return result['value']
+        except RuntimeAdapterError:
+            raise
+        except Exception as error:
+            raise RuntimeAdapterError('RUNTIME_CONNECTION_FAILED', f'DSH {method} unavailable.') from error
+
+    def follow(self, session: str) -> dict:
+        """Subscribe before prompt and return the native opening snapshot."""
+        try:
+            self.socket = connect(
+                self.origin.replace('http:', 'ws:') + '/api/remote.mux',
+                origin=self.origin, additional_headers={'Cookie': self.cookie},
+                proxy=None, open_timeout=15, max_size=32 * 1024 * 1024,
+            )
+            self.socket.send(json.dumps({
+                'type': 'open', 'streamId': 'session', 'endpoint': 'session/follow',
+                'payload': {'args': {'request': {'address': {'kind': 'session', 'sessionId': session}}}},
+            }))
+            deadline = time.monotonic() + 20
+            while time.monotonic() < deadline:
+                frame = self.receive(max(0.01, deadline - time.monotonic()))
+                if frame.get('type') == 'snapshot':
+                    if frame.get('header', {}).get('id') != session:
+                        raise RuntimeAdapterError('RUNTIME_PROTOCOL_ERROR', 'DSH snapshot identity mismatch.')
+                    return frame
+            raise RuntimeAdapterError('RUNTIME_CONNECTION_FAILED', 'DSH subscription snapshot timed out.')
+        except RuntimeAdapterError:
+            raise
+        except Exception as error:
+            raise RuntimeAdapterError('RUNTIME_CONNECTION_FAILED', 'DSH subscription failed.') from error
+
+    def receive(self, timeout: float = 1) -> dict:
+        """Read one multiplexed Session frame, preserving native failure semantics."""
+        try:
+            message = json.loads(self.socket.recv(timeout=timeout))
+            if message.get('type') in {'error', 'end'}:
+                raise RuntimeAdapterError('RUNTIME_CONNECTION_CLOSED', 'DSH Session stream ended unexpectedly.')
+            return message.get('value', {})
+        except TimeoutError:
+            return {}
+        except RuntimeAdapterError:
+            raise
+        except Exception as error:
+            raise RuntimeAdapterError('RUNTIME_CONNECTION_CLOSED', 'DSH Session connection failed.') from error
+
+    def close(self) -> None:
+        """Close observation and stop only this owned service/process group."""
+        if self.socket is not None:
+            self.socket.close()
+        if self.process is not None:
+            for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGKILL):
+                if self.process.poll() is not None:
+                    break
+                try:
+                    os.killpg(self.process.pid, sig)
+                except ProcessLookupError:
+                    break
+                try:
+                    self.process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    continue
+            if self.process.poll() is None:
+                raise RuntimeAdapterError('RUNTIME_SHUTDOWN_FAILED', 'Owned DSH service did not stop.',
+                                          terminal_confirmed=False)
+        self.cookie = ''

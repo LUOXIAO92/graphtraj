@@ -100,6 +100,38 @@ current rules in the Worktree-local copy, refreshed when setup or Worktree
 preparation runs. Setup migrates the old installer's complete shared ignore
 rule group; standalone user rules remain unchanged.
 
+## Pi child Agents
+
+The `pi` Runtime controls the installed Pi backend through persistent stdio RPC;
+it does not allocate a listening TCP port. Prepare an environment that can run
+Pi with the selected lightweight asb sandbox, then configure a child role:
+
+```yaml
+roles:
+  pi_assistant:
+    runtime: pi
+    model: deepseek/deepseek-flash
+    api_key_env: DEEPSEEK_API_KEY
+    worktree_access: write
+    reports: [result.md]
+    pi:
+      sandbox_python: /path/to/asb-venv/bin/python
+      sandbox_path: /path/to/sandbox-runtime/node_modules/.bin
+      agent_dir: /path/to/existing/pi/agent
+role_tree:
+  pi_assistant: {}
+```
+
+The sandbox paths select the prepared Python environment and helper executables;
+`agent_dir` points to existing Pi configuration. Keep credentials in the selected
+native configuration or referenced environment variable. The qualified model
+routes are `deepseek/deepseek-flash` and
+`openrouter/google/gemini-3.8-flash`; the latter uses the configured OpenRouter
+authentication. Use the same public Runner dispatch, input, interruption and
+recovery operations as other child roles. Native Session identity, context and
+Trace remain associated with that role. This selects Pi for children without
+changing the user's Main Runtime.
+
 ## DeepSeek Harness child Agents
 
 The `dsh` Runtime uses the installed DeepSeek Harness backend through its
@@ -1129,7 +1161,7 @@ Historical `state/<run-id>` directories are left byte-for-byte untouched.
 GraphTraj does not migrate them, read them as fallback or offer compatibility
 for the old project command, Run-based Batch syntax or configuration sources.
 
-Child-Agent Adapters support Codex and DeepSeek Harness. Dispatched Agents use Runner for formal
+Child-Agent Adapters support Codex, Pi and DeepSeek Harness. Dispatched Agents use Runner for formal
 task work. A role configured with `allow_runtime_swarm`
 may use Runtime-native helpers only for temporary read-only investigation;
 those helpers cannot occupy a Team seat, have no independent GraphTraj Trace,

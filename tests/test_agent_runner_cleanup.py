@@ -14,6 +14,7 @@ from conftest import FakeCodex, InstalledCommands, run_process, wait_for_file
 from runner_fixtures import configure_harness
 from test_ticket_graph import _change_status, _register, _ticket
 from test_task_recovery import installed_commands
+from test_pi_runtime import pi_environment
 
 
 @dataclass(frozen=True)
@@ -40,6 +41,9 @@ def _deliver_ticket(
     integrate: bool,
     failed_start: bool = False,
     terminal_failed_start: bool = False,
+    pi_startup: dict | None = None,
+    pi_interrupt: bool = False,
+    pi_crash: bool = False,
 ) -> DeliveredTicket:
     root, worktrees, _, environment = configure_harness(
         commands, repository, fake_codex, tmp_path
@@ -47,6 +51,10 @@ def _deliver_ticket(
     roles_file = root / '.graphtraj/roles.yml'
     roles = yaml.safe_load(roles_file.read_text())
     roles['roles']['failed_start'] = dict(roles['roles']['coding_team']['engineer'])
+    if pi_startup is not None:
+        roles['roles']['failed_start'] = {
+            'runtime': 'pi', 'model': 'deepseek/deepseek-flash', 'pi': pi_startup,
+        }
     roles['role_tree'] = {'coding-team.engineer': {}, 'failed_start': {}}
     roles_file.write_text(yaml.safe_dump(roles))
     ticket_id = "85"
@@ -71,6 +79,10 @@ def _deliver_ticket(
     )
     failed_start_aliases: tuple[str, ...] = ()
     if failed_start or terminal_failed_start:
+        if pi_startup is not None:
+            environment['PI_FIXTURE_UNESTABLISHED'] = '1'
+            if pi_crash:
+                environment['PI_FIXTURE_STARTUP_FAILURE'] = '1'
         if failed_start:
             environment["FAKE_CODEX_UNSUPPORTED"] = "1"
         else:
@@ -79,12 +91,22 @@ def _deliver_ticket(
             failed_batch = yaml.safe_load(batch.read_text())
             failed_batch['tasks'][0]['role'] = 'failed_start'
             batch.write_text(yaml.safe_dump(failed_batch))
-        failed = run_process(
-            [str(commands.runner), "--swarm-input", str(batch)],
-            cwd=root,
-            env=environment,
-            timeout=15,
-        )
+        launch_command = [str(commands.runner), "--swarm-input", str(batch)]
+        if pi_interrupt:
+            ready = tmp_path / 'pi-startup-ready'
+            environment['PI_FIXTURE_STARTUP_READY'] = str(ready)
+            with subprocess.Popen(launch_command, cwd=root, env=environment, text=True,
+                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE) as launching:
+                wait_for_file(ready)
+                allocation = next((root / '.graphtraj/runner/sessions').iterdir())
+                interrupted = run_process([str(commands.runner), 'interrupt', allocation.name],
+                                          cwd=root, env=environment, timeout=15)
+                assert interrupted.returncode == 0, interrupted.stdout + interrupted.stderr
+                assert yaml.safe_load(interrupted.stdout)['interrupt_status'] == 'interrupted'
+                stdout, stderr = launching.communicate(timeout=15)
+                failed = subprocess.CompletedProcess(launch_command, launching.returncode, stdout, stderr)
+        else:
+            failed = run_process(launch_command, cwd=root, env=environment, timeout=15)
         assert failed.returncode == 1
         if terminal_failed_start:
             failed_batch['tasks'][0]['role'] = 'coding-team.engineer'
@@ -110,6 +132,9 @@ def _deliver_ticket(
         else:
             environment.pop("FAKE_CODEX_EVENTS")
             environment.pop("FAKE_CODEX_EXIT_CODE")
+        environment.pop('PI_FIXTURE_UNESTABLISHED', None)
+        environment.pop('PI_FIXTURE_STARTUP_READY', None)
+        environment.pop('PI_FIXTURE_STARTUP_FAILURE', None)
     environment.update(
         FAKE_CODEX_LIFECYCLE_ACTION="complete-team-round",
         GRAPHTRAJ_AGENT_RUNNER=str(commands.runner),
@@ -450,7 +475,12 @@ def test_installed_cleanup_retains_a_terminal_unmapped_startup_failure_after_int
     if failure_case == "uncertain":
         failure["terminal_confirmed"] = False
         failure["message"] = "private startup diagnostic fixture-secret"
+        failure["diagnostic"] = {"process": {"runtime_pid": 123, "secret": "fixture-secret"}}
         (failed_session / "launch-error.yml").write_text(yaml.safe_dump(failure))
+        (failed_session / "pi-process.json").write_text(json.dumps({
+            "policy": "fixture-secret", "argv": ["pi", "--session",
+            str(trace.with_suffix(".pi") / "session.jsonl"), "--private", "fixture-secret"],
+        }))
     elif failure_case == "foreign":
         launch["mapping"]["ticket_id"] = "another-ticket"
         (failed_session / "launch.yml").write_text(yaml.safe_dump(launch))
@@ -479,9 +509,22 @@ def test_installed_cleanup_retains_a_terminal_unmapped_startup_failure_after_int
             assert artifacts[relative + "/launch.yml"]["identity_fields"] == []
             assert artifacts[relative + "/heartbeat.yml"]["identity_fields"] == ["worker_pid"]
             assert artifacts[trace.relative_to(ticket.root).as_posix()]["bytes"] == 0
+            failure_info = artifacts[relative + "/launch-error.yml"]
+            assert failure_info["field_types"] == {
+                "code": "str", "message": "str", "diagnostic": "dict", "terminal_confirmed": "bool",
+            }
+            assert failure_info["other_field_count"] == 0
+            process_info = artifacts[relative + "/pi-process.json"]
+            assert process_info["field_types"] == {"policy": "str", "argv": "list"}
+            assert process_info["other_field_count"] == 0
+            assert process_info["argv_strings"] is True
+            assert process_info["requested_session_matches_trace"] is True
         else:
             assert "artifacts" not in proof
         assert "fixture-secret" not in cleaned.stdout
+        refused_stop = run_process([str(ticket.commands.runner), 'interrupt', failed_session.name],
+                                   cwd=ticket.root, env=ticket.environment)
+        assert refused_stop.returncode == 1, refused_stop.stdout + refused_stop.stderr
         assert ticket.worktree.is_dir()
         assert {path.name: path.read_bytes() for path in failed_session.iterdir()
                 if path.is_file() and not path.is_symlink()} == allocation_before
@@ -494,6 +537,71 @@ def test_installed_cleanup_retains_a_terminal_unmapped_startup_failure_after_int
     assert set(ticket.failed_start_aliases) <= set(document["aliases_removed"])
     assert all(not session.exists() for session in failed_sessions)
     _assert_durable_contents(ticket, durable_before)
+
+
+@pytest.mark.parametrize('interrupt_startup', (False, True))
+def test_pi_failed_creation_retains_owned_process_and_native_stop(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+    pi_environment: dict,
+    interrupt_startup: bool,
+) -> None:
+    """Public Runner retains pre-Session process ownership and verified native shutdown."""
+    ticket = _deliver_ticket(installed_commands, temporary_git_repository, fake_codex, tmp_path,
+                             integrate=True, terminal_failed_start=True, pi_startup=pi_environment,
+                             pi_interrupt=interrupt_startup)
+    alias = ticket.failed_start_aliases[0]
+    directory = ticket.root / '.graphtraj/runner/sessions' / alias
+    heartbeat = yaml.safe_load((directory / 'heartbeat.yml').read_text())
+    failure = yaml.safe_load((directory / 'launch-error.yml').read_text())
+    assert heartbeat['runtime_pid'] > 0
+    assert heartbeat['execution_id']
+    assert heartbeat['control_directory']
+    assert heartbeat['process_outcome'] == {'terminal_confirmed': True, 'runtime_exit_code': 0}
+    assert failure['code'] == ('RUNTIME_EXECUTION_INTERRUPTED' if interrupt_startup else 'RUNTIME_SESSION_MISSING')
+    assert failure['terminal_confirmed'] is True
+    assert not (directory / 'mapping.yml').exists()
+    assert not (directory / 'session.yml').exists()
+    original_failure = (directory / 'launch-error.yml').read_bytes()
+    stopped = run_process([str(ticket.commands.runner), 'interrupt', alias],
+                          cwd=ticket.root, env=ticket.environment)
+    assert stopped.returncode == 0, stopped.stdout + stopped.stderr
+    assert yaml.safe_load(stopped.stdout)['interrupt_status'] == 'stopped'
+    cleaned = _cleanup(ticket)
+    assert cleaned.returncode == 0, cleaned.stdout + cleaned.stderr
+    retained = ticket.ticket_directory / 'teams/1/traces' / alias / 'runner'
+    assert (retained / 'launch-error.yml').read_bytes() == original_failure
+    assert not ticket.worktree.exists()
+
+
+def test_pi_crashed_creation_retains_binding_without_certifying_tool_stop(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+    pi_environment: dict,
+) -> None:
+    """A reaped transport without native stop proof remains unconfirmed."""
+    ticket = _deliver_ticket(installed_commands, temporary_git_repository, fake_codex, tmp_path,
+                             integrate=True, terminal_failed_start=True, pi_startup=pi_environment,
+                             pi_crash=True)
+    alias = ticket.failed_start_aliases[0]
+    directory = ticket.root / '.graphtraj/runner/sessions' / alias
+    heartbeat = yaml.safe_load((directory / 'heartbeat.yml').read_text())
+    assert heartbeat['runtime_pid'] > 0
+    assert heartbeat['process_outcome'] == {'terminal_confirmed': False, 'runtime_exit_code': 71}
+    original_failure = (directory / 'launch-error.yml').read_bytes()
+    assert yaml.safe_load(original_failure)['terminal_confirmed'] is False
+    stopped = run_process([str(ticket.commands.runner), 'interrupt', alias],
+                          cwd=ticket.root, env=ticket.environment)
+    assert stopped.returncode == 1, stopped.stdout + stopped.stderr
+    cleaned = _cleanup(ticket)
+    assert cleaned.returncode == 1, cleaned.stdout + cleaned.stderr
+    assert yaml.safe_load(cleaned.stdout)['error']['code'] == 'cleanup-ownership-mismatch'
+    assert (directory / 'launch-error.yml').read_bytes() == original_failure
+    assert ticket.worktree.is_dir()
 
 
 def test_installed_cleanup_refuses_an_unattributed_session_record_without_partial_cleanup(

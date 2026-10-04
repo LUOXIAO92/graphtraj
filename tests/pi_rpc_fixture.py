@@ -29,7 +29,7 @@ def main() -> None:
     records = [json.loads(line) for line in session_file.read_text().splitlines()] if session_file.exists() else []
     session = records[0]['id'] if records else str(uuid.uuid4())
     history = [x.get('message', {}).get('content', '') for x in records[1:]]
-    if not records:
+    if not records and not os.environ.get('PI_FIXTURE_UNESTABLISHED'):
         session_file.write_text(json.dumps({'type': 'session', 'id': session, 'version': 3}) + '\n')
     output_lock = threading.Lock()
     active = False
@@ -96,6 +96,18 @@ def main() -> None:
                                 'model': {'provider': provider, 'id': model},
                                 'isStreaming': active, 'isCompacting': False,
                                 'pendingMessageCount': len(queued)}
+            if os.environ.get('PI_FIXTURE_UNESTABLISHED'):
+                response['data']['sessionId'] = None
+                if os.environ.get('PI_FIXTURE_STARTUP_READY') and not stop.is_set():
+                    Path(os.environ['PI_FIXTURE_STARTUP_READY']).touch()
+
+                    def delayed_state(reply: dict = response) -> None:
+                        """Keep servicing native abort while Session creation waits."""
+                        stop.wait(10)
+                        emit(reply)
+
+                    threading.Thread(target=delayed_state, daemon=True).start()
+                    continue
         elif kind == 'prompt':
             if active and request.get('streamingBehavior') == 'steer':
                 queued.append(request['message'])

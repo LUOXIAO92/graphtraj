@@ -34,7 +34,7 @@ from graphtraj.execution.runner_models import RunnerError
 from graphtraj.execution.runner_process import OPERATION_TIMEOUT_SECONDS
 from graphtraj.execution.runner_transport import runtime_launch_failure
 from graphtraj.runtimes.runtime_adapter import (
-    RuntimeAdapterError, RuntimeTurn, select_runtime_adapter,
+    RuntimeAdapterError, RuntimeTurn, select_runtime_adapter, runtime_process_owner,
 )
 
 
@@ -137,7 +137,13 @@ def run(job_file: Path) -> int:
 
             def record_created(session: str, runtime_pid: int) -> None:
                 """Bind the native Session and register assignment before its first turn."""
-                nonlocal mapping_recorded, execution_mapping
+                nonlocal mapping_recorded, execution_mapping, startup_lock
+                startup_lock.close()
+                startup_lock = execution_start_lock(session_directory.parent.parent)
+                try:
+                    require_execution_allowed(session_directory.parent.parent, base_mapping["alias"], base_mapping)
+                except RunnerError as error:
+                    raise RuntimeAdapterError(error.code, error.message) from error
                 if operation == "resume" and session != expected_session:
                     raise RuntimeAdapterError(
                         "RUNTIME_SESSION_NOT_RESUMABLE", "The mapped Runtime session could not be resumed.",
@@ -168,6 +174,16 @@ def run(job_file: Path) -> int:
                         budget_stopped.set()
                         assert turn_handle is not None
                         turn_handle.terminate()
+
+            def record_process(runtime_pid: int, outcome: dict | None) -> None:
+                """Retain control of the owned process before native Session creation."""
+                assert turn_handle is not None
+                heartbeat.update(runtime_pid=runtime_pid, execution_id=turn_handle.execution_id,
+                                 control_directory=control_directory)
+                if outcome is not None:
+                    heartbeat["process_outcome"] = outcome
+                write_heartbeat(session_directory, heartbeat)
+                startup_lock.close()
 
             def record_session(session: str, runtime_pid: int) -> None:
                 """Persist native execution identity before acknowledging its caller."""
@@ -223,7 +239,8 @@ def run(job_file: Path) -> int:
                 monitor_thread.start()
             try:
                 with worker_connection(session_directory, turn_handle.operate) as control_directory:
-                    result = turn_handle.run()
+                    with runtime_process_owner(record_process):
+                        result = turn_handle.run()
                     terminal = _terminal_turn(result)
                     if budget_stopped.is_set() and terminal["outcome"] == "interrupted":
                         terminal["budget_stopped"] = True

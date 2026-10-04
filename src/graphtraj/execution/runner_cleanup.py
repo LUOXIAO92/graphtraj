@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
@@ -470,6 +471,26 @@ def _allocation_artifacts(
                 item["identity_fields"] = [name for name in (
                     "runtime_pid", "worker_pid", "session", "execution_id", "control_directory",
                 ) if isinstance(document, dict) and document.get(name) is not None]
+            if path.parent == directory and path.name in {"launch-error.yml", "pi-process.json"}:
+                document = (json.loads(path.read_text(encoding="utf-8"))
+                            if path.suffix == ".json" else document)
+                fields = (("policy", "argv") if path.suffix == ".json" else
+                          ("code", "message", "diagnostic", "terminal_confirmed"))
+                item["document_type"] = type(document).__name__
+                if isinstance(document, dict):
+                    item["field_types"] = {name: type(document[name]).__name__
+                                           for name in fields if name in document}
+                    item["other_field_count"] = len(set(document) - set(fields))
+                    if path.name == "pi-process.json":
+                        argv = document.get("argv")
+                        if isinstance(argv, list) and all(isinstance(arg, str) for arg in argv):
+                            item["argv_strings"] = True
+                            sessions = [argv[index + 1] for index, arg in enumerate(argv[:-1])
+                                        if arg == "--session"]
+                            item["requested_session_matches_trace"] = sessions == [
+                                str(trace.with_suffix(".pi") / "session.jsonl")]
+                        else:
+                            item["argv_strings"] = False
             result[key] = item
         except FileNotFoundError:
             result[key] = {"status": "absent"}

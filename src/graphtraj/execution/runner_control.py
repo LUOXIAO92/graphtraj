@@ -27,7 +27,8 @@ from graphtraj.execution.runner_connection import connection_operation, session_
 from graphtraj.execution.runner_io import confirm_alias_mapping_durable, write_yaml_durably
 from graphtraj.execution.runner_capacity import capacity_positions
 from graphtraj.execution.runner_models import RunnerError
-from graphtraj.execution.runner_heartbeat import execution_start_lock
+from graphtraj.execution.runner_heartbeat import execution_start_lock, read_heartbeat, ownership_is_held
+from graphtraj.execution.runner_transport import valid_terminal_launch_failure
 from graphtraj.execution.runner_process import (
     OPERATION_TIMEOUT_SECONDS,
     stop_worker,
@@ -610,7 +611,10 @@ def interrupt_session(alias: str, cwd: Path) -> Dict[str, Any]:
     """
 
     runner_directory = discover_runner_directory(cwd)
-    mapping, _ = read_alias_mapping(runner_directory, alias)
+    try:
+        mapping, _ = read_alias_mapping(runner_directory, alias)
+    except RunnerError:
+        return _interrupt_allocation(runner_directory, alias)
     require_descendant_authority(runner_directory, alias, mapping)
     with execution_start_lock(runner_directory):
         mapping, session_directory = read_alias_mapping(runner_directory, alias)
@@ -655,6 +659,56 @@ def interrupt_session(alias: str, cwd: Path) -> Dict[str, Any]:
     complete = all(item["interrupt_status"] in {"interrupted", "stopped"} for item in results)
     return {"alias": alias, "interrupt_status": "interrupted" if complete else "incomplete",
             "members": results}
+
+
+def _interrupt_allocation(runner: Path, alias: str) -> dict:
+    """Address only an attributed pre-Session allocation's original live owner."""
+    directory = runner / "sessions" / alias
+    if (Path(alias).name != alias or alias in {".", ".."} or directory.resolve() != directory
+            or any(os.path.lexists(directory / name) for name in
+                   ("mapping.yml", "session.yml", "native-session.yml", "execution.yml"))):
+        raise _invalid_mapping()
+    launch_file = directory / "launch.yml"
+    try:
+        if launch_file.is_symlink():
+            raise _invalid_mapping()
+        launch = yaml.safe_load(launch_file.read_text())
+        mapping = launch["mapping"]
+        if (not isinstance(launch, dict) or not isinstance(mapping, dict)
+                or launch.get("operation") != "launch" or mapping.get("alias") != alias
+                or any(field not in mapping for field in SESSION_BINDING_FIELDS)):
+            raise _invalid_mapping()
+        from graphtraj.graph.ticket_graph import _load_states
+
+        configuration = load_project_configuration(runner.parent.parent)
+        ticket_directory, ticket = _load_states(configuration.state / "tickets")[mapping["ticket_id"]]
+        trace = ticket_directory / "teams" / str(mapping["team_generation"]) / "traces" / alias / "events.jsonl"
+        worktree = configuration.agent_worktrees / (mapping["ticket_id"] + "-" + ticket["ticket_name"])
+        if (mapping.get("trace_file") != str(trace)
+                or mapping.get("worktree_path") != str(worktree)):
+            raise _invalid_mapping()
+    except (OSError, ValueError, TypeError, KeyError, yaml.YAMLError) as error:
+        raise _invalid_mapping() from error
+    require_descendant_authority(runner, alias, mapping)
+    with execution_start_lock(runner):
+        if any(os.path.lexists(directory / name) for name in ("mapping.yml", "session.yml", "native-session.yml")):
+            raise RunnerError("operation-failed", "Session creation completed; retry interruption by alias.")
+        heartbeat = read_heartbeat(directory)
+        if heartbeat is None or heartbeat.get("alias") != alias:
+            raise _invalid_mapping()
+        if not ownership_is_held(directory, heartbeat["worker_pid"]):
+            failure = directory / "launch-error.yml"
+            if failure.is_file() and not failure.is_symlink() and valid_terminal_launch_failure(yaml.safe_load(failure.read_text())):
+                return {"alias": alias, "interrupt_status": "stopped"}
+            raise RunnerError("operation-failed", "The allocation has no live native owner or confirmed terminal failure.")
+        control = Path(heartbeat.get("control_directory", ""))
+        if (control.parent != directory or control.resolve() != control or not control.is_dir()
+                or not isinstance(heartbeat.get("execution_id"), str) or not heartbeat["execution_id"]
+                or type(heartbeat.get("runtime_pid")) is not int or heartbeat["runtime_pid"] <= 0):
+            raise _invalid_mapping()
+        write_yaml_durably(directory / "stop.yml", {"alias": alias})
+    session_operation({**heartbeat, "session": None}, "interrupt")
+    return {"alias": alias, "interrupt_status": "interrupted"}
 
 
 def _interrupt_session(

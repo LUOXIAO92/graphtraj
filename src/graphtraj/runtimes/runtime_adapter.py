@@ -14,6 +14,24 @@ if TYPE_CHECKING:
 SessionStarted = Callable[[str, int], None]
 NativeReplacement = Callable[[Sequence[str]], dict]
 _recovery_reviewer: ContextVar[Callable[[dict], dict] | None] = ContextVar('recovery_reviewer', default=None)
+_process_owner: ContextVar[Callable[[int, dict | None], None] | None] = ContextVar('process_owner', default=None)
+
+
+@contextmanager
+def runtime_process_owner(record: Callable[[int, dict | None], None]):
+    """Bind the trusted Worker's pre-Session process creation callback."""
+    token = _process_owner.set(record)
+    try:
+        yield
+    finally:
+        _process_owner.reset(token)
+
+
+def record_runtime_process(pid: int, outcome: dict | None = None) -> None:
+    """Publish owned process creation or termination without establishing a Session."""
+    record = _process_owner.get()
+    if record is not None:
+        record(pid, outcome)
 
 
 @contextmanager

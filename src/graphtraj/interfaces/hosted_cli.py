@@ -50,15 +50,20 @@ def cli_connection(
     alias: str,
     allowed_features: Collection[str],
     recovery_reviewer: Callable[[dict], dict] | None = None,
+    directory: Path | None = None,
 ) -> Iterator[str]:
     """Serve one Session using its actual ownership and selected approval route.
 
     Only this ephemeral directory is granted to the Session. The surrounding
     private tree and other Sessions' channels remain denied. No control records
-    or caller-selectable identities are published in the directory.
+    or caller-selectable identities are published in the directory. A Runtime
+    whose sandbox only permits writing inside its own Worktree passes that
+    sandbox-visible directory; every other caller keeps the shared location
+    beside the Runner records.
     """
     runner = discover_runner_directory(root)
-    directory = runner.parent / 'cli'
+    if directory is None:
+        directory = runner.parent / 'cli'
     directory.mkdir(parents=True, exist_ok=True)
 
     def authenticate(pid: int) -> None:

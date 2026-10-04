@@ -229,8 +229,13 @@ class DshExecution:
         environment = self._prepare()
         # The native plugin uses the prepared public CLI. Kernel-observed PID
         # ownership authenticates it; an environment address is not authority.
+        # DSH's sandbox only writes inside the Session Worktree and temporary
+        # roots, so this Session's channel lives in its own git-excluded scratch
+        # directory instead of the shared location other runtimes keep.
+        channel = Path(self.request['worktree_path']) / '.scratch'
         environment[CONNECTION_ENV] = connections.enter_context(cli_connection(
             Path(self.request['harness_root']), self.directory.name, native_operation_features(),
+            directory=channel,
         ))
         self.service = DshService(self.request['executable'], Path(self.request['worktree_path']), environment)
         try:

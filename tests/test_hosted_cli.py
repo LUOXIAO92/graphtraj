@@ -108,6 +108,53 @@ def test_cli_host_accepts_the_session_worktree_and_refuses_other_directories(tmp
         assert yaml.safe_load(sibling.stdout)['error']['code'] == 'authority-denied'
 
 
+def test_cli_connection_uses_and_cleans_a_sandbox_visible_channel(tmp_path: Path) -> None:
+    """A Runtime may relocate its own channel into a directory its sandbox can write."""
+    runner, _, commit = result_project(tmp_path)
+    directory = own_process(runner)
+    worktree = tmp_path / 'worktrees/research'
+    channel = worktree / '.scratch'
+    foreign = tmp_path / 'elsewhere'
+    foreign.mkdir()
+    shared = runner.parent / 'cli'
+    with hold_ownership(directory, os.getpid()), cli_connection(
+        tmp_path, 'research@x1', native_operation_features(), directory=channel,
+    ) as address:
+        assert Path(address).parent == channel
+        assert cli(worktree, address, 'reports', 'research@x1').returncode == 0
+        submission = cli(worktree, address, 'submit-result', '--commit', commit,
+                         '--result-ref', 'result.md', '--completion', 'Worktree channel')
+        assert submission.returncode == 0, submission.stdout + submission.stderr
+        assert yaml.safe_load(submission.stdout)['alias'] == 'research@x1'
+        refused = cli(foreign, address, 'reports', 'research@x1')
+        assert refused.returncode == 1
+        assert yaml.safe_load(refused.stdout)['error']['code'] == 'invalid-config'
+    assert not Path(address).exists()
+    assert not any(channel.iterdir())
+    assert not shared.exists()
+    absent = cli(worktree, address, 'reports', 'research@x1')
+    assert absent.returncode == 1
+    assert yaml.safe_load(absent.stdout)['error']['code'] == 'operation-failed'
+    assert 'owner did not acknowledge' in absent.stderr
+
+
+def test_cli_connection_removes_a_relocated_channel_after_failure(tmp_path: Path) -> None:
+    """A raised Session error still cleans up the relocated channel directory."""
+    import pytest
+
+    runner, _, _ = result_project(tmp_path)
+    directory = own_process(runner)
+    channel = tmp_path / 'worktrees/research/.scratch'
+    with hold_ownership(directory, os.getpid()):
+        with pytest.raises(RuntimeError):
+            with cli_connection(tmp_path, 'research@x1', native_operation_features(), directory=channel) as address:
+                observed = Path(address)
+                assert observed.parent == channel
+                raise RuntimeError('native session failed')
+    assert not observed.exists()
+    assert not any(channel.iterdir())
+
+
 def test_cli_host_refuses_unowned_wrong_channel_and_unavailable_host(tmp_path: Path) -> None:
     """A channel address, claimed owner PID or a dead owner never supplies authority."""
     runner, _, commit = result_project(tmp_path)

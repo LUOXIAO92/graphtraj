@@ -143,7 +143,7 @@ def peer(monkeypatch: pytest.MonkeyPatch) -> list:
 
     NativePeer.instances = []
     monkeypatch.setattr(execution, 'DshService', NativePeer)
-    monkeypatch.setattr(hosted_cli, 'cli_connection', lambda *args: nullcontext('/bound-channel'))
+    monkeypatch.setattr(hosted_cli, 'cli_connection', lambda *args, **kwargs: nullcontext('/bound-channel'))
     return NativePeer.instances
 
 
@@ -466,6 +466,29 @@ def test_public_json_cli_uses_host_identity_and_report_checks(tmp_path: Path) ->
     document = json.loads(result.stdout)
     assert document['failed']
     assert document.get('error') and 'reports' not in document
+
+
+def test_dsh_own_channel_is_projected_inside_the_session_worktree(
+    tmp_path: Path, peer: list, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The Session's own public CLI channel lives inside its sandboxed Worktree."""
+    from graphtraj.interfaces import hosted_cli
+
+    channels = []
+
+    def record(root: Path, alias: str, features: Any, *args: Any, **kwargs: Any):
+        """Capture the requested channel directory without opening a real host."""
+        channels.append({'root': root, 'directory': kwargs.get('directory')})
+        return nullcontext('/bound-channel')
+
+    monkeypatch.setattr(hosted_cli, 'cli_connection', record)
+    turn, thread, outcome = run_turn(tmp_path)
+    peer[0].frames.append('turn/end')
+    thread.join(3)
+    assert outcome['result']['outcome'] == 'completed'
+    worktree = Path(request(tmp_path)['worktree_path'])
+    assert channels == [{'root': tmp_path, 'directory': worktree / '.scratch'}]
+    assert channels[0]['directory'].is_relative_to(worktree)
 
 
 def test_native_remote_envelopes_and_authentication_failure(

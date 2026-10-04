@@ -413,12 +413,16 @@ def cleanup(ticket_id: str | None) -> None:
 @click.argument('alias')
 def reports(alias: str) -> None:
     """Read a directly owned Session's reports and retained result submissions."""
+    from graphtraj.interfaces.hosted_cli import CONNECTION_ENV
     from graphtraj.workspace.runner_project import discover_project_root
 
     try:
-        _emit_result(invoke_tool("session_reports",
-            {"alias": alias}, cwd=discover_project_root(Path.cwd()),
-        ).document)
+        # A Session forwards its actual directory to the bound host, which
+        # already holds the project binding and may lie outside the Runtime's
+        # readable tree. A direct caller has no such channel and resolves the
+        # Harness Project Root itself.
+        cwd = Path.cwd() if CONNECTION_ENV in os.environ else discover_project_root(Path.cwd())
+        _emit_result(invoke_tool("session_reports", {"alias": alias}, cwd=cwd).document)
     except (RunnerError, ValueError, OSError) as error:
         _fail(error if isinstance(error, RunnerError) else RunnerError('RESULT_INVALID', str(error)))
 

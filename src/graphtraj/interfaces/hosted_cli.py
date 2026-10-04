@@ -9,7 +9,7 @@ from typing import Any, Callable, Collection, Iterator, Mapping
 
 from graphtraj.execution.runner_connection import connection_operation, worker_connection
 from graphtraj.execution.runner_models import RunnerError
-from graphtraj.execution.runner_status import process_caller_alias, runtime_caller
+from graphtraj.execution.runner_status import process_caller_alias, read_alias_mapping, runtime_caller
 from graphtraj.interfaces.gateway import handle_request
 from graphtraj.interfaces.tools import ToolResult
 from graphtraj.runtimes.runtime_adapter import recovery_review
@@ -17,6 +17,31 @@ from graphtraj.workspace.runner_project import discover_runner_directory
 
 
 CONNECTION_ENV = 'GRAPHTRAJ_CLI_CONNECTION'
+
+
+def _caller_in_scope(document_cwd: Any, root: Path, runner: Path, alias: str) -> bool:
+    """Whether one caller directory is the bound project or this Session's Worktree.
+
+    A restricted Runtime cannot read the Harness Project Root, so its public CLI
+    runs from the Worktree the Runner recorded for that Session. That recorded
+    directory and paths inside it are the Session's own project scope; every
+    other directory, including another project's, stays refused.
+    """
+    if not isinstance(document_cwd, str):
+        return False
+    if document_cwd == str(root):
+        return True
+    try:
+        mapping, _ = read_alias_mapping(runner, alias)
+    except RunnerError:
+        return False
+    worktree = mapping.get('worktree_path')
+    if not isinstance(worktree, str) or not worktree:
+        return False
+    try:
+        return Path(document_cwd).resolve().is_relative_to(Path(worktree).resolve())
+    except (OSError, ValueError):
+        return False
 
 
 @contextmanager
@@ -44,8 +69,11 @@ def cli_connection(
     def operate(document: dict) -> dict:
         """Bind verified identity before entering the same gateway as native tools."""
         if (not isinstance(document, dict) or set(document) != {'cwd', 'request'}
-                or document['cwd'] != str(root)):
-            raise RunnerError('invalid-config', 'Agent Runner must be invoked from the Harness Project Root.')
+                or not _caller_in_scope(document['cwd'], root, runner, alias)):
+            raise RunnerError(
+                'invalid-config',
+                "Agent Runner must be invoked from the Harness Project Root or this Session's Worktree.",
+            )
         with runtime_caller(runner, alias), recovery_review(recovery_reviewer):
             result = handle_request(document['request'], cwd=root, allowed_features=allowed_features)
         return {'document': result.document, 'failed': result.failed}

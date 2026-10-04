@@ -18,14 +18,24 @@ from test_result_submission import result_project
 from test_codex_app_server import context, peer
 
 
-def cli(root: Path, address: str, *arguments: str, **claims: str) -> subprocess.CompletedProcess:
-    """Execute the public entry in a distinct process, retaining real kernel locks."""
+def run_cli(module: str, root: Path, address: str, *arguments: str, **claims: str) -> subprocess.CompletedProcess:
+    """Execute one public entry in a distinct process, retaining real kernel locks."""
     environment = {**os.environ, 'PYTHONPATH': str(Path(__file__).resolve().parents[1] / 'src'),
                    CONNECTION_ENV: address, **claims}
     return subprocess.run(
-        [sys.executable, '-c', 'from graphtraj.interfaces.cli.agent_runner import main; main()',
-         *arguments], cwd=root, env=environment, capture_output=True, text=True, timeout=20,
+        [sys.executable, '-c', f'from {module} import main; main()', *arguments],
+        cwd=root, env=environment, capture_output=True, text=True, timeout=20,
     )
+
+
+def cli(root: Path, address: str, *arguments: str, **claims: str) -> subprocess.CompletedProcess:
+    """Execute the Agent Runner entry in a distinct process, retaining real kernel locks."""
+    return run_cli('graphtraj.interfaces.cli.agent_runner', root, address, *arguments, **claims)
+
+
+def product_cli(root: Path, address: str, *arguments: str, **claims: str) -> subprocess.CompletedProcess:
+    """Execute the product entry in a distinct process, retaining real kernel locks."""
+    return run_cli('graphtraj.interfaces.cli.graphtraj', root, address, *arguments, **claims)
 
 
 def own_process(runner: Path) -> Path:
@@ -63,6 +73,39 @@ def test_cli_host_submits_exact_result_and_preserves_report_authority(tmp_path: 
         assert yaml.safe_load(refused.stdout)['error']['code'] == 'authority-denied'
     with runtime_caller(runner, None):
         assert tools.read_reports({'alias': 'research@x1'}, cwd=tmp_path).document['submissions'] == [submission]
+
+
+def test_cli_host_accepts_the_session_worktree_and_refuses_other_directories(tmp_path: Path) -> None:
+    """A restricted Session reaches the bound host from its own Worktree, and only there."""
+    runner, _, commit = result_project(tmp_path)
+    directory = own_process(runner)
+    worktree = tmp_path / 'worktrees/research'
+    nested = worktree / 'src'
+    nested.mkdir()
+    foreign = tmp_path / 'elsewhere'
+    foreign.mkdir()
+    with hold_ownership(directory, os.getpid()), cli_connection(
+        tmp_path, 'research@x1', native_operation_features(),
+    ) as address:
+        report = cli(worktree, address, 'submit-report', '--name', 'researcher-x1.md',
+                     '--text', 'Worktree evidence')
+        assert report.returncode == 0, report.stdout + report.stderr
+        assert yaml.safe_load(report.stdout)['report'].endswith('researcher-x1.md')
+        submission = cli(worktree, address, 'submit-result', '--commit', commit,
+                         '--result-ref', 'result.md', '--evidence-ref',
+                         '.state/teams/1/rounds/1/researcher-x1.md', '--completion', 'Complete')
+        assert submission.returncode == 0, submission.stdout + submission.stderr
+        assert yaml.safe_load(submission.stdout)['alias'] == 'research@x1'
+        graph = product_cli(worktree, address, 'ticket', 'graph')
+        assert graph.returncode == 0, graph.stdout + graph.stderr
+        assert [item['ticket_id'] for item in yaml.safe_load(graph.stdout)['tickets']] == ['148']
+        assert cli(nested, address, 'reports', 'research@x1').returncode == 0
+        refused = cli(foreign, address, 'reports', 'research@x1')
+        assert refused.returncode == 1
+        assert yaml.safe_load(refused.stdout)['error']['code'] == 'invalid-config'
+        sibling = cli(worktree, address, 'reports', 'research@x2')
+        assert sibling.returncode == 1
+        assert yaml.safe_load(sibling.stdout)['error']['code'] == 'authority-denied'
 
 
 def test_cli_host_refuses_unowned_wrong_channel_and_unavailable_host(tmp_path: Path) -> None:

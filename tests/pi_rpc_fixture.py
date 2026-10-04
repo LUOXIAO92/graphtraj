@@ -60,14 +60,17 @@ def main() -> None:
         answer = '|'.join(str(x) for x in history + queued)
         if text == 'cli':
             env = {**os.environ, 'GRAPHTRAJ_CALLER_ALIAS': 'research@x2', 'GRAPHTRAJ_ROLE': 'main'}
+            # The restricted Session's own directory is its Worktree, never the
+            # unreadable Harness Project Root.
+            worktree = os.path.join(os.environ['PI_FIXTURE_ROOT'], 'worktrees', 'research')
             authorized = subprocess.run([sys.executable, '-c',
                                         'from graphtraj.interfaces.cli.agent_runner import main; main()',
                                         'submit-report', '--name', 'researcher-x1.md', '--text', 'Pi hosted evidence'],
-                                       cwd=os.environ['PI_FIXTURE_ROOT'], env=env,
+                                       cwd=worktree, env=env,
                                        capture_output=True, text=True, timeout=15)
             child = subprocess.run([sys.executable, '-c',
                                     'from graphtraj.interfaces.cli.agent_runner import main; main()',
-                                    'reports', 'research@x2'], cwd=os.environ['PI_FIXTURE_ROOT'],
+                                    'reports', 'research@x2'], cwd=worktree,
                                    env=env, capture_output=True, text=True, timeout=15)
             answer = json.dumps({'authorized_exit': authorized.returncode, 'authorized': authorized.stdout,
                                  'refused_exit': child.returncode, 'refused': child.stdout})

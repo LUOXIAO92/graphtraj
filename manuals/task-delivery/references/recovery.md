@@ -166,6 +166,13 @@ reports, and is not permission to claim another Agent's work or checks as its ow
 
 ## Stop and replace
 
+A Native Process can exist before its Session is ready. Runner retains its owned
+execution control during this interval; the existing `interrupt` operation can
+stop an attributed start still owned by a live Worker. A Worker PID or an empty
+Trace alone does not establish Runtime termination. Cleanup of a failed allocation
+still requires verified attribution and a confirmed terminal outcome; historical
+records missing that proof remain refused.
+
 Retirement releases an Agent from its task and removes its active mapping while
 retaining its native Session, evidence and original parent relationships. Use
 the public `retire` operation only after the target and its entire descendant

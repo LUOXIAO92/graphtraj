@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import re
 import shutil
+import stat
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -419,11 +420,62 @@ def _unstarted_session_directory(
             if isinstance(failure, dict) and isinstance(failure.get("terminal_confirmed"), bool)
             else None
         )
+        if launch_matches:
+            evidence["artifacts"] = _allocation_artifacts(target, directory, trace, mapping)
         # Never publish failure messages or diagnostics: they can contain
         # credentials or task output retained by the Runtime.
         return trace_valid and launch_matches and valid_terminal_launch_failure(failure)
     except (OSError, TypeError, ValueError, yaml.YAMLError):
         return False
+
+
+def _allocation_artifacts(
+    target: CleanupTarget,
+    directory: Path,
+    trace: Path,
+    mapping: dict[str, Any],
+) -> dict[str, Any]:
+    """Inspect retained allocation artifacts without exposing task text or following links.
+
+    Presence and identity field names are inspection evidence, never proof of
+    process ownership or termination. Input artifacts can exist before launch.
+    """
+    paths = [directory / name for name in (
+        "launch.yml", "launch-error.yml", "mapping.yml", "session.yml",
+        "native-session.yml", "heartbeat.yml", "execution.yml", "pi-process.json",
+    )]
+    paths.extend((trace, trace.with_suffix(".pi") / "rpc.jsonl",
+                  trace.with_suffix(".pi") / "session.jsonl",
+                  trace.with_suffix(".pi") / "role-instructions.txt"))
+    batch = Path(mapping["retained_batch_file"])
+    if batch.is_relative_to(target.project.state_directory / "batches"):
+        paths.append(batch)
+    paths.extend(directory.glob("control-*"))
+    result: dict[str, Any] = {}
+    for path in paths:
+        key = path.relative_to(target.project.harness_root).as_posix()
+        try:
+            if path.resolve() != path:
+                result[key] = {"status": "linked"}
+                continue
+            metadata = path.lstat()
+            if not stat.S_ISREG(metadata.st_mode):
+                result[key] = {"status": "directory" if stat.S_ISDIR(metadata.st_mode) else "other"}
+                continue
+            item: dict[str, Any] = {"status": "file", "bytes": metadata.st_size}
+            if path.suffix == ".yml" and path.parent == directory:
+                document = yaml.safe_load(path.read_text(encoding="utf-8"))
+                if path.name == "launch.yml" and isinstance(document, dict):
+                    document = document.get("mapping")
+                item["identity_fields"] = [name for name in (
+                    "runtime_pid", "worker_pid", "session", "execution_id", "control_directory",
+                ) if isinstance(document, dict) and document.get(name) is not None]
+            result[key] = item
+        except FileNotFoundError:
+            result[key] = {"status": "absent"}
+        except (OSError, UnicodeError, ValueError, yaml.YAMLError):
+            result[key] = {"status": "unreadable"}
+    return result
 
 
 def _valid_mapping(mapping: dict[str, Any], alias: str, ticket_id: str) -> bool:

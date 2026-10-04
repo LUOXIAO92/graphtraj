@@ -464,11 +464,23 @@ def test_installed_cleanup_retains_a_terminal_unmapped_startup_failure_after_int
         assert cleaned.returncode == 1, cleaned.stdout + cleaned.stderr
         document = yaml.safe_load(cleaned.stdout)
         assert document["error"]["code"] == "cleanup-ownership-mismatch"
-        assert document["evidence"]["allocation_failures"][failed_session.name] == {
+        proof = document["evidence"]["allocation_failures"][failed_session.name]
+        assert {key: proof[key] for key in (
+            "trace_valid", "launch_matches_ticket", "terminal_confirmed",
+        )} == {
             "trace_valid": True,
             "launch_matches_ticket": failure_case != "foreign",
             "terminal_confirmed": failure_case != "uncertain",
         }
+        if failure_case == "uncertain":
+            artifacts = proof["artifacts"]
+            relative = failed_session.relative_to(ticket.root).as_posix()
+            assert artifacts[relative + "/mapping.yml"] == {"status": "absent"}
+            assert artifacts[relative + "/launch.yml"]["identity_fields"] == []
+            assert artifacts[relative + "/heartbeat.yml"]["identity_fields"] == ["worker_pid"]
+            assert artifacts[trace.relative_to(ticket.root).as_posix()]["bytes"] == 0
+        else:
+            assert "artifacts" not in proof
         assert "fixture-secret" not in cleaned.stdout
         assert ticket.worktree.is_dir()
         assert {path.name: path.read_bytes() for path in failed_session.iterdir()

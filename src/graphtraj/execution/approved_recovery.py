@@ -72,7 +72,7 @@ def approved_recovery(arguments: dict, cwd: Path) -> dict:
                           'resume': event['proposal']['request'].get('resume', True)} == request), None)
     if previous is not None:
         return _resume(project, previous)
-    before, _ = _snapshot(project, alias)
+    before, _ = _snapshot(project, alias, administrative=not request['resume'])
     after = _repair_snapshot(project, before, request)
     proposal = {
         'request': request, 'before': before, 'after': after,
@@ -82,7 +82,11 @@ def approved_recovery(arguments: dict, cwd: Path) -> dict:
     if minutes:
         decision = review_proposal(proposal, cwd, project.runner_directory)
         if decision != {'decision': 'accept'}:
-            raise RunnerError('recovery-denied', 'Recovery was not approved; no repair was applied.')
+            rationale = decision.get('rationale')
+            message = 'Recovery was not approved; no repair was applied.'
+            if isinstance(rationale, str) and rationale.strip():
+                message += ' Reviewer reason: ' + rationale
+            raise RunnerError('recovery-denied', message)
     return _apply_recovery(proposal, cwd)
 
 
@@ -109,6 +113,16 @@ def _repair_snapshot(project: Any, before: dict, request: dict) -> dict:
     after = copy.deepcopy(before)
     minutes = request.get('additional_minutes', 0)
     resume = request.get('resume', True)
+    if request['alias'] not in {member['session_ref'] for member in before['team']['members'].values()}:
+        if resume or request.get('restore_active', False) or not minutes or before['budget'] is None:
+            raise RunnerError(
+                'invalid-input',
+                'Retired-member recovery requires a positive budget increment without resume or restore_active.',
+            )
+        # The retained binding preserves ownership; this repair changes only its
+        # Ticket budget, leaving the retired Session and Team untouched.
+        after['budget']['approved_minutes'] = after['budget'].get('approved_minutes', 0) + minutes
+        return after
     if request.get('restore_active', False):
         if before['ticket']['replaced_by']:
             raise RunnerError('invalid-input', 'A replaced Ticket requires task-graph revision.')
@@ -136,7 +150,13 @@ def _repair_snapshot(project: Any, before: dict, request: dict) -> dict:
     return after
 
 
-def _snapshot(project: Any, alias: str, *, worldline_locked: bool = False) -> tuple[dict, dict]:
+def _snapshot(
+    project: Any,
+    alias: str,
+    *,
+    administrative: bool = False,
+    worldline_locked: bool = False,
+) -> tuple[dict, dict]:
     """Read the exact target state and derive all paths from registered ownership."""
     mapping, session = read_alias_mapping(project.runner_directory, alias)
     directory, ticket = _load_states(project.state_directory / 'tickets')[mapping['ticket_id']]
@@ -144,7 +164,7 @@ def _snapshot(project: Any, alias: str, *, worldline_locked: bool = False) -> tu
         raise RunnerError('seat-replaced', 'Recovery cannot change Session ownership.')
     team_path = directory / 'teams' / str(mapping['team_generation']) / 'team.yml'
     team = read_team(team_path)
-    if alias not in {member['session_ref'] for member in team['members'].values()}:
+    if not administrative and alias not in {member['session_ref'] for member in team['members'].values()}:
         raise RunnerError('seat-replaced', 'Recovery requires the original current Team member.')
     paths = {'ticket': directory / 'ticket.yml', 'team': team_path,
              'budget': directory / 'execution-budget.yml', 'stop': session / 'stop.yml',
@@ -208,7 +228,7 @@ def _apply_recovery(proposal: dict, cwd: Path) -> dict:
             or proposal['after'] != _repair_snapshot(project, proposal['before'], request)):
         raise RunnerError('invalid-input', 'The proposal differs from the supported recovery and retained authority.')
     digest = hashlib.sha256(json.dumps(proposal, sort_keys=True).encode()).hexdigest()
-    _, paths = _snapshot(project, alias)
+    _, paths = _snapshot(project, alias, administrative=not request['resume'])
     with execution_start_lock(project.runner_directory):
         lock = _lock(project.state_directory / 'tickets', exclusive=True)
         try:
@@ -218,7 +238,7 @@ def _apply_recovery(proposal: dict, cwd: Path) -> dict:
                 applied = next((event for event in events if event['event'] == 'recovery-applied'
                                 and event.get('proposal_sha256') == digest), None)
                 if applied is None:
-                    current, paths = _snapshot(project, alias)
+                    current, paths = _snapshot(project, alias, administrative=not request['resume'])
                     differences = _differences(proposal['before'], current)
                     if differences:
                         return {'recovery_status': 'stale', 'applied': False, 'differences': differences}
@@ -238,7 +258,9 @@ def _apply_recovery(proposal: dict, cwd: Path) -> dict:
 
                     def mutate(recorded: dict) -> Any:
                         """Recheck under the Worldline lock before any state mutation."""
-                        current, _ = _snapshot(project, alias, worldline_locked=True)
+                        current, _ = _snapshot(
+                            project, alias, administrative=not request['resume'], worldline_locked=True,
+                        )
                         differences = _differences(proposal['before'], current)
                         if differences:
                             raise RunnerError('recovery-stale', json.dumps(differences))

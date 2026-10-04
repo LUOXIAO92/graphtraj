@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
+import stat
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -119,13 +121,15 @@ def _cleanup(target: CleanupTarget) -> CleanupResponse:
             {"ticket_status": target.status},
         )
 
-    mappings, mapping_errors, busy_aliases = _ticket_mappings(target)
+    allocation_failures: dict[str, Any] = {}
+    mappings, mapping_errors, busy_aliases = _ticket_mappings(target, allocation_failures)
     if mapping_errors:
         return _refused(
             target,
             "cleanup-ownership-mismatch",
             "The live Runner mappings cannot be attributed safely.",
-            {"mapping_mismatches": mapping_errors},
+            {"mapping_mismatches": mapping_errors,
+             "allocation_failures": allocation_failures},
         )
     if busy_aliases:
         return _refused(
@@ -258,6 +262,7 @@ def _cleanup(target: CleanupTarget) -> CleanupResponse:
 
 def _ticket_mappings(
     target: CleanupTarget,
+    allocation_failures: dict[str, Any] | None = None,
 ) -> tuple[list[Path], list[str], list[str]]:
     sessions = target.project.runner_directory / "sessions"
     if not os.path.lexists(str(sessions)):
@@ -301,12 +306,15 @@ def _ticket_mappings(
                     pass
             if alias_candidate:
                 match = unstarted_alias.fullmatch(directory.name)
+                evidence: dict[str, Any] = {}
                 if match is not None and _unstarted_session_directory(
-                    target, directory, _alias_generation(match)
+                    target, directory, _alias_generation(match), evidence
                 ):
                     mappings.append(directory)
                 else:
                     errors.append(directory.name)
+                    if allocation_failures is not None and evidence:
+                        allocation_failures[directory.name] = evidence
             continue
         try:
             mapping = yaml.safe_load(mapping_file.read_text(encoding="utf-8"))
@@ -354,8 +362,14 @@ def _alias_generation(match: re.Match[str]) -> str:
 
 
 def _unstarted_session_directory(
-    target: CleanupTarget, directory: Path, generation: str
+    target: CleanupTarget, directory: Path, generation: str,
+    evidence: dict[str, Any],
 ) -> bool:
+    """Validate failed launch cleanup and expose only non-sensitive proof fields.
+
+    The summary distinguishes launch attribution from confirmed termination;
+    it never interprets diagnostic prose or a stale PID as stopping evidence.
+    """
     events = directory / "events.jsonl"
     trace = (
         target.ticket_directory
@@ -370,16 +384,16 @@ def _unstarted_session_directory(
         # a link, so these are no longer the same record. An allocation that
         # still holds no record is safe to remove; anything else must be
         # attributed by its own launch documents before removal.
-        if (
+        trace_valid = not (
             events.is_symlink()
             or not events.is_file()
             or trace.is_symlink()
             or not trace.is_file()
-        ):
-            return False
+        )
+        evidence["trace_valid"] = trace_valid
         launch_file = directory / "launch.yml"
         if not os.path.lexists(str(launch_file)):
-            return events.stat().st_size == 0 and trace.stat().st_size == 0
+            return trace_valid and events.stat().st_size == 0 and trace.stat().st_size == 0
         error_file = directory / "launch-error.yml"
         if (
             launch_file.is_symlink()
@@ -391,18 +405,98 @@ def _unstarted_session_directory(
         launch = yaml.safe_load(launch_file.read_text(encoding="utf-8"))
         failure = yaml.safe_load(error_file.read_text(encoding="utf-8"))
         mapping = launch.get("mapping") if isinstance(launch, dict) else None
-        return (
-            launch.get("operation") == "launch"
+        launch_matches = (
+            isinstance(launch, dict)
+            and launch.get("operation") == "launch"
             and isinstance(mapping, dict)
             and mapping.get("alias") == directory.name
             and mapping.get("ticket_id") == target.ticket_id
             and mapping.get("team_generation") == int(generation)
             and isinstance(mapping.get("retained_batch_file"), str)
             and bool(mapping["retained_batch_file"])
-            and valid_terminal_launch_failure(failure)
         )
+        evidence["launch_matches_ticket"] = launch_matches
+        evidence["terminal_confirmed"] = (
+            failure.get("terminal_confirmed")
+            if isinstance(failure, dict) and isinstance(failure.get("terminal_confirmed"), bool)
+            else None
+        )
+        if launch_matches:
+            evidence["artifacts"] = _allocation_artifacts(target, directory, trace, mapping)
+        # Never publish failure messages or diagnostics: they can contain
+        # credentials or task output retained by the Runtime.
+        return trace_valid and launch_matches and valid_terminal_launch_failure(failure)
     except (OSError, TypeError, ValueError, yaml.YAMLError):
         return False
+
+
+def _allocation_artifacts(
+    target: CleanupTarget,
+    directory: Path,
+    trace: Path,
+    mapping: dict[str, Any],
+) -> dict[str, Any]:
+    """Inspect retained allocation artifacts without exposing task text or following links.
+
+    Presence and identity field names are inspection evidence, never proof of
+    process ownership or termination. Input artifacts can exist before launch.
+    """
+    paths = [directory / name for name in (
+        "launch.yml", "launch-error.yml", "mapping.yml", "session.yml",
+        "native-session.yml", "heartbeat.yml", "execution.yml", "pi-process.json",
+    )]
+    paths.extend((trace, trace.with_suffix(".pi") / "rpc.jsonl",
+                  trace.with_suffix(".pi") / "session.jsonl",
+                  trace.with_suffix(".pi") / "role-instructions.txt"))
+    batch = Path(mapping["retained_batch_file"])
+    if batch.is_relative_to(target.project.state_directory / "batches"):
+        paths.append(batch)
+    paths.extend(directory.glob("control-*"))
+    result: dict[str, Any] = {}
+    for path in paths:
+        key = path.relative_to(target.project.harness_root).as_posix()
+        try:
+            if path.resolve() != path:
+                result[key] = {"status": "linked"}
+                continue
+            metadata = path.lstat()
+            if not stat.S_ISREG(metadata.st_mode):
+                result[key] = {"status": "directory" if stat.S_ISDIR(metadata.st_mode) else "other"}
+                continue
+            item: dict[str, Any] = {"status": "file", "bytes": metadata.st_size}
+            if path.suffix == ".yml" and path.parent == directory:
+                document = yaml.safe_load(path.read_text(encoding="utf-8"))
+                if path.name == "launch.yml" and isinstance(document, dict):
+                    document = document.get("mapping")
+                item["identity_fields"] = [name for name in (
+                    "runtime_pid", "worker_pid", "session", "execution_id", "control_directory",
+                ) if isinstance(document, dict) and document.get(name) is not None]
+            if path.parent == directory and path.name in {"launch-error.yml", "pi-process.json"}:
+                document = (json.loads(path.read_text(encoding="utf-8"))
+                            if path.suffix == ".json" else document)
+                fields = (("policy", "argv") if path.suffix == ".json" else
+                          ("code", "message", "diagnostic", "terminal_confirmed"))
+                item["document_type"] = type(document).__name__
+                if isinstance(document, dict):
+                    item["field_types"] = {name: type(document[name]).__name__
+                                           for name in fields if name in document}
+                    item["other_field_count"] = len(set(document) - set(fields))
+                    if path.name == "pi-process.json":
+                        argv = document.get("argv")
+                        if isinstance(argv, list) and all(isinstance(arg, str) for arg in argv):
+                            item["argv_strings"] = True
+                            sessions = [argv[index + 1] for index, arg in enumerate(argv[:-1])
+                                        if arg == "--session"]
+                            item["requested_session_matches_trace"] = sessions == [
+                                str(trace.with_suffix(".pi") / "session.jsonl")]
+                        else:
+                            item["argv_strings"] = False
+            result[key] = item
+        except FileNotFoundError:
+            result[key] = {"status": "absent"}
+        except (OSError, UnicodeError, ValueError, yaml.YAMLError):
+            result[key] = {"status": "unreadable"}
+    return result
 
 
 def _valid_mapping(mapping: dict[str, Any], alias: str, ticket_id: str) -> bool:

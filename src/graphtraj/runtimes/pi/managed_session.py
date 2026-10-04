@@ -16,7 +16,7 @@ import threading
 import uuid
 
 from graphtraj.execution.runner_io import write_yaml_durably
-from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError, SessionStarted
+from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError, SessionStarted, record_runtime_process
 
 
 INFORMATION = {'notify', 'setStatus', 'setWidget', 'setTitle', 'set_editor_text'}
@@ -45,6 +45,7 @@ class PiManagedExecution:
         self.trace = trace_file
         self.expected = expected_session
         self.session: str | None = None
+        self.bound = False
         self._execution_id = uuid.uuid4().hex
         self.proc: subprocess.Popen | None = None
         self.events: queue.Queue = queue.Queue()
@@ -58,6 +59,7 @@ class PiManagedExecution:
         self.transport_closed = threading.Event()
         self.prompt_started = False
         self.stderr_reader: threading.Thread | None = None
+        self.startup_terminal_confirmed = False
 
     @property
     def execution_id(self) -> str:
@@ -239,6 +241,7 @@ class PiManagedExecution:
                 self.proc = subprocess.Popen(argv, cwd=self.request['worktree_path'], env=env,
                                              stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                              text=True, bufsize=1, start_new_session=True)
+                record_runtime_process(self.proc.pid)
 
                 def retain_stderr() -> None:
                     """Keep private log files host-side; Node must be able to stat its stdio."""
@@ -252,6 +255,8 @@ class PiManagedExecution:
                 reader = threading.Thread(target=self._read, daemon=True)
                 reader.start()
                 state = self._rpc('get_state')
+                if self.stopping.is_set():
+                    raise RuntimeAdapterError('RUNTIME_EXECUTION_INTERRUPTED', 'Pi startup was interrupted.')
                 self.session = state.get('sessionId')
                 if not isinstance(self.session, str) or not self.session:
                     raise RuntimeAdapterError('RUNTIME_SESSION_MISSING', 'Pi did not return a native Session.')
@@ -267,6 +272,7 @@ class PiManagedExecution:
                     'runtime_version': self.request['version'],
                 })
                 self.created(self.session, self.proc.pid)
+                self.bound = True
                 with self.lock:
                     if self.stopping.is_set():
                         return self._result('interrupted', None)
@@ -342,6 +348,14 @@ class PiManagedExecution:
                 except (OSError, subprocess.TimeoutExpired) as error:
                     raise self._shutdown_failure(original_error or error, stderr_offset) from error
                 finally:
+                    self.startup_terminal_confirmed = (
+                        native_idle and self.proc is not None and self.proc.poll() is not None
+                    )
+                    if self.proc is not None:
+                        record_runtime_process(self.proc.pid, {
+                            'terminal_confirmed': self.startup_terminal_confirmed,
+                            'runtime_exit_code': self.proc.poll(),
+                        })
                     if self.stderr_reader is not None:
                         self.stderr_reader.join(timeout=5)
                     if reader is not None:
@@ -442,7 +456,9 @@ class PiManagedExecution:
     def operate(self, request: dict) -> dict:
         """Control only this bound Session/execution using Runner's existing server."""
         with self.lock:
-            if (request.get('session'), request.get('execution_id')) != (self.session, self.execution_id):
+            if (request.get('session'), request.get('execution_id')) != (
+                self.session if self.bound else None, self.execution_id,
+            ):
                 raise RuntimeAdapterError('operation-failed', 'Pi execution is not owned.')
             operation = request.get('operation')
             if operation == 'status':
@@ -476,6 +492,9 @@ class PiManagedExecution:
             if operation != 'interrupt':
                 raise RuntimeAdapterError('invalid-input', 'Unknown Pi operation.')
         self._interrupt()
-        if not self.done.wait(timeout=30) or not self.outcome or self.outcome['outcome'] != 'interrupted':
+        if not self.done.wait(timeout=30) or not (
+            self.startup_terminal_confirmed and not self.bound
+            or self.outcome and self.outcome['outcome'] == 'interrupted'
+        ):
             raise RuntimeAdapterError('operation-failed', 'Pi interruption is not yet confirmed.', terminal_confirmed=False)
         return {}

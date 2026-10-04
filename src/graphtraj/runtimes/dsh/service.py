@@ -21,6 +21,13 @@ from websockets.sync.client import connect
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 
 
+# The Gateway forwards Agent-scoped approval waterfalls over this one internal
+# stream; its ``ready`` frame carries the clientId later results must name.
+APPROVAL_STREAM   = 'events'
+APPROVAL_ENDPOINT = '$events'
+APPROVAL_RESULT   = '$events/result'
+
+
 class DshService:
     """Keep launch tokens/cookies in memory and reap only our own service.
 
@@ -38,6 +45,10 @@ class DshService:
         self.origin = ''
         self.cookie = ''
         self.socket = None
+        self.client_id: str | None = None
+        # Frames read while opening the approval channel are replayed to receive.
+        self.backlog: list[dict] = []
+        self.events: queue.Queue = queue.Queue()
 
     def start(self) -> None:
         """Launch an owned Web backend and exchange its single-use launch token."""
@@ -88,12 +99,16 @@ class DshService:
 
     def rpc(self, method: str, request: dict | None = None) -> dict:
         """Call the native Remote envelope; a successful response is only a receipt."""
+        return self._call(method, {} if request is None else {
+            '_request' if method == 'session/list' else 'request': request,
+        })
+
+    def _call(self, method: str, args: dict) -> dict:
+        """Call one native Remote method with its exact named wire arguments."""
         rpc_id = uuid.uuid4().hex
         body = {
             'type': 'client-request', 'rpcId': rpc_id, 'method': method,
-            'payload': {'args': {} if request is None else {
-                '_request' if method == 'session/list' else 'request': request,
-            }},
+            'payload': {'args': args},
         }
         call = urllib.request.Request(
             self.origin + '/api/' + method, data=json.dumps(body).encode(),
@@ -115,6 +130,34 @@ class DshService:
         except Exception as error:
             raise RuntimeAdapterError('RUNTIME_CONNECTION_FAILED', f'DSH {method} unavailable.') from error
 
+    def answer_approval(self, event_id: str, outcome: str) -> None:
+        """Return one explicit outcome to the exact pending native approval request."""
+        if self.client_id is None:
+            raise RuntimeAdapterError('RUNTIME_PROTOCOL_ERROR', 'DSH approval channel is not open.')
+        self._call(APPROVAL_RESULT, {
+            'clientId': self.client_id, 'eventId': event_id,
+            'outcome': {'kind': 'result', 'value': outcome},
+        })
+
+    def open_events(self) -> str:
+        """Open the forwarded-event stream and require its native ready frame."""
+        self._open_stream(APPROVAL_STREAM, APPROVAL_ENDPOINT, {})
+        deadline = time.monotonic() + 20
+        while time.monotonic() < deadline:
+            message = self._receive_message(max(0.01, deadline - time.monotonic()))
+            if message.get('streamId') != APPROVAL_STREAM:
+                # Session frames may interleave; retain them for the owner loop.
+                if message:
+                    self.backlog.append(message)
+                continue
+            value = message.get('value') or {}
+            client_id = value.get('clientId')
+            if value.get('type') == 'ready' and isinstance(client_id, str) and client_id:
+                self.client_id = client_id
+                return client_id
+            raise RuntimeAdapterError('RUNTIME_PROTOCOL_ERROR', 'DSH approval channel did not open correctly.')
+        raise RuntimeAdapterError('RUNTIME_CONNECTION_FAILED', 'DSH approval channel did not become ready.')
+
     def follow(self, session: str) -> dict:
         """Subscribe before prompt and return the native opening snapshot."""
         try:
@@ -123,10 +166,9 @@ class DshService:
                 origin=self.origin, additional_headers={'Cookie': self.cookie},
                 proxy=None, open_timeout=15, max_size=32 * 1024 * 1024,
             )
-            self.socket.send(json.dumps({
-                'type': 'open', 'streamId': 'session', 'endpoint': 'session/follow',
-                'payload': {'args': {'request': {'address': {'kind': 'session', 'sessionId': session}}}},
-            }))
+            self._open_stream('session', 'session/follow', {
+                'request': {'address': {'kind': 'session', 'sessionId': session}},
+            })
             deadline = time.monotonic() + 20
             while time.monotonic() < deadline:
                 frame = self.receive(max(0.01, deadline - time.monotonic()))
@@ -141,12 +183,38 @@ class DshService:
             raise RuntimeAdapterError('RUNTIME_CONNECTION_FAILED', 'DSH subscription failed.') from error
 
     def receive(self, timeout: float = 1) -> dict:
-        """Read one multiplexed Session frame, preserving native failure semantics."""
+        """Read one Session frame; queue approval-channel frames for the owner."""
+        message = self.backlog.pop(0) if self.backlog else self._receive_message(timeout)
+        if not message:
+            return {}
+        if message.get('streamId') == APPROVAL_STREAM:
+            self.events.put(message.get('value') or {})
+            return {}
+        return message.get('value', {})
+
+    def take_events(self) -> list[dict]:
+        """Drain queued approval-channel frames without blocking."""
+        frames = []
+        while True:
+            try:
+                frames.append(self.events.get_nowait())
+            except queue.Empty:
+                return frames
+
+    def _open_stream(self, stream_id: str, endpoint: str, args: dict) -> None:
+        """Open one logical stream on the authenticated multiplexed socket."""
+        self.socket.send(json.dumps({
+            'type': 'open', 'streamId': stream_id, 'endpoint': endpoint,
+            'payload': {'args': args},
+        }))
+
+    def _receive_message(self, timeout: float) -> dict:
+        """Read one multiplexed frame, preserving native failure semantics."""
         try:
             message = json.loads(self.socket.recv(timeout=timeout))
             if message.get('type') in {'error', 'end'}:
                 raise RuntimeAdapterError('RUNTIME_CONNECTION_CLOSED', 'DSH Session stream ended unexpectedly.')
-            return message.get('value', {})
+            return message
         except TimeoutError:
             return {}
         except RuntimeAdapterError:

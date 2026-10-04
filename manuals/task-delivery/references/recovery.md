@@ -49,6 +49,14 @@ The administrative-only result is `applied`, with the actual changes and
 `recovery_event_id`. It does not claim that continuation occurred. Adding zero
 minutes does not clear a budget stop when continuation is requested either.
 
+A retained retired alias can request a positive Ticket budget increment with
+`--no-resume` and without `--restore-active`. The same reviewer and caller
+authority checks apply. Approval changes only the retained budget; it neither
+restarts Sessions nor reverses retirement. Main can then separately use
+`continue --ticket-id <id> --budget-only --caused-by-event-id <recovery_event_id>`
+and ordinary swarm dispatch with explicit first instructions for a new member.
+Original accounting, stops and identities remain retained.
+
 Recovery within existing spending authority does not need another approval
 merely because a parent interrupted the Session. Additional spending requires
 the selected human or automatic reviewer. The same recovery operation requests

@@ -263,7 +263,12 @@ def continue_stopped_ticket(
                         continue
                 roots[alias] = mapping
             if not roots:
-                raise ValueError("The Team has no actual root Sessions")
+                if members or not budget_only:
+                    raise ValueError("The Team has no actual root Sessions")
+                # Retired members stay retired. Main may restore only the
+                # Ticket's budget permission before a separately scoped swarm.
+                if caller_alias(project.runner_directory) is not None:
+                    raise RunnerError("authority-denied", "Only the root caller may continue this Ticket.")
             # Validate the whole operation before clearing its sampled stop. Explicit
             # subtree stops stay bound to the old entities and require replacement.
             for alias, mapping in roots.items():

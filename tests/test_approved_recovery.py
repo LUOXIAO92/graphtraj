@@ -623,15 +623,16 @@ def test_bound_host_decides_inside_recover(
     assert len(observed) == 1
 
 
+@pytest.mark.parametrize('fixture_name', ['target', 'retired_target'])
 @pytest.mark.parametrize('decision', ['accept', 'decline', 'wrong-request', 'error'])
 def test_selected_http_reviewer_controls_recovery(
-    target: tuple, monkeypatch: pytest.MonkeyPatch, decision: str,
+    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch, decision: str, fixture_name: str,
 ) -> None:
     """Exercise the real HTTP adapter envelope with a controlled provider response."""
     from io import BytesIO
     from graphtraj.runtimes.codex import approval
 
-    root, ticket, _, arguments = target
+    root, ticket, _, arguments = request.getfixturevalue(fixture_name)
     config_file = root / '.graphtraj/config.yml'
     config = yaml.safe_load(config_file.read_text())
     config['codex'] = {'approval': {'model': 'selected-reviewer',
@@ -942,3 +943,190 @@ def test_live_selected_http_reviewer(
         raise
     finally:
         print('LIVE_RECOVERY_REVIEW ' + json.dumps(observations, sort_keys=True))
+
+
+@pytest.fixture
+def retired_target(target: tuple) -> tuple:
+    """Retire every member through public operations, preserving their records."""
+    root, ticket, mapping, arguments = target
+    invoke(root, {**arguments, 'additional_minutes': 0, 'resume': False})
+    call = local_tool.bind(root)
+    call({'action': 'execute', 'feature': 'interrupt', 'arguments': {'alias': mapping['alias']}})
+    runner = root / '.graphtraj/runner'
+    mappings = [yaml.safe_load(path.read_text()) for path in (runner / 'sessions').glob('*/mapping.yml')]
+    for member in sorted(mappings, key=lambda item: item['parent'] is None):
+        with runtime_caller(runner, member['parent']):
+            result = call({'action': 'execute', 'feature': 'retire',
+                           'arguments': {'alias': member['alias']}}).document
+        assert result['retire_status'] == 'retired'
+    assert all(member['session_ref'] is None for member in
+               yaml.safe_load((ticket / 'teams/1/team.yml').read_text())['members'].values())
+    budget_path = ticket / 'execution-budget.yml'
+    budget = yaml.safe_load(budget_path.read_text())
+    budget.update(stopped=True, stopping_checks=3, notifications=['stochastic_stop:3'])
+    budget_path.write_text(yaml.safe_dump(budget))
+    request = {key: value for key, value in arguments.items() if key != 'restore_active'}
+    request.update(resume=False)
+    return root, ticket, mapping, request
+
+
+@pytest.mark.parametrize('decision', ['accept', 'decline', 'error', 'stale'])
+def test_ticket_budget_repair_retains_retired_sessions(
+    retired_target: tuple, monkeypatch: pytest.MonkeyPatch, decision: str,
+) -> None:
+    """Review changes only the exact budget increment, never retirement or stops."""
+    root, ticket, mapping, request = retired_target
+    budget_path = ticket / 'execution-budget.yml'
+    before = yaml.safe_load(budget_path.read_text())
+    preserved = {path: path.read_bytes() for path in ticket.rglob('*')
+                 if path.is_file() and path.name != 'execution-budget.yml' and not path.name.startswith('.')}
+    events = read_worldline(ticket.parent.parent, root)
+    reviewed = []
+
+    def review(proposal: dict) -> dict:
+        """Control the selected host decision while retaining the real recovery path."""
+        reviewed.append(copy.deepcopy(proposal))
+        assert yaml.safe_load(budget_path.read_text()) == before
+        assert proposal['after']['budget'] == {**before, 'approved_minutes': 7}
+        if decision == 'error':
+            raise recovery.runtime_adapter.RuntimeAdapterError('review-failed', 'Controlled failure')
+        if decision == 'stale':
+            # A concurrent public repair must invalidate the original snapshot.
+            local_tool.bind(root, recovery_reviewer=lambda proposal: {'decision': 'accept'})({
+                'action': 'execute', 'feature': 'approved_recovery',
+                'arguments': {**request, 'additional_minutes': 2, 'reason': 'Concurrent authorized repair'},
+            })
+        return {'decision': 'accept' if decision == 'stale' else decision}
+
+    def unexpected_send(*args: object, **kwargs: object) -> None:
+        """Administrative recovery must never reach native continuation."""
+        pytest.fail('Ticket repair resumed a Session')
+
+    monkeypatch.setattr(recovery, '_send_session_locked', unexpected_send)
+    call = local_tool.bind(root, recovery_reviewer=review)
+    payload = {'action': 'execute', 'feature': 'approved_recovery', 'arguments': request}
+    if decision in {'decline', 'error'}:
+        with pytest.raises(RunnerError):
+            call(payload)
+        assert yaml.safe_load(budget_path.read_text()) == before
+        assert read_worldline(ticket.parent.parent, root) == events
+    else:
+        result = call(payload).document
+        assert result['recovery_status'] == ('stale' if decision == 'stale' else 'applied')
+        assert result['applied'] is (decision == 'accept')
+        assert yaml.safe_load(budget_path.read_text()) == {
+            **before, 'approved_minutes': 2 if decision == 'stale' else 7,
+        }
+        if decision == 'accept':
+            assert call(payload).document == result
+            assert call({'action': 'execute', 'feature': 'approved_recovery', 'arguments': {
+                'alias': mapping['alias'], 'retry_event_id': result['recovery_event_id'],
+            }}).document == result
+            event = next(event for event in read_worldline(ticket.parent.parent, root)
+                         if event['event_id'] == result['recovery_event_id'])
+            assert event['ticket_id'] == '83'
+            assert event['caused_by_event_ids'] == request['caused_by_event_ids']
+            assert event['proposal'] == reviewed[0]
+            assert event['alias'] == mapping['alias'] and event['session'] == mapping['session']
+    assert len(reviewed) == 1
+    assert all(path.read_bytes() == contents for path, contents in preserved.items())
+    assert not list((root / '.graphtraj/runner/sessions').glob('*/mapping.yml'))
+
+
+def test_ticket_recovery_authority_targets_and_separate_continuation(
+    retired_target: tuple,
+    monkeypatch: pytest.MonkeyPatch,
+    installed_commands: InstalledCommands,
+    fake_codex: FakeCodex,
+) -> None:
+    """Retained ownership gates repair; only Main may continue an empty Team budget."""
+    root, ticket, mapping, request = retired_target
+    before = (ticket / 'execution-budget.yml').read_bytes()
+    call = local_tool.bind(root, recovery_reviewer=lambda proposal: {'decision': 'accept'})
+    for invalid in (
+        {**request, 'alias': 'unknown'},
+        {**request, 'resume': True}, {**request, 'restore_active': True},
+        {**request, 'retry_event_id': request['caused_by_event_ids'][0]},
+        {**request, 'additional_minutes': 0},
+    ):
+        with pytest.raises(RunnerError):
+            call({'action': 'execute', 'feature': 'approved_recovery', 'arguments': invalid})
+    for extra in ({'actor': 'main'}, {'ticket_id': '83'}):
+        assert call({'action': 'execute', 'feature': 'approved_recovery',
+                     'arguments': {**request, **extra}}).failed
+    with runtime_caller(root / '.graphtraj/runner', 'unrelated@e1'):
+        with pytest.raises(RunnerError) as error:
+            call({'action': 'execute', 'feature': 'approved_recovery', 'arguments': request})
+        assert error.value.code == 'authority-denied'
+    assert (ticket / 'execution-budget.yml').read_bytes() == before
+    result = call({'action': 'execute', 'feature': 'approved_recovery', 'arguments': request}).document
+    continued_request = {'ticket_id': '83', 'budget_only': True,
+                         'caused_by_event_ids': [result['recovery_event_id']]}
+    with runtime_caller(root / '.graphtraj/runner', mapping['alias']):
+        with pytest.raises(RunnerError) as error:
+            call({'action': 'execute', 'feature': 'continue', 'arguments': continued_request})
+        assert error.value.code == 'authority-denied'
+    with pytest.raises(RunnerError):
+        call({'action': 'execute', 'feature': 'continue',
+              'arguments': {**continued_request, 'budget_only': False}})
+    monkeypatch.chdir(root)
+    continued = CliRunner().invoke(main, ['continue', '--ticket-id', '83', '--budget-only',
+                                         '--caused-by-event-id', result['recovery_event_id']])
+    assert continued.exit_code == 0, continued.output
+    assert yaml.safe_load(continued.output)['tasks'] == []
+    assert yaml.safe_load((ticket / 'execution-budget.yml').read_text()) == {
+        **yaml.safe_load(before), 'approved_minutes': 7, 'stopped': False,
+    }
+    assert not list((root / '.graphtraj/runner/sessions').glob('*/mapping.yml'))
+    retained = {path: path.read_bytes() for path in (ticket / 'teams/1/traces').rglob('*')
+                if path.is_file() and not path.is_symlink()}
+    instruction = 'Inspect retained evidence only. No source edits, deployment, or old Session resumption.'
+    batch = root / 'restricted-swarm.yml'
+    batch.write_text(yaml.safe_dump({'tasks': [{
+        'ticket_id': '83', 'role': 'coding-team.team-leader', 'instruction': instruction,
+    }]}))
+    environment = dict(os.environ, FAKE_CODEX_LOG=str(fake_codex.log_file),
+                       FAKE_CODEX_CAPTURE_STDIN='1',
+                       FAKE_CODEX_EVENTS=json.dumps([
+                           {'type': 'thread.started', 'thread_id': 'fresh-evidence-session'},
+                           {'type': 'turn.started'}, {'type': 'turn.completed'},
+                       ]))
+    environment['HOME'] = str(root / 'operator-home')
+    environment['PATH'] = str(fake_codex.executable.parent) + os.pathsep + environment['PATH']
+    launched = run_process([str(installed_commands.runner), '--swarm-input', str(batch)],
+                           cwd=root, env=environment, timeout=30)
+    assert launched.returncode == 0, launched.stdout + launched.stderr
+    new = yaml.safe_load(launched.stdout)['tasks'][0]
+    assert new['session'] == 'fresh-evidence-session' and new['session'] != mapping['session']
+    assert new['alias'] != mapping['alias']
+    wait_for_file(root / '.graphtraj/runner/sessions' / new['alias'] / 'execution.yml')
+    assert instruction in json.loads(fake_codex.log_file.read_text())['stdin']
+    assert all(path.read_bytes() == value for path, value in retained.items())
+
+
+def test_ticket_cli_recovery_matches_shared_tool(
+    retired_target: tuple, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Both public entries select the same reviewer and deduplicate the same repair."""
+    root, ticket, _, request = retired_target
+    monkeypatch.chdir(root)
+    proposals = []
+
+    class Reviewer:
+        """Supply the selected Runtime decision at the existing approval seam."""
+
+        def native_recovery_approval(self, proposal: dict, cwd: Path) -> dict:
+            """Retain the one concrete proposal seen by the CLI."""
+            proposals.append(proposal)
+            return {'decision': 'accept'}
+
+    monkeypatch.setattr(recovery.runtime_adapter, 'select_runtime_adapter', lambda runtime: Reviewer())
+    command = ['recover', request['alias'], '--no-resume']
+    for key in ('reason', 'instruction', 'allowed_scope', 'forbidden_scope', 'additional_minutes'):
+        command.extend(['--' + key.replace('_', '-'), str(request[key])])
+    command.extend(['--caused-by-event-id', request['caused_by_event_ids'][0]])
+    cli = CliRunner().invoke(main, command)
+    assert cli.exit_code == 0, cli.output
+    assert yaml.safe_load(cli.output) == invoke(root, request)
+    assert len(proposals) == 1
+    assert proposals[0]['request']['resume'] is False

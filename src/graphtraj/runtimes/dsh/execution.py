@@ -49,6 +49,7 @@ class DshExecution:
         self.last_message: str | None = None
         self.end: dict | None = None
         self.unsupported: str | None = None
+        self.pending: dict[str, dict] = {}
         # Runner retires/moves its control directory. Keep native Session data
         # with the durable Trace so retirement cannot break the retained link.
         self.logs = trace_file.parent / 'dsh-native'
@@ -165,6 +166,60 @@ class DshExecution:
             'mode': mode, 'content': [{'type': 'text', 'text': prompt}],
         })
 
+    def _approval_frames(self) -> None:
+        """Expose native approval requests to the parent; never decide them here."""
+        for frame in self.service.take_events():
+            kind = frame.get('type')
+            if kind == 'waterfall' and frame.get('event') == 'approval/request':
+                self._request_approval(frame)
+            elif kind == 'cancel':
+                # The first answer, native abort or process exit settles the
+                # native request; a later reply must authorize nothing.
+                with self.lock:
+                    for token, details in list(self.pending.items()):
+                        if details['request_id'] == frame.get('eventId'):
+                            del self.pending[token]
+
+    def _request_approval(self, frame: dict) -> None:
+        """Publish one pending native approval with the identity its parent needs."""
+        request  = frame.get('request') or {}
+        event_id = frame.get('eventId')
+        token    = uuid.uuid4().hex
+        details  = {
+            'session': self.session, 'execution_id': self.execution_id,
+            'request_id': event_id, 'request_token': token,
+            'method': 'dsh/approval-request', 'tool': request.get('toolName'),
+            'call_id': request.get('callId'), 'reason': request.get('reason'),
+        }
+        with self.lock:
+            if self.stopping.is_set() or self.finished.is_set():
+                return
+            self.pending[token] = details
+        threading.Thread(target=self._notify_direct_parent, args=(token, details), daemon=True).start()
+
+    def _notify_direct_parent(self, token: str, details: dict) -> None:
+        """Announce a pending request through the real parent channel, without deciding."""
+        from graphtraj.execution.runner_control import notify_direct_parent
+
+        notice = (
+            'Direct child notice: DSH Session {session} waits for your decision on native '
+            'approval request {request_id} ({tool}) in execution {execution_id}. Reply through '
+            'the existing reply entry for that request when you decide; receiving this notice '
+            'neither approves nor rejects it.'
+        ).format(**details)
+        while True:
+            with self.lock:
+                if token not in self.pending:
+                    return
+            try:
+                receipt = notify_direct_parent(self.directory, notice, details)
+            except Exception:
+                receipt = None
+            if receipt is not None and receipt.get('delivery') in {'received', 'no-direct-parent'}:
+                return
+            # Retry only while the original native request is still pending.
+            time.sleep(1)
+
     def run(self) -> dict:
         """Bind, subscribe, prompt and wait; retain ownership through stop confirmation."""
         from graphtraj.interfaces.hosted_cli import CONNECTION_ENV, cli_connection
@@ -190,6 +245,7 @@ class DshExecution:
             write_yaml_durably(self.directory / 'session.yml', {'session': native, 'runtime': 'dsh'})
             self.created(native, self.service.process.pid)
             self.service.follow(native)
+            self.service.open_events()
             self.service.rpc('session/selectModel', {
                 'sessionId': native, 'provider': self.request['provider'], 'model': self.request['model'],
                 **({'reasoningEffort': self.request['reasoning_effort']}
@@ -217,6 +273,7 @@ class DshExecution:
                         raise RuntimeAdapterError('RUNTIME_STOP_FAILED', 'DSH did not reach cancellation quiescence.')
                 frame = self.service.receive()
                 self._retain_trace()
+                self._approval_frames()
                 if frame.get('type') == 'event':
                     event = frame['event']
                     kind = event['type']
@@ -228,10 +285,10 @@ class DshExecution:
                         self.end = None
                     elif kind == 'turn/end':
                         self.end = data
-                    elif kind == 'approval/asked' or (
-                        kind == 'tool/call' and data.get('name') == 'ask_user_question'
-                    ):
-                        self.unsupported = 'DSH interactive approval/user input is unsupported.'
+                    elif kind == 'tool/call' and data.get('name') == 'ask_user_question':
+                        # approval/asked and approval/decided are log-only audit
+                        # events; only non-approval user questions stay unsupported.
+                        self.unsupported = 'DSH interactive user input is unsupported.'
                         self.stopping.set()
                 with self.lock:
                     if self.end is not None and not self.stopping.is_set() and self._settled():
@@ -256,6 +313,7 @@ class DshExecution:
                 self.service.close()
                 with self.lock:
                     self.active = False
+                    self.pending.clear()
                 self._retain_trace()
                 if self.outcome is not None and not self.trace_file.is_file():
                     raise RuntimeAdapterError('RUNTIME_TRACE_FAILED', 'DSH native Trace was not retained.')
@@ -280,7 +338,19 @@ class DshExecution:
             if operation == 'status':
                 return {'activity': 'running' if self.active else 'idle', 'last_outcome': self.outcome}
             if operation == 'requests':
-                return {'requests': []}
+                return {'requests': list(self.pending.values())}
+            if operation == 'reply':
+                details  = self.pending.get(request.get('request_token'))
+                response = request.get('response')
+                if details is None or self.stopping.is_set() or self.finished.is_set():
+                    raise RuntimeAdapterError('invalid-input', 'Supply a reply to a pending DSH approval request.')
+                decision = response.get('decision') if isinstance(response, dict) else None
+                if not isinstance(response, dict) or set(response) != {'decision'} or decision not in {'allow', 'reject'}:
+                    raise RuntimeAdapterError('invalid-input', 'Return exactly one explicit allow or reject decision.')
+                outcome = 'allowed-once' if decision == 'allow' else 'rejected'
+                self.service.answer_approval(details['request_id'], outcome)
+                del self.pending[request['request_token']]
+                return {'request_id': details['request_id'], 'reply_status': 'submitted'}
             if operation == 'send' and self.active and not self.stopping.is_set():
                 self._input(request['instruction'], 'steer')
                 self.end = None

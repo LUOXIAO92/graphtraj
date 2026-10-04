@@ -48,6 +48,10 @@ class NativePeer:
         self.reason = 'completed'
         self.closed = False
         self.session = 'native-dsh'
+        self.event_data = {}
+        self.event_frames = []
+        self.event_lock = threading.Lock()
+        self.answers = []
         home = Path(environment['DSH_HOME'])
         config = yaml.safe_load((home / 'profiles/web/cordis.patch.yml').read_text())
         root = next(row['config']['root'] for row in config if row.get('id') == 'session-persistence-jsonl')
@@ -63,6 +67,33 @@ class NativePeer:
         """Observe this exact session before input."""
         self.calls.append(('follow', session))
         return {'type': 'snapshot'}
+
+    def open_events(self) -> str:
+        """Bind the forwarded approval channel before any native work starts."""
+        self.calls.append(('open_events', None))
+        return 'native-client'
+
+    def take_events(self) -> list:
+        """Deliver approval-channel frames the test scheduled."""
+        with self.event_lock:
+            frames, self.event_frames = self.event_frames, []
+        return frames
+
+    def answer_approval(self, event_id: str, outcome: str) -> None:
+        """Record the exact one-shot native outcome returned to the request."""
+        self.calls.append(('answer_approval', event_id, outcome))
+        self.answers.append((event_id, outcome))
+
+    def push_approval(self, event_id: str, **request: Any) -> None:
+        """Schedule one native approval waterfall for the runtime to pick up."""
+        with self.event_lock:
+            self.event_frames.append({'type': 'waterfall', 'event': 'approval/request',
+                                      'eventId': event_id, 'agentId': 'native-agent', 'request': request})
+
+    def push_cancel(self, event_id: str) -> None:
+        """Withdraw one native approval before the parent answers it."""
+        with self.event_lock:
+            self.event_frames.append({'type': 'cancel', 'eventId': event_id})
 
     def rpc(self, method: str, body: dict | None = None) -> dict:
         """Respond using native receipts, inbox and running-state shapes."""
@@ -93,6 +124,7 @@ class NativePeer:
             if kind == 'turn/end':
                 self.running = False
             return {'type': 'event', 'event': {'type': kind, 'data': {
+                **self.event_data,
                 'reason': {'kind': self.reason},
                 'message': {'content': [{'type': 'text', 'text': 'Native response'}]},
             }}}
@@ -140,6 +172,39 @@ def run_turn(tmp_path: Path, *, expected: str | None = None, trace_file: Path | 
         time.sleep(0.005)
     assert bindings == [('created', expected or 'native-dsh'), ('started', expected or 'native-dsh')]
     return turn, thread, outcome
+
+
+def turn_identity(turn: Any) -> dict:
+    """Return the exact Session/execution pair the public controls must carry."""
+    return {'session': turn.session, 'execution_id': turn.execution_id}
+
+
+def wait_for_request(turn: Any, timeout: float = 3) -> dict:
+    """Poll the public requests operation until the native request is published."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        pending = turn.operate({**turn_identity(turn), 'operation': 'requests'})['requests']
+        if pending:
+            return pending[0]
+        time.sleep(0.01)
+    raise AssertionError('The native approval request never became public.')
+
+
+@pytest.fixture
+def notices(monkeypatch: pytest.MonkeyPatch) -> list:
+    """Retain the direct-parent notices without a real Runner mapping."""
+    from graphtraj.execution import runner_control
+
+    recorded = []
+
+    def notify(directory: Path, notice: str, identity: dict | None = None, **kwargs: Any) -> dict:
+        """Record the existing channel call and claim acknowledgement."""
+        recorded.append({'directory': directory, 'notice': notice, 'identity': identity})
+        return {'delivery': 'received', 'parent': 'parent@x1',
+                'parent_session': 'parent-session', 'parent_execution_id': 'parent-exec'}
+
+    monkeypatch.setattr(runner_control, 'notify_direct_parent', notify)
+    return recorded
 
 
 def test_receipt_active_input_and_native_completion(tmp_path: Path, peer: list) -> None:
@@ -197,14 +262,133 @@ def test_native_error_is_not_success(reason: str, tmp_path: Path, peer: list) ->
     assert peer[0].closed
 
 
-def test_native_approval_fails_explicitly_and_stops(tmp_path: Path, peer: list) -> None:
-    """Unsupported interaction is never discarded as successful completion."""
+def test_non_approval_user_question_fails_explicitly_and_stops(tmp_path: Path, peer: list) -> None:
+    """Unsupported non-approval interaction is never discarded as completion."""
     turn, thread, outcome = run_turn(tmp_path)
-    peer[0].frames.append('approval/asked')
+    peer[0].event_data = {'name': 'ask_user_question'}
+    peer[0].frames.append('tool/call')
     peer[0].release_cancel.set()
     thread.join(3)
     assert outcome['error'].code == 'RUNTIME_REQUEST_UNHANDLED'
     assert peer[0].cancelled.is_set() and peer[0].closed
+
+
+def test_approval_audit_event_is_not_terminal(tmp_path: Path, peer: list) -> None:
+    """approval/asked is log-only; the turn keeps waiting for the real decision."""
+    turn, thread, outcome = run_turn(tmp_path)
+    peer[0].frames.append('approval/asked')
+    time.sleep(0.05)
+    assert thread.is_alive() and not outcome
+    peer[0].frames.append('turn/end')
+    thread.join(3)
+    assert outcome['result']['outcome'] == 'completed'
+
+
+def test_native_approval_waits_for_the_direct_parent_reply(
+    tmp_path: Path, peer: list, notices: list,
+) -> None:
+    """The live request reaches the parent, and one explicit allow answers it once."""
+    turn, thread, outcome = run_turn(tmp_path)
+    peer[0].push_approval('native-event-1', toolName='bash', callId='call-9', reason='git add')
+    request = wait_for_request(turn)
+
+    assert thread.is_alive() and not outcome
+    assert request['session'] == turn.session and request['execution_id'] == turn.execution_id
+    assert request['request_id'] == 'native-event-1' and request['request_token']
+    assert (request['tool'], request['call_id'], request['reason']) == ('bash', 'call-9', 'git add')
+    assert len(notices) == 1 and notices[0]['identity']['request_token'] == request['request_token']
+    assert 'neither approves nor rejects it' in notices[0]['notice']
+
+    receipt = turn.operate({**turn_identity(turn), 'operation': 'reply',
+                            'request_token': request['request_token'], 'response': {'decision': 'allow'}})
+    assert receipt == {'request_id': 'native-event-1', 'reply_status': 'submitted'}
+    assert peer[0].answers == [('native-event-1', 'allowed-once')]
+    assert turn.operate({**turn_identity(turn), 'operation': 'requests'})['requests'] == []
+
+    with pytest.raises(RuntimeAdapterError) as duplicate:
+        turn.operate({**turn_identity(turn), 'operation': 'reply',
+                      'request_token': request['request_token'], 'response': {'decision': 'allow'}})
+    assert duplicate.value.code == 'invalid-input' and peer[0].answers == [('native-event-1', 'allowed-once')]
+
+    peer[0].frames.append('turn/end')
+    thread.join(3)
+    assert outcome['result']['outcome'] == 'completed'
+
+
+def test_native_rejection_never_grants_the_action(tmp_path: Path, peer: list, notices: list) -> None:
+    """An explicit reject returns the native refusal and runs no approved answer."""
+    turn, thread, outcome = run_turn(tmp_path)
+    peer[0].push_approval('native-event-2', toolName='bash')
+    request = wait_for_request(turn)
+    receipt = turn.operate({**turn_identity(turn), 'operation': 'reply',
+                            'request_token': request['request_token'], 'response': {'decision': 'reject'}})
+    assert receipt['reply_status'] == 'submitted'
+    assert peer[0].answers == [('native-event-2', 'rejected')]
+    peer[0].frames.append('turn/end')
+    thread.join(3)
+    assert outcome['result']['outcome'] == 'completed'
+
+
+def test_wrong_identity_stale_and_malformed_replies_authorize_nothing(
+    tmp_path: Path, peer: list, notices: list,
+) -> None:
+    """Only the exactly owned request token with one explicit decision can answer."""
+    turn, thread, outcome = run_turn(tmp_path)
+    peer[0].push_approval('native-event-3', toolName='bash')
+    request = wait_for_request(turn)
+    reply = {'operation': 'reply', 'request_token': request['request_token'],
+             'response': {'decision': 'allow'}}
+    for wrong in ({'session': 'other'}, {'execution_id': 'other'}):
+        with pytest.raises(RuntimeAdapterError) as error:
+            turn.operate({**turn_identity(turn), **wrong, **reply})
+        assert error.value.code == 'operation-failed'
+    with pytest.raises(RuntimeAdapterError) as stale:
+        turn.operate({**turn_identity(turn), **{**reply, 'request_token': 'stale-token'}})
+    assert stale.value.code == 'invalid-input'
+    for response in ({'decision': 'maybe'}, {'allow': True}, {'decision': 'allow', 'extra': 1}):
+        with pytest.raises(RuntimeAdapterError) as malformed:
+            turn.operate({**turn_identity(turn), **{**reply, 'response': response}})
+        assert malformed.value.code == 'invalid-input'
+    assert peer[0].answers == []
+    assert turn.operate({**turn_identity(turn), 'operation': 'requests'})['requests'] != []
+    peer[0].release_cancel.set()
+    turn.terminate()
+    thread.join(3)
+
+
+def test_interrupt_clears_the_pending_approval(tmp_path: Path, peer: list, notices: list) -> None:
+    """Stopping the native work leaves no hidden request for a later consent."""
+    turn, thread, outcome = run_turn(tmp_path)
+    peer[0].push_approval('native-event-4', toolName='bash')
+    request = wait_for_request(turn)
+    peer[0].release_cancel.set()
+    assert turn.operate({**turn_identity(turn), 'operation': 'interrupt'}) == {}
+    assert outcome['result']['outcome'] == 'interrupted'
+    assert turn.operate({**turn_identity(turn), 'operation': 'requests'})['requests'] == []
+    with pytest.raises(RuntimeAdapterError) as late:
+        turn.operate({**turn_identity(turn), 'operation': 'reply',
+                      'request_token': request['request_token'], 'response': {'decision': 'allow'}})
+    assert late.value.code == 'invalid-input' and peer[0].answers == []
+
+
+def test_native_withdrawal_discards_a_late_reply(tmp_path: Path, peer: list, notices: list) -> None:
+    """A withdrawn native request cannot be authorized by a later reply."""
+    turn, thread, outcome = run_turn(tmp_path)
+    peer[0].push_approval('native-event-5', toolName='bash')
+    request = wait_for_request(turn)
+    peer[0].push_cancel('native-event-5')
+    deadline = time.monotonic() + 3
+    while time.monotonic() < deadline and turn.operate(
+        {**turn_identity(turn), 'operation': 'requests'}
+    )['requests']:
+        time.sleep(0.01)
+    with pytest.raises(RuntimeAdapterError) as late:
+        turn.operate({**turn_identity(turn), 'operation': 'reply',
+                      'request_token': request['request_token'], 'response': {'decision': 'allow'}})
+    assert late.value.code == 'invalid-input' and peer[0].answers == []
+    peer[0].frames.append('turn/end')
+    thread.join(3)
+    assert outcome['result']['outcome'] == 'completed'
 
 
 def test_lost_host_connection_is_failure_and_reaps_owned_service(
@@ -319,6 +503,87 @@ def test_native_remote_envelopes_and_authentication_failure(
         service.rpc('session/list', {})
     assert rejected.value.code == 'RUNTIME_CONNECTION_FAILED'
     assert service.cookie not in str(rejected.value)
+
+
+def test_approval_result_uses_raw_event_arguments(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The one-shot outcome must travel as the exact $events/result args object."""
+    from graphtraj.runtimes.dsh.service import DshService
+    import urllib.request
+
+    service = DshService('dsh', tmp_path, {})
+    service.origin = 'http://127.0.0.1:1'
+    service.cookie = 'test-cookie=not-a-real-credential'
+    service.client_id = 'native-client'
+    seen = {}
+
+    class Remote:
+        """Capture the native result envelope without returning credential text."""
+
+        def open(self, call: Any, timeout: float) -> io.StringIO:
+            body = json.loads(call.data)
+            seen.update(body)
+            return io.StringIO(json.dumps({'rpcId': body['rpcId'], 'result': {'ok': True, 'value': {}}}))
+
+    monkeypatch.setattr(urllib.request, 'build_opener', lambda *args: Remote())
+    service.answer_approval('native-event-1', 'allowed-once')
+    assert seen['method'] == '$events/result'
+    assert seen['payload'] == {'args': {
+        'clientId': 'native-client', 'eventId': 'native-event-1',
+        'outcome': {'kind': 'result', 'value': 'allowed-once'},
+    }}
+
+
+def test_approval_channel_opens_with_ready_and_routes_frames(tmp_path: Path) -> None:
+    """The forwarded-event stream proves readiness and never blocks the Session frames."""
+    from graphtraj.runtimes.dsh.service import DshService
+
+    class Socket:
+        """Scripted multiplexed frames for the two native streams."""
+
+        def __init__(self, messages: list) -> None:
+            self.messages = list(messages)
+            self.sent = []
+
+        def send(self, text: str) -> None:
+            self.sent.append(json.loads(text))
+
+        def recv(self, timeout: float = 1) -> str:
+            if not self.messages:
+                raise TimeoutError()
+            return json.dumps(self.messages.pop(0))
+
+    service = DshService('dsh', tmp_path, {})
+    service.socket = Socket([
+        {'type': 'item', 'streamId': 'session', 'value': {'type': 'event', 'event': {'type': 'turn/start'}}},
+        {'type': 'item', 'streamId': 'events', 'value': {'type': 'ready', 'clientId': 'native-client', 'host': {}}},
+        {'type': 'item', 'streamId': 'events', 'value': {'type': 'waterfall', 'eventId': 'native-event-1'}},
+    ])
+    assert service.open_events() == 'native-client'
+    assert service.socket.sent == [{'type': 'open', 'streamId': 'events', 'endpoint': '$events',
+                                    'payload': {'args': {}}}]
+    assert service.receive() == {'type': 'event', 'event': {'type': 'turn/start'}}
+    assert service.receive() == {}
+    assert service.take_events() == [{'type': 'waterfall', 'eventId': 'native-event-1'}]
+
+
+def test_approval_channel_without_ready_is_explicit(tmp_path: Path) -> None:
+    """An unanswerable approval channel fails instead of silently hanging a turn."""
+    from graphtraj.runtimes.dsh.service import DshService
+
+    class Socket:
+        """Return one invalid approval frame instead of the native ready frame."""
+
+        def send(self, text: str) -> None:
+            """Ignore the open frame; recv supplies the wrong first frame."""
+
+        def recv(self, timeout: float = 1) -> str:
+            return json.dumps({'type': 'item', 'streamId': 'events', 'value': {'type': 'emit'}})
+
+    service = DshService('dsh', tmp_path, {})
+    service.socket = Socket()
+    with pytest.raises(RuntimeAdapterError) as error:
+        service.open_events()
+    assert error.value.code == 'RUNTIME_PROTOCOL_ERROR'
 
 
 def test_dsh_role_projection_keeps_secrets_out_of_launch(

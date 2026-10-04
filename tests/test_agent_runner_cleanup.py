@@ -401,12 +401,15 @@ def test_installed_cleanup_removes_historical_preflight_allocation_after_integra
     assert yaml.safe_load(repeated.stdout)["cleanup_status"] == "already-cleaned"
 
 
+@pytest.mark.parametrize("failure_case", ("confirmed", "uncertain", "foreign"))
 def test_installed_cleanup_retains_a_terminal_unmapped_startup_failure_after_integration(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
     fake_codex: FakeCodex,
     tmp_path: Path,
+    failure_case: str,
 ) -> None:
+    """Cleanup reports retained proof, refusing uncertain or foreign allocations."""
     ticket = _deliver_ticket(
         installed_commands,
         temporary_git_repository,
@@ -444,9 +447,34 @@ def test_installed_cleanup_retains_a_terminal_unmapped_startup_failure_after_int
     assert '"type": "runner-execution-start"' in session_records
     assert trace.is_file() and not trace.is_symlink()
     assert trace.read_bytes() == b""
+    if failure_case == "uncertain":
+        failure["terminal_confirmed"] = False
+        failure["message"] = "private startup diagnostic fixture-secret"
+        (failed_session / "launch-error.yml").write_text(yaml.safe_dump(failure))
+    elif failure_case == "foreign":
+        launch["mapping"]["ticket_id"] = "another-ticket"
+        (failed_session / "launch.yml").write_text(yaml.safe_dump(launch))
     durable_before = _durable_contents(ticket)
+    allocation_before = {path.name: path.read_bytes() for path in failed_session.iterdir()
+                         if path.is_file() and not path.is_symlink()}
 
     cleaned = _cleanup(ticket)
+
+    if failure_case != "confirmed":
+        assert cleaned.returncode == 1, cleaned.stdout + cleaned.stderr
+        document = yaml.safe_load(cleaned.stdout)
+        assert document["error"]["code"] == "cleanup-ownership-mismatch"
+        assert document["evidence"]["allocation_failures"][failed_session.name] == {
+            "trace_valid": True,
+            "launch_matches_ticket": failure_case != "foreign",
+            "terminal_confirmed": failure_case != "uncertain",
+        }
+        assert "fixture-secret" not in cleaned.stdout
+        assert ticket.worktree.is_dir()
+        assert {path.name: path.read_bytes() for path in failed_session.iterdir()
+                if path.is_file() and not path.is_symlink()} == allocation_before
+        assert _durable_contents(ticket) == durable_before
+        return
 
     assert cleaned.returncode == 0, cleaned.stderr
     document = yaml.safe_load(cleaned.stdout)

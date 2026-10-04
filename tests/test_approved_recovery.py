@@ -670,9 +670,15 @@ def test_selected_http_reviewer_controls_recovery(
         assert result['recovery_status'] == 'applied'
         assert invoke(root, request) == result
     else:
-        with pytest.raises(RunnerError):
+        with pytest.raises(RunnerError) as error:
             invoke(root, request)
         assert (ticket / 'execution-budget.yml').read_bytes() == before
+        if decision == 'decline':
+            assert error.value.code == 'recovery-denied'
+            assert 'Controlled decision' in error.value.message
+        else:
+            assert error.value.code == 'RUNTIME_REQUEST_FAILED'
+            assert 'Controlled decision' not in error.value.message
     assert len(calls) == 1
 
 

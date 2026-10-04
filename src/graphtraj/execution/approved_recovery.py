@@ -82,7 +82,11 @@ def approved_recovery(arguments: dict, cwd: Path) -> dict:
     if minutes:
         decision = review_proposal(proposal, cwd, project.runner_directory)
         if decision != {'decision': 'accept'}:
-            raise RunnerError('recovery-denied', 'Recovery was not approved; no repair was applied.')
+            rationale = decision.get('rationale')
+            message = 'Recovery was not approved; no repair was applied.'
+            if isinstance(rationale, str) and rationale.strip():
+                message += ' Reviewer reason: ' + rationale
+            raise RunnerError('recovery-denied', message)
     return _apply_recovery(proposal, cwd)
 
 

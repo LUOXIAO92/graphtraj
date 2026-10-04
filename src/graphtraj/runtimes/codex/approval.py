@@ -138,6 +138,8 @@ async def review_request(route: dict, context: dict) -> dict:
                 or result['decision'] not in context['allowed_decisions']
                 or not isinstance(result['rationale'], str) or not result['rationale'].strip()):
             raise ValueError('Invalid approval decision')
+        if context.get('method') == 'graphtraj/recoveryApproval' and result['decision'] == 'decline':
+            return {'decision': 'decline', 'rationale': result['rationale']}
         return {'decision': result['decision']}
     except Exception as error:
         # Do not expose credentials, endpoint response bodies or request contents in errors.

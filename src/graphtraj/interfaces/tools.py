@@ -847,10 +847,13 @@ _ROLE_EDGE_PROPERTIES = {
 _ROLE_ORGANIZATION_SCHEMA = {
     "type": "object",
     "properties": {
+        "expected_revision": {"type": "string", "description": "Revision returned by preview; reject a draft based on older configuration."},
         "change": {
             "type": "object",
             "description": "Explicit preset and dispatch-edge change; omit for a side-effect-free preview.",
             "properties": {
+                "unset_fields": {"type": "object", "additionalProperties": {"type": "array", "items": {"type": "string"}}},
+                "rename_presets": {"type": "object", "additionalProperties": {"type": "string"}},
                 "set_presets": {
                     "type": "object",
                     "description": "Exact preset reference to settings; a declared preset merges, a new reference is added.",

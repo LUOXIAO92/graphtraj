@@ -39,7 +39,7 @@ test('actual Electron window uses native graph, safe preload, refresh and persis
   }));
   assert.equal(boundary.require, 'undefined');
   assert.equal(boundary.process, 'undefined');
-  assert.deepEqual(boundary.methods, ['addProject', 'graph', 'projects', 'removeProject', 'selectProject']);
+  assert.deepEqual(boundary.methods, ['addProject', 'graph', 'projects', 'removeProject', 'saveSettings', 'selectProject', 'settings']);
   assert.match(await page.evaluate(async () => {
     try { await window.graphtraj.graph('/'); return 'unexpected'; }
     catch (error) { return String(error); }

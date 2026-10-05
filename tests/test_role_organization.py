@@ -1,15 +1,24 @@
 """Authorized public organization of child role presets and dispatch edges."""
 
+import asyncio
+import json
 from pathlib import Path
 
 import pytest
 import yaml
 
+from graphtraj.configuration.project_configuration import default_configuration_content
 from graphtraj.configuration.project_roles import load_project_roles
 from graphtraj.execution import approved_recovery
 from graphtraj.execution.runner_models import RunnerError
 from graphtraj.execution.runner_status import runtime_caller
 from graphtraj.interfaces import local_tool
+from graphtraj.runtimes.codex.app_server import CodexAppServer, CodexServerRequest
+from graphtraj.runtimes.codex.managed_session import (
+    native_operation_features,
+    run_native_operation,
+)
+from test_codex_app_server import peer
 
 
 ROLES = """\
@@ -247,3 +256,60 @@ def test_child_caller_cannot_organize_roles(project: Path) -> None:
     assert message
     assert reviews == []
     assert snapshot(project) == before
+
+
+CHILD_ATTEMPT = {"change": {"set_presets": {
+    "child_only": {"runtime": "codex", "model": "child-model"},
+}}}
+
+
+def test_owning_host_thread_reaches_the_operation_and_a_child_does_not(
+    tmp_path: Path, peer: Path,
+) -> None:
+    """Main's real host callback applies the change; a live child is still refused."""
+    project = tmp_path
+    (project / ".graphtraj").mkdir()
+    (project / ".graphtraj" / "config.yml").write_text(
+        default_configuration_content(project, project), encoding="utf-8",
+    )
+    (project / ".graphtraj" / "roles.yml").write_text(ROLES, encoding="utf-8")
+    assert "role_organization" in native_operation_features()
+    reviews: list[dict] = []
+
+    def reviewer(proposal: dict) -> dict:
+        """Approve whatever the owning host selected for review."""
+        reviews.append(proposal)
+        return {"decision": "accept"}
+
+    async def exercise() -> tuple[dict, bool, dict, bool]:
+        """Send both callers through the production native callback on one connection."""
+        async with CodexAppServer(command=[str(peer)], cwd=project) as adapter:
+            async def call(native_session: str, root_alias: str | None, arguments: dict) -> tuple[dict, bool]:
+                """Issue one graphtraj tool call from the selected native thread."""
+                response = await run_native_operation(
+                    adapter, native_session, root_alias, project,
+                    CodexServerRequest(1, 'item/tool/call', {
+                        'threadId': native_session, 'tool': 'graphtraj', 'arguments': arguments,
+                    }), recovery_reviewer=reviewer,
+                )
+                return json.loads(response['contentItems'][0]['text']), response['success']
+
+            owner = await call('owner', None, {
+                'action': 'execute', 'feature': 'role_organization', 'arguments': ADD,
+            })
+            child = await call('child@e1', 'child@e1', {
+                'action': 'execute', 'feature': 'role_organization', 'arguments': CHILD_ATTEMPT,
+            })
+        return (*owner, *child)
+
+    owner_document, owner_success, child_document, child_success = asyncio.run(exercise())
+    assert owner_success, owner_document
+    assert owner_document["applied"] is True
+    assert len(reviews) == 1
+    assert not child_success
+    assert child_document["error"]["code"] == "authority-denied"
+    assert len(reviews) == 1
+
+    roles = load_project_roles(project)
+    assert roles.preset("reviewer").model == "review-model"
+    assert "child_only" not in roles.presets

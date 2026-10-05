@@ -154,8 +154,10 @@ def test_native_gateway_restricts_features_and_context(
             discovered, success = await call({'action': 'discover'})
             assert success
             callable_features = (
-                set(NATIVE_RUNNER_TOOLS.values()) | {'parent_status', 'retire', 'replace', 'cleanup'} if issuer == 'owner'
-                else {'alias_status', 'ticket_graph'}
+                set(NATIVE_RUNNER_TOOLS.values())
+                | {'parent_status', 'retire', 'replace', 'cleanup',
+                   'approved_recovery', 'role_organization'}
+                if issuer == 'owner' else {'alias_status', 'ticket_graph'}
             )
             assert {entry['feature'] for entry in discovered['features']} == (
                 callable_features | set(tools.METHOD_FEATURE_NAMES)

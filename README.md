@@ -424,6 +424,32 @@ set_presets:
     model: your-selected-model
 ```
 
+A preset can also carry optional, non-empty inline `system_prompt` and
+`developer_prompt` text. These use the same authorized change operation. For an
+existing Pi preset named `pi_worker`, for example:
+
+```yaml
+set_presets:
+  pi_worker:
+    system_prompt: |
+      State the result concisely and identify the evidence supporting it.
+```
+
+The native channels differ by Runtime:
+
+| Runtime | `system_prompt` | `developer_prompt` |
+| --- | --- | --- |
+| Pi | System prompt addition through `--append-system-prompt` | Unsupported |
+| DSH | `system-prompt` plugin's `personaSuffix` | Unsupported |
+| Codex | App-server `baseInstructions` | App-server `developerInstructions` |
+
+Requesting an unsupported layer returns `ROLE_CONFIG_UNSUPPORTED` before
+dispatch. Prompt text is never silently moved to another layer or sent as task
+text. The existing `instructions` UTF-8 file reference remains supported, and
+unrelated preset settings are preserved. Approved prompt changes apply to the
+next dispatch; retained Sessions keep their captured inputs. These operations
+manage dispatched child roles, not Main's own host prompts.
+
 The same operation submits the concrete change to the selected reviewer and
 applies it only after approval. There is no separate apply command or caller
 approval flag. Refusal, an unavailable reviewer, an invalid role graph or a

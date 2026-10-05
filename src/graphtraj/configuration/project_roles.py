@@ -47,6 +47,8 @@ class RolePreset:
     codex: Mapping[str, object] | None = None
     pi: Mapping[str, object] | None = None
     instructions: str | None = None
+    system_prompt: str | None = None
+    developer_prompt: str | None = None
     worktree_access: str = "write"
     reports: tuple[str, ...] = ()
 
@@ -359,7 +361,7 @@ def _role_preset(
     initial_count = len(diagnostics)
     allowed = _REQUIRED_FIELDS | _CONNECTION_FIELDS | {
         "reasoning_effort", "codex", "pi", "allow_runtime_swarm", "instructions",
-        "worktree_access", "reports",
+        "system_prompt", "developer_prompt", "worktree_access", "reports",
     }
     if "instructions" in entry and (
         not isinstance(entry["instructions"], str)
@@ -367,6 +369,13 @@ def _role_preset(
         or "\x00" in entry["instructions"]
     ):
         diagnostics.append(f"{name}.instructions must reference a UTF-8 instruction file.")
+    for field in ("system_prompt", "developer_prompt"):
+        if field in entry and (
+            not isinstance(entry[field], str)
+            or not entry[field].strip()
+            or "\x00" in entry[field]
+        ):
+            diagnostics.append(f"{name}.{field} must be non-empty UTF-8 prompt text.")
     if entry.get("worktree_access", "write") not in ("read", "write"):
         diagnostics.append(f"{name}.worktree_access must be read or write.")
     reports = entry.get("reports", [])
@@ -442,6 +451,8 @@ def _role_preset(
         ),
         allow_runtime_swarm=entry.get("allow_runtime_swarm", False),
         instructions=entry.get("instructions"),
+        system_prompt=entry.get("system_prompt"),
+        developer_prompt=entry.get("developer_prompt"),
         worktree_access=entry.get("worktree_access", "write"),
         reports=tuple(entry.get("reports", [])),
         reasoning_effort=(

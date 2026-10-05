@@ -48,9 +48,11 @@ def pi_environment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict:
             'agent_dir': str(tmp_path / 'user-agent')}
 
 
-def context(root: Path, config: dict, model: str = 'deepseek/deepseek-flash'):
+def context(root: Path, config: dict, model: str = 'deepseek/deepseek-flash', **role_fields):
     """Prepare a real Pi Adapter through the public role/Runtime boundary."""
-    _, settings = parse_inline_role({'author': {'runtime': 'pi', 'model': model, 'pi': config}})
+    _, settings = parse_inline_role({'author': {
+        'runtime': 'pi', 'model': model, 'pi': config, **role_fields,
+    }})
     role = resolve_child_role('author', settings, root)
     adapter = select_runtime_adapter('pi')
     prepared = adapter.preflight_runtime_context(
@@ -68,9 +70,10 @@ def execution(
     prompt: str,
     stack: ExitStack,
     expected: str | None = None,
+    **role_fields,
 ):
     """Bind fixture ownership using actual process IDs before native task work."""
-    adapter, prepared = context(root, config)
+    adapter, prepared = context(root, config, **role_fields)
     runner = root / '.graphtraj/runner'
     directory = runner / 'sessions' / alias
     trace = root / 'state' / (alias + '.jsonl')

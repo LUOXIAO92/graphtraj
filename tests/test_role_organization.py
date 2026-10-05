@@ -1,6 +1,7 @@
 """Authorized public organization of child role presets and dispatch edges."""
 
 import asyncio
+from dataclasses import replace
 import json
 from pathlib import Path
 
@@ -8,12 +9,14 @@ import pytest
 import yaml
 
 from graphtraj.configuration.project_configuration import default_configuration_content
-from graphtraj.configuration.project_roles import load_project_roles
+from graphtraj.configuration.project_roles import RolePreset, load_project_roles
+from graphtraj.configuration.role_definitions import resolve_child_role
 from graphtraj.execution import approved_recovery
 from graphtraj.execution.runner_models import RunnerError
 from graphtraj.execution.runner_status import runtime_caller
 from graphtraj.interfaces import local_tool
 from graphtraj.runtimes.codex.app_server import CodexAppServer, CodexServerRequest
+from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 from graphtraj.runtimes.codex.managed_session import (
     native_operation_features,
     run_native_operation,
@@ -313,3 +316,191 @@ def test_owning_host_thread_reaches_the_operation_and_a_child_does_not(
     roles = load_project_roles(project)
     assert roles.preset("reviewer").model == "review-model"
     assert "child_only" not in roles.presets
+
+
+SYSTEM_TEXT = (
+    "Deliver only the layer the selected Runtime exposes.\n"
+    "Keep the dispatch instruction in its own channel."
+)
+DEVELOPER_TEXT = "Treat the accepted specification as the contract."
+
+
+def test_approved_prompt_content_is_persisted_verbatim(project: Path) -> None:
+    """One approved call authors exact system/developer text through the public entry."""
+    reviews: list[dict] = []
+
+    def reviewer(proposal: dict) -> dict:
+        """Retain the exact reviewed document and approve it."""
+        reviews.append(proposal)
+        return {"decision": "accept"}
+
+    result = execute(
+        project,
+        {"change": {"set_presets": {"coding_team.engineer": {
+            "system_prompt": SYSTEM_TEXT,
+            "developer_prompt": DEVELOPER_TEXT,
+        }}}},
+        reviewer,
+    ).document
+    assert result["applied"] is True
+
+    roles = load_project_roles(project)
+    engineer = roles.preset("coding_team.engineer")
+    assert engineer.system_prompt == SYSTEM_TEXT
+    assert engineer.developer_prompt == DEVELOPER_TEXT
+    assert engineer.instructions is None
+    assert engineer.model == "engineer-model"
+    assert engineer.api_key_env == "ENGINEER_KEY"
+
+    # The reviewer decided on this exact text, and the file on disk carries it.
+    reviewed = reviews[0]["after"]["roles"]["coding_team"]["engineer"]
+    assert reviewed["system_prompt"] == SYSTEM_TEXT
+    assert reviewed["developer_prompt"] == DEVELOPER_TEXT
+    document = yaml.safe_load(roles_path(project).read_text(encoding="utf-8"))
+    assert document["roles"]["coding_team"]["engineer"]["system_prompt"] == SYSTEM_TEXT
+
+
+def test_prompt_change_keeps_instructions_reference_and_unrelated_settings(
+    project: Path,
+) -> None:
+    """Authoring one prompt layer leaves the file reference and every other setting intact."""
+    document = yaml.safe_load(roles_path(project).read_text(encoding="utf-8"))
+    document["roles"]["coding_team"]["engineer"]["instructions"] = "engineer.md"
+    document["roles"]["analyst"]["system_prompt"] = "Existing system text."
+    roles_path(project).write_text(yaml.safe_dump(document, sort_keys=False), encoding="utf-8")
+    before = snapshot(project)
+
+    assert execute(
+        project,
+        {"change": {"set_presets": {
+            "coding_team.engineer": {"developer_prompt": DEVELOPER_TEXT},
+        }}},
+        accept,
+    ).document["applied"] is True
+
+    after = snapshot(project)
+    assert {
+        name for name in set(before) | set(after) if before.get(name) != after.get(name)
+    } == {".graphtraj/roles.yml"}
+
+    roles = load_project_roles(project)
+    engineer = roles.preset("coding_team.engineer")
+    assert engineer.instructions == "engineer.md"
+    assert engineer.developer_prompt == DEVELOPER_TEXT
+    assert engineer.system_prompt is None
+    assert roles.preset("analyst").system_prompt == "Existing system text."
+    assert roles.preset("analyst").model == "analyst-model"
+    assert roles.preset("coding_team.team_leader").reports == ("leader.md",)
+
+
+def test_declined_prompt_review_applies_nothing(project: Path) -> None:
+    """A reviewer refusal keeps the authored prompt out of the configuration."""
+    before = roles_path(project).read_bytes()
+    code, message = refusal(
+        project,
+        {"change": {"set_presets": {
+            "coding_team.engineer": {"developer_prompt": DEVELOPER_TEXT},
+        }}},
+        lambda proposal: {"decision": "decline", "rationale": "prompt not approved"},
+    )
+    assert code == "role-change-denied"
+    assert "prompt not approved" in message
+    assert roles_path(project).read_bytes() == before
+
+
+def test_prompt_target_changed_after_review_is_refused(project: Path) -> None:
+    """Prompt content changed after review is never overwritten by the approval."""
+    def reviewer(proposal: dict) -> dict:
+        """Change the target between review and application."""
+        document = yaml.safe_load(roles_path(project).read_text(encoding="utf-8"))
+        document["roles"]["coding_team"]["engineer"]["developer_prompt"] = "changed-after-review"
+        roles_path(project).write_text(yaml.safe_dump(document, sort_keys=False), encoding="utf-8")
+        return {"decision": "accept"}
+
+    result = execute(
+        project,
+        {"change": {"set_presets": {
+            "coding_team.engineer": {"developer_prompt": DEVELOPER_TEXT},
+        }}},
+        reviewer,
+    ).document
+    assert result["applied"] is False
+    assert result["status"] == "stale"
+    assert load_project_roles(project).preset(
+        "coding_team.engineer"
+    ).developer_prompt == "changed-after-review"
+
+
+def test_child_caller_cannot_author_prompts(project: Path) -> None:
+    """A live child Session is refused even with a host-bound accepting reviewer."""
+    reviews: list[dict] = []
+    before = snapshot(project)
+    runner = project / ".graphtraj" / "runner"
+    with runtime_caller(runner, "254-ticket@engineer"):
+        code, message = refusal(
+            project,
+            {"change": {"set_presets": {
+                "coding_team.engineer": {"system_prompt": SYSTEM_TEXT},
+            }}},
+            lambda proposal: reviews.append(proposal) or {"decision": "accept"},
+        )
+    assert code == "authority-denied"
+    assert message
+    assert reviews == []
+    assert snapshot(project) == before
+
+
+@pytest.mark.parametrize("value", ["", "   ", 7, ["text"]])
+def test_malformed_prompt_content_is_refused_without_writing(
+    project: Path, value: object,
+) -> None:
+    """A non-string, blank or NUL prompt value is refused before any reviewer or write."""
+    reviews: list[dict] = []
+    before = snapshot(project)
+    code, message = refusal(
+        project,
+        {"change": {"set_presets": {"analyst": {"system_prompt": value}}}},
+        lambda proposal: reviews.append(proposal) or {"decision": "accept"},
+    )
+    assert message
+    assert code in {None, "invalid-input"}
+    assert reviews == []
+    assert snapshot(project) == before
+
+
+def test_prompt_layer_the_runtime_does_not_expose_is_refused_before_dispatch(
+    project: Path,
+) -> None:
+    """A declared layer is refused for the Runtimes that lack it, never folded elsewhere."""
+    analyst = load_project_roles(project).preset("analyst")
+    assert analyst.runtime == "codex"
+
+    with pytest.raises(RuntimeAdapterError) as caught:
+        resolve_child_role(
+            "analyst", replace(analyst, system_prompt=SYSTEM_TEXT), project,
+        )
+    assert caught.value.code == "ROLE_CONFIG_UNSUPPORTED"
+    assert "system_prompt" in caught.value.message
+    assert "codex" in caught.value.message
+
+    for runtime in ("pi", "dsh"):
+        declared = RolePreset(runtime, "deepseek-flash", None, None,
+                              developer_prompt=DEVELOPER_TEXT)
+        with pytest.raises(RuntimeAdapterError) as refused:
+            resolve_child_role("author", declared, project)
+        assert refused.value.code == "ROLE_CONFIG_UNSUPPORTED"
+        assert "developer_prompt" in refused.value.message
+
+
+def test_supported_prompt_layers_resolve_into_the_role_text(project: Path) -> None:
+    """Each Runtime's own layer resolves; the other layer is not silently carried."""
+    analyst = load_project_roles(project).preset("analyst")
+    codex = resolve_child_role("analyst", replace(analyst, developer_prompt=DEVELOPER_TEXT), project)
+    assert DEVELOPER_TEXT in codex.instructions
+
+    for runtime in ("pi", "dsh"):
+        declared = RolePreset(runtime, "deepseek-flash", None, None,
+                              system_prompt=SYSTEM_TEXT)
+        resolved = resolve_child_role("author", declared, project)
+        assert SYSTEM_TEXT in resolved.instructions
+        assert DEVELOPER_TEXT not in resolved.instructions

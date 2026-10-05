@@ -19,7 +19,7 @@ from graphtraj.configuration.role_definitions import ResolvedChildRole
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError, select_runtime_adapter
 
 
-def request(tmp_path: Path) -> dict:
+def request(tmp_path: Path, instructions: str = 'Assigned responsibility') -> dict:
     """Provide nonsecret native launch inputs to the public Runtime contract."""
     return {
         'executable': 'dsh', 'package': '/installed/dsh/package.json', 'tool': 'graphtraj-tool',
@@ -27,7 +27,7 @@ def request(tmp_path: Path) -> dict:
         'provider': 'deepseek-official', 'model': 'deepseek-flash',
         'reasoning_effort': 'low', 'api_key_env': 'DSH_TEST_KEY',
         'base_url': 'https://api.deepseek.com/anthropic', 'sandbox': 'workspace-write',
-        'instructions': 'Assigned responsibility', 'reports': ['.state/report.md'],
+        'instructions': instructions, 'reports': ['.state/report.md'],
     }
 
 
@@ -149,11 +149,14 @@ def peer(monkeypatch: pytest.MonkeyPatch) -> list:
     return NativePeer.instances
 
 
-def run_turn(tmp_path: Path, *, expected: str | None = None, trace_file: Path | None = None) -> tuple:
+def run_turn(
+    tmp_path: Path, *, expected: str | None = None, trace_file: Path | None = None,
+    instructions: str = 'Assigned responsibility',
+) -> tuple:
     """Run the public RuntimeTurn asynchronously so controls overlap active work."""
     bindings = []
     turn = select_runtime_adapter('dsh').managed_execution(
-        request(tmp_path), 'Original instruction', tmp_path,
+        request(tmp_path, instructions), 'Original instruction', tmp_path,
         lambda session, pid: bindings.append(('started', session)), {},
         trace_file=trace_file or tmp_path / 'trace.jsonl', expected_session=expected,
         session_created=lambda session, pid: bindings.append(('created', session)),

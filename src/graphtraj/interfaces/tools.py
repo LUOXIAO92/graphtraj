@@ -894,13 +894,20 @@ register_tool(
     'explicit change with the selected reviewer\'s decision. Omit change for a '
     'side-effect-free preview. The same call obtains authorization and writes the '
     'reviewed document; refusal, an unavailable reviewer or a target changed after '
-    'review leaves roles.yml untouched. Equivalent to `graphtraj roles organize`.',
+    'review leaves roles.yml untouched. A preset keeps its existing `instructions` '
+    'UTF-8 file reference and may add inline `system_prompt` and `developer_prompt` '
+    'text. Pi and DSH deliver only the system prompt layer, Codex only developer '
+    'instructions; content for a layer the selected Runtime does not expose is '
+    'refused at launch instead of being passed as task text. Equivalent to '
+    '`graphtraj roles organize`.',
     _ROLE_ORGANIZATION_SCHEMA,
     organize_roles, manual_ref='manuals/task-delivery/guide.md',
     examples=(
         {},
         {"change": {"set_presets": {"reviewer": {"runtime": "codex", "model": "review-model"}}}},
         {"change": {"add_edges": [{"parent": "team_leader", "child": "reviewer"}]}},
+        {"change": {"set_presets": {"coding_team.engineer": {
+            "system_prompt": "Check the accepted specification before changing source."}}}},
     ),
 )
 

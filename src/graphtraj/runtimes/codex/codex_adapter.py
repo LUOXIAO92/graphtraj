@@ -67,6 +67,15 @@ _CODEX_ROLE_PROJECTION: Mapping[str, Any] = {
 }
 
 
+# Codex exposes permission requests as an opt-in feature. GraphTraj enables it
+# on every activation so a fresh Worker and a retained resumed Session can ask
+# for network or filesystem access through the native approval flow. This is a
+# request path, not a grant: existing approvals and denied paths still govern.
+CODEX_PERMISSION_REQUEST_FEATURES: Mapping[str, Any] = {
+    "exec_permission_approvals": True,
+}
+
+
 # Captured tool names remain callable by existing Sessions. New Sessions expose
 # these same operations through the gateway, without adding mutation privileges.
 NATIVE_RUNNER_TOOLS = {
@@ -179,6 +188,7 @@ class _CodexRole:
             ),
             ("developer_instructions", developer_instructions),
             ("agents", self.agents),
+            ("features", CODEX_PERMISSION_REQUEST_FEATURES),
         )
         for key, value in overrides:
             arguments.extend(("-c", "{0}={1}".format(key, _toml_value(value))))

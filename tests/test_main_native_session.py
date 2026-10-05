@@ -45,6 +45,7 @@ def test_main_start_and_resume_preserve_native_configuration(
     resume = next(item['params'] for item in requests if item.get('method') == 'thread/resume')
     for params in (start, resume):
         assert not {'model', 'modelProvider', 'approvalPolicy', 'approvalsReviewer'} & params.keys()
+        assert params['config']['features'] == {'exec_permission_approvals': True}
         assert params['config']['permissions']['operator'] == original['permissions']['operator']
         assert params['permissions'] == params['config']['default_permissions']
         selected = params['config']['permissions'][params['permissions']]

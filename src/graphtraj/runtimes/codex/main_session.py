@@ -15,7 +15,11 @@ from typing import Awaitable, Callable
 from graphtraj.configuration.project_configuration import load_project_configuration
 from graphtraj.execution.runner_models import RunnerError
 from graphtraj.execution.runner_status import caller_alias
-from graphtraj.runtimes.codex.codex_adapter import NATIVE_RUNNER_TOOLS, native_runner_tools
+from graphtraj.runtimes.codex.codex_adapter import (
+    CODEX_PERMISSION_REQUEST_FEATURES,
+    NATIVE_RUNNER_TOOLS,
+    native_runner_tools,
+)
 from graphtraj.runtimes.codex.access import private_filesystem
 from graphtraj.runtimes.codex.app_server import CodexAppServer, CodexServerRequest
 from graphtraj.runtimes.codex.managed_session import run_native_operation
@@ -120,7 +124,10 @@ async def run_main(
             context = _MainContext({
                 'cwd': str(root), 'dynamicTools': native_runner_tools(),
                 'permissions': profile,
-                'config': {'permissions': permissions, 'default_permissions': profile},
+                'config': {
+                    'permissions': permissions, 'default_permissions': profile,
+                    'features': dict(CODEX_PERMISSION_REQUEST_FEATURES),
+                },
             })
             if resume is None:
                 session = await adapter.create_session(context)

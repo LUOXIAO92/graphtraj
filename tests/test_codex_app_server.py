@@ -1086,6 +1086,34 @@ def _native_filesystem(request: dict) -> dict:
     return settings['permissions'][profile]['filesystem']
 
 
+def test_permission_request_feature_reaches_fresh_and_resumed_activation(
+    tmp_path: Path, peer: Path,
+) -> None:
+    """Every activation requests Codex's permission-request capability natively."""
+    worktree = tmp_path / 'worktree'
+    resolved = context(worktree, peer)
+
+    # A fresh activation carries the setting in both native config channels:
+    # the thread parameters used by the app-server and the CLI overrides used
+    # by a legacy exec launch.
+    parameters = resolved.session_document()['adapter_request']
+    assert parameters['config']['features'] == {'exec_permission_approvals': True}
+    assert _native_settings(resolved)['features'] == {'exec_permission_approvals': True}
+
+    # A retained-session continuation rebuilds the request without losing it.
+    resumed = refresh_codex_report_paths(
+        resolved.launch_document()['adapter_request'],
+        worktree=worktree, evidence=tmp_path / 'evidence',
+        report_files=(), role='engineer',
+    )
+    assert resumed['session_parameters']['config']['features'] == {
+        'exec_permission_approvals': True,
+    }
+    assert _native_settings_of_arguments(resumed['arguments'])['features'] == {
+        'exec_permission_approvals': True,
+    }
+
+
 @pytest.mark.parametrize(
     'selected, expected',
     [('auto_review', 'auto_review'), (None, None), ('user', 'user')],

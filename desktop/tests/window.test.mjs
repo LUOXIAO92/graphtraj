@@ -12,6 +12,7 @@ test('actual Electron window uses native graph, safe preload, refresh and persis
   t.after(() => fs.rm(root, { recursive: true, force: true }));
   const first = await fixtures.makeProject(path.join(root, 'first'), 'first-project');
   const second = await fixtures.makeProject(path.join(root, 'second'), 'second-project');
+  const canonicalSecond = await fs.realpath(second);
   const desktop = fileURLToPath(new URL('..', import.meta.url));
   const args = [desktop, `--user-data-dir=${path.join(root, 'userData')}`];
   let app = await electron.launch({ args });
@@ -65,7 +66,7 @@ test('actual Electron window uses native graph, safe preload, refresh and persis
   await page.getByText('Offline / query error', { exact: false }).waitFor({ timeout: 15000 });
   await fs.rename(moved, second);
   await page.getByText('Connected', { exact: false }).waitFor({ timeout: 15000 });
-  await page.getByRole('button', { name: `Remove ${second}`, exact: true }).click();
+  await page.getByRole('button', { name: `Remove ${canonicalSecond}`, exact: true }).click();
   await page.getByText('first project', { exact: true }).waitFor();
   assert.equal(fixtures.operate(second, 'ticket_graph').tickets.length, 3);
   await app.close();

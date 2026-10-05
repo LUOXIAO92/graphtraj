@@ -840,6 +840,71 @@ register_tool(
 )
 
 
+_ROLE_EDGE_PROPERTIES = {
+    "parent": {"type": "string"},
+    "child":  {"type": "string"},
+}
+_ROLE_ORGANIZATION_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "change": {
+            "type": "object",
+            "description": "Explicit preset and dispatch-edge change; omit for a side-effect-free preview.",
+            "properties": {
+                "set_presets": {
+                    "type": "object",
+                    "description": "Exact preset reference to settings; a declared preset merges, a new reference is added.",
+                    "additionalProperties": {"type": "object"},
+                },
+                "remove_presets": {
+                    "type": "array", "minItems": 1, "items": {"type": "string"},
+                },
+                "add_edges": {
+                    "type": "array", "minItems": 1,
+                    "items": {
+                        "type": "object", "properties": _ROLE_EDGE_PROPERTIES,
+                        "required": ["parent", "child"], "additionalProperties": False,
+                    },
+                },
+                "remove_edges": {
+                    "type": "array", "minItems": 1,
+                    "items": {
+                        "type": "object", "properties": _ROLE_EDGE_PROPERTIES,
+                        "required": ["parent", "child"], "additionalProperties": False,
+                    },
+                },
+            },
+            "additionalProperties": False,
+        },
+    },
+    "additionalProperties": False,
+}
+
+
+def organize_roles(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> ToolResult:
+    """Preview child role presets and dispatch edges, or apply one approved change."""
+    from graphtraj.execution.role_organization import organize_child_roles
+
+    return ToolResult(organize_child_roles(arguments, cwd=cwd or Path.cwd()))
+
+
+register_tool(
+    'role_organization',
+    'Read the declared child role presets and direct dispatch edges, or apply one '
+    'explicit change with the selected reviewer\'s decision. Omit change for a '
+    'side-effect-free preview. The same call obtains authorization and writes the '
+    'reviewed document; refusal, an unavailable reviewer or a target changed after '
+    'review leaves roles.yml untouched. Equivalent to `graphtraj roles organize`.',
+    _ROLE_ORGANIZATION_SCHEMA,
+    organize_roles, manual_ref='manuals/task-delivery/guide.md',
+    examples=(
+        {},
+        {"change": {"set_presets": {"reviewer": {"runtime": "codex", "model": "review-model"}}}},
+        {"change": {"add_edges": [{"parent": "team_leader", "child": "reviewer"}]}},
+    ),
+)
+
+
 def read_reports(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> ToolResult:
     """Read the declared reports of an authorized direct child."""
     return ToolResult(read_session_reports(_string_argument(arguments, 'alias'), cwd or Path.cwd()))
@@ -1059,6 +1124,7 @@ _CLI = {
     "decide_result": (("agent-runner", "decide-result"), {}),
     "retire": (("agent-runner", "retire"), {}),
     "replace": (("agent-runner", "replace"), {"caused_by_event_id": ("caused_by_event_ids", "value")}),
+    "role_organization": (("graphtraj", "roles", "organize"), {"change_file": ("change", "yaml")}),
     "cleanup": (("agent-runner", "cleanup"), {}),
     "main": (("agent-runner", "main"), {"instruction_file": ("instruction", "text")}),
 }

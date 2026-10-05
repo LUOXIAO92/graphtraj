@@ -289,13 +289,17 @@ def test_native_approval_waits_for_the_direct_parent_reply(
 ) -> None:
     """The live request reaches the parent, and one explicit allow answers it once."""
     turn, thread, outcome = run_turn(tmp_path)
-    peer[0].push_approval('native-event-1', toolName='bash', callId='call-9', reason='git add')
+    peer[0].push_approval('native-event-1', toolName='bash', callId='call-9', reason='git add',
+                          displayReason={'en': 'Allow this operation with workspace-write permissions: git add'})
     request = wait_for_request(turn)
 
     assert thread.is_alive() and not outcome
     assert request['session'] == turn.session and request['execution_id'] == turn.execution_id
     assert request['request_id'] == 'native-event-1' and request['request_token']
     assert (request['tool'], request['call_id'], request['reason']) == ('bash', 'call-9', 'git add')
+    # The native frame carries no command/args, so the localized reason is the
+    # widest safe action context the parent can review.
+    assert request['display_reason'] == {'en': 'Allow this operation with workspace-write permissions: git add'}
     assert len(notices) == 1 and notices[0]['identity']['request_token'] == request['request_token']
     assert 'neither approves nor rejects it' in notices[0]['notice']
 
@@ -554,6 +558,61 @@ def test_approval_result_uses_raw_event_arguments(tmp_path: Path, monkeypatch: p
         'clientId': 'native-client', 'eventId': 'native-event-1',
         'outcome': {'kind': 'result', 'value': 'allowed-once'},
     }}
+
+
+def test_approval_result_confirms_a_value_less_native_success(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The Gateway success envelope omits ``value``; that still confirms the reply."""
+    from graphtraj.runtimes.dsh.service import DshService
+    import urllib.request
+
+    service = DshService('dsh', tmp_path, {})
+    service.origin = 'http://127.0.0.1:1'
+    service.cookie = 'test-cookie=not-a-real-credential'
+    service.client_id = 'native-client'
+
+    class Remote:
+        """Return the exact one-shot success shape the Gateway produces."""
+
+        def open(self, call: Any, timeout: float) -> io.StringIO:
+            body = json.loads(call.data)
+            return io.StringIO(json.dumps({'rpcId': body['rpcId'], 'result': {'ok': True}}))
+
+    monkeypatch.setattr(urllib.request, 'build_opener', lambda *args: Remote())
+    # A confirmed delivery must not raise; an omitted value is not a failure.
+    assert service.answer_approval('native-event-1', 'allowed-once') is None
+
+
+def test_remote_call_separates_protocol_and_transport_and_never_infers_success(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A mismatched envelope and an unreachable request stay distinct and unconfirmed."""
+    from graphtraj.runtimes.dsh.service import DshService
+    import urllib.error
+    import urllib.request
+
+    service = DshService('dsh', tmp_path, {})
+    service.origin = 'http://127.0.0.1:1'
+    service.cookie = 'test-cookie=not-a-real-credential'
+    state = {'mode': 'mismatch'}
+
+    class Remote:
+        """Return a wrong rpcId or fail the transport, never a native result."""
+
+        def open(self, call: Any, timeout: float) -> io.StringIO:
+            if state['mode'] == 'transport':
+                raise urllib.error.HTTPError(call.full_url, 503, 'Unavailable', {}, None)
+            return io.StringIO(json.dumps({'rpcId': 'other', 'result': {'ok': True, 'value': {}}}))
+
+    monkeypatch.setattr(urllib.request, 'build_opener', lambda *args: Remote())
+    with pytest.raises(RuntimeAdapterError) as mismatch:
+        service.rpc('session/list', {})
+    assert mismatch.value.code == 'RUNTIME_PROTOCOL_ERROR'
+    state['mode'] = 'transport'
+    with pytest.raises(RuntimeAdapterError) as transport:
+        service.rpc('session/list', {})
+    assert transport.value.code == 'RUNTIME_CONNECTION_FAILED'
 
 
 def test_approval_channel_opens_with_ready_and_routes_frames(tmp_path: Path) -> None:

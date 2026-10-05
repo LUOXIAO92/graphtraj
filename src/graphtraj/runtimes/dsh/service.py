@@ -117,6 +117,14 @@ class DshService:
         try:
             with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(call, timeout=20) as response:
                 document = json.load(response)
+        except (json.JSONDecodeError, UnicodeDecodeError) as error:
+            raise RuntimeAdapterError('RUNTIME_PROTOCOL_ERROR', f'DSH {method} response body was not JSON.') from error
+        except Exception as error:
+            # Connection, HTTP-status and timeout failures share no native
+            # outcome; report them as unconfirmed rather than as a native result.
+            raise RuntimeAdapterError('RUNTIME_CONNECTION_FAILED', f'DSH {method} request failed.') from error
+
+        try:
             if document.get('rpcId') != rpc_id:
                 raise ValueError('Mismatched native response')
             result = document['result']
@@ -124,11 +132,16 @@ class DshService:
                 code = result.get('error', {}).get('code', 'unknown')
                 # Only the native code, never returned URL/header/body text.
                 raise RuntimeAdapterError('RUNTIME_REQUEST_FAILED', f'DSH {method} failed ({code}).')
-            return result['value']
         except RuntimeAdapterError:
             raise
         except Exception as error:
-            raise RuntimeAdapterError('RUNTIME_CONNECTION_FAILED', f'DSH {method} unavailable.') from error
+            raise RuntimeAdapterError('RUNTIME_PROTOCOL_ERROR', f'DSH {method} response was not the native envelope.') from error
+
+        # The Gateway's one-shot success envelope omits ``value`` entirely
+        # (``return {ok: true, value: void 0}``), so only an explicit ``ok``
+        # confirms the outcome; a missing value is confirmation, never a KeyError
+        # and never an inferred success from an uncertain response.
+        return result.get('value')
 
     def answer_approval(self, event_id: str, outcome: str) -> None:
         """Return one explicit outcome to the exact pending native approval request."""

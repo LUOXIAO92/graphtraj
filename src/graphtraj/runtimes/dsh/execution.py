@@ -190,6 +190,10 @@ class DshExecution:
             'request_id': event_id, 'request_token': token,
             'method': 'dsh/approval-request', 'tool': request.get('toolName'),
             'call_id': request.get('callId'), 'reason': request.get('reason'),
+            # The native approval frame identifies the tool call by ``callId``
+            # and deliberately omits its command/arguments, so this localized
+            # reason is the widest safe action context the parent can review.
+            'display_reason': request.get('displayReason'),
         }
         with self.lock:
             if self.stopping.is_set() or self.finished.is_set():

@@ -50,6 +50,9 @@ class DshExecution:
         self.end: dict | None = None
         self.unsupported: str | None = None
         self.pending: dict[str, dict] = {}
+        # Streamed tool/call contexts, keyed by callId, held only while the
+        # call is open so an approval can name exactly what it will run.
+        self.tool_calls: dict[str, dict] = {}
         # Runner retires/moves its control directory. Keep native Session data
         # with the durable Trace so retirement cannot break the retained link.
         self.logs = trace_file.parent / 'dsh-native'
@@ -178,22 +181,46 @@ class DshExecution:
                 with self.lock:
                     for token, details in list(self.pending.items()):
                         if details['request_id'] == frame.get('eventId'):
+                            self.tool_calls.pop(details.get('call_id'), None)
                             del self.pending[token]
+
+    def _remember_tool_call(self, data: dict) -> None:
+        """Retain one streamed tool call's exact arguments for its approval frame."""
+        call_id = data.get('callId')
+        if not isinstance(call_id, str) or not call_id:
+            return
+        arguments = data.get('arguments')
+        try:
+            parsed = json.loads(arguments) if isinstance(arguments, str) else arguments
+        except (TypeError, ValueError):
+            parsed = arguments
+        with self.lock:
+            if self.stopping.is_set() or self.finished.is_set():
+                return
+            self.tool_calls[call_id] = {'tool': data.get('name'), 'arguments': parsed}
+
+    def _forget_tool_call(self, call_id: Any) -> None:
+        """Drop one completed tool call so no stale action context is served."""
+        with self.lock:
+            self.tool_calls.pop(call_id, None)
 
     def _request_approval(self, frame: dict) -> None:
         """Publish one pending native approval with the identity its parent needs."""
         request  = frame.get('request') or {}
         event_id = frame.get('eventId')
         token    = uuid.uuid4().hex
+        call_id  = request.get('callId')
+        with self.lock:
+            # The approval frame names only the tool call; the same native stream
+            # already delivered that call's exact arguments, so the parent can
+            # review what the operation will actually run.
+            action = self.tool_calls.get(call_id) if isinstance(call_id, str) else None
         details  = {
             'session': self.session, 'execution_id': self.execution_id,
             'request_id': event_id, 'request_token': token,
             'method': 'dsh/approval-request', 'tool': request.get('toolName'),
-            'call_id': request.get('callId'), 'reason': request.get('reason'),
-            # The native approval frame identifies the tool call by ``callId``
-            # and deliberately omits its command/arguments, so this localized
-            # reason is the widest safe action context the parent can review.
-            'display_reason': request.get('displayReason'),
+            'call_id': call_id, 'reason': request.get('reason'),
+            'display_reason': request.get('displayReason'), 'action': action,
         }
         with self.lock:
             if self.stopping.is_set() or self.finished.is_set():
@@ -294,11 +321,17 @@ class DshExecution:
                         self.end = None
                     elif kind == 'turn/end':
                         self.end = data
-                    elif kind == 'tool/call' and data.get('name') == 'ask_user_question':
-                        # approval/asked and approval/decided are log-only audit
-                        # events; only non-approval user questions stay unsupported.
-                        self.unsupported = 'DSH interactive user input is unsupported.'
-                        self.stopping.set()
+                    elif kind == 'tool/call':
+                        # Keep the streamed call context until its approval frame
+                        # arrives, so the parent can review the exact arguments.
+                        self._remember_tool_call(data)
+                        if data.get('name') == 'ask_user_question':
+                            # approval/asked and approval/decided are log-only audit
+                            # events; only non-approval user questions stay unsupported.
+                            self.unsupported = 'DSH interactive user input is unsupported.'
+                            self.stopping.set()
+                    elif kind == 'tool/result':
+                        self._forget_tool_call(data.get('callId'))
                 with self.lock:
                     if self.end is not None and not self.stopping.is_set() and self._settled():
                         reason = self.end.get('reason', {}).get('kind')
@@ -323,6 +356,7 @@ class DshExecution:
                 with self.lock:
                     self.active = False
                     self.pending.clear()
+                    self.tool_calls.clear()
                 self._retain_trace()
                 if self.outcome is not None and not self.trace_file.is_file():
                     raise RuntimeAdapterError('RUNTIME_TRACE_FAILED', 'DSH native Trace was not retained.')
@@ -358,6 +392,7 @@ class DshExecution:
                     raise RuntimeAdapterError('invalid-input', 'Return exactly one explicit allow or reject decision.')
                 outcome = 'allowed-once' if decision == 'allow' else 'rejected'
                 self.service.answer_approval(details['request_id'], outcome)
+                self.tool_calls.pop(details.get('call_id'), None)
                 del self.pending[request['request_token']]
                 return {'request_id': details['request_id'], 'reply_status': 'submitted'}
             if operation == 'send' and self.active and not self.stopping.is_set():

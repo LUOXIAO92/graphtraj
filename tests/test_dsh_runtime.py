@@ -121,6 +121,8 @@ class NativePeer:
         time.sleep(0.005)
         if self.frames:
             kind = self.frames.pop(0)
+            if isinstance(kind, dict):
+                return kind
             if kind == 'turn/end':
                 self.running = False
             return {'type': 'event', 'event': {'type': kind, 'data': {
@@ -289,6 +291,16 @@ def test_native_approval_waits_for_the_direct_parent_reply(
 ) -> None:
     """The live request reaches the parent, and one explicit allow answers it once."""
     turn, thread, outcome = run_turn(tmp_path)
+    peer[0].frames.append({'type': 'event', 'event': {'type': 'tool/call', 'data': {
+        'callId': 'call-9', 'name': 'bash',
+        'arguments': json.dumps({'command': 'printf probe > "$HOME/.graphtraj-258.txt"',
+                                 'sandbox_permissions': 'workspace-write',
+                                 'justification': 'write a probe outside the workspace'}),
+    }}})
+    deadline = time.monotonic() + 3
+    while 'call-9' not in turn.tool_calls and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert 'call-9' in turn.tool_calls
     peer[0].push_approval('native-event-1', toolName='bash', callId='call-9', reason='git add',
                           displayReason={'en': 'Allow this operation with workspace-write permissions: git add'})
     request = wait_for_request(turn)
@@ -300,12 +312,21 @@ def test_native_approval_waits_for_the_direct_parent_reply(
     # The native frame carries no command/args, so the localized reason is the
     # widest safe action context the parent can review.
     assert request['display_reason'] == {'en': 'Allow this operation with workspace-write permissions: git add'}
+    # The same native stream delivered the tool call named by callId, so the exact
+    # command/arguments are exposed for the parent's review.
+    assert request['action'] == {'tool': 'bash', 'arguments': {
+        'command': 'printf probe > "$HOME/.graphtraj-258.txt"',
+        'sandbox_permissions': 'workspace-write',
+        'justification': 'write a probe outside the workspace',
+    }}
     assert len(notices) == 1 and notices[0]['identity']['request_token'] == request['request_token']
     assert 'neither approves nor rejects it' in notices[0]['notice']
 
     receipt = turn.operate({**turn_identity(turn), 'operation': 'reply',
                             'request_token': request['request_token'], 'response': {'decision': 'allow'}})
     assert receipt == {'request_id': 'native-event-1', 'reply_status': 'submitted'}
+    # The answered request leaves no stale action context behind.
+    assert turn.tool_calls == {}
     assert peer[0].answers == [('native-event-1', 'allowed-once')]
     assert turn.operate({**turn_identity(turn), 'operation': 'requests'})['requests'] == []
 

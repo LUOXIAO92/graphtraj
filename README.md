@@ -440,7 +440,7 @@ The native channels differ by Runtime:
 | Runtime | `system_prompt` | `developer_prompt` |
 | --- | --- | --- |
 | Pi | System prompt addition through `--append-system-prompt` | Unsupported |
-| DSH | `system-prompt` plugin's `personaSuffix` | Unsupported |
+| DSH | System text in the session-scoped `persona` plugin's `suffix` | Unsupported |
 | Codex | App-server `baseInstructions` | App-server `developerInstructions` |
 
 Requesting an unsupported layer returns `ROLE_CONFIG_UNSUPPORTED` before

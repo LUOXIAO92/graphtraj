@@ -6,9 +6,12 @@ import './activity.css';
 
 const readable = (value: unknown) => typeof value === 'string' ? value : JSON.stringify(value, null, 2);
 
-function EventCard({ event }: { event: ActivityEvent }) {
+export function EventCard({ event }: { event: ActivityEvent }) {
   const [copied, setCopied] = useState('');
-  const content = event.text ?? readable(event.result ?? event.arguments ?? event.details ?? event.usage) ?? '';
+  const content = event.text ?? readable(event.result ?? event.arguments ?? event.usage) ?? '';
+  const details = event.details === undefined ? '' : readable(event.details);
+  const error = event.error ? readable(event.error) : '';
+  const copyContent = [content, details, error].filter(Boolean).join('\n\n');
   return <Card className="activity-event">
     <Card.Header><Card.Title>{event.kind === 'tool' ? event.name || event.call_id || 'Tool' : event.role || event.kind}</Card.Title>
       <Card.Description>{event.time === null ? 'Time not recorded' : new Date(event.time).toLocaleString()}
@@ -18,12 +21,11 @@ function EventCard({ event }: { event: ActivityEvent }) {
       {event.kind === 'tool' && <p>{content.split('\n')[0].slice(0, 160)}</p>}
       {event.kind === 'tool' || event.kind === 'usage' || event.details ? <details>
         <summary>{event.kind === 'usage' ? 'Recorded usage' : event.phase === 'call' ? 'Arguments / command' : 'Result / details'}</summary>
-        <pre>{content}</pre>{Boolean(event.error) && <pre>{readable(event.error)}</pre>}
-        {Boolean(event.details) && event.result !== undefined && <pre>{readable(event.details)}</pre>}
+        <pre>{content}</pre>{details && <pre>{details}</pre>}{error && <pre>{error}</pre>}
       </details> : <Markdown skipHtml components={{ a: ({ children }) => <span>{children}</span>,
         img: () => <span>[External image omitted]</span> }}>{content || 'No readable text in this record.'}</Markdown>}
       <Button size="sm" variant="ghost" onPress={() => {
-        void window.graphtraj.copyText(content).then(() => setCopied('Copied'), () => setCopied('Copy unavailable'));
+        void window.graphtraj.copyText(copyContent).then(() => setCopied('Copied'), () => setCopied('Copy unavailable'));
       }}>{copied || 'Copy'}</Button>
     </Card.Content>
   </Card>;
@@ -72,10 +74,10 @@ export function ActivityView({ projectId, ticketId }: { projectId: string; ticke
         }
       } catch {
         if (alive) setError('Activity disconnected or access refused. Retrying; retained messages remain readable.');
-      } finally { if (alive) timer = setTimeout(tick, 3000); }
+      } finally { if (alive) timer = setTimeout(tick, more && followingRef.current ? 0 : 3000); }
     }
     function tick() {
-      if (more && !loadRequested.current) {
+      if (more && !followingRef.current && !loadRequested.current) {
         void window.graphtraj.activity(projectId, { ticket_id: ticketId }).then(next => {
           if (alive) setActivity(previous => ({ ...previous, ...next }));
         }, () => { if (alive) setError('Member status disconnected; retained content remains readable.'); })

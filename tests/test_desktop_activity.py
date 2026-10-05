@@ -13,6 +13,12 @@ from test_result_submission import result_project
 from conftest import InstalledCommands
 
 
+@pytest.fixture(autouse=True)
+def human_process(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Model an unbound human OS host only for in-process controlled-data checks."""
+    monkeypatch.setattr('graphtraj.execution.desktop_activity.caller_runtime', lambda: None)
+
+
 def query(root: Path, **arguments: object) -> dict:
     """Exercise the native gateway, including argument and authority validation."""
     result = bind(root, desktop_observer=True)({'action': 'execute', 'feature': 'desktop_activity',
@@ -21,7 +27,9 @@ def query(root: Path, **arguments: object) -> dict:
     return result.document
 
 
-def prepare(root: Path, runtime: str, records: list[dict]) -> tuple[Path, Path, Path]:
+def prepare(
+    root: Path, runtime: str, records: list[dict], parent: str | None = None,
+) -> tuple[Path, Path, Path]:
     """Retain a controlled Runtime's records behind actual registered membership."""
     runner, team, _ = result_project(root)
     directory = runner / 'sessions/research@x1'
@@ -29,7 +37,7 @@ def prepare(root: Path, runtime: str, records: list[dict]) -> tuple[Path, Path, 
     trace.parent.mkdir(parents=True)
     trace.write_text(''.join(json.dumps(record) + '\n' for record in records))
     mapping = yaml.safe_load((directory / 'mapping.yml').read_text())
-    mapping.update(runtime=runtime, trace_file=str(trace))
+    mapping.update(runtime=runtime, trace_file=str(trace), parent=parent)
     (directory / 'mapping.yml').write_text(yaml.safe_dump(mapping))
     (directory / 'launch.yml').write_text(yaml.safe_dump({'context_evidence': {'model': 'recorded-model'}}))
     for alias in ('research@x1', 'research@x2', 'research@x3'):
@@ -45,10 +53,11 @@ def message(text: str) -> dict:
 
 def test_incremental_replay_partial_record_and_members(tmp_path: Path) -> None:
     """Pages append once, replay identical IDs and retain offsets across partial writes."""
-    _, _, trace = prepare(tmp_path, 'codex', [message(str(i)) for i in range(205)])
+    _, _, trace = prepare(tmp_path, 'codex', [message(str(i)) for i in range(205)], parent='research@x2')
     first = query(tmp_path, alias='research@x1')
     assert len(first['events']) == 200 and first['has_more']
     assert first['agents'][0]['model'] == 'recorded-model'
+    assert first['agents'][0]['parent'] == 'research@x2'
     assert first['agents'][0]['state'] == 'idle' and not first['agents'][0]['historical']
     second = query(tmp_path, alias='research@x1', cursor=first['cursor'])
     replay = query(tmp_path, alias='research@x1', cursor=first['cursor'])
@@ -92,6 +101,28 @@ def test_agent_cannot_use_human_observation_or_forge_path(tmp_path: Path) -> Non
     assert refused.failed and 'unexpected parameter' in refused.document['error']
     with pytest.raises(ValueError, match='actual member'):
         query(tmp_path, alias='other@x1')
+
+
+@pytest.mark.parametrize('runtime', ['codex', 'pi', 'dsh'])
+def test_external_main_runtime_cannot_select_grandchild_trace(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, runtime: str,
+) -> None:
+    """A desktop flag cannot elevate an external Main detected by native ancestry."""
+    prepare(tmp_path, 'codex', [message('private grandchild')], parent='research@x2')
+    monkeypatch.setattr('graphtraj.execution.desktop_activity.caller_runtime', lambda: runtime)
+    with pytest.raises(RunnerError, match='human observation'):
+        query(tmp_path, alias='research@x1')
+
+
+def test_native_main_binding_is_not_a_human(tmp_path: Path) -> None:
+    """Main's explicitly bound None alias and host receiver both retain Agent limits."""
+    from graphtraj.execution.runner_connection import parent_connection
+
+    runner, _, _ = prepare(tmp_path, 'codex', [message('private grandchild')], parent='research@x2')
+    with runtime_caller(runner, None), pytest.raises(RunnerError, match='human observation'):
+        query(tmp_path, alias='research@x1')
+    with parent_connection('native-main-receiver'), pytest.raises(RunnerError, match='human observation'):
+        query(tmp_path, alias='research@x1')
 
 
 def test_missing_and_changed_traces_are_explicit(tmp_path: Path) -> None:
@@ -180,6 +211,9 @@ def test_installed_observer_streams_updates_and_reconnects(
 
     if not shutil.which('node'):
         pytest.skip('Optional desktop requires Node')
+    from graphtraj.runtimes.replacement import caller_runtime
+    if caller_runtime() is not None:
+        pytest.skip('Positive human subprocess observation requires a genuine non-Agent host')
     _, _, trace = prepare(tmp_path, 'codex', [message('first native record')])
     environment = {**os.environ, 'GRAPHTRAJ_TOOL': str(installed_commands.product.with_name('graphtraj-tool'))}
     reader = Path(__file__).parents[1] / 'desktop/electron/activity.ts'
@@ -211,3 +245,57 @@ def test_installed_observer_streams_updates_and_reconnects(
         env=environment, capture_output=True, text=True, timeout=40,
     )
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_installed_desktop_flag_preserves_actual_agent_identity(
+    tmp_path: Path, installed_commands: InstalledCommands,
+) -> None:
+    """A real Agent-launched observer cannot elevate itself through its CLI flag."""
+    import subprocess
+    from graphtraj.runtimes.replacement import caller_runtime
+
+    if caller_runtime() is None:
+        pytest.skip('This negative integration case requires an actual Agent host')
+    prepare(tmp_path, 'codex', [message('private grandchild')], parent='research@x2')
+    result = subprocess.run(
+        [str(installed_commands.product.with_name('graphtraj-tool')), '--desktop-observer'],
+        cwd=tmp_path, input=json.dumps({'action': 'execute', 'feature': 'desktop_activity',
+            'arguments': {'ticket_id': '148', 'alias': 'research@x1'}}) + '\n',
+        text=True, capture_output=True, timeout=20,
+    )
+    assert result.returncode == 0, result.stderr
+    reply = json.loads(result.stdout)
+    assert reply['failed'] and 'human observation' in reply.get('error', ''), reply
+    assert 'private grandchild' not in result.stdout
+
+
+def test_desktop_option_keeps_authenticated_cli_forwarding(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The desktop selector cannot bypass the calling Agent's existing channel."""
+    from graphtraj.interfaces.local_tool import answer
+    from graphtraj.interfaces.tools import ToolResult
+
+    calls = []
+
+    def forwarded(request: dict, cwd: Path) -> ToolResult:
+        """Represent the authenticated host refusing an Agent conversation query."""
+        calls.append((request, cwd))
+        return ToolResult({'error': 'Agent query refused'}, failed=True)
+
+    monkeypatch.setattr('graphtraj.interfaces.hosted_cli.forward_request', forwarded)
+    request = {'action': 'execute', 'feature': 'desktop_activity', 'arguments': {'ticket_id': '148'}}
+    reply = answer(request, cwd=tmp_path, desktop_observer=True)
+    assert reply['failed'] and calls == [(request, tmp_path)]
+
+
+def test_dsh_external_main_uses_native_node_entrypoint(monkeypatch: pytest.MonkeyPatch) -> None:
+    """DSH's actual executable ancestry is recognized without trusting environment claims."""
+    from graphtraj.runtimes import replacement
+
+    monkeypatch.setattr(replacement, 'process_ancestors', lambda pid: [pid, 700])
+    monkeypatch.setattr(replacement, 'process_executable', lambda pid: Path('/usr/bin/node'))
+    monkeypatch.setattr(replacement.sys, 'platform', 'darwin')
+    monkeypatch.setattr(replacement.subprocess, 'check_output',
+                        lambda *args, **kwargs: '/usr/bin/node /installed/@deepseek-ai/dsh/lib/bin.js')
+    assert replacement.caller_runtime() == 'dsh'

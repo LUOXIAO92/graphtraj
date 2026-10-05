@@ -10,7 +10,11 @@ import yaml
 
 from graphtraj.configuration.project_configuration import load_project_configuration
 from graphtraj.execution.runner_models import RunnerError
-from graphtraj.execution.runner_status import caller_alias, read_alias_mapping, _status_session
+from graphtraj.execution.runner_connection import current_parent_connection
+from graphtraj.runtimes.replacement import caller_runtime
+from graphtraj.execution.runner_status import (
+    caller_alias, read_alias_mapping, runtime_caller_is_bound, _status_session,
+)
 from graphtraj.graph.delivery_state import read_team
 from graphtraj.graph.ticket_graph import _load_states
 from graphtraj.runtimes.activity import TraceReader, redact
@@ -37,7 +41,10 @@ def observe(
     if not human_observer.get():
         raise RunnerError('authority-denied', 'Activity requires the human desktop host binding.')
     runner = discover_runner_directory(cwd)
-    if caller_alias(runner) is not None:
+    # None in Runner's alias mapping also describes Main. Keep native host
+    # bindings and OS-observed Runtime ancestry distinct from an unbound user.
+    if (runtime_caller_is_bound() or current_parent_connection() is not None
+            or caller_runtime() is not None or caller_alias(runner) is not None):
         raise RunnerError('authority-denied', 'Desktop conversations are a human observation surface, not an Agent report query.')
     configuration = load_project_configuration(cwd)
     states = _load_states(configuration.state / 'tickets')

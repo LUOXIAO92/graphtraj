@@ -15,7 +15,7 @@ def caller_runtime() -> str | None:
     """Identify an external caller from its process ancestry, not projected flags.
 
     Managed callers use their recorded Runtime instead. For external callers,
-    recognize Codex's executable and pi's actual Node entrypoint. An unknown
+    recognize Codex's executable and Pi/DSH's actual Node entrypoints. An unknown
     executable is not classified as lacking approval support.
     """
     for pid in process_ancestors(os.getpid())[1:]:
@@ -32,10 +32,12 @@ def caller_runtime() -> str | None:
                     argv = shlex.split(subprocess.check_output(
                         ["/bin/ps", "-p", str(pid), "-o", "args="], text=True,
                     ))
-                if len(argv) > 1 and str(Path(argv[1]).resolve()).endswith(
-                    "/@mariozechner/pi-coding-agent/dist/cli.js"
-                ):
-                    return "pi"
+                if len(argv) > 1:
+                    entrypoint = str(Path(argv[1]).resolve())
+                    if entrypoint.endswith("/@mariozechner/pi-coding-agent/dist/cli.js"):
+                        return "pi"
+                    if entrypoint.endswith("/@deepseek-ai/dsh/lib/bin.js"):
+                        return "dsh"
             except (OSError, ValueError, subprocess.CalledProcessError):
                 continue
     return None

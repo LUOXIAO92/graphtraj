@@ -188,7 +188,7 @@ def answer(
         from graphtraj.interfaces.hosted_cli import forward_request
 
         result = None
-        if not desktop_observer and request.get('action') == 'execute' and (
+        if request.get('action') == 'execute' and (
             allowed_features is None or request.get('feature') in allowed_features
         ):
             result = forward_request(request, cwd or Path.cwd())

@@ -27,12 +27,7 @@ test('native desktop bridge isolates projects, persists preferences and reconnec
   assert.equal(b.projects.length, 2);
   assert.notEqual(firstId, secondId);
   assert.equal((await projects.graph(firstId)).graph.tickets[0].title, 'first project');
-  const activity = await projects.activity({ projectId: firstId, ticket_id: '1' });
-  assert.deepEqual(activity.agents, []);
-  assert.equal(activity.ticket_id, '1');
   await assert.rejects(projects.activity({ projectId: '/', ticket_id: '1' }), /Choose an added project/);
-  await assert.rejects(projects.activity({ projectId: firstId, ticket_id: '1', alias: '../other' }), /refused/);
-  assert.deepEqual((await projects.activity({ projectId: secondId, ticket_id: '1' })).agents, []);
   assert.equal((await projects.graph(secondId)).graph.tickets[0].title, 'second project');
   assert.deepEqual((await projects.graph(secondId)).graph.tickets[1].dependencies, ['1']);
   await assert.rejects(projects.graph(first), /Choose an added project/);

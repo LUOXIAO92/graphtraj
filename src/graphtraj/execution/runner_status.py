@@ -94,6 +94,11 @@ def conflicting_binding_field(
     return None
 
 
+def runtime_caller_is_bound() -> bool:
+    """Whether this call has native Agent context, including a Main identity of None."""
+    return _runtime_caller.get() is not None
+
+
 def caller_alias(runner_directory: Path) -> str | None:
     """Return the identity bound to a native callback or the calling process.
 

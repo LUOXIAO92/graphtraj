@@ -408,7 +408,30 @@ only for the dispatch relationships this project permits. A preset name alone
 grants neither dispatch nor acceptance authority. Grouped presets and inline
 roles use the same configuration and relationship checks.
 
-The Runtime Adapter interprets this setting. Codex maps it to
+Main can manage these declarations through `role_organization`, also available as
+`graphtraj roles organize`. With no change supplied, it reads the current roles
+and dispatch edges without modifying configuration. Ordinary child Sessions
+cannot use this operation to expand their own authority.
+
+To request a change, pass a YAML document to
+`graphtraj roles organize --change-file change.yml`. Supported keys are
+`set_presets`, `remove_presets`, `add_edges` and `remove_edges`; each edge names
+its `parent` and `child`. For example, a change to an existing preset can be:
+
+```yaml
+set_presets:
+  reviewer:
+    model: your-selected-model
+```
+
+The same operation submits the concrete change to the selected reviewer and
+applies it only after approval. There is no separate apply command or caller
+approval flag. Refusal, an unavailable reviewer, an invalid role graph or a
+target changed during review leaves the configuration unchanged. Unrelated
+settings and historical Agent identities are retained; existing Sessions keep
+their captured settings.
+
+The Runtime Adapter interprets `reasoning_effort`. Codex maps it to
 `model_reasoning_effort`; omission retains the shared Codex projection default (`high`). Invalid
 values produce a configuration error. The effective setting is preserved on
 Session continuation. Batch inline roles accept the same optional field.

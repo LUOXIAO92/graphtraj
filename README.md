@@ -134,9 +134,10 @@ a time notice does not mean execution has stopped. The renderer exposes no
 task-control or arbitrary-command interface.
 
 Actual macOS window tests cover native graph queries, project separation,
-refresh, reconnect, persistence and removal. Genuine OS-picker interaction and
-the independent-running-task open/close boundary still await acceptance for
-this candidate. Cross-platform installers are separate delivery work. Supplied
+refresh, reconnect, persistence and removal. A separate unmocked window was
+used to add two projects through the OS picker. Opening, closing and reopening
+the tested desktop left the observed independent Runner execution running.
+Cross-platform installers are separate delivery work. Supplied
 dependency notices and their recorded limitations are retained in
 `desktop/THIRD_PARTY_LICENSES.txt` and `desktop/licenses/`.
 

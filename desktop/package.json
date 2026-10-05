@@ -8,7 +8,7 @@
     "node": ">=22.18"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.electron.json && tsc --noEmit && vite build",
+    "build": "node --preserve-symlinks --preserve-symlinks-main node_modules/typescript/lib/tsc.js -p tsconfig.electron.json && node --preserve-symlinks --preserve-symlinks-main node_modules/typescript/lib/tsc.js --noEmit && node --preserve-symlinks --preserve-symlinks-main node_modules/vite/bin/vite.js build --configLoader native",
     "start": "npm run build && electron .",
     "test": "npm run build && node --test tests/*.test.cjs",
     "test:desktop": "npm run build && node --test tests/*.test.mjs"

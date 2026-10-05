@@ -142,11 +142,15 @@ def settings_request(request: dict, cwd: Path, reviewer: Callable[[dict], dict])
                 f"Unsupported reasoning effort for {preset.runtime}; "
                 f"choose {', '.join(sorted(efforts[preset.runtime]))}."
             )
-        if preset.runtime == "pi" and (preset.base_url or preset.codex or "/" not in preset.model):
-            raise ValueError(
-                "Pi requires provider/model-id and native provider configuration; "
-                "clear Base URL and update incompatible Codex settings through the native role entry."
-            )
+        if preset.runtime == "pi":
+            provider, separator, model = preset.model.partition("/")
+            if not separator or not provider or not model:
+                raise ValueError("Pi model must be provider/model-id with a nonempty provider and model.")
+            if preset.base_url or preset.codex:
+                raise ValueError(
+                    "Pi requires native provider configuration; clear Base URL and "
+                    "update incompatible Codex settings through the native role entry."
+                )
         if preset.runtime == "dsh" and preset.model not in {
             "deepseek-flash", "deepseek-official/deepseek-flash",
         }:

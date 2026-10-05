@@ -93,6 +93,8 @@ def test_revision_conflict_before_and_during_review(project: Path) -> None:
 
 
 @pytest.mark.parametrize("fields", [
+    {"runtime": "pi", "model": "provider/"},
+    {"runtime": "pi", "model": "/model"},
     {"runtime": "pi", "model": "provider/model", "developer_prompt": "unsupported"},
     {"api_key_env": "sk-plaintext-secret"},
     {"base_url": "https://user:secret@example.invalid/v1"},

@@ -1,13 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Button, Card, Description, Form, Input, Label, TextArea, TextField } from '@heroui/react';
-import type { RoleFields, Settings, SettingsDraft } from '../electron/types';
+import type { RoleFields, Settings } from '../electron/types';
+import { fieldLabels as labels, ownRole, roleChanges, roleName } from './settings-draft';
 import './settings.css';
-
-const labels: Record<keyof RoleFields, string> = {
-  runtime: 'Runtime', model: 'Model', base_url: 'Base URL', api_key_env: 'Credential environment variable (api_key_env)',
-  reasoning_effort: 'Reasoning effort', instructions: 'Instruction file reference',
-  system_prompt: 'System prompt', developer_prompt: 'Developer prompt',
-};
 
 /** Edit a project-local draft; only the native save entry can persist it. */
 export function SettingsView({ projectId }: { projectId: string }) {
@@ -24,7 +19,7 @@ export function SettingsView({ projectId }: { projectId: string }) {
 
   function reset(value: Settings): void {
     setSaved(value); setRoles(structuredClone(value.roles)); setEdges(value.edges); setRenames({});
-    setSelected(current => current in value.roles ? current : Object.keys(value.roles)[0] ?? '');
+    setSelected(current => Object.hasOwn(value.roles, current) ? current : Object.keys(value.roles)[0] ?? '');
   }
   useEffect(() => {
     let alive = true;
@@ -35,18 +30,7 @@ export function SettingsView({ projectId }: { projectId: string }) {
     return () => { alive = false; };
   }, [projectId]);
 
-  const edits: SettingsDraft['edits'] = {};
-  const changes: { label: string; before: string; after: string }[] = [];
-  for (const [role, fields] of Object.entries(roles)) {
-    for (const field of Object.keys(labels) as (keyof RoleFields)[]) {
-      const before = saved?.roles[role]?.[field] ?? null;
-      const after = fields[field] || null;
-      if (before !== after) {
-        (edits[role] ??= {})[field] = after;
-        changes.push({ label: `${role} · ${labels[field]}`, before: before ?? '(not set)', after: after ?? '(clear)' });
-      }
-    }
-  }
+  const { edits, changes } = roleChanges(roles, saved?.roles);
   const names = Object.fromEntries(Object.entries(renames).filter(([old, name]) => old !== name));
   for (const [old, name] of Object.entries(names)) changes.push({ label: 'Role name', before: old, after: name });
   const same = (a: [string, string], b: [string, string]) => a[0] === b[0] && a[1] === b[1];
@@ -75,9 +59,9 @@ export function SettingsView({ projectId }: { projectId: string }) {
     finally { setBusy(false); }
   }
   function field(name: keyof RoleFields, multiline = false) {
-    const value = roles[selected]?.[name] ?? '';
+    const value = ownRole(roles, selected)?.[name] ?? '';
     return <TextField key={name} value={value} isDisabled={busy}
-      onChange={value => { setMessage(''); setRoles(current => ({ ...current, [selected]: { ...current[selected], [name]: value } })); }}>
+      onChange={value => { setMessage(''); setRoles(current => ({ ...current, [selected]: { ...ownRole(current, selected), [name]: value } })); }}>
       <Label>{labels[name]}</Label>
       {multiline ? <TextArea rows={4} /> : <Input autoComplete="off" spellCheck={false} />}
       {name === 'api_key_env' && <Description>Environment variable NAME only, for example OPENAI_API_KEY. Set the secret in the environment used to launch your Runtime; this form never reads or saves its value.</Description>}
@@ -101,7 +85,7 @@ export function SettingsView({ projectId }: { projectId: string }) {
     {saved && <div className="settings-columns">
       <nav aria-label="Configured roles">{Object.keys(roles).map(reference => <Button key={reference}
         variant={selected === reference ? 'primary' : 'secondary'} isDisabled={busy}
-        onPress={() => setSelected(reference)}>{renames[reference] ?? reference}</Button>)}
+        onPress={() => setSelected(reference)}>{roleName(renames, reference)}</Button>)}
         {!Object.keys(roles).length && <p>No existing role presets. Configure roles through the native project setup first.</p>}
       </nav>
       {selected && <div className="settings-fields">
@@ -110,7 +94,7 @@ export function SettingsView({ projectId }: { projectId: string }) {
           <details><summary>Runtime parameters</summary>{field('reasoning_effort')}</details>
         </Card.Content></Card>
         <Card><Card.Header><Card.Title>Role</Card.Title></Card.Header><Card.Content>
-          <TextField value={renames[selected] ?? selected} isDisabled={busy}
+          <TextField value={roleName(renames, selected)} isDisabled={busy}
             onChange={name => setRenames(current => ({ ...current, [selected]: name }))}>
             <Label>Role reference</Label><Input /><Description>Existing name or group.name. Renaming updates its dispatch references.</Description>
           </TextField>
@@ -121,7 +105,7 @@ export function SettingsView({ projectId }: { projectId: string }) {
     {saved && <Card><Card.Header><Card.Title>Dispatch relationships</Card.Title></Card.Header><Card.Content>
       <p>These are configured relationships, not running Agents. Removing an edge does not stop an existing Session.</p>
       <ul>{edges.map(([parent, child]) => <li key={`${parent}:${child}`}>
-        {renames[parent] ?? parent} → {renames[child] ?? child}{' '}
+        {roleName(renames, parent)} → {roleName(renames, child)}{' '}
         <Button size="sm" variant="ghost" isDisabled={busy} aria-label={`Remove dispatch ${parent} to ${child}`}
           onPress={() => setEdges(current => current.filter(edge => !same(edge, [parent, child])))}>Remove</Button>
       </li>)}</ul>

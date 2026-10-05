@@ -617,6 +617,28 @@ def answer_pending_request(
     )
 
 
+def read_desktop_activity(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> ToolResult:
+    """Expose the native human monitor without widening Agent report access."""
+    from graphtraj.execution.desktop_activity import observe
+
+    return ToolResult(observe(cwd or Path.cwd(), arguments['ticket_id'],
+                              arguments.get('alias'), arguments.get('cursor')))
+
+
+register_tool(
+    "desktop_activity",
+    "Read actual Ticket members and bounded native Chat/usage records for the human desktop. "
+    "Agent callers are refused; no messaging or control is provided.",
+    {"type": "object", "properties": {
+        "ticket_id": {"type": "string"}, "alias": {"type": "string"},
+        "cursor": {"type": "string"},
+    }, "required": ["ticket_id"], "additionalProperties": False},
+    read_desktop_activity,
+    manual_ref="manuals/task-delivery/guide.md",
+    examples=({"ticket_id": "1"},),
+)
+
+
 register_tool(
     "ticket_graph",
     "Read the current Ticket DAG, states and dependency readiness for the project "

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, session } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, session } from 'electron';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { GraphReader, Projects } from './projects';
@@ -41,6 +41,10 @@ else {
     session.defaultSession.setPermissionCheckHandler(() => false);
 
     const handlers: Record<string, (id?: unknown) => unknown> = {
+      'activity:copy': text => {
+        if (typeof text !== 'string') throw new Error('Copy requires text.');
+        clipboard.writeText(text);
+      },
       'projects:list': () => projects.list(),
       'projects:add': async () => {
         const result = await dialog.showOpenDialog(window!, {
@@ -51,6 +55,7 @@ else {
       'projects:select': id => projects.select(id),
       'projects:remove': id => projects.remove(id),
       'projects:graph': id => projects.graph(id),
+      'projects:activity': value => projects.activity(value),
     };
     for (const [channel, handler] of Object.entries(handlers)) {
       ipcMain.handle(channel, (event, id) => {
@@ -59,7 +64,7 @@ else {
             event.senderFrame.url !== pathToFileURL(page).href) {
           throw new Error('Desktop request from an untrusted frame.');
         }
-        if (channel === 'projects:graph' || channel === 'projects:list') return handler(id);
+        if (channel === 'activity:copy' || channel === 'projects:activity' || channel === 'projects:graph' || channel === 'projects:list') return handler(id);
         // Serialize preference changes, including the native folder dialog.
         const next = writes.then(() => handler(id));
         writes = next.catch(() => undefined);
@@ -72,5 +77,5 @@ else {
     app.quit();
   });
   app.on('window-all-closed', () => app.quit());
-  app.on('before-quit', () => reader?.close());
+  app.on('before-quit', () => { reader?.close(); projects?.close(); });
 }

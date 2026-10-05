@@ -1,0 +1,15 @@
+.activity { border-top: 1px solid var(--separator); margin-top: 1rem; padding-top: 1rem; }
+.activity h3 { font-weight: 650; margin-block: .6rem; }
+.activity h4 { font-size: .8rem; color: var(--muted); margin-block: .5rem; }
+.activity-member { margin-bottom: .8rem; }
+.activity-member p { font-size: .75rem; overflow-wrap: anywhere; margin-top: .3rem; }
+.activity-controls { display: flex; gap: .4rem; flex-wrap: wrap; align-items: center; }
+.activity-history { max-height: 65vh; overflow: auto; overflow-anchor: none; margin-block: .8rem; }
+.activity-event { margin-bottom: .75rem; overflow-wrap: anywhere; }
+.activity-event pre { overflow: auto; white-space: pre-wrap; font: .78rem/1.5 ui-monospace, monospace; padding: .5rem; background: var(--background); border-radius: .4rem; }
+.activity-event code { font: .8rem ui-monospace, monospace; }
+.activity-event p { margin-block: .5rem; }
+.activity-event ul, .activity-event ol { padding-left: 1.2rem; }
+.activity-event ul { list-style: disc; }
+.activity-event ol { list-style: decimal; }
+.activity-event summary { cursor: pointer; font-weight: 600; }

@@ -1,3 +1,4 @@
+import { ActivityReader, type ActivityRequest, type Activity } from './activity.ts';
 import { execFile, type ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { access, mkdir, readFile, realpath, rename, stat, writeFile } from 'node:fs/promises';
@@ -57,6 +58,7 @@ export class Projects {
   private preferences: Preferences = { projects: [], selected: null };
   private file: string;
   private reader: GraphReader;
+  private activityReader = new ActivityReader();
 
   constructor(file: string, reader: GraphReader) {
     this.file = file;
@@ -114,9 +116,24 @@ export class Projects {
 
   async remove(id: unknown): Promise<Preferences> {
     const project = this.project(id);
+    this.activityReader.close(project.root);
     const projects = this.preferences.projects.filter(p => p.id !== project.id);
     return this.save({ projects, selected: this.preferences.selected === id
       ? projects[0]?.id ?? null : this.preferences.selected });
+  }
+
+  close(): void { this.activityReader.close(); }
+
+  async activity(value: unknown): Promise<Activity> {
+    if (!value || typeof value !== 'object') throw new Error('Choose a Ticket.');
+    const { projectId, ticket_id, alias, cursor } = value as Record<string, unknown>;
+    const project = this.project(projectId);
+    if (typeof ticket_id !== 'string' || (alias !== undefined && typeof alias !== 'string') ||
+        (cursor !== undefined && typeof cursor !== 'string')) throw new Error('Invalid activity selection.');
+    if (await realpath(project.root) !== project.root) throw new Error('Project directory changed. Add it again.');
+    const request: ActivityRequest = { ticket_id, ...(alias === undefined ? {} : { alias }),
+      ...(cursor === undefined ? {} : { cursor }) };
+    return this.activityReader.read(project.root, request);
   }
 
   async graph(id: unknown): Promise<Observation> {

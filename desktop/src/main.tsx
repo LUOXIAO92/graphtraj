@@ -7,6 +7,7 @@ import {
 } from '@xyflow/react';
 import type { DesktopAPI, Observation, Preferences, Ticket } from '../electron/types';
 import { layout } from './layout';
+import { ActivityView } from './Activity';
 import '@xyflow/react/dist/style.css';
 import './style.css';
 
@@ -140,6 +141,7 @@ function GraphView({ projectId }: { projectId: string }) {
           <dt>Replaced by</dt><dd>{detail.replaced_by.join(', ') || 'None'}</dd>
           <dt>Dependency readiness</dt><dd>{detail.ready ? 'Ready' : 'Not ready to start'}</dd></dl>
         {!visible.has(detail.ticket_id) && <p>This ticket is hidden by the current filter.</p>}
+        <ActivityView key={`${projectId}:${detail.ticket_id}`} projectId={projectId} ticketId={detail.ticket_id} />
         <p className="note">This is the recorded Ticket state. An execution finishing is not acceptance. A time notice is not an actual stop.</p>
       </aside>}
     </div>

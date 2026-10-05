@@ -60,6 +60,7 @@ def bind(
     *,
     event_receiver: Callable[[dict[str, str]], None] | None = None,
     recovery_reviewer: Callable[[dict], dict] | None = None,
+    desktop_observer: bool = False,
 ) -> Callable[[Mapping[str, Any]], ToolResult]:
     """Return the tool callback bound to one trusted host launch context.
 
@@ -68,9 +69,27 @@ def bind(
     With ``event_receiver``, the returned HostTool retains the host callback
     across tool calls until explicitly closed. The callback uses the host's
     existing client; its return acknowledges forwarding, not Agent processing.
+    ``desktop_observer`` selects the read-only human activity surface and cannot
+    be combined with Agent event/control callbacks; verified Agents are refused.
     ``recovery_reviewer`` must invoke that host's actual selected reviewer and
     return its accept/decline decision; it is never a model-supplied argument.
     """
+    if desktop_observer:
+        if event_receiver is not None or recovery_reviewer is not None:
+            raise ValueError('The desktop observer cannot bind Agent control callbacks.')
+
+        def observe(request: Mapping[str, Any]) -> ToolResult:
+            """Bind read-only human access outside native Agent tool callbacks."""
+            from graphtraj.execution.desktop_activity import human_observer
+
+            token = human_observer.set(True)
+            try:
+                allowed = ('desktop_activity',) if allowed_features is None or 'desktop_activity' in allowed_features else ()
+                return gateway.handle_request(request, cwd=cwd, allowed_features=allowed)
+            finally:
+                human_observer.reset(token)
+
+        return observe
     if event_receiver is not None:
         return HostTool(cwd or Path.cwd(), allowed_features, event_receiver, recovery_reviewer)
     callback = partial(gateway.handle_request, cwd=cwd, allowed_features=allowed_features)
@@ -155,6 +174,7 @@ def answer(
     *,
     cwd: Path | None = None,
     allowed_features: Collection[str] | None = None,
+    desktop_observer: bool = False,
 ) -> dict[str, Any]:
     """Answer one decoded request with the bridge's structured wire document.
 
@@ -168,14 +188,12 @@ def answer(
         from graphtraj.interfaces.hosted_cli import forward_request
 
         result = None
-        if request.get('action') == 'execute' and (
+        if not desktop_observer and request.get('action') == 'execute' and (
             allowed_features is None or request.get('feature') in allowed_features
         ):
             result = forward_request(request, cwd or Path.cwd())
         if result is None:
-            result = gateway.handle_request(
-                request, cwd=cwd, allowed_features=allowed_features
-            )
+            result = bind(cwd, allowed_features, desktop_observer=desktop_observer)(request)
     except Exception as error:
         # Business rejections stay host-owned; the bridge reports them instead
         # of ending the session, so a call after a rejection still works.
@@ -189,6 +207,7 @@ def serve(
     *,
     cwd: Path | None = None,
     allowed_features: Collection[str] | None = None,
+    desktop_observer: bool = False,
 ) -> None:
     """Answer newline-delimited requests until the host closes input.
 
@@ -204,7 +223,7 @@ def serve(
         except json.JSONDecodeError:
             reply = {"failed": True, "error": "Parse error"}
         else:
-            reply = answer(request, cwd=cwd, allowed_features=allowed_features)
+            reply = answer(request, cwd=cwd, allowed_features=allowed_features, desktop_observer=desktop_observer)
         output_stream.write(json.dumps(reply) + "\n")
         output_stream.flush()
 
@@ -221,6 +240,10 @@ def main() -> None:
         "--allowed-features",
         help="Comma-separated feature names this host exposes; default exposes all.",
     )
+    parser.add_argument(
+        "--desktop-observer", action="store_true",
+        help="Bind the read-only human activity observer; Agent callers remain refused.",
+    )
     options = parser.parse_args()
     allowed = tuple(name for name in (options.allowed_features or "").split(",") if name)
 
@@ -229,4 +252,5 @@ def main() -> None:
         sys.stdout,
         cwd=Path.cwd(),
         allowed_features=allowed or None,
+        desktop_observer=options.desktop_observer,
     )

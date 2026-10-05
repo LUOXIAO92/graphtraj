@@ -39,13 +39,16 @@ test('actual Electron window uses native graph, safe preload, refresh and persis
   }));
   assert.equal(boundary.require, 'undefined');
   assert.equal(boundary.process, 'undefined');
-  assert.deepEqual(boundary.methods, ['addProject', 'graph', 'projects', 'removeProject', 'selectProject']);
+  assert.deepEqual(boundary.methods, ['activity', 'addProject', 'copyText', 'graph', 'projects', 'removeProject', 'selectProject']);
   assert.match(await page.evaluate(async () => {
     try { await window.graphtraj.graph('/'); return 'unexpected'; }
     catch (error) { return String(error); }
   }), /Choose an added project/);
   await page.locator('.react-flow__node').first().click();
   await page.getByRole('complementary', { name: 'Ticket details' }).waitFor();
+  await page.getByText('No participating Agents recorded.').waitFor();
+  await page.evaluate(() => window.graphtraj.copyText('Observed plain text'));
+  assert.equal(await app.evaluate(({ clipboard }) => clipboard.readText()), 'Observed plain text');
   await page.getByRole('slider', { name: 'Detail width' }).focus();
   await page.getByRole('slider', { name: 'Detail width' }).press('End');
   await page.getByRole('button', { name: 'Close details' }).click();

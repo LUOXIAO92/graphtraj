@@ -19,10 +19,13 @@ from graphtraj.configuration.role_definitions import ResolvedChildRole
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError, select_runtime_adapter
 
 
-def request(tmp_path: Path, instructions: str = 'Assigned responsibility') -> dict:
+def request(
+    tmp_path: Path, instructions: str = 'Assigned responsibility',
+    package: str = '/installed/dsh/package.json',
+) -> dict:
     """Provide nonsecret native launch inputs to the public Runtime contract."""
     return {
-        'executable': 'dsh', 'package': '/installed/dsh/package.json', 'tool': 'graphtraj-tool',
+        'executable': 'dsh', 'package': package, 'tool': 'graphtraj-tool',
         'worktree_path': str(tmp_path), 'harness_root': str(tmp_path),
         'provider': 'deepseek-official', 'model': 'deepseek-flash',
         'reasoning_effort': 'low', 'api_key_env': 'DSH_TEST_KEY',
@@ -53,7 +56,7 @@ class NativePeer:
         self.event_lock = threading.Lock()
         self.answers = []
         home = Path(environment['DSH_HOME'])
-        config = yaml.safe_load((home / 'profiles/web/cordis.patch.yml').read_text())
+        config = yaml.load((home / 'profiles/web/cordis.patch.yml').read_text(), Loader=TaggedLoader)
         root = next(row['config']['root'] for row in config if row.get('id') == 'session-persistence-jsonl')
         log = Path(root) / 'workspace' / self.session / 'v4.jsonl'
         log.parent.mkdir(parents=True)
@@ -151,12 +154,13 @@ def peer(monkeypatch: pytest.MonkeyPatch) -> list:
 
 def run_turn(
     tmp_path: Path, *, expected: str | None = None, trace_file: Path | None = None,
-    instructions: str = 'Assigned responsibility',
+    instructions: str = 'Assigned responsibility', package: str | None = None,
 ) -> tuple:
     """Run the public RuntimeTurn asynchronously so controls overlap active work."""
     bindings = []
     turn = select_runtime_adapter('dsh').managed_execution(
-        request(tmp_path, instructions), 'Original instruction', tmp_path,
+        request(tmp_path, instructions, package or '/installed/dsh/package.json'),
+        'Original instruction', tmp_path,
         lambda session, pid: bindings.append(('started', session)), {},
         trace_file=trace_file or tmp_path / 'trace.jsonl', expected_session=expected,
         session_created=lambda session, pid: bindings.append(('created', session)),
@@ -210,6 +214,98 @@ def notices(monkeypatch: pytest.MonkeyPatch) -> list:
 
     monkeypatch.setattr(runner_control, 'notify_direct_parent', notify)
     return recorded
+
+
+class TaggedLoader(yaml.SafeLoader):
+    """Read DSH `!!js` expressions back as their exact source text."""
+
+
+TaggedLoader.add_constructor(
+    'tag:yaml.org,2002:js', lambda loader, node: loader.construct_scalar(node),
+)
+
+
+def installed_web_app(tmp_path: Path, *, preset: bool = True) -> str:
+    """Write the minimal installed DSH package tree the adapter reads."""
+    root = tmp_path / 'dsh'
+    root.mkdir()
+    (root / 'package.json').write_text('{"version": "0.2.0-rc.2"}')
+    if not preset:
+        return str(root / 'package.json')
+
+    bundle = root / 'node_modules/@deepseek-ai/dsh-web-app'
+    preset_file = bundle / 'presets/standard.patch.yml'
+    preset_file.parent.mkdir(parents=True)
+    (bundle / 'package.json').write_text(
+        json.dumps({'dsh': {'bundle': {'patch': ['./presets/standard.patch.yml']}}}))
+    preset_file.write_text(
+        "- insert:\n"
+        "    - id: preset-standard\n"
+        "      name: '@deepseek-ai/dsh-agent-preset'\n"
+        "      config:\n"
+        "        id: standard\n"
+        "        order: 1\n"
+        "        plugins:\n"
+        "          - id: persona\n"
+        "            name: '@deepseek-ai/dsh-persona'\n"
+        "            config:\n"
+        "              prefix: You are a coding agent powered by the {{model}} model.\n"
+        "              suffix: Your working directory is {{cwd}}.\n"
+        "          - id: tool-bash\n"
+        "            name: '@deepseek-ai/dsh-tool-bash'\n"
+        "            disabled: !!js process.platform === 'win32'\n"
+        "          - id: tool-fs\n"
+        "            name: '@deepseek-ai/dsh-tool-fs'\n",
+    )
+    return str(root / 'package.json')
+
+
+def prepared_profile(tmp_path: Path) -> tuple[list, str]:
+    """Read the profile patch and its exact text for this Agent's Session."""
+    text = (tmp_path / 'dsh-home/profiles/web/cordis.patch.yml').read_text()
+    return yaml.load(text, Loader=TaggedLoader), text
+
+
+def test_prepared_profile_restates_the_standard_preset_persona(
+    tmp_path: Path, peer: list,
+) -> None:
+    """The role text replaces the installed preset persona and keeps its plugins."""
+    turn, thread, outcome = run_turn(
+        tmp_path, package=installed_web_app(tmp_path), instructions='ROLE-TEXT-255')
+
+    rows, text = prepared_profile(tmp_path)
+    preset = next(row for row in rows if row.get('id') == 'preset-standard')
+    plugins = preset['config']['plugins']
+    persona = next(plugin for plugin in plugins if plugin['id'] == 'persona')
+    assert persona['config'] == {'prefix': '', 'suffix': 'ROLE-TEXT-255'}
+    assert [plugin['id'] for plugin in plugins] == ['persona', 'tool-bash', 'tool-fs']
+    bash = next(plugin for plugin in plugins if plugin['id'] == 'tool-bash')
+    assert bash['disabled'] == "process.platform === 'win32'"
+    assert '!!js' in text
+    deployment = next(row for row in rows if row.get('id') == 'system-prompt')
+    assert deployment['config'] == {'personaSuffix': 'ROLE-TEXT-255'}
+
+    peer[0].frames.extend(['assistant/message', 'turn/end'])
+    thread.join(3)
+    assert outcome['result']['outcome'] == 'completed'
+
+
+def test_prepared_profile_without_the_installed_bundle_keeps_preparing(
+    tmp_path: Path, peer: list,
+) -> None:
+    """An unreadable installed bundle leaves the deployment persona as the input."""
+    turn, thread, outcome = run_turn(
+        tmp_path, package=installed_web_app(tmp_path, preset=False),
+        instructions='ROLE-TEXT-255')
+
+    rows, _ = prepared_profile(tmp_path)
+    assert not [row for row in rows if row.get('id') == 'preset-standard']
+    deployment = next(row for row in rows if row.get('id') == 'system-prompt')
+    assert deployment['config'] == {'personaSuffix': 'ROLE-TEXT-255'}
+
+    peer[0].frames.extend(['assistant/message', 'turn/end'])
+    thread.join(3)
+    assert outcome['result']['outcome'] == 'completed'
 
 
 def test_receipt_active_input_and_native_completion(tmp_path: Path, peer: list) -> None:

@@ -18,6 +18,103 @@ from graphtraj.runtimes.dsh.service import DshService
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 
 
+# DSH's shipped profile patches carry `!!js` expressions (for example the
+# platform guards on its tool rows). Preserve that tag while the adapter copies
+# a shipped agent preset into this Session's own profile patch.
+_JS_TAG = 'tag:yaml.org,2002:js'
+_WEB_APP_BUNDLE = Path('node_modules') / '@deepseek-ai' / 'dsh-web-app'
+_PERSONA_PLUGIN = '@deepseek-ai/dsh-persona'
+
+
+class _JsExpression(str):
+    """One `!!js` expression kept exactly as the installed profile wrote it."""
+
+
+class _PatchLoader(yaml.SafeLoader):
+    """Profile-patch loader that keeps `!!js` expressions instead of failing."""
+
+
+class _PatchDumper(yaml.SafeDumper):
+    """Profile-patch dumper that writes those expressions back."""
+
+
+_PatchLoader.add_constructor(
+    _JS_TAG, lambda loader, node: _JsExpression(loader.construct_scalar(node)),
+)
+_PatchDumper.add_representer(
+    _JsExpression, lambda dumper, value: dumper.represent_scalar(_JS_TAG, str(value)),
+)
+
+
+def _dump_profile_patches(patches: list[dict]) -> str:
+    """Serialize this Session's profile patch list, keeping `!!js` expressions."""
+    return yaml.dump(patches, Dumper=_PatchDumper, sort_keys=False)
+
+
+def _load_installed_patches(path: Path) -> list:
+    """Read one installed profile patch list, or nothing when it is unavailable."""
+    try:
+        document = yaml.load(path.read_text(encoding='utf-8'), Loader=_PatchLoader)
+    except (OSError, UnicodeError, yaml.YAMLError):
+        return []
+    return document if isinstance(document, list) else []
+
+
+def _deployment_agent_preset(install_root: Path, instructions: str) -> dict | None:
+    """Return the installed agent-preset override that carries ``instructions``.
+
+    The Web profile's default ``standard`` agent preset mounts its own
+    scope-only ``persona`` row, which shadows the deployment persona for every
+    Session that preset creates. The role text therefore also replaces that
+    row's prefix and suffix, and the preset's remaining plugins are copied
+    exactly as installed so its tools, groups and isolation stay unchanged.
+
+    Parameters
+    ----------
+    install_root:
+        Directory holding the installed DSH package and its bundles.
+    instructions:
+        Resolved role text to install as the Session's system-layer input.
+
+    Returns
+    -------
+    dict | None
+        An id-targeted profile patch row, or None when the installed bundle
+        cannot be read; the existing deployment-persona patch then stays the
+        only prompt input.
+    """
+    bundle = install_root / _WEB_APP_BUNDLE
+    try:
+        manifest = json.loads((bundle / 'package.json').read_text(encoding='utf-8'))
+        declared = manifest['dsh']['bundle']['patch']
+    except (OSError, UnicodeError, ValueError, KeyError, TypeError):
+        return None
+    names = [declared] if isinstance(declared, str) else declared
+    if not isinstance(names, list):
+        return None
+
+    for name in names:
+        if not isinstance(name, str):
+            return None
+        for row in _load_installed_patches(bundle / name):
+            if not isinstance(row, dict):
+                continue
+            for entry in row.get('insert') or []:
+                if not isinstance(entry, dict) or not isinstance(entry.get('id'), str):
+                    continue
+                config = entry.get('config')
+                if not isinstance(config, dict) or config.get('id') != 'standard':
+                    continue
+                if not isinstance(config.get('plugins'), list):
+                    continue
+                for plugin in config['plugins']:
+                    if (isinstance(plugin, dict) and plugin.get('id') == 'persona'
+                            and plugin.get('name') == _PERSONA_PLUGIN):
+                        plugin['config'] = {'prefix': '', 'suffix': instructions}
+                        return {'id': entry['id'], 'config': config}
+    return None
+
+
 class DshExecution:
     """Keep one Session bound until work and the pending inbox are quiescent."""
 
@@ -83,7 +180,12 @@ class DshExecution:
             {'id': 'system-prompt', 'config': {'personaSuffix': self.request['instructions']}},
             {'insert': [{'id': 'graphtraj', 'name': str(Path(__file__).with_name('tool.mjs'))}]},
         ]
-        (profile / 'cordis.patch.yml').write_text(yaml.safe_dump(patches, sort_keys=False), encoding='utf-8')
+        preset = _deployment_agent_preset(
+            Path(self.request['package']).parent, self.request['instructions'],
+        )
+        if preset is not None:
+            patches.append(preset)
+        (profile / 'cordis.patch.yml').write_text(_dump_profile_patches(patches), encoding='utf-8')
         environment = dict(os.environ)
         environment.update({
             'DSH_HOME': str(home), 'DSH_PERMISSION_MODE': mode, 'NO_COLOR': '1',

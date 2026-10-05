@@ -1,0 +1,35 @@
+{
+  "name": "graphtraj-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Optional read-only GraphTraj project monitor",
+  "main": "dist-electron/main.js",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.electron.json && tsc --noEmit && vite build",
+    "start": "npm run build && electron .",
+    "test": "npm run build && node --test tests/*.test.cjs",
+    "test:desktop": "npm run build && node --test tests/*.test.mjs"
+  },
+  "dependencies": {
+    "@heroui/react": "3.0.1",
+    "@heroui/styles": "3.0.1",
+    "@xyflow/react": "12.10.0",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "tailwind-variants": "3.2.2"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "4.1.18",
+    "@types/node": "22.19.7",
+    "@types/react": "19.2.7",
+    "@types/react-dom": "19.2.3",
+    "electron": "44.5.1",
+    "playwright": "1.58.2",
+    "tailwindcss": "4.1.18",
+    "typescript": "5.9.3",
+    "vite": "7.3.6"
+  }
+}

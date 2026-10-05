@@ -397,6 +397,7 @@ def test_installed_command_corrects_a_dependency_and_generates_current_readiness
             {
                 "ticket_id": "1",
                 "ticket_name": "foundation",
+                "title": "Foundation",
                 "status": "pending",
                 "active": True,
                 "ready": True,
@@ -406,6 +407,7 @@ def test_installed_command_corrects_a_dependency_and_generates_current_readiness
             {
                 "ticket_id": "2",
                 "ticket_name": "feature",
+                "title": "Feature",
                 "status": "pending",
                 "active": True,
                 "ready": True,

@@ -25,6 +25,26 @@ ISSUE = {
 }
 
 
+@pytest.mark.parametrize("body", [ISSUE["body"], "---\ntask_type: research\n---\n\nA research task."])
+def test_graph_monitor_reads_title_without_changing_delivery(project: Path, body: str) -> None:
+    """The desktop's public read seam returns authored labels and delivery facts."""
+    call = local_tool.bind(cwd=project)
+    registered = call({
+        "action": "execute", "feature": "ticket_register",
+        "arguments": {**ISSUE, "title": "A human-readable graph title", "body": body},
+    })
+    assert not registered.failed
+    request = {"action": "execute", "feature": "ticket_graph", "arguments": {}}
+    observed = local_tool.answer(request, cwd=project, allowed_features=["ticket_graph"])
+    assert observed["result"]["tickets"][0]["title"] == "A human-readable graph title"
+    assert observed["result"]["tickets"][0]["status"] == "pending"
+    assert local_tool.answer(request, cwd=project, allowed_features=["ticket_graph"]) == observed
+    refused = local_tool.answer({
+        "action": "execute", "feature": "ticket_register", "arguments": ISSUE,
+    }, cwd=project, allowed_features=["ticket_graph"])
+    assert refused["failed"]
+
+
 @pytest.fixture
 def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Provide a configured local project and controlled material for ticket_graph."""

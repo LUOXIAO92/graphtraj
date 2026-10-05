@@ -435,6 +435,15 @@ def read_graph(state: Path) -> dict[str, Any]:
         rendered = []
         for ticket_id in sorted(records, key=int):
             record = records[ticket_id]
+            directory, _ = states[ticket_id]
+            snapshot = (directory / record["current_definition"]).read_text(encoding="utf-8")
+            front_matter = split_execution_budget_front_matter(snapshot)
+            if front_matter is not None:
+                _, _, snapshot = front_matter
+            heading = snapshot.lstrip("\r\n").splitlines()[0]
+            prefix = f"# Ticket {ticket_id}: "
+            if not heading.startswith(prefix):
+                raise ValueError("Ticket snapshot is invalid")
             ready = (
                 record["active"]
                 and record["status"] in {"pending", "ready"}
@@ -447,6 +456,7 @@ def read_graph(state: Path) -> dict[str, Any]:
                 {
                     "ticket_id": ticket_id,
                     "ticket_name": record["ticket_name"],
+                    "title": heading.removeprefix(prefix),
                     "status": record["status"],
                     "active": record["active"],
                     "ready": ready,

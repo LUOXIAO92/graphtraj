@@ -472,17 +472,6 @@ def test_prompt_layer_the_runtime_does_not_expose_is_refused_before_dispatch(
     project: Path,
 ) -> None:
     """A declared layer is refused for the Runtimes that lack it, never folded elsewhere."""
-    analyst = load_project_roles(project).preset("analyst")
-    assert analyst.runtime == "codex"
-
-    with pytest.raises(RuntimeAdapterError) as caught:
-        resolve_child_role(
-            "analyst", replace(analyst, system_prompt=SYSTEM_TEXT), project,
-        )
-    assert caught.value.code == "ROLE_CONFIG_UNSUPPORTED"
-    assert "system_prompt" in caught.value.message
-    assert "codex" in caught.value.message
-
     for runtime in ("pi", "dsh"):
         declared = RolePreset(runtime, "deepseek-flash", None, None,
                               developer_prompt=DEVELOPER_TEXT)
@@ -490,17 +479,35 @@ def test_prompt_layer_the_runtime_does_not_expose_is_refused_before_dispatch(
             resolve_child_role("author", declared, project)
         assert refused.value.code == "ROLE_CONFIG_UNSUPPORTED"
         assert "developer_prompt" in refused.value.message
+        assert runtime in refused.value.message
 
 
 def test_supported_prompt_layers_resolve_into_the_role_text(project: Path) -> None:
     """Each Runtime's own layer resolves; the other layer is not silently carried."""
     analyst = load_project_roles(project).preset("analyst")
-    codex = resolve_child_role("analyst", replace(analyst, developer_prompt=DEVELOPER_TEXT), project)
-    assert DEVELOPER_TEXT in codex.instructions
+    assert analyst.runtime == "codex"
+
+    # Codex keeps the two layers in separate native parameters.
+    both = resolve_child_role(
+        "analyst",
+        replace(analyst, system_prompt=SYSTEM_TEXT, developer_prompt=DEVELOPER_TEXT),
+        project,
+    )
+    assert both.system_instructions == SYSTEM_TEXT
+    assert DEVELOPER_TEXT in both.instructions
+    assert SYSTEM_TEXT not in both.instructions
+
+    # Codex without a system-level prompt keeps its built-in base prompt.
+    developer_only = resolve_child_role(
+        "analyst", replace(analyst, developer_prompt=DEVELOPER_TEXT), project,
+    )
+    assert developer_only.system_instructions == ""
+    assert DEVELOPER_TEXT in developer_only.instructions
 
     for runtime in ("pi", "dsh"):
         declared = RolePreset(runtime, "deepseek-flash", None, None,
                               system_prompt=SYSTEM_TEXT)
         resolved = resolve_child_role("author", declared, project)
         assert SYSTEM_TEXT in resolved.instructions
+        assert resolved.system_instructions == ""
         assert DEVELOPER_TEXT not in resolved.instructions

@@ -896,8 +896,9 @@ register_tool(
     'reviewed document; refusal, an unavailable reviewer or a target changed after '
     'review leaves roles.yml untouched. A preset keeps its existing `instructions` '
     'UTF-8 file reference and may add inline `system_prompt` and `developer_prompt` '
-    'text. Pi and DSH deliver only the system prompt layer, Codex only developer '
-    'instructions; content for a layer the selected Runtime does not expose is '
+    'text. Pi and DSH deliver only the system prompt layer; Codex delivers '
+    '`system_prompt` as base instructions and `developer_prompt` as developer '
+    'instructions. Content for a layer the selected Runtime does not expose is '
     'refused at launch instead of being passed as task text. Equivalent to '
     '`graphtraj roles organize`.',
     _ROLE_ORGANIZATION_SCHEMA,

@@ -106,6 +106,7 @@ class _CodexRole:
     name: str
     reasoning_effort: str
     developer_instructions: str
+    base_instructions: str
     default_permissions: str
     agents: Mapping[str, Any]
     native_settings: Mapping[str, Any]
@@ -182,20 +183,26 @@ class _CodexRole:
         for key, value in overrides:
             arguments.extend(("-c", "{0}={1}".format(key, _toml_value(value))))
         arguments.extend(("--json", "-"))
+        session_parameters = {
+            "cwd": str(worktree),
+            "model": model,
+            "dynamicTools": native_runner_tools(),
+            "developerInstructions": developer_instructions,
+            "config": {
+                key: value for key, value in overrides
+                if key != "developer_instructions"
+            },
+        }
+        # Codex's base/system instructions are a separate native thread
+        # parameter. Omit it when no system-layer text was authored so the
+        # Runtime keeps its own built-in base prompt.
+        if self.base_instructions:
+            session_parameters["baseInstructions"] = self.base_instructions
         return {
             **({"approval": dict(self.approval)} if self.approval is not None else {}),
             "arguments": arguments,
             "worktree_path": str(worktree),
-            "session_parameters": {
-                "cwd": str(worktree),
-                "model": model,
-                "dynamicTools": native_runner_tools(),
-                "developerInstructions": developer_instructions,
-                "config": {
-                    key: value for key, value in overrides
-                    if key != "developer_instructions"
-                },
-            },
+            "session_parameters": session_parameters,
         }
 
 
@@ -1229,6 +1236,7 @@ def _resolve_codex_role(role: ResolvedChildRole, harness_root: Path) -> _CodexRo
         ),
         reasoning_effort=reasoning_effort,
         developer_instructions=role.instructions,
+        base_instructions=role.system_instructions,
         default_permissions=document["default_permissions"],
         agents={"enabled": role.allow_runtime_swarm},
         native_settings={

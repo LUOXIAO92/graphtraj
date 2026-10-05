@@ -10,12 +10,10 @@ from contextlib import ExitStack
 import json
 from pathlib import Path
 
-import pytest
 import yaml
 
 from graphtraj.configuration.project_roles import RolePreset
 from graphtraj.configuration.role_definitions import resolve_child_role
-from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 from test_dsh_runtime import peer, run_turn
 from test_pi_runtime import execution, pi_environment
 from test_result_submission import result_project
@@ -107,16 +105,46 @@ def test_codex_developer_instructions_carry_the_authored_developer_prompt(
     developer = context.session_document()['adapter_request']['developerInstructions']
     assert DEVELOPER_TEXT in developer
     assert TASK_TEXT not in developer
+    # With no authored system text, Codex keeps its own built-in base prompt.
+    assert 'baseInstructions' not in context.session_document()['adapter_request']
 
 
-def test_codex_refuses_a_system_level_prompt_before_dispatch(tmp_path: Path) -> None:
-    """Codex has no system layer, so system_prompt is an explicit preflight failure."""
-    role = RolePreset('codex', 'gpt-5.6-sol', None, None, system_prompt=SYSTEM_TEXT)
-    with pytest.raises(RuntimeAdapterError) as caught:
-        resolve_child_role('engineer', role, tmp_path)
-    assert caught.value.code == 'ROLE_CONFIG_UNSUPPORTED'
-    assert 'system_prompt' in caught.value.message
-    assert 'developer' in caught.value.message
+def test_codex_keeps_the_authored_system_prompt_in_the_base_layer(
+    tmp_path: Path, temporary_git_repository: Path,
+) -> None:
+    """Codex's base/system layer is a separate native parameter, not the developer layer."""
+    from graphtraj.runtimes.codex.codex_adapter import preflight_runtime_context
+
+    executable = tmp_path / 'codex'
+    executable.write_text('#!/bin/sh\necho --sandbox\n', encoding='utf-8')
+    executable.chmod(0o755)
+
+    role = resolve_child_role(
+        'engineer',
+        RolePreset('codex', 'gpt-5.6-sol', None, None,
+                   system_prompt=SYSTEM_TEXT, developer_prompt=DEVELOPER_TEXT),
+        tmp_path,
+    )
+    worktree = tmp_path / 'worktree'
+    worktree.mkdir()
+    evidence = tmp_path / 'evidence'
+    evidence.mkdir()
+
+    context = preflight_runtime_context(
+        runtime_store=tmp_path / 'harness' / '.codex',
+        executable=executable,
+        git_common_directory=temporary_git_repository / '.git',
+        role=role,
+        worktree=worktree,
+        evidence=evidence,
+        requested_skills=(),
+    ).finalize()
+    params = context.session_document()['adapter_request']
+    assert params['baseInstructions'] == SYSTEM_TEXT
+    assert SYSTEM_TEXT not in params['developerInstructions']
+    assert DEVELOPER_TEXT in params['developerInstructions']
+    assert TASK_TEXT not in params['baseInstructions']
+    assert TASK_TEXT not in params['developerInstructions']
 
 
 def test_approved_role_prompt_reaches_the_next_codex_native_request(
@@ -128,7 +156,10 @@ def test_approved_role_prompt_reaches_the_next_codex_native_request(
 
     assert execute(
         project,
-        {"change": {"set_presets": {"analyst": {"developer_prompt": DEVELOPER_TEXT}}}},
+        {"change": {"set_presets": {"analyst": {
+            "system_prompt": SYSTEM_TEXT,
+            "developer_prompt": DEVELOPER_TEXT,
+        }}}},
         accept,
     ).document["applied"] is True
 
@@ -152,6 +183,8 @@ def test_approved_role_prompt_reaches_the_next_codex_native_request(
         evidence=evidence,
         requested_skills=(),
     ).finalize()
-    developer = context.session_document()['adapter_request']['developerInstructions']
-    assert DEVELOPER_TEXT in developer
-    assert TASK_TEXT not in developer
+    params = context.session_document()['adapter_request']
+    assert params['baseInstructions'] == SYSTEM_TEXT
+    assert DEVELOPER_TEXT in params['developerInstructions']
+    assert TASK_TEXT not in params['baseInstructions']
+    assert TASK_TEXT not in params['developerInstructions']

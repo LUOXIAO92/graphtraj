@@ -100,6 +100,46 @@ current rules in the Worktree-local copy, refreshed when setup or Worktree
 preparation runs. Setup migrates the old installer's complete shared ignore
 rule group; standalone user rules remain unchanged.
 
+## Optional desktop project graph
+
+The development desktop in `desktop/` displays existing projects and their
+native task graphs. It is optional: installing or running the Python CLI does
+not require Node or Electron. This first desktop slice provides project and
+graph monitoring; Agent activity, usage dashboards and settings are separate
+follow-up work.
+
+Install the matching Python GraphTraj version in a persistent environment and
+put `graphtraj-tool` on PATH, or set `GRAPHTRAJ_TOOL` to that executable. Use
+Node 22.18 or newer; the macOS development build was checked with Node 24.18.0.
+From `desktop/`, run:
+
+```sh
+npm ci
+npm exec -- install-electron
+npm start
+```
+
+The second command runs the pinned Electron package's official installer.
+Installation and desktop startup need normal host filesystem and graphical
+session access; restricted Agent environments can block destination path
+resolution. The build preserves linked Worktree paths without broadening
+Agent access. Generated dependencies and build output are not project state.
+
+Use **Add project** to select an existing Harness Project Root. The application
+stores its project list and selection in Electron userData. Removing a project
+only removes its list entry. The graph refreshes every three seconds and shows
+Ticket state, dependencies, inactive or replaced nodes, query errors and the
+last successful update. Execution completion does not mean Ticket acceptance;
+a time notice does not mean execution has stopped. The renderer exposes no
+task-control or arbitrary-command interface.
+
+Actual macOS window tests cover native graph queries, project separation,
+refresh, reconnect, persistence and removal. Genuine OS-picker interaction and
+the independent-running-task open/close boundary still await acceptance for
+this candidate. Cross-platform installers are separate delivery work. Supplied
+dependency notices and their recorded limitations are retained in
+`desktop/THIRD_PARTY_LICENSES.txt` and `desktop/licenses/`.
+
 ## Pi child Agents
 
 The `pi` Runtime controls the installed Pi backend through persistent stdio RPC;

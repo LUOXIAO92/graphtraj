@@ -516,6 +516,14 @@ graphtraj ticket integrate --ticket-id <id> -- <validation-command> <arguments>
 agent-runner cleanup --ticket-id <id>
 ```
 
+The reply payload follows the request's Runtime. The `decline` example above
+is for Codex. For a DSH approval, use `{"decision":"reject"}` to refuse or
+`{"decision":"allow"}` to authorize the displayed operation. Read the actual
+request before replying; a reply error does not establish whether the native
+operation received the decision. Do not retry an uncertain reply blindly.
+Pi extension UI replies use the requested `value`, `confirmed` or `cancelled`
+fields; a UI confirmation alone does not grant sandbox filesystem permissions.
+
 The project assigns implementation, investigation, validation and acceptance
 responsibilities through its selected instructions and actual Agent hierarchy.
 Specialist checks provide evidence for the common result decision; they do not

@@ -362,7 +362,10 @@ def test_non_codex_current_task_changes_and_visible_delivery(
         adapter.interrupted = True
         with pytest.raises(KeyboardInterrupt):
             owning.finish_check(connection, {'end': True})
-        assert 'interrupted; no continuation' in capsys.readouterr().out
+        output = capsys.readouterr().out
+        marker = '[GraphTraj hook: finish-check] skip:'
+        assert marker in output
+        assert output.split(marker, 1)[1].strip()
     assert len(records(tmp_path)) == 3
 
 

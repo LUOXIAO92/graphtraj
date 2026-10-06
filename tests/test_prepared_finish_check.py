@@ -231,3 +231,32 @@ def test_completed_archived_child_is_resolved_by_native_task_path(prepared_exter
         assert response['native_observation']['session']=='actual-child'
         assert response['native_observation']['state']=='completed'
         assert response['result']['status']=='error'  # Remaining config is still unconfirmed.
+
+
+def test_prepared_checker_retains_read_only_graphtraj_interface(
+    prepared_external: tuple, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Public child registration keeps checker identity but refuses write operations."""
+    from graphtraj.interfaces.local_tool import HostTool
+
+    root, _, _=prepared_external
+    captured=[]
+    original=HostTool.register_checker
+
+    def register(parent: HostTool, *args: object, **kwargs: object) -> HostTool:
+        """Observe the actual public registration result without replacing its behavior."""
+        child=original(parent,*args,**kwargs)
+        captured.append(child)
+        return child
+
+    monkeypatch.setattr(HostTool,'register_checker',register)
+    with external_main(root) as ready:
+        result, prepared=call(ready,'prepare')
+        assert result.exit_code==0
+        identity=captured[0]({'action':'execute','feature':'agent_identity','arguments':{}})
+        assert identity.document['alias']==prepared['checker_alias']
+        assert identity.document['purpose']=='checker'
+        denied=captured[0]({'action':'execute','feature':'send_instruction',
+                            'arguments':{'alias':ready['alias'],'instruction':'not authorized'}})
+        assert denied.failed
+        assert denied.document['error']=='Unknown feature: send_instruction'

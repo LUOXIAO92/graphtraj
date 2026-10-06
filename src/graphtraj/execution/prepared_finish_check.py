@@ -71,6 +71,14 @@ def material(record: dict) -> dict:
                 'task_name': '<actual native returned task_name>'}}}
 
 
+def retain_checker(host: object, alias: str | None = None) -> object:
+    """Keep the existing read-only GraphTraj checker interface on creation/restoration."""
+    child = host.register_checker(host.receiver, resume=alias)
+    child.allowed_features = {'agent_identity', 'ticket_graph', 'alias_status'}
+    host.prepared_checks[child.alias] = child
+    return child
+
+
 def prepare(host: object, prompt: str | None = None, turn: str | None = None) -> dict:
     """Register one checker per checked turn and return its native full-history action."""
     runner, adapter, connection = owner(host)
@@ -88,8 +96,7 @@ def prepare(host: object, prompt: str | None = None, turn: str | None = None) ->
                 and not record.get('actionable_delivered')):
             if record['state'] == 'prepared':
                 if record['checker_alias'] not in host.prepared_checks:
-                    host.prepared_checks[record['checker_alias']] = host.register_checker(
-                        host.receiver, resume=record['checker_alias'])
+                    retain_checker(host, record['checker_alias'])
                 return material(record)
             if record['state'] == 'running':
                 return {'status': 'running', 'checker_alias': record['checker_alias'],
@@ -100,8 +107,7 @@ def prepare(host: object, prompt: str | None = None, turn: str | None = None) ->
                     'result': record.get('result'), 'native_observation': record.get('native_observation')}
         if record['state'] in ('prepared', 'running'):
             operate(host, 'cancel', record['checker_alias'], None, 0)
-    child = host.register_checker(host.receiver)
-    host.prepared_checks[child.alias] = child
+    child = retain_checker(host)
     _, directory = read_alias_mapping(runner, child.alias)
     record = {'state': 'prepared', 'checker_alias': child.alias, 'parent': host.alias,
               'preparation': native}
@@ -131,7 +137,7 @@ def operate(
         return {'status': record['state'], 'checker_alias': checker_alias,
                 'result': record.get('result'), 'native_observation': record.get('native_observation')}
     if checker_alias not in host.prepared_checks:
-        host.prepared_checks[checker_alias] = host.register_checker(host.receiver, resume=checker_alias)
+        retain_checker(host, checker_alias)
     if action == 'collect' and not task_name and not record.get('native'):
         raise RunnerError('invalid-input', 'Supply the actual returned native task_name.')
 

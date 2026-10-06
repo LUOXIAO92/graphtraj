@@ -175,8 +175,11 @@ an exception to the same Main. Keep real user stops and execution limits;
 the check grants no approval, time extension or acceptance. Unreadable state or
 checker errors remain explicit failures, not a completed-task conclusion.
 Every activation visibly starts with `[GraphTraj hook: finish-check]` and
-reports release, continuation, exclusion or failure with its reason. Private
-logs alone do not satisfy this feedback; disabled hooks do not claim execution.
+shows the actual decision and why it permits or prevents ending the turn.
+Start, completed and waiting use host-visible output without waking Main;
+only actionable returns work to Main. Waiting does not mean the task is complete.
+Errors remain visible hook failures. Private logs alone do not satisfy this
+feedback; disabled hooks do not claim execution.
 
 Ordinary children and the checker itself do not run Main's finalize hook.
 This task-state check does not add automatic code Review or another task ledger.

@@ -763,9 +763,11 @@ it continues. Ordinary children and the checker do not acquire a recursive
 completion hook; user interruption and execution limits remain effective.
 
 Every activation identifies itself with `[GraphTraj hook: finish-check]` and
-shows its start and outcome: release, continue, skip or failure with a reason.
-Errors must reach the user/Main rather than silently pass or remain only in
-private logs. A disabled hook makes no claim to have run.
+shows its start and actual decision with the reason for allowing or preventing
+the turn from ending. Start, completed and waiting appear in the host's visible
+hook output without sending new input to Main; only actionable returns work to
+Main. Waiting is not task completion. Errors appear as visible hook failures,
+not a pass or private-log-only message. A disabled hook makes no claim to have run.
 
 The checker does not redo code review or reconstruct requirements from native
 Traces. Reference or checker failures are not completion evidence. Native

@@ -10,11 +10,12 @@ from graphtraj.interfaces.cli.projection import OperationCommand, invoke_tool
 
 
 @click.command('bind-finalize', cls=OperationCommand, feature='bind_main_finalize')
-@click.option('--summary-issue', required=True)
-def bind_command(summary_issue: str) -> None:
-    """Bind the actual Main and print hook material for host review/adoption."""
+@click.option('--summary-issue')
+def bind_command(summary_issue: str | None) -> None:
+    """Report the owning-host adoption needed instead of creating a legacy binding."""
     try:
-        result = invoke_tool('bind_main_finalize', {'summary_issue': summary_issue})
+        arguments = {'summary_issue': summary_issue} if summary_issue is not None else {}
+        result = invoke_tool('bind_main_finalize', arguments)
     except Exception as error:
         raise click.ClickException(str(error)) from error
     click.echo(json.dumps(result.document, ensure_ascii=False))

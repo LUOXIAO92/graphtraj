@@ -9,35 +9,36 @@ from pathlib import Path
 
 import click
 
-from graphtraj.execution.main_finalize import check_main_finalize
+from graphtraj.execution.main_finalize import PREFIX
 
 
 @click.command()
 @click.option('--binding', required=True, type=click.Path(path_type=Path))
 @click.option('--hook-session', required=True)
 def main(binding: Path, hook_session: str) -> None:
-    """Receive native hook input and write only a valid Codex Stop response.
+    """Visibly refuse legacy static bindings without reading or changing them.
 
-    Other hook events skip before opening Main's private binding. SIGTERM becomes
-    KeyboardInterrupt so the async owner can cancel its checker; neither
-    interrupt emits a continuation decision.
+    This entry remains to report an actionable failure to old configurations.
+    The adopted owning host must invoke its finish_check callback; a native
+    Session argument cannot authenticate GraphTraj identity. SIGTERM still
+    exits without requesting continuation.
     """
     def interrupted(signum: int, frame: object) -> None:
         """Preserve a host cancellation instead of interpreting it as an error."""
         raise KeyboardInterrupt
 
     signal.signal(signal.SIGTERM, interrupted)
+    click.echo(f'{PREFIX} start: Resolving owning host.', err=True)
     try:
-        event = json.load(sys.stdin)
-        if (not isinstance(event, dict) or event.get('hook_event_name') != 'Stop'
-                or event.get('session_id') != hook_session):
-            result = {}
-        else:
-            result = check_main_finalize(binding, event)
+        json.load(sys.stdin)
+        raise ValueError(
+            'Legacy standalone hook cannot authenticate GraphTraj identity. '
+            'Keep it disabled; adopt HostTool.finish_check through the owning host.'
+        )
     except KeyboardInterrupt:
         raise SystemExit(130)
     except Exception as error:
-        reason = f'Completion hook failed: {error}'
+        reason = f'{PREFIX} failure: {error}'
         result = {'continue': False, 'stopReason': reason, 'systemMessage': reason}
     click.echo(json.dumps(result, ensure_ascii=False))
 

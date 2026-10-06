@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import shlex
-import sys
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
@@ -30,15 +28,11 @@ def proxy(
 
 
 def verify_main(connection: dict) -> str:
-    """Check native root metadata for the Session captured by the caller boundary."""
+    """Resolve transport handles; GraphTraj already verified the Agent purpose."""
     async def read() -> str:
         """Read metadata through the existing host, without reading conversation turns."""
         async with proxy(connection) as client:
             thread = await client.read_thread(connection['session'])
-            source = thread.get('source')
-            if (thread.get('parentThreadId') is not None
-                    or isinstance(source, dict) and 'subAgent' in source):
-                raise RuntimeAdapterError('authority-denied', 'A native child cannot bind Main Stop.')
             hook_session = thread.get('sessionId')
             if not isinstance(hook_session, str) or not hook_session:
                 raise ValueError('The native hook Session identity is unavailable.')
@@ -48,17 +42,25 @@ def verify_main(connection: dict) -> str:
 
 
 def hook(path: Path, binding: dict) -> dict:
-    """Return native hook configuration without installing or trusting it."""
-    command = shlex.join([
-        sys.executable, '-m', 'graphtraj.runtimes.codex.stop_hook',
-        '--binding', str(path), '--hook-session', binding['connection']['hook_session'],
-    ])
-    return {'hooks': {'Stop': [{'hooks': [{'type': 'command', 'command': command}]}]}}
+    """Refuse a standalone hook without an authenticated owning-host callback."""
+    raise RuntimeAdapterError(
+        'RUNTIME_UNSUPPORTED',
+        'finish-check requires the adopted owning HostTool lifecycle callback. '
+        'A standalone command hook cannot authenticate its GraphTraj caller.',
+    )
 
 
 def event_context(binding: dict, event: dict) -> dict | None:
     """Confirm Main's exact native turn, ignoring other lifecycle events."""
-    if event.get('hook_event_name') != 'Stop' or event.get('session_id') != binding['connection']['hook_session']:
+    if not isinstance(event, dict) or not isinstance(event.get('hook_event_name'), str):
+        raise ValueError('The native lifecycle event is unavailable.')
+    if event['hook_event_name'] in ('Interrupt', 'SubagentStop'):
+        return None
+    if event['hook_event_name'] != 'Stop':
+        raise ValueError('Unknown native finish-check lifecycle event.')
+    if not isinstance(event.get('session_id'), str) or not event['session_id']:
+        raise ValueError('The native event execution handle is unavailable.')
+    if event['session_id'] != binding['connection']['hook_session']:
         return None
     if not isinstance(event.get('turn_id'), str) or not event['turn_id']:
         raise ValueError('Stop did not identify its native turn.')
@@ -80,9 +82,13 @@ def event_context(binding: dict, event: dict) -> dict | None:
 
 def response(result: dict | None, continued: bool) -> dict:
     """Return a Stop decision; repeated checker errors cannot self-continue forever."""
-    if result is None or result['status'] in ('completed', 'waiting'):
-        return {}
-    reason = result['reason']
+    prefix = '[GraphTraj hook: finish-check]'
+    if result is None:
+        return {'systemMessage': f'{prefix} skip: owning turn stopped, changed or unrelated.'}
+    outcome = {'completed': 'pass', 'waiting': 'pass', 'actionable': 'continue', 'error': 'failure'}[result['status']]
+    reason = f"{prefix} {outcome}: {result['reason']}"
+    if result['status'] in ('completed', 'waiting'):
+        return {'systemMessage': reason}
     if result['status'] == 'actionable':
         return {'decision': 'block', 'reason': '\n'.join([reason, *result['nodes']])}
     if continued:
@@ -103,10 +109,6 @@ def check(
 
         async def handle(request: CodexServerRequest) -> dict:
             """Expose only read-only GraphTraj task summaries to this exact checker."""
-            from graphtraj.interfaces.gateway import handle_request
-            from graphtraj.execution.runner_status import runtime_caller
-            from graphtraj.workspace.runner_project import discover_runner_directory
-
             if (request.method != 'item/tool/call' or child_id is None
                     or request.params.get('threadId') != child_id
                     or request.params.get('tool') != 'graphtraj'):
@@ -114,10 +116,7 @@ def check(
 
             def call() -> dict:
                 """Keep the fork's caller identity separate from the root Main."""
-                root = Path(binding['cwd'])
-                with runtime_caller(discover_runner_directory(root), child_id):
-                    result = handle_request(request.params.get('arguments', {}), cwd=root,
-                                            allowed_features={'ticket_graph', 'alias_status'})
+                result = binding['checker_tool'](request.params.get('arguments', {}))
                 return {'contentItems': [{'type': 'inputText', 'text': json.dumps(result.document)}],
                         'success': not result.failed}
             return await asyncio.to_thread(call)
@@ -135,8 +134,20 @@ def check(
             execution = await client.start_execution(child, prompt)
             try:
                 # Leave time for native cancellation before the default 600s hook deadline.
-                result = await client.wait(execution, timeout=540)
+                pending = asyncio.create_task(client.wait(execution, timeout=540))
+                while not pending.done():
+                    await asyncio.wait({pending}, timeout=1)
+                    await asyncio.to_thread(binding['execution_allowed'])
+                    if not await client.is_current_turn(binding['session'], context['turn']):
+                        if not pending.done():
+                            await client.interrupt(execution)
+                        await pending
+                        return None
+                result = await pending
             except BaseException as error:
+                if not pending.done():
+                    pending.cancel()
+                await asyncio.gather(pending, return_exceptions=True)
                 try:
                     await client.interrupt(execution)
                     await client.wait(execution, timeout=10)

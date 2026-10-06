@@ -183,7 +183,7 @@ class RuntimeAdapter(RuntimePreparationAdapter, Protocol):
         """Capture this Runtime's owning host, or None when no host is available."""
 
     def verify_finalize_main(self, connection: dict) -> str:
-        """Verify the captured Main host and return its native Session identity."""
+        """Resolve the adopted host's native execution handle, not Agent authority."""
 
     def finalize_hook(self, path: Path, binding: dict) -> dict:
         """Return host-specific adoption material for an already captured binding."""
@@ -198,7 +198,14 @@ class RuntimeAdapter(RuntimePreparationAdapter, Protocol):
         prompt: str,
         created: Callable[[str], None],
     ) -> dict | None:
-        """Fork native context and bind the child before appending its check task."""
+        """Fork native context/model and associate the child before its check task.
+
+        ``binding['checker_tool']`` is the registered checker callback, and
+        ``binding['execution_allowed']`` checks the owning execution's stop
+        state. Use them without deriving identity from native handles. Cancel
+        native work when its owning execution stops; return None only for an
+        observed stop or changed turn. Unknown metadata must raise.
+        """
 
     def finalize_response(self, result: dict | None, continued: bool) -> dict:
         """Translate a check or bounded failure into the native host's end response."""

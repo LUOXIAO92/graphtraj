@@ -747,7 +747,12 @@ class CodexAppServer:
     async def is_current_turn(self, session: str, turn: str) -> bool:
         """Check the exact live turn without loading dialogue or execution items."""
         thread = await self.read_thread(session)
-        if thread.get('status', {}).get('type') != 'active':
+        status = thread.get('status')
+        if not isinstance(status, dict) or status.get('type') not in ('active', 'idle', 'notLoaded'):
+            raise self._protocol_failure('Main lifecycle status is unavailable or erroneous.')
+        if status['type'] == 'notLoaded':
+            raise self._protocol_failure('Main lifecycle state is not loaded.')
+        if status['type'] == 'idle':
             return False
         response = await self._call('thread/turns/list', {
             'threadId': session, 'limit': 1, 'itemsView': 'notLoaded',
@@ -755,7 +760,13 @@ class CodexAppServer:
         turns = response.get('data')
         if not isinstance(turns, list) or not turns or not isinstance(turns[0], dict):
             raise self._protocol_failure('The active Main turn could not be verified.')
-        return turns[0].get('id') == turn and turns[0].get('status') == 'inProgress'
+        current = turns[0]
+        if (not isinstance(current.get('id'), str) or not current['id']
+                or current.get('status') not in ('inProgress', 'completed', 'interrupted', 'failed')):
+            raise self._protocol_failure('Main turn metadata is unavailable or erroneous.')
+        if current['status'] == 'failed':
+            raise self._protocol_failure('Main turn failed.')
+        return current['id'] == turn and current['status'] == 'inProgress'
 
     def token_usage(self, session: CodexSession) -> dict[str, Any] | None:
         """Return only usage actually delivered by the native host, if available."""

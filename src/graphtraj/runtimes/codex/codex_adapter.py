@@ -342,13 +342,13 @@ class CodexRuntimeAdapter:
         return current_connection()
 
     def verify_finalize_main(self, connection: dict) -> str:
-        """Verify the captured Main through the owning Codex daemon."""
+        """Resolve the adopted Main's native transport through its owning daemon."""
         from graphtraj.runtimes.codex.finalize import verify_main
 
         return verify_main(connection)
 
     def finalize_hook(self, path: Path, binding: dict) -> dict:
-        """Return the supported command Stop carrier for this exact Main."""
+        """Refuse standalone hook adoption without the owning GraphTraj callback."""
         from graphtraj.runtimes.codex.finalize import hook
 
         return hook(path, binding)

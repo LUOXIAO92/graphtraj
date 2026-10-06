@@ -110,6 +110,7 @@ class HostTool:
     ) -> None:
         """Open the existing private control transport for this trusted callback."""
         self.cwd = cwd
+        self.receiver = receiver
         self.recovery_reviewer = recovery_reviewer
         self.allowed_features = allowed_features
         self.closed = False
@@ -195,6 +196,24 @@ class HostTool:
         except BaseException:
             child.close()
             raise
+
+    def finish_check(
+        self,
+        connection: dict[str, Any],
+        event: dict[str, Any],
+        *,
+        summary_issue: str | None = None,
+    ) -> dict[str, Any]:
+        """Handle an enabled native lifecycle event on this already adopted host.
+
+        This is an owning-host callback, never a model operation. The host
+        supplies its actual connection/event, displays receiver messages, and
+        applies the returned decision to the same Main. It must honor disabled
+        hooks and native user/budget cancellation before calling this method.
+        """
+        from graphtraj.execution.main_finalize import check_main_finalize
+
+        return check_main_finalize(self, connection, event, summary_issue=summary_issue)
 
     def _record_connection(self) -> None:
         """Keep the current receiver on the existing Agent mapping for child notices."""

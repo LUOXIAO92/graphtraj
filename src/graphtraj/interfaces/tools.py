@@ -1161,17 +1161,17 @@ for _name, (_path, _parameters) in _CLI.items():
 
 
 def bind_main_finalize(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> ToolResult:
-    """Bind the root caller's actual host without accepting model identity fields."""
+    """Explain why legacy binding cannot replace owning-host finish-check adoption."""
     from graphtraj.execution.main_finalize import bind_main_finalize as bind
 
-    return ToolResult(bind(_string_argument(arguments, 'summary_issue'), cwd or Path.cwd()))
+    return ToolResult(bind(arguments.get('summary_issue'), cwd or Path.cwd()))
 
 
 register_tool(
     'bind_main_finalize',
-    'Bind Main completion checking to the current host and return its hook configuration.',
+    'Explain required finish-check owning-host adoption; saved native bindings are unsupported.',
     {'type': 'object', 'properties': {'summary_issue': {'type': 'string'}},
-     'required': ['summary_issue'], 'additionalProperties': False},
+     'additionalProperties': False},
     bind_main_finalize,
     manual_ref="manuals/task-delivery/guide.md",
 )

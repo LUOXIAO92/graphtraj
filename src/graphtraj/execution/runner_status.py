@@ -375,6 +375,18 @@ def _unstarted_allocation(directory: Path) -> bool:
     )
 
 
+def unestablished_execution_allocation(directory: Path) -> bool:
+    """Whether retained lifecycle facts confirm no execution identity was established.
+
+    Unlike the subtree-only root-launch exemption, a pending launch is not
+    sufficient here. Native host/checker associations also prohibit exclusion.
+    """
+    if (directory.is_symlink() or not directory.is_dir()
+            or os.path.lexists(directory / 'native.yml')):
+        return False
+    return _unstarted_allocation(directory) or _terminal_unestablished_launch(directory)
+
+
 def _unestablished_root_launch(directory: Path) -> bool:
     """Exclude an authoritative root allocation without certifying it stopped.
 

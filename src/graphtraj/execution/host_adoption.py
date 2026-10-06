@@ -19,37 +19,58 @@ from graphtraj.execution.runner_io import write_yaml_durably
 from graphtraj.execution.runner_models import RunnerError
 from graphtraj.execution.runner_status import (
     read_alias_mapping, require_execution_allowed, require_host_adoption,
-    retained_session_directories,
+    retained_session_directories, unestablished_execution_allocation,
 )
 from graphtraj.interfaces.local_tool import bind
 from graphtraj.runtimes.runtime_adapter import current_recovery_reviewer, select_runtime_adapter
 from graphtraj.workspace.runner_project import discover_project_root, discover_runner_directory
 
 
-def execution_associations(runner: Path) -> Iterator[tuple[dict, dict]]:
+def execution_associations(
+    runner: Path, stage: str = 'lifecycle association lookup',
+) -> Iterator[tuple[dict, dict]]:
     """Read existing registered execution associations without inferring purpose."""
     directory = runner / 'sessions'
+    if directory.is_symlink():
+        raise RunnerError('operation-failed', f'{stage}: Runner sessions directory is a symlink.')
     paths = list(directory.iterdir()) if directory.exists() else []
     seen = set()
     for path in [*paths, *retained_session_directories(runner)]:
         alias = path.name if path.parent == directory else path.parent.name
-        if alias in seen or not path.is_dir():
+        if alias in seen:
             continue
         seen.add(alias)
-        mapping, path = read_alias_mapping(runner, alias)
-        native_path = path / 'native.yml'
-        native = yaml.safe_load(native_path.read_text()) if native_path.exists() else {}
-        if not isinstance(native, dict):
-            raise RunnerError('operation-failed', 'Invalid registered execution association.')
+        try:
+            if unestablished_execution_allocation(path):
+                continue
+            mapping, path = read_alias_mapping(runner, alias)
+            native_path = path / 'native.yml'
+            if native_path.is_symlink():
+                raise RunnerError('operation-failed', 'Registered execution association is a symlink.')
+            native = yaml.safe_load(native_path.read_text()) if native_path.exists() else {}
+            if (not isinstance(native, dict) or (native_path.exists() and (
+                    native.get('runtime') != mapping['runtime']
+                    or not isinstance(native.get('session'), str) or not native['session']))):
+                raise RunnerError('operation-failed', 'Invalid registered execution association.')
+        except RunnerError as error:
+            raise RunnerError(error.code, f'{stage}: Agent {alias}: {error.message}') from error
+        except (OSError, UnicodeError, yaml.YAMLError) as error:
+            raise RunnerError('operation-failed',
+                              f'{stage}: Agent {alias}: Cannot read execution records ({type(error).__name__}).') from error
         session = native.get('session') or mapping.get('session')
         if session:
             yield mapping, {**native, 'runtime': mapping['runtime'], 'session': session}
 
 
-def require_unclaimed_execution(runner: Path, connection: dict, resume: str | None) -> None:
+def require_unclaimed_execution(
+    runner: Path,
+    connection: dict,
+    resume: str | None,
+    stage: str = 'before adoption review',
+) -> None:
     """Prevent duplicate adoption and promotion of retained checker/member records."""
     matched = []
-    for mapping, native in execution_associations(runner):
+    for mapping, native in execution_associations(runner, stage):
         if (native['runtime'], native['session']) == (connection['runtime'], connection['session']):
             if resume == mapping['alias'] and native.get('codex_home') != connection.get('codex_home'):
                 raise RunnerError('authority-denied', 'Restoration cannot change the owning native connection.')
@@ -98,7 +119,7 @@ def external_main(cwd: Path, resume: str | None = None) -> Iterator[dict]:
         mapping, directory = read_alias_mapping(runner, alias)
         # Serialize association publication with concurrent adoption and stopping.
         with execution_start_lock(runner):
-            require_unclaimed_execution(runner, connection, resume)
+            require_unclaimed_execution(runner, connection, resume, 'after Agent registration')
             require_execution_allowed(runner, alias, mapping)
             write_yaml_durably(directory / 'native.yml', connection)
         credential = secrets.token_hex(32)

@@ -116,7 +116,7 @@ def check_main_finalize(
         def execution_allowed() -> None:
             """Cancel checker execution when either Runner or its owning host stops."""
             if host.closed:
-                raise RunnerError('operation-unavailable', 'The owning host attachment closed.')
+                raise RunnerError('host-closed', 'The owning host attachment closed.')
             require_execution_allowed(runner, host.alias, mapping)
 
         binding['execution_allowed'] = execution_allowed
@@ -164,7 +164,7 @@ def check_main_finalize(
         announce('skip', 'The owning execution was interrupted; no continuation is requested.')
         raise
     except Exception as error:
-        if isinstance(error, RunnerError) and error.code in ('subtree-stopped', 'session-retired'):
+        if isinstance(error, RunnerError) and error.code in ('subtree-stopped', 'session-retired', 'host-closed'):
             announce('skip', str(error))
             raise
         reason = f'finish-check failed: {error}'

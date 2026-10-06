@@ -11,6 +11,7 @@ import sys
 import tempfile
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from contextvars import ContextVar
 from pathlib import Path
@@ -51,22 +52,38 @@ def worker_connection(
     operate: Callable[[dict], dict],
     *,
     authenticate: Callable[[int], None] | None = None,
+    concurrent: bool = False,
 ) -> Iterator[str]:
     """Serve local requests without requiring a listening network/socket permission."""
     stop = threading.Event()
+    executor = ThreadPoolExecutor(max_workers=2) if concurrent else None
     with tempfile.TemporaryDirectory(prefix='control-', dir=directory) as address:
         def serve() -> None:
             """Publish complete responses while native work continues on its own loop."""
+            pending = {}
+
+            def answer(descriptor: int) -> None:
+                """Close the pinned directory after its one request has been answered."""
+                try:
+                    _answer_request(descriptor, operate, authenticate)
+                finally:
+                    os.close(descriptor)
+
             while not stop.is_set():
                 for entry in Path(address).iterdir():
+                    if entry in pending:
+                        if pending[entry].done():
+                            del pending[entry]
+                        continue
                     try:
                         descriptor = os.open(entry, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
                     except OSError:
                         continue
-                    try:
-                        _answer_request(descriptor, operate, authenticate)
-                    finally:
-                        os.close(descriptor)
+                    if executor is None:
+                        answer(descriptor)
+                    else:
+                        pending[entry] = executor.submit(answer, descriptor)
+                pending = {entry: future for entry, future in pending.items() if not future.done()}
                 stop.wait(0.01)
 
         thread = threading.Thread(target=serve, daemon=True)
@@ -76,6 +93,8 @@ def worker_connection(
         finally:
             stop.set()
             thread.join()
+            if executor is not None:
+                executor.shutdown(wait=True)
             # A caller removes its request directory after consuming the reply.
             # Keep acknowledged results available across fast native completion.
             deadline = time.monotonic() + OPERATION_TIMEOUT_SECONDS

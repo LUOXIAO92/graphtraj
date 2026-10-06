@@ -6,6 +6,7 @@ import hmac
 import json
 import os
 import secrets
+import threading
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
@@ -18,6 +19,7 @@ from graphtraj.execution.runner_io import write_yaml_durably
 from graphtraj.execution.runner_models import RunnerError
 from graphtraj.execution.runner_status import (
     read_alias_mapping, require_execution_allowed, require_host_adoption,
+    retained_session_directories,
 )
 from graphtraj.interfaces.local_tool import bind
 from graphtraj.runtimes.runtime_adapter import current_recovery_reviewer, select_runtime_adapter
@@ -27,12 +29,14 @@ from graphtraj.workspace.runner_project import discover_project_root, discover_r
 def execution_associations(runner: Path) -> Iterator[tuple[dict, dict]]:
     """Read existing registered execution associations without inferring purpose."""
     directory = runner / 'sessions'
-    if not directory.exists():
-        return
-    for path in directory.iterdir():
-        if not path.is_dir() or not (path / 'mapping.yml').exists():
+    paths = list(directory.iterdir()) if directory.exists() else []
+    seen = set()
+    for path in [*paths, *retained_session_directories(runner)]:
+        alias = path.name if path.parent == directory else path.parent.name
+        if alias in seen or not path.is_dir():
             continue
-        mapping, _ = read_alias_mapping(runner, path.name)
+        seen.add(alias)
+        mapping, path = read_alias_mapping(runner, alias)
         native_path = path / 'native.yml'
         native = yaml.safe_load(native_path.read_text()) if native_path.exists() else {}
         if not isinstance(native, dict):
@@ -47,6 +51,8 @@ def require_unclaimed_execution(runner: Path, connection: dict, resume: str | No
     matched = []
     for mapping, native in execution_associations(runner):
         if (native['runtime'], native['session']) == (connection['runtime'], connection['session']):
+            if resume == mapping['alias'] and native.get('codex_home') != connection.get('codex_home'):
+                raise RunnerError('authority-denied', 'Restoration cannot change the owning native connection.')
             matched.append(mapping)
     if matched and (len(matched) != 1 or matched[0]['alias'] != resume
                     or matched[0].get('purpose') != 'main'):
@@ -96,6 +102,7 @@ def external_main(cwd: Path, resume: str | None = None) -> Iterator[dict]:
             require_execution_allowed(runner, alias, mapping)
             write_yaml_durably(directory / 'native.yml', connection)
         credential = secrets.token_hex(32)
+        checking = threading.Lock()
         binding_path = directory / 'finish-hook.json'
         if resume:
             # Restored ownership revokes an abandoned ephemeral attachment.
@@ -131,9 +138,15 @@ def external_main(cwd: Path, resume: str | None = None) -> Iterator[dict]:
                 return {'status': 'skip', 'reason': f'GraphTraj {purpose} does not run Main completion checks.'}
             if matches[0]['alias'] != alias or purpose != 'main':
                 raise RunnerError('authority-denied', 'The lifecycle does not belong to this adopted Main.')
-            return host.finish_check(connection, event)
+            if not checking.acquire(blocking=False):
+                raise RunnerError('operation-running', 'This Main already has an active finish-check.')
+            try:
+                return host.finish_check(connection, event)
+            finally:
+                checking.release()
 
-        with worker_connection(directory, lifecycle) as address:
+        # The checker must be able to receive its skip while Main waits for it.
+        with worker_connection(directory, lifecycle, concurrent=True) as address:
             descriptor = os.open(binding_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
             with os.fdopen(descriptor, 'w') as stream:
                 json.dump({'address': address, 'credential': credential}, stream)

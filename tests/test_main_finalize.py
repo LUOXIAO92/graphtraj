@@ -45,7 +45,8 @@ for line in sys.stdin:
         result = {'thread':main_thread()}
         if options.get('read_id_from_request'): result['thread']['id'] = params['threadId']
     elif method == 'thread/turns/list':
-        result = {'data':[{'id':options.get('current_turn','main-turn'), 'status':options.get('turn_status','inProgress')}]}
+        turn = options.get('turns_by_thread', {}).get(params['threadId'], options.get('current_turn','main-turn'))
+        result = {'data':[{'id':turn, 'status':options.get('turn_status','inProgress')}]}
     elif method == 'thread/fork':
         if options.get('fork_error'):
             send({'id':request['id'],'error':{'code':-32600,'message':'fork unavailable'}})
@@ -66,6 +67,13 @@ for line in sys.stdin:
         if options.get('wait_for_interrupt'):
             options['stopped'] = True
             continue
+        if options.get('checker_hook_command'):
+            import shlex, subprocess
+            hook = subprocess.run(shlex.split(options['checker_hook_command']), input=json.dumps({
+                'hook_event_name':'Stop','session_id':'shared-native-session',
+                'turn_id':'check-turn','stop_hook_active':False,'model':'actual-model',
+            }), text=True, capture_output=True, timeout=10)
+            (root / 'checker-hook.json').write_text(hook.stdout)
         if options.get('tool_request'):
             send({'id':'checker-tool','method':'item/tool/call','params':{
                 'threadId':options.get('tool_caller',params['threadId']),
@@ -399,6 +407,21 @@ def test_native_stop_cancels_running_checker(host: tuple) -> None:
     wire = [json.loads(line) for line in (host[0] / 'wire.jsonl').read_text().splitlines()]
     cancelled = [m['params'] for m in wire if m['method'] == 'turn/interrupt']
     assert cancelled == [{'threadId': 'checker', 'turnId': 'check-turn'}]
+    assert 'skip:' in host[2][-1]['message']
+
+
+def test_closed_owning_host_does_not_request_continuation(host: tuple, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Closing the owner interrupts its active check instead of returning a block."""
+    def close_owner(binding: dict, context: dict, prompt: str, created: Callable) -> dict:
+        """Exercise the shared cancellation check after an actual HostTool close."""
+        host[1].close()
+        binding['execution_allowed']()
+        raise AssertionError('Closed host allowed checker execution')
+
+    monkeypatch.setattr(finalize, 'check', close_owner)
+    with pytest.raises(RunnerError) as failure:
+        stop(host)
+    assert failure.value.code == 'host-closed'
     assert 'skip:' in host[2][-1]['message']
 
 

@@ -762,6 +762,17 @@ finish the turn. Actionable unfinished nodes are returned to the same Main so
 it continues. Ordinary children and the checker do not acquire a recursive
 completion hook; user interruption and execution limits remain effective.
 
+When the owning host exposes its native fork as a Main tool, GraphTraj prepares
+and registers the checker through its public entry and returns the Adapter's
+invocation materials. Main performs that specific native action without
+configuration overrides and supplies its returned execution reference.
+GraphTraj verifies native provenance and correspondence with the prepared check,
+then reads the result and manages cancellation. A supplied handle is a lookup
+hint, not identity proof; a Main-transcribed verdict is not the native result.
+Preparation may request this specific Main action before a verdict exists;
+it is not a checker actionable decision. Existing records retain the checked
+turn and handle duplicates, stale preparations and interruption.
+
 Every activation identifies itself with `[GraphTraj hook: finish-check]` and
 shows its start and actual decision with the reason for allowing or preventing
 the turn from ending. Start, completed and waiting appear in the host's visible

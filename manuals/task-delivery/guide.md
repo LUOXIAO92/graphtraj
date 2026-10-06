@@ -174,6 +174,17 @@ approval permits Main to finish its turn. Actionable unfinished nodes return
 an exception to the same Main. Keep real user stops and execution limits;
 the check grants no approval, time extension or acceptance. Unreadable state or
 checker errors remain explicit failures, not a completed-task conclusion.
+
+For an authorized native-host preparation, use GraphTraj's public entry to
+register the checker and obtain the Adapter-generated invocation materials.
+Main performs only that native action, retaining full context and configuration,
+and supplies the returned execution reference. GraphTraj verifies provenance
+and correspondence with this check, reads its native result and manages
+cancellation; do not substitute a declared identity or transcribed verdict.
+Preparation can request its specific Main action before a checker result exists.
+Keep that preparation distinct from an actionable verdict, preserve the checked
+turn and honor the returned stale, duplicate or interrupted lifecycle state.
+
 Every activation visibly starts with `[GraphTraj hook: finish-check]` and
 shows the actual decision and why it permits or prevents ending the turn.
 Start, completed and waiting use host-visible output without waking Main;

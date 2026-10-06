@@ -30,7 +30,11 @@ authority, time, acceptance or permission to modify state. Historical failed
 nodes that the current graph explicitly replaces are not new blocking work.
 
 Return only a JSON object with status, reason and nodes. status is one of the
-four conclusions above. reason briefly explains the task-state evidence. nodes
+four conclusions above. Begin reason with the decisive fact and why it permits
+or prevents Main from ending this turn; a list of Ticket states alone is not
+a reason. For waiting, explain what prevents further authorized work and what
+event or approval permits it to resume; do not imply the unfinished goal is
+complete. Add only the task-state evidence needed to support that decision. nodes
 is a list of the relevant existing Ticket identifiers or URLs; use an empty
 list when none applies. For actionable, name the concrete unfinished nodes and
 next work so the same Main can continue. For waiting, identify the pending event

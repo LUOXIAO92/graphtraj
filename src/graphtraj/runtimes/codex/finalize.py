@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
+from graphtraj.execution.main_finalize import finish_check_outcome
 from graphtraj.runtimes.codex.app_server import CodexAppServer, CodexServerRequest
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 from graphtraj.workspace.runner_project import runtime_executable
@@ -87,15 +88,13 @@ def response(result: dict | None, continued: bool) -> dict:
     prefix = '[GraphTraj hook: finish-check]'
     if result is None:
         return {'systemMessage': f'{prefix} skip: owning turn stopped, changed or unrelated.'}
-    outcome = {'completed': 'pass', 'waiting': 'pass', 'actionable': 'continue', 'error': 'failure'}[result['status']]
-    reason = f"{prefix} {outcome}: {result['reason']}"
+    outcome, detail = finish_check_outcome(result)
+    reason = f'{prefix} {outcome}: {detail}'
     if result['status'] in ('completed', 'waiting'):
         return {'systemMessage': reason}
     if result['status'] == 'actionable':
         return {'decision': 'block', 'reason': '\n'.join([reason, *result['nodes']])}
-    if continued:
-        return {'continue': False, 'stopReason': reason, 'systemMessage': reason}
-    return {'decision': 'block', 'reason': reason}
+    return {'continue': False, 'stopReason': reason, 'systemMessage': reason}
 
 
 def check(

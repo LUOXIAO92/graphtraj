@@ -8,6 +8,7 @@ import os
 import secrets
 import threading
 from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Iterator
 
@@ -110,8 +111,16 @@ def external_main(cwd: Path, resume: str | None = None) -> Iterator[dict]:
             return selected_reviewer(exact)
         return adapter.native_recovery_approval(exact, root)
 
+    hook_messages: ContextVar[list[str] | None] = ContextVar('hook_messages', default=None)
+
     def receive(event: dict) -> None:
-        """Return notices through the same native connection, without a new Main."""
+        """Deliver hook notices in its native result, without starting a Main turn."""
+        messages = hook_messages.get()
+        if event.get('event') == 'finish-check':
+            if messages is None:
+                raise RunnerError('operation-failed', 'No owning hook output is available for finish-check.')
+            messages.append(event['message'])
+            return
         adapter.send_host_event(connection, event)
 
     with bind(root, event_receiver=receive, recovery_reviewer=review) as host:
@@ -170,9 +179,16 @@ def external_main(cwd: Path, resume: str | None = None) -> Iterator[dict]:
                 raise RunnerError('authority-denied', 'The lifecycle does not belong to this adopted Main.')
             if not checking.acquire(blocking=False):
                 raise RunnerError('operation-running', 'This Main already has an active finish-check.')
+            messages: list[str] = []
+            token = hook_messages.set(messages)
             try:
-                return host.finish_check(connection, event)
+                result = host.finish_check(connection, event)
+                # The fixed handler returns this to the current native hook UI.
+                # Only its actionable block decision requests Main continuation.
+                result['systemMessage'] = '\n'.join(messages)
+                return result
             finally:
+                hook_messages.reset(token)
                 checking.release()
 
         # The checker must be able to receive its skip while Main waits for it.

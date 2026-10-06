@@ -52,6 +52,17 @@ def parse_check_result(text: str) -> dict[str, Any]:
 PREFIX = '[GraphTraj hook: finish-check]'
 
 
+def finish_check_outcome(result: dict) -> tuple[str, str]:
+    """Separate waiting permission to end this turn from completed task work."""
+    status = result['status']
+    outcome = {'completed': 'pass', 'waiting': 'waiting',
+               'actionable': 'continue', 'error': 'failure'}[status]
+    reason = result['reason']
+    if status == 'waiting':
+        reason = f'{reason} Allow this turn to end; the task remains unfinished.'
+    return outcome, reason
+
+
 def finish_check_exclusion(purpose: str) -> str | None:
     """Explain exclusion only for a registered member/checker purpose."""
     if purpose in ('member', 'checker'):
@@ -87,11 +98,9 @@ def check_main_finalize(
 
     def respond(result: dict | None, reason: str = '') -> dict:
         """Deliver the visible outcome before returning the native decision."""
-        outcome = ('skip' if result is None else
-                   {'completed': 'pass', 'waiting': 'pass',
-                    'actionable': 'continue', 'error': 'failure'}[result['status']])
+        outcome, reason = ('skip', reason) if result is None else finish_check_outcome(result)
         reply = adapter.finalize_response(result, context['continued'])
-        announce(outcome, reason if result is None else result['reason'])
+        announce(outcome, reason)
         return reply
 
     try:

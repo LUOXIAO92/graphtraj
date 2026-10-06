@@ -21,9 +21,10 @@ def test_configured_settings_cannot_stand_in_for_effective_turn(
     root, owner, visible = host
     options(host, thread_config=configuration)
     result = stop(host)
-    assert result['decision'] == 'block'
-    assert 'complete effective Main turn configuration' in result['reason']
-    assert 'no checker was started' in result['reason']
+    assert result['continue'] is False
+    assert 'decision' not in result
+    assert 'complete effective Main turn configuration' in result['stopReason']
+    assert 'no checker was started' in result['stopReason']
     assert len(visible) == 2
     assert all(event['alias'] == owner.alias for event in visible)
     assert '[GraphTraj hook: finish-check] start:' in visible[0]['message']
@@ -54,8 +55,10 @@ def test_fixed_hook_process_exposes_configuration_failure(
     assert process.returncode == 0
     assert '[GraphTraj hook: finish-check] start:' in process.stderr
     result = json.loads(process.stdout)
-    assert result['decision'] == 'block'
-    assert '[GraphTraj hook: finish-check] failure:' in result['reason']
-    assert 'complete effective Main turn configuration' in result['reason']
-    assert 'failure:' in visible[-1]['message']
+    assert result['continue'] is False
+    assert 'decision' not in result
+    assert '[GraphTraj hook: finish-check] failure:' in result['stopReason']
+    assert 'complete effective Main turn configuration' in result['stopReason']
+    assert 'failure:' in result['systemMessage']
+    assert visible == []
     assert not records(root)

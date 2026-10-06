@@ -35,6 +35,18 @@ async def pages(client: CodexAppServer, method: str, parameters: dict) -> list[d
         parameters = {**parameters, 'cursor': cursor}
 
 
+def user_input_ids(entries: list[dict]) -> list[str]:
+    """Keep only native input identifiers so same-turn steering invalidates old checks."""
+    identifiers = []
+    for entry in entries:
+        item = entry.get('item')
+        if isinstance(item, dict) and item.get('type') == 'userMessage':
+            if not isinstance(item.get('id'), str) or not item['id']:
+                raise failure('Native Main input has no stable identifier.')
+            identifiers.append(item['id'])
+    return identifiers
+
+
 def prepare(connection: dict, task_name: str, prompt: str, turn: str | None) -> dict:
     """Bind materials to the actual active Main turn without setting any Runtime option."""
     async def run() -> dict:
@@ -48,7 +60,11 @@ def prepare(connection: dict, task_name: str, prompt: str, turn: str | None) -> 
                 raise failure('The owning Main turn is no longer active.')
             if turn is not None and current_id != turn:
                 raise failure('Preparation cannot substitute a later Main turn.')
+            entries = await pages(client, 'thread/items/list', {
+                'threadId': connection['session'], 'turnId': current_id, 'limit': 100,
+            })
             return {'session': connection['session'], 'turn': current_id, 'task_name': task_name,
+                    'input_ids': user_input_ids(entries),
                     'native_action': {'tool': 'collaboration.spawn_agent', 'arguments': {
                         'task_name': task_name, 'message': prompt, 'fork_turns': 'all'}},
                     'configuration_status': 'Native full-history model/effort inheritance; '
@@ -143,6 +159,10 @@ def observe(
                     interrupted = True
                     deadline = max(deadline, time.monotonic() + 5)
                 elif turn['status'] != 'inProgress':
+                    current_inputs = await pages(client, 'thread/items/list', {
+                        'threadId': preparation['session'], 'turnId': preparation['turn'], 'limit': 100,
+                    })
+                    stale = stale or user_input_ids(current_inputs) != preparation['input_ids']
                     if turn['status'] == 'failed' and not cancel and not stale:
                         return {**native, 'state': 'failed', 'turn': turn['id'],
                                 'reason': 'The native checker execution failed.'}

@@ -83,7 +83,9 @@ def prepare(host: object, prompt: str | None = None, turn: str | None = None) ->
         prompt += '\n\n' + json.dumps({'task_graph_hint': read_graph(configuration.state)})
     native = method(connection, 'finish_check_' + secrets.token_hex(16), prompt, turn)
     for directory, record in records(host, runner):
-        if record['preparation']['turn'] == native['turn']:
+        if (record['preparation']['turn'] == native['turn']
+                and record['preparation'].get('input_ids') == native['input_ids']
+                and not record.get('actionable_delivered')):
             if record['state'] == 'prepared':
                 if record['checker_alias'] not in host.prepared_checks:
                     host.prepared_checks[record['checker_alias']] = host.register_checker(
@@ -175,6 +177,7 @@ def operate(
                     record['result'] = {'status': 'error', 'reason': native['configuration_error'], 'nodes': []}
                 else:
                     record['result'] = parsed
+                    record['actionable_delivered'] = parsed['status'] == 'actionable'
         save(directory, record)
     finally:
         if record['state'] in ('completed', 'cancelled', 'failed'):

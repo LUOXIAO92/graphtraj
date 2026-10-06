@@ -202,3 +202,18 @@ def test_native_execution_and_result_failure_are_visible(prepared_external: tupl
         assert result.exit_code!=0 and response['status']=='failed'
         assert response['result']['status']=='error'
         assert 'failure:' in response['hook_response']['systemMessage']
+
+
+def test_same_turn_new_user_input_invalidates_result(prepared_external: tuple) -> None:
+    """A steered goal cannot receive the prepared checker verdict for earlier input."""
+    root, _, _=prepared_external
+    with external_main(root) as ready:
+        _, prepared=call(ready,'prepare')
+        path=native_child(root,prepared)
+        options=json.loads((root/'native-options.json').read_text())
+        options['spawn_items'].append({'turnId':'main-turn','item':{
+            'type':'userMessage','id':'new-user-input','content':[{'type':'text','text':'Changed goal'}]}})
+        (root/'native-options.json').write_text(json.dumps(options))
+        result,response=call(ready,'collect',checker_alias=prepared['checker_alias'],task_name=path)
+        assert result.exit_code==0 and response['status']=='cancelled'
+        assert 'result' not in response

@@ -105,6 +105,29 @@ A failed integration or necessary check does not complete the Ticket or unlock i
 successors. Finish when the accepted scope is integrated or authorized progress is
 blocked; report exact results and remaining obstacles.
 
+## GraphTraj Agent identity
+
+GraphTraj registers Main, members and completion checkers with their purpose
+and direct parent. Runtime session/thread identifiers remain execution handles
+inside Adapters rather than identity or authority. Query the bound caller with
+`agent-runner identity` or the `agent_identity` tool operation; an unregistered
+model caller is not Main, and human CLI access is a separate context.
+
+An existing external Main is adopted by its owning host through
+`HostTool.adopt_main(runtime_name)`, with the actual host reviewer and event
+receiver supplied to `bind`. These callbacks are host integration, not model
+request arguments or an approval stub. No replacement Main conversation is
+started. A new binding restores a stopped identity with `resume=recorded_alias`
+or performs authorized replacement with `replaces=stopped_alias`, preserving
+history and original descendant parentage.
+
+The owning Main registers a checker through `register_checker(receiver)` before
+Adapter execution and closes its binding when finished. CLI/MCP calls use that
+Agent's `cli_channel(verify_writer)` and required channel access; the host checks
+the actual writer rather than trusting an environment address or shared PID.
+Adoption requires a host capable of this integration; installing a package does
+not retrofit callbacks into an already-running conversation or enable a hook.
+
 ## Main finalize checking
 
 For a supported owning Runtime, `graphtraj bind-finalize --summary-issue <ref>`

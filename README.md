@@ -1102,18 +1102,52 @@ print(reply.document, reply.failed)
 ```
 
 For task events, an owning Python host can retain its existing parent Session
-connection through the tool binding:
+connection and adopt the existing Main through the tool binding:
 
 ```python
 callback = bind(
     cwd=Path("/absolute/path/to/harness-project-root"),
     event_receiver=forward_to_parent,
+    recovery_reviewer=review_in_owning_host,
 )
+main_alias = callback.adopt_main(runtime_name)
 # Register callback in the host's tool API and retain it across tool calls.
 # forward_to_parent uses the host's existing Session client.
 # When the host has finished receiving all Agent events:
 callback.close()
 ```
+
+`runtime_name` identifies the host's configured execution backend. GraphTraj
+allocates the Agent alias and records its purpose and direct parent using the
+existing Runner records. Native conversation identifiers remain Adapter
+execution handles; they do not grant Main authority. `agent-runner identity`
+and the `agent_identity` tool operation report the calling GraphTraj identity.
+An unregistered model binding is not Main. Ordinary human CLI and desktop
+access remain distinct from Agent calls.
+
+`review_in_owning_host` must be the actual host review mechanism; it approves
+the concrete adoption before registration. The host calls `adopt_main`, not a
+model request carrying a chosen role or alias. Adoption attaches the already
+running Main rather than creating a replacement conversation. For stopped
+identity restoration, a new unbound host tool calls
+`adopt_main(runtime_name, resume=recorded_alias)`. Authorized replacement uses
+`replaces=stopped_alias`; retained history and descendants' original parentage
+are preserved. An already-bound member cannot adopt itself as Main.
+
+Before executing a completion checker, the owning Main host calls
+`callback.register_checker(checker_event_receiver)` and uses the returned
+child binding for that checker. Its purpose and direct parent exist before
+Adapter execution; a checker cannot recursively register another checker.
+Close each binding at the end of its receiving lifetime. Identity registration
+does not install, enable or prove operation of a native completion hook.
+
+For CLI or MCP calls from a registered Agent, the owning host uses
+`callback.cli_channel(verify_writer)`. The verifier must authenticate the
+kernel-observed writer for this specific Agent execution, including when
+several Agents share a host process. Give that execution the returned channel
+as `GRAPHTRAJ_CLI_CONNECTION` and only its required channel filesystem access.
+An environment address, shared PID or model-supplied identity alone is not
+authority. The installed CLI must match the host's GraphTraj implementation.
 
 The host supplies `forward_to_parent`; it forwards to the Session that the host
 already owns. A running parent receives input in its current turn; an idle
@@ -1215,7 +1249,9 @@ authority are unchanged. Registry extensions belong to
 a dependency of CLI, Python, local bridge or native callbacks.
 
 A Codex host can supply its actual calling thread through `params._meta.threadId`
-for the existing in-band caller-notice binding. The awaited call can return an
+for the existing in-band caller-notice transport; this does not identify or
+authorize a GraphTraj Agent. Agent MCP calls use the authenticated host channel
+described above. The awaited call can return an
 enforced stop in `stop_deliveries`, preserving the stop identity, actual stop time
 and elapsed duration. A thread ID alone does not attach a persistent event
 receiver or prove Agent processing. A host that needs delivery after the tool

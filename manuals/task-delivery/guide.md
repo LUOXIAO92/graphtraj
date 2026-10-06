@@ -164,8 +164,10 @@ Agent commands keep their own interface and file permissions. Trusted hook
 execution is not evidence of a model command's filesystem sandbox.
 
 GraphTraj identity selects Main and excludes members and checkers. The checker
-uses inherited native context and Main's actual model to identify the current
-goal, then treats its Issue, current DAG and Tickets as the state authority.
+inherits native context and Main's complete effective Runtime configuration,
+including current-turn overrides. The Adapter must preserve those settings or
+fail explicitly, rather than substitute stored defaults. The checker identifies
+the current goal, then treats its Issue, current DAG and Tickets as the state authority.
 Resolve stale/conflicting hints or return an error when the goal cannot be
 identified. Completed work or legitimate waiting for an execution, event or
 approval permits Main to finish its turn. Actionable unfinished nodes return
@@ -179,7 +181,7 @@ logs alone do not satisfy this feedback; disabled hooks do not claim execution.
 Ordinary children and the checker itself do not run Main's finalize hook.
 This task-state check does not add automatic code Review or another task ledger.
 Verify actual host behavior after adopting a fixed installation and report only
-observable context, model and optional cache-usage evidence.
+observable context, effective configuration and optional cache-usage evidence.
 
 ## Limits and recovery
 

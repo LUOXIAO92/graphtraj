@@ -752,8 +752,10 @@ general-purpose privileged tool. Installing the package alone establishes
 neither adoption nor actual native hook behavior.
 
 GraphTraj identity scopes the hook to Main and excludes registered members and
-checkers. The checker inherits Main's available native context and actual
-model, identifies the current goal, then reads its Issue, DAG and Tickets.
+checkers. The checker inherits Main's native context and complete effective
+Runtime configuration, including current-turn overrides. The Adapter preserves
+these settings and fails explicitly when it cannot; stored defaults are not a
+substitute. The checker identifies the current goal, then reads its Issue, DAG and Tickets.
 Conflicting or stale hints cannot override that current task; an unresolved
 goal is an error. Completed work and legitimate waiting may
 finish the turn. Actionable unfinished nodes are returned to the same Main so

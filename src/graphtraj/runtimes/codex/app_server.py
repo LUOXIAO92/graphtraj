@@ -719,30 +719,21 @@ class CodexAppServer:
         return {'session': thread_id, 'activity': status['type'], 'turn': turn}
 
     async def fork_session(self, parent: dict[str, Any]) -> CodexSession:
-        """Fork native history with the source's current model/provider unchanged.
+        """Refuse a checker fork without native effective-turn configuration capture.
 
-        The caller binds the returned handle to its actual Main before starting
-        execution. Fork lineage is checked, never represented as native parent
-        metadata. No private rollout or replacement instructions are supplied.
+        Codex 0.160 exposes configured thread settings, explicitly not per-turn
+        telemetry. Its turn metadata omits effective configuration. Forking with
+        model/provider alone can silently replace current-turn overrides with
+        defaults, so no child is created until the native contract supports
+        complete capture, transmission and confirmation.
         """
-        if any(not isinstance(parent.get(k), str) or not parent[k]
-               for k in ('id', 'model', 'modelProvider')):
-            raise CodexAdapterError('RUNTIME_REQUEST_INVALID', 'Main model metadata is unavailable.')
-        response = await self._call('thread/fork', {
-            'threadId': parent['id'], 'model': parent['model'],
-            'modelProvider': parent['modelProvider'], 'excludeTurns': True,
-        })
-        thread = response.get('thread')
-        if (not isinstance(thread, dict) or not isinstance(thread.get('id'), str)
-                or not thread['id'] or thread['id'] == parent['id']
-                or thread['id'] in self._sessions
-                or thread.get('forkedFromId') != parent['id']
-                or response.get('model') != parent['model']
-                or response.get('modelProvider') != parent['modelProvider']):
-            raise self._protocol_failure('thread/fork did not preserve the bound source and model.')
-        session = CodexSession(thread['id'], None)
-        self._sessions[session.thread_id] = session
-        return session
+        raise CodexAdapterError(
+            'RUNTIME_CAPABILITY_UNSUPPORTED',
+            'Cannot inherit complete effective Main turn configuration: the native '
+            'Codex interface does not expose all current-turn settings or confirm '
+            'their inheritance. Thread/project defaults cannot replace turn '
+            'overrides; no checker was started.',
+        )
 
     async def is_current_turn(self, session: str, turn: str) -> bool:
         """Check the exact live turn without loading dialogue or execution items."""

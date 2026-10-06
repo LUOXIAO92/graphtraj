@@ -32,7 +32,8 @@ def send(message):
 def main_thread():
     return {'id':'main', 'sessionId':'shared-native-session', 'model':'configured-model', 'modelProvider':'actual-provider',
             'source':'appServer', 'parentThreadId':None,
-            'status':options.get('thread_status', {'type':'active' if not options.get('stopped') else 'idle'})}
+            'status':options.get('thread_status', {'type':'active' if not options.get('stopped') else 'idle'}),
+            **options.get('thread_config', {})}
 
 for line in sys.stdin:
     request = json.loads(line)

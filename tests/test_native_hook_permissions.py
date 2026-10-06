@@ -19,10 +19,25 @@ from pathlib import Path
 import pytest
 
 
+# Capture only this explicit opt-in before the autouse Runner environment cleanup.
+# Never retain or render the surrounding environment in assertion diagnostics.
+_TRUST_APPROVED = os.environ.get('GRAPHTRAJ_NATIVE_HOOK_TRUST_ONCE') == '1'
+
+
 pytestmark = pytest.mark.skipif(
     os.environ.get('GRAPHTRAJ_NATIVE_HOOK_PROBE') != '1',
     reason='Explicit opt-in required for the real native hook permission probe',
 )
+
+
+def require_fixture_trust() -> None:
+    """Refuse before native setup unless this invocation explicitly opted in."""
+    if not _TRUST_APPROVED:
+        pytest.fail(
+            'Explicit user approval to trust this exact inert fixture hook is required; '
+            'no native setup, turn or trust write was performed.',
+            pytrace=False,
+        )
 
 
 @dataclass
@@ -97,6 +112,9 @@ async def loaded_hook(adapter: object, root: Path) -> dict:
 
 async def observe_fixture(tmp_path: Path, *, execute: bool) -> None:
     """Observe registry/trust, then optionally actual hook events on two threads."""
+    if execute:
+        require_fixture_trust()
+
     from graphtraj.runtimes.codex.app_server import CodexAppServer, CodexServerRequest
 
     executable = shutil.which('codex')
@@ -123,10 +141,6 @@ async def observe_fixture(tmp_path: Path, *, execute: bool) -> None:
             assert hook['trustStatus'] == 'untrusted', hook
             if not execute:
                 return
-            assert os.environ.get('GRAPHTRAJ_NATIVE_HOOK_TRUST_ONCE') == '1', (
-                'Explicit user approval to trust this exact inert fixture hook is required; '
-                'no turn was started and no trust was changed.'
-            )
             # The operator must explicitly approve this fixture-only native trust write.
             # This is not a model-supplied approval or current-host configuration.
             await adapter._call('config/batchWrite', {
@@ -187,6 +201,11 @@ async def observe_fixture(tmp_path: Path, *, execute: bool) -> None:
 def test_native_hook_configuration_is_visible_before_start(tmp_path: Path) -> None:
     """Read actual loading/enabled/untrusted metadata without turns or trust writes."""
     asyncio.run(observe_fixture(tmp_path, execute=False))
+
+
+def test_fixture_trust_opt_in_survives_runner_cleanup() -> None:
+    """Exercise authorization propagation without launching any native process."""
+    require_fixture_trust()
 
 
 def test_native_session_hooks_keep_per_thread_file_permissions(tmp_path: Path) -> None:

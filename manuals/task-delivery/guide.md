@@ -130,17 +130,28 @@ not retrofit callbacks into an already-running conversation or enable a hook.
 
 ## Main completion checking: finish-check
 
-The owning host must first adopt Main and retain its authenticated
-`HostTool.cli_channel(verify_writer)`. From that channel, `graphtraj bind-finalize`
-or `bind_main_finalize` prepares a registered alias and native hook material.
-An optional summary Issue is only a hint. Package installation alone does not
-attach an existing host; report a missing owning-host entry explicitly rather
-than fabricating a caller or temporary bridge.
+An existing external Codex Main uses `graphtraj adopt-main` from its actual
+native terminal in the Harness Project Root. The command obtains the selected
+native review, registers the existing conversation and prints its ready alias
+and hook material. Keep this foreground owner running; it creates no replacement
+Main and enables no hook. Closing it revokes the private lifecycle attachment.
+Restore a stopped owner in the same conversation with
+`graphtraj adopt-main --resume <returned-alias>`, preserving its history.
+
+An already integrated Python host can instead retain its authenticated
+`HostTool.cli_channel(verify_writer)` and use `graphtraj bind-finalize` or
+`bind_main_finalize`. An optional summary Issue is only a hint; the public
+adoption command does not need it. The shared `adopt_main` feature directs
+callers to the retained CLI owner, not a model-supplied executor. Installation
+alone establishes neither adoption nor observed hook behavior.
 
 Review and adopt returned material through the Runtime's configuration and
 trust mechanism, honoring explicit user disablement. Preserve the owning
 host/channel for the hook's lifetime. Preparation is not enablement or observed
 receipt; legacy static Session bindings and expired channels fail visibly.
+The fixed trusted hook uses a private lifecycle-only host attachment; ordinary
+Agent commands keep their own interface and file permissions. Trusted hook
+execution is not evidence of a model command's filesystem sandbox.
 
 GraphTraj identity selects Main and excludes members and checkers. The checker
 uses inherited native context and Main's actual model to identify the current

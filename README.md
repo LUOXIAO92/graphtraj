@@ -687,27 +687,52 @@ relationships; it does not remove a Worktree still used by another execution.
 
 ## Main completion checks: finish-check
 
-The existing owning host first adopts Main and retains an authenticated
-`HostTool.cli_channel(verify_writer)` as described under Python host integration
-below. The verifier admits only that Agent's actual command and hook writers.
-Installing GraphTraj alone does not attach an already-running host; if the
-host cannot establish this boundary, keep the hook disabled and report the
-missing integration.
+For an existing external Codex Main, run this command from its own native
+terminal in the Harness Project Root, preserving its actual launch context:
 
-From that live channel, prepare the native hook:
+```sh
+graphtraj adopt-main
+```
+
+The command obtains the selected native review for that existing conversation,
+registers its GraphTraj identity and prints an `adoption_status: ready` document
+with its alias and hook material. It remains running in the foreground to own
+the connection; retain that terminal while using the hook. It does not start
+a replacement Main, enable the hook, change trust or upgrade other tools.
+Review the returned material before adopting it through the host's native
+configuration and trust mechanism, honoring explicit user disablement.
+
+Ctrl-C or closing the owner revokes its private hook attachment without closing
+the native conversation. To restore a stopped owner for that same conversation,
+use `graphtraj adopt-main --resume <returned-alias>` through the same reviewed
+entry. Preserve the original records; do not substitute a native ID or a chosen
+role. A registered member/checker cannot adopt itself as Main. The shared
+`adopt_main` feature describes this CLI entry; ordinary tool requests cannot
+supply its host executor.
+
+For a host already integrated through the Python API below, retain its
+authenticated `HostTool.cli_channel(verify_writer)` and prepare material with:
 
 ```sh
 graphtraj bind-finalize
 ```
 
-The shared operation is `bind_main_finalize`. Optional `--summary-issue` or
+That shared operation is `bind_main_finalize`. Optional `--summary-issue` or
 `summary_issue` supplies a task hint, not an authoritative or fixed target.
 The result contains the registered alias and native hook material. Review and
 adopt that material through the Runtime's supported configuration, preserving
 existing settings, permissions and explicit user disablement. Preparation
 does not enable or trust the hook. Keep the owning host and channel alive for
 the hook's lifetime; expired channels report failure. Old static Session
-bindings are refused rather than promoted to Main identities.
+bindings are refused rather than promoted to Main identities. The public
+`adopt-main` route prepares its own hook material without this extra command.
+
+The fixed, user-trusted hook is host code using a private lifecycle-only
+attachment. Ordinary Agent CLI/tool calls retain their own permissions and
+authenticated channels. Do not infer that a trusted hook inherits the same
+filesystem sandbox as a model command, or expose its private attachment as a
+general-purpose privileged tool. Installing the package alone establishes
+neither adoption nor actual native hook behavior.
 
 GraphTraj identity scopes the hook to Main and excludes registered members and
 checkers. The checker inherits Main's available native context and actual

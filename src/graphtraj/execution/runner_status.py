@@ -163,7 +163,32 @@ def _live_session_owners(runner_directory: Path) -> Dict[int, str | None]:
     return owners
 
 
-def is_direct_owner(caller: str | None, mapping: Mapping[str, Any]) -> bool:
+def registered_parent(runner_directory: Path, mapping: Mapping[str, Any]) -> str | None:
+    """Resolve a retained host association without rewriting the recorded parent.
+
+    Only an already registered Main may represent the exact old host connection.
+    A native handle locates that registration; it never creates an Agent purpose.
+    """
+    parent = mapping.get("parent")
+    connection = mapping.get("parent_connection")
+    if parent is not None or not isinstance(connection, dict):
+        return parent
+    if not (runner_directory / "sessions" / mapping["alias"] / "mapping.yml").exists():
+        return None  # A root launch has not established its Agent record yet.
+    from graphtraj.execution.host_adoption import execution_associations
+
+    matches = [registered["alias"] for registered, native in execution_associations(runner_directory)
+               if registered.get("purpose") == "main"
+               and all(native.get(key) == connection.get(key)
+                       for key in ("runtime", "session", "codex_home"))]
+    if len(matches) > 1:
+        raise RunnerError("authority-denied", "The retained parent has multiple registered owners.")
+    return matches[0] if matches else None
+
+
+def is_direct_owner(
+    caller: str | None, mapping: Mapping[str, Any], runner_directory: Path,
+) -> bool:
     """Return whether one caller directly owns the Agent this mapping records.
 
     A Session directly owns the children the Runner recorded with it as their
@@ -173,7 +198,7 @@ def is_direct_owner(caller: str | None, mapping: Mapping[str, Any]) -> bool:
     recorded parent alone decides, so no request field and no projected
     environment value can widen the relation.
     """
-    parent = mapping.get("parent")
+    parent = registered_parent(runner_directory, mapping)
     if caller is None:
         return parent is None
     return parent == caller
@@ -190,7 +215,7 @@ def require_direct_authority(
     approval reply and a created child Batch all use this one judgement.
     """
     caller = caller_alias(runner_directory)
-    if caller == alias or is_direct_owner(caller, mapping):
+    if caller == alias or is_direct_owner(caller, mapping, runner_directory):
         return
     raise _authority_denied()
 
@@ -231,7 +256,7 @@ def require_task_authority(
     caller = caller_alias(runner_directory)
     if operation == "submit" and caller == alias:
         return mapping
-    if operation in {"accept", "integrate", "register-member"} and is_direct_owner(caller, mapping):
+    if operation in {"accept", "integrate", "register-member"} and is_direct_owner(caller, mapping, runner_directory):
         return mapping
     raise _authority_denied()
 
@@ -249,12 +274,12 @@ def require_descendant_authority(
     if caller is None or caller == alias:
         return
     seen = {alias}
-    parent = mapping.get("parent")
+    parent = registered_parent(runner_directory, mapping)
     while isinstance(parent, str) and parent not in seen:
         if parent == caller:
             return
         seen.add(parent)
-        parent = read_alias_mapping(runner_directory, parent)[0].get("parent")
+        parent = registered_parent(runner_directory, read_alias_mapping(runner_directory, parent)[0])
     raise _authority_denied()
 
 
@@ -274,7 +299,7 @@ def require_replacement_authority(
     from graphtraj.runtimes.replacement import caller_runtime
 
     caller = caller_alias(runner_directory)
-    if is_direct_owner(caller, mapping):
+    if is_direct_owner(caller, mapping, runner_directory):
         return None
     runtime = (
         read_alias_mapping(runner_directory, caller)[0]["runtime"]
@@ -326,7 +351,7 @@ def require_stopped_subtree(runner_directory: Path, alias: str) -> None:
             )
         pending.extend(
             name for name, (child, _) in mappings.items()
-            if child.get("parent") == current
+            if registered_parent(runner_directory, child) == current
         )
 
 
@@ -351,7 +376,7 @@ def require_execution_allowed(
             raise RunnerError(
                 "subtree-stopped", f"{alias} belongs to stopped subtree {current}.",
             )
-        parent = mapping.get("parent")
+        parent = registered_parent(runner_directory, mapping)
         current = parent if isinstance(parent, str) else None
         if current is not None:
             mapping, _ = read_alias_mapping(runner_directory, current)
@@ -515,11 +540,11 @@ def status_tree(
 
     children: Dict[str, list[str]] = {}
     for alias, mapping in records.items():
-        parent = mapping.get("parent")
+        parent = registered_parent(runner_directory, mapping)
         if isinstance(parent, str):
             children.setdefault(parent, []).append(alias)
     roots = (
-        [alias for alias, mapping in records.items() if mapping.get("parent") is None]
+        [alias for alias, mapping in records.items() if registered_parent(runner_directory, mapping) is None]
         if caller is None
         else [caller] if caller in records else []
     )
@@ -621,7 +646,7 @@ def _status_alias(
     mapping, session_directory = read_alias_mapping(runner_directory, alias)
     # A cross-level observation keeps only the coarse activity, for an Agent
     # caller and for a caller with no live Session owner alike.
-    if caller != alias and not is_direct_owner(caller, mapping):
+    if caller != alias and not is_direct_owner(caller, mapping, runner_directory):
         return _status_summary(mapping, session_directory, alias)
     status = _status_session(mapping, session_directory, alias)
     if operation_total:
@@ -1022,4 +1047,4 @@ def agent_identity(cwd: Path) -> dict:
     mapping, directory = read_alias_mapping(runner, alias)
     require_execution_allowed(runner, alias, mapping)
     return {"access": "agent", "alias": alias,
-            "purpose": mapping.get("purpose", "member"), "parent": mapping["parent"]}
+            "purpose": mapping.get("purpose", "member"), "parent": registered_parent(runner, mapping)}

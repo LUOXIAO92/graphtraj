@@ -29,7 +29,7 @@ def retire_session(alias: str, cwd: Path, *, replacement: dict | None = None) ->
     mapping, directory = read_alias_mapping(project.runner_directory, alias)
     require_stopped_subtree(project.runner_directory, alias)
     caller = caller_alias(project.runner_directory)
-    if not is_direct_owner(caller, mapping):
+    if not is_direct_owner(caller, mapping, project.runner_directory):
         from graphtraj.runtimes.replacement import caller_runtime
 
         runtime = (read_alias_mapping(project.runner_directory, caller)[0]['runtime']

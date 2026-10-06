@@ -123,14 +123,23 @@ def external_main(cwd: Path, resume: str | None = None) -> Iterator[dict]:
             require_execution_allowed(runner, alias, mapping)
             write_yaml_durably(directory / 'native.yml', connection)
         credential = secrets.token_hex(32)
+        operation_credential = secrets.token_hex(32)
+        operation_path = directory / 'main-operation.json'
         checking = threading.Lock()
         binding_path = directory / 'finish-hook.json'
         if resume:
             # Restored ownership revokes an abandoned ephemeral attachment.
             binding_path.unlink(missing_ok=True)
+            operation_path.unlink(missing_ok=True)
 
         def lifecycle(document: dict) -> dict:
             """Authenticate fixed host code, then resolve registered execution purpose."""
+            if set(document) == {'credential', 'request'}:
+                if (not isinstance(document['credential'], str)
+                        or not hmac.compare_digest(document['credential'], operation_credential)):
+                    raise RunnerError('authority-denied', 'The Main operation is not authenticated.')
+                result = host(document['request'])
+                return {'document': result.document, 'failed': result.failed}
             if (set(document) != {'credential', 'event'}
                     or not isinstance(document['credential'], str)
                     or not hmac.compare_digest(document['credential'], credential)):
@@ -171,12 +180,17 @@ def external_main(cwd: Path, resume: str | None = None) -> Iterator[dict]:
             descriptor = os.open(binding_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
             with os.fdopen(descriptor, 'w') as stream:
                 json.dump({'address': address, 'credential': credential}, stream)
+            descriptor = os.open(operation_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(descriptor, 'w') as stream:
+                json.dump({'address': address, 'credential': operation_credential}, stream)
             try:
                 hook = adapter.finalize_hook(binding_path, {'cwd': str(root), 'trusted_host': True})
-                yield {'adoption_status': 'ready', 'alias': alias, 'hook': hook}
+                yield {'adoption_status': 'ready', 'alias': alias, 'hook': hook,
+                       'operation_binding': str(operation_path)}
             finally:
                 host.close()
                 binding_path.unlink(missing_ok=True)
+                operation_path.unlink(missing_ok=True)
 
 
 def trusted_hook_event(binding: Path, event: dict) -> dict:
@@ -198,3 +212,27 @@ def heartbeat_external_main(root: Path, alias: str) -> None:
     mapping, directory = read_alias_mapping(runner, alias)
     require_execution_allowed(runner, alias, mapping)
     write_heartbeat(directory, {'alias': alias, 'worker_pid': os.getpid()})
+
+
+def main_operation(binding: Path, request: dict, cwd: Path) -> dict:
+    """Run an exact request using a native-approved private owner capability.
+
+    The binding path selects an owner, never proves authority. Ordinary model
+    execution cannot read this Runner-private file; its native permission
+    reviewer must authorize the concrete public command. Credentials stay in
+    process memory and never appear in command arguments or results.
+    """
+    runner = discover_runner_directory(cwd)
+    require_host_adoption(runner)
+    if binding.name != 'main-operation.json' or binding.parent.parent != runner / 'sessions':
+        raise RunnerError('authority-denied', 'The operation binding is outside this project.')
+    mapping, directory = read_alias_mapping(runner, binding.parent.name)
+    if mapping.get('purpose') != 'main' or not mapping.get('hosted'):
+        raise RunnerError('authority-denied', 'The operation binding is not an adopted Main.')
+    require_execution_allowed(runner, mapping['alias'], mapping)
+    if binding.is_symlink():
+        raise RunnerError('authority-denied', 'The operation binding is not a regular owner capability.')
+    document = json.loads(binding.read_text())
+    return connection_operation(document['address'], {
+        'credential': document['credential'], 'request': request,
+    }, timeout_seconds=600)

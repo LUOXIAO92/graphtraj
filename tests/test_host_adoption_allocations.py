@@ -21,12 +21,12 @@ from test_host_adoption import invoke_hook, EVENT
 from test_main_finalize import host
 
 
-def worker_attempt(root: Path, alias: str, monkeypatch: pytest.MonkeyPatch, *, fail: bool) -> Path:
+def worker_attempt(root: Path, alias: str, monkeypatch: pytest.MonkeyPatch, *, fail: bool, parent_connection: dict | None = None) -> Path:
     """Execute a real Runner job, controlling only its native creation result."""
     directory = root / '.graphtraj/runner/sessions' / alias
     directory.mkdir()
     job = {'operation': 'launch', 'runtime': 'codex', 'adapter_request': {}, 'mapping': {
-        'alias': alias, 'runtime': 'codex', 'parent': None, 'ticket_id': 'fixture',
+        'alias': alias, 'runtime': 'codex', 'parent': None, 'parent_connection': parent_connection, 'ticket_id': 'fixture',
         'team_generation': 1, 'role': 'engineer', 'worktree_path': str(root),
         'trace_file': str(directory / 'trace.jsonl'), 'retained_batch_file': str(root / 'batch.yml'),
     }}

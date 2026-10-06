@@ -39,3 +39,27 @@ def adopt_command(resume: str | None) -> None:
         click.echo(json.dumps(result.document))
     except Exception as error:
         raise click.ClickException(f'External Main adoption failed: {error}') from error
+
+
+@click.command('main-operation')
+@click.option('--binding', required=True, type=click.Path(path_type=Path))
+@click.option('--request', required=True)
+def operation_command(binding: Path, request: str) -> None:
+    """Execute one exact public request through an adopted Main's private owner.
+
+    Run this exact command through the caller's native execution permission
+    request when its sandbox denies the private binding. Approval applies to
+    this operation; it does not change the caller's identity or parent records.
+    """
+    from graphtraj.execution.host_adoption import main_operation
+    from graphtraj.interfaces.gateway import INPUT_SCHEMA, _validate
+
+    try:
+        document = json.loads(request)
+        _validate(document, INPUT_SCHEMA, 'request')
+        result = main_operation(binding.absolute(), document, Path.cwd())
+        click.echo(json.dumps(result))
+        if result['failed']:
+            raise click.exceptions.Exit(1)
+    except (OSError, ValueError, RuntimeError) as error:
+        raise click.ClickException(str(error)) from error

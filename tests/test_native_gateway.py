@@ -67,6 +67,9 @@ def test_native_gateway_disclosure_execution_and_correction(
             'threadId': 'thread-1', 'turnId': 'turn-1', 'callId': 'different-from-rpc-id',
             'tool': 'graphtraj', 'arguments': arguments,
         }, 'response': native_result(document, success)})
+    if host == 'main':
+        # Main's GraphTraj alias is allocated at the public launch boundary.
+        exchanges[-1].pop('response')
     protocol = root / 'protocol.jsonl'
     monkeypatch.setenv('PEER_REQUEST_EXCHANGES', json.dumps(exchanges))
     monkeypatch.setenv('PEER_PROTOCOL_LOG', str(protocol))
@@ -98,7 +101,15 @@ def test_native_gateway_disclosure_execution_and_correction(
     assert registered[0]['type'] == 'function'
     assert registered[0]['inputSchema'] == gateway.INPUT_SCHEMA
     replies = [item for item in messages if str(item.get('id', '')).startswith('native-request-1')]
-    assert [reply['result'] for reply in replies] == [item['response'] for item in exchanges]
+    assert [reply['result'] for reply, item in zip(replies, exchanges) if 'response' in item] == [
+        item['response'] for item in exchanges if 'response' in item
+    ]
+    if host == 'main':
+        observed = json.loads(replies[-1]['result']['contentItems'][0]['text'])['agents']
+        assert len(observed) == 1
+        assert observed[0]['alias'] == result['alias']
+        assert observed[0]['purpose'] == 'main'
+        assert observed[0]['activity'] == 'running'
     assert [reply['id'] for reply in replies] == [
         'native-request-1' + '-next' * index for index in range(len(exchanges))
     ]
@@ -156,7 +167,7 @@ def test_native_gateway_restricts_features_and_context(
             callable_features = (
                 set(NATIVE_RUNNER_TOOLS.values())
                 | {'parent_status', 'retire', 'replace', 'cleanup',
-                   'approved_recovery', 'role_organization'}
+                   'approved_recovery', 'role_organization', 'agent_identity'}
                 if issuer == 'owner' else {'alias_status', 'ticket_graph'}
             )
             assert {entry['feature'] for entry in discovered['features']} == (

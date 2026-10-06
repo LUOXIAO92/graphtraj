@@ -76,8 +76,6 @@ def test_main_summarizes_actual_native_status_callback(
     (directory / 'execution.yml').write_text(yaml.safe_dump({
         'outcome': 'completed', 'terminal_confirmed': True}))
     entry = {'alias': 'child@e1'}
-    if issuer == 'thread-1':
-        entry.update(session='private-session', execution_id='private-turn')
     entry.update(activity='idle', last_outcome='completed')
     exchange = {'method': 'item/tool/call', 'params': {
         'threadId': issuer, 'tool': 'graphtraj', 'arguments': {
@@ -98,8 +96,8 @@ def test_main_summarizes_actual_native_status_callback(
     assert result['last_agent_message'] == 'request accepted'
     assert result['native_operations'] == [{
         'tool': 'graphtraj', 'success': True, 'from_main': issuer == 'thread-1',
-        'aliases': [{'alias': 'child@e1', 'has_session': issuer == 'thread-1',
-                     'has_execution_id': issuer == 'thread-1'}]}]
+        'aliases': [{'alias': 'child@e1', 'has_session': False,
+                     'has_execution_id': False}]}]
     assert 'private-session' not in json.dumps(result['native_operations'])
 
 
@@ -115,8 +113,7 @@ def test_main_empty_status_start_resume_and_invalid_formal_record(
     exchange = {'method': 'item/tool/call', 'params': {
         'threadId': 'thread-1', 'tool': 'graphtraj', 'arguments': {
             'action': 'execute', 'feature': 'alias_status', 'arguments': {}}},
-        'response': {'contentItems': [{'type': 'inputText', 'text': json.dumps({'agents': []})}],
-                     'success': True}}
+}
     monkeypatch.setattr(main_session, 'runtime_executable', lambda runtime: peer)
     monkeypatch.setenv('PEER_REQUEST_EXCHANGE', json.dumps(exchange))
     monkeypatch.setenv('PEER_NATIVE_ROLLOUT', str(tmp_path / 'native'))
@@ -133,6 +130,7 @@ def test_main_empty_status_start_resume_and_invalid_formal_record(
         )
         assert first['session'] == second['session']
         assert first['record'] == second['record']
+        assert first['alias'] == second['alias']
         for result in (first, second):
             assert result['last_agent_message'] == 'request accepted'
             assert result['native_operations'] == [{
@@ -142,7 +140,9 @@ def test_main_empty_status_start_resume_and_invalid_formal_record(
     asyncio.run(exercise())
     clean = read_alias_status({}, cwd=tmp_path)
     assert not clean.failed
-    assert clean.document == {'agents': []}
+    assert len(clean.document['agents']) == 1
+    assert clean.document['agents'][0]['purpose'] == 'main'
+    assert clean.document['agents'][0]['activity'] == 'idle'
 
     # Do not fix Main by suppressing unreadable or malformed formal records.
     broken = config.parent / 'runner/sessions/broken@e1'
@@ -150,8 +150,8 @@ def test_main_empty_status_start_resume_and_invalid_formal_record(
     (broken / 'mapping.yml').write_text('{}\n')
     invalid = read_alias_status({}, cwd=tmp_path)
     assert invalid.failed
-    assert invalid.document['agents'][0]['alias'] == 'broken@e1'
-    assert invalid.document['agents'][0]['error']['code'] == 'operation-failed'
+    broken_status = next(item for item in invalid.document['agents'] if item['alias'] == 'broken@e1')
+    assert broken_status['error']['code'] == 'operation-failed'
 
 
 @pytest.mark.parametrize('method, response', [

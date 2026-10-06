@@ -9,7 +9,10 @@ from typing import Any, Callable, Collection, Iterator, Mapping
 
 from graphtraj.execution.runner_connection import connection_operation, worker_connection
 from graphtraj.execution.runner_models import RunnerError
-from graphtraj.execution.runner_status import process_caller_alias, read_alias_mapping, runtime_caller
+from graphtraj.execution.runner_status import (
+    process_caller_alias, read_alias_mapping, runtime_caller, require_execution_allowed,
+)
+from graphtraj.execution.runner_heartbeat import ownership_is_held
 from graphtraj.interfaces.gateway import handle_request
 from graphtraj.interfaces.tools import ToolResult
 from graphtraj.runtimes.runtime_adapter import recovery_review
@@ -51,6 +54,7 @@ def cli_connection(
     allowed_features: Collection[str],
     recovery_reviewer: Callable[[dict], dict] | None = None,
     directory: Path | None = None,
+    authenticate: Callable[[int], None] | None = None,
 ) -> Iterator[str]:
     """Serve one Session using its actual ownership and selected approval route.
 
@@ -66,8 +70,15 @@ def cli_connection(
         directory = runner.parent / 'cli'
     directory.mkdir(parents=True, exist_ok=True)
 
-    def authenticate(pid: int) -> None:
+    def verify_writer(pid: int) -> None:
         """Require this channel's live Session to own the kernel-observed writer."""
+        if authenticate is not None:
+            mapping, session_directory = read_alias_mapping(runner, alias)
+            require_execution_allowed(runner, alias, mapping)
+            if not ownership_is_held(session_directory, mapping['worker_pid']):
+                raise RunnerError('authority-denied', 'The bound host no longer owns this Agent.')
+            authenticate(pid)
+            return
         if process_caller_alias(runner, pid) != alias:
             raise RunnerError('authority-denied', 'The CLI request is not owned by this live Session.')
 
@@ -83,7 +94,7 @@ def cli_connection(
             result = handle_request(document['request'], cwd=root, allowed_features=allowed_features)
         return {'document': result.document, 'failed': result.failed}
 
-    with worker_connection(directory, operate, authenticate=authenticate) as address:
+    with worker_connection(directory, operate, authenticate=verify_writer) as address:
         yield address
 
 

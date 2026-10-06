@@ -123,7 +123,8 @@ for line in sys.stdin:
             if not os.environ.get('PEER_CONTINUE_AFTER_REJECTION'):
                 complete(thread_id, turn_id, 'request rejected')
             continue
-        assert message['result'] == (exchange['response'] if exchange else {'decision': 'accept'})
+        if exchange is None or 'response' in exchange:
+            assert message['result'] == (exchange['response'] if exchange else {'decision': 'accept'})
         following = next(exchanges, None)
         if following is not None:
             exchange = following

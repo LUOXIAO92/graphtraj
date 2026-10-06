@@ -54,6 +54,7 @@ from graphtraj.workspace.runner_project import (
 )
 from graphtraj.execution.runner_status import (
     caller_alias,
+    caller_is_main,
     conflicting_binding_field,
     owning_execution,
     read_alias_mapping,
@@ -105,13 +106,15 @@ def register_child_batch(batch: Batch, cwd: Path, registration: Path) -> LaunchR
     parent_alias = caller
     # Count retained Session ancestry, not Batches or resumptions.
     while parent_alias is not None:
+        ancestor, _ = read_alias_mapping(project.runner_directory, parent_alias)
+        if ancestor.get('purpose') == 'main':
+            break
         depth += 1
         if depth > limit:
             raise RunnerError(
                 "authority-denied",
                 f"The child Batch exceeds project dispatch_depth={limit}. No child registered.",
             )
-        ancestor, _ = read_alias_mapping(project.runner_directory, parent_alias)
         parent_alias = ancestor["parent"]
     from graphtraj.teams.team_replacement import require_active_session
 
@@ -152,7 +155,7 @@ def _task_policy(task: Task, role: str | None = None) -> str:
 
 def _require_dispatch_roles(project: Any, batch: Batch, parent: dict | None) -> None:
     """Validate every configured direct edge before retaining or starting work."""
-    parent_reference = parent.get("role_reference", parent["role"]) if parent else None
+    parent_reference = parent.get("role_reference", parent["role"]) if parent and parent.get("purpose") != "main" else None
     for task in batch.tasks:
         reference = task.role_reference or task.role
         if not project.roles.permits_dispatch(parent_reference, reference):
@@ -170,7 +173,7 @@ def launch_team_batch(batch: Batch, cwd: Path) -> LaunchResponse:
     _require_dispatch_roles(project, batch, None)
     host = current_parent_connection() or runtime_adapter.current_host_connection()
     with parent_connection(host):
-        return _run_batch_workers(project, batch)
+        return _run_batch_workers(project, batch, parent_alias=caller_alias(project.runner_directory) or "")
 
 
 def continue_stopped_ticket(
@@ -211,7 +214,7 @@ def continue_stopped_ticket(
     if generation is None:
         # Before native creation there is no member whose parent can authorize
         # recovery. Use the same actual root caller identity as root dispatch.
-        if caller_alias(project.runner_directory) is not None:
+        if caller_alias(project.runner_directory) is not None and not caller_is_main(project.runner_directory):
             raise RunnerError("authority-denied", "Only the root caller may continue this Ticket.")
         if state["status"] != "ready" or any(
             states[dependency][1]["status"] != "integrated"
@@ -267,7 +270,7 @@ def continue_stopped_ticket(
                     raise ValueError("The Team has no actual root Sessions")
                 # Retired members stay retired. Main may restore only the
                 # Ticket's budget permission before a separately scoped swarm.
-                if caller_alias(project.runner_directory) is not None:
+                if caller_alias(project.runner_directory) is not None and not caller_is_main(project.runner_directory):
                     raise RunnerError("authority-denied", "Only the root caller may continue this Ticket.")
             # Validate the whole operation before clearing its sampled stop. Explicit
             # subtree stops stay bound to the old entities and require replacement.
@@ -357,7 +360,7 @@ def _run_batch_workers(
                     environment = dict(os.environ)
                     environment.pop("GRAPHTRAJ_PARENT_CONNECTION", None)
                     host = current_parent_connection()
-                    if not parent_alias and host is not None:
+                    if host is not None:
                         environment["GRAPHTRAJ_PARENT_CONNECTION"] = (
                             json.dumps(host) if isinstance(host, dict) else host
                         )
@@ -431,10 +434,12 @@ def _deliver_ticket(
     """
     task = _registered_ticket_task(project, requested)
     evidence = project.state_directory / "tickets" / (task.ticket_id + "-" + task.ticket_name)
+    parent = read_alias_mapping(project.runner_directory, parent_alias)[0] if parent_alias else None
+    task_parent = parent_alias if parent and parent.get("purpose") != "main" else None
     with execution_start_lock(project.runner_directory):
         state = yaml.safe_load((evidence / "ticket.yml").read_text())
         generation = state.get("active_team_ordinal")
-        if parent_alias is None and generation is None:
+        if task_parent is None and generation is None:
             if state["status"] != "ready":
                 raise RunnerError("TICKET_ALREADY_ACTIVE", "The selected Ticket is not ready.")
             generation = 1
@@ -453,7 +458,7 @@ def _deliver_ticket(
             if team["status"] != "active":
                 raise RunnerError("team-not-active", "The task Team has stopped starting work.")
             worktree = project.harness_root / state["worktree"]
-            if parent_alias is not None:
+            if task_parent is not None:
                 parent, _ = read_alias_mapping(project.runner_directory, parent_alias)
                 _require_dispatch_roles(project, Batch((task,), b""), parent)
                 if parent["ticket_id"] != task.ticket_id or parent["team_generation"] != generation:
@@ -470,15 +475,15 @@ def _deliver_ticket(
     alias, session = _run_agent(
         project, task, task.role, worktree, evidence, traces, None, None,
         None, parent_alias, retained_batch, prompt, capacity_fd=capacity_fd,
-        register_member=True, wait_for_completion=parent_alias is not None or prompt is not None,
+        register_member=True, wait_for_completion=task_parent is not None or prompt is not None,
     )
-    if parent_alias is not None:
+    if task_parent is not None:
         _run_registered_children(project, task, alias, session, retained_batch, capacity_fd)
     return {"ticket_id": task.ticket_id, "ticket_name": task.ticket_name,
             "role": task.role, "alias": alias, "session": session,
             "execution_id": read_alias_mapping(project.runner_directory, alias)[0]["execution_id"],
             "worktree_path": str(worktree),
-            "launch_status": "completed" if parent_alias is not None or prompt is not None else "launched"}
+            "launch_status": "completed" if task_parent is not None or prompt is not None else "launched"}
 
 
 def run_session_children(job_file: Path) -> None:
@@ -790,6 +795,7 @@ def _execute_agent(
                                         if register_member else None),
                 "mapping": {
                     "alias": alias,
+                    "purpose": "member",
                     "runtime": context.runtime,
                     "ticket_id": task.ticket_id,
                     "team_generation": generation,

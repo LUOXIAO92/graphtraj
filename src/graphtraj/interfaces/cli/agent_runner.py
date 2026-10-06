@@ -170,6 +170,16 @@ def main_session(instruction_file: Path, resume: str | None) -> None:
         _fail(RunnerError('invalid-input', str(error)))
 
 
+@main.command(cls=OperationCommand, feature="agent_identity")
+def identity() -> None:
+    """Read this caller's GraphTraj identity or explicit human access."""
+    try:
+        result = invoke_tool('agent_identity', {}, cwd=Path.cwd().resolve())
+        _emit_result(result.document)
+    except RunnerError as error:
+        _fail(error)
+
+
 @main.command(cls=OperationCommand, feature="parent_status")
 @click.option('--timeout-seconds', default=0.0, type=float)
 def parent_status(timeout_seconds: float) -> None:

@@ -1102,6 +1102,21 @@ register_tool(
 )
 
 
+
+
+def read_agent_identity(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> ToolResult:
+    """Read the bound GraphTraj identity without accepting identity claims."""
+    from graphtraj.execution.runner_status import agent_identity
+
+    return ToolResult(agent_identity(cwd or Path.cwd()))
+
+
+register_tool(
+    "agent_identity", "Read the bound GraphTraj Agent identity or explicit human access.",
+    {"type": "object", "properties": {}, "additionalProperties": False}, read_agent_identity,
+)
+
+
 # CLI names and decoding are presentation metadata, not another parameter schema.
 # Unlisted parameters use their Python name and Click's existing scalar/repeated form.
 _CLI = {
@@ -1119,6 +1134,7 @@ _CLI = {
     }),
     "ticket_integrate": (("graphtraj", "ticket", "integrate"), {"role": ("role", "yaml-value")}),
     "alias_status": (("agent-runner", "status"), {}),
+    "agent_identity": (("agent-runner", "identity"), {}),
     "parent_status": (("agent-runner", "parent-status"), {}),
     "swarm": (("agent-runner", "--swarm-input"), {"swarm_input": ("", "yaml")}),
     "send_instruction": (("agent-runner", "send"), {"caused_by_event_id": ("caused_by_event_ids", "value")}),

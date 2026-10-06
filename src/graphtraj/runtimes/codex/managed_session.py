@@ -568,7 +568,7 @@ async def run_native_operation(
             allowed_features = {'alias_status', 'ticket_graph', *METHOD_FEATURE_NAMES}
             if action == 'execute' and feature not in ('alias_status', 'ticket_graph'):
                 raise RunnerError('authority-denied', 'Temporary native helpers have read-only Runner access.')
-        identity = root_alias if thread == native_session else thread
+        identity = root_alias if thread == native_session and root_alias else 'unregistered'
 
         def operate() -> ToolResult:
             """Reuse public validation/control without process-based authorization."""
@@ -600,4 +600,4 @@ def native_operation_features() -> set[str]:
 
     return (set(NATIVE_RUNNER_TOOLS.values()) | set(METHOD_FEATURE_NAMES)
             | {'parent_status', 'retire', 'replace', 'cleanup', 'approved_recovery',
-               'role_organization'})
+               'role_organization', 'agent_identity'})

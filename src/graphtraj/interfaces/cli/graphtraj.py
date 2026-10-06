@@ -15,7 +15,7 @@ from graphtraj.interfaces.cli.projection import (
 from graphtraj.interfaces.cli.worldline import worldline
 from graphtraj.interfaces.cli.project_setup import setup, doctor
 from graphtraj.interfaces.cli.ticket import delivery_state, ticket
-from graphtraj.interfaces.cli.finalize import bind_command
+from graphtraj.interfaces.cli.finalize import adopt_command, bind_command
 
 
 @click.group(cls=OperationGroup)
@@ -57,3 +57,4 @@ main.add_command(delivery_state)
 main.add_command(roles)
 
 main.add_command(bind_command)
+main.add_command(adopt_command)

@@ -1180,6 +1180,32 @@ TOOLS['bind_main_finalize'] = replace(
 )
 
 
+def adopt_external_main(
+    arguments: Mapping[str, Any],
+    *,
+    cwd: Path | None = None,
+    execute: Callable[[Path, str | None], dict] | None = None,
+) -> ToolResult:
+    """Attach through the CLI's retained owner, never a model-supplied executor."""
+    from graphtraj.execution.runner_models import RunnerError
+
+    if execute is None:
+        raise RunnerError('unsupported-operation', 'Use graphtraj adopt-main in the existing Main terminal.')
+    return ToolResult(execute(cwd or Path.cwd(), arguments.get('resume')))
+
+
+register_tool(
+    'adopt_main',
+    'Adopt the existing external Codex Main through native review and retain its '
+    'trusted finish-check attachment. Keep graphtraj adopt-main running; it prepares '
+    'hook material without enabling hooks or changing trust.',
+    {'type': 'object', 'properties': {'resume': {'type': 'string'}},
+     'additionalProperties': False},
+    adopt_external_main, manual_ref='manuals/task-delivery/guide.md',
+)
+TOOLS['adopt_main'] = replace(TOOLS['adopt_main'], cli_path=('graphtraj', 'adopt-main'))
+
+
 # Method-only features carry the guide's own frontmatter description and no
 # executable action. Their identifiers are the delivered guide directory names,
 # so the registry stays the only catalog of feature identifiers.

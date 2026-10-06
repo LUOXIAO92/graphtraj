@@ -45,8 +45,9 @@ def verify_main(connection: dict) -> str:
 
 def hook(path: Path, binding: dict) -> dict:
     """Prepare the native command carrier without modifying enable/trust settings."""
+    carrier = '--host-binding' if binding.get('trusted_host') else '--channel'
     command = shlex.join([sys.executable, '-m', 'graphtraj.runtimes.codex.stop_hook',
-                          '--channel', str(path), '--project', binding['cwd']])
+                          carrier, str(path), '--project', binding['cwd']])
     return {'hooks': {'Stop': [{'hooks': [{'type': 'command', 'command': command,
                                          'statusMessage': '[GraphTraj hook: finish-check]'}]}]}}
 

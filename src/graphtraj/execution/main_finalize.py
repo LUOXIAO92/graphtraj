@@ -113,7 +113,13 @@ def check_main_finalize(
             raise ValueError('The owning connection does not match the registered Runtime.')
         binding = {'runtime': mapping['runtime'], 'connection': dict(connection),
                    'cwd': str(host.cwd)}
-        binding['execution_allowed'] = lambda: require_execution_allowed(runner, host.alias, mapping)
+        def execution_allowed() -> None:
+            """Cancel checker execution when either Runner or its owning host stops."""
+            if host.closed:
+                raise RunnerError('operation-unavailable', 'The owning host attachment closed.')
+            require_execution_allowed(runner, host.alias, mapping)
+
+        binding['execution_allowed'] = execution_allowed
         binding['session'] = adapter.verify_finalize_main(binding['connection'])
         context = adapter.finalize_event(binding, event)
         if context is None:

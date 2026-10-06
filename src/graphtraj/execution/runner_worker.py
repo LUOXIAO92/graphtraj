@@ -38,6 +38,35 @@ from graphtraj.runtimes.runtime_adapter import (
 )
 
 
+def run_external_main(cwd: Path, resume: str | None, ready: Callable[[dict], None]) -> dict:
+    """Own an approved existing Main until this foreground Runner command stops.
+
+    The native terminal must retain this process after the ready document is
+    printed. Closing it revokes its private hook attachment, not the Main's
+    native conversation or retained GraphTraj records.
+    """
+    from graphtraj.execution.host_adoption import external_main, heartbeat_external_main
+
+    stop = threading.Event()
+    previous = {signum: signal.getsignal(signum) for signum in (signal.SIGINT, signal.SIGTERM)}
+
+    def terminate(signum: int, frame: object) -> None:
+        """Stop this owner without starting or replacing a native conversation."""
+        stop.set()
+
+    try:
+        for signum in previous:
+            signal.signal(signum, terminate)
+        with external_main(cwd, resume) as document:
+            ready(document)
+            while not stop.wait(HEARTBEAT_INTERVAL_SECONDS):
+                heartbeat_external_main(cwd, document['alias'])
+            return {'adoption_status': 'closed', 'alias': document['alias']}
+    finally:
+        for signum, handler in previous.items():
+            signal.signal(signum, handler)
+
+
 def run(job_file: Path) -> int:
     """Own one current Session execution without creating a Turn record."""
 

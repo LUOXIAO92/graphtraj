@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from contextvars import ContextVar
 from importlib.resources import files
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -19,14 +20,16 @@ if TYPE_CHECKING:
     from graphtraj.interfaces.local_tool import HostTool
 
 
+finish_host: ContextVar[HostTool | None] = ContextVar('finish_host', default=None)
+
+
 def bind_main_finalize(summary_issue: str | None, cwd: Path) -> dict[str, Any]:
-    """Reject legacy binding: only an adopted owning host can attach finish-check."""
-    raise RunnerError(
-        'unsupported-operation',
-        'finish-check requires the adopted owning HostTool.finish_check lifecycle callback. '
-        'A saved native Session or Issue cannot authenticate Main. Keep the hook disabled '
-        'until the owning host supports and the user approves that adoption.',
-    )
+    """Prepare a native hook on the caller's existing authenticated CLI channel."""
+    host = finish_host.get()
+    if host is None:
+        raise RunnerError('unsupported-operation',
+                          'finish-check requires an adopted owning HostTool CLI channel.')
+    return host.prepare_finish_check(summary_issue)
 
 
 def parse_check_result(text: str) -> dict[str, Any]:
@@ -47,6 +50,13 @@ def parse_check_result(text: str) -> dict[str, Any]:
 
 
 PREFIX = '[GraphTraj hook: finish-check]'
+
+
+def finish_check_exclusion(purpose: str) -> str | None:
+    """Explain exclusion only for a registered member/checker purpose."""
+    if purpose in ('member', 'checker'):
+        return f'GraphTraj {purpose} does not run Main completion checks.'
+    return None
 
 
 def check_main_finalize(
@@ -92,9 +102,10 @@ def check_main_finalize(
         mapping, _ = read_alias_mapping(runner, host.alias)
         require_execution_allowed(runner, host.alias, mapping)
         purpose = mapping.get('purpose', 'member')
-        if purpose in ('member', 'checker'):
-            announce('skip', f'GraphTraj {purpose} does not run Main completion checks.')
-            return {'status': 'skip', 'reason': f'GraphTraj {purpose} is excluded.'}
+        excluded = finish_check_exclusion(purpose)
+        if excluded is not None:
+            announce('skip', excluded)
+            return {'status': 'skip', 'reason': excluded}
         if purpose != 'main':
             raise RunnerError('authority-denied', 'Unknown GraphTraj Agent purpose.')
         adapter = select_runtime_adapter(mapping['runtime'])

@@ -348,7 +348,7 @@ class CodexRuntimeAdapter:
         return verify_main(connection)
 
     def finalize_hook(self, path: Path, binding: dict) -> dict:
-        """Refuse standalone hook adoption without the owning GraphTraj callback."""
+        """Prepare the native command carrier on the authenticated owning channel."""
         from graphtraj.runtimes.codex.finalize import hook
 
         return hook(path, binding)

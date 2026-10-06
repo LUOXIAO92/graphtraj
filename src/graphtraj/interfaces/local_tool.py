@@ -116,6 +116,9 @@ class HostTool:
         self.closed = False
         self.alias = None
         self.owner = None
+        self.cli_address = None
+        self.finish_connection = None
+        self.finish_hint = None
         directory = discover_runner_directory(cwd)
         directory.mkdir(parents=True, exist_ok=True)
 
@@ -139,17 +142,23 @@ class HostTool:
         if self.closed:
             raise RunnerError('operation-failed', 'The owning host event binding is closed.')
         from graphtraj.runtimes.runtime_adapter import recovery_review
+        from graphtraj.execution.main_finalize import finish_host
 
         runner = discover_runner_directory(self.cwd)
         if self.alias:
             mapping, _ = read_alias_mapping(runner, self.alias)
             require_execution_allowed(runner, self.alias, mapping)
-        with parent_connection(self.address), recovery_review(self.recovery_reviewer):
-            if self.alias:
-                with runtime_caller(runner, self.alias):
+
+        token = finish_host.set(self)
+        try:
+            with parent_connection(self.address), recovery_review(self.recovery_reviewer):
+                if self.alias:
+                    with runtime_caller(runner, self.alias):
+                        return gateway.handle_request(request, cwd=self.cwd, allowed_features=self.allowed_features)
+                with runtime_caller(runner, 'unregistered'):
                     return gateway.handle_request(request, cwd=self.cwd, allowed_features=self.allowed_features)
-            with runtime_caller(runner, 'unregistered'):
-                return gateway.handle_request(request, cwd=self.cwd, allowed_features=self.allowed_features)
+        finally:
+            finish_host.reset(token)
 
     def adopt_main(
         self, runtime: str, *, resume: str | None = None, replaces: str | None = None,
@@ -197,6 +206,39 @@ class HostTool:
             child.close()
             raise
 
+    def prepare_finish_check(self, summary_issue: str | None = None) -> dict:
+        """Return reviewable hook material without enabling or trusting a hook."""
+        from graphtraj.runtimes.runtime_adapter import select_runtime_adapter
+
+        if self.closed or not self.alias:
+            raise RunnerError('authority-denied', 'The owning host has no registered Agent.')
+        runner = discover_runner_directory(self.cwd)
+        mapping, _ = read_alias_mapping(runner, self.alias)
+        require_execution_allowed(runner, self.alias, mapping)
+        if mapping.get('purpose') != 'main' or not self.cli_address:
+            raise RunnerError('authority-denied',
+                              'An adopted Main with an authenticated CLI channel is required.')
+        adapter = select_runtime_adapter(mapping['runtime'])
+        connection = adapter.current_host_connection()
+        if connection is None:
+            raise RunnerError('unsupported-operation', 'The owning native connection is unavailable.')
+        connection = dict(connection)
+        adapter.verify_finalize_main(connection)
+        hook = adapter.finalize_hook(Path(self.cli_address), {'cwd': str(self.cwd)})
+        self.finish_connection = connection
+        self.finish_hint = summary_issue
+        return {'alias': self.alias, 'hook': hook}
+
+    def receive_finish_check(self, event: dict) -> dict:
+        """Dispatch an authenticated lifecycle carrier on its registered Agent."""
+        runner = discover_runner_directory(self.cwd)
+        mapping, _ = read_alias_mapping(runner, self.alias)
+        if mapping.get('purpose', 'member') in ('member', 'checker'):
+            return self.finish_check({}, event)
+        if self.finish_connection is None:
+            raise RunnerError('operation-unavailable', 'Prepare finish-check on this owning channel first.')
+        return self.finish_check(self.finish_connection, event, summary_issue=self.finish_hint)
+
     def finish_check(
         self,
         connection: dict[str, Any],
@@ -234,11 +276,18 @@ class HostTool:
         from graphtraj.interfaces.hosted_cli import cli_connection
         from graphtraj.interfaces.tools import TOOLS
 
-        if self.closed or not self.alias:
-            raise RunnerError('authority-denied', 'The host has no registered Agent.')
+        if self.closed or not self.alias or self.cli_address is not None:
+            raise RunnerError('authority-denied', 'An open registered Agent without another CLI channel is required.')
         with cli_connection(self.cwd, self.alias, TOOLS if self.allowed_features is None else self.allowed_features,
-                            self.recovery_reviewer, authenticate=authenticate) as address:
-            yield address
+                            self.recovery_reviewer, authenticate=authenticate,
+                            host_request=self.__call__, lifecycle=self.receive_finish_check) as address:
+            self.cli_address = address
+            try:
+                yield address
+            finally:
+                self.cli_address = None
+                self.finish_connection = None
+                self.finish_hint = None
 
     def close(self) -> None:
         """Release this host connection; later delivery must report a failure."""

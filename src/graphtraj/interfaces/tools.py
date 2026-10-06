@@ -1161,7 +1161,7 @@ for _name, (_path, _parameters) in _CLI.items():
 
 
 def bind_main_finalize(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> ToolResult:
-    """Explain why legacy binding cannot replace owning-host finish-check adoption."""
+    """Prepare finish-check on the actual owning authenticated channel."""
     from graphtraj.execution.main_finalize import bind_main_finalize as bind
 
     return ToolResult(bind(arguments.get('summary_issue'), cwd or Path.cwd()))
@@ -1169,7 +1169,7 @@ def bind_main_finalize(arguments: Mapping[str, Any], *, cwd: Path | None = None)
 
 register_tool(
     'bind_main_finalize',
-    'Explain required finish-check owning-host adoption; saved native bindings are unsupported.',
+    'Prepare finish-check command-hook material on the adopted Main authenticated channel.',
     {'type': 'object', 'properties': {'summary_issue': {'type': 'string'}},
      'additionalProperties': False},
     bind_main_finalize,

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import shlex
+import sys
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
@@ -42,12 +44,11 @@ def verify_main(connection: dict) -> str:
 
 
 def hook(path: Path, binding: dict) -> dict:
-    """Refuse a standalone hook without an authenticated owning-host callback."""
-    raise RuntimeAdapterError(
-        'RUNTIME_UNSUPPORTED',
-        'finish-check requires the adopted owning HostTool lifecycle callback. '
-        'A standalone command hook cannot authenticate its GraphTraj caller.',
-    )
+    """Prepare the native command carrier without modifying enable/trust settings."""
+    command = shlex.join([sys.executable, '-m', 'graphtraj.runtimes.codex.stop_hook',
+                          '--channel', str(path), '--project', binding['cwd']])
+    return {'hooks': {'Stop': [{'hooks': [{'type': 'command', 'command': command,
+                                         'statusMessage': '[GraphTraj hook: finish-check]'}]}]}}
 
 
 def event_context(binding: dict, event: dict) -> dict | None:

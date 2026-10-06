@@ -13,15 +13,20 @@ from graphtraj.execution.main_finalize import PREFIX
 
 
 @click.command()
-@click.option('--binding', required=True, type=click.Path(path_type=Path))
-@click.option('--hook-session', required=True)
-def main(binding: Path, hook_session: str) -> None:
-    """Visibly refuse legacy static bindings without reading or changing them.
+@click.option('--binding', type=click.Path(path_type=Path))
+@click.option('--hook-session')
+@click.option('--channel')
+@click.option('--project', type=click.Path(path_type=Path))
+def main(
+    binding: Path | None,
+    hook_session: str | None,
+    channel: str | None,
+    project: Path | None,
+) -> None:
+    """Carry native lifecycle input through the registered owner's CLI channel.
 
-    This entry remains to report an actionable failure to old configurations.
-    The adopted owning host must invoke its finish_check callback; a native
-    Session argument cannot authenticate GraphTraj identity. SIGTERM still
-    exits without requesting continuation.
+    Legacy static Session bindings remain refused without changing old records.
+    Native user interruption exits without a continuation response.
     """
     def interrupted(signum: int, frame: object) -> None:
         """Preserve a host cancellation instead of interpreting it as an error."""
@@ -30,11 +35,16 @@ def main(binding: Path, hook_session: str) -> None:
     signal.signal(signal.SIGTERM, interrupted)
     click.echo(f'{PREFIX} start: Resolving owning host.', err=True)
     try:
-        json.load(sys.stdin)
-        raise ValueError(
-            'Legacy standalone hook cannot authenticate GraphTraj identity. '
-            'Keep it disabled; adopt HostTool.finish_check through the owning host.'
-        )
+        from graphtraj.interfaces.hosted_cli import forward_lifecycle
+
+        event = json.load(sys.stdin)
+        if binding is not None or hook_session is not None:
+            raise ValueError('Legacy standalone hook cannot authenticate GraphTraj identity; '
+                             'prepare its authenticated channel with graphtraj bind-finalize.')
+        result = forward_lifecycle(event, project or Path.cwd(), channel)
+        # Excluded Agent purposes have no native check to translate.
+        if result.get('status') == 'skip':
+            result = {'systemMessage': f"{PREFIX} skip: {result['reason']}"}
     except KeyboardInterrupt:
         raise SystemExit(130)
     except Exception as error:

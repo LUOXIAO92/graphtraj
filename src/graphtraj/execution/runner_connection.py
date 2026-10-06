@@ -133,9 +133,18 @@ def session_operation(mapping: dict, operation: str, **arguments: object) -> dic
 
 
 def connection_operation(
-    address: str | dict, document: dict, *, authenticate: bool = False,
+    address: str | dict,
+    document: dict,
+    *,
+    authenticate: bool = False,
+    timeout_seconds: float = OPERATION_TIMEOUT_SECONDS,
 ) -> dict:
-    """Exchange one request with an existing owner, retaining acknowledgement semantics."""
+    """Exchange one request with an existing owner, retaining acknowledgement semantics.
+
+    ``timeout_seconds`` bounds file-channel acknowledgement; ordinary control
+    calls keep their existing limit. Native lifecycle carriers may wait for
+    their checker within the native hook deadline without extending execution.
+    """
     if isinstance(address, dict):
         from graphtraj.runtimes.runtime_adapter import select_runtime_adapter
 
@@ -154,7 +163,7 @@ def connection_operation(
                 stream.flush()
                 os.replace(request, request.with_suffix('.json'))
                 response_file = Path(directory) / 'response.json'
-                deadline = time.monotonic() + OPERATION_TIMEOUT_SECONDS
+                deadline = time.monotonic() + timeout_seconds
                 while not response_file.is_file():
                     if time.monotonic() >= deadline:
                         raise TimeoutError('Session control timed out; delivery is unconfirmed.')

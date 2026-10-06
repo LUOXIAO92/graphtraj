@@ -260,8 +260,9 @@ def test_standalone_legacy_hook_cannot_claim_identity(tmp_path: Path) -> None:
 
 def test_legacy_binding_does_not_mutate_records(host: tuple) -> None:
     """Old bindings neither redefine identity nor persist a mandatory task target."""
-    with pytest.raises(RunnerError, match='adopted owning HostTool'):
+    with pytest.raises(RunnerError) as rejected:
         host[1]({'action': 'execute', 'feature': 'bind_main_finalize', 'arguments': {}})
+    assert rejected.value.code == 'authority-denied'
     assert not (host[0] / '.graphtraj/runner/main-sessions').exists()
 
 
@@ -410,3 +411,110 @@ def test_unrelated_native_events_do_not_fork(host: tuple, event: dict) -> None:
     assert 'skip:' in stop(host, **event)['systemMessage']
     wire = [json.loads(line) for line in (host[0] / 'wire.jsonl').read_text().splitlines()]
     assert not any(item['method'] == 'thread/fork' for item in wire)
+
+
+def test_public_command_attaches_to_existing_authenticated_host(
+    host: tuple, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Prepare then execute the generated native carrier on the same registered owner."""
+    import os
+    import shlex
+    import subprocess
+    from graphtraj.execution.runner_process import process_ancestors
+    from graphtraj.interfaces.hosted_cli import CONNECTION_ENV
+
+    root, owning, visible = host
+    monkeypatch.setenv('CODEX_THREAD_ID', 'main')
+    monkeypatch.setenv('CODEX_HOME', str(root))
+    writers = []
+
+    def authenticate(pid: int) -> None:
+        """This controlled host owns the sole Agent and these direct subprocesses."""
+        assert os.getpid() in process_ancestors(pid)
+        writers.append(pid)
+
+    with owning.cli_channel(authenticate) as address:
+        environment = {**os.environ, CONNECTION_ENV: address,
+                       'PYTHONPATH': str(Path(main_finalize.__file__).resolve().parents[2])}
+        prepared = subprocess.run(
+            [sys.executable, '-c', 'from graphtraj.interfaces.cli.graphtraj import main; main()',
+             'bind-finalize'], cwd=root, env=environment, capture_output=True, text=True, timeout=15,
+        )
+        assert prepared.returncode == 0, prepared.stdout + prepared.stderr
+        document = json.loads(prepared.stdout)
+        assert document['alias'] == owning.alias
+        command = document['hook']['hooks']['Stop'][0]['hooks'][0]['command']
+        event = {'hook_event_name': 'Stop', 'session_id': 'shared-native-session',
+                 'turn_id': 'main-turn', 'stop_hook_active': False, 'model': 'actual-model'}
+        options(host, output=json.dumps({'status': 'actionable', 'reason': 'Continue authorized272 work',
+                                        'nodes': ['272']}))
+        result = subprocess.run(shlex.split(command), input=json.dumps(event), cwd=root,
+                                env=environment, capture_output=True, text=True, timeout=15)
+        assert result.returncode == 0, result.stderr
+        assert '[GraphTraj hook: finish-check] start:' in result.stderr
+        decision = json.loads(result.stdout)
+        assert decision['decision'] == 'block' and '272' in decision['reason']
+        assert '[GraphTraj hook: finish-check] continue:' in decision['reason']
+        assert visible[-1]['alias'] == owning.alias
+        assert len(writers) == 2 and writers[0] != writers[1]
+        # The hook contains only an authenticated channel, never native identity.
+        assert '--channel' in shlex.split(command) and '--hook-session' not in shlex.split(command)
+        assert owning.alias == document['alias']
+    # The retained command is not a credential after the genuine owner closes.
+    result = subprocess.run(shlex.split(command), input=json.dumps(event), cwd=root,
+                            env=environment, capture_output=True, text=True, timeout=15)
+    assert json.loads(result.stdout)['continue'] is False
+    assert '[GraphTraj hook: finish-check] failure:' in result.stdout
+
+
+def test_command_hook_channel_rejects_foreign_writer(host: tuple) -> None:
+    """Knowing the channel address never supplies its Agent identity."""
+    import os
+    import subprocess
+    from graphtraj.interfaces.hosted_cli import CONNECTION_ENV
+
+    def refuse(pid: int) -> None:
+        """The owning host does not assign this writer to its Agent."""
+        raise RunnerError('authority-denied', 'Writer is not assigned to this Agent.')
+
+    with host[1].cli_channel(refuse) as address:
+        environment = {**os.environ, CONNECTION_ENV: address,
+                       'PYTHONPATH': str(Path(main_finalize.__file__).resolve().parents[2])}
+        result = subprocess.run(
+            [sys.executable, '-m', 'graphtraj.runtimes.codex.stop_hook'], input='{}',
+            cwd=host[0], env=environment, capture_output=True, text=True, timeout=15,
+        )
+        assert result.returncode == 0
+        assert json.loads(result.stdout)['continue'] is False
+        assert '[GraphTraj hook: finish-check] failure:' in result.stdout
+        assert not (host[0] / 'wire.jsonl').exists()
+
+
+@pytest.mark.parametrize('hosted_channel', [True, False])
+def test_registered_checker_command_hook_skips(host: tuple, hosted_channel: bool) -> None:
+    """A checker using its own authentic channel never reaches native fork execution."""
+    import os
+    import subprocess
+    from graphtraj.execution.runner_process import process_ancestors
+    from graphtraj.interfaces.hosted_cli import CONNECTION_ENV
+
+    def authenticate(pid: int) -> None:
+        """The controlled host assigns this sole subprocess to its checker."""
+        assert os.getpid() in process_ancestors(pid)
+
+    from graphtraj.interfaces.hosted_cli import cli_connection
+
+    with host[1].register_checker(host[2].append) as checker:
+        channel = (checker.cli_channel(authenticate) if hosted_channel else
+                   cli_connection(host[0], checker.alias, {'agent_identity'}, authenticate=authenticate))
+        with channel as address:
+            environment = {**os.environ, CONNECTION_ENV: address,
+                           'PYTHONPATH': str(Path(main_finalize.__file__).resolve().parents[2])}
+            result = subprocess.run(
+                [sys.executable, '-m', 'graphtraj.runtimes.codex.stop_hook',
+                 '--channel', str(host[0] / 'foreign-root-channel')], input='{}',
+                cwd=host[0], env=environment, capture_output=True, text=True, timeout=15,
+            )
+            assert result.returncode == 0
+            assert '[GraphTraj hook: finish-check] skip:' in json.loads(result.stdout)['systemMessage']
+            assert not (host[0] / 'wire.jsonl').exists()

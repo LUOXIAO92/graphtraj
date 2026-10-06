@@ -685,27 +685,43 @@ Ticket's Agents, then removes the unused Ticket Worktree/branch. Retirement
 removes active mappings while preserving durable evidence and original parent
 relationships; it does not remove a Worktree still used by another execution.
 
-## Main completion checks
+## Main completion checks: finish-check
 
-From the existing owning Main context, bind a summary Issue or equivalent task
-reference:
+The existing owning host first adopts Main and retains an authenticated
+`HostTool.cli_channel(verify_writer)` as described under Python host integration
+below. The verifier admits only that Agent's actual command and hook writers.
+Installing GraphTraj alone does not attach an already-running host; if the
+host cannot establish this boundary, keep the hook disabled and report the
+missing integration.
+
+From that live channel, prepare the native hook:
 
 ```sh
-graphtraj bind-finalize --summary-issue '<summary-issue-reference>'
+graphtraj bind-finalize
 ```
 
-The shared tool operation is `bind_main_finalize` with `summary_issue`. The
-result provides the binding and native hook material for review and adoption;
-returning that material does not install it or prove that the current host has
-run it. Adopt it through the Runtime's supported hook configuration while
-preserving existing settings and permissions.
+The shared operation is `bind_main_finalize`. Optional `--summary-issue` or
+`summary_issue` supplies a task hint, not an authoritative or fixed target.
+The result contains the registered alias and native hook material. Review and
+adopt that material through the Runtime's supported configuration, preserving
+existing settings, permissions and explicit user disablement. Preparation
+does not enable or trust the hook. Keep the owning host and channel alive for
+the hook's lifetime; expired channels report failure. Old static Session
+bindings are refused rather than promoted to Main identities.
 
-The hook is scoped to its actual Main. It delegates a state check using the
-Main's available native context and current model, then checks the summary
-Issue, DAG and referenced Tickets. Completed work and legitimate waiting may
+GraphTraj identity scopes the hook to Main and excludes registered members and
+checkers. The checker inherits Main's available native context and actual
+model, identifies the current goal, then reads its Issue, DAG and Tickets.
+Conflicting or stale hints cannot override that current task; an unresolved
+goal is an error. Completed work and legitimate waiting may
 finish the turn. Actionable unfinished nodes are returned to the same Main so
 it continues. Ordinary children and the checker do not acquire a recursive
 completion hook; user interruption and execution limits remain effective.
+
+Every activation identifies itself with `[GraphTraj hook: finish-check]` and
+shows its start and outcome: release, continue, skip or failure with a reason.
+Errors must reach the user/Main rather than silently pass or remain only in
+private logs. A disabled hook makes no claim to have run.
 
 The checker does not redo code review or reconstruct requirements from native
 Traces. Reference or checker failures are not completion evidence. Native

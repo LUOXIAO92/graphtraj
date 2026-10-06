@@ -128,21 +128,32 @@ the actual writer rather than trusting an environment address or shared PID.
 Adoption requires a host capable of this integration; installing a package does
 not retrofit callbacks into an already-running conversation or enable a hook.
 
-## Main finalize checking
+## Main completion checking: finish-check
 
-For a supported owning Runtime, `graphtraj bind-finalize --summary-issue <ref>`
-or the shared `bind_main_finalize` operation returns a Main binding and native
-hook material. Review and adopt that material through the existing Runtime
-configuration. It applies to the bound Main, not every Agent sharing a project
-or prompt. Binding preparation alone is not installation or observed receipt.
+The owning host must first adopt Main and retain its authenticated
+`HostTool.cli_channel(verify_writer)`. From that channel, `graphtraj bind-finalize`
+or `bind_main_finalize` prepares a registered alias and native hook material.
+An optional summary Issue is only a hint. Package installation alone does not
+attach an existing host; report a missing owning-host entry explicitly rather
+than fabricating a caller or temporary bridge.
 
-The completion checker uses the inherited native context and Main's actual
-model, with the summary Issue, current DAG and referenced Tickets as the state
-authority. Completed work or legitimate waiting for an execution, event or
+Review and adopt returned material through the Runtime's configuration and
+trust mechanism, honoring explicit user disablement. Preserve the owning
+host/channel for the hook's lifetime. Preparation is not enablement or observed
+receipt; legacy static Session bindings and expired channels fail visibly.
+
+GraphTraj identity selects Main and excludes members and checkers. The checker
+uses inherited native context and Main's actual model to identify the current
+goal, then treats its Issue, current DAG and Tickets as the state authority.
+Resolve stale/conflicting hints or return an error when the goal cannot be
+identified. Completed work or legitimate waiting for an execution, event or
 approval permits Main to finish its turn. Actionable unfinished nodes return
 an exception to the same Main. Keep real user stops and execution limits;
 the check grants no approval, time extension or acceptance. Unreadable state or
 checker errors remain explicit failures, not a completed-task conclusion.
+Every activation visibly starts with `[GraphTraj hook: finish-check]` and
+reports release, continuation, exclusion or failure with its reason. Private
+logs alone do not satisfy this feedback; disabled hooks do not claim execution.
 
 Ordinary children and the checker itself do not run Main's finalize hook.
 This task-state check does not add automatic code Review or another task ledger.

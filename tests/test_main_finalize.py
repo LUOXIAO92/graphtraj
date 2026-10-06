@@ -396,7 +396,9 @@ def test_state_read_failure_is_visible(host: tuple, monkeypatch: pytest.MonkeyPa
         raise OSError('task graph unreadable')
 
     monkeypatch.setattr(main_finalize, 'read_graph', unreadable)
-    assert 'task graph unreadable' in stop(host)['reason']
+    response = stop(host)
+    assert response['continue'] is False
+    assert 'task graph unreadable' in response['stopReason']
     assert 'failure:' in host[2][-1]['message']
 
 
@@ -412,18 +414,26 @@ def test_native_stop_cancels_running_checker(host: tuple) -> None:
 
 
 def test_closed_owning_host_does_not_request_continuation(host: tuple, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Closing the owner interrupts its active check instead of returning a block."""
-    def close_owner(binding: dict, context: dict, prompt: str, created: Callable) -> dict:
-        """Exercise the shared cancellation check after an actual HostTool close."""
-        host[1].close()
-        binding['execution_allowed']()
-        raise AssertionError('Closed host allowed checker execution')
+    """Closing during native preparation cannot issue a new checker action."""
+    from graphtraj.runtimes.codex.codex_adapter import CodexRuntimeAdapter
 
-    monkeypatch.setattr(finalize, 'check', close_owner)
-    with pytest.raises(RunnerError) as failure:
-        stop(host)
-    assert failure.value.code == 'host-closed'
-    assert 'skip:' in host[2][-1]['message']
+    def close_owner(
+        adapter: object,
+        connection: dict,
+        task_name: str,
+        prompt: str,
+        turn: str | None,
+    ) -> dict:
+        """Close the actual HostTool while its native preparation call is outstanding."""
+        host[1].close()
+        return {'session': 'main', 'turn': 'main-turn', 'input_ids': [], 'task_name': task_name}
+
+    monkeypatch.setattr(CodexRuntimeAdapter, 'prepare_main_check', close_owner)
+    response = stop(host)
+    assert host[1].closed
+    assert response['continue'] is False and 'decision' not in response
+    assert 'failure:' in response['systemMessage']
+    assert not records(host[0])
 
 
 @pytest.mark.parametrize('event', [

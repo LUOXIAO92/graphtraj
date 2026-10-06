@@ -78,9 +78,12 @@ async def association(client: CodexAppServer, preparation: dict, task_path: str 
                                  task_path.rsplit('/', 1)[-1] != preparation['task_name']):
         raise failure('The returned task path does not match this prepared checker.')
     parent = preparation['session']
-    threads = await pages(client, 'thread/list', {
-        'parentThreadId': parent, 'sourceKinds': ['subAgentThreadSpawn'], 'limit': 100,
-    })
+    threads = []
+    for archived in (False, True):
+        threads.extend(await pages(client, 'thread/list', {
+            'parentThreadId': parent, 'sourceKinds': ['subAgentThreadSpawn'],
+            'archived': archived, 'limit': 100,
+        }))
     matches = []
     for thread in threads:
         source = thread.get('source')

@@ -27,7 +27,8 @@ for line in sys.stdin:
     if method=='thread/read':
         result={'thread':{'id':p['threadId'],'sessionId':'shared-native-session','model':'actual-model',
                          'modelProvider':'actual-provider','status':{'type':'active'}}}
-    elif method=='thread/list': result={'data':[] if child is None else [child],'nextCursor':None}
+    elif method=='thread/list':
+        result={'data':[child] if child is not None and p.get('archived',False)==options.get('archived',False) else [],'nextCursor':None}
     elif method=='thread/turns/list':
         parent=p['threadId']=='main'
         state='inProgress' if parent else options.get('child_status','completed')
@@ -217,3 +218,16 @@ def test_same_turn_new_user_input_invalidates_result(prepared_external: tuple) -
         result,response=call(ready,'collect',checker_alias=prepared['checker_alias'],task_name=path)
         assert result.exit_code==0 and response['status']=='cancelled'
         assert 'result' not in response
+
+
+
+def test_completed_archived_child_is_resolved_by_native_task_path(prepared_external: tuple) -> None:
+    """A finished native task remains readable without private metadata scanning."""
+    root, _, _=prepared_external
+    with external_main(root) as ready:
+        _, prepared=call(ready,'prepare')
+        path=native_child(root,prepared,archived=True)
+        _, response=call(ready,'collect',checker_alias=prepared['checker_alias'],task_name=path)
+        assert response['native_observation']['session']=='actual-child'
+        assert response['native_observation']['state']=='completed'
+        assert response['result']['status']=='error'  # Remaining config is still unconfirmed.

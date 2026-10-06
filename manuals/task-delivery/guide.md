@@ -138,6 +138,16 @@ Main and enables no hook. Closing it revokes the private lifecycle attachment.
 Restore a stopped owner in the same conversation with
 `graphtraj adopt-main --resume <returned-alias>`, preserving its history.
 
+For ordinary requests from that external Main, use the returned
+`operation_binding` with `graphtraj main-operation --binding <path> --request
+'<public request JSON>'`. Obtain the native execution permission for the exact
+command if its sandbox denies the private binding. The retained owner supplies
+the registered caller identity; the path alone grants none. Lifecycle and
+ordinary-operation capabilities are separate. Bare `graphtraj-tool` does not
+automatically gain this binding, while managed Agent channels keep their
+existing route. Existing root relationships are resolved from their retained
+owning connection without rewriting the original parent records.
+
 An already integrated Python host can instead retain its authenticated
 `HostTool.cli_channel(verify_writer)` and use `graphtraj bind-finalize` or
 `bind_main_finalize`. An optional summary Issue is only a hint; the public

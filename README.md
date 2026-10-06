@@ -702,6 +702,23 @@ a replacement Main, enable the hook, change trust or upgrade other tools.
 Review the returned material before adopting it through the host's native
 configuration and trust mechanism, honoring explicit user disablement.
 
+The ready document also returns `operation_binding` for ordinary Main requests:
+
+```sh
+graphtraj main-operation --binding '<operation_binding>' \
+  --request '{"action":"execute","feature":"agent_identity","arguments":{}}'
+```
+
+Use the same public request format for other operations. If the native sandbox
+denies access to this private binding, request the host's execution permission
+for that exact command. The path locates the binding; it is not a caller-supplied
+role or credential. Keep credentials private. The owner binds the request to
+its registered Main and applies the ordinary relationship checks. Its lifecycle
+capability cannot authorize these requests. Bare `graphtraj-tool` is not
+automatically attached to an external Main; managed Agent channels retain their
+existing tool route. An earlier user-approved registration alone does not make
+an unbound command a Main operation.
+
 Ctrl-C or closing the owner revokes its private hook attachment without closing
 the native conversation. To restore a stopped owner for that same conversation,
 use `graphtraj adopt-main --resume <returned-alias>` through the same reviewed

@@ -142,6 +142,20 @@ def check_main_finalize(
         prompt += '\n\n' + json.dumps({
             'summary_issue_hint': summary_issue, 'task_graph_hint': graph,
         }, ensure_ascii=False)
+        if hasattr(adapter, 'prepare_main_check'):
+            if host.finish_connection is None:
+                host.finish_connection = dict(binding['connection'])
+            from graphtraj.execution.prepared_finish_check import prepare
+
+            with host.preparation_lock:
+                prepared = prepare(host, prompt, context.get('turn'))
+            if prepared.get('result'):
+                return respond(prepared['result'])
+            if prepared['status'] == 'cancelled':
+                return respond(None, 'The prepared native check was cancelled.')
+            announce('prepare', 'The registered checker requires the approved native host action.')
+            return {'decision': 'block', 'reason': f'{PREFIX} preparation required (not a checker verdict): '
+                    + json.dumps(prepared, ensure_ascii=False)}
         child = host.register_checker(host.receiver)
         # The child callback supplies GraphTraj identity, not its native handle.
         child.allowed_features = {'agent_identity', 'ticket_graph', 'alias_status'}

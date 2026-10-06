@@ -371,6 +371,33 @@ class CodexRuntimeAdapter:
 
         return check(binding, context, prompt, created)
 
+    def prepare_main_check(
+        self,
+        connection: dict,
+        task_name: str,
+        prompt: str,
+        turn: str | None,
+    ) -> dict:
+        """Prepare the authorized host-native full-history action without overrides."""
+        from graphtraj.runtimes.codex.prepared_check import prepare
+
+        return prepare(connection, task_name, prompt, turn)
+
+    def observe_main_check(
+        self,
+        connection: dict,
+        preparation: dict,
+        task_name: str | None,
+        wait_seconds: float,
+        cancel: bool,
+        allowed: Callable,
+        associated: Callable,
+    ) -> dict:
+        """Resolve the real task-name return and retain verified result/cancellation."""
+        from graphtraj.runtimes.codex.prepared_check import observe
+
+        return observe(connection, preparation, task_name, wait_seconds, cancel, allowed, associated)
+
     def finalize_response(self, result: dict | None, continued: bool) -> dict:
         """Render native continuation, including bounded error handling."""
         from graphtraj.runtimes.codex.finalize import response

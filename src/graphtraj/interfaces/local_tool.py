@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import threading
 import sys
 from functools import partial
 from contextlib import contextmanager
@@ -114,11 +115,14 @@ class HostTool:
         self.recovery_reviewer = recovery_reviewer
         self.allowed_features = allowed_features
         self.closed = False
+        self.closing = False
         self.alias = None
         self.owner = None
         self.cli_address = None
         self.finish_connection = None
         self.finish_hint = None
+        self.prepared_checks = {}
+        self.preparation_lock = threading.RLock()
         directory = discover_runner_directory(cwd)
         directory.mkdir(parents=True, exist_ok=True)
 
@@ -292,12 +296,19 @@ class HostTool:
     def close(self) -> None:
         """Release this host connection; later delivery must report a failure."""
         if not self.closed:
-            self.closed = True
+            self.closing = True
             try:
-                self.connection.__exit__(None, None, None)
+                if self.prepared_checks:
+                    from graphtraj.execution.prepared_finish_check import close_preparations
+                    with self.preparation_lock:
+                        close_preparations(self)
             finally:
-                if self.owner is not None:
-                    self.owner.close()
+                self.closed = True
+                try:
+                    self.connection.__exit__(None, None, None)
+                finally:
+                    if self.owner is not None:
+                        self.owner.close()
 
     def __enter__(self) -> HostTool:
         """Retain this binding until its owning host leaves the scope."""

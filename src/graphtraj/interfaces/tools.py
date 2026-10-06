@@ -1206,6 +1206,40 @@ register_tool(
 TOOLS['adopt_main'] = replace(TOOLS['adopt_main'], cli_path=('graphtraj', 'adopt-main'))
 
 
+def operate_finish_check(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> ToolResult:
+    """Use the caller's retained owner to prepare, collect or cancel its native checker."""
+    from graphtraj.execution.main_finalize import finish_host
+    from graphtraj.execution.prepared_finish_check import operate
+    from graphtraj.execution.runner_models import RunnerError
+
+    host = finish_host.get()
+    if host is None:
+        raise RunnerError('authority-denied', 'finish-check requires the registered Main channel.')
+    from graphtraj.execution.main_finalize import PREFIX
+    from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
+
+    try:
+        with host.preparation_lock:
+            result = operate(host, arguments['action'], arguments.get('checker_alias'),
+                             arguments.get('task_name'), arguments.get('wait_seconds', 0))
+    except (RunnerError, RuntimeAdapterError, ValueError, OSError) as error:
+        return ToolResult({'status': 'failed', 'systemMessage':
+                           f'{PREFIX} start: Operating prepared check.\n{PREFIX} failure: {error}'}, failed=True)
+    return ToolResult(result, failed=result['status'] == 'failed')
+
+
+register_tool(
+    'finish_check', 'Prepare, collect or cancel the approved native checker on this Main.',
+    {'type': 'object', 'properties': {
+        'action': {'type': 'string', 'enum': ['prepare', 'collect', 'cancel']},
+        'checker_alias': {'type': 'string'}, 'task_name': {'type': 'string'},
+        'wait_seconds': {'type': 'number', 'minimum': 0, 'maximum': 30}},
+     'required': ['action'], 'additionalProperties': False},
+    operate_finish_check, manual_ref='manuals/task-delivery/guide.md',
+)
+TOOLS['finish_check'] = replace(TOOLS['finish_check'], cli_path=('graphtraj', 'finish-check'))
+
+
 # Method-only features carry the guide's own frontmatter description and no
 # executable action. Their identifiers are the delivered guide directory names,
 # so the registry stays the only catalog of feature identifiers.

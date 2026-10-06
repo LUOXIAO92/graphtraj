@@ -125,6 +125,7 @@ def external_main(cwd: Path, resume: str | None = None) -> Iterator[dict]:
 
     with bind(root, event_receiver=receive, recovery_reviewer=review) as host:
         alias = host.adopt_main('codex', resume=resume)
+        host.finish_connection = dict(connection)
         mapping, directory = read_alias_mapping(runner, alias)
         # Serialize association publication with concurrent adoption and stopping.
         with execution_start_lock(runner):
@@ -204,9 +205,11 @@ def external_main(cwd: Path, resume: str | None = None) -> Iterator[dict]:
                 yield {'adoption_status': 'ready', 'alias': alias, 'hook': hook,
                        'operation_binding': str(operation_path)}
             finally:
-                host.close()
-                binding_path.unlink(missing_ok=True)
-                operation_path.unlink(missing_ok=True)
+                try:
+                    host.close()
+                finally:
+                    binding_path.unlink(missing_ok=True)
+                    operation_path.unlink(missing_ok=True)
 
 
 def trusted_hook_event(binding: Path, event: dict) -> dict:

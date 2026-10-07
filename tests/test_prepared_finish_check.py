@@ -32,7 +32,7 @@ for line in sys.stdin:
         result={'data':[child] if child is not None and p.get('archived',False)==options.get('archived',False) else [],'nextCursor':None}
     elif method=='thread/turns/list':
         parent=p['threadId']=='main'
-        state='inProgress' if parent else options.get('child_status','completed')
+        state=options.get('main_status','inProgress') if parent else options.get('child_status','completed')
         if not parent and (root/'native-interrupted').exists(): state='interrupted'
         result={'data':[{'id':options.get('main_turn','main-turn') if parent else 'child-turn',
                          'status':state,'items':[]}]}
@@ -235,6 +235,77 @@ def test_owner_close_cancels_prepared_native_execution(prepared_external: tuple)
         native_child(root,prepared,child_status='inProgress')
     assert (root/'native-interrupted').read_text()=='actual-child'
     assert (root/'.graphtraj/runner/sessions'/prepared['checker_alias']/'execution.yml').exists()
+
+
+@pytest.mark.parametrize('cause', ['request', 'idle', 'turn', 'main_completed', 'input', 'authorization',
+                                  'interrupted'])
+@pytest.mark.parametrize('running', [False, True])
+def test_public_cancellation_identifies_the_observed_cause(
+    prepared_external: tuple,
+    monkeypatch: pytest.MonkeyPatch,
+    cause: str,
+    running: bool,
+) -> None:
+    """Cancellation exposes its actual guard without dialogue or losing the interrupt cause."""
+    from graphtraj.execution import prepared_finish_check
+    from graphtraj.execution.runner_models import RunnerError
+
+    root, _, delivered = prepared_external
+    with external_main(root) as ready:
+        _, prepared = call(ready, 'prepare')
+        changes = {'child_status': 'inProgress' if running else 'completed'}
+        if cause == 'idle':
+            changes['main_stopped'] = True
+        elif cause == 'turn':
+            changes['main_turn'] = 'later-turn'
+        elif cause == 'main_completed':
+            changes['main_status'] = 'completed'
+        elif cause == 'interrupted':
+            changes['child_status'] = 'interrupted'
+        path = native_child(root, prepared, **changes)
+        if cause == 'input':
+            options = json.loads((root / 'native-options.json').read_text())
+            options['spawn_items'].append({'turnId': 'main-turn', 'item': {
+                'type': 'userMessage', 'id': 'new-input', 'content': 'Do not expose this body.',
+            }})
+            (root / 'native-options.json').write_text(json.dumps(options))
+        if cause == 'authorization':
+            original = prepared_finish_check.require_execution_allowed
+
+            def allowed(directory: Path, alias: str, mapping: dict) -> None:
+                """Model a checker stop at the execution authorization boundary."""
+                if alias == prepared['checker_alias']:
+                    raise RunnerError('subtree-stopped', 'The checker execution was stopped.')
+                original(directory, alias, mapping)
+
+            monkeypatch.setattr(prepared_finish_check, 'require_execution_allowed', allowed)
+        action = 'cancel' if cause == 'request' else 'collect'
+        result, response = call(ready, action, checker_alias=prepared['checker_alias'], task_name=path)
+        assert result.exit_code == 0, result.output
+        assert response['status'] == 'cancelled' and 'result' not in response
+        native = response['native_observation']
+        observation = native['cancellation']
+        assert native['reason'] in response['systemMessage']
+        assert observation['requested'] is (cause == 'request')
+        assert observation['checked_turn'] == 'main-turn'
+        assert observation['checker_status'] == changes['child_status']
+        assert observation['main'] == {
+            'activity': 'idle' if cause == 'idle' else 'active',
+            'turn': None if cause == 'idle' else {
+                'id': 'later-turn' if cause == 'turn' else 'main-turn',
+                'status': 'completed' if cause == 'main_completed' else 'inProgress',
+            },
+        }
+        assert observation['expected_input_ids'] == []
+        assert observation['observed_input_ids'] == (['new-input'] if cause == 'input' else [])
+        assert observation['execution_error'] == ({
+            'type': 'RunnerError', 'code': 'subtree-stopped', 'message': 'The checker execution was stopped.',
+        } if cause == 'authorization' else None)
+        assert 'Do not expose this body.' not in json.dumps(response)
+        assert (root / 'native-interrupted').exists() is (running and cause != 'interrupted')
+        _, repeated = call(ready, 'collect', checker_alias=prepared['checker_alias'], task_name=path)
+        assert repeated['native_observation'] == native
+        assert not delivered
 
 
 def test_hook_requests_preparation_without_claiming_checker_verdict(prepared_external: tuple) -> None:

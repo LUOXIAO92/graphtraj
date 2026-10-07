@@ -197,7 +197,8 @@ def operate(
         result['result'] = record['result']
         result['hook_response'] = adapter.finalize_response(record['result'], True)
     else:
-        result['systemMessage'] = f"{PREFIX} {record['state']}: Native checker lifecycle observed."
+        reason = native.get('reason', 'Native checker lifecycle observed.')
+        result['systemMessage'] = f"{PREFIX} {record['state']}: {reason}"
     return result
 
 

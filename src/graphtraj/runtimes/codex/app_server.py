@@ -735,14 +735,22 @@ class CodexAppServer:
             'overrides; no checker was started.',
         )
 
-    async def is_current_turn(self, session: str, turn: str) -> bool:
-        """Check the exact live turn without loading dialogue or execution items."""
+    async def is_current_turn(
+        self, session: str, turn: str, *, observation: dict[str, Any] | None = None,
+    ) -> bool:
+        """Check the live turn, optionally recording the metadata used by this check.
+
+        ``observation`` receives activity and, when queried, the latest turn's
+        ID/status. It contains no dialogue and does not trigger another query.
+        """
         thread = await self.read_thread(session)
         status = thread.get('status')
         if not isinstance(status, dict) or status.get('type') not in ('active', 'idle', 'notLoaded'):
             raise self._protocol_failure('Main lifecycle status is unavailable or erroneous.')
         if status['type'] == 'notLoaded':
             raise self._protocol_failure('Main lifecycle state is not loaded.')
+        if observation is not None:
+            observation.update(activity=status['type'], turn=None)
         if status['type'] == 'idle':
             return False
         response = await self._call('thread/turns/list', {
@@ -757,6 +765,8 @@ class CodexAppServer:
             raise self._protocol_failure('Main turn metadata is unavailable or erroneous.')
         if current['status'] == 'failed':
             raise self._protocol_failure('Main turn failed.')
+        if observation is not None:
+            observation['turn'] = {key: current[key] for key in ('id', 'status')}
         return current['id'] == turn and current['status'] == 'inProgress'
 
     def token_usage(self, session: CodexSession) -> dict[str, Any] | None:

@@ -267,6 +267,7 @@ def observe(
             configuration_error = native.get('configuration_error')
             deadline = time.monotonic() + wait_seconds
             interrupted = False
+            cancellation = None
             while True:
                 response = await client._call('thread/turns/list', {
                     'threadId': native['session'], 'limit': 1, 'itemsView': 'notLoaded',
@@ -280,15 +281,45 @@ def observe(
                     raise failure('The external checker has no distinct native execution turn.')
                 if turn.get('status') not in ('inProgress', 'completed', 'interrupted', 'failed'):
                     raise failure('External checker has unknown native status.')
-                stale = not await client.is_current_turn(preparation['session'], preparation['turn'])
+                main_observation = {}
+                current = await client.is_current_turn(
+                    preparation['session'], preparation['turn'], observation=main_observation,
+                )
                 current_inputs = await pages(client, 'thread/items/list', {
                     'threadId': preparation['session'], 'turnId': preparation['turn'], 'limit': 100,
                 })
-                stale = stale or user_input_ids(current_inputs) != preparation['input_ids']
+                input_ids = user_input_ids(current_inputs)
+                stale = not current or input_ids != preparation['input_ids']
+                execution_error = None
                 try:
                     allowed()
-                except Exception:
+                except Exception as error:
                     stale = True
+                    execution_error = {'type': type(error).__name__,
+                                       'code': getattr(error, 'code', None), 'message': str(error)}
+                reasons = []
+                if cancel:
+                    reasons.append('Cancellation was explicitly requested.')
+                if not current:
+                    reasons.append('The prepared Main turn is no longer current and active.')
+                if input_ids != preparation['input_ids']:
+                    reasons.append('Native Main user-message identifiers changed after preparation.')
+                if execution_error:
+                    reasons.append('Execution authorization check failed: ' + execution_error['message'])
+                if turn['status'] == 'interrupted':
+                    reasons.append('The native checker turn was interrupted.')
+                # Keep the observation that caused interruption, rather than
+                # replacing it with the resulting interrupted child status.
+                if reasons and cancellation is None:
+                    cancellation = {
+                        'reason': ' '.join(reasons),
+                        'cancellation': {
+                            'requested': cancel, 'checked_turn': preparation['turn'],
+                            'main': main_observation, 'checker_status': turn['status'],
+                            'expected_input_ids': preparation['input_ids'], 'observed_input_ids': input_ids,
+                            'execution_error': execution_error,
+                        },
+                    }
                 if (cancel or stale or configuration_error) and turn['status'] == 'inProgress' and not interrupted:
                     await client._call('turn/interrupt', {'threadId': native['session'], 'turnId': turn['id']})
                     interrupted = True
@@ -302,7 +333,7 @@ def observe(
                                 'reason': 'The native checker execution failed.'}
                     if cancel or stale or turn['status'] != 'completed':
                         return {**native, 'state': 'cancelled', 'turn': turn['id'],
-                                'reason': 'Checker stopped or its prepared Main turn is no longer current.'}
+                                **cancellation}
                     entries = await pages(client, 'thread/items/list', {
                         'threadId': native['session'], 'turnId': turn['id'], 'limit': 100,
                     })

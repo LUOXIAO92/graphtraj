@@ -230,7 +230,8 @@ def require_task_authority(
     """Authorize a task operation against the actual Session and current Team.
 
     Submission belongs to the member itself; acceptance and member registration
-    belong to its real direct parent (including a top-level caller). Registration
+    belong to its real direct parent (including a top-level caller). Integration
+    also belongs to the registered Main owning that member's subtree. Registration
     may precede membership, but never the Runner's Session binding. This is the
     common authorization check, not a submission or acceptance state transition.
     Role names and caller-supplied identity fields confer no authority.
@@ -255,6 +256,12 @@ def require_task_authority(
         raise _authority_denied()
     caller = caller_alias(runner_directory)
     if operation == "submit" and caller == alias:
+        return mapping
+    if operation == "integrate" and caller_is_main(runner_directory):
+        require_execution_allowed(
+            runner_directory, caller, read_alias_mapping(runner_directory, caller)[0],
+        )
+        require_descendant_authority(runner_directory, alias, mapping)
         return mapping
     if operation in {"accept", "integrate", "register-member"} and is_direct_owner(caller, mapping, runner_directory):
         return mapping

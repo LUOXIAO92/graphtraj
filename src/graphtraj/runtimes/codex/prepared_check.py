@@ -78,8 +78,10 @@ def association_diagnostics(entries: list[dict], preparation: dict, child: dict)
     spawn_candidates = [(entry, item) for entry, item in candidates
                         if 'spawn' in str(item.get('name', '')).lower()
                         or 'spawn' in str(item.get('tool', '')).lower()]
+    activities = [(entry, item) for entry, item in candidates
+                  if item.get('type') == 'subAgentActivity']
     details = []
-    for entry, item in (spawn_candidates or candidates)[:12]:
+    for entry, item in (spawn_candidates + activities or candidates)[:12]:
         output = item.get('output')
         try:
             parsed = json.loads(output) if isinstance(output, str) else None
@@ -88,6 +90,9 @@ def association_diagnostics(entries: list[dict], preparation: dict, child: dict)
         details.append({
             'turn': entry.get('turnId'),
             **{key: item.get(key) for key in ('id', 'type', 'namespace', 'name', 'tool', 'status')},
+            **{key: item.get(key) for key in ('kind', 'agentThreadId', 'agentPath')
+               if item.get('type') == 'subAgentActivity'},
+            'activity_child_matches': item.get('agentThreadId') == child['id'],
             'turn_matches': entry.get('turnId') == preparation['turn'],
             'id_present': isinstance(item.get('id'), str) and bool(item['id']),
             'sender_matches': item.get('senderThreadId') == preparation['session'],

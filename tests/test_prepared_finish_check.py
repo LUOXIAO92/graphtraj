@@ -341,6 +341,9 @@ def test_native_association_failure_reports_only_safe_predicate_metadata(
             'id': 'native-call', 'type': 'functionCallOutput', 'namespace': 'unexpected',
             'name': 'spawn_agent', 'prompt': 'PRIVATE_PROMPT',
             'output': json.dumps({'task_name': path, 'credential': 'PRIVATE_CREDENTIAL'}),
+        }}, {'turnId': 'main-turn', 'item': {
+            'id': 'activity', 'type': 'subAgentActivity', 'kind': 'started',
+            'agentThreadId': 'actual-child', 'agentPath': path,
         }}]
         (root / 'native-options.json').write_text(json.dumps(options))
         result, response = call(ready, 'collect', checker_alias=prepared['checker_alias'], task_name=path)
@@ -349,6 +352,7 @@ def test_native_association_failure_reports_only_safe_predicate_metadata(
         assert 'read_turn' in visible and 'main-turn' in visible
         assert 'namespace_matches' in visible and 'unexpected' in visible
         assert 'matching_call_count' in visible and 'output_task_matches' in visible
+        assert 'agentThreadId' in visible and 'actual-child' in visible and 'started' in visible
         assert 'PRIVATE_PROMPT' not in visible and 'PRIVATE_CREDENTIAL' not in visible
         assert not (root / '.graphtraj/runner/sessions' / prepared['checker_alias'] / 'native.yml').exists()
         native_child(root, prepared)

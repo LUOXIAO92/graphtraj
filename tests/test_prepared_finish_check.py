@@ -26,7 +26,8 @@ for line in sys.stdin:
     result={}
     if method=='thread/read':
         result={'thread':{'id':p['threadId'],'sessionId':'shared-native-session','model':'actual-model',
-                         'modelProvider':'actual-provider','status':{'type':'active'}}}
+                         'modelProvider':'actual-provider','status':{'type':
+                         'idle' if p['threadId']=='main' and options.get('main_stopped') else 'active'}}}
     elif method=='thread/list':
         result={'data':[child] if child is not None and p.get('archived',False)==options.get('archived',False) else [],'nextCursor':None}
     elif method=='thread/turns/list':
@@ -91,7 +92,8 @@ def test_prepare_correlate_and_read_native_result(prepared_external: tuple) -> N
         _, repeated=call(ready,'prepare')
         assert repeated['checker_alias']==prepared['checker_alias']
         path=native_child(root,prepared)
-        result, observed=call(ready,'collect',checker_alias=prepared['checker_alias'],task_name=path)
+        result, observed=call(ready,'collect',checker_alias=prepared['checker_alias'],task_name=path,
+                              wait_seconds=30)
         assert result.exit_code!=0
         assert observed['native_observation']['session']=='actual-child'
         assert 'Fresh authorization' in observed['native_observation']['output']
@@ -99,6 +101,23 @@ def test_prepare_correlate_and_read_native_result(prepared_external: tuple) -> N
         assert 'output schema' in observed['result']['reason']
         assert observed['hook_response']['continue'] is False
         assert not delivered
+
+
+@pytest.mark.parametrize('duration', [-1, 31, float('nan'), float('inf')])
+def test_public_collect_rejects_invalid_wait_without_changing_preparation(
+    prepared_external: tuple, duration: float,
+) -> None:
+    """The public gateway accepts bounded numbers and refuses invalid waits visibly."""
+    root, _, _ = prepared_external
+    with external_main(root) as ready:
+        _, prepared = call(ready, 'prepare')
+        record = root / '.graphtraj/runner/sessions' / prepared['checker_alias'] / 'execution.yml'
+        before = record.read_bytes()
+        result, response = call(ready, 'collect', checker_alias=prepared['checker_alias'],
+                                wait_seconds=duration)
+        assert result.exit_code != 0
+        assert 'wait_seconds' in response['systemMessage']
+        assert record.read_bytes() == before
 
 
 @pytest.mark.parametrize('change', ['path','parent','fork','turn','missing_spawn'])

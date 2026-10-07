@@ -1219,9 +1219,12 @@ def operate_finish_check(arguments: Mapping[str, Any], *, cwd: Path | None = Non
     from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 
     try:
+        wait_seconds = arguments.get('wait_seconds', 0)
+        if not 0 <= wait_seconds <= 30:
+            raise ValueError('wait_seconds must be finite and between 0 and 30.')
         with host.preparation_lock:
             result = operate(host, arguments['action'], arguments.get('checker_alias'),
-                             arguments.get('task_name'), arguments.get('wait_seconds', 0))
+                             arguments.get('task_name'), wait_seconds)
     except (RunnerError, RuntimeAdapterError, ValueError, OSError) as error:
         return ToolResult({'status': 'failed', 'systemMessage':
                            f'{PREFIX} start: Operating prepared check.\n{PREFIX} failure: {error}'}, failed=True)
@@ -1233,7 +1236,7 @@ register_tool(
     {'type': 'object', 'properties': {
         'action': {'type': 'string', 'enum': ['prepare', 'collect', 'cancel']},
         'checker_alias': {'type': 'string'}, 'task_name': {'type': 'string'},
-        'wait_seconds': {'type': 'number', 'minimum': 0, 'maximum': 30}},
+        'wait_seconds': {'type': 'number', 'description': 'Finite seconds from 0 to 30; zero reads once.'}},
      'required': ['action'], 'additionalProperties': False},
     operate_finish_check, manual_ref='manuals/task-delivery/guide.md',
 )

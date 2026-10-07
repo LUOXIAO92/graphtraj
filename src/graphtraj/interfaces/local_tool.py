@@ -289,9 +289,16 @@ class HostTool:
             try:
                 yield address
             finally:
-                self.cli_address = None
-                self.finish_connection = None
-                self.finish_hint = None
+                try:
+                    if self.prepared_checks:
+                        from graphtraj.execution.prepared_finish_check import close_preparations
+
+                        with self.preparation_lock:
+                            close_preparations(self)
+                finally:
+                    self.cli_address = None
+                    self.finish_connection = None
+                    self.finish_hint = None
 
     def close(self) -> None:
         """Release this host connection; later delivery must report a failure."""

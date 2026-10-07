@@ -92,9 +92,13 @@ async def association(client: CodexAppServer, preparation: dict, task_path: str 
         path = source.get('agent_path')
         if (isinstance(path, str) and path.rsplit('/', 1)[-1] == preparation['task_name']
                 and (task_path is None or path == task_path)):
-            if (source.get('parent_thread_id') != parent or thread.get('parentThreadId') != parent
-                    or thread.get('forkedFromId') != parent):
-                raise failure('Prepared checker lacks genuine native fork provenance.')
+            parents = {'source.parent_thread_id': source.get('parent_thread_id'),
+                       'parentThreadId': thread.get('parentThreadId'),
+                       'forkedFromId': thread.get('forkedFromId')}
+            conflicts = {name: value for name, value in parents.items() if value != parent}
+            if conflicts:
+                raise failure('Prepared checker lacks genuine native fork provenance: '
+                              f'expected parent {parent!r}; differing native fields {conflicts!r}.')
             matches.append(thread)
     if not matches:
         return None

@@ -146,6 +146,17 @@ def records(root: Path) -> list[Path]:
     return list((root / '.graphtraj/runner/sessions').glob('checker_*/execution.yml'))
 
 
+def prepared_stop(host: tuple) -> dict:
+    """Use the current native metadata peer and extract the real hook preparation."""
+    from test_prepared_finish_check import PEER as prepared_peer
+
+    (host[0] / 'peer.py').write_text(prepared_peer)
+    (host[0] / 'native-options.json').write_text('{}')
+    response = stop(host)
+    assert response['decision'] == 'block'
+    return json.loads(response['reason'][response['reason'].index('{'):])
+
+
 @pytest.mark.parametrize('status,reason,nodes', [
     ('completed', 'Current goal is integrated.', []),
     ('waiting', 'Required child remains running.', ['237']),
@@ -154,28 +165,29 @@ def records(root: Path) -> list[Path]:
 ])
 def test_main_end_decision(host: tuple, status: str, reason: str, nodes: list[str]) -> None:
     """Return the native same-Main decision and actually deliver visible events."""
+    from test_prepared_finish_check import native_child
+
     root, owning, visible = host
-    options(host, output=json.dumps({'status': status, 'reason': reason, 'nodes': nodes}))
-    result = stop(host)
+    prepared = prepared_stop(host)
+    verdict = {'status': status, 'reason': reason, 'nodes': nodes}
+    path = native_child(root, prepared, output=json.dumps(verdict))
+    collected = owning({'action': 'execute', 'feature': 'finish_check', 'arguments': {
+        'action': 'collect', 'checker_alias': prepared['checker_alias'],
+        'task_name': path, 'wait_seconds': 30,
+    }})
+    # This remains a genuine failure until native configuration is confirmed;
+    # preparing a native child alone is not a successful completion check.
+    assert collected.document['result'] == verdict
+    result = collected.document['hook_response']
     if status == 'actionable':
         assert result['decision'] == 'block' and '237' in result['reason']
     else:
-        assert 'pass:' in result['systemMessage']
-    assert [message['alias'] for message in visible] == [owning.alias, owning.alias]
-    assert visible[0]['message'].startswith('[GraphTraj hook: finish-check] start:')
-    assert reason in visible[-1]['message']
-    wire = [json.loads(line) for line in (root / 'wire.jsonl').read_text().splitlines()]
-    fork = next(item['params'] for item in wire if item['method'] == 'thread/fork')
-    assert fork == {'threadId': 'main', 'model': 'actual-model',
-                    'modelProvider': 'actual-provider', 'excludeTurns': True}
-    context = json.loads((root / 'child-context.json').read_text())
-    assert context[:2] == ['original developer instructions', 'private context sentinel']
-    assert len(context) == 3
-    evidence = yaml.safe_load(records(root)[0].read_text())
-    assert evidence['model'] == 'actual-model' and evidence['session'] == 'checker'
-    assert [m['params']['threadId'] for m in wire if m['method'] == 'turn/start'] == ['checker']
+        assert ('waiting:' if status == 'waiting' else 'pass:') in result['systemMessage']
+    evidence = yaml.safe_load(records(root)[0].read_text())['finish_check']
+    assert evidence['native_observation']['session'] == 'actual-child'
     native = yaml.safe_load(records(root)[0].with_name('native.yml').read_text())
     assert native['parent'] == owning.alias
+    assert prepared['native_action']['arguments']['fork_turns'] == 'all'
 
 
 @pytest.mark.parametrize('values', [
@@ -204,6 +216,19 @@ def test_failures_visible_and_bounded(host: tuple, values: dict) -> None:
 ])
 def test_stopped_or_changed_main_not_continued(host: tuple, values: dict) -> None:
     """A stopped or replaced native turn cannot be awakened by its old check."""
+    if values.get('interrupt_during_check'):
+        from test_prepared_finish_check import native_child
+
+        prepared = prepared_stop(host)
+        path = native_child(host[0], prepared, child_status='inProgress', main_stopped=True)
+        result = host[1]({'action': 'execute', 'feature': 'finish_check', 'arguments': {
+            'action': 'collect', 'checker_alias': prepared['checker_alias'], 'task_name': path,
+        }})
+        assert result.document['status'] == 'cancelled'
+        assert 'hook_response' not in result.document
+        assert (host[0] / 'native-interrupted').read_text() == 'actual-child'
+        assert 'skip:' in stop(host)['systemMessage']
+        return
     options(host, **values)
     assert 'skip:' in stop(host)['systemMessage']
     assert 'skip:' in host[2][-1]['message']
@@ -404,13 +429,20 @@ def test_state_read_failure_is_visible(host: tuple, monkeypatch: pytest.MonkeyPa
 
 def test_native_stop_cancels_running_checker(host: tuple) -> None:
     """A real controlled wire interruption cancels the fork and cannot continue Main."""
-    options(host, wait_for_interrupt=True)
-    result = stop(host)
-    assert 'skip:' in result['systemMessage']
-    wire = [json.loads(line) for line in (host[0] / 'wire.jsonl').read_text().splitlines()]
+    from test_prepared_finish_check import native_child
+
+    prepared = prepared_stop(host)
+    path = native_child(host[0], prepared, child_status='inProgress', main_stopped=True)
+    result = host[1]({'action': 'execute', 'feature': 'finish_check', 'arguments': {
+        'action': 'collect', 'checker_alias': prepared['checker_alias'],
+        'task_name': path, 'wait_seconds': 30,
+    }})
+    assert result.document['status'] == 'cancelled'
+    assert 'hook_response' not in result.document
+    wire = [json.loads(line) for line in (host[0] / 'prepared-wire.jsonl').read_text().splitlines()]
     cancelled = [m['params'] for m in wire if m['method'] == 'turn/interrupt']
-    assert cancelled == [{'threadId': 'checker', 'turnId': 'check-turn'}]
-    assert 'skip:' in host[2][-1]['message']
+    assert cancelled == [{'threadId': 'actual-child', 'turnId': 'child-turn'}]
+    assert 'skip:' in stop(host)['systemMessage']
 
 
 def test_closed_owning_host_does_not_request_continuation(host: tuple, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -480,15 +512,20 @@ def test_public_command_attaches_to_existing_authenticated_host(
         command = document['hook']['hooks']['Stop'][0]['hooks'][0]['command']
         event = {'hook_event_name': 'Stop', 'session_id': 'shared-native-session',
                  'turn_id': 'main-turn', 'stop_hook_active': False, 'model': 'actual-model'}
-        options(host, output=json.dumps({'status': 'actionable', 'reason': 'Continue authorized272 work',
-                                        'nodes': ['272']}))
+        from test_prepared_finish_check import PEER as prepared_peer
+
+        (root / 'peer.py').write_text(prepared_peer)
+        (root / 'native-options.json').write_text('{}')
         result = subprocess.run(shlex.split(command), input=json.dumps(event), cwd=root,
                                 env=environment, capture_output=True, text=True, timeout=15)
         assert result.returncode == 0, result.stderr
         assert '[GraphTraj hook: finish-check] start:' in result.stderr
         decision = json.loads(result.stdout)
-        assert decision['decision'] == 'block' and '272' in decision['reason']
-        assert '[GraphTraj hook: finish-check] continue:' in decision['reason']
+        assert decision['decision'] == 'block'
+        assert 'preparation required (not a checker verdict)' in decision['reason']
+        material = json.loads(decision['reason'][decision['reason'].index('{'):])
+        assert material['native_action']['tool'] == 'collaboration.spawn_agent'
+        assert material['checked_turn'] == 'main-turn'
         assert visible[-1]['alias'] == owning.alias
         assert len(writers) == 2 and writers[0] != writers[1]
         # The hook contains only an authenticated channel, never native identity.

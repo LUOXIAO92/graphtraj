@@ -82,8 +82,9 @@ def native_child(root: Path, prepared: dict, **changes: object) -> str:
     return path
 
 
-def test_prepare_correlate_and_read_native_result(prepared_external: tuple) -> None:
-    """The task-path result resolves to native evidence; incomplete config never passes."""
+@pytest.mark.parametrize('verdict', ['completed', 'waiting', 'actionable'])
+def test_prepare_correlate_and_read_native_result(prepared_external: tuple, verdict: str) -> None:
+    """Native verdicts work without hidden telemetry; only actionable continues Main."""
     root, _, delivered = prepared_external
     with external_main(root) as ready:
         result, prepared=call(ready,'prepare')
@@ -93,16 +94,83 @@ def test_prepare_correlate_and_read_native_result(prepared_external: tuple) -> N
         assert set(arguments)=={'task_name','message','fork_turns'} and arguments['fork_turns']=='all'
         _, repeated=call(ready,'prepare')
         assert repeated['checker_alias']==prepared['checker_alias']
-        path=native_child(root,prepared)
+        path=native_child(root,prepared,output=json.dumps({
+            'status': verdict, 'reason': 'Fresh authorization required.' if verdict == 'waiting'
+            else 'Current goal checked.', 'nodes': ['272'] if verdict == 'actionable' else [],
+        }))
         result, observed=call(ready,'collect',checker_alias=prepared['checker_alias'],task_name=path,
                               wait_seconds=30)
-        assert result.exit_code!=0
+        assert result.exit_code==0, result.output
         assert observed['native_observation']['session']=='actual-child'
-        assert 'Fresh authorization' in observed['native_observation']['output']
-        assert observed['status']=='failed' and observed['result']['status']=='error'
-        assert 'output schema' in observed['result']['reason']
-        assert observed['hook_response']['continue'] is False
+        assert observed['status']=='completed' and observed['result']['status']==verdict
+        if verdict == 'actionable':
+            assert observed['hook_response']['decision'] == 'block'
+            assert '272' in observed['hook_response']['reason']
+        else:
+            assert set(observed['hook_response']) == {'systemMessage'}
+            assert ('pass' if verdict == 'completed' else verdict) in observed['hook_response']['systemMessage']
         assert not delivered
+
+
+@pytest.mark.parametrize('change, reason', [
+    ({}, None),
+    ({'model': 'other-model'}, 'overrides model'),
+    ({'reasoning_effort': 'xhigh'}, 'overrides reasoning_effort'),
+    ({'reasoning_effort': 'high'}, 'overrides reasoning_effort'),
+    ({'agent_type': 'reviewer'}, 'overrides agent_type'),
+    ({'fork_turns': 'none'}, 'full Main history'),
+    ({'message': 'Different goal'}, 'prepared task'),
+])
+@pytest.mark.parametrize('running', [False, True])
+def test_visible_native_invocation_preserves_prepared_inheritance(
+    prepared_external: tuple,
+    change: dict,
+    reason: str | None,
+    running: bool,
+) -> None:
+    """Visible overrides fail even when equal to defaults; running children are stopped."""
+    root, _, delivered = prepared_external
+    with external_main(root) as ready:
+        _, prepared = call(ready, 'prepare')
+        path = native_child(root, prepared, child_status='inProgress' if running else 'completed')
+        options = json.loads((root / 'native-options.json').read_text())
+        options['spawn_items'].append({'turnId': 'main-turn', 'item': {
+            'id': 'spawn-call', 'type': 'functionCall', 'namespace': 'collaboration',
+            'name': 'spawn_agent',
+            'arguments': json.dumps({**prepared['native_action']['arguments'], **change}),
+        }})
+        (root / 'native-options.json').write_text(json.dumps(options))
+        result, response = call(ready, 'collect', checker_alias=prepared['checker_alias'], task_name=path)
+        if reason:
+            assert result.exit_code != 0
+            assert response['status'] == 'failed'
+            assert reason in response['result']['reason']
+            assert response['hook_response']['continue'] is False
+            if running:
+                assert (root / 'native-interrupted').read_text() == 'actual-child'
+        else:
+            assert result.exit_code == 0, result.output
+            assert response['status'] == ('running' if running else 'completed')
+            if running:
+                call(ready, 'cancel', checker_alias=prepared['checker_alias'])
+        assert not delivered
+
+
+@pytest.mark.parametrize('effort', ['high', 'xhigh', None])
+def test_thread_defaults_are_not_effective_turn_observations(
+    prepared_external: tuple, effort: str | None,
+) -> None:
+    """Saved child effort and absent telemetry cannot prove or disprove Main turn inheritance."""
+    root, _, _ = prepared_external
+    with external_main(root) as ready:
+        _, prepared = call(ready, 'prepare')
+        path = native_child(root, prepared)
+        options = json.loads((root / 'native-options.json').read_text())
+        options['child']['reasoningEffort'] = effort
+        (root / 'native-options.json').write_text(json.dumps(options))
+        result, response = call(ready, 'collect', checker_alias=prepared['checker_alias'], task_name=path)
+        assert result.exit_code == 0, result.output
+        assert response['result']['status'] == 'waiting'
 
 
 @pytest.mark.parametrize('duration', [-1, 31, float('nan'), float('inf')])
@@ -237,8 +305,7 @@ def test_native_spawn_without_optional_fork_origin_keeps_turn_protection(
             assert 'result' not in response
         else:
             assert response['native_observation']['state'] == 'completed'
-            assert result.exit_code != 0 and response['result']['status'] == 'error'
-            assert 'configuration_error' in response['native_observation']
+            assert result.exit_code == 0 and response['result']['status'] == 'waiting'
 
 
 @pytest.mark.parametrize('changes', [{'child_status':'failed'}, {'output':'not a checker verdict'}])
@@ -406,8 +473,7 @@ def test_observed_native_started_activity_preserves_preparation_guards(
         if scenario in ('current', 'stale', 'running-stale'):
             assert response['native_observation']['spawn_call'] == 'native-start-call'
             if scenario == 'current':
-                assert result.exit_code != 0 and response['result']['status'] == 'error'
-                assert 'configuration_error' in response['native_observation']
+                assert result.exit_code == 0 and response['result']['status'] == 'waiting'
             else:
                 assert result.exit_code == 0 and response['status'] == 'cancelled'
                 assert 'result' not in response
@@ -430,7 +496,7 @@ def test_completed_archived_child_is_resolved_by_native_task_path(prepared_exter
         _, response=call(ready,'collect',checker_alias=prepared['checker_alias'],task_name=path)
         assert response['native_observation']['session']=='actual-child'
         assert response['native_observation']['state']=='completed'
-        assert response['result']['status']=='error'  # Remaining config is still unconfirmed.
+        assert response['result']['status']=='waiting'
 
 
 def test_prepared_checker_retains_read_only_graphtraj_interface(

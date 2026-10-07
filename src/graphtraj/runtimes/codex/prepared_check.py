@@ -134,9 +134,44 @@ def prepare(connection: dict, task_name: str, prompt: str, turn: str | None) -> 
                     'input_ids': user_input_ids(entries),
                     'native_action': {'tool': 'collaboration.spawn_agent', 'arguments': {
                         'task_name': task_name, 'message': prompt, 'fork_turns': 'all'}},
-                    'configuration_status': 'Native full-history model/effort inheritance; '
-                    'remaining effective settings require native confirmation.'}
+                    'configuration_status': 'Native full-history inheritance without configuration overrides; '
+                    'unexposed settings are not independently observed.'}
     return asyncio.run(run())
+
+
+def invocation_error(entries: list[dict], preparation: dict, spawn_call: str) -> str | None:
+    """Reject contradictory native call arguments when the host exposes them.
+
+    A hidden call is not evidence of drift. Thread defaults are deliberately
+    excluded: they do not describe the invoking step's effective settings.
+    """
+    expected = preparation['native_action']['arguments']
+    for entry in entries:
+        item = entry.get('item')
+        if (entry.get('turnId') != preparation['turn'] or not isinstance(item, dict)
+                or item.get('type') != 'functionCall'
+                or item.get('namespace') != 'collaboration' or item.get('name') != 'spawn_agent'):
+            continue
+        try:
+            arguments = json.loads(item['arguments'])
+        except (KeyError, TypeError, ValueError):
+            if item.get('id') == spawn_call:
+                return 'The native checker invocation has unreadable arguments.'
+            continue
+        if not isinstance(arguments, dict):
+            if item.get('id') == spawn_call:
+                return 'The native checker invocation has invalid arguments.'
+            continue
+        if arguments.get('task_name') != preparation['task_name'] and item.get('id') != spawn_call:
+            continue
+        for key in ('model', 'reasoning_effort', 'agent_type'):
+            if arguments.get(key) is not None:
+                return f'The native checker invocation overrides {key}; Main settings must be inherited.'
+        if arguments.get('fork_turns', 'all') != 'all':
+            return 'The native checker invocation does not inherit the full Main history.'
+        if any(arguments.get(key) != expected[key] for key in ('task_name', 'message')):
+            return 'The native checker invocation differs from the prepared task.'
+    return None
 
 
 async def association(client: CodexAppServer, preparation: dict, task_path: str | None) -> dict | None:
@@ -202,9 +237,13 @@ async def association(client: CodexAppServer, preparation: dict, task_path: str 
         details['matching_call_count'] = len(matching_calls)
         raise failure('No unique native spawn links this checker to the prepared Main turn. '
                       + json.dumps(details, ensure_ascii=False, sort_keys=True))
-    return {'session': child['id'], 'task_path': child['source']['subAgent']['thread_spawn']['agent_path'],
+    native = {'session': child['id'], 'task_path': child['source']['subAgent']['thread_spawn']['agent_path'],
             'spawn_call': matching_calls[0]['id'], 'model': child.get('model'),
             'provider': child.get('modelProvider'), 'effort': child.get('reasoningEffort')}
+    error = invocation_error(entries, preparation, matching_calls[0]['id'])
+    if error:
+        native['configuration_error'] = error
+    return native
 
 
 def observe(
@@ -225,6 +264,7 @@ def observe(
                     return {'state': 'cancelled', 'reason': 'No matching native execution exists.'}
                 raise failure('The returned native task is not visible through thread/list.')
             associated(native)
+            configuration_error = native.get('configuration_error')
             deadline = time.monotonic() + wait_seconds
             interrupted = False
             while True:
@@ -249,11 +289,14 @@ def observe(
                     allowed()
                 except Exception:
                     stale = True
-                if (cancel or stale) and turn['status'] == 'inProgress' and not interrupted:
+                if (cancel or stale or configuration_error) and turn['status'] == 'inProgress' and not interrupted:
                     await client._call('turn/interrupt', {'threadId': native['session'], 'turnId': turn['id']})
                     interrupted = True
                     deadline = max(deadline, time.monotonic() + 5)
                 elif turn['status'] != 'inProgress':
+                    if configuration_error and not cancel and not stale:
+                        return {**native, 'state': 'failed', 'turn': turn['id'],
+                                'reason': configuration_error}
                     if turn['status'] == 'failed' and not cancel and not stale:
                         return {**native, 'state': 'failed', 'turn': turn['id'],
                                 'reason': 'The native checker execution failed.'}
@@ -270,10 +313,7 @@ def observe(
                                 and isinstance(entry['item'].get('text'), str)]
                     if not messages:
                         raise failure('The native checker produced no readable final result.')
-                    return {**native, 'state': 'completed', 'turn': turn['id'], 'output': messages[-1],
-                            'configuration_confirmed': False,
-                            'configuration_error': 'Native public metadata does not confirm service tier, '
-                            'output schema and effective collaboration instructions for the checked turn.'}
+                    return {**native, 'state': 'completed', 'turn': turn['id'], 'output': messages[-1]}
                 if time.monotonic() >= deadline:
                     if interrupted:
                         raise failure('Native checker interruption was not confirmed.')

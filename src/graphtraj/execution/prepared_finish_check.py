@@ -183,12 +183,8 @@ def operate(
                 record['result'] = {'status': 'error', 'reason': f'Native checker result is invalid: {error}',
                                     'nodes': []}
             else:
-                if native.get('configuration_confirmed') is not True:
-                    record['state'] = 'failed'
-                    record['result'] = {'status': 'error', 'reason': native['configuration_error'], 'nodes': []}
-                else:
-                    record['result'] = parsed
-                    record['actionable_delivered'] = parsed['status'] == 'actionable'
+                record['result'] = parsed
+                record['actionable_delivered'] = parsed['status'] == 'actionable'
         save(directory, record)
     finally:
         if record['state'] in ('completed', 'cancelled', 'failed'):

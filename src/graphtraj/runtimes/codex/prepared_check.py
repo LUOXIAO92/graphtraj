@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 from typing import Callable
 
@@ -45,6 +46,22 @@ def user_input_ids(entries: list[dict]) -> list[str]:
                 raise failure('Native Main input has no stable identifier.')
             identifiers.append(item['id'])
     return identifiers
+
+
+def spawn_output_matches(item: dict, task_path: str) -> bool:
+    """Match a v2 native function result, never a Main-transcribed task path."""
+    if (item.get('type') != 'functionCallOutput'
+            or item.get('namespace') != 'collaboration'
+            or item.get('name') != 'spawn_agent'):
+        return False
+    output = item.get('output')
+    if not isinstance(output, str):
+        return False
+    try:
+        result = json.loads(output)
+    except ValueError:
+        return False
+    return isinstance(result, dict) and result.get('task_name') == task_path
 
 
 def prepare(connection: dict, task_name: str, prompt: str, turn: str | None) -> dict:
@@ -109,17 +126,21 @@ async def association(client: CodexAppServer, preparation: dict, task_path: str 
     if len(matches) != 1 or not isinstance(matches[0].get('id'), str):
         raise failure('Prepared checker has ambiguous native associations.')
     child = matches[0]
+    child_path = child['source']['subAgent']['thread_spawn']['agent_path']
     entries = await pages(client, 'thread/items/list', {
         'threadId': parent, 'turnId': preparation['turn'], 'limit': 100,
     })
     matching_calls = [entry['item'] for entry in entries
                       if entry.get('turnId') == preparation['turn']
                       and isinstance(entry.get('item'), dict)
-                      and entry['item'].get('type') == 'collabAgentToolCall'
-                      and entry['item'].get('tool') == 'spawnAgent'
-                      and entry['item'].get('senderThreadId') == parent
-                      and child['id'] in entry['item'].get('receiverThreadIds', [])
-                      and entry['item'].get('status') in ('inProgress', 'completed')]
+                      and isinstance(entry['item'].get('id'), str)
+                      and entry['item']['id']
+                      and (spawn_output_matches(entry['item'], child_path)
+                           or (entry['item'].get('type') == 'collabAgentToolCall'
+                               and entry['item'].get('tool') == 'spawnAgent'
+                               and entry['item'].get('senderThreadId') == parent
+                               and child['id'] in entry['item'].get('receiverThreadIds', [])
+                               and entry['item'].get('status') in ('inProgress', 'completed')))]
     if len(matching_calls) != 1:
         raise failure('No unique native spawn links this checker to the prepared Main turn.')
     return {'session': child['id'], 'task_path': child['source']['subAgent']['thread_spawn']['agent_path'],
@@ -161,6 +182,10 @@ def observe(
                 if turn.get('status') not in ('inProgress', 'completed', 'interrupted', 'failed'):
                     raise failure('External checker has unknown native status.')
                 stale = not await client.is_current_turn(preparation['session'], preparation['turn'])
+                current_inputs = await pages(client, 'thread/items/list', {
+                    'threadId': preparation['session'], 'turnId': preparation['turn'], 'limit': 100,
+                })
+                stale = stale or user_input_ids(current_inputs) != preparation['input_ids']
                 try:
                     allowed()
                 except Exception:
@@ -170,10 +195,6 @@ def observe(
                     interrupted = True
                     deadline = max(deadline, time.monotonic() + 5)
                 elif turn['status'] != 'inProgress':
-                    current_inputs = await pages(client, 'thread/items/list', {
-                        'threadId': preparation['session'], 'turnId': preparation['turn'], 'limit': 100,
-                    })
-                    stale = stale or user_input_ids(current_inputs) != preparation['input_ids']
                     if turn['status'] == 'failed' and not cancel and not stale:
                         return {**native, 'state': 'failed', 'turn': turn['id'],
                                 'reason': 'The native checker execution failed.'}

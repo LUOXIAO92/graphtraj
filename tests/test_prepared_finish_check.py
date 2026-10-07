@@ -38,7 +38,9 @@ for line in sys.stdin:
                          'status':state,'items':[]}]}
     elif method=='thread/items/list':
         if p['threadId']=='main':
-            result={'data': options.get('spawn_items',[]),'nextCursor':None}
+            items=options.get('spawn_items',[])
+            start=int(p.get('cursor',0)); end=start+options.get('main_page_size',100)
+            result={'data':items[start:end],'nextCursor':str(end) if end<len(items) else None}
         else:
             result={'data':[{'turnId':'child-turn','item':{'type':'agentMessage','id':'answer',
                     'phase':'final_answer','text':options.get('output',json.dumps({'status':'waiting',
@@ -265,6 +267,65 @@ def test_same_turn_new_user_input_invalidates_result(prepared_external: tuple) -
         result,response=call(ready,'collect',checker_alias=prepared['checker_alias'],task_name=path)
         assert result.exit_code==0 and response['status']=='cancelled'
         assert 'result' not in response
+
+
+@pytest.mark.parametrize('running', [False, True])
+def test_v2_native_function_output_correlates_and_cancels_steered_check(
+    prepared_external: tuple, running: bool,
+) -> None:
+    """Native v2 output links the child; new Main input cancels even a live child."""
+    root, _, _ = prepared_external
+    with external_main(root) as ready:
+        _, prepared = call(ready, 'prepare')
+        path = native_child(root, prepared, child_status='inProgress' if running else 'completed')
+        options = json.loads((root / 'native-options.json').read_text())
+        options['child']['forkedFromId'] = None
+        options['main_page_size'] = 1
+        options['spawn_items'] = [
+            {'turnId': 'main-turn', 'item': {'id': 'earlier-item', 'type': 'agentMessage'}},
+            {'turnId': 'main-turn', 'item': {
+                'id': 'native-spawn-output', 'type': 'functionCallOutput',
+                'namespace': 'collaboration', 'name': 'spawn_agent',
+                'output': json.dumps({'task_name': path}),
+            }},
+            {'turnId': 'main-turn', 'item': {'id': 'steering', 'type': 'userMessage'}},
+        ]
+        (root / 'native-options.json').write_text(json.dumps(options))
+        result, response = call(ready, 'collect', checker_alias=prepared['checker_alias'],
+                                task_name=path, wait_seconds=0)
+        assert result.exit_code == 0, result.output
+        assert response['status'] == 'cancelled' and 'result' not in response
+        assert response['native_observation']['spawn_call'] == 'native-spawn-output'
+        if running:
+            assert (root / 'native-interrupted').read_text() == 'actual-child'
+
+
+@pytest.mark.parametrize('change', ['namespace', 'name', 'output', 'path', 'turn', 'duplicate'])
+def test_v2_output_requires_unique_native_spawn_for_prepared_turn(
+    prepared_external: tuple, change: str,
+) -> None:
+    """Lookalike results and stale or duplicated native outputs cannot establish identity."""
+    root, _, _ = prepared_external
+    with external_main(root) as ready:
+        _, prepared = call(ready, 'prepare')
+        path = native_child(root, prepared)
+        options = json.loads((root / 'native-options.json').read_text())
+        item = {'id': 'native-spawn-output', 'type': 'functionCallOutput',
+                'namespace': 'collaboration', 'name': 'spawn_agent',
+                'output': json.dumps({'task_name': path})}
+        entry = {'turnId': 'main-turn', 'item': item}
+        if change in ('namespace', 'name', 'output'):
+            item[change] = 'unrelated'
+        if change == 'path':
+            item['output'] = json.dumps({'task_name': '/root/other'})
+        if change == 'turn':
+            entry['turnId'] = 'old-turn'
+        options['spawn_items'] = [entry, entry] if change == 'duplicate' else [entry]
+        (root / 'native-options.json').write_text(json.dumps(options))
+        result, _ = call(ready, 'collect', checker_alias=prepared['checker_alias'], task_name=path)
+        assert result.exit_code != 0
+        assert not (root / '.graphtraj/runner/sessions' / prepared['checker_alias'] / 'native.yml').exists()
+        native_child(root, prepared)
 
 
 

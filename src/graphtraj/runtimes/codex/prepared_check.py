@@ -186,6 +186,12 @@ async def association(client: CodexAppServer, preparation: dict, task_path: str 
                       and isinstance(entry['item'].get('id'), str)
                       and entry['item']['id']
                       and (spawn_output_matches(entry['item'], child_path)
+                           # Native v2 spawn emits Started with its call ID in
+                           # the invoking turn, unlike later child completion.
+                           or (entry['item'].get('type') == 'subAgentActivity'
+                               and entry['item'].get('kind') == 'started'
+                               and entry['item'].get('agentThreadId') == child['id']
+                               and entry['item'].get('agentPath') == child_path)
                            or (entry['item'].get('type') == 'collabAgentToolCall'
                                and entry['item'].get('tool') == 'spawnAgent'
                                and entry['item'].get('senderThreadId') == parent

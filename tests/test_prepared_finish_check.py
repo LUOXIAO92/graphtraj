@@ -342,7 +342,7 @@ def test_native_association_failure_reports_only_safe_predicate_metadata(
             'name': 'spawn_agent', 'prompt': 'PRIVATE_PROMPT',
             'output': json.dumps({'task_name': path, 'credential': 'PRIVATE_CREDENTIAL'}),
         }}, {'turnId': 'main-turn', 'item': {
-            'id': 'activity', 'type': 'subAgentActivity', 'kind': 'started',
+            'id': 'activity', 'type': 'subAgentActivity', 'kind': 'interacted',
             'agentThreadId': 'actual-child', 'agentPath': path,
         }}]
         (root / 'native-options.json').write_text(json.dumps(options))
@@ -352,10 +352,72 @@ def test_native_association_failure_reports_only_safe_predicate_metadata(
         assert 'read_turn' in visible and 'main-turn' in visible
         assert 'namespace_matches' in visible and 'unexpected' in visible
         assert 'matching_call_count' in visible and 'output_task_matches' in visible
-        assert 'agentThreadId' in visible and 'actual-child' in visible and 'started' in visible
+        assert 'agentThreadId' in visible and 'actual-child' in visible and 'interacted' in visible
         assert 'PRIVATE_PROMPT' not in visible and 'PRIVATE_CREDENTIAL' not in visible
         assert not (root / '.graphtraj/runner/sessions' / prepared['checker_alias'] / 'native.yml').exists()
         native_child(root, prepared)
+
+
+@pytest.mark.parametrize('scenario', [
+    'current', 'stale', 'running-stale', 'interacted', 'completed',
+    'path', 'child', 'turn', 'duplicate', 'missing-id', 'parent',
+])
+def test_observed_native_started_activity_preserves_preparation_guards(
+    prepared_external: tuple, scenario: str,
+) -> None:
+    """Use the host-observed Started/Completed shape; only a unique exact start binds."""
+    root, _, delivered = prepared_external
+    with external_main(root) as ready:
+        _, prepared = call(ready, 'prepare')
+        path = native_child(root, prepared,
+                            child_status='inProgress' if scenario == 'running-stale' else 'completed')
+        options = json.loads((root / 'native-options.json').read_text())
+        options['child']['forkedFromId'] = None
+        item = {'type': 'subAgentActivity', 'kind': 'started', 'id': 'native-start-call',
+                'agentThreadId': 'actual-child', 'agentPath': path}
+        entry = {'turnId': 'main-turn', 'item': item}
+        options['main_page_size'] = 1
+        options['spawn_items'] = [
+            {'turnId': 'main-turn', 'item': {**item, 'id': 'unrelated-call',
+                                            'agentThreadId': 'another-child', 'agentPath': '/root/other'}},
+            entry,
+            {'turnId': 'main-turn', 'item': {**item, 'kind': 'completed', 'id': 'child-completed'}},
+        ]
+        if scenario in ('stale', 'running-stale'):
+            options['spawn_items'].append({'turnId': 'main-turn', 'item': {
+                'type': 'userMessage', 'id': 'new-main-input',
+            }})
+        if scenario in ('interacted', 'completed'):
+            item['kind'] = scenario
+        if scenario == 'path':
+            item['agentPath'] = '/root/other'
+        if scenario == 'child':
+            item['agentThreadId'] = 'another-child'
+        if scenario == 'turn':
+            entry['turnId'] = 'earlier-turn'
+        if scenario == 'duplicate':
+            options['spawn_items'].append({'turnId': 'main-turn', 'item': {**item, 'id': 'second-start'}})
+        if scenario == 'missing-id':
+            item.pop('id')
+        if scenario == 'parent':
+            options['child']['parentThreadId'] = 'another-parent'
+        (root / 'native-options.json').write_text(json.dumps(options))
+        result, response = call(ready, 'collect', checker_alias=prepared['checker_alias'], task_name=path)
+        if scenario in ('current', 'stale', 'running-stale'):
+            assert response['native_observation']['spawn_call'] == 'native-start-call'
+            if scenario == 'current':
+                assert result.exit_code != 0 and response['result']['status'] == 'error'
+                assert 'configuration_error' in response['native_observation']
+            else:
+                assert result.exit_code == 0 and response['status'] == 'cancelled'
+                assert 'result' not in response
+            if scenario == 'running-stale':
+                assert (root / 'native-interrupted').read_text() == 'actual-child'
+        else:
+            assert result.exit_code != 0
+            assert not (root / '.graphtraj/runner/sessions' / prepared['checker_alias'] / 'native.yml').exists()
+            native_child(root, prepared)
+        assert not delivered
 
 
 

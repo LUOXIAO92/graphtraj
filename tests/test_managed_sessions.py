@@ -192,6 +192,45 @@ def test_returned_launch_keeps_execution_owned(managed_project: ManagedProject) 
     assert status['execution_id']
 
 
+@pytest.mark.parametrize('operation', ['launch', 'resume'])
+def test_slow_startup_waits_for_native_execution(
+    managed_project: ManagedProject,
+    monkeypatch: pytest.MonkeyPatch,
+    operation: str,
+) -> None:
+    """Slow launch is not failed and slow continuation is not interrupted."""
+    root, cause, call, executable = managed_project
+    launched = None
+    if operation == 'resume':
+        launched = call('launch', launch_document())['tasks'][0]
+        assert launched['launch_status'] == 'launched', launched
+        call('send', [launched['alias'], 'complete first execution', [cause]])
+        observe(call, launched['alias'], 'idle', 'completed')
+
+    # Compress the old ten-second acknowledgement deadline while keeping the
+    # native RPC itself well within its separate request timeout.
+    monkeypatch.setattr(sys.modules[__name__], 'CALL', CALL.replace(
+        'try:\n    if operation',
+        'from graphtraj.execution import runner_control\n'
+        'runner_control.OPERATION_TIMEOUT_SECONDS = 0.05\n'
+        'try:\n    if operation',
+    ))
+    executable.write_text(executable.read_text().replace(
+        "elif method in ('thread/start', 'thread/resume'):\n",
+        "elif method in ('thread/start', 'thread/resume'):\n        time.sleep(0.3)\n",
+    ))
+    if operation == 'launch':
+        launched = call('launch', launch_document())['tasks'][0]
+        assert launched['launch_status'] == 'launched', launched
+    else:
+        sent = call('send', [launched['alias'], 'hold', [cause]])
+        assert sent['send_status'] == 'sent'
+        assert sent['session'] == launched['session']
+    active = observe(call, launched['alias'], 'running')
+    assert active['session'] == launched['session']
+    assert active['execution_id']
+
+
 @pytest.mark.skipif(os.environ.get('CODEX_MANAGED_REAL') != '1', reason='explicit real Codex acceptance probe')
 def test_real_registered_session(managed_project: ManagedProject) -> None:
     """Exercise public Runner ownership against the installed real Codex Adapter."""

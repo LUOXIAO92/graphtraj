@@ -892,10 +892,13 @@ def _await_session_resume(
     error_file: Path,
     expected_session: str | None,
 ) -> None:
-    """Wait only for durable ownership; execution continues after this returns."""
+    """Wait for durable startup or actual Worker exit, not a control-RPC timeout.
+
+    Native startup can outlast a control request. The Worker retains its own
+    budget and interruption handling while this caller waits for its outcome.
+    """
     mapping_file = session_directory / "mapping.yml"
-    deadline = time.monotonic() + OPERATION_TIMEOUT_SECONDS
-    while time.monotonic() < deadline:
+    while True:
         if error_file.is_file():
             if expected_session is None:
                 failure = yaml.safe_load(error_file.read_text(encoding="utf-8"))
@@ -930,7 +933,6 @@ def _await_session_resume(
                     )
             raise _not_resumable()
         time.sleep(0.01)
-    raise _not_resumable()
 
 
 def _resume_environment(

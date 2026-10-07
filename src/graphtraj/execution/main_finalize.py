@@ -137,11 +137,10 @@ def check_main_finalize(
         if not isinstance(context, dict) or type(context.get('continued')) is not bool:
             raise ValueError('The Adapter did not provide valid lifecycle state.')
         configuration = load_project_configuration(host.cwd)
-        graph = read_graph(configuration.state)
+        read_graph(configuration.state)
         prompt = files('graphtraj').joinpath('prompts/main_finalize_check.md').read_text(encoding='utf-8')
-        prompt += '\n\n' + json.dumps({
-            'summary_issue_hint': summary_issue, 'task_graph_hint': graph,
-        }, ensure_ascii=False)
+        if summary_issue is not None:
+            prompt += '\n\n' + json.dumps({'summary_issue_hint': summary_issue}, ensure_ascii=False)
         if hasattr(adapter, 'prepare_main_check'):
             if host.finish_connection is None:
                 host.finish_connection = dict(binding['connection'])

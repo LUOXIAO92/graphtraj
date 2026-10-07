@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import secrets
 from importlib.resources import files
 from pathlib import Path
@@ -87,10 +86,16 @@ def prepare(host: object, prompt: str | None = None, turn: str | None = None) ->
         raise RunnerError('unsupported-operation', 'This Runtime has no prepared checker interface.')
     if prompt is None:
         configuration = load_project_configuration(host.cwd)
+        # Fail explicitly if project state is unreadable, but let the checker
+        # identify and query its current task instead of copying all history.
+        read_graph(configuration.state)
         prompt = files('graphtraj').joinpath('prompts/main_finalize_check.md').read_text()
-        prompt += '\n\n' + json.dumps({'task_graph_hint': read_graph(configuration.state)})
     native = method(connection, 'finish_check_' + secrets.token_hex(16), prompt, turn)
     for directory, record in records(host, runner):
+        # An explicit cancellation retains the old request as evidence and
+        # permits a fresh public prepare, including after an owner update.
+        if record['state'] == 'cancelled':
+            continue
         if (record['preparation']['turn'] == native['turn']
                 and record['preparation'].get('input_ids') == native['input_ids']
                 and not record.get('actionable_delivered')):

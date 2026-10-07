@@ -260,3 +260,49 @@ def test_prepared_checker_retains_read_only_graphtraj_interface(
                             'arguments':{'alias':ready['alias'],'instruction':'not authorized'}})
         assert denied.failed
         assert denied.document['error']=='Unknown feature: send_instruction'
+
+
+@pytest.mark.parametrize('entry', ['prepare', 'hook'])
+def test_history_growth_does_not_expand_native_action_and_cancel_allows_retry(
+    prepared_external: tuple, entry: str,
+) -> None:
+    """Public cancellation preserves the old request; history is queried, not injected."""
+    from test_host_adoption import EVENT, invoke_hook
+
+    root, _, _ = prepared_external
+    with external_main(root) as ready:
+        def prepare_request() -> dict:
+            """Read the exact Adapter material through either supported Main entry."""
+            if entry == 'prepare':
+                result, document = call(ready, 'prepare')
+                assert result.exit_code == 0, result.output
+                return document
+            result = invoke_hook(ready, EVENT)
+            assert result.returncode == 0, result.stderr
+            response = json.loads(result.stdout)
+            return json.loads(response['reason'][response['reason'].index('{'):])
+
+        first = prepare_request()
+        result, cancelled = call(ready, 'cancel', checker_alias=first['checker_alias'])
+        assert result.exit_code == 0 and cancelled['status'] == 'cancelled'
+        old_directory = root / '.graphtraj/runner/sessions' / first['checker_alias']
+        retained = {name: (old_directory / name).read_bytes()
+                    for name in ('mapping.yml', 'execution.yml')}
+        registered = CliRunner().invoke(main, ['main-operation', '--binding', ready['operation_binding'],
+            '--request', json.dumps({'action': 'execute', 'feature': 'ticket_register', 'arguments': {
+                'ticket_id': '88', 'ticket_name': 'historical-context',
+                'source': 'https://github.com/example/project/issues/88',
+                'title': 'Historical task', 'body': '历史任务内容' * 10000, 'dependencies': [],
+            }})])
+        assert registered.exit_code == 0, registered.output
+        second = prepare_request()
+        assert second['checker_alias'] != first['checker_alias']
+        assert second['checked_turn'] == first['checked_turn']
+        assert second['native_action']['arguments']['message'] == first['native_action']['arguments']['message']
+        assert second['native_action']['arguments']['task_name'] != first['native_action']['arguments']['task_name']
+        repeated = prepare_request()
+        assert repeated['checker_alias'] == second['checker_alias']
+        assert repeated['native_action'] == second['native_action']
+        assert {name: (old_directory / name).read_bytes() for name in retained} == retained
+        _, old = call(ready, 'collect', checker_alias=first['checker_alias'])
+        assert old['status'] == 'cancelled'

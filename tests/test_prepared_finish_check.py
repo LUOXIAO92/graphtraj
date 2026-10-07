@@ -328,6 +328,32 @@ def test_v2_output_requires_unique_native_spawn_for_prepared_turn(
         native_child(root, prepared)
 
 
+def test_native_association_failure_reports_only_safe_predicate_metadata(
+    prepared_external: tuple,
+) -> None:
+    """The public failure exposes the read turn and mismatch, never native message bodies."""
+    root, _, _ = prepared_external
+    with external_main(root) as ready:
+        _, prepared = call(ready, 'prepare')
+        path = native_child(root, prepared)
+        options = json.loads((root / 'native-options.json').read_text())
+        options['spawn_items'] = [{'turnId': 'main-turn', 'item': {
+            'id': 'native-call', 'type': 'functionCallOutput', 'namespace': 'unexpected',
+            'name': 'spawn_agent', 'prompt': 'PRIVATE_PROMPT',
+            'output': json.dumps({'task_name': path, 'credential': 'PRIVATE_CREDENTIAL'}),
+        }}]
+        (root / 'native-options.json').write_text(json.dumps(options))
+        result, response = call(ready, 'collect', checker_alias=prepared['checker_alias'], task_name=path)
+        assert result.exit_code != 0
+        visible = json.dumps(response)
+        assert 'read_turn' in visible and 'main-turn' in visible
+        assert 'namespace_matches' in visible and 'unexpected' in visible
+        assert 'matching_call_count' in visible and 'output_task_matches' in visible
+        assert 'PRIVATE_PROMPT' not in visible and 'PRIVATE_CREDENTIAL' not in visible
+        assert not (root / '.graphtraj/runner/sessions' / prepared['checker_alias'] / 'native.yml').exists()
+        native_child(root, prepared)
+
+
 
 def test_completed_archived_child_is_resolved_by_native_task_path(prepared_external: tuple) -> None:
     """A finished native task remains readable without private metadata scanning."""

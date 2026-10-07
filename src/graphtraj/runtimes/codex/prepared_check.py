@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+from collections import Counter
 from typing import Callable
 
 from graphtraj.runtimes.codex import finalize
@@ -62,6 +63,50 @@ def spawn_output_matches(item: dict, task_path: str) -> bool:
     except ValueError:
         return False
     return isinstance(result, dict) and result.get('task_name') == task_path
+
+
+def association_diagnostics(entries: list[dict], preparation: dict, child: dict) -> dict:
+    """Describe native association predicates without exposing any message or output body."""
+    candidates = []
+    for entry in entries:
+        item = entry.get('item')
+        if not isinstance(item, dict) or item.get('type') not in (
+            'functionCallOutput', 'collabAgentToolCall', 'dynamicToolCall', 'subAgentActivity',
+        ):
+            continue
+        candidates.append((entry, item))
+    spawn_candidates = [(entry, item) for entry, item in candidates
+                        if 'spawn' in str(item.get('name', '')).lower()
+                        or 'spawn' in str(item.get('tool', '')).lower()]
+    details = []
+    for entry, item in (spawn_candidates or candidates)[:12]:
+        output = item.get('output')
+        try:
+            parsed = json.loads(output) if isinstance(output, str) else None
+        except ValueError:
+            parsed = None
+        details.append({
+            'turn': entry.get('turnId'),
+            **{key: item.get(key) for key in ('id', 'type', 'namespace', 'name', 'tool', 'status')},
+            'turn_matches': entry.get('turnId') == preparation['turn'],
+            'id_present': isinstance(item.get('id'), str) and bool(item['id']),
+            'sender_matches': item.get('senderThreadId') == preparation['session'],
+            'receiver_matches': child['id'] in item.get('receiverThreadIds', []),
+            'namespace_matches': item.get('namespace') == 'collaboration',
+            'name_matches': item.get('name') == 'spawn_agent',
+            'output_type': type(output).__name__,
+            'output_task_matches': isinstance(parsed, dict) and parsed.get('task_name') ==
+                child['source']['subAgent']['thread_spawn']['agent_path'],
+        })
+    return {
+        'read_turn': preparation['turn'], 'native_child_count': 1,
+        'entry_count': len(entries), 'candidate_count': len(candidates),
+        'spawn_candidate_count': len(spawn_candidates),
+        'item_types': dict(Counter(str(entry.get('item', {}).get('type')) for entry in entries
+                                   if isinstance(entry.get('item'), dict))),
+        'entry_turns': dict(Counter(str(entry.get('turnId')) for entry in entries)),
+        'candidates': details,
+    }
 
 
 def prepare(connection: dict, task_name: str, prompt: str, turn: str | None) -> dict:
@@ -142,7 +187,10 @@ async def association(client: CodexAppServer, preparation: dict, task_path: str 
                                and child['id'] in entry['item'].get('receiverThreadIds', [])
                                and entry['item'].get('status') in ('inProgress', 'completed')))]
     if len(matching_calls) != 1:
-        raise failure('No unique native spawn links this checker to the prepared Main turn.')
+        details = association_diagnostics(entries, preparation, child)
+        details['matching_call_count'] = len(matching_calls)
+        raise failure('No unique native spawn links this checker to the prepared Main turn. '
+                      + json.dumps(details, ensure_ascii=False, sort_keys=True))
     return {'session': child['id'], 'task_path': child['source']['subAgent']['thread_spawn']['agent_path'],
             'spawn_call': matching_calls[0]['id'], 'model': child.get('model'),
             'provider': child.get('modelProvider'), 'effort': child.get('reasoningEffort')}

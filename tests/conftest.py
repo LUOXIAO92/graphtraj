@@ -506,14 +506,13 @@ def _build_wheel(build_root: Path) -> Path:
 
 
 def _install_commands(environment: Path, wheel: Path) -> InstalledCommands:
-    """Install one built wheel into a fresh environment."""
+    """Install one wheel and its declared dependencies into an isolated environment."""
 
     subprocess.run(
         [
             sys.executable,
             "-m",
             "venv",
-            "--system-site-packages",
             str(environment),
         ],
         cwd=PROJECT_ROOT,
@@ -527,14 +526,13 @@ def _install_commands(environment: Path, wheel: Path) -> InstalledCommands:
             "pip",
             "install",
             "--disable-pip-version-check",
-            "--no-deps",
             str(wheel),
         ],
         cwd=wheel.parent,
     )
     result.check_returncode()
     # Workers use Python -I. Load their clock after site initialization so
-    # dependencies inherited through system-site-packages are available.
+    # the installed package and its dependencies are available.
     site = run_process([str(python), '-c',
                         "import sysconfig; print(sysconfig.get_path('purelib'))"], cwd=environment)
     site.check_returncode()

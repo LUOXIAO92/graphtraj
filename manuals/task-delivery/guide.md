@@ -177,6 +177,12 @@ checker errors remain explicit failures, not a completed-task conclusion.
 
 For an authorized native-host preparation, use GraphTraj's public entry to
 register the checker and obtain the Adapter-generated invocation materials.
+Through the bound `main-operation` channel, call the `finish_check` feature
+with `action: prepare`. Perform the returned `native_action`, then call
+`action: collect` with that preparation's `checker_alias` and the native
+tool's returned `task_name`. A running result retains the same checker;
+`action: cancel` stops that preparation. Request the feature's schema for
+the available wait parameters.
 Main performs only that native action, retaining full context and configuration,
 and supplies the returned execution reference. GraphTraj verifies provenance
 and correspondence with this check, reads its native result and manages

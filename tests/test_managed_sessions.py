@@ -12,7 +12,7 @@ from typing import Callable, Iterator
 import pytest
 import yaml
 
-from conftest import FakeCodex, InstalledCommands, run_process
+from conftest import FakeCodex, InstalledCommands, run_process, wait_for_file
 from runner_fixtures import configure_harness
 from test_ticket_graph import _ticket
 
@@ -206,9 +206,12 @@ def test_slow_startup_waits_for_native_execution(
         assert launched['launch_status'] == 'launched', launched
         call('send', [launched['alias'], 'complete first execution', [cause]])
         observe(call, launched['alias'], 'idle', 'completed')
+        # Sequence the fixture on Runner's retained completion receipt. Native
+        # idle alone can precede final Trace drain, which is not under test.
+        wait_for_file(root / '.graphtraj/runner/sessions' / launched['alias'] / 'execution.yml')
 
-    # Compress the old ten-second acknowledgement deadline while keeping the
-    # native RPC itself well within its separate request timeout.
+    # Compress the old startup deadline while staying within the independent
+    # five-second native RPC timeout.
     monkeypatch.setattr(sys.modules[__name__], 'CALL', CALL.replace(
         'try:\n    if operation',
         'from graphtraj.execution import runner_control\n'
@@ -229,6 +232,8 @@ def test_slow_startup_waits_for_native_execution(
     active = observe(call, launched['alias'], 'running')
     assert active['session'] == launched['session']
     assert active['execution_id']
+    if operation == 'resume':
+        assert active['execution_id'] != launched['execution_id']
 
 
 @pytest.mark.skipif(os.environ.get('CODEX_MANAGED_REAL') != '1', reason='explicit real Codex acceptance probe')

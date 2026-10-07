@@ -139,19 +139,7 @@ def _tool_call_response(
         )
     try:
         with _caller_notices(params) as recovery:
-            from graphtraj.interfaces.hosted_cli import forward_request
-
-            result = forward_request(arguments, Path.cwd())
-            if result is None:
-                if arguments.get('action') == 'execute':
-                    from graphtraj.execution.runner_status import caller_alias, runtime_caller
-                    from graphtraj.workspace.runner_project import discover_runner_directory
-
-                    runner = discover_runner_directory(Path.cwd())
-                    with runtime_caller(runner, caller_alias(runner) or 'unregistered'):
-                        result = gateway.handle_request(arguments, cwd=Path.cwd())
-                else:
-                    result = gateway.handle_request(arguments, cwd=Path.cwd())
+            result = gateway.handle_request(arguments, cwd=Path.cwd())
             document = (
                 recovery.attach_stop_deliveries(result.document)
                 if recovery is not None

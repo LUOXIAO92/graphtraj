@@ -8,7 +8,7 @@ import yaml
 from graphtraj.configuration.project_configuration import load_project_configuration
 from graphtraj.execution.runner_batch import parse_swarm, read_swarm
 from graphtraj.execution.runner_models import Batch, LaunchResponse, RunnerError
-from graphtraj.execution.runner_status import caller_alias, caller_is_main, read_alias_mapping
+from graphtraj.execution.runner_status import caller_alias, read_alias_mapping
 from graphtraj.graph.ticket_graph import read_graph
 from graphtraj.workspace.runner_project import (
     discover_project_root,
@@ -47,9 +47,9 @@ def _swarm_context(cwd: Path) -> tuple[str | None, dict[str, str]]:
     """Return the calling Session's Ticket and the registered Ticket names.
 
     A caller that runs inside a Ticket Session already works inside one Ticket,
-    so its launch input does not repeat that identity. Main has a registered
-    Agent identity without a Ticket assignment and selects each launch's Ticket
-    through the DAG.
+    so its launch input does not repeat that identity. Main has no Session of
+    its own and selects the Ticket through the DAG, so each task it launches
+    names that selection.
     """
     # A Session may call this entry from its own Ticket Worktree, so the
     # Harness Project Root is resolved from the working directory upwards.
@@ -92,7 +92,7 @@ def launch_batch(batch: Batch, cwd: Path) -> LaunchResponse:
     runner_directory = discover_runner_directory(discover_project_root(cwd))
     registration = os.environ.get("GRAPHTRAJ_PARENT_REGISTRATION")
     caller = caller_alias(runner_directory)
-    if caller is not None and not caller_is_main(runner_directory):
+    if caller is not None:
         from graphtraj.teams.team_round import register_child_batch
 
         # Only this Session's own registration file may be written; a request

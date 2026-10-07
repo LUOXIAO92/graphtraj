@@ -9,7 +9,6 @@ import sys
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
-from graphtraj.execution.main_finalize import finish_check_outcome
 from graphtraj.runtimes.codex.app_server import CodexAppServer, CodexServerRequest
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 from graphtraj.workspace.runner_project import runtime_executable
@@ -31,11 +30,15 @@ def proxy(
 
 
 def verify_main(connection: dict) -> str:
-    """Resolve transport handles; GraphTraj already verified the Agent purpose."""
+    """Check native root metadata for the Session captured by the caller boundary."""
     async def read() -> str:
         """Read metadata through the existing host, without reading conversation turns."""
         async with proxy(connection) as client:
             thread = await client.read_thread(connection['session'])
+            source = thread.get('source')
+            if (thread.get('parentThreadId') is not None
+                    or isinstance(source, dict) and 'subAgent' in source):
+                raise RuntimeAdapterError('authority-denied', 'A native child cannot bind Main Stop.')
             hook_session = thread.get('sessionId')
             if not isinstance(hook_session, str) or not hook_session:
                 raise ValueError('The native hook Session identity is unavailable.')
@@ -45,25 +48,17 @@ def verify_main(connection: dict) -> str:
 
 
 def hook(path: Path, binding: dict) -> dict:
-    """Prepare the native command carrier without modifying enable/trust settings."""
-    carrier = '--host-binding' if binding.get('trusted_host') else '--channel'
-    command = shlex.join([sys.executable, '-m', 'graphtraj.runtimes.codex.stop_hook',
-                          carrier, str(path), '--project', binding['cwd']])
-    return {'hooks': {'Stop': [{'hooks': [{'type': 'command', 'command': command,
-                                         'statusMessage': '[GraphTraj hook: finish-check]'}]}]}}
+    """Return native hook configuration without installing or trusting it."""
+    command = shlex.join([
+        sys.executable, '-m', 'graphtraj.runtimes.codex.stop_hook',
+        '--binding', str(path), '--hook-session', binding['connection']['hook_session'],
+    ])
+    return {'hooks': {'Stop': [{'hooks': [{'type': 'command', 'command': command}]}]}}
 
 
 def event_context(binding: dict, event: dict) -> dict | None:
     """Confirm Main's exact native turn, ignoring other lifecycle events."""
-    if not isinstance(event, dict) or not isinstance(event.get('hook_event_name'), str):
-        raise ValueError('The native lifecycle event is unavailable.')
-    if event['hook_event_name'] in ('Interrupt', 'SubagentStop'):
-        return None
-    if event['hook_event_name'] != 'Stop':
-        raise ValueError('Unknown native finish-check lifecycle event.')
-    if not isinstance(event.get('session_id'), str) or not event['session_id']:
-        raise ValueError('The native event execution handle is unavailable.')
-    if event['session_id'] != binding['connection']['hook_session']:
+    if event.get('hook_event_name') != 'Stop' or event.get('session_id') != binding['connection']['hook_session']:
         return None
     if not isinstance(event.get('turn_id'), str) or not event['turn_id']:
         raise ValueError('Stop did not identify its native turn.')
@@ -85,16 +80,14 @@ def event_context(binding: dict, event: dict) -> dict | None:
 
 def response(result: dict | None, continued: bool) -> dict:
     """Return a Stop decision; repeated checker errors cannot self-continue forever."""
-    prefix = '[GraphTraj hook: finish-check]'
-    if result is None:
-        return {'systemMessage': f'{prefix} skip: owning turn stopped, changed or unrelated.'}
-    outcome, detail = finish_check_outcome(result)
-    reason = f'{prefix} {outcome}: {detail}'
-    if result['status'] in ('completed', 'waiting'):
-        return {'systemMessage': reason}
+    if result is None or result['status'] in ('completed', 'waiting'):
+        return {}
+    reason = result['reason']
     if result['status'] == 'actionable':
         return {'decision': 'block', 'reason': '\n'.join([reason, *result['nodes']])}
-    return {'continue': False, 'stopReason': reason, 'systemMessage': reason}
+    if continued:
+        return {'continue': False, 'stopReason': reason, 'systemMessage': reason}
+    return {'decision': 'block', 'reason': reason}
 
 
 def check(
@@ -110,6 +103,10 @@ def check(
 
         async def handle(request: CodexServerRequest) -> dict:
             """Expose only read-only GraphTraj task summaries to this exact checker."""
+            from graphtraj.interfaces.gateway import handle_request
+            from graphtraj.execution.runner_status import runtime_caller
+            from graphtraj.workspace.runner_project import discover_runner_directory
+
             if (request.method != 'item/tool/call' or child_id is None
                     or request.params.get('threadId') != child_id
                     or request.params.get('tool') != 'graphtraj'):
@@ -117,7 +114,10 @@ def check(
 
             def call() -> dict:
                 """Keep the fork's caller identity separate from the root Main."""
-                result = binding['checker_tool'](request.params.get('arguments', {}))
+                root = Path(binding['cwd'])
+                with runtime_caller(discover_runner_directory(root), child_id):
+                    result = handle_request(request.params.get('arguments', {}), cwd=root,
+                                            allowed_features={'ticket_graph', 'alias_status'})
                 return {'contentItems': [{'type': 'inputText', 'text': json.dumps(result.document)}],
                         'success': not result.failed}
             return await asyncio.to_thread(call)
@@ -135,20 +135,8 @@ def check(
             execution = await client.start_execution(child, prompt)
             try:
                 # Leave time for native cancellation before the default 600s hook deadline.
-                pending = asyncio.create_task(client.wait(execution, timeout=540))
-                while not pending.done():
-                    await asyncio.wait({pending}, timeout=1)
-                    await asyncio.to_thread(binding['execution_allowed'])
-                    if not await client.is_current_turn(binding['session'], context['turn']):
-                        if not pending.done():
-                            await client.interrupt(execution)
-                        await pending
-                        return None
-                result = await pending
+                result = await client.wait(execution, timeout=540)
             except BaseException as error:
-                if not pending.done():
-                    pending.cancel()
-                await asyncio.gather(pending, return_exceptions=True)
                 try:
                     await client.interrupt(execution)
                     await client.wait(execution, timeout=10)

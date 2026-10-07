@@ -12,7 +12,7 @@ from typing import Callable, Iterator
 import pytest
 import yaml
 
-from conftest import FakeCodex, InstalledCommands, run_process, wait_for_file
+from conftest import FakeCodex, InstalledCommands, run_process
 from runner_fixtures import configure_harness
 from test_ticket_graph import _ticket
 
@@ -190,50 +190,6 @@ def test_returned_launch_keeps_execution_owned(managed_project: ManagedProject) 
     status = observe(call, launched['alias'], 'running')
     assert status['session'] == launched['session']
     assert status['execution_id']
-
-
-@pytest.mark.parametrize('operation', ['launch', 'resume'])
-def test_slow_startup_waits_for_native_execution(
-    managed_project: ManagedProject,
-    monkeypatch: pytest.MonkeyPatch,
-    operation: str,
-) -> None:
-    """Slow launch is not failed and slow continuation is not interrupted."""
-    root, cause, call, executable = managed_project
-    launched = None
-    if operation == 'resume':
-        launched = call('launch', launch_document())['tasks'][0]
-        assert launched['launch_status'] == 'launched', launched
-        call('send', [launched['alias'], 'complete first execution', [cause]])
-        observe(call, launched['alias'], 'idle', 'completed')
-        # Sequence the fixture on Runner's retained completion receipt. Native
-        # idle alone can precede final Trace drain, which is not under test.
-        wait_for_file(root / '.graphtraj/runner/sessions' / launched['alias'] / 'execution.yml')
-
-    # Compress the old startup deadline while staying within the independent
-    # five-second native RPC timeout.
-    monkeypatch.setattr(sys.modules[__name__], 'CALL', CALL.replace(
-        'try:\n    if operation',
-        'from graphtraj.execution import runner_control\n'
-        'runner_control.OPERATION_TIMEOUT_SECONDS = 0.05\n'
-        'try:\n    if operation',
-    ))
-    executable.write_text(executable.read_text().replace(
-        "elif method in ('thread/start', 'thread/resume'):\n",
-        "elif method in ('thread/start', 'thread/resume'):\n        time.sleep(0.3)\n",
-    ))
-    if operation == 'launch':
-        launched = call('launch', launch_document())['tasks'][0]
-        assert launched['launch_status'] == 'launched', launched
-    else:
-        sent = call('send', [launched['alias'], 'hold', [cause]])
-        assert sent['send_status'] == 'sent'
-        assert sent['session'] == launched['session']
-    active = observe(call, launched['alias'], 'running')
-    assert active['session'] == launched['session']
-    assert active['execution_id']
-    if operation == 'resume':
-        assert active['execution_id'] != launched['execution_id']
 
 
 @pytest.mark.skipif(os.environ.get('CODEX_MANAGED_REAL') != '1', reason='explicit real Codex acceptance probe')

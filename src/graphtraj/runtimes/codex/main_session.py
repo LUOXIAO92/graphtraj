@@ -8,15 +8,12 @@ import fcntl
 import json
 import re
 import uuid
-from contextlib import ExitStack
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Awaitable, Callable
 
 from graphtraj.configuration.project_configuration import load_project_configuration
 from graphtraj.execution.runner_models import RunnerError
-from graphtraj.execution.runner_connection import worker_connection
-from graphtraj.execution.runner_io import write_yaml_durably
 from graphtraj.execution.runner_status import caller_alias
 from graphtraj.runtimes.codex.codex_adapter import (
     CODEX_PERMISSION_REQUEST_FEATURES,
@@ -53,10 +50,9 @@ async def run_main(
 ) -> dict:
     """Run one Main turn; native user requests keep their original response format.
 
-    A member cannot become Main in its own Harness. GraphTraj registers Main
-    before native calls; separate native records retain the Adapter execution
-    association. Resuming preserves both associations and the registered tools.
-    No Team or child-role preset is created.
+    A formal Agent cannot become Main in its own Harness. New Main records use
+    separate Main storage; resuming one keeps its native identity and
+    originally registered tools. No Team or child-role preset is created.
     """
     configuration = load_project_configuration(root)
     runner = discover_runner_directory(root)
@@ -66,23 +62,17 @@ async def run_main(
         raise RunnerError('invalid-input', 'Main requires an instruction.')
     if resume is not None and re.fullmatch(r'main_[0-9a-f]{32}', resume) is None:
         raise RunnerError('invalid-input', 'Resume requires a Main record returned by this entry.')
-    # Keep the existing native launch records and associate their registered
-    # Agent alias; native conversation identifiers grant no role authority.
+    # Formal status enumeration expects an alias mapping for every sessions/
+    # entry. Main owns a native Session, but is not a formal Agent alias.
     record = runner / 'main-sessions' / (resume or ('main_' + uuid.uuid4().hex))
     if resume is None:
         record.mkdir(parents=True, exist_ok=False)
     # Same-Session continuation cannot create a second active Main driver.
-    with ExitStack() as stack, (record / 'launch.yml').open('a+b') as ownership:
+    with (record / 'launch.yml').open('a+b') as ownership:
         try:
             fcntl.flock(ownership, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as error:
             raise RunnerError('turn-running', 'This Main Session is already executing.') from error
-        from graphtraj.execution.agent_identity import adopt_host_agent
-
-        retained = json.loads((record / 'session.yml').read_text()) if resume else {}
-        binding, owner = adopt_host_agent(root, 'codex', lambda proposal: {'decision': 'accept'},
-                                          resume=retained.get('alias'))
-        stack.callback(owner.close)
         native_session: str | None = None
         operations: list[dict] = []
 
@@ -92,7 +82,7 @@ async def run_main(
                 request.method == 'item/tool/call'
                 and request.params.get('tool') in {'graphtraj', *NATIVE_RUNNER_TOOLS}
             ):
-                result = await run_native_operation(adapter, native_session, binding['alias'], root, request)
+                result = await run_native_operation(adapter, native_session, None, root, request)
                 # Summarize actual callback results without exporting private
                 # helper IDs, conversations or report contents to a caller.
                 summary = {'tool': request.params['tool'], 'success': result['success'],
@@ -141,38 +131,14 @@ async def run_main(
             })
             if resume is None:
                 session = await adapter.create_session(context)
+                (record / 'session.yml').write_text(json.dumps({'session': session.thread_id}) + '\n')
             else:
                 original = json.loads((record / 'session.yml').read_text())['session']
                 session = await adapter.resume_session(context, original)
-            # An older managed-Main record gains its authorized association;
-            # subsequent resumes reuse it instead of allocating another Agent.
-            if retained.get('alias') != binding['alias']:
-                (record / 'session.yml').write_text(json.dumps({
-                    **retained, 'session': session.thread_id, 'alias': binding['alias'],
-                }) + '\n')
             native_session = session.thread_id
             adapter.retain_native_trace(session, record / 'events.jsonl')
-            loop = asyncio.get_running_loop()
-            execution = None
-
-            def receive(event: dict) -> dict:
-                """Forward a registered child's event to this owned native turn."""
-                if execution is None:
-                    raise RunnerError('operation-unavailable', 'Main has not started its turn.')
-                asyncio.run_coroutine_threadsafe(
-                    adapter.send_input(execution, json.dumps(event, ensure_ascii=False)), loop,
-                ).result()
-                return {}
-
-            connection = worker_connection(runner, receive)
-            address = connection.__enter__()
-            write_yaml_durably(runner / 'sessions' / binding['alias'] / 'mapping.yml',
-                               {**binding, 'host_connection': address})
-            try:
-                execution = await adapter.start_execution(session, instruction)
-                result = await adapter.wait(execution)
-            finally:
-                await asyncio.to_thread(connection.__exit__, None, None, None)
+            execution = await adapter.start_execution(session, instruction)
+            result = await adapter.wait(execution)
             (record / 'execution.yml').write_text(json.dumps(result) + '\n')
-            return {'record': record.name, 'session': session.thread_id, 'alias': binding['alias'],
+            return {'record': record.name, 'session': session.thread_id,
                     'native_operations': operations, **result}

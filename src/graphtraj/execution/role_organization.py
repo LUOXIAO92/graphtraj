@@ -26,7 +26,7 @@ from graphtraj.configuration.project_roles import (
 )
 from graphtraj.execution.runner_io import write_yaml_durably
 from graphtraj.execution.runner_models import RunnerError
-from graphtraj.execution.runner_status import caller_alias, caller_is_main
+from graphtraj.execution.runner_status import caller_alias
 from graphtraj.workspace.runner_project import (
     discover_project_root,
     discover_runner_directory,
@@ -63,7 +63,7 @@ def organize_child_roles(arguments: Mapping[str, Any], *, cwd: Path | None = Non
     # The Runner's own process record decides the caller. A supplied role,
     # alias or reviewer field never confers authority over project role settings.
     caller = caller_alias(discover_runner_directory(root))
-    if caller is not None and not caller_is_main(discover_runner_directory(root)):
+    if caller is not None:
         raise RunnerError(
             "authority-denied",
             "Only the caller that owns the Harness Project may organize its child roles.",

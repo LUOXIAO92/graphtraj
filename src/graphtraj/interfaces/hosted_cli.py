@@ -9,10 +9,7 @@ from typing import Any, Callable, Collection, Iterator, Mapping
 
 from graphtraj.execution.runner_connection import connection_operation, worker_connection
 from graphtraj.execution.runner_models import RunnerError
-from graphtraj.execution.runner_status import (
-    process_caller_alias, read_alias_mapping, runtime_caller, require_execution_allowed,
-)
-from graphtraj.execution.runner_heartbeat import ownership_is_held
+from graphtraj.execution.runner_status import process_caller_alias, read_alias_mapping, runtime_caller
 from graphtraj.interfaces.gateway import handle_request
 from graphtraj.interfaces.tools import ToolResult
 from graphtraj.runtimes.runtime_adapter import recovery_review
@@ -54,9 +51,6 @@ def cli_connection(
     allowed_features: Collection[str],
     recovery_reviewer: Callable[[dict], dict] | None = None,
     directory: Path | None = None,
-    authenticate: Callable[[int], None] | None = None,
-    host_request: Callable[[dict], ToolResult] | None = None,
-    lifecycle: Callable[[dict], dict] | None = None,
 ) -> Iterator[str]:
     """Serve one Session using its actual ownership and selected approval route.
 
@@ -72,44 +66,24 @@ def cli_connection(
         directory = runner.parent / 'cli'
     directory.mkdir(parents=True, exist_ok=True)
 
-    def verify_writer(pid: int) -> None:
+    def authenticate(pid: int) -> None:
         """Require this channel's live Session to own the kernel-observed writer."""
-        if authenticate is not None:
-            mapping, session_directory = read_alias_mapping(runner, alias)
-            require_execution_allowed(runner, alias, mapping)
-            if not ownership_is_held(session_directory, mapping['worker_pid']):
-                raise RunnerError('authority-denied', 'The bound host no longer owns this Agent.')
-            authenticate(pid)
-            return
         if process_caller_alias(runner, pid) != alias:
             raise RunnerError('authority-denied', 'The CLI request is not owned by this live Session.')
 
     def operate(document: dict) -> dict:
         """Bind verified identity before entering the same gateway as native tools."""
-        if (not isinstance(document, dict) or set(document) not in ({'cwd', 'request'}, {'cwd', 'event'})
+        if (not isinstance(document, dict) or set(document) != {'cwd', 'request'}
                 or not _caller_in_scope(document['cwd'], root, runner, alias)):
             raise RunnerError(
                 'invalid-config',
                 "Agent Runner must be invoked from the Harness Project Root or this Session's Worktree.",
             )
         with runtime_caller(runner, alias), recovery_review(recovery_reviewer):
-            if 'event' in document:
-                if lifecycle is None:
-                    from graphtraj.execution.main_finalize import finish_check_exclusion
-
-                    mapping, _ = read_alias_mapping(runner, alias)
-                    excluded = finish_check_exclusion(mapping.get('purpose', 'member'))
-                    if excluded is not None:
-                        return {'response': {'status': 'skip', 'reason': excluded}}
-                    raise RunnerError('unsupported-operation', 'This Agent channel has no lifecycle attachment.')
-                if not isinstance(document['event'], dict):
-                    raise ValueError('The lifecycle event must be an object.')
-                return {'response': lifecycle(document['event'])}
-            result = (host_request(document['request']) if host_request is not None else
-                      handle_request(document['request'], cwd=root, allowed_features=allowed_features))
+            result = handle_request(document['request'], cwd=root, allowed_features=allowed_features)
         return {'document': result.document, 'failed': result.failed}
 
-    with worker_connection(directory, operate, authenticate=verify_writer) as address:
+    with worker_connection(directory, operate, authenticate=authenticate) as address:
         yield address
 
 
@@ -134,19 +108,3 @@ def forward_request(request: Mapping[str, Any], cwd: Path) -> ToolResult | None:
         'request': request,
     }, authenticate=True)
     return ToolResult(response['document'], failed=response['failed'])
-
-
-def forward_lifecycle(event: dict, cwd: Path, address: str | None = None) -> dict:
-    """Return a native hook decision over the existing authenticated owner channel.
-
-    The address locates a transport; its live kernel-writer check still decides
-    caller authority. The request contains no alias, purpose or native binding.
-    """
-    # Managed children keep their own authenticated caller channel even when
-    # the native host inherited a root hook command. An address grants nothing.
-    address = os.environ.get(CONNECTION_ENV, address)
-    if not address:
-        raise RunnerError('operation-unavailable', 'No authenticated owning CLI channel is available.')
-    reply = connection_operation(address, {'cwd': str(cwd.resolve()), 'event': event},
-                                 authenticate=True, timeout_seconds=600)
-    return reply['response']

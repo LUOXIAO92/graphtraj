@@ -1102,21 +1102,6 @@ register_tool(
 )
 
 
-
-
-def read_agent_identity(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> ToolResult:
-    """Read the bound GraphTraj identity without accepting identity claims."""
-    from graphtraj.execution.runner_status import agent_identity
-
-    return ToolResult(agent_identity(cwd or Path.cwd()))
-
-
-register_tool(
-    "agent_identity", "Read the bound GraphTraj Agent identity or explicit human access.",
-    {"type": "object", "properties": {}, "additionalProperties": False}, read_agent_identity,
-)
-
-
 # CLI names and decoding are presentation metadata, not another parameter schema.
 # Unlisted parameters use their Python name and Click's existing scalar/repeated form.
 _CLI = {
@@ -1134,7 +1119,6 @@ _CLI = {
     }),
     "ticket_integrate": (("graphtraj", "ticket", "integrate"), {"role": ("role", "yaml-value")}),
     "alias_status": (("agent-runner", "status"), {}),
-    "agent_identity": (("agent-runner", "identity"), {}),
     "parent_status": (("agent-runner", "parent-status"), {}),
     "swarm": (("agent-runner", "--swarm-input"), {"swarm_input": ("", "yaml")}),
     "send_instruction": (("agent-runner", "send"), {"caused_by_event_id": ("caused_by_event_ids", "value")}),
@@ -1161,86 +1145,23 @@ for _name, (_path, _parameters) in _CLI.items():
 
 
 def bind_main_finalize(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> ToolResult:
-    """Prepare finish-check on the actual owning authenticated channel."""
+    """Bind the root caller's actual host without accepting model identity fields."""
     from graphtraj.execution.main_finalize import bind_main_finalize as bind
 
-    return ToolResult(bind(arguments.get('summary_issue'), cwd or Path.cwd()))
+    return ToolResult(bind(_string_argument(arguments, 'summary_issue'), cwd or Path.cwd()))
 
 
 register_tool(
     'bind_main_finalize',
-    'Prepare finish-check command-hook material on the adopted Main authenticated channel.',
+    'Bind Main completion checking to the current host and return its hook configuration.',
     {'type': 'object', 'properties': {'summary_issue': {'type': 'string'}},
-     'additionalProperties': False},
+     'required': ['summary_issue'], 'additionalProperties': False},
     bind_main_finalize,
     manual_ref="manuals/task-delivery/guide.md",
 )
 TOOLS['bind_main_finalize'] = replace(
     TOOLS['bind_main_finalize'], cli_path=('graphtraj', 'bind-finalize'),
 )
-
-
-def adopt_external_main(
-    arguments: Mapping[str, Any],
-    *,
-    cwd: Path | None = None,
-    execute: Callable[[Path, str | None], dict] | None = None,
-) -> ToolResult:
-    """Attach through the CLI's retained owner, never a model-supplied executor."""
-    from graphtraj.execution.runner_models import RunnerError
-
-    if execute is None:
-        raise RunnerError('unsupported-operation', 'Use graphtraj adopt-main in the existing Main terminal.')
-    return ToolResult(execute(cwd or Path.cwd(), arguments.get('resume')))
-
-
-register_tool(
-    'adopt_main',
-    'Adopt the existing external Codex Main through native review and retain its '
-    'trusted finish-check attachment. Keep graphtraj adopt-main running; it prepares '
-    'hook material without enabling hooks or changing trust.',
-    {'type': 'object', 'properties': {'resume': {'type': 'string'}},
-     'additionalProperties': False},
-    adopt_external_main, manual_ref='manuals/task-delivery/guide.md',
-)
-TOOLS['adopt_main'] = replace(TOOLS['adopt_main'], cli_path=('graphtraj', 'adopt-main'))
-
-
-def operate_finish_check(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> ToolResult:
-    """Use the caller's retained owner to prepare, collect or cancel its native checker."""
-    from graphtraj.execution.main_finalize import finish_host
-    from graphtraj.execution.prepared_finish_check import operate
-    from graphtraj.execution.runner_models import RunnerError
-
-    host = finish_host.get()
-    if host is None:
-        raise RunnerError('authority-denied', 'finish-check requires the registered Main channel.')
-    from graphtraj.execution.main_finalize import PREFIX
-    from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
-
-    try:
-        wait_seconds = arguments.get('wait_seconds', 0)
-        if not 0 <= wait_seconds <= 30:
-            raise ValueError('wait_seconds must be finite and between 0 and 30.')
-        with host.preparation_lock:
-            result = operate(host, arguments['action'], arguments.get('checker_alias'),
-                             arguments.get('task_name'), wait_seconds)
-    except (RunnerError, RuntimeAdapterError, ValueError, OSError) as error:
-        return ToolResult({'status': 'failed', 'systemMessage':
-                           f'{PREFIX} start: Operating prepared check.\n{PREFIX} failure: {error}'}, failed=True)
-    return ToolResult(result, failed=result['status'] == 'failed')
-
-
-register_tool(
-    'finish_check', 'Prepare, collect or cancel the approved native checker on this Main.',
-    {'type': 'object', 'properties': {
-        'action': {'type': 'string', 'enum': ['prepare', 'collect', 'cancel']},
-        'checker_alias': {'type': 'string'}, 'task_name': {'type': 'string'},
-        'wait_seconds': {'type': 'number', 'description': 'Finite seconds from 0 to 30; zero reads once.'}},
-     'required': ['action'], 'additionalProperties': False},
-    operate_finish_check, manual_ref='manuals/task-delivery/guide.md',
-)
-TOOLS['finish_check'] = replace(TOOLS['finish_check'], cli_path=('graphtraj', 'finish-check'))
 
 
 # Method-only features carry the guide's own frontmatter description and no

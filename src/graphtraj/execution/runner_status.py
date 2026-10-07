@@ -27,11 +27,12 @@ _runtime_caller: ContextVar[tuple[Path, str | None] | None] = ContextVar('runtim
 
 @contextmanager
 def runtime_caller(runner_directory: Path, identity: str | None) -> Iterator[None]:
-    """Scope a GraphTraj alias received from its owned host callback.
+    """Scope an identity received on the private Runtime callback connection.
 
-    This is not a model input. Adapters bind registered aliases; temporary
-    native helpers receive an unregistered sentinel, never their native ID.
-    ``None`` is reserved for explicit trusted human access.
+    This is not a CLI/MCP identity input. Native helpers use their actual thread
+    ID, which cannot match a formal alias, and receive summary-only observation.
+    The Adapter verifies their native parent chain or its own creation-time
+    Session binding before entering this scope.
     """
     token = _runtime_caller.set((runner_directory.resolve(), identity))
     try:
@@ -87,26 +88,36 @@ def conflicting_binding_field(
 ) -> str | None:
     """Return the first binding field the request would change, if any."""
 
-    for field in (*SESSION_BINDING_FIELDS, "purpose"):
+    for field in SESSION_BINDING_FIELDS:
         if requested.get(field) != recorded.get(field):
             return field
     return None
 
 
 def caller_alias(runner_directory: Path) -> str | None:
-    """Resolve a bound Agent alias, or an unowned human CLI process.
+    """Return the identity bound to a native callback or the calling process.
 
-    A private callback supplies its GraphTraj alias. An isolated Runtime CLI
-    can also resolve its live Worker ancestry. Shared host processes require a
-    per-caller channel and cannot select an alias from a PID. Request fields,
-    native conversation handles and environment labels grant no authority.
+    An owned Runtime callback supplies its verified identity in a scoped
+    context: the formal alias, or a native helper thread ID for summary queries.
+    Ordinary CLI/MCP requests cannot select that context with their arguments.
+
+    A control request identifies itself by the process tree it runs in, never
+    by a value it carries. The Runner records each Session's Worker and native
+    Runtime process identifiers in its own mapping, and the Worker holds its
+    ownership lock for as long as it owns that Session, so the caller is the
+    Session whose recorded owner is a live ancestor of this process. When Main
+    or the user calls, no live Session owns the process and the result is
+    ``None``.
+
+    Neither a projected environment variable nor a request field can establish
+    or raise this identity: a missing, forged or copied value is simply not
+    consulted. Host isolation from a caller that leaves its own process tree is
+    the separate boundary owned by T3c.
     """
     native = _runtime_caller.get()
     if native is not None:
         if native[0] != runner_directory.resolve():
             raise _authority_denied()
-        if native[1] is None:
-            return None  # Explicit trusted human context, never a native Main.
         return native[1]
     return process_caller_alias(runner_directory, os.getpid())
 
@@ -120,15 +131,13 @@ def process_caller_alias(runner_directory: Path, pid: int) -> str | None:
     if not owners:
         return None
     for pid in process_ancestors(pid):
-        if pid in owners and owners[pid] is None:
-            raise RunnerError('authority-denied', 'A shared host requires a bound Agent call channel.')
         alias = owners.get(pid)
         if alias is not None:
             return alias
     return None
 
 
-def _live_session_owners(runner_directory: Path) -> Dict[int, str | None]:
+def _live_session_owners(runner_directory: Path) -> Dict[int, str]:
     """Map each live Session's recorded process identifiers to its alias.
 
     Liveness is the ownership lock the recorded Worker still holds, so an
@@ -146,7 +155,7 @@ def _live_session_owners(runner_directory: Path) -> Dict[int, str | None]:
             "authority-denied",
             "Caller identity cannot be verified because Session records are inaccessible.",
         ) from error
-    owners: Dict[int, str | None] = {}
+    owners: Dict[int, str] = {}
     for alias in aliases:
         try:
             mapping, session_directory = read_alias_mapping(runner_directory, alias)
@@ -154,51 +163,22 @@ def _live_session_owners(runner_directory: Path) -> Dict[int, str | None]:
             continue
         if not ownership_is_held(session_directory, mapping["worker_pid"]):
             continue
-        # A shared host process cannot identify which of its Agents called.
-        for pid in {mapping["runtime_pid"], mapping["worker_pid"]}:
-            if mapping.get("hosted") or (pid in owners and owners[pid] != alias):
-                owners[pid] = None
-            else:
-                owners[pid] = alias
+        owners.setdefault(mapping["runtime_pid"], alias)
+        owners.setdefault(mapping["worker_pid"], alias)
     return owners
 
 
-def registered_parent(runner_directory: Path, mapping: Mapping[str, Any]) -> str | None:
-    """Resolve a retained host association without rewriting the recorded parent.
-
-    Only an already registered Main may represent the exact old host connection.
-    A native handle locates that registration; it never creates an Agent purpose.
-    """
-    parent = mapping.get("parent")
-    connection = mapping.get("parent_connection")
-    if parent is not None or not isinstance(connection, dict):
-        return parent
-    if not (runner_directory / "sessions" / mapping["alias"] / "mapping.yml").exists():
-        return None  # A root launch has not established its Agent record yet.
-    from graphtraj.execution.host_adoption import execution_associations
-
-    matches = [registered["alias"] for registered, native in execution_associations(runner_directory)
-               if registered.get("purpose") == "main"
-               and all(native.get(key) == connection.get(key)
-                       for key in ("runtime", "session", "codex_home"))]
-    if len(matches) > 1:
-        raise RunnerError("authority-denied", "The retained parent has multiple registered owners.")
-    return matches[0] if matches else None
-
-
-def is_direct_owner(
-    caller: str | None, mapping: Mapping[str, Any], runner_directory: Path,
-) -> bool:
+def is_direct_owner(caller: str | None, mapping: Mapping[str, Any]) -> bool:
     """Return whether one caller directly owns the Agent this mapping records.
 
     A Session directly owns the children the Runner recorded with it as their
-    parent. An ordinary human CLI caller has no live Session owner and
+    parent. A caller with no live Session owner is Main or the user, which
     directly owns the top-level Sessions the Runner recorded without a parent;
     a sibling, a grandchild or another branch stays outside that relation. The
     recorded parent alone decides, so no request field and no projected
     environment value can widen the relation.
     """
-    parent = registered_parent(runner_directory, mapping)
+    parent = mapping.get("parent")
     if caller is None:
         return parent is None
     return parent == caller
@@ -209,13 +189,13 @@ def require_direct_authority(
 ) -> None:
     """Refuse ordinary control of a target outside the caller's direct relation.
 
-    An Agent addresses itself and its recorded direct children. Registered
-    Main uses its own alias; human callers address top-level Sessions recorded
-    without a parent. A message, an approval query, an
+    A Session addresses itself and its recorded direct children. Main and the
+    user, which have no live Session owner, address the top-level Sessions the
+    Runner recorded without a parent. A message, an approval query, an
     approval reply and a created child Batch all use this one judgement.
     """
     caller = caller_alias(runner_directory)
-    if caller == alias or is_direct_owner(caller, mapping, runner_directory):
+    if caller == alias or is_direct_owner(caller, mapping):
         return
     raise _authority_denied()
 
@@ -230,8 +210,7 @@ def require_task_authority(
     """Authorize a task operation against the actual Session and current Team.
 
     Submission belongs to the member itself; acceptance and member registration
-    belong to its real direct parent (including a top-level caller). Integration
-    also belongs to the registered Main owning that member's subtree. Registration
+    belong to its real direct parent (including a top-level caller). Registration
     may precede membership, but never the Runner's Session binding. This is the
     common authorization check, not a submission or acceptance state transition.
     Role names and caller-supplied identity fields confer no authority.
@@ -257,13 +236,7 @@ def require_task_authority(
     caller = caller_alias(runner_directory)
     if operation == "submit" and caller == alias:
         return mapping
-    if operation == "integrate" and caller_is_main(runner_directory):
-        require_execution_allowed(
-            runner_directory, caller, read_alias_mapping(runner_directory, caller)[0],
-        )
-        require_descendant_authority(runner_directory, alias, mapping)
-        return mapping
-    if operation in {"accept", "integrate", "register-member"} and is_direct_owner(caller, mapping, runner_directory):
+    if operation in {"accept", "integrate", "register-member"} and is_direct_owner(caller, mapping):
         return mapping
     raise _authority_denied()
 
@@ -281,12 +254,12 @@ def require_descendant_authority(
     if caller is None or caller == alias:
         return
     seen = {alias}
-    parent = registered_parent(runner_directory, mapping)
+    parent = mapping.get("parent")
     while isinstance(parent, str) and parent not in seen:
         if parent == caller:
             return
         seen.add(parent)
-        parent = registered_parent(runner_directory, read_alias_mapping(runner_directory, parent)[0])
+        parent = read_alias_mapping(runner_directory, parent)[0].get("parent")
     raise _authority_denied()
 
 
@@ -306,7 +279,7 @@ def require_replacement_authority(
     from graphtraj.runtimes.replacement import caller_runtime
 
     caller = caller_alias(runner_directory)
-    if is_direct_owner(caller, mapping, runner_directory):
+    if is_direct_owner(caller, mapping):
         return None
     runtime = (
         read_alias_mapping(runner_directory, caller)[0]["runtime"]
@@ -358,7 +331,7 @@ def require_stopped_subtree(runner_directory: Path, alias: str) -> None:
             )
         pending.extend(
             name for name, (child, _) in mappings.items()
-            if registered_parent(runner_directory, child) == current
+            if child.get("parent") == current
         )
 
 
@@ -383,7 +356,7 @@ def require_execution_allowed(
             raise RunnerError(
                 "subtree-stopped", f"{alias} belongs to stopped subtree {current}.",
             )
-        parent = registered_parent(runner_directory, mapping)
+        parent = mapping.get("parent")
         current = parent if isinstance(parent, str) else None
         if current is not None:
             mapping, _ = read_alias_mapping(runner_directory, current)
@@ -405,18 +378,6 @@ def _unstarted_allocation(directory: Path) -> bool:
         and entries[0].is_file()
         and entries[0].stat().st_size == 0
     )
-
-
-def unestablished_execution_allocation(directory: Path) -> bool:
-    """Whether retained lifecycle facts confirm no execution identity was established.
-
-    Unlike the subtree-only root-launch exemption, a pending launch is not
-    sufficient here. Native host/checker associations also prohibit exclusion.
-    """
-    if (directory.is_symlink() or not directory.is_dir()
-            or os.path.lexists(directory / 'native.yml')):
-        return False
-    return _unstarted_allocation(directory) or _terminal_unestablished_launch(directory)
 
 
 def _unestablished_root_launch(directory: Path) -> bool:
@@ -529,8 +490,8 @@ def status_tree(
 
     Visibility reuses the recorded direct relation unchanged. A live Session
     owns the subtree rooted at itself; a caller with no live Session owner,
-    which is a human CLI caller, observes recorded top-level Sessions and
-    their subtrees. Each node keeps its ``parent`` and ``children`` names and the
+    which is Main or the user, owns every recorded top-level Session and its
+    subtree. Each node keeps its ``parent`` and ``children`` names and the
     per-Agent detail ``_status_alias`` already allows, so only the caller
     itself and its recorded direct children carry a full status and every
     deeper node keeps the coarse activity and last outcome.
@@ -547,11 +508,11 @@ def status_tree(
 
     children: Dict[str, list[str]] = {}
     for alias, mapping in records.items():
-        parent = registered_parent(runner_directory, mapping)
+        parent = mapping.get("parent")
         if isinstance(parent, str):
             children.setdefault(parent, []).append(alias)
     roots = (
-        [alias for alias, mapping in records.items() if registered_parent(runner_directory, mapping) is None]
+        [alias for alias, mapping in records.items() if mapping.get("parent") is None]
         if caller is None
         else [caller] if caller in records else []
     )
@@ -653,7 +614,7 @@ def _status_alias(
     mapping, session_directory = read_alias_mapping(runner_directory, alias)
     # A cross-level observation keeps only the coarse activity, for an Agent
     # caller and for a caller with no live Session owner alike.
-    if caller != alias and not is_direct_owner(caller, mapping, runner_directory):
+    if caller != alias and not is_direct_owner(caller, mapping):
         return _status_summary(mapping, session_directory, alias)
     status = _status_session(mapping, session_directory, alias)
     if operation_total:
@@ -736,11 +697,6 @@ def _status_session(
 ) -> Dict[str, str]:
     """Read execution activity, optionally handling abnormality during observation."""
     identity = {"alias": alias}
-    if mapping.get("hosted"):
-        record = yaml.safe_load((session_directory / "session.yml").read_text())
-        return {**identity, "purpose": mapping["purpose"], "parent": mapping["parent"],
-                "activity": "running" if ownership_is_held(session_directory, mapping["worker_pid"]) else "idle",
-                "retired": bool(record.get("retirement"))}
     if "execution_id" in mapping:
         identity.update(session=mapping["session"], execution_id=mapping["execution_id"])
     execution_file = session_directory / "execution.yml"
@@ -891,7 +847,6 @@ def session_record_directory(runner_directory: Path, alias: str) -> Path:
 def read_alias_mapping(
     runner_directory: Path, alias: str
 ) -> Tuple[Dict[str, Any], Path]:
-    """Read a registered host or member binding, including retained retirement evidence."""
     if not ALIAS.fullmatch(alias):
         raise _alias_not_found()
     session_root = runner_directory / "sessions"
@@ -925,13 +880,6 @@ def is_session_mapping(mapping: Mapping[str, Any]) -> bool:
 def _valid_mapping(mapping: object, alias: str) -> bool:
     if not isinstance(mapping, dict):
         return False
-    if mapping.get("hosted") is True:
-        return (mapping.get("alias") == alias and mapping.get("purpose") in {"main", "checker"}
-                and isinstance(mapping.get("runtime"), str)
-                and isinstance(mapping.get("worker_pid"), int)
-                and isinstance(mapping.get("runtime_pid"), int)
-                and (mapping.get("parent") is None if mapping["purpose"] == "main"
-                     else isinstance(mapping.get("parent"), str)))
     return is_session_mapping(mapping) and _valid_session_mapping(mapping, alias)
 
 
@@ -1019,39 +967,3 @@ def _diagnostic_failure() -> RunnerError:
     return RunnerError(
         "operation-failed", "The requested Session diagnostics could not be read."
     )
-
-
-def require_host_adoption(runner_directory: Path) -> None:
-    """Refuse adopting a Main from an existing Agent's bound execution."""
-    bound = _runtime_caller.get()
-    if bound is not None and bound[1] is not None:
-        raise _authority_denied()
-    # Hosted Agents deliberately have no process identity. Their user-owned
-    # host can bind another conversation only through explicit native approval.
-    owners = _live_session_owners(runner_directory)
-    for pid in process_ancestors(os.getpid()):
-        if owners.get(pid) is not None:
-            raise _authority_denied()
-
-
-def caller_is_main(runner_directory: Path) -> bool:
-    """Whether this bound caller is a registered Main, independently of Runtime handles."""
-    alias = caller_alias(runner_directory)
-    if alias is None:
-        return False
-    try:
-        return read_alias_mapping(runner_directory, alias)[0].get("purpose") == "main"
-    except RunnerError:
-        return False
-
-
-def agent_identity(cwd: Path) -> dict:
-    """Return the bound caller's GraphTraj identity, or explicit human access."""
-    runner = discover_runner_directory(cwd)
-    alias = caller_alias(runner)
-    if alias is None:
-        return {"access": "human"}
-    mapping, directory = read_alias_mapping(runner, alias)
-    require_execution_allowed(runner, alias, mapping)
-    return {"access": "agent", "alias": alias,
-            "purpose": mapping.get("purpose", "member"), "parent": registered_parent(runner, mapping)}

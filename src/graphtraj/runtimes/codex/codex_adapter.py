@@ -342,13 +342,13 @@ class CodexRuntimeAdapter:
         return current_connection()
 
     def verify_finalize_main(self, connection: dict) -> str:
-        """Resolve the adopted Main's native transport through its owning daemon."""
+        """Verify the captured Main through the owning Codex daemon."""
         from graphtraj.runtimes.codex.finalize import verify_main
 
         return verify_main(connection)
 
     def finalize_hook(self, path: Path, binding: dict) -> dict:
-        """Prepare the native command carrier on the authenticated owning channel."""
+        """Return the supported command Stop carrier for this exact Main."""
         from graphtraj.runtimes.codex.finalize import hook
 
         return hook(path, binding)
@@ -370,33 +370,6 @@ class CodexRuntimeAdapter:
         from graphtraj.runtimes.codex.finalize import check
 
         return check(binding, context, prompt, created)
-
-    def prepare_main_check(
-        self,
-        connection: dict,
-        task_name: str,
-        prompt: str,
-        turn: str | None,
-    ) -> dict:
-        """Prepare the authorized host-native full-history action without overrides."""
-        from graphtraj.runtimes.codex.prepared_check import prepare
-
-        return prepare(connection, task_name, prompt, turn)
-
-    def observe_main_check(
-        self,
-        connection: dict,
-        preparation: dict,
-        task_name: str | None,
-        wait_seconds: float,
-        cancel: bool,
-        allowed: Callable,
-        associated: Callable,
-    ) -> dict:
-        """Resolve the real task-name return and retain verified result/cancellation."""
-        from graphtraj.runtimes.codex.prepared_check import observe
-
-        return observe(connection, preparation, task_name, wait_seconds, cancel, allowed, associated)
 
     def finalize_response(self, result: dict | None, continued: bool) -> dict:
         """Render native continuation, including bounded error handling."""

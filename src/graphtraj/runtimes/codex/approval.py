@@ -172,8 +172,8 @@ def review_recovery(proposal: dict, cwd: Path) -> dict:
     settings = None
     context = {}
     custom = False
-    mapping, directory = read_alias_mapping(project.runner_directory, caller) if caller else ({}, None)
-    if caller and mapping.get("purpose", "member") == "member":
+    if caller:
+        mapping, directory = read_alias_mapping(project.runner_directory, caller)
         task = read_session_task(mapping, project.harness_root)
         role = task.inline_preset or load_project_roles(project.harness_root).preset(
             mapping.get('role_reference') or mapping['role'])

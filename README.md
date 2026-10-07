@@ -685,100 +685,27 @@ Ticket's Agents, then removes the unused Ticket Worktree/branch. Retirement
 removes active mappings while preserving durable evidence and original parent
 relationships; it does not remove a Worktree still used by another execution.
 
-## Main completion checks: finish-check
+## Main completion checks
 
-For an existing external Codex Main, run this command from its own native
-terminal in the Harness Project Root, preserving its actual launch context:
-
-```sh
-graphtraj adopt-main
-```
-
-The command obtains the selected native review for that existing conversation,
-registers its GraphTraj identity and prints an `adoption_status: ready` document
-with its alias and hook material. It remains running in the foreground to own
-the connection; retain that terminal while using the hook. It does not start
-a replacement Main, enable the hook, change trust or upgrade other tools.
-Review the returned material before adopting it through the host's native
-configuration and trust mechanism, honoring explicit user disablement.
-
-The ready document also returns `operation_binding` for ordinary Main requests:
+From the existing owning Main context, bind a summary Issue or equivalent task
+reference:
 
 ```sh
-graphtraj main-operation --binding '<operation_binding>' \
-  --request '{"action":"execute","feature":"agent_identity","arguments":{}}'
+graphtraj bind-finalize --summary-issue '<summary-issue-reference>'
 ```
 
-Use the same public request format for other operations. If the native sandbox
-denies access to this private binding, request the host's execution permission
-for that exact command. The path locates the binding; it is not a caller-supplied
-role or credential. Keep credentials private. The owner binds the request to
-its registered Main and applies the ordinary relationship checks. Its lifecycle
-capability cannot authorize these requests. Bare `graphtraj-tool` is not
-automatically attached to an external Main; managed Agent channels retain their
-existing tool route. An earlier user-approved registration alone does not make
-an unbound command a Main operation.
+The shared tool operation is `bind_main_finalize` with `summary_issue`. The
+result provides the binding and native hook material for review and adoption;
+returning that material does not install it or prove that the current host has
+run it. Adopt it through the Runtime's supported hook configuration while
+preserving existing settings and permissions.
 
-Ctrl-C or closing the owner revokes its private hook attachment without closing
-the native conversation. To restore a stopped owner for that same conversation,
-use `graphtraj adopt-main --resume <returned-alias>` through the same reviewed
-entry. Preserve the original records; do not substitute a native ID or a chosen
-role. A registered member/checker cannot adopt itself as Main. The shared
-`adopt_main` feature describes this CLI entry; ordinary tool requests cannot
-supply its host executor.
-
-For a host already integrated through the Python API below, retain its
-authenticated `HostTool.cli_channel(verify_writer)` and prepare material with:
-
-```sh
-graphtraj bind-finalize
-```
-
-That shared operation is `bind_main_finalize`. Optional `--summary-issue` or
-`summary_issue` supplies a task hint, not an authoritative or fixed target.
-The result contains the registered alias and native hook material. Review and
-adopt that material through the Runtime's supported configuration, preserving
-existing settings, permissions and explicit user disablement. Preparation
-does not enable or trust the hook. Keep the owning host and channel alive for
-the hook's lifetime; expired channels report failure. Old static Session
-bindings are refused rather than promoted to Main identities. The public
-`adopt-main` route prepares its own hook material without this extra command.
-
-The fixed, user-trusted hook is host code using a private lifecycle-only
-attachment. Ordinary Agent CLI/tool calls retain their own permissions and
-authenticated channels. Do not infer that a trusted hook inherits the same
-filesystem sandbox as a model command, or expose its private attachment as a
-general-purpose privileged tool. Installing the package alone establishes
-neither adoption nor actual native hook behavior.
-
-GraphTraj identity scopes the hook to Main and excludes registered members and
-checkers. The checker inherits Main's native context and complete effective
-Runtime configuration, including current-turn overrides. The Adapter preserves
-these settings and fails explicitly when it cannot; stored defaults are not a
-substitute. The checker identifies the current goal, then reads its Issue, DAG and Tickets.
-Conflicting or stale hints cannot override that current task; an unresolved
-goal is an error. Completed work and legitimate waiting may
+The hook is scoped to its actual Main. It delegates a state check using the
+Main's available native context and current model, then checks the summary
+Issue, DAG and referenced Tickets. Completed work and legitimate waiting may
 finish the turn. Actionable unfinished nodes are returned to the same Main so
 it continues. Ordinary children and the checker do not acquire a recursive
 completion hook; user interruption and execution limits remain effective.
-
-When the owning host exposes its native fork as a Main tool, GraphTraj prepares
-and registers the checker through its public entry and returns the Adapter's
-invocation materials. Main performs that specific native action without
-configuration overrides and supplies its returned execution reference.
-GraphTraj verifies native provenance and correspondence with the prepared check,
-then reads the result and manages cancellation. A supplied handle is a lookup
-hint, not identity proof; a Main-transcribed verdict is not the native result.
-Preparation may request this specific Main action before a verdict exists;
-it is not a checker actionable decision. Existing records retain the checked
-turn and handle duplicates, stale preparations and interruption.
-
-Every activation identifies itself with `[GraphTraj hook: finish-check]` and
-shows its start and actual decision with the reason for allowing or preventing
-the turn from ending. Start, completed and waiting appear in the host's visible
-hook output without sending new input to Main; only actionable returns work to
-Main. Waiting is not task completion. Errors appear as visible hook failures,
-not a pass or private-log-only message. A disabled hook makes no claim to have run.
 
 The checker does not redo code review or reconstruct requirements from native
 Traces. Reference or checker failures are not completion evidence. Native
@@ -1175,52 +1102,18 @@ print(reply.document, reply.failed)
 ```
 
 For task events, an owning Python host can retain its existing parent Session
-connection and adopt the existing Main through the tool binding:
+connection through the tool binding:
 
 ```python
 callback = bind(
     cwd=Path("/absolute/path/to/harness-project-root"),
     event_receiver=forward_to_parent,
-    recovery_reviewer=review_in_owning_host,
 )
-main_alias = callback.adopt_main(runtime_name)
 # Register callback in the host's tool API and retain it across tool calls.
 # forward_to_parent uses the host's existing Session client.
 # When the host has finished receiving all Agent events:
 callback.close()
 ```
-
-`runtime_name` identifies the host's configured execution backend. GraphTraj
-allocates the Agent alias and records its purpose and direct parent using the
-existing Runner records. Native conversation identifiers remain Adapter
-execution handles; they do not grant Main authority. `agent-runner identity`
-and the `agent_identity` tool operation report the calling GraphTraj identity.
-An unregistered model binding is not Main. Ordinary human CLI and desktop
-access remain distinct from Agent calls.
-
-`review_in_owning_host` must be the actual host review mechanism; it approves
-the concrete adoption before registration. The host calls `adopt_main`, not a
-model request carrying a chosen role or alias. Adoption attaches the already
-running Main rather than creating a replacement conversation. For stopped
-identity restoration, a new unbound host tool calls
-`adopt_main(runtime_name, resume=recorded_alias)`. Authorized replacement uses
-`replaces=stopped_alias`; retained history and descendants' original parentage
-are preserved. An already-bound member cannot adopt itself as Main.
-
-Before executing a completion checker, the owning Main host calls
-`callback.register_checker(checker_event_receiver)` and uses the returned
-child binding for that checker. Its purpose and direct parent exist before
-Adapter execution; a checker cannot recursively register another checker.
-Close each binding at the end of its receiving lifetime. Identity registration
-does not install, enable or prove operation of a native completion hook.
-
-For CLI or MCP calls from a registered Agent, the owning host uses
-`callback.cli_channel(verify_writer)`. The verifier must authenticate the
-kernel-observed writer for this specific Agent execution, including when
-several Agents share a host process. Give that execution the returned channel
-as `GRAPHTRAJ_CLI_CONNECTION` and only its required channel filesystem access.
-An environment address, shared PID or model-supplied identity alone is not
-authority. The installed CLI must match the host's GraphTraj implementation.
 
 The host supplies `forward_to_parent`; it forwards to the Session that the host
 already owns. A running parent receives input in its current turn; an idle
@@ -1322,9 +1215,7 @@ authority are unchanged. Registry extensions belong to
 a dependency of CLI, Python, local bridge or native callbacks.
 
 A Codex host can supply its actual calling thread through `params._meta.threadId`
-for the existing in-band caller-notice transport; this does not identify or
-authorize a GraphTraj Agent. Agent MCP calls use the authenticated host channel
-described above. The awaited call can return an
+for the existing in-band caller-notice binding. The awaited call can return an
 enforced stop in `stop_deliveries`, preserving the stop identity, actual stop time
 and elapsed duration. A thread ID alone does not attach a persistent event
 receiver or prove Agent processing. A host that needs delivery after the tool

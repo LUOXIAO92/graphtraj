@@ -719,39 +719,35 @@ class CodexAppServer:
         return {'session': thread_id, 'activity': status['type'], 'turn': turn}
 
     async def fork_session(self, parent: dict[str, Any]) -> CodexSession:
-        """Refuse a checker fork without native effective-turn configuration capture.
+        """Fork native history with the source's current model/provider unchanged.
 
-        Codex 0.160 exposes configured thread settings, explicitly not per-turn
-        telemetry. Its turn metadata omits effective configuration. Forking with
-        model/provider alone can silently replace current-turn overrides with
-        defaults, so no child is created until the native contract supports
-        complete capture, transmission and confirmation.
+        The caller binds the returned handle to its actual Main before starting
+        execution. Fork lineage is checked, never represented as native parent
+        metadata. No private rollout or replacement instructions are supplied.
         """
-        raise CodexAdapterError(
-            'RUNTIME_CAPABILITY_UNSUPPORTED',
-            'Cannot inherit complete effective Main turn configuration: the native '
-            'Codex interface does not expose all current-turn settings or confirm '
-            'their inheritance. Thread/project defaults cannot replace turn '
-            'overrides; no checker was started.',
-        )
+        if any(not isinstance(parent.get(k), str) or not parent[k]
+               for k in ('id', 'model', 'modelProvider')):
+            raise CodexAdapterError('RUNTIME_REQUEST_INVALID', 'Main model metadata is unavailable.')
+        response = await self._call('thread/fork', {
+            'threadId': parent['id'], 'model': parent['model'],
+            'modelProvider': parent['modelProvider'], 'excludeTurns': True,
+        })
+        thread = response.get('thread')
+        if (not isinstance(thread, dict) or not isinstance(thread.get('id'), str)
+                or not thread['id'] or thread['id'] == parent['id']
+                or thread['id'] in self._sessions
+                or thread.get('forkedFromId') != parent['id']
+                or response.get('model') != parent['model']
+                or response.get('modelProvider') != parent['modelProvider']):
+            raise self._protocol_failure('thread/fork did not preserve the bound source and model.')
+        session = CodexSession(thread['id'], None)
+        self._sessions[session.thread_id] = session
+        return session
 
-    async def is_current_turn(
-        self, session: str, turn: str, *, observation: dict[str, Any] | None = None,
-    ) -> bool:
-        """Check the live turn, optionally recording the metadata used by this check.
-
-        ``observation`` receives activity and, when queried, the latest turn's
-        ID/status. It contains no dialogue and does not trigger another query.
-        """
+    async def is_current_turn(self, session: str, turn: str) -> bool:
+        """Check the exact live turn without loading dialogue or execution items."""
         thread = await self.read_thread(session)
-        status = thread.get('status')
-        if not isinstance(status, dict) or status.get('type') not in ('active', 'idle', 'notLoaded'):
-            raise self._protocol_failure('Main lifecycle status is unavailable or erroneous.')
-        if status['type'] == 'notLoaded':
-            raise self._protocol_failure('Main lifecycle state is not loaded.')
-        if observation is not None:
-            observation.update(activity=status['type'], turn=None)
-        if status['type'] == 'idle':
+        if thread.get('status', {}).get('type') != 'active':
             return False
         response = await self._call('thread/turns/list', {
             'threadId': session, 'limit': 1, 'itemsView': 'notLoaded',
@@ -759,15 +755,7 @@ class CodexAppServer:
         turns = response.get('data')
         if not isinstance(turns, list) or not turns or not isinstance(turns[0], dict):
             raise self._protocol_failure('The active Main turn could not be verified.')
-        current = turns[0]
-        if (not isinstance(current.get('id'), str) or not current['id']
-                or current.get('status') not in ('inProgress', 'completed', 'interrupted', 'failed')):
-            raise self._protocol_failure('Main turn metadata is unavailable or erroneous.')
-        if current['status'] == 'failed':
-            raise self._protocol_failure('Main turn failed.')
-        if observation is not None:
-            observation['turn'] = {key: current[key] for key in ('id', 'status')}
-        return current['id'] == turn and current['status'] == 'inProgress'
+        return turns[0].get('id') == turn and turns[0].get('status') == 'inProgress'
 
     def token_usage(self, session: CodexSession) -> dict[str, Any] | None:
         """Return only usage actually delivered by the native host, if available."""

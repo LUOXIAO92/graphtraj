@@ -297,12 +297,9 @@ def test_owning_host_thread_reaches_the_operation_and_a_child_does_not(
                 )
                 return json.loads(response['contentItems'][0]['text']), response['success']
 
-            with local_tool.bind(project, event_receiver=lambda event: None,
-                                 recovery_reviewer=accept) as host:
-                alias = host.adopt_main('codex')
-                owner = await call('owner', alias, {
-                    'action': 'execute', 'feature': 'role_organization', 'arguments': ADD,
-                })
+            owner = await call('owner', None, {
+                'action': 'execute', 'feature': 'role_organization', 'arguments': ADD,
+            })
             child = await call('child@e1', 'child@e1', {
                 'action': 'execute', 'feature': 'role_organization', 'arguments': CHILD_ATTEMPT,
             })

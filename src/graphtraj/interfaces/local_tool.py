@@ -19,18 +19,13 @@ from __future__ import annotations
 
 import argparse
 import json
-import threading
 import sys
 from functools import partial
-from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Callable, Collection, Mapping, TextIO
 
 from graphtraj.execution.runner_connection import parent_connection, worker_connection
 from graphtraj.execution.runner_models import RunnerError
-from graphtraj.execution.runner_status import (
-    caller_alias, runtime_caller, require_execution_allowed, read_alias_mapping,
-)
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 from graphtraj.workspace.runner_project import discover_runner_directory
 from graphtraj.interfaces import gateway
@@ -96,10 +91,9 @@ class HostTool:
     """Keep an owning host's event receiver alive across individual tool returns.
 
     The host forwards events using its already-owned Session/client, and closes
-    this binding only when it stops receiving child events. ``adopt_main``
-    registers the existing host after user authorization; it launches no native
-    Session and changes no model or permission settings. Use as a context manager
-    or call ``close`` off an asynchronous host's client event loop.
+    this binding only when it stops receiving child events. No Session, model,
+    permission or caller identity is created here. Use as a context manager or
+    call ``close``; asynchronous hosts should close off their client event loop.
     """
 
     def __init__(
@@ -111,18 +105,9 @@ class HostTool:
     ) -> None:
         """Open the existing private control transport for this trusted callback."""
         self.cwd = cwd
-        self.receiver = receiver
         self.recovery_reviewer = recovery_reviewer
         self.allowed_features = allowed_features
         self.closed = False
-        self.closing = False
-        self.alias = None
-        self.owner = None
-        self.cli_address = None
-        self.finish_connection = None
-        self.finish_hint = None
-        self.prepared_checks = {}
-        self.preparation_lock = threading.RLock()
         directory = discover_runner_directory(cwd)
         directory.mkdir(parents=True, exist_ok=True)
 
@@ -146,176 +131,15 @@ class HostTool:
         if self.closed:
             raise RunnerError('operation-failed', 'The owning host event binding is closed.')
         from graphtraj.runtimes.runtime_adapter import recovery_review
-        from graphtraj.execution.main_finalize import finish_host
 
-        runner = discover_runner_directory(self.cwd)
-        if self.alias:
-            mapping, _ = read_alias_mapping(runner, self.alias)
-            require_execution_allowed(runner, self.alias, mapping)
-
-        token = finish_host.set(self)
-        try:
-            with parent_connection(self.address), recovery_review(self.recovery_reviewer):
-                if self.alias:
-                    with runtime_caller(runner, self.alias):
-                        return gateway.handle_request(request, cwd=self.cwd, allowed_features=self.allowed_features)
-                with runtime_caller(runner, 'unregistered'):
-                    return gateway.handle_request(request, cwd=self.cwd, allowed_features=self.allowed_features)
-        finally:
-            finish_host.reset(token)
-
-    def adopt_main(
-        self, runtime: str, *, resume: str | None = None, replaces: str | None = None,
-    ) -> str:
-        """Bind this existing host after its owning user approves the exact adoption.
-
-        Called by the host integration, never exposed as a model request. The
-        host must supply its actual native reviewer when constructing this tool.
-        """
-        from graphtraj.execution.agent_identity import adopt_host_agent
-
-        if self.closed or self.alias is not None or self.recovery_reviewer is None:
-            raise RunnerError('authority-denied', 'An unbound owning host and native approval are required.')
-        mapping, self.owner = adopt_host_agent(
-            self.cwd, runtime, self.recovery_reviewer, resume=resume, replaces=replaces,
-        )
-        self.alias = mapping['alias']
-        try:
-            self._record_connection()
-        except BaseException:
-            self.close()
-            raise
-        return self.alias
-
-    def register_checker(
-        self, receiver: Callable[[dict], None], *, resume: str | None = None, replaces: str | None = None,
-    ) -> HostTool:
-        """Register a fresh checker before its Adapter starts using the callback."""
-        from graphtraj.execution.agent_identity import adopt_host_agent
-
-        if self.closed or not self.alias:
-            raise RunnerError('authority-denied', 'The parent host is not bound.')
-        runner = discover_runner_directory(self.cwd)
-        parent, _ = read_alias_mapping(runner, self.alias)
-        child = HostTool(self.cwd, self.allowed_features, receiver, self.recovery_reviewer)
-        try:
-            mapping, child.owner = adopt_host_agent(
-                self.cwd, parent['runtime'], lambda proposal: {'decision': 'accept'}, parent=self.alias,
-                resume=resume, replaces=replaces,
-            )
-            child.alias = mapping['alias']
-            child._record_connection()
-            return child
-        except BaseException:
-            child.close()
-            raise
-
-    def prepare_finish_check(self, summary_issue: str | None = None) -> dict:
-        """Return reviewable hook material without enabling or trusting a hook."""
-        from graphtraj.runtimes.runtime_adapter import select_runtime_adapter
-
-        if self.closed or not self.alias:
-            raise RunnerError('authority-denied', 'The owning host has no registered Agent.')
-        runner = discover_runner_directory(self.cwd)
-        mapping, _ = read_alias_mapping(runner, self.alias)
-        require_execution_allowed(runner, self.alias, mapping)
-        if mapping.get('purpose') != 'main' or not self.cli_address:
-            raise RunnerError('authority-denied',
-                              'An adopted Main with an authenticated CLI channel is required.')
-        adapter = select_runtime_adapter(mapping['runtime'])
-        connection = adapter.current_host_connection()
-        if connection is None:
-            raise RunnerError('unsupported-operation', 'The owning native connection is unavailable.')
-        connection = dict(connection)
-        adapter.verify_finalize_main(connection)
-        hook = adapter.finalize_hook(Path(self.cli_address), {'cwd': str(self.cwd)})
-        self.finish_connection = connection
-        self.finish_hint = summary_issue
-        return {'alias': self.alias, 'hook': hook}
-
-    def receive_finish_check(self, event: dict) -> dict:
-        """Dispatch an authenticated lifecycle carrier on its registered Agent."""
-        runner = discover_runner_directory(self.cwd)
-        mapping, _ = read_alias_mapping(runner, self.alias)
-        if mapping.get('purpose', 'member') in ('member', 'checker'):
-            return self.finish_check({}, event)
-        if self.finish_connection is None:
-            raise RunnerError('operation-unavailable', 'Prepare finish-check on this owning channel first.')
-        return self.finish_check(self.finish_connection, event, summary_issue=self.finish_hint)
-
-    def finish_check(
-        self,
-        connection: dict[str, Any],
-        event: dict[str, Any],
-        *,
-        summary_issue: str | None = None,
-    ) -> dict[str, Any]:
-        """Handle an enabled native lifecycle event on this already adopted host.
-
-        This is an owning-host callback, never a model operation. The host
-        supplies its actual connection/event, displays receiver messages, and
-        applies the returned decision to the same Main. It must honor disabled
-        hooks and native user/budget cancellation before calling this method.
-        """
-        from graphtraj.execution.main_finalize import check_main_finalize
-
-        return check_main_finalize(self, connection, event, summary_issue=summary_issue)
-
-    def _record_connection(self) -> None:
-        """Keep the current receiver on the existing Agent mapping for child notices."""
-        from graphtraj.execution.runner_io import write_yaml_durably
-
-        runner = discover_runner_directory(self.cwd)
-        mapping, directory = read_alias_mapping(runner, self.alias)
-        write_yaml_durably(directory / 'mapping.yml', {**mapping, 'host_connection': self.address})
-
-    @contextmanager
-    def cli_channel(self, authenticate: Callable[[int], None]):
-        """Expose this binding to CLI processes verified by the owning host.
-
-        The host must verify each kernel-observed writer against this Agent's
-        isolated execution, including when several Agents share a host process.
-        An environment address alone never supplies caller authority.
-        """
-        from graphtraj.interfaces.hosted_cli import cli_connection
-        from graphtraj.interfaces.tools import TOOLS
-
-        if self.closed or not self.alias or self.cli_address is not None:
-            raise RunnerError('authority-denied', 'An open registered Agent without another CLI channel is required.')
-        with cli_connection(self.cwd, self.alias, TOOLS if self.allowed_features is None else self.allowed_features,
-                            self.recovery_reviewer, authenticate=authenticate,
-                            host_request=self.__call__, lifecycle=self.receive_finish_check) as address:
-            self.cli_address = address
-            try:
-                yield address
-            finally:
-                try:
-                    if self.prepared_checks:
-                        from graphtraj.execution.prepared_finish_check import close_preparations
-
-                        with self.preparation_lock:
-                            close_preparations(self)
-                finally:
-                    self.cli_address = None
-                    self.finish_connection = None
-                    self.finish_hint = None
+        with parent_connection(self.address), recovery_review(self.recovery_reviewer):
+            return gateway.handle_request(request, cwd=self.cwd, allowed_features=self.allowed_features)
 
     def close(self) -> None:
         """Release this host connection; later delivery must report a failure."""
         if not self.closed:
-            self.closing = True
-            try:
-                if self.prepared_checks:
-                    from graphtraj.execution.prepared_finish_check import close_preparations
-                    with self.preparation_lock:
-                        close_preparations(self)
-            finally:
-                self.closed = True
-                try:
-                    self.connection.__exit__(None, None, None)
-                finally:
-                    if self.owner is not None:
-                        self.owner.close()
+            self.closed = True
+            self.connection.__exit__(None, None, None)
 
     def __enter__(self) -> HostTool:
         """Retain this binding until its owning host leaves the scope."""
@@ -349,12 +173,9 @@ def answer(
         ):
             result = forward_request(request, cwd or Path.cwd())
         if result is None:
-            if request.get('action') == 'execute':
-                runner = discover_runner_directory(cwd or Path.cwd())
-                with runtime_caller(runner, caller_alias(runner) or 'unregistered'):
-                    result = gateway.handle_request(request, cwd=cwd, allowed_features=allowed_features)
-            else:
-                result = gateway.handle_request(request, cwd=cwd, allowed_features=allowed_features)
+            result = gateway.handle_request(
+                request, cwd=cwd, allowed_features=allowed_features
+            )
     except Exception as error:
         # Business rejections stay host-owned; the bridge reports them instead
         # of ending the session, so a call after a rejection still works.

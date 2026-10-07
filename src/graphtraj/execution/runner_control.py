@@ -131,33 +131,26 @@ def notify_direct_parent(
             parent_mapping, parent_directory = read_alias_mapping(
                 runner_directory, parent
             )
-            if parent_mapping.get("hosted"):
-                address = parent_mapping.get('host_connection')
-                if address is None:
-                    raise RunnerError('operation-unavailable', 'The registered parent has no owning host receiver.')
-                connection_operation(address, json.loads(message))
-                record['delivery'] = 'received'
-            else:
-                # Reuse the same alias lock and continuation path as ordinary send.
-                # A child's inherited capacity belongs to this existing task tree.
-                # Only the Worker inherited this descriptor. Runtime-launched CLI
-                # subprocesses can retain the environment string without the FD.
-                capacity = (
-                    os.environ.get("GRAPHTRAJ_CAPACITY_FD")
-                    if mapping.get("worker_pid") == os.getpid() else None
-                )
-                receipt = _send_session(
-                    parent, message, parent_directory, parent_mapping, (),
-                    runner_directory.parent.parent,
-                    capacity_fd=int(capacity) if capacity is not None else None,
-                    system_notice=True,
-                    retain_notice_channel=mapping.get("worker_pid") == os.getpid(),
-                )
-                record.update({
-                    "delivery": "received",
-                    "parent_session": receipt["session"],
-                    "parent_execution_id": receipt["execution_id"],
-                })
+            # Reuse the same alias lock and continuation path as ordinary send.
+            # A child's inherited capacity belongs to this existing task tree.
+            # Only the Worker inherited this descriptor. Runtime-launched CLI
+            # subprocesses can retain the environment string without the FD.
+            capacity = (
+                os.environ.get("GRAPHTRAJ_CAPACITY_FD")
+                if mapping.get("worker_pid") == os.getpid() else None
+            )
+            receipt = _send_session(
+                parent, message, parent_directory, parent_mapping, (),
+                runner_directory.parent.parent,
+                capacity_fd=int(capacity) if capacity is not None else None,
+                system_notice=True,
+                retain_notice_channel=mapping.get("worker_pid") == os.getpid(),
+            )
+            record.update({
+                "delivery": "received",
+                "parent_session": receipt["session"],
+                "parent_execution_id": receipt["execution_id"],
+            })
         elif mapping.get("parent_connection") is not None:
             address = mapping["parent_connection"]
             record["parent_connection"] = address
@@ -892,13 +885,10 @@ def _await_session_resume(
     error_file: Path,
     expected_session: str | None,
 ) -> None:
-    """Wait for durable startup or actual Worker exit, not a control-RPC timeout.
-
-    Native startup can outlast a control request. The Worker retains its own
-    budget and interruption handling while this caller waits for its outcome.
-    """
+    """Wait only for durable ownership; execution continues after this returns."""
     mapping_file = session_directory / "mapping.yml"
-    while True:
+    deadline = time.monotonic() + OPERATION_TIMEOUT_SECONDS
+    while time.monotonic() < deadline:
         if error_file.is_file():
             if expected_session is None:
                 failure = yaml.safe_load(error_file.read_text(encoding="utf-8"))
@@ -933,6 +923,7 @@ def _await_session_resume(
                     )
             raise _not_resumable()
         time.sleep(0.01)
+    raise _not_resumable()
 
 
 def _resume_environment(

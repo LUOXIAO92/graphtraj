@@ -29,7 +29,7 @@ def retire_session(alias: str, cwd: Path, *, replacement: dict | None = None) ->
     mapping, directory = read_alias_mapping(project.runner_directory, alias)
     require_stopped_subtree(project.runner_directory, alias)
     caller = caller_alias(project.runner_directory)
-    if not is_direct_owner(caller, mapping, project.runner_directory):
+    if not is_direct_owner(caller, mapping):
         from graphtraj.runtimes.replacement import caller_runtime
 
         runtime = (read_alias_mapping(project.runner_directory, caller)[0]['runtime']
@@ -70,12 +70,6 @@ def retire_stopped_session(project: Project, alias: str) -> dict:
     """
     mapping, directory = read_alias_mapping(project.runner_directory, alias)
     require_stopped_subtree(project.runner_directory, alias)
-    if mapping.get("hosted"):
-        record_file = directory / "session.yml"
-        record = yaml.safe_load(record_file.read_text())
-        if not record.get("retirement"):
-            write_yaml_durably(record_file, {**record, "retirement": {"mapping": mapping, "member": None}})
-        return {"alias": alias, "retire_status": "retired", "member": None}
     record_file = directory / "session.yml"
     record = yaml.safe_load(record_file.read_text())
     retirement = record.get("retirement")

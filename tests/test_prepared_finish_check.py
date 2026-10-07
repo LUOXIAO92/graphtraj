@@ -211,6 +211,34 @@ def test_no_main_transcribed_verdict_is_accepted(prepared_external: tuple) -> No
         assert result.exit_code!=0
 
 
+@pytest.mark.parametrize('changed', [False, True])
+def test_native_spawn_without_optional_fork_origin_keeps_turn_protection(
+    prepared_external: tuple, changed: bool,
+) -> None:
+    """Real spawn correlation permits null origin, but steering invalidates its result."""
+    root, _, _ = prepared_external
+    with external_main(root) as ready:
+        _, prepared = call(ready, 'prepare')
+        path = native_child(root, prepared)
+        options = json.loads((root / 'native-options.json').read_text())
+        options['child']['forkedFromId'] = None
+        if changed:
+            options['spawn_items'].append({'turnId': 'main-turn', 'item': {
+                'type': 'userMessage', 'id': 'later-input', 'content': [],
+            }})
+        (root / 'native-options.json').write_text(json.dumps(options))
+        result, response = call(ready, 'collect', checker_alias=prepared['checker_alias'],
+                                task_name=path, wait_seconds=30)
+        assert response['native_observation']['session'] == 'actual-child'
+        if changed:
+            assert result.exit_code == 0 and response['status'] == 'cancelled'
+            assert 'result' not in response
+        else:
+            assert response['native_observation']['state'] == 'completed'
+            assert result.exit_code != 0 and response['result']['status'] == 'error'
+            assert 'configuration_error' in response['native_observation']
+
+
 @pytest.mark.parametrize('changes', [{'child_status':'failed'}, {'output':'not a checker verdict'}])
 def test_native_execution_and_result_failure_are_visible(prepared_external: tuple, changes: dict) -> None:
     """Native failure or unreadable output cannot become a completed/waiting verdict."""

@@ -93,8 +93,12 @@ async def association(client: CodexAppServer, preparation: dict, task_path: str 
         if (isinstance(path, str) and path.rsplit('/', 1)[-1] == preparation['task_name']
                 and (task_path is None or path == task_path)):
             parents = {'source.parent_thread_id': source.get('parent_thread_id'),
-                       'parentThreadId': thread.get('parentThreadId'),
-                       'forkedFromId': thread.get('forkedFromId')}
+                       'parentThreadId': thread.get('parentThreadId')}
+            # Native full-history spawn can leave this optional field null.
+            # The source parents and prepared-turn spawn receiver below remain
+            # mandatory; a supplied contradictory fork origin still refuses.
+            if thread.get('forkedFromId') is not None:
+                parents['forkedFromId'] = thread['forkedFromId']
             conflicts = {name: value for name, value in parents.items() if value != parent}
             if conflicts:
                 raise failure('Prepared checker lacks genuine native fork provenance: '

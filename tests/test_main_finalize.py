@@ -660,3 +660,31 @@ def test_hook_configuration_is_only_adoption_material(tmp_path: Path) -> None:
         assert '--binding' not in handler['command']
         assert '--hook-session' not in handler['command']
     assert not list(tmp_path.iterdir())
+
+
+def test_fork_without_baseline_uses_native_request_increments(host: tuple[Path, Path]) -> None:
+    """Huge inherited totals are only replay identities, never checker usage."""
+    root, binding = host
+    first = token_record(input_tokens=956010000, cached_input_tokens=936721800,
+                         output_tokens=3158000, reasoning_output_tokens=1810800)
+    first['payload']['info']['last_token_usage'] = {
+        'input_tokens': 100, 'cached_input_tokens': 80,
+        'output_tokens': 20, 'reasoning_output_tokens': 10}
+    second = token_record(input_tokens=956010225, cached_input_tokens=936721920,
+                          output_tokens=3158058, reasoning_output_tokens=1810854)
+    second['payload']['info']['last_token_usage'] = {
+        'input_tokens': 225, 'cached_input_tokens': 120,
+        'output_tokens': 58, 'reasoning_output_tokens': 54}
+    replay = token_record(input_tokens=900000000)
+    replay['payload']['info']['last_token_usage'] = {'input_tokens': 999999}
+    records = check_records([], [replay, call_record('one'), call_record('two'),
+        first, first, {'type': 'response_item', 'payload': {
+            'type': 'message', 'role': 'assistant', 'content': []}}, second, second])
+    (root / 'options.json').write_text(json.dumps({'records': records}))
+    result = stop(binding)
+    assert 'input_tokens=325' in result['systemMessage']
+    assert 'cached_input_tokens=200' in result['systemMessage']
+    assert 'output_tokens=78' in result['systemMessage']
+    assert 'reasoning_tokens=64' in result['systemMessage']
+    assert 'tool_calls=2' in result['systemMessage']
+    assert 'model_requests=none' in result['systemMessage']

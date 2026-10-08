@@ -116,7 +116,9 @@ class CodexCheckUsage:
 
     Codex total_token_usage is cumulative across inherited history; last usage
     can be replayed with rate-limit updates and has no independent request ID.
-    Subtract only observed baseline fields, never infer them from last usage.
+    Subtract observed baseline fields. When a fork omits that baseline, sum
+    native last_token_usage only after new model output in this turn, deduping
+    cumulative snapshots. A pre-output replay is not a current request.
     output_tokens already includes reasoning_output_tokens: expose reasoning
     separately without adding it to output. Model requests remain unavailable.
     Missing/unreadable telemetry does not change the completion decision.
@@ -168,6 +170,9 @@ class CodexCheckUsage:
             total = None
             calls = set()
             completed = False
+            snapshots = set()
+            increments = []
+            model_output = False
             for line in lines:
                 record = json.loads(line)
                 payload = record.get('payload', {})
@@ -180,16 +185,30 @@ class CodexCheckUsage:
                 snapshot = _total(record)
                 if snapshot is not None:
                     total = snapshot
+                    identity = tuple(sorted((key, value) for key, value in snapshot.items()
+                                            if type(value) is int))
+                    if identity and identity not in snapshots:
+                        snapshots.add(identity)
+                        if model_output:
+                            last = payload['info'].get('last_token_usage')
+                            increments.append(last if isinstance(last, dict) else {})
+                            model_output = False
                 if record.get('type') == 'response_item':
                     call = tool_call_id(payload)
                     if call is not None and call not in self.calls:
                         calls.add(call)
+                        model_output = True
+                    if (payload.get('type') == 'reasoning'
+                            or (payload.get('type') == 'message' and payload.get('role') == 'assistant')):
+                        model_output = True
                 if record.get('type') == 'event_msg' and payload.get('type') == 'task_complete':
                     completed = payload.get('turn_id') == turn
                     current = None
             # A partial native flush cannot establish a whole-check aggregate.
             if not completed:
                 return CheckUsage()
+            if model_output:
+                increments.append({})  # The final response has no usable usage update.
             values = {}
             for field, native in (
                 ('input_tokens', 'input_tokens'),
@@ -201,6 +220,10 @@ class CodexCheckUsage:
                 after = total.get(native) if total is not None else None
                 if type(before) is int and type(after) is int and 0 <= before <= after:
                     values[field] = after - before
+                elif before is None and increments:
+                    parts = [increment.get(native) for increment in increments]
+                    if all(type(value) is int and value >= 0 for value in parts):
+                        values[field] = sum(parts)
             return CheckUsage(**values, tool_calls=len(calls))
         except (OSError, ValueError, TypeError, KeyError):
             return CheckUsage()

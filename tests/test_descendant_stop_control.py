@@ -4,6 +4,7 @@ import os
 import signal
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from typing import Awaitable, Callable
 
 import pytest
 import yaml
@@ -81,6 +82,75 @@ def test_native_owner_retains_control_of_its_recorded_root(
 def mapping(root: Path, alias: str) -> dict:
     """Read identity retained by a managed Worker in the isolated test project."""
     return yaml.safe_load((root / '.graphtraj/runner/sessions' / alias / 'mapping.yml').read_text())
+
+
+def test_native_root_owner_outlives_historical_checker_membership(
+    managed_project: ManagedProject, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Native entry, tools and Stop agree without rewriting either ownership record."""
+    import json
+    import sys
+    from graphtraj.execution import main_finalize
+    from graphtraj.execution.runner_batch import parse_batch
+    from graphtraj.execution.runner_connection import parent_connection
+    from graphtraj.execution.runner_launch import launch_batch
+    from graphtraj.interfaces.local_tool import bind
+    from graphtraj.runtimes import runtime_adapter
+    from graphtraj.runtimes.codex import finalize
+    from graphtraj.runtimes.codex.app_server import CodexAppServer, CodexServerRequest
+    from test_main_finalize import PEER, native_hook, rollout
+
+    root, _, _, executable = managed_project
+    monkeypatch.setenv('PATH', str(executable.parent) + os.pathsep + os.environ['PATH'])
+    monkeypatch.setenv('MANAGED_NATIVE_ROOT', str(executable.parent.parent / 'native'))
+    monkeypatch.setenv('CODEX_HOME', str(root))
+    connection = {'runtime': 'codex', 'session': 'main', 'codex_home': str(root)}
+    with parent_connection(connection):
+        target = launch_batch(parse_batch(launch_document()), root).document['tasks'][0]['alias']
+    original = mapping(root, target)
+    historical = main_finalize.bind_checker(
+        root / '.graphtraj/runner/main-sessions/old-owner/session.yml',
+        {'runtime': 'codex', 'session': 'old-owner', 'connection': {
+            **connection, 'session': 'old-owner',
+        }, 'summary_issue': ''}, 'main',
+    ) / 'session.yml'
+    retained = historical.read_bytes()
+    peer = root / 'completion-peer.py'
+    peer.write_text(PEER)
+    (root / 'options.json').write_text(json.dumps({'source': 'vscode'}))
+    monkeypatch.setenv('FINALIZE_TEST_ROOT', str(root))
+
+    def connect(
+        connection: dict,
+        on_request: Callable[[CodexServerRequest], Awaitable[dict]] | None = None,
+    ) -> CodexAppServer:
+        """Supply native metadata and fork protocol without changing Runner ownership."""
+        return CodexAppServer(cwd=root, command=(sys.executable, str(peer)),
+                              experimental_api=True, on_request=on_request)
+
+    monkeypatch.setattr(finalize, 'proxy', connect)
+    monkeypatch.setattr(runtime_adapter, 'current_host_connection', lambda: dict(connection))
+    monkeypatch.setattr(main_finalize, 'current_host_connection', lambda: dict(connection))
+    rollout(root, source='vscode')
+    assert 'associated' in native_hook(root, 'SessionStart')['systemMessage']
+    tool = bind(root)
+    assert not tool({'action': 'execute', 'feature': 'bind_main_finalize',
+                     'arguments': {'summary_issue': 'tracker:current'}}).failed
+    result = native_hook(root)
+    assert 'completed' in result['systemMessage'] and 'decision' not in result
+    assert historical.read_bytes() == retained
+    assert mapping(root, target) == original
+
+    # A real fork has no root owning connection even though its source is root-like.
+    rollout(root, session='checker')
+    assert 'recorded completion checker' in native_hook(root)['systemMessage']
+    assert native_hook(root, 'SessionStart') == {}
+    rollout(root, source={'subagent': {'thread_spawn': {'parent_thread_id': 'parent'}}})
+    assert 'child Session' in native_hook(root)['systemMessage']
+    rollout(root, source='vscode')
+    monkeypatch.setenv('CODEX_HOME', str(root / 'other-home'))
+    assert 'recorded completion checker' in native_hook(root)['systemMessage']
+    assert historical.read_bytes() == retained
 
 
 def test_stop_descendants_preserves_identity_and_prohibits_later_work(managed_project: ManagedProject) -> None:

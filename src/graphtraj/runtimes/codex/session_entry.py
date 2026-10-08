@@ -60,6 +60,40 @@ def event_record(event: dict) -> tuple[dict, dict]:
     return metadata, context
 
 
+def is_bound_checker(runner: Path, connection: dict) -> bool:
+    """Check retained checker ownership after verifying an explicit native root.
+
+    A recorded checker may later be the actual host of a managed root. That
+    existing root's complete mapping and exact native connection establish its
+    current ownership; historical checker membership alone cannot revoke it.
+    Native children must be excluded by the caller before entering this check.
+    """
+    import yaml
+    from graphtraj.execution.runner_models import RunnerError
+    from graphtraj.execution.runner_status import NativeCaller, is_direct_owner, read_alias_mapping
+
+    session = connection['session']
+    matched = False
+    for path in (runner / 'main-sessions').glob('*/checks/*/session.yml'):
+        child = yaml.safe_load(path.read_text(encoding='utf-8'))
+        if child['runtime'] == 'codex' and child['session'] == session:
+            matched = True
+            break
+    if not matched:
+        return False
+
+    caller = NativeCaller(session, connection)
+    for directory in (runner / 'sessions').glob('*'):
+        try:
+            mapping, _ = read_alias_mapping(runner, directory.name)
+        except RunnerError:
+            # Unrelated withdrawn records do not establish current ownership.
+            continue
+        if mapping.get('parent') is None and is_direct_owner(caller, mapping):
+            return False
+    return True
+
+
 def caller_identity(runner: Path, connection: dict) -> str | None:
     """Resolve the native caller against its source and existing association.
 
@@ -81,10 +115,8 @@ def caller_identity(runner: Path, connection: dict) -> str | None:
     source = session_source(thread)
     if source == 'child':
         return session
-    for path in (runner / 'main-sessions').glob('*/checks/*/session.yml'):
-        child = yaml.safe_load(path.read_text(encoding='utf-8'))
-        if child['runtime'] == 'codex' and child['session'] == session:
-            return session
+    if source == 'main' and is_bound_checker(runner, connection):
+        return session
     key = hashlib.sha256(('codex:' + session).encode()).hexdigest()
     path = runner / 'main-sessions' / ('finalize_' + key) / 'session.yml'
     if source != 'main' or not path.is_file():

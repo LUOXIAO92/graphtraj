@@ -11,14 +11,13 @@ from pathlib import Path
 import click
 
 from graphtraj.execution.main_finalize import bind_session, check_main_finalize, session_binding
-from graphtraj.runtimes.codex.session_entry import event_record, session_source
+from graphtraj.runtimes.codex.session_entry import event_record, session_source, is_bound_checker
 
 
 def native_event(event: dict) -> dict:
     """Associate native start/resume and handle Stop without Main relay calls."""
     from graphtraj.execution.runner_status import process_caller_alias
     from graphtraj.workspace.runner_project import discover_runner_directory
-    import yaml
 
     name = event.get('hook_event_name')
     if name not in {'SessionStart', 'Stop'}:
@@ -41,14 +40,13 @@ def native_event(event: dict) -> dict:
     if source != 'main':
         raise ValueError('Unknown Codex Session source; Main was not associated.')
     session = metadata['id']
-    for path in (runner / 'main-sessions').glob('*/checks/*/session.yml'):
-        checker = yaml.safe_load(path.read_text(encoding='utf-8'))
-        if checker['runtime'] == 'codex' and checker['session'] == session:
-            return skipped(f'Session {session} is a recorded completion checker.')
+    connection = {'runtime': 'codex', 'session': session,
+                  'hook_session': event.get('session_id'),
+                  'codex_home': os.path.abspath(os.environ.get('CODEX_HOME', Path.home() / '.codex'))}
+    if is_bound_checker(runner, connection):
+        return skipped(f'Session {session} is a recorded completion checker.')
     binding = session_binding(root, 'codex', session)
     if name == 'SessionStart':
-        connection = {'runtime': 'codex', 'session': session, 'hook_session': event.get('session_id'),
-                      'codex_home': os.path.abspath(os.environ.get('CODEX_HOME', Path.home() / '.codex'))}
         bind_session(connection, root)
         return {'systemMessage': 'GraphTraj Main Session associated.'}
     if not binding.is_file():

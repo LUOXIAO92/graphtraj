@@ -47,10 +47,19 @@ def bind_session(connection: dict, cwd: Path, summary_issue: str = '') -> dict[s
     session = adapter.verify_finalize_main(connection)
     # Forks need not have a native child marker. Their Runner creation binding
     # still prevents a checker from registering itself as another Main.
-    for path in (runner / 'main-sessions').glob('*/checks/*/session.yml'):
-        child = yaml.safe_load(path.read_text(encoding='utf-8'))
-        if child['runtime'] == connection['runtime'] and child['session'] == session:
-            raise RunnerError('authority-denied', 'A bound checker cannot register Main completion.')
+    if connection['runtime'] == 'codex':
+        from graphtraj.runtimes.codex.session_entry import is_bound_checker
+
+        checker = is_bound_checker(runner, connection)
+    else:
+        checker = False
+        for path in (runner / 'main-sessions').glob('*/checks/*/session.yml'):
+            child = yaml.safe_load(path.read_text(encoding='utf-8'))
+            if child['runtime'] == connection['runtime'] and child['session'] == session:
+                checker = True
+                break
+    if checker:
+        raise RunnerError('authority-denied', 'A bound checker cannot register Main completion.')
     configuration = load_project_configuration(cwd)
     key = hashlib.sha256((connection['runtime'] + ':' + session).encode()).hexdigest()
     directory = runner / 'main-sessions' / ('finalize_' + key)

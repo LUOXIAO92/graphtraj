@@ -11,7 +11,7 @@ from typing import Any, Mapping
 from urllib.parse import urlsplit
 
 from graphtraj.configuration.role_definitions import ResolvedChildRole
-from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
+from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError, finalize_usage
 
 
 class DshContext:
@@ -49,6 +49,8 @@ class DshContext:
 
 class DshRuntimeAdapter:
     """DSH child-Agent adapter; Main-specific host features are explicitly unavailable."""
+
+    finalize_usage = staticmethod(finalize_usage)
 
     def preflight_runtime_context(
         self,

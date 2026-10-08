@@ -687,25 +687,25 @@ relationships; it does not remove a Worktree still used by another execution.
 
 ## Main completion checks
 
-From the existing owning Main context, bind a summary Issue or equivalent task
-reference:
+The Runtime's session-entry integration recognizes an external Main from its
+native Session source and automatically carries that association into CLI,
+Tool and MCP operations. GraphTraj members keep their existing identity and
+parent protocol. Native and supported plugin children are excluded from Main
+registration; an unknown source is reported rather than silently promoted.
+Main does not manually supply a binding path or pin completion checks to one
+Issue. Adopt the Runtime-specific integration through its normal configuration
+and trust mechanism, preserving existing settings and permissions.
 
-```sh
-graphtraj bind-finalize --summary-issue '<summary-issue-reference>'
-```
+The Adapter executes and collects the checker with Main's current native context
+and actual Runtime settings. The checker resolves the current task and verifies
+its Issue, DAG and Tickets; supplied references are hints that may be outdated.
+Main does not mediate checker preparation, dispatch or collection.
 
-The shared tool operation is `bind_main_finalize` with `summary_issue`. The
-result provides the binding and native hook material for review and adoption;
-returning that material does not install it or prove that the current host has
-run it. Adopt it through the Runtime's supported hook configuration while
-preserving existing settings and permissions.
-
-The hook is scoped to its actual Main. It delegates a state check using the
-Main's available native context and current model, then checks the summary
-Issue, DAG and referenced Tickets. Completed work and legitimate waiting may
-finish the turn. Actionable unfinished nodes are returned to the same Main so
-it continues. Ordinary children and the checker do not acquire a recursive
-completion hook; user interruption and execution limits remain effective.
+Each activation visibly reports a start and outcome. Completed work and
+legitimate waiting end the hook without another Main input or reply. Actionable
+unfinished work returns to the same Main with the next work to perform. Children
+and the checker do not recursively activate the hook; user interruption and
+execution limits remain effective.
 
 The checker does not redo code review or reconstruct requirements from native
 Traces. Reference or checker failures are not completion evidence. Native

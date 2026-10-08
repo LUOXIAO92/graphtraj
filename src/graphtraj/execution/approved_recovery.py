@@ -18,7 +18,7 @@ from graphtraj.execution.runner_io import write_yaml_durably
 from graphtraj.execution.runner_models import RunnerError
 from graphtraj.execution.runner_status import (
     caller_alias, read_alias_mapping, require_direct_authority, require_stopped_subtree,
-    require_execution_allowed,
+    require_execution_allowed, caller_runtime_name,
 )
 from graphtraj.graph.delivery_state import read_team
 from graphtraj.graph.delivery_worldline import append_project_worldline_event, read_worldline, _read_shards
@@ -98,8 +98,7 @@ def review_proposal(proposal: dict, cwd: Path, runner_directory: Path) -> dict:
             return reviewer(proposal)
         else:
             caller = caller_alias(runner_directory)
-            runtime = (read_alias_mapping(runner_directory, caller)[0]['runtime']
-                       if caller else caller_runtime())
+            runtime = caller_runtime_name(runner_directory, caller) or caller_runtime()
             if runtime is None:
                 raise RunnerError('native-approval-unavailable', 'The calling Runtime is unknown.')
             adapter = runtime_adapter.select_runtime_adapter(runtime)

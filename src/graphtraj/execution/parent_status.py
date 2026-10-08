@@ -11,7 +11,7 @@ from graphtraj.runtimes.runtime_adapter import select_runtime_adapter
 from graphtraj.workspace.runner_project import discover_runner_directory
 
 
-def parent_status(cwd: Path, timeout_seconds: float = 0) -> dict:
+def parent_status(cwd: Path, timeout_seconds: float = 0, *, include_hooks: bool = False) -> dict:
     """Read the actual host parent, optionally waiting a finite interval for idle.
 
     Only the root child can wait: Main cannot synchronously wait for its own
@@ -32,4 +32,7 @@ def parent_status(cwd: Path, timeout_seconds: float = 0) -> dict:
     observe = getattr(adapter, 'parent_host_status', None)
     if observe is None:
         raise RunnerError('operation-unavailable', 'This Runtime cannot observe its owning host.')
-    return {'alias': alias, **observe(connection, timeout_seconds)}
+    if include_hooks and connection['runtime'] != 'codex':
+        raise RunnerError('unsupported-runtime', 'Native hook diagnostics currently require Codex.')
+    options = {'include_hooks': True} if include_hooks else {}
+    return {'alias': alias, **observe(connection, timeout_seconds, **options)}

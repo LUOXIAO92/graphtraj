@@ -690,6 +690,19 @@ class CodexAppServer:
         if not isinstance(joined, dict) or joined.get('id') != thread_id:
             raise self._protocol_failure('Host subscription returned a different native Session.')
 
+    async def read_hooks(self, cwd: str) -> dict[str, Any]:
+        """Read public discovered hook definitions/trust, not private execution history."""
+        if not isinstance(cwd, str) or not Path(cwd).is_absolute():
+            raise self._protocol_failure('Native host cwd is unavailable for hooks/list.')
+        return await self._call('hooks/list', {'cwds': [cwd]})
+
+    def drain_notifications(self) -> list[dict[str, Any]]:
+        """Return already-received notifications without polling the native host."""
+        notices = []
+        while not self._notifications.empty():
+            notices.append(self._notifications.get_nowait())
+        return notices
+
     async def read_host_status(self, thread_id: str) -> dict[str, Any]:
         """Read host activity and latest turn metadata without conversation items.
 

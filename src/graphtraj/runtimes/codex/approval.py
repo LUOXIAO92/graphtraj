@@ -163,7 +163,7 @@ def review_recovery(proposal: dict, cwd: Path) -> dict:
     from graphtraj.configuration.project_configuration import load_project_configuration
     from graphtraj.configuration.project_roles import load_project_roles
     from graphtraj.execution.runner_batch import read_session_task
-    from graphtraj.execution.runner_status import caller_alias, read_alias_mapping
+    from graphtraj.execution.runner_status import NativeCaller, caller_alias, read_alias_mapping
     from graphtraj.workspace.runner_project import discover_project
 
     project = discover_project(cwd, require_clean_integration=False)
@@ -172,7 +172,7 @@ def review_recovery(proposal: dict, cwd: Path) -> dict:
     settings = None
     context = {}
     custom = False
-    if caller:
+    if caller and not isinstance(caller, NativeCaller):
         mapping, directory = read_alias_mapping(project.runner_directory, caller)
         task = read_session_task(mapping, project.harness_root)
         role = task.inline_preset or load_project_roles(project.harness_root).preset(

@@ -25,6 +25,31 @@ from graphtraj.workspace.runner_project import discover_runner_directory
 _runtime_caller: ContextVar[tuple[Path, str | None] | None] = ContextVar('runtime_caller', default=None)
 
 
+class NativeCaller(str):
+    """A Runtime-verified Session identifier, never a managed Agent alias.
+
+    String compatibility preserves existing parent comparisons. The attached
+    connection contains only the existing native association, not configuration.
+    """
+
+    connection: dict
+
+    def __new__(cls, session: str, connection: dict) -> 'NativeCaller':
+        """Retain the association verified at the current call boundary."""
+        value = super().__new__(cls, session)
+        value.connection = dict(connection)
+        return value
+
+
+def caller_runtime_name(runner: Path, caller: str | None) -> str | None:
+    """Select Runtime from typed native context or the managed identity protocol."""
+    if isinstance(caller, NativeCaller):
+        return caller.connection['runtime']
+    if caller is not None:
+        return read_alias_mapping(runner, caller)[0]['runtime']
+    return None
+
+
 @contextmanager
 def runtime_caller(runner_directory: Path, identity: str | None) -> Iterator[None]:
     """Scope an identity received on the private Runtime callback connection.
@@ -134,7 +159,8 @@ def caller_alias(runner_directory: Path) -> str | None:
             from graphtraj.runtimes.dsh.session_entry import caller_identity
         else:
             raise RunnerError('authority-denied', 'Unknown native caller Runtime.')
-        return caller_identity(runner_directory, connection)
+        identity = caller_identity(runner_directory, connection)
+        return NativeCaller(identity, connection) if identity is not None else None
     except runtime_adapter.RuntimeAdapterError as error:
         raise RunnerError(error.code, error.message) from error
 
@@ -208,7 +234,8 @@ def is_direct_owner(caller: str | None, mapping: Mapping[str, Any]) -> bool:
     # Old top-level launches recorded their actual native owner here. A
     # verified native caller can retain that specific relation without being
     # reclassified as Main or acquiring authority over unrelated roots.
-    connection = runtime_adapter.current_host_connection()
+    connection = (caller.connection if isinstance(caller, NativeCaller)
+                  else runtime_adapter.current_host_connection())
     if connection is None:
         return False
     return all(connection.get(key) == owner.get(key) for key in (
@@ -321,10 +348,7 @@ def require_replacement_authority(
     caller = caller_alias(runner_directory)
     if is_direct_owner(caller, mapping):
         return None
-    runtime = (
-        read_alias_mapping(runner_directory, caller)[0]["runtime"]
-        if caller is not None else caller_runtime()
-    )
+    runtime = caller_runtime_name(runner_directory, caller) or caller_runtime()
     try:
         execute = runtime_adapter.native_replacement_approval(runtime)
     except runtime_adapter.RuntimeAdapterError as error:

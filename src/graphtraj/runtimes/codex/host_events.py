@@ -31,7 +31,9 @@ def request_connection() -> dict | None:
     return current_connection() if _calling_session.get() is not None else None
 
 
-def parent_status(connection: Mapping[str, Any], timeout_seconds: float) -> dict:
+def parent_status(
+    connection: Mapping[str, Any], timeout_seconds: float, *, include_hooks: bool = False,
+) -> dict:
     """Read the bound host and optionally wait for native idle plus a terminal turn.
 
     Read metadata once, then recheck only on a relevant native notification.
@@ -40,7 +42,7 @@ def parent_status(connection: Mapping[str, Any], timeout_seconds: float) -> dict
     there is no polling fallback.
     """
     from graphtraj.execution.runner_process import OPERATION_TIMEOUT_SECONDS
-    from graphtraj.runtimes.codex.app_server import CodexAppServer
+    from graphtraj.runtimes.codex.app_server import CodexAppServer, CodexServerRequest
     from graphtraj.workspace.runner_project import runtime_executable
 
     if any(not isinstance(connection.get(key), str) or not connection[key]
@@ -49,6 +51,10 @@ def parent_status(connection: Mapping[str, Any], timeout_seconds: float) -> dict
 
     async def observe() -> dict:
         """Bound observations independently of the Agent's ordinary notifications."""
+        async def leave_to_host(request: CodexServerRequest) -> dict:
+            """Observe without answering replayed Main requests or approvals."""
+            await asyncio.Future()
+
         observations = []
         result = {'runtime': 'codex', 'session': connection['session'],
                   'outcome': 'timeout', 'observations': observations,
@@ -61,23 +67,54 @@ def parent_status(connection: Mapping[str, Any], timeout_seconds: float) -> dict
                     environment={'CODEX_HOME': connection['codex_home']},
                     experimental_api=True,
                     request_timeout=OPERATION_TIMEOUT_SECONDS,
+                    on_request=leave_to_host,
+                    request_handler_timeout=None,
                 ) as client:
                     if timeout_seconds:
                         await client.subscribe_host(connection['session'])
+                    if include_hooks:
+                        thread = await client.read_thread(connection['session'])
+                        result['native_identity'] = {
+                            key: thread[key] for key in
+                            ('id', 'sessionId', 'source', 'parentThreadId', 'agentPath', 'depth')
+                            if key in thread
+                        }
+                        result['hook_configuration'] = await client.read_hooks(thread.get('cwd'))
+                        result['hook_events'] = []
+                        result['hook_observation_scope'] = (
+                            'hooks/list is discovered configuration/trust, not an active-registry '
+                            'snapshot. Events cover this connection only; absence is not proof '
+                            'of failure or a historical execution record.'
+                        )
                     trigger = None
+                    def retain_hook(notification: dict) -> None:
+                        """Keep only this owning thread's actual hook notifications."""
+                        params = notification.get('params', {})
+                        if (include_hooks and params.get('threadId') == connection['session']
+                                and notification.get('method') in {'hook/started', 'hook/completed'}):
+                            result['hook_events'].append({
+                                'method': notification['method'], 'params': params,
+                                'observed_at': datetime.now(timezone.utc).isoformat(),
+                            })
+
                     while True:
                         state = await client.read_host_status(connection['session'])
                         observations.append({**state, 'observed_at': datetime.now(timezone.utc).isoformat(),
                                              'trigger': trigger})
                         terminal = state['turn'] is not None and state['turn']['status'] != 'inProgress'
                         if state['activity'] == 'idle' and terminal:
+                            for notification in client.drain_notifications():
+                                retain_hook(notification)
                             return {**result, 'outcome': 'idle'}
                         if not timeout_seconds or state['activity'] in {'notLoaded', 'systemError'}:
+                            for notification in client.drain_notifications():
+                                retain_hook(notification)
                             return {**result, 'outcome': 'observed'}
                         while True:
                             notification = await client.next_notification()
                             params = notification.get('params', {})
                             method = notification.get('method')
+                            retain_hook(notification)
                             if (params.get('threadId') == connection['session'] and method in {
                                 'turn/completed', 'thread/status/changed', 'thread/closed',
                             }):

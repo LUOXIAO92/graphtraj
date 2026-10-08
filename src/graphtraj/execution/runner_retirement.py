@@ -32,8 +32,9 @@ def retire_session(alias: str, cwd: Path, *, replacement: dict | None = None) ->
     if not is_direct_owner(caller, mapping):
         from graphtraj.runtimes.replacement import caller_runtime
 
-        runtime = (read_alias_mapping(project.runner_directory, caller)[0]['runtime']
-                   if caller is not None else caller_runtime())
+        from graphtraj.execution.runner_status import caller_runtime_name
+
+        runtime = caller_runtime_name(project.runner_directory, caller) or caller_runtime()
         # Keep the supported Runtime with no approval mechanism distinct from
         # an unavailable or refusing selected reviewer.
         if runtime != 'pi':

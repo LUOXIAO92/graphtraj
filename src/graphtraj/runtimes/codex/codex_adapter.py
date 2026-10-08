@@ -384,11 +384,13 @@ class CodexRuntimeAdapter:
 
         return send_event(connection, event)
 
-    def parent_host_status(self, connection: Mapping[str, Any], timeout_seconds: float) -> dict:
+    def parent_host_status(
+        self, connection: Mapping[str, Any], timeout_seconds: float, *, include_hooks: bool = False,
+    ) -> dict:
         """Read the original host through its existing public proxy, without input."""
         from graphtraj.runtimes.codex.host_events import parent_status
 
-        return parent_status(connection, timeout_seconds)
+        return parent_status(connection, timeout_seconds, include_hooks=include_hooks)
 
     def read_session_identity(self, session_directory: Path) -> str:
         """Attest the native identity retained by the Codex owner."""

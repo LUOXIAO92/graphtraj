@@ -692,6 +692,12 @@ native Session source and automatically carries that association into CLI,
 Tool and MCP operations. GraphTraj members keep their existing identity and
 parent protocol. Native and supported plugin children are excluded from Main
 registration; an unknown source is reported rather than silently promoted.
+
+Pi plugin recognition covers `nicobailon/pi-subagents` (`PI_SUBAGENT_CHILD`
+and child Session parent/depth metadata) and `mjakl/pi-subagent`
+(`PI_SUBAGENT_DEPTH` and `pi-subagent:delegation` records). Support is limited
+to these known plugin markers, including their shared-process Session context.
+
 Main does not manually supply a binding path or pin completion checks to one
 Issue. Adopt the Runtime-specific integration through its normal configuration
 and trust mechanism, preserving existing settings and permissions.
@@ -712,8 +718,8 @@ Review the generated commands, merge them into the project's existing hook
 configuration, and use the host's normal review and trust controls. Keep the
 installation and its interpreter outside temporary directories. The commands
 receive native event context; they take no fixed Session ID, binding path or
-summary Issue. Actual startup/resume and Stop observations are still needed
-after configuration; generating or trusting the material alone proves neither.
+summary Issue. Verify native Main entry and Stop after configuration;
+generating or trusting the material alone proves neither.
 
 If Main is already running when the integration is installed, a trusted Stop
 can establish the missing association from verified native ownership of the

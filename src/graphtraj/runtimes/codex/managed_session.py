@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import os
 import json
+import re
 import uuid
 from concurrent.futures import CancelledError
 from contextlib import ExitStack
@@ -100,6 +101,7 @@ class CodexManagedExecution:
         self.loop: asyncio.AbstractEventLoop | None = None
         self.adapter: CodexAppServer | None = None
         self.result: asyncio.Task | None = None
+        self.startup: asyncio.Task | None = None
         self.operations: set[asyncio.Task] = set()
         self.outcome: dict | None = None
         self.requests: dict[str, tuple[CodexServerRequest, asyncio.Future[dict]]] = {}
@@ -140,13 +142,30 @@ class CodexManagedExecution:
                                  experimental_api=True)
         self.adapter = adapter
         observer = None
+        phase = 'initialize'
         try:
             async with adapter:
+                phase = 'thread/resume' if self.expected_session else 'thread/start'
                 observer = asyncio.create_task(self._observe())
-                session = (
-                    await adapter.resume_session(self.context, self.expected_session)
-                    if self.expected_session else await adapter.create_session(self.context)
+                if self.termination_requested:
+                    raise RuntimeAdapterError(
+                        'RUNTIME_EXECUTION_INTERRUPTED', 'Stopped before native Session creation.',
+                    )
+                self.startup = asyncio.create_task(
+                    adapter.resume_session(self.context, self.expected_session)
+                    if self.expected_session else adapter.create_session(self.context)
                 )
+                try:
+                    session = await self.startup
+                except asyncio.CancelledError:
+                    if not self.termination_requested:
+                        raise
+                    raise RuntimeAdapterError(
+                        'RUNTIME_EXECUTION_INTERRUPTED', 'Stopped during native Session creation.',
+                        terminal_confirmed=False,
+                    ) from None
+                finally:
+                    self.startup = None
                 self.native_session = session.thread_id
                 write_yaml_durably(self.directory / 'session.yml', {
                     'session': session.thread_id,
@@ -188,7 +207,23 @@ class CodexManagedExecution:
             # startup RPC failed. Keep a shutdown failure explicitly unconfirmed.
             if error.code == 'RUNTIME_SHUTDOWN_FAILED':
                 raise
-            raise RuntimeAdapterError(error.code, error.message) from error
+            message = error.message
+            if self.native_session is None:
+                # Match Pi's startup-only diagnostic boundary and redaction;
+                # never publish task output or earlier executions' stderr.
+                diagnostic = adapter.stderr_tail
+                for name, value in os.environ.items():
+                    if value and any(part in name.upper() for part in (
+                        'KEY', 'TOKEN', 'SECRET', 'PASSWORD', 'CREDENTIAL',
+                    )):
+                        diagnostic = diagnostic.replace(value, '[REDACTED]')
+                diagnostic = re.sub(r'(?i)(bearer\s+)[^\s"\']+', r'\1[REDACTED]', diagnostic)
+                diagnostic = re.sub(r'(https?://)[^\s/@]+:[^\s/@]+@', r'\1[REDACTED]@', diagnostic)
+                diagnostic = re.sub(r'(https?://[^\s?]+)\?[^\s]+', r'\1?[REDACTED]', diagnostic)
+                message = f'Codex {phase}: {message}'
+                if diagnostic.strip():
+                    message += '\nStartup stderr: ' + diagnostic.strip()[-4096:]
+            raise RuntimeAdapterError(error.code, message) from error
         finally:
             await asyncio.to_thread(connections.close)
             if observer is not None:
@@ -503,8 +538,15 @@ class CodexManagedExecution:
     def terminate(self) -> bool:
         """Schedule native interruption for a Worker termination/budget signal."""
         self.termination_requested = True
-        if self.loop is None or self.execution is None or self.loop.is_closed():
+        if self.loop is None or self.loop.is_closed():
             return False
+        if self.execution is None:
+            def cancel_startup() -> None:
+                """Cancel only pending Session loading, leaving shutdown owned."""
+                if self.startup is not None:
+                    self.startup.cancel()
+            self.loop.call_soon_threadsafe(cancel_startup)
+            return True
         async def interrupt() -> None:
             """Observe signal-driven cancellation errors without inferring an outcome."""
             try:

@@ -1086,6 +1086,62 @@ def _native_filesystem(request: dict) -> dict:
     return settings['permissions'][profile]['filesystem']
 
 
+@pytest.mark.parametrize('access', ['write', 'read'])
+def test_linked_worktree_git_permissions_reach_native_create_and_resume(
+    temporary_git_repository: Path, tmp_path: Path, peer: Path, access: str,
+) -> None:
+    """Codex receives the exact Git pointer target without widening read-only roles."""
+    from conftest import run_process
+    from graphtraj.runtimes.codex.codex_adapter import restore_codex_context
+
+    repository = temporary_git_repository
+    worktree = tmp_path / 'linked'
+    run_process(['git', 'worktree', 'add', '-b', 'linked', str(worktree)],
+                cwd=repository).check_returncode()
+    gitdir = Path(run_process(['git', 'rev-parse', '--absolute-git-dir'],
+                             cwd=worktree).stdout.strip())
+    common = repository / '.git'
+    role = ResolvedChildRole('engineer', 'Use this linked Worktree.',
+                             RolePreset('codex', 'chosen-model', None, None,
+                                        worktree_access=access))
+    resolved = preflight_runtime_context(
+        runtime_store=tmp_path / '.codex', executable=peer,
+        git_common_directory=common, role=role, worktree=worktree,
+        evidence=tmp_path / 'evidence', requested_skills=(), report_files=(),
+    ).finalize()
+    original = resolved.launch_document()['adapter_request']
+    # A previous launch had only the common Git grant. Refresh its retained
+    # configuration without requiring a new Session or editing private state.
+    retained = json.loads(json.dumps(original))
+    config = retained['session_parameters']['config']
+    config['permissions'][config['default_permissions']]['filesystem'].pop(str(gitdir), None)
+    refreshed = refresh_codex_report_paths(
+        retained, worktree=worktree, evidence=tmp_path / 'evidence',
+        report_files=(), role='engineer',
+    )
+
+    async def exercise() -> None:
+        """Observe permissions at the production native request boundary."""
+        session_id = None
+        for request in (original, refreshed):
+            actual = restore_codex_context(request, resolved.evidence_document())
+            async with CodexAppServer(command=[str(peer)], cwd=worktree) as adapter:
+                session = (await adapter.create_session(actual) if session_id is None
+                           else await adapter.resume_session(actual, session_id))
+                session_id = session.thread_id
+                turn = await adapter.start_execution(session, 'configuration')
+                observed = json.loads((await adapter.wait(turn, timeout=2))['last_agent_message'])
+                settings = observed['config']
+                fs = settings['permissions'][settings['default_permissions']]['filesystem']
+                assert (fs.get(str(gitdir)) == 'write') is (access == 'write')
+                if access == 'write':
+                    assert fs[str(common / 'config')] == fs[str(common / 'hooks')] == 'read'
+                assert fs[str(tmp_path / '.graphtraj')] == 'none'
+                assert _native_filesystem(request).get(str(gitdir)) == fs.get(str(gitdir))
+
+    asyncio.run(exercise())
+
+
 def test_permission_request_feature_reaches_fresh_and_resumed_activation(
     tmp_path: Path, peer: Path,
 ) -> None:

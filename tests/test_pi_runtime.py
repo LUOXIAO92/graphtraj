@@ -118,8 +118,7 @@ def test_pi_config_dependency_and_host_limits(tmp_path: Path, pi_environment: di
     assert launch['adapter_request']['model'] == 'google/gemini-3.8-flash'
     assert 'fixture-secret' not in json.dumps(launch)
     assert launch['adapter_request']['reports'] == [str(tmp_path / 'state/teams/1/rounds/1/researcher-x1.md')]
-    with pytest.raises(RuntimeAdapterError, match='not supported'):
-        adapter.finalize_hook(tmp_path, {})
+    assert Path(adapter.finalize_hook(tmp_path, {})['extension']).is_file()
     (tmp_path / 'bin/srt').unlink()
     with pytest.raises(RuntimeAdapterError, match='requires srt'):
         context(tmp_path, pi_environment)

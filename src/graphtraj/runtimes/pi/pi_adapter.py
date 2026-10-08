@@ -60,17 +60,27 @@ class PiContext:
 class PiRuntimeAdapter:
     """Prepare and control Pi children; leave all task authority with Runner."""
 
-    verify_finalize_main = staticmethod(unsupported)
-    finalize_hook = staticmethod(unsupported)
     finalize_event = staticmethod(unsupported)
     check_main_finalize = staticmethod(unsupported)
     finalize_response = staticmethod(unsupported)
     send_host_event = staticmethod(unsupported)
     parent_host_status = staticmethod(unsupported)
 
-    def current_host_connection(self) -> None:
-        """Pi interactive owning-host capture is outside this Adapter's scope."""
-        return None
+    def current_host_connection(self) -> dict | None:
+        """Read the association scoped by Pi's actual Session extension callback."""
+        from graphtraj.runtimes.pi.session_entry import current_connection
+
+        return current_connection()
+
+    def verify_finalize_main(self, connection: dict) -> str:
+        """Exclude supported plugin children using Pi's native Session facts."""
+        from graphtraj.runtimes.pi.session_entry import verify_main
+
+        return verify_main(connection)
+
+    def finalize_hook(self, path: Path, binding: dict) -> dict:
+        """Return the native extension path without installing or enabling it."""
+        return {'extension': str(Path(__file__).with_name('extension.mjs'))}
 
     def native_replacement_approval(self) -> None:
         """Pi has no built-in execution approval mechanism."""

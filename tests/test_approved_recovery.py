@@ -70,6 +70,10 @@ class NativeApproval:
         self.proposals = []
         self.before_apply = None
 
+    def current_host_connection(self) -> None:
+        """The controlled human approval caller has no external Agent Session."""
+        return None
+
     def native_recovery_approval(self, proposal: dict, cwd: Path) -> dict:
         """Observe unchanged state before simulating the actual native decision."""
         current, _ = recovery._snapshot(recovery.discover_project(self.root, require_clean_integration=False), proposal['request']['alias'])
@@ -80,6 +84,104 @@ class NativeApproval:
         if self.mode in {'denied', 'failed'}:
             raise RunnerError('native-approval-' + self.mode, self.mode)
         return {'decision': 'accept'}
+
+
+@pytest.mark.parametrize('decision', ['accept', 'decline'])
+def test_native_session_recovery_uses_its_runtime_without_managed_alias_lookup(
+    target: tuple, monkeypatch: pytest.MonkeyPatch, decision: str,
+) -> None:
+    """Both recovery reviewer stages retain typed native identity and selected policy."""
+    from graphtraj.runtimes.codex import approval, finalize
+    from graphtraj.execution.runner_status import NativeCaller, caller_alias
+
+    root, ticket, _, arguments = target
+    configuration = root / '.graphtraj/config.yml'
+    config = yaml.safe_load(configuration.read_text())
+    route = {'model': 'selected-review', 'base_url': 'https://review.example/v1',
+             'api_key_env': 'REVIEW_KEY'}
+    config['codex'] = {'approval': route}
+    configuration.write_text(yaml.safe_dump(config))
+    connection = {'runtime': 'codex', 'session': 'actual-native-session',
+                  'codex_home': str(root / 'native-home')}
+
+    class NativeMetadata:
+        """Return source evidence from the controlled owning Runtime boundary."""
+        async def __aenter__(self) -> 'NativeMetadata':
+            """Open the metadata reader."""
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            """Close without mutation."""
+
+        async def read_thread(self, session: str) -> dict:
+            """Keep the native source distinct from managed Team membership."""
+            return {'id': session, 'source': {'subAgent': {'thread_spawn': {}}}}
+
+    monkeypatch.setattr(recovery.runtime_adapter, 'current_host_connection', lambda: connection)
+    monkeypatch.setattr(finalize, 'proxy', lambda value: NativeMetadata())
+    received = []
+
+    def review(selected: dict, context: dict) -> dict:
+        """Observe the selected approval route; return only its explicit decision."""
+        assert selected == route
+        received.append(context)
+        return {'request_id': context['request_id'], 'decision': decision,
+                'rationale': 'Controlled selected-reviewer response.'}
+
+    monkeypatch.setattr(approval, '_completion', review)
+    runner = root / '.graphtraj/runner'
+    assert isinstance(caller_alias(runner), NativeCaller)
+    before = read_worldline(ticket.parent.parent, root)
+    proposal = {'request': arguments}
+    result = recovery.review_proposal(proposal, root, runner)
+    assert result['decision'] == decision
+    assert received[0]['request'] == proposal
+    assert read_worldline(ticket.parent.parent, root) == before
+
+
+def test_recovery_scopes_mapping_validation_to_recorded_descendants(
+    target: tuple, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Unrelated withdrawn mappings survive recovery; ambiguous descendants block it."""
+    root, ticket, mapping, arguments = target
+    runner = root / '.graphtraj/runner'
+    parent = 'main_retained@m1'
+    child = 'checker_retained@m1'
+    records = {}
+    for alias, purpose, owner in ((parent, 'main', None), (child, 'checker', parent)):
+        directory = runner / 'sessions' / alias
+        directory.mkdir()
+        record = {
+            'alias': alias, 'purpose': purpose, 'parent': owner,
+            'runtime': 'codex', 'hosted': True, 'role': purpose,
+            'ticket_id': None, 'team_generation': None,
+            'worktree_path': str(root), 'session': None,
+            'worker_pid': 123, 'runtime_pid': 123,
+        }
+        path = directory / 'mapping.yml'
+        path.write_text(yaml.safe_dump(record))
+        records[path] = path.read_bytes()
+
+    adapter = NativeApproval(root, 'automatic')
+    monkeypatch.setattr(recovery.runtime_adapter, 'select_runtime_adapter', lambda runtime: adapter)
+    request = {**arguments, 'resume': False}
+    events = read_worldline(ticket.parent.parent, root)
+    child_path = runner / 'sessions' / child / 'mapping.yml'
+    child_record = yaml.safe_load(child_path.read_text())
+    for owner in (mapping['alias'], 'missing_parent@m1', 42):
+        child_path.write_text(yaml.safe_dump({**child_record, 'parent': owner}))
+        with pytest.raises(RunnerError) as error:
+            invoke(root, request)
+        assert error.value.code == 'operation-failed'
+        assert read_worldline(ticket.parent.parent, root) == events
+    assert adapter.proposals == []
+
+    child_path.write_bytes(records[child_path])
+    result = invoke(root, request)
+    assert result['recovery_status'] == 'applied'
+    assert applied_proposal(root, result)['after']['mapping'] == mapping
+    assert len(adapter.proposals) == 1
+    assert all(path.read_bytes() == original for path, original in records.items())
 
 
 def test_recovered_unchanged_result_returns_to_integration(

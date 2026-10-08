@@ -4,14 +4,36 @@ from __future__ import annotations
 
 import asyncio
 import os
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, Iterator
 
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 
 
-def parent_status(connection: Mapping[str, Any], timeout_seconds: float) -> dict:
+_calling_session: ContextVar[str | None] = ContextVar('codex_calling_session', default=None)
+
+
+@contextmanager
+def calling_session(session: str | None) -> Iterator[None]:
+    """Scope native MCP metadata to this call instead of changing process state."""
+    token = _calling_session.set(session)
+    try:
+        yield
+    finally:
+        _calling_session.reset(token)
+
+
+def request_connection() -> dict | None:
+    """Return only this native MCP callback's context, excluding inherited env."""
+    return current_connection() if _calling_session.get() is not None else None
+
+
+def parent_status(
+    connection: Mapping[str, Any], timeout_seconds: float, *, include_hooks: bool = False,
+) -> dict:
     """Read the bound host and optionally wait for native idle plus a terminal turn.
 
     Read metadata once, then recheck only on a relevant native notification.
@@ -20,7 +42,7 @@ def parent_status(connection: Mapping[str, Any], timeout_seconds: float) -> dict
     there is no polling fallback.
     """
     from graphtraj.execution.runner_process import OPERATION_TIMEOUT_SECONDS
-    from graphtraj.runtimes.codex.app_server import CodexAppServer
+    from graphtraj.runtimes.codex.app_server import CodexAppServer, CodexServerRequest
     from graphtraj.workspace.runner_project import runtime_executable
 
     if any(not isinstance(connection.get(key), str) or not connection[key]
@@ -29,6 +51,10 @@ def parent_status(connection: Mapping[str, Any], timeout_seconds: float) -> dict
 
     async def observe() -> dict:
         """Bound observations independently of the Agent's ordinary notifications."""
+        async def leave_to_host(request: CodexServerRequest) -> dict:
+            """Observe without answering replayed Main requests or approvals."""
+            await asyncio.Future()
+
         observations = []
         result = {'runtime': 'codex', 'session': connection['session'],
                   'outcome': 'timeout', 'observations': observations,
@@ -41,23 +67,57 @@ def parent_status(connection: Mapping[str, Any], timeout_seconds: float) -> dict
                     environment={'CODEX_HOME': connection['codex_home']},
                     experimental_api=True,
                     request_timeout=OPERATION_TIMEOUT_SECONDS,
+                    on_request=leave_to_host,
+                    request_handler_timeout=None,
                 ) as client:
                     if timeout_seconds:
                         await client.subscribe_host(connection['session'])
+                    if include_hooks:
+                        from graphtraj.runtimes.codex.session_entry import association_status
+
+                        thread = await client.read_thread(connection['session'])
+                        result['native_identity'] = {
+                            key: thread[key] for key in
+                            ('id', 'sessionId', 'source', 'parentThreadId', 'agentPath', 'depth', 'cwd')
+                            if key in thread
+                        }
+                        result['completion_association'] = association_status(dict(connection), thread)
+                        result['hook_configuration'] = await client.read_hooks(thread.get('cwd'))
+                        result['hook_events'] = []
+                        result['hook_observation_scope'] = (
+                            'hooks/list is discovered configuration/trust, not an active-registry '
+                            'snapshot. Events cover this connection only; absence is not proof '
+                            'of failure or a historical execution record.'
+                        )
                     trigger = None
+                    def retain_hook(notification: dict) -> None:
+                        """Keep only this owning thread's actual hook notifications."""
+                        params = notification.get('params', {})
+                        if (include_hooks and params.get('threadId') == connection['session']
+                                and notification.get('method') in {'hook/started', 'hook/completed'}):
+                            result['hook_events'].append({
+                                'method': notification['method'], 'params': params,
+                                'observed_at': datetime.now(timezone.utc).isoformat(),
+                            })
+
                     while True:
                         state = await client.read_host_status(connection['session'])
                         observations.append({**state, 'observed_at': datetime.now(timezone.utc).isoformat(),
                                              'trigger': trigger})
                         terminal = state['turn'] is not None and state['turn']['status'] != 'inProgress'
                         if state['activity'] == 'idle' and terminal:
+                            for notification in client.drain_notifications():
+                                retain_hook(notification)
                             return {**result, 'outcome': 'idle'}
                         if not timeout_seconds or state['activity'] in {'notLoaded', 'systemError'}:
+                            for notification in client.drain_notifications():
+                                retain_hook(notification)
                             return {**result, 'outcome': 'observed'}
                         while True:
                             notification = await client.next_notification()
                             params = notification.get('params', {})
                             method = notification.get('method')
+                            retain_hook(notification)
                             if (params.get('threadId') == connection['session'] and method in {
                                 'turn/completed', 'thread/status/changed', 'thread/closed',
                             }):
@@ -81,8 +141,8 @@ def current_connection() -> dict | None:
     Retaining it and the native thread makes delivery independent of the CLI's
     lifetime. Formal children use their mapped parent or explicit host callback.
     """
-    session = os.environ.get('CODEX_THREAD_ID')
-    if not session or os.environ.get('GRAPHTRAJ_ROLE'):
+    session = _calling_session.get() or os.environ.get('CODEX_THREAD_ID')
+    if not session or (_calling_session.get() is None and os.environ.get('GRAPHTRAJ_ROLE')):
         return None
     return {
         'runtime': 'codex', 'session': session,

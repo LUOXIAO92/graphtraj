@@ -2,6 +2,8 @@ import { app, BrowserWindow, clipboard, dialog, ipcMain, session } from 'electro
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { GraphReader, Projects } from './projects';
+import { SettingsClient, reviewText } from './settings';
+import type { SettingsDraft } from './types';
 
 app.setName('GraphTraj');
 // The standard Chromium switch also isolates Electron preferences for desktop checks.
@@ -11,6 +13,7 @@ const page = path.join(__dirname, '../dist/index.html');
 let window: BrowserWindow | null = null;
 let reader: GraphReader;
 let projects: Projects;
+let settings: SettingsClient;
 let writes: Promise<unknown> = Promise.resolve();
 
 /** Create a sandboxed observer window without a local web server. */
@@ -37,10 +40,19 @@ else {
     reader = new GraphReader();
     projects = new Projects(path.join(app.getPath('userData'), 'projects.json'), reader);
     await projects.load();
+    settings = new SettingsClient(async proposal => {
+      if (!window) return false;
+      const answer = await dialog.showMessageBox(window, {
+        type: 'question', title: 'Save project settings?', message: 'Approve these configuration changes?',
+        detail: reviewText(proposal), buttons: ['Cancel', 'Save settings'],
+        defaultId: 0, cancelId: 0, noLink: true,
+      });
+      return answer.response === 1;
+    });
     session.defaultSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
     session.defaultSession.setPermissionCheckHandler(() => false);
 
-    const handlers: Record<string, (id?: unknown) => unknown> = {
+    const handlers: Record<string, (id?: unknown, draft?: SettingsDraft) => unknown> = {
       'activity:copy': text => {
         if (typeof text !== 'string') throw new Error('Copy requires text.');
         clipboard.writeText(text);
@@ -56,9 +68,17 @@ else {
       'projects:remove': id => projects.remove(id),
       'projects:graph': id => projects.graph(id),
       'projects:activity': value => projects.activity(value),
+      'settings:read': async id => settings.request(await projects.settingsRoot(id)),
+      'settings:save': async (id, draft) => {
+        if (!draft || typeof draft !== 'object' || Object.keys(draft).some(key =>
+          !['revision', 'edits', 'renames', 'add_edges', 'remove_edges'].includes(key))) {
+          throw new Error('Invalid settings draft.');
+        }
+        return settings.request(await projects.settingsRoot(id), draft);
+      },
     };
     for (const [channel, handler] of Object.entries(handlers)) {
-      ipcMain.handle(channel, (event, id) => {
+      ipcMain.handle(channel, (event, id, draft) => {
         if (!window || event.sender !== window.webContents ||
             event.senderFrame !== window.webContents.mainFrame ||
             event.senderFrame.url !== pathToFileURL(page).href) {
@@ -66,7 +86,7 @@ else {
         }
         if (channel === 'activity:copy' || channel === 'projects:activity' || channel === 'projects:graph' || channel === 'projects:list') return handler(id);
         // Serialize preference changes, including the native folder dialog.
-        const next = writes.then(() => handler(id));
+        const next = writes.then(() => handler(id, draft));
         writes = next.catch(() => undefined);
         return next;
       });
@@ -77,5 +97,5 @@ else {
     app.quit();
   });
   app.on('window-all-closed', () => app.quit());
-  app.on('before-quit', () => { reader?.close(); projects?.close(); });
+  app.on('before-quit', () => { reader?.close(); projects?.close(); settings?.close(); });
 }

@@ -86,6 +86,7 @@ def managed_project(
     temporary_git_repository: Path,
     fake_codex: FakeCodex,
     tmp_path: Path,
+    request: pytest.FixtureRequest,
 ) -> Iterator[ManagedProject]:
     """Prepare an explicitly authorized, ready task for native Session checks."""
     from graphtraj.graph.ticket_graph import register_ticket
@@ -117,6 +118,7 @@ def managed_project(
     executable.chmod(0o755)
     environment['MANAGED_NATIVE_ROOT'] = str(tmp_path / 'native')
     environment['CODEX_HOME'] = str(tmp_path / 'codex-home')
+    environment.update(getattr(request, 'param', {}))
     environment.pop('PYTHONPATH', None)
     python = installed_commands.runner.with_name('python')
 
@@ -299,6 +301,22 @@ def test_active_input_reaches_the_same_native_execution(managed_project: Managed
     after = observe(call, alias, 'idle', 'completed')
     assert after['session'] == before['session'] == launched['session']
     assert after['execution_id'] == before['execution_id']
+
+
+@pytest.mark.parametrize('managed_project', [{'MANAGED_SESSION_DELAY': '10.5'}], indirect=True)
+def test_slow_native_launch_and_resume_keep_one_session(managed_project: ManagedProject) -> None:
+    """Native loading can exceed both prior RPC and Runner startup deadlines."""
+    _, cause, call, _ = managed_project
+    launched = call('launch', launch_document(), timeout=25)['tasks'][0]
+    alias = launched['alias']
+    call('send', [alias, 'complete first execution', [cause]])
+    first = observe(call, alias, 'idle', 'completed')
+    call('send', [alias, 'hold', [cause]], timeout=25)
+    second = observe(call, alias, 'running')
+    assert second['session'] == first['session'] == launched['session']
+    assert second['execution_id'] != first['execution_id']
+    call('interrupt', [alias])
+    observe(call, alias, 'idle', 'interrupted')
 
 
 def test_idle_continuation_preserves_alias_and_native_history(managed_project: ManagedProject) -> None:

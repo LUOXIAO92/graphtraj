@@ -8,6 +8,7 @@ import {
 import type { DesktopAPI, Observation, Preferences, Ticket } from '../electron/types';
 import { layout } from './layout';
 import { ActivityView } from './Activity';
+import { SettingsView } from './Settings';
 import '@xyflow/react/dist/style.css';
 import './style.css';
 
@@ -149,6 +150,7 @@ function GraphView({ projectId }: { projectId: string }) {
 }
 
 function App() {
+  const [view, setView] = useState<'graph' | 'settings'>('graph');
   const [preferences, setPreferences] = useState<Preferences | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -181,7 +183,12 @@ function App() {
       <p className="note">Removing a project only changes this list. Projects and running tasks remain independent of this window.</p>
     </nav>
     <main>{error && <div className="error" role="alert">{error}</div>}
-      {preferences?.selected ? <ReactFlowProvider key={preferences.selected}>
+      {preferences?.selected && <nav className="workspace-nav" aria-label="Project views">
+        <Button variant={view === 'graph' ? 'primary' : 'secondary'} onPress={() => setView('graph')}>Task graph</Button>
+        <Button variant={view === 'settings' ? 'primary' : 'secondary'} onPress={() => setView('settings')}>Settings</Button>
+      </nav>}
+      {preferences?.selected && view === 'settings' ? <SettingsView key={preferences.selected} projectId={preferences.selected} /> :
+      preferences?.selected ? <ReactFlowProvider key={preferences.selected}>
         <GraphView projectId={preferences.selected} />
       </ReactFlowProvider> : <div className="welcome"><p className="eyebrow">Optional desktop companion</p>
         <h1>Your projects, in view.</h1><p>Add an existing GraphTraj project directory to see its complete task graph.</p>

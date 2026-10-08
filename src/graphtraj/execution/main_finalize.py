@@ -33,14 +33,33 @@ def bind_main_finalize(summary_issue: str, cwd: Path) -> dict[str, Any]:
     connection = current_host_connection()
     if connection is None:
         raise RunnerError('unsupported-operation', 'The current native Main host is unavailable.')
+    return bind_session(connection, cwd, summary_issue)
+
+
+def bind_session(connection: dict, cwd: Path, summary_issue: str = '') -> dict[str, Any]:
+    """Associate an Adapter-observed external Session using existing Main storage.
+
+    Callers of this internal boundary obtain connection facts from their Runtime,
+    never from model operation arguments. A task hint does not define identity.
+    """
+    runner = discover_runner_directory(cwd)
     adapter = select_runtime_adapter(connection['runtime'])
     session = adapter.verify_finalize_main(connection)
     # Forks need not have a native child marker. Their Runner creation binding
     # still prevents a checker from registering itself as another Main.
-    for path in (runner / 'main-sessions').glob('*/checks/*/session.yml'):
-        child = yaml.safe_load(path.read_text(encoding='utf-8'))
-        if child['runtime'] == connection['runtime'] and child['session'] == session:
-            raise RunnerError('authority-denied', 'A bound checker cannot register Main completion.')
+    if connection['runtime'] == 'codex':
+        from graphtraj.runtimes.codex.session_entry import is_bound_checker
+
+        checker = is_bound_checker(runner, connection)
+    else:
+        checker = False
+        for path in (runner / 'main-sessions').glob('*/checks/*/session.yml'):
+            child = yaml.safe_load(path.read_text(encoding='utf-8'))
+            if child['runtime'] == connection['runtime'] and child['session'] == session:
+                checker = True
+                break
+    if checker:
+        raise RunnerError('authority-denied', 'A bound checker cannot register Main completion.')
     configuration = load_project_configuration(cwd)
     key = hashlib.sha256((connection['runtime'] + ':' + session).encode()).hexdigest()
     directory = runner / 'main-sessions' / ('finalize_' + key)
@@ -54,11 +73,17 @@ def bind_main_finalize(summary_issue: str, cwd: Path) -> dict[str, Any]:
     if path.exists():
         previous = yaml.safe_load(path.read_text())
         if any(previous.get(key) != binding[key]
-               for key in ('runtime', 'session', 'connection', 'cwd')):
+               for key in ('runtime', 'session', 'cwd')):
             raise RunnerError('authority-denied', 'This Main already has a different Session binding.')
     write_yaml_durably(path, binding)
     return {'binding': str(path), 'session': session,
             'hook': adapter.finalize_hook(path, binding)}
+
+
+def session_binding(cwd: Path, runtime: str, session: str) -> Path:
+    """Locate the existing per-Session association without a caller-supplied path."""
+    key = hashlib.sha256((runtime + ':' + session).encode()).hexdigest()
+    return discover_runner_directory(cwd) / 'main-sessions' / ('finalize_' + key) / 'session.yml'
 
 
 def parse_check_result(text: str) -> dict[str, Any]:
@@ -78,6 +103,31 @@ def parse_check_result(text: str) -> dict[str, Any]:
     return result
 
 
+def check_prompt(binding: dict) -> str:
+    """Supply current authoritative graph access and a non-authoritative task hint."""
+    configuration = load_project_configuration(Path(binding['cwd']))
+    graph = read_graph(configuration.state)
+    prompt = files('graphtraj').joinpath('prompts/main_finalize_check.md').read_text(encoding='utf-8')
+    return prompt + '\n\n' + json.dumps({
+        'summary_issue_hint': binding['summary_issue'], 'task_graph': graph,
+    }, ensure_ascii=False)
+
+
+def bind_checker(binding_file: Path, binding: dict, child: str) -> Path:
+    """Retain a native child returned to its owning Adapter before execution."""
+    if not isinstance(child, str) or not child or child == binding['session']:
+        raise ValueError('The checker did not create a distinct native Session.')
+    key = hashlib.sha256(child.encode()).hexdigest()
+    directory = binding_file.parent / 'checks' / key
+    directory.mkdir(parents=True, exist_ok=False)
+    write_yaml_durably(directory / 'session.yml', {
+        'runtime': binding['runtime'], 'session': child,
+        'parent': binding['session'], 'parent_connection': binding['connection'],
+        'summary_issue': binding['summary_issue'],
+    })
+    return directory
+
+
 def check_main_finalize(binding_file: Path, event: dict[str, Any]) -> dict[str, Any]:
     """Handle one trusted host event through its Adapter and existing Task Graph.
 
@@ -91,13 +141,7 @@ def check_main_finalize(binding_file: Path, event: dict[str, Any]) -> dict[str, 
     if context is None:
         return adapter.finalize_response(None, False)
     try:
-        root = Path(binding['cwd'])
-        configuration = load_project_configuration(root)
-        graph = read_graph(configuration.state)
-        prompt = files('graphtraj').joinpath('prompts/main_finalize_check.md').read_text(encoding='utf-8')
-        prompt += '\n\n' + json.dumps({
-            'summary_issue': binding['summary_issue'], 'task_graph': graph,
-        }, ensure_ascii=False)
+        prompt = check_prompt(binding)
         child_binding: tuple[str, Path] | None = None
 
         def created(child: str) -> None:
@@ -105,16 +149,7 @@ def check_main_finalize(binding_file: Path, event: dict[str, Any]) -> dict[str, 
             nonlocal child_binding
             if child_binding is not None:
                 raise ValueError('One Stop cannot bind multiple completion checkers.')
-            if not isinstance(child, str) or not child or child == binding['session']:
-                raise ValueError('The checker did not create a distinct native Session.')
-            key = hashlib.sha256(child.encode()).hexdigest()
-            directory = binding_file.parent / 'checks' / key
-            directory.mkdir(parents=True, exist_ok=False)
-            write_yaml_durably(directory / 'session.yml', {
-                'runtime': binding['runtime'], 'session': child,
-                'parent': binding['session'], 'parent_connection': binding['connection'],
-                'summary_issue': binding['summary_issue'],
-            })
+            directory = bind_checker(binding_file, binding, child)
             child_binding = (child, directory)
 
         native = adapter.check_main_finalize(binding, context, prompt, created)

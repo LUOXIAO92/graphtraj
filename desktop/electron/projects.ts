@@ -144,4 +144,12 @@ export class Projects {
     const graph = await this.reader.read(project.root);
     return { projectId: project.id, graph, updatedAt: new Date().toISOString() };
   }
+
+  async settingsRoot(id: unknown): Promise<string> {
+    const project = this.project(id);
+    if (await realpath(project.root) !== project.root) {
+      throw new Error('Project directory now resolves elsewhere. Remove and add it again.');
+    }
+    return project.root;
+  }
 }

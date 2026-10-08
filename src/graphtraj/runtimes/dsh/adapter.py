@@ -173,9 +173,11 @@ class DshRuntimeAdapter:
             stream.seek(stderr_offset)
             return stream.read().decode('utf-8', errors='replace')
 
-    def current_host_connection(self) -> None:
-        """DSH is a child Runtime; it does not adopt an existing Main host."""
-        return None
+    def current_host_connection(self) -> dict | None:
+        """Capture the association supplied by the native execution's shell registry."""
+        from graphtraj.runtimes.dsh.session_entry import current_connection
+
+        return current_connection()
 
     def native_replacement_approval(self) -> Any:
         """Fail rather than treat an unimplemented native approval route as absent."""
@@ -186,29 +188,31 @@ class DshRuntimeAdapter:
         raise RuntimeAdapterError('native-approval-unavailable', 'DSH host recovery approval is unavailable.')
 
     def verify_finalize_main(self, connection: dict) -> str:
-        """Reject Main adoption, outside this child-only adapter's scope."""
-        raise RuntimeAdapterError('RUNTIME_UNSUPPORTED', 'DSH Main hosting is unsupported.')
+        """Verify DSH's actual agent/created Session header."""
+        from graphtraj.runtimes.dsh.session_entry import verify_main
+
+        return verify_main(connection)
 
     def finalize_hook(self, path: Path, binding: dict) -> dict:
-        """No DSH Main hook is installed."""
-        self.verify_finalize_main(binding)
+        """Return the native plugin path without enabling it."""
+        return {'plugin': str(Path(__file__).with_name('tool.mjs'))}
 
     def finalize_event(self, binding: dict, event: dict) -> None:
         """Reject rather than reinterpret DSH events as Main lifecycle events."""
-        self.verify_finalize_main(binding)
+        raise RuntimeAdapterError('RUNTIME_UNSUPPORTED', 'DSH completion uses its native plugin lifecycle.')
 
     def check_main_finalize(self, binding: dict, context: dict, prompt: str, created: Any) -> None:
         """DSH does not launch Main finalization checkers."""
-        self.verify_finalize_main(binding)
+        raise RuntimeAdapterError('RUNTIME_UNSUPPORTED', 'DSH completion uses its native plugin lifecycle.')
 
     def finalize_response(self, result: dict | None, continued: bool) -> dict:
         """DSH has no Main finalization response protocol."""
-        self.verify_finalize_main({})
+        raise RuntimeAdapterError('RUNTIME_UNSUPPORTED', 'DSH completion uses its native plugin lifecycle.')
 
     def send_host_event(self, connection: Mapping[str, Any], event: dict) -> dict:
         """Managed DSH children receive events through their existing Worker."""
-        self.verify_finalize_main(dict(connection))
+        raise RuntimeAdapterError('RUNTIME_UNSUPPORTED', 'DSH external host event delivery is unavailable.')
 
     def parent_host_status(self, connection: Mapping[str, Any], timeout_seconds: float) -> dict:
         """There is no separately adopted DSH Main host to query."""
-        self.verify_finalize_main(dict(connection))
+        raise RuntimeAdapterError('RUNTIME_UNSUPPORTED', 'DSH external host status is unavailable.')

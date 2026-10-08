@@ -7,11 +7,44 @@ import sys
 import time
 from pathlib import Path
 from types import FrameType
+from websockets.server import ServerProtocol
+from websockets.http11 import Request
+from websockets.frames import Frame, Opcode
+
+
+socket = ServerProtocol() if sys.argv[1:3] == ['app-server', 'proxy'] else None
+
+
+def flush_socket() -> None:
+    """Write native proxy transport output without replacing JSON-RPC semantics."""
+    for data in socket.data_to_send():
+        if data:
+            sys.stdout.buffer.write(data)
+    sys.stdout.buffer.flush()
+
+
+def incoming():
+    """Serve the owning proxy's real WebSocket framing or ordinary stdio."""
+    if socket is None:
+        yield from sys.stdin
+        return
+    while data := sys.stdin.buffer.read1(65536):
+        socket.receive_data(data)
+        for event in socket.events_received():
+            if isinstance(event, Request):
+                socket.send_response(socket.accept(event))
+            elif isinstance(event, Frame) and event.opcode is Opcode.TEXT:
+                yield event.data.decode()
+        flush_socket()
 
 
 def emit(message: dict) -> None:
     """Write one native protocol message."""
-    print(json.dumps(message), flush=True)
+    if socket is None:
+        print(json.dumps(message), flush=True)
+    else:
+        socket.send_text(json.dumps(message).encode())
+        flush_socket()
 
 
 def record(message: dict) -> None:
@@ -111,7 +144,7 @@ if os.environ.get('PEER_STALL_CLOSE'):
         print('close acknowledged', file=sys.stderr, flush=True)
         raise SystemExit(0)
     signal.signal(signal.SIGTERM, acknowledge_close)
-for line in sys.stdin:
+for line in incoming():
     message = json.loads(line)
     record(message)
     method = message.get('method')
@@ -141,12 +174,21 @@ for line in sys.stdin:
         result = {'userAgent': 'controlled-codex'}
     elif method == 'initialized':
         initialized = True
+        if os.environ.get('PEER_PAUSE_BEFORE_SESSION'):
+            while True:
+                time.sleep(1)
         continue
     elif method == 'config/read':
         result = {'config': json.loads(os.environ.get('PEER_CONFIG', '{}')),
                   'origins': {}, 'layers': None}
     elif method in {'thread/start', 'thread/resume'}:
         assert initialized
+        if os.environ.get('PEER_SESSION_DELAY'):
+            emit({'method': 'thread/loading', 'params': {}})
+            time.sleep(float(os.environ['PEER_SESSION_DELAY']))
+        if os.environ.get('PEER_SESSION_FAILURE'):
+            emit({'id': message['id'], 'error': {'code': -32000, 'message': 'Session loading failed'}})
+            continue
         thread_id = params.get('threadId', f'thread-{len(sessions) + 1}')
         sessions[thread_id] = params
         rollout = native_rollout(thread_id)
@@ -164,6 +206,12 @@ for line in sys.stdin:
         assert initialized
         assert params['includeTurns'] is False
         thread_id = params['threadId']
+        if thread_id in os.environ.get('PEER_MAIN_THREADS', '').split(','):
+            emit({'id': message['id'], 'result': {'thread': {
+                'id': thread_id, 'sessionId': thread_id + '-hook', 'source': 'appServer',
+                'parentThreadId': None, 'model': 'controlled-main', 'modelProvider': 'controlled',
+            }}})
+            continue
         parents = json.loads(os.environ['PEER_THREAD_PARENTS'])
         parent = parents[thread_id]
         if isinstance(parent, list):

@@ -619,7 +619,7 @@ def interrupt_session(alias: str, cwd: Path) -> Dict[str, Any]:
     with execution_start_lock(runner_directory):
         mapping, session_directory = read_alias_mapping(runner_directory, alias)
         write_yaml_durably(session_directory / "stop.yml", {"alias": alias})
-        records, failures = _recorded_sessions(runner_directory)
+        records, failures = _recorded_sessions(runner_directory, ownership_only=True)
         # Allocations still preparing a job have no native Session yet. They
         # must pass the Worker guard after we release this lock. Retain any
         # unreadable record with native identity as explicitly unconfirmed.
@@ -887,8 +887,9 @@ def _await_session_resume(
 ) -> None:
     """Wait only for durable ownership; execution continues after this returns."""
     mapping_file = session_directory / "mapping.yml"
-    deadline = time.monotonic() + OPERATION_TIMEOUT_SECONDS
-    while time.monotonic() < deadline:
+    # Session loading remains owned by the Worker and its execution budget;
+    # ordinary control deadlines must not reject a still-starting Session.
+    while True:
         if error_file.is_file():
             if expected_session is None:
                 failure = yaml.safe_load(error_file.read_text(encoding="utf-8"))
@@ -923,7 +924,6 @@ def _await_session_resume(
                     )
             raise _not_resumable()
         time.sleep(0.01)
-    raise _not_resumable()
 
 
 def _resume_environment(

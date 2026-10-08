@@ -409,7 +409,7 @@ class CodexAppServer:
             params.pop('dynamicTools', None)
             params['threadId'] = thread_id
             params['excludeTurns'] = True
-        response = await self._call(method, params)
+        response = await self._call(method, params, wait_for_session=True)
         try:
             thread = response['thread']
             returned_id = _native_id(thread['id'])
@@ -690,6 +690,19 @@ class CodexAppServer:
         if not isinstance(joined, dict) or joined.get('id') != thread_id:
             raise self._protocol_failure('Host subscription returned a different native Session.')
 
+    async def read_hooks(self, cwd: str) -> dict[str, Any]:
+        """Read public discovered hook definitions/trust, not private execution history."""
+        if not isinstance(cwd, str) or not Path(cwd).is_absolute():
+            raise self._protocol_failure('Native host cwd is unavailable for hooks/list.')
+        return await self._call('hooks/list', {'cwds': [cwd]})
+
+    def drain_notifications(self) -> list[dict[str, Any]]:
+        """Return already-received notifications without polling the native host."""
+        notices = []
+        while not self._notifications.empty():
+            notices.append(self._notifications.get_nowait())
+        return notices
+
     async def read_host_status(self, thread_id: str) -> dict[str, Any]:
         """Read host activity and latest turn metadata without conversation items.
 
@@ -728,10 +741,16 @@ class CodexAppServer:
         if any(not isinstance(parent.get(k), str) or not parent[k]
                for k in ('id', 'model', 'modelProvider')):
             raise CodexAdapterError('RUNTIME_REQUEST_INVALID', 'Main model metadata is unavailable.')
-        response = await self._call('thread/fork', {
+        parameters = {
             'threadId': parent['id'], 'model': parent['model'],
             'modelProvider': parent['modelProvider'], 'excludeTurns': True,
-        })
+        }
+        settings = parent.get('turn_settings', {})
+        # Native fork inherits history and permissions but rebuilds model config.
+        # Preserve the checked turn's observed effort instead of project defaults.
+        if 'effort' in settings:
+            parameters['config'] = {'model_reasoning_effort': settings['effort']}
+        response = await self._call('thread/fork', parameters)
         thread = response.get('thread')
         if (not isinstance(thread, dict) or not isinstance(thread.get('id'), str)
                 or not thread['id'] or thread['id'] == parent['id']
@@ -740,6 +759,8 @@ class CodexAppServer:
                 or response.get('model') != parent['model']
                 or response.get('modelProvider') != parent['modelProvider']):
             raise self._protocol_failure('thread/fork did not preserve the bound source and model.')
+        if 'effort' in settings and response.get('reasoningEffort') != settings['effort']:
+            raise self._protocol_failure('thread/fork changed the checked turn reasoning effort.')
         session = CodexSession(thread['id'], None)
         self._sessions[session.thread_id] = session
         return session
@@ -804,7 +825,9 @@ class CodexAppServer:
         self._fail(error)
         return error
 
-    async def _call(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
+    async def _call(
+        self, method: str, params: dict[str, Any], *, wait_for_session: bool = False,
+    ) -> dict[str, Any]:
         """Correlate a client request while the reader consumes interleaved events."""
         self._require_connection()
         self._sequence += 1
@@ -812,8 +835,13 @@ class CodexAppServer:
         future = asyncio.get_running_loop().create_future()
         self._pending[request_id] = future
         try:
-            async with asyncio.timeout(self._timeout):
+            async with asyncio.timeout(self._timeout) as deadline:
                 await self._send({'id': request_id, 'method': method, 'params': params})
+                # Loading a Session is native work, not a transport deadline.
+                # Keep writes bounded; caller cancellation/close still wakes
+                # this owner, while ordinary control RPCs retain their limit.
+                if wait_for_session:
+                    deadline.reschedule(None)
                 response = await asyncio.shield(future)
         except TimeoutError as error:
             failure = CodexAdapterError(

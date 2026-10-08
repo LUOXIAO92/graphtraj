@@ -459,7 +459,8 @@ def read_parent_status(arguments: Mapping[str, Any], *, cwd: Path | None = None)
     """Observe only the caller root's recorded Runtime host parent."""
     from graphtraj.execution.parent_status import parent_status
 
-    result = parent_status(cwd or Path.cwd(), arguments.get('timeout_seconds', 0))
+    result = parent_status(cwd or Path.cwd(), arguments.get('timeout_seconds', 0),
+                           include_hooks=arguments.get('include_hooks', False))
     return ToolResult(result, failed=result['outcome'] in {'timeout', 'error'})
 
 
@@ -469,6 +470,8 @@ register_tool(
     'waiting a finite interval for native idle within the caller\'s remaining execution budget. '
     'No input is sent. Main cannot wait on itself.',
     {'type': 'object', 'properties': {
+        'include_hooks': {'type': 'boolean', 'default': False,
+                          'description': 'Read owning Codex source and hooks/list; retain hook notifications during the existing wait. Does not replay past events or expose an active-registry snapshot.'},
         'timeout_seconds': {'type': 'number', 'default': 0,
                             'description': 'Zero reads once; a finite positive timeout waits for idle. Choose within the remaining execution budget.'},
     }, 'additionalProperties': False},
@@ -869,10 +872,13 @@ _ROLE_EDGE_PROPERTIES = {
 _ROLE_ORGANIZATION_SCHEMA = {
     "type": "object",
     "properties": {
+        "expected_revision": {"type": "string", "description": "Revision returned by preview; reject a draft based on older configuration."},
         "change": {
             "type": "object",
             "description": "Explicit preset and dispatch-edge change; omit for a side-effect-free preview.",
             "properties": {
+                "unset_fields": {"type": "object", "additionalProperties": {"type": "array", "items": {"type": "string"}}},
+                "rename_presets": {"type": "object", "additionalProperties": {"type": "string"}},
                 "set_presets": {
                     "type": "object",
                     "description": "Exact preset reference to settings; a declared preset merges, a new reference is added.",

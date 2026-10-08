@@ -236,7 +236,12 @@ def main() -> None:
     exposes; it is not read from the request.
     """
     parser = argparse.ArgumentParser(prog="graphtraj-tool", description=TOOL_DESCRIPTION)
-    parser.add_argument(
+    boundary = parser.add_mutually_exclusive_group()
+    boundary.add_argument(
+        "--desktop-settings", action="store_true",
+        help="Serve one human desktop settings read/save with native host review over the owned pipe.",
+    )
+    boundary.add_argument(
         "--allowed-features",
         help="Comma-separated feature names this host exposes; default exposes all.",
     )
@@ -245,6 +250,11 @@ def main() -> None:
         help="Bind the read-only human activity observer; Agent callers remain refused.",
     )
     options = parser.parse_args()
+    if options.desktop_settings:
+        from graphtraj.interfaces.desktop_settings import serve as serve_settings
+
+        serve_settings(sys.stdin, sys.stdout, Path.cwd())
+        return
     allowed = tuple(name for name in (options.allowed_features or "").split(",") if name)
 
     serve(

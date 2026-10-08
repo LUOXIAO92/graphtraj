@@ -25,6 +25,23 @@ def host_peer(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
                 assert request['params'] == {'threadId':'original-host', 'excludeTurns':True}
                 subscribed = True
                 result['result'] = {'thread':{'id':'original-host'}}
+                if (root / 'pending-request').exists():
+                    ws.send_text(json.dumps({'id':'host-approval',
+                        'method':'item/commandExecution/requestApproval',
+                        'params':{'threadId':'original-host','turnId':'main-turn','itemId':'command'}
+                    }).encode())
+            if request['method'] == 'hooks/list':
+                assert request['params'] == {'cwds':[str(root)]}
+                result['result'] = {'data':[{'cwd':str(root), 'hooks':[
+                    {'key':'observed-stop', 'eventName':'stop', 'enabled':True,
+                     'trustStatus':'trusted', 'currentHash':'native-hash'}
+                ], 'warnings':[], 'errors':[]}]}
+                if subscribed:
+                    for event, status in [('hook/started','running'), ('hook/completed','completed')]:
+                        ws.send_text(json.dumps({'method':event, 'params':{
+                            'threadId':'original-host', 'turnId':'main-turn',
+                            'run':{'status':status, 'entries':[{'kind':'warning','text':'visible result'}]}
+                        }}).encode())
             if request['method'] == 'thread/turns/list':
                 assert request['params'] == {'threadId':'original-host', 'limit':1, 'itemsView':'notLoaded'}
                 mode = (root / 'mode').read_text()
@@ -35,6 +52,7 @@ def host_peer(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
                 assert request['params'] == {'threadId':'original-host', 'includeTurns':False}
                 mode = (root / 'mode').read_text()
                 result['result'] = {'thread':{'id':'wrong' if mode == 'wrong' else 'original-host', 'status':{'type':'notLoaded' if mode == 'unloaded' else 'active' if mode in ('active','turn','quiet','unrelated','drop') else 'idle'}}}
+                result['result']['thread'].update(cwd=str(root), source='appServer', sessionId='native-session')
                 if subscribed and mode in ('active','turn','quiet','unrelated','drop'):
                     (root / 'mode').write_text('idle')
 """
@@ -92,6 +110,40 @@ def test_public_parent_wait_reads_active_then_idle(host_peer: Path, mode: str, m
     assert sum(item['method'] == 'thread/read' for item in wire) == 3
 
 
+@pytest.mark.parametrize('state', ['missing', 'matching', 'mismatched'])
+def test_public_hook_observer_projects_existing_association(host_peer: Path, state: str) -> None:
+    """The owning host lookup is visible without repairing records or sending input."""
+    import yaml
+    from graphtraj.configuration.project_configuration import default_configuration_content
+    from graphtraj.execution.main_finalize import session_binding
+
+    config = host_peer / '.graphtraj/config.yml'
+    config.parent.mkdir()
+    config.write_text(default_configuration_content(host_peer, host_peer))
+    path = session_binding(host_peer, 'codex', 'original-host')
+    if state != 'missing':
+        path.parent.mkdir(parents=True)
+        path.write_text(yaml.safe_dump({
+            'runtime': 'codex', 'session': 'original-host',
+            'connection': {'runtime': 'codex', 'session': 'original-host',
+                           'codex_home': str(host_peer / 'home'),
+                           'hook_session': 'native-session' if state == 'matching' else 'old-session'},
+        }))
+    before = path.read_bytes() if path.exists() else None
+    (host_peer / 'mode').write_text('idle')
+    result = bind(host_peer)({'action': 'execute', 'feature': 'parent_status',
+                              'arguments': {'include_hooks': True}})
+    assert not result.failed
+    assert result.document['completion_association'] == {
+        'cwd': str(host_peer), 'binding_path': str(path), 'status': state,
+    }
+    assert (path.read_bytes() if path.exists() else None) == before
+    wire = [json.loads(line)['request'] for line in (host_peer / 'wire.jsonl').read_text().splitlines()]
+    assert {item['method'] for item in wire} <= {
+        'initialize', 'initialized', 'thread/read', 'thread/turns/list', 'hooks/list',
+    }
+
+
 @pytest.mark.parametrize(('mode', 'outcome'), [('quiet', 'timeout'), ('unrelated', 'timeout'), ('drop', 'error')])
 def test_parent_wait_needs_own_host_event(host_peer: Path, mode: str, outcome: str) -> None:
     """Silent changes and unrelated events never cause polling; EOF stays an error."""
@@ -126,6 +178,23 @@ def test_cli_parent_status_reads_once(host_peer: Path) -> None:
     assert result.exit_code == 0, result.output
     assert 'outcome: observed' in result.output
     assert 'activity: active' in result.output
+
+
+def test_hook_diagnostics_preserve_native_events_and_do_not_answer_approvals(host_peer: Path) -> None:
+    """The existing public observer projects native evidence without controlling Main."""
+    (host_peer / 'mode').write_text('active')
+    (host_peer / 'pending-request').touch()
+    result = bind(host_peer)({'action':'execute', 'feature':'parent_status',
+                             'arguments':{'timeout_seconds':1, 'include_hooks':True}})
+    assert not result.failed, result.document
+    document = result.document
+    assert document['native_identity']['source'] == 'appServer'
+    assert document['hook_configuration']['data'][0]['hooks'][0]['trustStatus'] == 'trusted'
+    assert [event['method'] for event in document['hook_events']] == ['hook/started', 'hook/completed']
+    assert document['hook_events'][-1]['params']['run']['entries'][0]['text'] == 'visible result'
+    wire = [json.loads(line)['request'] for line in (host_peer / 'wire.jsonl').read_text().splitlines()]
+    assert not any(request.get('id') == 'host-approval' for request in wire)
+    assert not any(request.get('method') in {'turn/start','thread/start','config/batchWrite'} for request in wire)
 
 
 def test_wait_refuses_to_load_a_host(host_peer: Path) -> None:

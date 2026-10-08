@@ -687,25 +687,50 @@ relationships; it does not remove a Worktree still used by another execution.
 
 ## Main completion checks
 
-From the existing owning Main context, bind a summary Issue or equivalent task
-reference:
+The Runtime's session-entry integration recognizes an external Main from its
+native Session source and automatically carries that association into CLI,
+Tool and MCP operations. GraphTraj members keep their existing identity and
+parent protocol. Native and supported plugin children are excluded from Main
+registration; an unknown source is reported rather than silently promoted.
+
+Pi plugin recognition covers `nicobailon/pi-subagents` (`PI_SUBAGENT_CHILD`
+and child Session parent/depth metadata) and `mjakl/pi-subagent`
+(`PI_SUBAGENT_DEPTH` and `pi-subagent:delegation` records). Support is limited
+to these known plugin markers, including their shared-process Session context.
+
+Main does not manually supply a binding path or pin completion checks to one
+Issue. Adopt the Runtime-specific integration through its normal configuration
+and trust mechanism, preserving existing settings and permissions.
+
+The Adapter executes and collects the checker with Main's current native context
+and actual Runtime settings. The checker resolves the current task and verifies
+its Issue, DAG and Tickets; supplied references are hints that may be outdated.
+Main does not mediate checker preparation, dispatch or collection.
+
+For Codex, generate the SessionStart and Stop configuration using the Python
+interpreter from the installation you intend to keep:
 
 ```sh
-graphtraj bind-finalize --summary-issue '<summary-issue-reference>'
+python -m graphtraj.runtimes.codex.stop_hook --configuration
 ```
 
-The shared tool operation is `bind_main_finalize` with `summary_issue`. The
-result provides the binding and native hook material for review and adoption;
-returning that material does not install it or prove that the current host has
-run it. Adopt it through the Runtime's supported hook configuration while
-preserving existing settings and permissions.
+Review the generated commands, merge them into the project's existing hook
+configuration, and use the host's normal review and trust controls. Keep the
+installation and its interpreter outside temporary directories. The commands
+receive native event context; they take no fixed Session ID, binding path or
+summary Issue. Verify native Main entry and Stop after configuration;
+generating or trusting the material alone proves neither.
 
-The hook is scoped to its actual Main. It delegates a state check using the
-Main's available native context and current model, then checks the summary
-Issue, DAG and referenced Tickets. Completed work and legitimate waiting may
-finish the turn. Actionable unfinished nodes are returned to the same Main so
-it continues. Ordinary children and the checker do not acquire a recursive
-completion hook; user interruption and execution limits remain effective.
+If Main is already running when the integration is installed, a trusted Stop
+can establish the missing association from verified native ownership of the
+project's existing root Agents. It reuses the normal entry checks; no restart
+or manual binding is needed.
+
+Each activation visibly reports a start and outcome. Completed work and
+legitimate waiting end the hook without another Main input or reply. Actionable
+unfinished work returns to the same Main with the next work to perform. Children
+and the checker do not recursively activate the hook; user interruption and
+execution limits remain effective.
 
 The checker does not redo code review or reconstruct requirements from native
 Traces. Reference or checker failures are not completion evidence. Native

@@ -10,6 +10,8 @@ happens only when the file still holds the reviewed content.
 from __future__ import annotations
 
 import copy
+import fcntl
+import hashlib
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -31,7 +33,10 @@ from graphtraj.workspace.runner_project import (
 )
 
 
-CHANGE_FIELDS = ("set_presets", "remove_presets", "add_edges", "remove_edges")
+CHANGE_FIELDS = (
+    "set_presets", "remove_presets", "add_edges", "remove_edges",
+    "unset_fields", "rename_presets",
+)
 
 
 def organize_child_roles(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> dict:
@@ -49,10 +54,11 @@ def organize_child_roles(arguments: Mapping[str, Any], *, cwd: Path | None = Non
     before_text = _read_text(path)
     before = _load_document(before_text)
     current = _validated(before)
+    revision = hashlib.sha256(before_text.encode("utf-8")).hexdigest()
 
     change = arguments.get("change")
     if change is None:
-        return _view(path, before, current)
+        return {**_view(path, before, current), "revision": revision}
 
     # The Runner's own process record decides the caller. A supplied role,
     # alias or reviewer field never confers authority over project role settings.
@@ -63,20 +69,35 @@ def organize_child_roles(arguments: Mapping[str, Any], *, cwd: Path | None = Non
             "Only the caller that owns the Harness Project may organize its child roles.",
         )
 
+    if arguments.get("expected_revision", revision) != revision:
+        raise RunnerError(
+            "configuration-conflict",
+            "roles.yml changed while editing. Reload settings and reapply your changes; nothing was written.",
+        )
+
     after = _changed(before, change)
     if after == before:
-        return {**_view(path, before, current), "applied": False}
+        return {**_view(path, before, current), "revision": revision, "applied": False}
     reviewed = _validated(after)
     _approve({"request": dict(arguments), "before": before, "after": after}, root)
-    if _read_text(path) != before_text:
-        return {
-            "applied":     False,
-            "status":      "stale",
-            "roles_file":  str(path),
-            "message":     "roles.yml changed after review; nothing was written.",
-        }
-    write_yaml_durably(path, after)
-    return {**_view(path, after, reviewed), "applied": True}
+    # Serialize the compare/write interval between native saves. A waiting
+    # writer holding the replaced inode still rechecks the current path below.
+    # External editors need not use our lock, so compare their bytes as well.
+    with path.open("rb") as stream:
+        fcntl.flock(stream, fcntl.LOCK_EX)
+        if _read_text(path) != before_text:
+            return {
+                "applied":     False,
+                "status":      "stale",
+                "roles_file":  str(path),
+                "message":     "roles.yml changed after review; nothing was written.",
+            }
+        write_yaml_durably(path, after)
+    after_text = yaml.safe_dump(after, sort_keys=False, allow_unicode=True)
+    return {
+        **_view(path, after, reviewed), "applied": True,
+        "revision": hashlib.sha256(after_text.encode("utf-8")).hexdigest(),
+    }
 
 
 def _view(path: Path, document: Mapping[str, Any], roles: ProjectRoles) -> dict:
@@ -113,13 +134,45 @@ def _changed(document: dict, change: object) -> dict:
 
     for reference, settings in change.get("set_presets", {}).items():
         _set_preset(roles, reference, settings)
+    for reference, fields in change.get("unset_fields", {}).items():
+        entries, name = _preset_location(roles, reference)
+        for field in fields:
+            entries[name].pop(field, None)
     for reference in change.get("remove_presets", ()):
         _remove_preset(roles, reference)
     for edge in change.get("add_edges", ()):
         _change_edge(tree, edge, present=True)
     for edge in change.get("remove_edges", ()):
         _change_edge(tree, edge, present=False)
+    for old, new in change.get("rename_presets", {}).items():
+        entries, name = _preset_location(roles, old)
+        settings = copy.deepcopy(entries[name])
+        target, target_name = _preset_location(roles, new, existing=False)
+        if target_name in target:
+            raise RunnerError("invalid-input", "The new role name already exists.")
+        _remove_preset(roles, old)
+        _set_preset(roles, new, settings)
+        _rename_tree(tree, old, new)
     return after
+
+
+def _rename_tree(tree: dict, old: str, new: str) -> None:
+    """Rename every nested occurrence, retaining all of its outgoing edges."""
+    if old in tree:
+        if new in tree:
+            raise RunnerError("invalid-input", "The new role reference already occurs in the dispatch tree.")
+        tree[new] = tree.pop(old)
+    for children in tree.values():
+        _rename_tree(children, old, new)
+
+
+def _preset_location(roles: dict, reference: str, *, existing: bool = True) -> tuple[dict, str]:
+    """Locate an exact preset without changing its group or sibling settings."""
+    group, _, name = reference.rpartition(".")
+    entries = roles.get(group, {}) if group else roles
+    if not isinstance(entries, dict) or (existing and name not in entries):
+        raise RunnerError("invalid-input", "The role reference does not exist.")
+    return entries, name
 
 
 def _set_preset(roles: dict, reference: str, settings: object) -> None:
@@ -171,24 +224,31 @@ def _change_edge(tree: dict, edge: object, *, present: bool) -> None:
     """Add or remove one direct dispatch edge under its declaring parent."""
     parent = edge["parent"]
     child = edge["child"]
-    children = tree.get(parent)
+    parents: list[dict] = []
+
+    def collect(nodes: dict) -> None:
+        """Find every declaration of the parent in a nested dispatch tree."""
+        if parent in nodes:
+            parents.append(nodes[parent])
+        for descendants in nodes.values():
+            collect(descendants)
+
+    collect(tree)
     if present:
-        if children is None:
-            children = tree[parent] = {}
-        if not isinstance(children, dict):
-            raise RunnerError(
-                "invalid-input", "role_tree.{0} must be a mapping.".format(parent)
-            )
-        children.setdefault(child, {})
+        if not parents:
+            parents = [tree.setdefault(parent, {})]
+        parents[0].setdefault(child, {})
         return
-    if not isinstance(children, dict) or child not in children:
+    matches = [children for children in parents if child in children]
+    if not matches:
         raise RunnerError(
             "invalid-input",
             "role_tree edge {0} -> {1} is not configured.".format(parent, child),
         )
-    del children[child]
-    if not children:
-        del tree[parent]
+    if any(children[child] for children in matches):
+        raise RunnerError("invalid-input", "This edge contains nested dispatch relationships. Remove those relationships first so unrelated edges are not silently lost.")
+    for children in matches:
+        del children[child]
 
 
 def _is_group(entries: object) -> bool:

@@ -25,6 +25,31 @@ from graphtraj.workspace.runner_project import discover_runner_directory
 _runtime_caller: ContextVar[tuple[Path, str | None] | None] = ContextVar('runtime_caller', default=None)
 
 
+class NativeCaller(str):
+    """A Runtime-verified Session identifier, never a managed Agent alias.
+
+    String compatibility preserves existing parent comparisons. The attached
+    connection contains only the existing native association, not configuration.
+    """
+
+    connection: dict
+
+    def __new__(cls, session: str, connection: dict) -> 'NativeCaller':
+        """Retain the association verified at the current call boundary."""
+        value = super().__new__(cls, session)
+        value.connection = dict(connection)
+        return value
+
+
+def caller_runtime_name(runner: Path, caller: str | None) -> str | None:
+    """Select Runtime from typed native context or the managed identity protocol."""
+    if isinstance(caller, NativeCaller):
+        return caller.connection['runtime']
+    if caller is not None:
+        return read_alias_mapping(runner, caller)[0]['runtime']
+    return None
+
+
 @contextmanager
 def runtime_caller(runner_directory: Path, identity: str | None) -> Iterator[None]:
     """Scope an identity received on the private Runtime callback connection.
@@ -114,17 +139,35 @@ def caller_alias(runner_directory: Path) -> str | None:
     or the user calls, no live Session owns the process and the result is
     ``None``.
 
-    Neither a projected environment variable nor a request field can establish
-    or raise this identity: a missing, forged or copied value is simply not
-    consulted. Host isolation from a caller that leaves its own process tree is
-    the separate boundary owned by T3c.
+    Managed identity takes precedence over inherited environment values. For
+    external calls, native per-Session locators select the Runtime record; its
+    actual source and current association must agree before Main is returned.
+    Unknown and stale native sources never fall back to human CLI authority.
     """
     native = _runtime_caller.get()
     if native is not None:
         if native[0] != runner_directory.resolve():
             raise _authority_denied()
         return native[1]
-    return process_caller_alias(runner_directory, os.getpid())
+    member = process_caller_alias(runner_directory, os.getpid())
+    if member is not None:
+        return member
+    try:
+        connection = runtime_adapter.current_host_connection()
+        if connection is None:
+            return None
+        if connection['runtime'] == 'codex':
+            from graphtraj.runtimes.codex.session_entry import caller_identity
+        elif connection['runtime'] == 'pi':
+            from graphtraj.runtimes.pi.session_entry import caller_identity
+        elif connection['runtime'] == 'dsh':
+            from graphtraj.runtimes.dsh.session_entry import caller_identity
+        else:
+            raise RunnerError('authority-denied', 'Unknown native caller Runtime.')
+        identity = caller_identity(runner_directory, connection)
+        return NativeCaller(identity, connection) if identity is not None else None
+    except runtime_adapter.RuntimeAdapterError as error:
+        raise RunnerError(error.code, error.message) from error
 
 
 def process_caller_alias(runner_directory: Path, pid: int) -> str | None:
@@ -179,14 +222,30 @@ def is_direct_owner(caller: str | None, mapping: Mapping[str, Any]) -> bool:
     A Session directly owns the children the Runner recorded with it as their
     parent. A caller with no live Session owner is Main or the user, which
     directly owns the top-level Sessions the Runner recorded without a parent;
-    a sibling, a grandchild or another branch stays outside that relation. The
-    recorded parent alone decides, so no request field and no projected
-    environment value can widen the relation.
+    a sibling, a grandchild or another branch stays outside that relation.
+    Existing external roots also retain their native owning connection. That
+    relation requires the verified native caller and its current connection;
+    no request field or projected environment alone can widen it.
     """
     parent = mapping.get("parent")
     if caller is None:
         return parent is None
-    return parent == caller
+    if parent == caller:
+        return True
+    owner = mapping.get('parent_connection')
+    if (parent is not None or not isinstance(owner, dict)
+            or owner.get('session') != caller):
+        return False
+    # Old top-level launches recorded their actual native owner here. A
+    # verified native caller can retain that specific relation without being
+    # reclassified as Main or acquiring authority over unrelated roots.
+    connection = (caller.connection if isinstance(caller, NativeCaller)
+                  else runtime_adapter.current_host_connection())
+    if connection is None:
+        return False
+    return all(connection.get(key) == owner.get(key) for key in (
+        'runtime', 'session', 'codex_home',
+    ))
 
 
 def require_direct_authority(
@@ -202,7 +261,12 @@ def require_direct_authority(
     caller = caller_alias(runner_directory)
     if caller == alias or is_direct_owner(caller, mapping):
         return
-    raise _authority_denied()
+    raise RunnerError(
+        'authority-denied',
+        "Only the target's direct parent may control this Session. "
+        f"Resolved caller: {caller!r}; target is a "
+        f"{'root' if mapping.get('parent') is None else 'child'} Session.",
+    )
 
 
 def require_task_authority(
@@ -256,7 +320,7 @@ def require_descendant_authority(
     approval or replacement authority.
     """
     caller = caller_alias(runner_directory)
-    if caller is None or caller == alias:
+    if caller is None or caller == alias or is_direct_owner(caller, mapping):
         return
     seen = {alias}
     parent = mapping.get("parent")
@@ -264,7 +328,10 @@ def require_descendant_authority(
         if parent == caller:
             return
         seen.add(parent)
-        parent = read_alias_mapping(runner_directory, parent)[0].get("parent")
+        ancestor = read_alias_mapping(runner_directory, parent)[0]
+        if is_direct_owner(caller, ancestor):
+            return
+        parent = ancestor.get("parent")
     raise _authority_denied()
 
 
@@ -286,10 +353,7 @@ def require_replacement_authority(
     caller = caller_alias(runner_directory)
     if is_direct_owner(caller, mapping):
         return None
-    runtime = (
-        read_alias_mapping(runner_directory, caller)[0]["runtime"]
-        if caller is not None else caller_runtime()
-    )
+    runtime = caller_runtime_name(runner_directory, caller) or caller_runtime()
     try:
         execute = runtime_adapter.native_replacement_approval(runtime)
     except runtime_adapter.RuntimeAdapterError as error:
@@ -320,7 +384,17 @@ def require_stopped_subtree(runner_directory: Path, alias: str) -> None:
         if (_unstarted_allocation(path) or _terminal_unestablished_launch(path)
                 or _unestablished_root_launch(path)):
             continue
-        mappings[name] = read_alias_mapping(runner_directory, name)
+        mapping, directory = _read_alias_record(runner_directory, name)
+        if (not isinstance(mapping, dict) or mapping.get("alias") != name
+                or "parent" not in mapping
+                or (mapping["parent"] is not None and not isinstance(mapping["parent"], str))):
+            raise _invalid_mapping()
+        mappings[name] = mapping, directory
+    # Parentage determines the subtree; unrelated records need not implement
+    # the current execution schema. An unresolved parent cannot prove exclusion.
+    if any(mapping.get("parent") is not None and mapping["parent"] not in mappings
+           for mapping, _ in mappings.values()):
+        raise _invalid_mapping()
     pending = [alias]
     seen: set[str] = set()
     while pending:
@@ -328,7 +402,7 @@ def require_stopped_subtree(runner_directory: Path, alias: str) -> None:
         if current in seen:
             continue
         seen.add(current)
-        mapping, directory = mappings[current]
+        mapping, directory = read_alias_mapping(runner_directory, current)
         if _status_session(mapping, directory, current, respond_to_abnormal=False)["activity"] != "idle":
             raise RunnerError(
                 "replacement-not-stopped",
@@ -519,7 +593,9 @@ def status_tree(
     roots = (
         [alias for alias, mapping in records.items() if mapping.get("parent") is None]
         if caller is None
-        else [caller] if caller in records else []
+        else [caller] if caller in records else [
+            alias for alias, mapping in records.items() if is_direct_owner(caller, mapping)
+        ]
     )
 
     nodes: list[Dict[str, Any]] = []
@@ -571,12 +647,15 @@ def status_tree(
 
 def _recorded_sessions(
     runner_directory: Path,
+    *,
+    ownership_only: bool = False,
 ) -> Tuple[Dict[str, Dict[str, Any]], list[Tuple[str, RunnerError]]]:
     """Read every Session record the Runner retains for this project.
 
     Returns the valid records by alias and the alias of each record that could
     not be read with the error it raised, so one unreadable Session never stops
-    the enumeration of the rest.
+    the enumeration of the rest. Subtree interruption may read only parentage
+    first; every selected member still requires its complete execution mapping.
     """
     session_root = runner_directory / "sessions"
     if session_root.is_symlink() or not session_root.is_dir():
@@ -591,9 +670,23 @@ def _recorded_sessions(
     failures: list[Tuple[str, RunnerError]] = []
     for alias in entries:
         try:
-            records[alias] = read_alias_mapping(runner_directory, alias)[0]
+            if ownership_only:
+                record, _ = _read_alias_record(runner_directory, alias)
+                if (not isinstance(record, dict) or record.get("alias") != alias
+                        or "parent" not in record
+                        or (record["parent"] is not None
+                            and not isinstance(record["parent"], str))):
+                    raise _invalid_mapping()
+                records[alias] = record
+            else:
+                records[alias] = read_alias_mapping(runner_directory, alias)[0]
         except RunnerError as error:
             failures.append((alias, error))
+    if ownership_only:
+        failures.extend(
+            (alias, _invalid_mapping()) for alias, record in records.items()
+            if record["parent"] is not None and record["parent"] not in records
+        )
     return records, failures
 
 
@@ -852,6 +945,15 @@ def session_record_directory(runner_directory: Path, alias: str) -> Path:
 def read_alias_mapping(
     runner_directory: Path, alias: str
 ) -> Tuple[Dict[str, Any], Path]:
+    """Read a Session record and require the complete current execution identity."""
+    mapping, session_directory = _read_alias_record(runner_directory, alias)
+    if not _valid_mapping(mapping, alias):
+        raise _invalid_mapping()
+    return mapping, session_directory
+
+
+def _read_alias_record(runner_directory: Path, alias: str) -> Tuple[Any, Path]:
+    """Read retained ownership without interpreting its execution schema."""
     if not ALIAS.fullmatch(alias):
         raise _alias_not_found()
     session_root = runner_directory / "sessions"
@@ -873,8 +975,6 @@ def read_alias_mapping(
             mapping = record["retirement"]["mapping"]
     except (OSError, UnicodeError, KeyError, TypeError, yaml.YAMLError) as error:
         raise _invalid_mapping() from error
-    if not _valid_mapping(mapping, alias):
-        raise _invalid_mapping()
     return mapping, session_directory
 
 

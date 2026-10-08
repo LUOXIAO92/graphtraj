@@ -105,26 +105,37 @@ A failed integration or necessary check does not complete the Ticket or unlock i
 successors. Finish when the accepted scope is integrated or authorized progress is
 blocked; report exact results and remaining obstacles.
 
-## Main finalize checking
+## Main completion checking
 
-For a supported owning Runtime, `graphtraj bind-finalize --summary-issue <ref>`
-or the shared `bind_main_finalize` operation returns a Main binding and native
-hook material. Review and adopt that material through the existing Runtime
-configuration. It applies to the bound Main, not every Agent sharing a project
-or prompt. Binding preparation alone is not installation or observed receipt.
+Use the selected Runtime's session-entry integration to recognize the external
+Main and carry its current Session association through CLI, Tool and MCP calls.
+GraphTraj members retain their existing identities and parent relationships.
+Runtime-native and supported plugin children, including the checker, must not
+register as Main or recursively activate its completion hook. Unknown sources
+remain explicitly unrecognized. Review installation material through the
+Runtime's normal configuration and trust mechanism before enabling the hook.
 
-The completion checker uses the inherited native context and Main's actual
-model, with the summary Issue, current DAG and referenced Tickets as the state
-authority. Completed work or legitimate waiting for an execution, event or
-approval permits Main to finish its turn. Actionable unfinished nodes return
-an exception to the same Main. Keep real user stops and execution limits;
-the check grants no approval, time extension or acceptance. Unreadable state or
-checker errors remain explicit failures, not a completed-task conclusion.
+For an already-running Codex Main, a trusted Stop can reuse the native entry
+checks to establish a missing association when its ownership of existing root
+Agents is verified. No restart, fabricated startup event or manual binding is
+required.
 
-Ordinary children and the checker itself do not run Main's finalize hook.
-This task-state check does not add automatic code Review or another task ledger.
-Verify actual host behavior after adopting a fixed installation and report only
-observable context, model and optional cache-usage evidence.
+The Adapter runs and collects the checker using Main's current native context
+and actual Runtime settings. Main does not relay prepare, spawn or collect
+operations. The checker identifies the current task from inherited context and
+verifies the applicable Issue, DAG and Tickets; a supplied Issue reference is
+a hint to verify, not a permanent task binding.
+
+Every activation visibly reports its start and outcome. Completed work or
+legitimate waiting permits the turn to end without another Main input or reply.
+Actionable unfinished work returns to the same Main with the concrete next work.
+Unreadable task sources and execution errors are visible failures. Preserve user
+stops, permissions and execution limits: a check grants no time, approval or
+acceptance. It does not redo code Review or create another task ledger.
+
+Validate actual host behavior after adopting a fixed installation. Configuration
+material and controlled checks alone do not prove live Session recognition,
+configuration inheritance or the absence of duplicate Main replies.
 
 ## Limits and recovery
 

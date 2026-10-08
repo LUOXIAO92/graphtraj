@@ -9,5 +9,7 @@ const api: DesktopAPI = {
   selectProject: id => ipcRenderer.invoke('projects:select', id),
   removeProject: id => ipcRenderer.invoke('projects:remove', id),
   graph: id => ipcRenderer.invoke('projects:graph', id),
+  settings: id => ipcRenderer.invoke('settings:read', id),
+  saveSettings: (id, draft) => ipcRenderer.invoke('settings:save', id, draft),
 };
 contextBridge.exposeInMainWorld('graphtraj', api);

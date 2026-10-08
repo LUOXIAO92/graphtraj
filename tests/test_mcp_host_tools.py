@@ -172,6 +172,24 @@ def _started_mcp(
     return server
 
 
+def _associate_native_mains(
+    commands: InstalledCommands, root: Path, environment: dict[str, str],
+) -> None:
+    """Enter the controlled Main peers through the real SessionStart carrier."""
+    for session in environment['PEER_MAIN_THREADS'].split(','):
+        rollout = root / (session + '.jsonl')
+        rollout.write_text(json.dumps({'type': 'session_meta', 'payload': {
+            'id': session, 'source': 'cli',
+        }}) + '\n')
+        result = subprocess.run([
+            str(commands.product.with_name('python')), '-m', 'graphtraj.runtimes.codex.stop_hook',
+        ], cwd=root, env=environment, input=json.dumps({
+            'hook_event_name': 'SessionStart', 'source': 'startup', 'cwd': str(root),
+            'session_id': session + '-hook', 'transcript_path': str(rollout),
+        }), capture_output=True, text=True, timeout=20)
+        assert result.returncode == 0 and 'continue' not in json.loads(result.stdout), result.stdout + result.stderr
+
+
 def _stable_event(document: dict) -> dict:
     return {
         key: value
@@ -559,6 +577,8 @@ def managed_mcp(
     })["event_id"]
     fake_codex.executable.write_text(
         "#!" + sys.executable + "\n"
+        + "import sys, runpy\nif sys.argv[1:3] == ['app-server', 'proxy']:\n"
+        + "    runpy.run_path(" + repr(str(Path(__file__).with_name('codex_stdio_peer.py'))) + ")\n    raise SystemExit(0)\n"
         + Path(__file__).with_name("managed_codex_peer.py").read_text(encoding="utf-8"),
         encoding="utf-8",
     )
@@ -567,10 +587,12 @@ def managed_mcp(
         {
             "MANAGED_NATIVE_ROOT": str(tmp_path / "native"),
             "CODEX_HOME":          str(tmp_path / "codex-home"),
+            "PEER_MAIN_THREADS":   'managed-main',
         }
     )
     environment.pop("PYTHONPATH", None)
     environment.pop("CODEX_THREAD_ID", None)
+    _associate_native_mains(installed_commands, root, environment)
 
     with _started_mcp(mcp_executable, root, environment) as server:
         managed = ManagedMcp(
@@ -1349,7 +1371,7 @@ def _controlled_budget_server(
     )
     codex.chmod(0o755)
     protocol = tmp_path / "mcp-main-protocol.jsonl"
-    return {
+    configured = {
         **environment,
         "FAKE_CODEX_APPEND_LOG":       "1",
         "FAKE_CODEX_CAPTURE_ROLE":     "1",
@@ -1358,9 +1380,12 @@ def _controlled_budget_server(
         "MCP_MAIN_CWD":                str(harness),
         "PATH":                        str(bin_directory) + os.pathsep + environment["PATH"],
         "PEER_PROTOCOL_LOG":           str(protocol),
+        "PEER_MAIN_THREADS":           'thread-main,thread-one,thread-two,other-caller',
         "PYTHONPATH":                  str(controls),
         **control,
-    }, protocol
+    }
+    _associate_native_mains(installed_commands, harness, configured)
+    return configured, protocol
 
 
 def test_installed_mcp_server_returns_a_budget_stop_to_the_request_caller(

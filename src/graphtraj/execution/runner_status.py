@@ -109,17 +109,31 @@ def caller_alias(runner_directory: Path) -> str | None:
     or the user calls, no live Session owns the process and the result is
     ``None``.
 
-    Neither a projected environment variable nor a request field can establish
-    or raise this identity: a missing, forged or copied value is simply not
-    consulted. Host isolation from a caller that leaves its own process tree is
-    the separate boundary owned by T3c.
+    Managed identity takes precedence over inherited environment values. For
+    external calls, native per-Session locators select the Runtime record; its
+    actual source and current association must agree before Main is returned.
+    Unknown and stale native sources never fall back to human CLI authority.
     """
     native = _runtime_caller.get()
     if native is not None:
         if native[0] != runner_directory.resolve():
             raise _authority_denied()
         return native[1]
-    return process_caller_alias(runner_directory, os.getpid())
+    member = process_caller_alias(runner_directory, os.getpid())
+    if member is not None:
+        return member
+    connection = runtime_adapter.current_host_connection()
+    if connection is None:
+        return None
+    if connection['runtime'] == 'codex':
+        from graphtraj.runtimes.codex.session_entry import caller_identity
+    elif connection['runtime'] == 'pi':
+        from graphtraj.runtimes.pi.session_entry import caller_identity
+    elif connection['runtime'] == 'dsh':
+        from graphtraj.runtimes.dsh.session_entry import caller_identity
+    else:
+        raise RunnerError('authority-denied', 'Unknown native caller Runtime.')
+    return caller_identity(runner_directory, connection)
 
 
 def process_caller_alias(runner_directory: Path, pid: int) -> str | None:

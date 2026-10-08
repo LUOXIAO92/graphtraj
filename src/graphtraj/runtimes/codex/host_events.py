@@ -4,11 +4,31 @@ from __future__ import annotations
 
 import asyncio
 import os
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, Iterator
 
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
+
+
+_calling_session: ContextVar[str | None] = ContextVar('codex_calling_session', default=None)
+
+
+@contextmanager
+def calling_session(session: str | None) -> Iterator[None]:
+    """Scope native MCP metadata to this call instead of changing process state."""
+    token = _calling_session.set(session)
+    try:
+        yield
+    finally:
+        _calling_session.reset(token)
+
+
+def request_connection() -> dict | None:
+    """Return only this native MCP callback's context, excluding inherited env."""
+    return current_connection() if _calling_session.get() is not None else None
 
 
 def parent_status(connection: Mapping[str, Any], timeout_seconds: float) -> dict:
@@ -81,8 +101,8 @@ def current_connection() -> dict | None:
     Retaining it and the native thread makes delivery independent of the CLI's
     lifetime. Formal children use their mapped parent or explicit host callback.
     """
-    session = os.environ.get('CODEX_THREAD_ID')
-    if not session or os.environ.get('GRAPHTRAJ_ROLE'):
+    session = _calling_session.get() or os.environ.get('CODEX_THREAD_ID')
+    if not session or (_calling_session.get() is None and os.environ.get('GRAPHTRAJ_ROLE')):
         return None
     return {
         'runtime': 'codex', 'session': session,

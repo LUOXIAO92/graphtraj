@@ -728,10 +728,16 @@ class CodexAppServer:
         if any(not isinstance(parent.get(k), str) or not parent[k]
                for k in ('id', 'model', 'modelProvider')):
             raise CodexAdapterError('RUNTIME_REQUEST_INVALID', 'Main model metadata is unavailable.')
-        response = await self._call('thread/fork', {
+        parameters = {
             'threadId': parent['id'], 'model': parent['model'],
             'modelProvider': parent['modelProvider'], 'excludeTurns': True,
-        })
+        }
+        settings = parent.get('turn_settings', {})
+        # Native fork inherits history and permissions but rebuilds model config.
+        # Preserve the checked turn's observed effort instead of project defaults.
+        if 'effort' in settings:
+            parameters['config'] = {'model_reasoning_effort': settings['effort']}
+        response = await self._call('thread/fork', parameters)
         thread = response.get('thread')
         if (not isinstance(thread, dict) or not isinstance(thread.get('id'), str)
                 or not thread['id'] or thread['id'] == parent['id']
@@ -740,6 +746,8 @@ class CodexAppServer:
                 or response.get('model') != parent['model']
                 or response.get('modelProvider') != parent['modelProvider']):
             raise self._protocol_failure('thread/fork did not preserve the bound source and model.')
+        if 'effort' in settings and response.get('reasoningEffort') != settings['effort']:
+            raise self._protocol_failure('thread/fork changed the checked turn reasoning effort.')
         session = CodexSession(thread['id'], None)
         self._sessions[session.thread_id] = session
         return session

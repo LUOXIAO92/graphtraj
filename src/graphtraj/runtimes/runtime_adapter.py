@@ -266,9 +266,23 @@ class RuntimeAdapter(RuntimePreparationAdapter, Protocol):
 def current_host_connection() -> dict | None:
     """Capture supported host context at the trusted root launch boundary."""
     from graphtraj.runtimes.replacement import caller_runtime
+    from graphtraj.runtimes.codex.host_events import request_connection
+
+    connection = request_connection()
+    if connection is not None:
+        return connection
 
     runtime = caller_runtime()
     if runtime is None:
+        import os
+
+        if any(os.environ.get(name) for name in (
+            'CODEX_THREAD_ID', 'GRAPHTRAJ_NATIVE_RUNTIME', 'DSH_SESSION_ID',
+        )):
+            raise RuntimeAdapterError(
+                'authority-unavailable',
+                'A native Session locator is present but its calling Runtime cannot be verified.',
+            )
         return None
     try:
         adapter = select_runtime_adapter(runtime)

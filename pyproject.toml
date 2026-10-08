@@ -18,6 +18,7 @@ dependencies = [
 graphtraj = "graphtraj.interfaces.cli.graphtraj:main"
 graphtraj-mcp = "graphtraj.interfaces.mcp:main"
 graphtraj-tool = "graphtraj.interfaces.local_tool:main"
+graphtraj-session = "graphtraj.runtimes.native_entry:main"
 agent-runner = "graphtraj.interfaces.cli.agent_runner:main"
 
 [tool.setuptools]
@@ -30,6 +31,7 @@ where = ["src"]
 graphtraj = [
     "runtimes/codex/policy/*",
     "runtimes/dsh/*.mjs",
+    "runtimes/pi/*.mjs",
     "prompts/*.md",
 ]
 

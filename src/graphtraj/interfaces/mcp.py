@@ -138,7 +138,13 @@ def _tool_call_response(
             request_id, INVALID_PARAMS, "Tool arguments must be an object."
         )
     try:
-        with _caller_notices(params) as recovery:
+        from graphtraj.runtimes.codex.host_events import calling_session
+
+        metadata = params.get('_meta', {})
+        session = metadata.get('threadId') if isinstance(metadata, dict) else None
+        if session is not None and (not isinstance(session, str) or not session):
+            raise ValueError('Invalid native MCP Session metadata.')
+        with calling_session(session), _caller_notices(params) as recovery:
             result = gateway.handle_request(arguments, cwd=Path.cwd())
             document = (
                 recovery.attach_stop_deliveries(result.document)

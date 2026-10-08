@@ -42,7 +42,7 @@ def send(message):
 
 def main_thread():
     return {'id':'main', 'sessionId':'shared-native-session', 'model':'configured-model', 'modelProvider':'actual-provider',
-            'source':'appServer', 'parentThreadId':None,
+            'source':options.get('source','appServer'), 'parentThreadId':options.get('parent'),
             'status':{'type':'active' if not options.get('stopped') else 'idle'}}
 
 for line in sys.stdin:
@@ -55,6 +55,8 @@ for line in sys.stdin:
     if method == 'thread/read':
         result = {'thread':main_thread()}
         if options.get('read_id_from_request'): result['thread']['id'] = params['threadId']
+    elif method == 'thread/resume':
+        result = {'thread':main_thread()}
     elif method == 'thread/turns/list':
         result = {'data':[{'id':options.get('current_turn','main-turn'), 'status':'inProgress'}]}
     elif method == 'thread/fork':
@@ -66,7 +68,7 @@ for line in sys.stdin:
         child = {'id':options.get('child','checker'),'forkedFromId':'main'}
         (root / 'child-context.json').write_text(json.dumps(parent_context))
         result = {'thread':child, 'model':options.get('fork_model','actual-model'),
-                  'modelProvider':'actual-provider'}
+                  'modelProvider':'actual-provider', 'reasoningEffort':params.get('config',{}).get('model_reasoning_effort')}
     elif method == 'turn/start':
         assert params['threadId'] == options.get('child','checker')
         context = json.loads((root / 'child-context.json').read_text())
@@ -152,9 +154,11 @@ def test_main_end_decision(
     })}))
     result = stop(binding)
     if status == 'actionable':
-        assert result == {'decision':'block', 'reason':reason + '\n237'}
+        assert result['decision'] == 'block' and result['reason'] == reason + '\n237'
+        assert result['systemMessage']
     else:
-        assert result == {}
+        assert result['systemMessage']
+        assert 'decision' not in result
     wire = [json.loads(line) for line in (root / 'wire.jsonl').read_text().splitlines()]
     fork = next(item['params'] for item in wire if item['method'] == 'thread/fork')
     assert fork == {'threadId':'main', 'model':'actual-model', 'modelProvider':'actual-provider',
@@ -191,7 +195,8 @@ def test_checker_failures_are_visible_and_bounded(host: tuple[Path, Path], optio
     root, binding = host
     (root / 'options.json').write_text(json.dumps(options))
     first = stop(binding)
-    assert first['decision'] == 'block' and first['reason']
+    assert first['continue'] is False and first['systemMessage']
+    assert 'decision' not in first
     # A fresh native checker Session is still required on the continued Stop.
     if options.get('child') != 'main':
         options['child'] = 'checker-two'
@@ -299,7 +304,7 @@ def test_checker_has_no_sibling_control(
     root, binding = host
     request = {'action': 'execute', 'feature': feature, 'arguments': {}}
     (root / 'options.json').write_text(json.dumps({'tool_request': request}))
-    assert stop(binding) == {}
+    assert stop(binding)['systemMessage']
     reply = json.loads((root / 'tool-reply.json').read_text())
     assert reply['result']['success'] is allowed
 
@@ -309,7 +314,7 @@ def test_only_observed_cache_usage_is_retained(host: tuple[Path, Path]) -> None:
     root, binding = host
     usage = {'last': {'inputTokens': 113, 'cachedInputTokens': 0, 'outputTokens': 19}}
     (root / 'options.json').write_text(json.dumps({'usage': usage}))
-    assert stop(binding) == {}
+    assert stop(binding)['systemMessage']
     evidence = next(binding.parent.glob('checks/*/execution.yml'))
     assert yaml.safe_load(evidence.read_text())['usage'] == usage
 
@@ -317,7 +322,7 @@ def test_only_observed_cache_usage_is_retained(host: tuple[Path, Path]) -> None:
 def test_main_can_bind_its_next_goal_without_reparenting(host: tuple[Path, Path]) -> None:
     """A new summary reference does not change Session identity or old check evidence."""
     root, binding = host
-    assert stop(binding) == {}
+    assert stop(binding)['systemMessage']
     document = bind(root)({'action': 'execute', 'feature': 'bind_main_finalize',
                           'arguments': {'summary_issue': 'https://tracker.test/goal/240'}}).document
     assert document['binding'] == str(binding)
@@ -331,7 +336,7 @@ def test_fork_cannot_rebind_itself_as_main(
 ) -> None:
     """The Runner parent binding remains authoritative without a native child flag."""
     root, binding = host
-    assert stop(binding) == {}
+    assert stop(binding)['systemMessage']
     (root / 'options.json').write_text(json.dumps({'read_id_from_request': True}))
     monkeypatch.setattr(main_finalize, 'current_host_connection', lambda: {
         'runtime': 'codex', 'session': 'checker', 'codex_home': str(root),
@@ -348,3 +353,110 @@ def test_checker_stop_with_shared_session_id_cannot_recurse(host: tuple[Path, Pa
     assert not (binding.parent / 'checks').exists()
     wire = [json.loads(line) for line in (root / 'wire.jsonl').read_text().splitlines()]
     assert not any(item['method'] == 'thread/fork' for item in wire)
+
+
+def native_hook(root: Path, event: str = 'Stop', **changes: object) -> dict:
+    """Deliver an actual lifecycle envelope to the public command entry."""
+    reply = CliRunner().invoke(stop_hook, [], input=json.dumps({
+        'hook_event_name': event, 'cwd': str(root), 'session_id': 'shared-native-session',
+        'transcript_path': str(root / 'rollout.jsonl'), 'turn_id': 'main-turn',
+        'stop_hook_active': False, 'model': 'actual-model', **changes,
+    }))
+    assert reply.exit_code == 0, reply.output
+    return json.loads(reply.output)
+
+
+def rollout(root: Path, source: object = 'cli', session: str = 'main') -> None:
+    """Write native-format records owned by the controlled Runtime peer."""
+    records = [
+        {'type': 'session_meta', 'payload': {'id': session, 'source': source}},
+        {'type': 'turn_context', 'payload': {'turn_id': 'older-turn', 'effort': 'xhigh'}},
+        {'type': 'turn_context', 'payload': {
+            'turn_id': 'main-turn', 'model': 'actual-model', 'effort': 'high',
+        }},
+    ]
+    (root / 'rollout.jsonl').write_text(''.join(json.dumps(r) + '\n' for r in records))
+
+
+def test_native_start_resume_and_stop_need_no_main_binding_input(host: tuple[Path, Path]) -> None:
+    """Start/resume associate the event's Session; Stop runs and collects the child."""
+    root, binding = host
+    binding.unlink()
+    rollout(root)
+    for source in ('startup', 'resume'):
+        assert native_hook(root, 'SessionStart', source=source)['systemMessage']
+    result = native_hook(root)
+    assert 'completed' in result['systemMessage']
+    assert 'decision' not in result and 'continue' not in result
+    wire = [json.loads(line) for line in (root / 'wire.jsonl').read_text().splitlines()]
+    forks = [r['params'] for r in wire if r['method'] == 'thread/fork']
+    assert len(forks) == 1
+    assert forks[0]['config']['model_reasoning_effort'] == 'high'
+    assert [r['params']['threadId'] for r in wire if r['method'] == 'turn/start'] == ['checker']
+
+
+@pytest.mark.parametrize('source', [
+    {'subagent': {'thread_spawn': {'parent_thread_id': 'main', 'depth': 2, 'agent_path': 'a/b'}}},
+    {'subAgent': {'threadSpawn': {'parentThreadId': 'main', 'depth': 1}}},
+])
+def test_native_children_cannot_overwrite_main(host: tuple[Path, Path], source: dict) -> None:
+    """Native source overrides inherited association variables at every depth."""
+    root, binding = host
+    original = binding.read_bytes()
+    rollout(root, source=source)
+    assert native_hook(root, 'SessionStart') == {}
+    assert native_hook(root) == {}
+    assert binding.read_bytes() == original
+
+
+def test_unknown_source_and_stale_event_leave_main_unchanged(host: tuple[Path, Path]) -> None:
+    """Neither absent provenance nor another Session's event may associate Main."""
+    root, binding = host
+    original = binding.read_bytes()
+    rollout(root, source='unknown')
+    assert native_hook(root, 'SessionStart')['continue'] is False
+    rollout(root)
+    assert native_hook(root, 'SessionStart', session_id='another-session')['continue'] is False
+    assert binding.read_bytes() == original
+
+
+def test_native_checker_and_changed_turn_do_not_recurse(host: tuple[Path, Path]) -> None:
+    """Creation-time checker ownership wins even when Codex fork source is root."""
+    root, binding = host
+    rollout(root)
+    native_hook(root)
+    rollout(root, session='checker')
+    assert native_hook(root, 'SessionStart') == {}
+    assert native_hook(root) == {}
+    rollout(root)
+    result = native_hook(root, turn_id='missing-turn')
+    assert result['continue'] is False and 'settings' in result['systemMessage']
+
+
+def test_native_mcp_call_context_does_not_leak_between_sessions(
+    host: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Host request metadata wins over parent environment and resets after calls."""
+    from graphtraj.execution.runner_status import caller_alias
+    from graphtraj.runtimes.codex.host_events import calling_session
+    from graphtraj.workspace.runner_project import discover_runner_directory
+
+    root, _ = host
+    runner = discover_runner_directory(root)
+    monkeypatch.setenv('CODEX_THREAD_ID', 'main')
+    (root / 'options.json').write_text(json.dumps({'read_id_from_request': True, 'source': {
+        'subAgent': {'threadSpawn': {'parentThreadId': 'main', 'depth': 2}},
+    }}))
+    with calling_session('actual-child'):
+        assert caller_alias(runner) == 'actual-child'
+    (root / 'options.json').write_text('{}')
+    assert caller_alias(runner) is None
+
+
+def test_hook_configuration_is_only_adoption_material(tmp_path: Path) -> None:
+    """Producing configuration does not activate hooks or require identity input."""
+    reply = CliRunner().invoke(stop_hook, ['--configuration'])
+    assert reply.exit_code == 0
+    configuration = json.loads(reply.output)
+    assert set(configuration['hooks']) == {'SessionStart', 'Stop'}
+    assert not list(tmp_path.iterdir())

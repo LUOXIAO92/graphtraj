@@ -3,19 +3,58 @@
 from __future__ import annotations
 
 import json
+import os
 import signal
 import sys
 from pathlib import Path
 
 import click
 
-from graphtraj.execution.main_finalize import check_main_finalize
+from graphtraj.execution.main_finalize import bind_session, check_main_finalize, session_binding
+from graphtraj.runtimes.codex.session_entry import event_record, session_source
+
+
+def native_event(event: dict) -> dict:
+    """Associate native start/resume and handle Stop without Main relay calls."""
+    from graphtraj.execution.runner_status import process_caller_alias
+    from graphtraj.workspace.runner_project import discover_runner_directory
+    import yaml
+
+    name = event.get('hook_event_name')
+    if name not in {'SessionStart', 'Stop'}:
+        return {}
+    root = Path(event['cwd'])
+    runner = discover_runner_directory(root)
+    # Existing managed ownership always wins over an inherited Main environment.
+    if process_caller_alias(runner, os.getpid()) is not None:
+        return {}
+    metadata, _ = event_record(event)
+    source = session_source(metadata)
+    if source == 'child':
+        return {}
+    if source != 'main':
+        raise ValueError('Unknown Codex Session source; Main was not associated.')
+    session = metadata['id']
+    for path in (runner / 'main-sessions').glob('*/checks/*/session.yml'):
+        checker = yaml.safe_load(path.read_text(encoding='utf-8'))
+        if checker['runtime'] == 'codex' and checker['session'] == session:
+            return {}
+    binding = session_binding(root, 'codex', session)
+    if name == 'SessionStart':
+        connection = {'runtime': 'codex', 'session': session, 'hook_session': event.get('session_id'),
+                      'codex_home': os.path.abspath(os.environ.get('CODEX_HOME', Path.home() / '.codex'))}
+        bind_session(connection, root)
+        return {'systemMessage': 'GraphTraj Main Session associated.'}
+    if not binding.is_file():
+        raise ValueError('Main SessionStart/resume association is unavailable.')
+    return check_main_finalize(binding, event)
 
 
 @click.command()
-@click.option('--binding', required=True, type=click.Path(path_type=Path))
-@click.option('--hook-session', required=True)
-def main(binding: Path, hook_session: str) -> None:
+@click.option('--binding', type=click.Path(path_type=Path))
+@click.option('--hook-session')
+@click.option('--configuration', is_flag=True, help='Print adoption material without enabling the hook.')
+def main(binding: Path | None, hook_session: str | None, configuration: bool) -> None:
     """Receive native hook input and write only a valid Codex Stop response.
 
     Other hook events skip before opening Main's private binding. SIGTERM becomes
@@ -27,9 +66,18 @@ def main(binding: Path, hook_session: str) -> None:
         raise KeyboardInterrupt
 
     signal.signal(signal.SIGTERM, interrupted)
+    if configuration:
+        from graphtraj.runtimes.codex.finalize import hook
+
+        click.echo(json.dumps(hook(Path(), {}), ensure_ascii=False))
+        return
     try:
         event = json.load(sys.stdin)
-        if (not isinstance(event, dict) or event.get('hook_event_name') != 'Stop'
+        if not isinstance(event, dict):
+            raise ValueError('Invalid native lifecycle event.')
+        if binding is None:
+            result = native_event(event)
+        elif (event.get('hook_event_name') != 'Stop'
                 or event.get('session_id') != hook_session):
             result = {}
         else:

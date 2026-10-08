@@ -12,6 +12,7 @@ from typing import Any, Awaitable, Callable
 from graphtraj.runtimes.codex.app_server import CodexAppServer, CodexServerRequest
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 from graphtraj.workspace.runner_project import runtime_executable
+from graphtraj.runtimes.codex.session_entry import session_source, event_record
 
 
 def proxy(
@@ -35,25 +36,25 @@ def verify_main(connection: dict) -> str:
         """Read metadata through the existing host, without reading conversation turns."""
         async with proxy(connection) as client:
             thread = await client.read_thread(connection['session'])
-            source = thread.get('source')
-            if (thread.get('parentThreadId') is not None
-                    or isinstance(source, dict) and 'subAgent' in source):
-                raise RuntimeAdapterError('authority-denied', 'A native child cannot bind Main Stop.')
+            if session_source(thread) != 'main':
+                raise RuntimeAdapterError('authority-denied', 'A child or unknown native source cannot bind Main Stop.')
             hook_session = thread.get('sessionId')
             if not isinstance(hook_session, str) or not hook_session:
                 raise ValueError('The native hook Session identity is unavailable.')
+            if 'hook_session' in connection and connection['hook_session'] != hook_session:
+                raise ValueError('Codex lifecycle event belongs to a different native Session.')
             connection['hook_session'] = hook_session
             return thread['id']
     return asyncio.run(read())
 
 
 def hook(path: Path, binding: dict) -> dict:
-    """Return native hook configuration without installing or trusting it."""
+    """Return Session-scoped adoption material without installing or trusting it."""
     command = shlex.join([
         sys.executable, '-m', 'graphtraj.runtimes.codex.stop_hook',
-        '--binding', str(path), '--hook-session', binding['connection']['hook_session'],
     ])
-    return {'hooks': {'Stop': [{'hooks': [{'type': 'command', 'command': command}]}]}}
+    return {'hooks': {event: [{'hooks': [{'type': 'command', 'command': command}]}]
+                      for event in ('SessionStart', 'Stop')}}
 
 
 def event_context(binding: dict, event: dict) -> dict | None:
@@ -74,20 +75,29 @@ def event_context(binding: dict, event: dict) -> dict | None:
 
     if not asyncio.run(belongs_to_main()):
         return None
-    return {'turn': event['turn_id'], 'continued': event['stop_hook_active'],
-            'model': event['model']}
+    context = {'turn': event['turn_id'], 'continued': event['stop_hook_active'],
+               'model': event['model']}
+    if event.get('transcript_path'):
+        metadata, settings = event_record(event)
+        if metadata['id'] != binding['session'] or session_source(metadata) != 'main':
+            raise ValueError('The Stop transcript does not belong to the bound Main.')
+        if settings.get('model') != event['model']:
+            raise ValueError('The Stop model conflicts with its native turn settings.')
+        context['settings'] = settings
+    return context
 
 
 def response(result: dict | None, continued: bool) -> dict:
     """Return a Stop decision; repeated checker errors cannot self-continue forever."""
-    if result is None or result['status'] in ('completed', 'waiting'):
+    if result is None:
         return {}
     reason = result['reason']
+    visible = {'systemMessage': f"Completion check {result['status']}: {reason}"}
+    if result['status'] in ('completed', 'waiting'):
+        return visible
     if result['status'] == 'actionable':
-        return {'decision': 'block', 'reason': '\n'.join([reason, *result['nodes']])}
-    if continued:
-        return {'continue': False, 'stopReason': reason, 'systemMessage': reason}
-    return {'decision': 'block', 'reason': reason}
+        return {**visible, 'decision': 'block', 'reason': '\n'.join([reason, *result['nodes']])}
+    return {**visible, 'continue': False, 'stopReason': reason}
 
 
 def check(
@@ -126,16 +136,42 @@ def check(
             parent = await client.read_thread(binding['session'])
             if not await client.is_current_turn(binding['session'], context['turn']):
                 return None
+            await client.subscribe_host(binding['session'])
             # Hook model is the active turn's slug; Thread.model is configuration,
             # and can differ from actual per-turn model selection.
             parent = {**parent, 'model': context['model']}
+            if 'settings' in context:
+                parent['turn_settings'] = context['settings']
             child = await client.fork_session(parent)
             child_id = child.thread_id
             created(child_id)
             execution = await client.start_execution(child, prompt)
+
+            async def main_stopped() -> None:
+                """Observe the owning turn's native stop without polling or waking it."""
+                while True:
+                    notice = await client.next_notification()
+                    params = notice.get('params', {})
+                    if params.get('threadId') != binding['session']:
+                        continue
+                    if notice.get('method') == 'thread/closed':
+                        return
+                    if notice.get('method') == 'turn/completed':
+                        return
+                    if notice.get('method') == 'turn/started' and params.get('turn', {}).get('id') != context['turn']:
+                        return
+
+            stopped = asyncio.create_task(main_stopped())
+            checked = asyncio.create_task(client.wait(execution, timeout=540))
             try:
                 # Leave time for native cancellation before the default 600s hook deadline.
-                result = await client.wait(execution, timeout=540)
+                finished, _ = await asyncio.wait((stopped, checked), return_when=asyncio.FIRST_COMPLETED)
+                if stopped in finished:
+                    stopped.result()
+                    await client.interrupt(execution)
+                    await client.wait(execution, timeout=10)
+                    return None
+                result = checked.result()
             except BaseException as error:
                 try:
                     await client.interrupt(execution)
@@ -143,6 +179,10 @@ def check(
                 except RuntimeAdapterError as cleanup_error:
                     error.add_note(f'Checker cancellation: {cleanup_error}')
                 raise
+            finally:
+                stopped.cancel()
+                checked.cancel()
+                await asyncio.gather(stopped, checked, return_exceptions=True)
             if not await client.is_current_turn(binding['session'], context['turn']):
                 return None
             if result['outcome'] != 'completed':

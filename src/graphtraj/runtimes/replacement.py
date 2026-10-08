@@ -32,10 +32,16 @@ def caller_runtime() -> str | None:
                     argv = shlex.split(subprocess.check_output(
                         ["/bin/ps", "-p", str(pid), "-o", "args="], text=True,
                     ))
-                if len(argv) > 1 and str(Path(argv[1]).resolve()).endswith(
-                    "/@mariozechner/pi-coding-agent/dist/cli.js"
-                ):
+                if len(argv) > 1 and str(Path(argv[1]).resolve()).endswith((
+                    "/@mariozechner/pi-coding-agent/dist/cli.js",
+                    "/@earendil-works/pi-coding-agent/dist/cli.js",
+                    "/@earendil-works/pi-coding-agent/dist/bundle/cli.js",
+                )):
                     return "pi"
+                if len(argv) > 1 and str(Path(argv[1]).resolve()).endswith(
+                    '/@deepseek-ai/dsh/lib/bin.js'
+                ):
+                    return 'dsh'
             except (OSError, ValueError, subprocess.CalledProcessError):
                 continue
     return None

@@ -99,6 +99,34 @@ def owns_native_root(runner: Path, connection: dict) -> bool:
     return False
 
 
+def association_status(connection: dict, thread: dict) -> dict:
+    """Project the existing binding lookup using public native metadata only.
+
+    Thread cwd is a snapshot, not proof of a previous hook event's cwd. This
+    read-only diagnostic neither repairs bindings nor reads conversation data.
+    """
+    import yaml
+    from graphtraj.execution.main_finalize import session_binding
+    from graphtraj.execution.runner_models import RunnerError
+
+    try:
+        cwd = thread['cwd']
+        path = session_binding(Path(cwd), 'codex', thread['id'])
+        result = {'cwd': cwd, 'binding_path': str(path), 'status': 'missing'}
+        if path.is_file():
+            binding = yaml.safe_load(path.read_text(encoding='utf-8'))
+            owner = binding.get('connection', {})
+            matches = (binding.get('runtime') == 'codex'
+                       and binding.get('session') == thread['id']
+                       and owner.get('hook_session') == thread.get('sessionId')
+                       and all(owner.get(key) == connection.get(key)
+                               for key in ('runtime', 'session', 'codex_home')))
+            result['status'] = 'matching' if matches else 'mismatched'
+        return result
+    except (OSError, ValueError, KeyError, TypeError, AttributeError, yaml.YAMLError, RunnerError) as error:
+        return {'status': 'unavailable', 'error': str(error)}
+
+
 def caller_identity(runner: Path, connection: dict) -> str | None:
     """Resolve the native caller against its source and existing association.
 

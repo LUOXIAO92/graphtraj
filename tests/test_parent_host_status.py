@@ -110,6 +110,40 @@ def test_public_parent_wait_reads_active_then_idle(host_peer: Path, mode: str, m
     assert sum(item['method'] == 'thread/read' for item in wire) == 3
 
 
+@pytest.mark.parametrize('state', ['missing', 'matching', 'mismatched'])
+def test_public_hook_observer_projects_existing_association(host_peer: Path, state: str) -> None:
+    """The owning host lookup is visible without repairing records or sending input."""
+    import yaml
+    from graphtraj.configuration.project_configuration import default_configuration_content
+    from graphtraj.execution.main_finalize import session_binding
+
+    config = host_peer / '.graphtraj/config.yml'
+    config.parent.mkdir()
+    config.write_text(default_configuration_content(host_peer, host_peer))
+    path = session_binding(host_peer, 'codex', 'original-host')
+    if state != 'missing':
+        path.parent.mkdir(parents=True)
+        path.write_text(yaml.safe_dump({
+            'runtime': 'codex', 'session': 'original-host',
+            'connection': {'runtime': 'codex', 'session': 'original-host',
+                           'codex_home': str(host_peer / 'home'),
+                           'hook_session': 'native-session' if state == 'matching' else 'old-session'},
+        }))
+    before = path.read_bytes() if path.exists() else None
+    (host_peer / 'mode').write_text('idle')
+    result = bind(host_peer)({'action': 'execute', 'feature': 'parent_status',
+                              'arguments': {'include_hooks': True}})
+    assert not result.failed
+    assert result.document['completion_association'] == {
+        'cwd': str(host_peer), 'binding_path': str(path), 'status': state,
+    }
+    assert (path.read_bytes() if path.exists() else None) == before
+    wire = [json.loads(line)['request'] for line in (host_peer / 'wire.jsonl').read_text().splitlines()]
+    assert {item['method'] for item in wire} <= {
+        'initialize', 'initialized', 'thread/read', 'thread/turns/list', 'hooks/list',
+    }
+
+
 @pytest.mark.parametrize(('mode', 'outcome'), [('quiet', 'timeout'), ('unrelated', 'timeout'), ('drop', 'error')])
 def test_parent_wait_needs_own_host_event(host_peer: Path, mode: str, outcome: str) -> None:
     """Silent changes and unrelated events never cause polling; EOF stays an error."""

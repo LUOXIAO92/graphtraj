@@ -73,12 +73,15 @@ def parent_status(
                     if timeout_seconds:
                         await client.subscribe_host(connection['session'])
                     if include_hooks:
+                        from graphtraj.runtimes.codex.session_entry import association_status
+
                         thread = await client.read_thread(connection['session'])
                         result['native_identity'] = {
                             key: thread[key] for key in
-                            ('id', 'sessionId', 'source', 'parentThreadId', 'agentPath', 'depth')
+                            ('id', 'sessionId', 'source', 'parentThreadId', 'agentPath', 'depth', 'cwd')
                             if key in thread
                         }
+                        result['completion_association'] = association_status(dict(connection), thread)
                         result['hook_configuration'] = await client.read_hooks(thread.get('cwd'))
                         result['hook_events'] = []
                         result['hook_observation_scope'] = (

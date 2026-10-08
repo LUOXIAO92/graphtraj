@@ -122,18 +122,21 @@ def caller_alias(runner_directory: Path) -> str | None:
     member = process_caller_alias(runner_directory, os.getpid())
     if member is not None:
         return member
-    connection = runtime_adapter.current_host_connection()
-    if connection is None:
-        return None
-    if connection['runtime'] == 'codex':
-        from graphtraj.runtimes.codex.session_entry import caller_identity
-    elif connection['runtime'] == 'pi':
-        from graphtraj.runtimes.pi.session_entry import caller_identity
-    elif connection['runtime'] == 'dsh':
-        from graphtraj.runtimes.dsh.session_entry import caller_identity
-    else:
-        raise RunnerError('authority-denied', 'Unknown native caller Runtime.')
-    return caller_identity(runner_directory, connection)
+    try:
+        connection = runtime_adapter.current_host_connection()
+        if connection is None:
+            return None
+        if connection['runtime'] == 'codex':
+            from graphtraj.runtimes.codex.session_entry import caller_identity
+        elif connection['runtime'] == 'pi':
+            from graphtraj.runtimes.pi.session_entry import caller_identity
+        elif connection['runtime'] == 'dsh':
+            from graphtraj.runtimes.dsh.session_entry import caller_identity
+        else:
+            raise RunnerError('authority-denied', 'Unknown native caller Runtime.')
+        return caller_identity(runner_directory, connection)
+    except runtime_adapter.RuntimeAdapterError as error:
+        raise RunnerError(error.code, error.message) from error
 
 
 def process_caller_alias(runner_directory: Path, pid: int) -> str | None:
@@ -590,12 +593,15 @@ def status_tree(
 
 def _recorded_sessions(
     runner_directory: Path,
+    *,
+    ownership_only: bool = False,
 ) -> Tuple[Dict[str, Dict[str, Any]], list[Tuple[str, RunnerError]]]:
     """Read every Session record the Runner retains for this project.
 
     Returns the valid records by alias and the alias of each record that could
     not be read with the error it raised, so one unreadable Session never stops
-    the enumeration of the rest.
+    the enumeration of the rest. Subtree interruption may read only parentage
+    first; every selected member still requires its complete execution mapping.
     """
     session_root = runner_directory / "sessions"
     if session_root.is_symlink() or not session_root.is_dir():
@@ -610,9 +616,23 @@ def _recorded_sessions(
     failures: list[Tuple[str, RunnerError]] = []
     for alias in entries:
         try:
-            records[alias] = read_alias_mapping(runner_directory, alias)[0]
+            if ownership_only:
+                record, _ = _read_alias_record(runner_directory, alias)
+                if (not isinstance(record, dict) or record.get("alias") != alias
+                        or "parent" not in record
+                        or (record["parent"] is not None
+                            and not isinstance(record["parent"], str))):
+                    raise _invalid_mapping()
+                records[alias] = record
+            else:
+                records[alias] = read_alias_mapping(runner_directory, alias)[0]
         except RunnerError as error:
             failures.append((alias, error))
+    if ownership_only:
+        failures.extend(
+            (alias, _invalid_mapping()) for alias, record in records.items()
+            if record["parent"] is not None and record["parent"] not in records
+        )
     return records, failures
 
 

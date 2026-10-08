@@ -102,14 +102,39 @@ def test_unverifiable_native_runtime_does_not_become_human_cli(
     project: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A denied source lookup must not turn an inherited locator into Main."""
-    from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
+    from graphtraj.execution.runner_models import RunnerError
 
     monkeypatch.setattr(replacement, 'caller_runtime', lambda: None)
     monkeypatch.setenv('GRAPHTRAJ_NATIVE_RUNTIME', 'pi')
-    with pytest.raises(RuntimeAdapterError, match='cannot be verified'):
+    with pytest.raises(RunnerError, match='cannot be verified'):
         caller_alias(discover_runner_directory(project))
     monkeypatch.delenv('GRAPHTRAJ_NATIVE_RUNTIME')
     assert caller_alias(discover_runner_directory(project)) is None
+
+
+def test_unverifiable_caller_returns_mcp_error_without_closing_server(
+    project: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A native source failure is visible while the host transport stays usable."""
+    from io import StringIO
+    from graphtraj.interfaces.mcp import serve
+
+    monkeypatch.setattr(replacement, 'caller_runtime', lambda: None)
+    monkeypatch.setenv('GRAPHTRAJ_NATIVE_RUNTIME', 'pi')
+    requests = [
+        {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {
+            'name': 'graphtraj', 'arguments': {
+                'action': 'execute', 'feature': 'alias_status', 'arguments': {},
+            },
+        }},
+        {'jsonrpc': '2.0', 'id': 2, 'method': 'ping'},
+    ]
+    output = StringIO()
+    serve(StringIO('\n'.join(json.dumps(request) for request in requests)), output)
+    failed, alive = [json.loads(line) for line in output.getvalue().splitlines()]
+    assert failed['result']['isError'] is True
+    assert 'cannot be verified' in failed['result']['content'][0]['text']
+    assert alive == {'jsonrpc': '2.0', 'id': 2, 'result': {}}
 
 
 def dsh_session(monkeypatch: pytest.MonkeyPatch, session: str, source: str = 'main') -> None:

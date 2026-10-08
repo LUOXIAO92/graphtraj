@@ -27,6 +27,7 @@ def proxy(
         cwd=Path.cwd(), command=(str(runtime_executable('codex')), 'app-server', 'proxy'),
         environment={'CODEX_HOME': connection['codex_home']}, experimental_api=True,
         on_request=on_request,
+        request_handler_timeout=None,
     )
 
 
@@ -117,8 +118,18 @@ def check(
             from graphtraj.execution.runner_status import runtime_caller
             from graphtraj.workspace.runner_project import discover_runner_directory
 
-            if (request.method != 'item/tool/call' or child_id is None
-                    or request.params.get('threadId') != child_id
+            if child_id is None or request.params.get('threadId') != child_id:
+                # Subscribing to Main can replay its pending native requests.
+                # Its UI owns the response; serverRequest/resolved or connection
+                # shutdown cancels this observer without answering on its behalf.
+                await asyncio.Future()
+            if request.method.endswith('/requestApproval'):
+                raise RuntimeAdapterError(
+                    'native-approval-unavailable',
+                    'The checker requires native approval, but this hook connection '
+                    'has no bound user approval interface. No approval was granted.',
+                )
+            if (request.method != 'item/tool/call'
                     or request.params.get('tool') != 'graphtraj'):
                 raise RuntimeAdapterError('authority-denied', 'The checker cannot approve or control work.')
 

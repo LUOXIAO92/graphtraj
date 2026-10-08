@@ -70,6 +70,10 @@ class NativeApproval:
         self.proposals = []
         self.before_apply = None
 
+    def current_host_connection(self) -> None:
+        """The controlled human approval caller has no external Agent Session."""
+        return None
+
     def native_recovery_approval(self, proposal: dict, cwd: Path) -> dict:
         """Observe unchanged state before simulating the actual native decision."""
         current, _ = recovery._snapshot(recovery.discover_project(self.root, require_clean_integration=False), proposal['request']['alias'])

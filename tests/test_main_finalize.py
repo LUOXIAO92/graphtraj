@@ -57,6 +57,10 @@ for line in sys.stdin:
         if options.get('read_id_from_request'): result['thread']['id'] = params['threadId']
     elif method == 'thread/resume':
         result = {'thread':main_thread()}
+        if options.get('parent_approval'):
+            send({'id':'parent-approval','method':'item/commandExecution/requestApproval',
+                  'params':{'threadId':'main','turnId':'main-turn','itemId':'parent-command',
+                            'command':'read approved source','cwd':str(root)}})
     elif method == 'thread/turns/list':
         result = {'data':[{'id':options.get('current_turn','main-turn'), 'status':'inProgress'}]}
     elif method == 'thread/fork':
@@ -76,6 +80,16 @@ for line in sys.stdin:
         (root / 'child-context.json').write_text(json.dumps(context))
         turn = {'id':'check-turn','status':'inProgress','items':[]}
         send({'id':request['id'],'result':{'turn':turn}})
+        if options.get('resolve_parent_approval'):
+            send({'method':'serverRequest/resolved',
+                  'params':{'threadId':'main','requestId':'parent-approval'}})
+        if options.get('approval_request'):
+            send({'id':'checker-approval','method':'item/commandExecution/requestApproval',
+                  'params':{'threadId':params['threadId'],'turnId':'check-turn',
+                            'itemId':'checker-command','command':'read protected source',
+                            'cwd':str(root)}})
+            reply = json.loads(sys.stdin.readline())
+            (root / 'approval-reply.json').write_text(json.dumps(reply))
         if options.get('tool_request'):
             send({'id':'checker-tool','method':'item/tool/call','params':{
                 'threadId':options.get('tool_caller',params['threadId']),
@@ -307,6 +321,32 @@ def test_checker_has_no_sibling_control(
     assert stop(binding)['systemMessage']
     reply = json.loads((root / 'tool-reply.json').read_text())
     assert reply['result']['success'] is allowed
+
+
+@pytest.mark.parametrize('resolved', [False, True])
+def test_checker_observer_does_not_answer_main_approval(
+    host: tuple[Path, Path], resolved: bool,
+) -> None:
+    """Main's pending approval belongs to its native UI, including cancellation."""
+    root, binding = host
+    (root / 'options.json').write_text(json.dumps({
+        'parent_approval': True, 'resolve_parent_approval': resolved,
+    }))
+    result = stop(binding)
+    assert 'completed' in result['systemMessage']
+    wire = [json.loads(line) for line in (root / 'wire.jsonl').read_text().splitlines()]
+    assert not any(item.get('id') == 'parent-approval' for item in wire)
+
+
+def test_checker_reports_missing_native_approval_interface(host: tuple[Path, Path]) -> None:
+    """Unavailable user approval is an explicit error and never an implicit grant."""
+    root, binding = host
+    (root / 'options.json').write_text(json.dumps({'approval_request': True}))
+    result = stop(binding)
+    assert result['continue'] is False
+    assert 'no bound user approval interface' in result['systemMessage']
+    reply = json.loads((root / 'approval-reply.json').read_text())
+    assert 'error' in reply and 'result' not in reply
 
 
 def test_only_observed_cache_usage_is_retained(host: tuple[Path, Path]) -> None:

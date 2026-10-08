@@ -65,6 +65,50 @@ def test_unresponsive_parent_does_not_prevent_descendant_interrupt(managed_proje
     assert result['interrupt_status'] == 'interrupted'
 
 
+@pytest.mark.parametrize('owner', ['unrelated', 'target', 'missing'])
+def test_interrupt_scopes_full_mapping_checks_to_descendants(
+    managed_project: ManagedProject, owner: str,
+) -> None:
+    """Historical branches stay intact; real or unresolved descendants block confirmation."""
+    root, _, call, _ = managed_project
+    parent = call('launch', launch_document())['tasks'][0]['alias']
+    child = call('child', [parent, 'descendant@e1'])['alias']
+    session_root = root / '.graphtraj/runner/sessions'
+    retained_parent = 'main_retained@m1'
+    retained_child = 'checker_retained@m1'
+    child_parent = {'unrelated': retained_parent, 'target': parent,
+                    'missing': 'missing_parent@m1'}[owner]
+    retained = {}
+    for alias, purpose, ancestor in (
+        (retained_parent, 'main', None),
+        (retained_child, 'checker', child_parent),
+    ):
+        directory = session_root / alias
+        directory.mkdir()
+        path = directory / 'mapping.yml'
+        path.write_text(yaml.safe_dump({
+            'alias': alias, 'purpose': purpose, 'parent': ancestor,
+            'runtime': 'codex', 'hosted': True, 'role': purpose,
+            'ticket_id': None, 'team_generation': None,
+            'worktree_path': str(root), 'session': None,
+            'worker_pid': 123, 'runtime_pid': 123,
+        }))
+        retained[path] = path.read_bytes()
+
+    result = call('interrupt', [parent])
+    members = {item['alias']: item['interrupt_status'] for item in result['members']}
+    assert members[parent] == members[child] == 'interrupted'
+    if owner == 'unrelated':
+        assert result['interrupt_status'] == 'interrupted'
+        assert set(members) == {parent, child}
+    else:
+        assert result['interrupt_status'] == 'incomplete'
+        assert members[retained_child] == 'unconfirmed'
+    assert retained_parent not in members
+    assert all(path.read_bytes() == content for path, content in retained.items())
+    observe(call, child, 'idle', 'interrupted')
+
+
 def test_concurrent_resume_cannot_outlive_stop(managed_project: ManagedProject) -> None:
     """Whichever startup wins, the final stop includes it or refuses its launch."""
     root, cause, call, _ = managed_project

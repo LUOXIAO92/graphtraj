@@ -619,7 +619,7 @@ def interrupt_session(alias: str, cwd: Path) -> Dict[str, Any]:
     with execution_start_lock(runner_directory):
         mapping, session_directory = read_alias_mapping(runner_directory, alias)
         write_yaml_durably(session_directory / "stop.yml", {"alias": alias})
-        records, failures = _recorded_sessions(runner_directory)
+        records, failures = _recorded_sessions(runner_directory, ownership_only=True)
         # Allocations still preparing a job have no native Session yet. They
         # must pass the Worker guard after we release this lock. Retain any
         # unreadable record with native identity as explicitly unconfirmed.

@@ -82,6 +82,51 @@ class NativeApproval:
         return {'decision': 'accept'}
 
 
+def test_recovery_scopes_mapping_validation_to_recorded_descendants(
+    target: tuple, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Unrelated withdrawn mappings survive recovery; ambiguous descendants block it."""
+    root, ticket, mapping, arguments = target
+    runner = root / '.graphtraj/runner'
+    parent = 'main_retained@m1'
+    child = 'checker_retained@m1'
+    records = {}
+    for alias, purpose, owner in ((parent, 'main', None), (child, 'checker', parent)):
+        directory = runner / 'sessions' / alias
+        directory.mkdir()
+        record = {
+            'alias': alias, 'purpose': purpose, 'parent': owner,
+            'runtime': 'codex', 'hosted': True, 'role': purpose,
+            'ticket_id': None, 'team_generation': None,
+            'worktree_path': str(root), 'session': None,
+            'worker_pid': 123, 'runtime_pid': 123,
+        }
+        path = directory / 'mapping.yml'
+        path.write_text(yaml.safe_dump(record))
+        records[path] = path.read_bytes()
+
+    adapter = NativeApproval(root, 'automatic')
+    monkeypatch.setattr(recovery.runtime_adapter, 'select_runtime_adapter', lambda runtime: adapter)
+    request = {**arguments, 'resume': False}
+    events = read_worldline(ticket.parent.parent, root)
+    child_path = runner / 'sessions' / child / 'mapping.yml'
+    child_record = yaml.safe_load(child_path.read_text())
+    for owner in (mapping['alias'], 'missing_parent@m1', 42):
+        child_path.write_text(yaml.safe_dump({**child_record, 'parent': owner}))
+        with pytest.raises(RunnerError) as error:
+            invoke(root, request)
+        assert error.value.code == 'operation-failed'
+        assert read_worldline(ticket.parent.parent, root) == events
+    assert adapter.proposals == []
+
+    child_path.write_bytes(records[child_path])
+    result = invoke(root, request)
+    assert result['recovery_status'] == 'applied'
+    assert applied_proposal(root, result)['after']['mapping'] == mapping
+    assert len(adapter.proposals) == 1
+    assert all(path.read_bytes() == original for path, original in records.items())
+
+
 def test_recovered_unchanged_result_returns_to_integration(
     target: tuple, monkeypatch: pytest.MonkeyPatch,
 ) -> None:

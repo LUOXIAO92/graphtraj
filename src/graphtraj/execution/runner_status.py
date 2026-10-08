@@ -315,7 +315,17 @@ def require_stopped_subtree(runner_directory: Path, alias: str) -> None:
         if (_unstarted_allocation(path) or _terminal_unestablished_launch(path)
                 or _unestablished_root_launch(path)):
             continue
-        mappings[name] = read_alias_mapping(runner_directory, name)
+        mapping, directory = _read_alias_record(runner_directory, name)
+        if (not isinstance(mapping, dict) or mapping.get("alias") != name
+                or "parent" not in mapping
+                or (mapping["parent"] is not None and not isinstance(mapping["parent"], str))):
+            raise _invalid_mapping()
+        mappings[name] = mapping, directory
+    # Parentage determines the subtree; unrelated records need not implement
+    # the current execution schema. An unresolved parent cannot prove exclusion.
+    if any(mapping.get("parent") is not None and mapping["parent"] not in mappings
+           for mapping, _ in mappings.values()):
+        raise _invalid_mapping()
     pending = [alias]
     seen: set[str] = set()
     while pending:
@@ -323,7 +333,7 @@ def require_stopped_subtree(runner_directory: Path, alias: str) -> None:
         if current in seen:
             continue
         seen.add(current)
-        mapping, directory = mappings[current]
+        mapping, directory = read_alias_mapping(runner_directory, current)
         if _status_session(mapping, directory, current, respond_to_abnormal=False)["activity"] != "idle":
             raise RunnerError(
                 "replacement-not-stopped",
@@ -847,6 +857,15 @@ def session_record_directory(runner_directory: Path, alias: str) -> Path:
 def read_alias_mapping(
     runner_directory: Path, alias: str
 ) -> Tuple[Dict[str, Any], Path]:
+    """Read a Session record and require the complete current execution identity."""
+    mapping, session_directory = _read_alias_record(runner_directory, alias)
+    if not _valid_mapping(mapping, alias):
+        raise _invalid_mapping()
+    return mapping, session_directory
+
+
+def _read_alias_record(runner_directory: Path, alias: str) -> Tuple[Any, Path]:
+    """Read retained ownership without interpreting its execution schema."""
     if not ALIAS.fullmatch(alias):
         raise _alias_not_found()
     session_root = runner_directory / "sessions"
@@ -868,8 +887,6 @@ def read_alias_mapping(
             mapping = record["retirement"]["mapping"]
     except (OSError, UnicodeError, KeyError, TypeError, yaml.YAMLError) as error:
         raise _invalid_mapping() from error
-    if not _valid_mapping(mapping, alias):
-        raise _invalid_mapping()
     return mapping, session_directory
 
 

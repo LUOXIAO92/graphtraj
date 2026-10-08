@@ -37,6 +37,13 @@ resources through the configured Runtime's supported mechanisms; GraphTraj
 does not choose a professional Skill by its name.
 If child dispatch returns `registered`, end that dispatch turn so the existing
 Driver can start the child.
+
+For a failure before Session registration, preserve and retry the unchanged
+original swarm input. Reuse is limited to a clean canonical Worktree with
+matching recorded ownership and branch. Dirty, foreign or unmarked leftovers
+remain refused. Direct cleanup still requires integration. After successful
+retry, use ordinary delivery and cleanup.
+
 Keep one execution per Session and communicate only with direct parents/children.
 
 ## Receive and decide results

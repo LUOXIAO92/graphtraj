@@ -566,6 +566,16 @@ paths through the `graphtraj` tool (`action: execute`, `feature: submit_report`)
 or `agent-runner submit-report`. Ending execution does not accept or
 complete the Ticket. Use ordinary `send` to continue an eligible existing Session.
 
+If launch fails before Session registration, retry with the unchanged original
+swarm input. GraphTraj can reuse a clean canonical Worktree whose recorded
+ownership and branch match that input. Missing unrelated Worktree paths do not
+prevent launch or cause their Git registrations to be removed. Dirty, foreign
+or unmarked leftovers are refused. Direct cleanup still requires an integrated
+Ticket; the supported recovery for a newly owned pre-registration leftover is
+retry, followed by ordinary delivery and cleanup. Git failures identify the
+action, working directory and exit status without exposing command operands
+or stderr.
+
 Select the ready Ticket with a block-style YAML swarm input:
 
 ```yaml

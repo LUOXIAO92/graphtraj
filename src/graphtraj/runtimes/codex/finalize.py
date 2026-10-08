@@ -54,8 +54,14 @@ def hook(path: Path, binding: dict) -> dict:
     command = shlex.join([
         sys.executable, '-m', 'graphtraj.runtimes.codex.stop_hook',
     ])
-    return {'hooks': {event: [{'hooks': [{'type': 'command', 'command': command}]}]
-                      for event in ('SessionStart', 'Stop')}}
+    messages = {
+        'SessionStart': 'GraphTraj: associating Main session',
+        'Stop': 'GraphTraj: checking task completion',
+    }
+    return {'hooks': {
+        event: [{'hooks': [{'type': 'command', 'command': command, 'statusMessage': message}]}]
+        for event, message in messages.items()
+    }}
 
 
 def event_context(binding: dict, event: dict) -> dict | None:

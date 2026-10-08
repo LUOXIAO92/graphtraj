@@ -499,4 +499,9 @@ def test_hook_configuration_is_only_adoption_material(tmp_path: Path) -> None:
     assert reply.exit_code == 0
     configuration = json.loads(reply.output)
     assert set(configuration['hooks']) == {'SessionStart', 'Stop'}
+    for groups in configuration['hooks'].values():
+        handler = groups[0]['hooks'][0]
+        assert handler['statusMessage'].strip()
+        assert '--binding' not in handler['command']
+        assert '--hook-session' not in handler['command']
     assert not list(tmp_path.iterdir())

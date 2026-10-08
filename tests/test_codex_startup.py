@@ -2,6 +2,7 @@
 
 import asyncio
 import os
+import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -15,6 +16,44 @@ from graphtraj.runtimes.codex.managed_session import CodexManagedExecution
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 from test_codex_app_server import context, peer
 from test_codex_approval import ROUTE, managed, completion_stub, resume_settings
+
+
+@pytest.mark.parametrize('phase', ['initialize', 'thread/start', 'thread/resume'])
+def test_startup_failure_preserves_redacted_diagnostic(
+    tmp_path: Path, peer: Path, monkeypatch: pytest.MonkeyPatch, phase: str,
+) -> None:
+    """Native EOF reports its phase and bounded startup cause without secrets."""
+    request, directory = managed(tmp_path, peer, monkeypatch)
+    previous = None
+    if phase == 'thread/resume':
+        completion_stub(monkeypatch, 'accept', [])
+        previous = CodexManagedExecution(request, 'request: initial', directory,
+            lambda *_: None, {}, directory / 'events.jsonl').run()['session_id']
+        resume_settings(tmp_path, directory, monkeypatch, {'approval': ROUTE}, {}, False)
+    monkeypatch.setenv('TEST_STARTUP_SECRET', 'sensitive-value')
+    Path(request['arguments'][0]).write_text(
+        '#!' + sys.executable + '\nimport json, sys\n'
+        'for line in sys.stdin:\n'
+        '    message = json.loads(line)\n'
+        f'    if message.get("method") == {phase!r}:\n'
+        '        print("x" * 5000 + " native configuration rejected sensitive-value "\n'
+        '              "Bearer private-token https://user:password@example.test/?key=private-query",\n'
+        '              file=sys.stderr, flush=True)\n'
+        '        break\n'
+        '    if "id" in message:\n'
+        '        print(json.dumps({"id": message["id"], "result": {}}), flush=True)\n'
+    )
+    with pytest.raises(RuntimeAdapterError) as caught:
+        CodexManagedExecution(request, 'undelivered', directory, lambda *_: None,
+            {}, directory / 'events.jsonl', expected_session=previous).run()
+    error = caught.value
+    assert error.code == 'RUNTIME_CONNECTION_CLOSED' and error.terminal_confirmed
+    assert f'Codex {phase}:' in error.message
+    assert 'native configuration rejected' in error.message and '[REDACTED]' in error.message
+    assert all(secret not in error.message for secret in (
+        'sensitive-value', 'private-token', 'user:password', 'private-query',
+    ))
+    assert len(error.message.split('Startup stderr: ', 1)[1]) <= 4096
 
 
 @pytest.mark.parametrize('resume', [False, True])

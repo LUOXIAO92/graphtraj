@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import os
 import json
+import re
 import uuid
 from concurrent.futures import CancelledError
 from contextlib import ExitStack
@@ -141,8 +142,10 @@ class CodexManagedExecution:
                                  experimental_api=True)
         self.adapter = adapter
         observer = None
+        phase = 'initialize'
         try:
             async with adapter:
+                phase = 'thread/resume' if self.expected_session else 'thread/start'
                 observer = asyncio.create_task(self._observe())
                 if self.termination_requested:
                     raise RuntimeAdapterError(
@@ -204,7 +207,23 @@ class CodexManagedExecution:
             # startup RPC failed. Keep a shutdown failure explicitly unconfirmed.
             if error.code == 'RUNTIME_SHUTDOWN_FAILED':
                 raise
-            raise RuntimeAdapterError(error.code, error.message) from error
+            message = error.message
+            if self.native_session is None:
+                # Match Pi's startup-only diagnostic boundary and redaction;
+                # never publish task output or earlier executions' stderr.
+                diagnostic = adapter.stderr_tail
+                for name, value in os.environ.items():
+                    if value and any(part in name.upper() for part in (
+                        'KEY', 'TOKEN', 'SECRET', 'PASSWORD', 'CREDENTIAL',
+                    )):
+                        diagnostic = diagnostic.replace(value, '[REDACTED]')
+                diagnostic = re.sub(r'(?i)(bearer\s+)[^\s"\']+', r'\1[REDACTED]', diagnostic)
+                diagnostic = re.sub(r'(https?://)[^\s/@]+:[^\s/@]+@', r'\1[REDACTED]@', diagnostic)
+                diagnostic = re.sub(r'(https?://[^\s?]+)\?[^\s]+', r'\1?[REDACTED]', diagnostic)
+                message = f'Codex {phase}: {message}'
+                if diagnostic.strip():
+                    message += '\nStartup stderr: ' + diagnostic.strip()[-4096:]
+            raise RuntimeAdapterError(error.code, message) from error
         finally:
             await asyncio.to_thread(connections.close)
             if observer is not None:

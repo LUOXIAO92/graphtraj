@@ -115,6 +115,11 @@ register as Main or recursively activate its completion hook. Unknown sources
 remain explicitly unrecognized. Review installation material through the
 Runtime's normal configuration and trust mechanism before enabling the hook.
 
+For an already-running Codex Main, a trusted Stop can reuse the native entry
+checks to establish a missing association when its ownership of existing root
+Agents is verified. No restart, fabricated startup event or manual binding is
+required.
+
 The Adapter runs and collects the checker using Main's current native context
 and actual Runtime settings. Main does not relay prepare, spawn or collect
 operations. The checker identifies the current task from inherited context and

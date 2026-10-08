@@ -715,6 +715,11 @@ receive native event context; they take no fixed Session ID, binding path or
 summary Issue. Actual startup/resume and Stop observations are still needed
 after configuration; generating or trusting the material alone proves neither.
 
+If Main is already running when the integration is installed, a trusted Stop
+can establish the missing association from verified native ownership of the
+project's existing root Agents. It reuses the normal entry checks; no restart
+or manual binding is needed.
+
 Each activation visibly reports a start and outcome. Completed work and
 legitimate waiting end the hook without another Main input or reply. Actionable
 unfinished work returns to the same Main with the next work to perform. Children

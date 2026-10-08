@@ -12,8 +12,9 @@ import yaml
 from test_managed_sessions import ManagedProject, launch_document, managed_project, observe
 
 
+@pytest.mark.parametrize('native_source', ['child', 'main'])
 def test_native_owner_retains_control_of_its_recorded_root(
-    managed_project: ManagedProject, monkeypatch: pytest.MonkeyPatch,
+    managed_project: ManagedProject, monkeypatch: pytest.MonkeyPatch, native_source: str,
 ) -> None:
     """Actual external ownership survives native classification without global Main authority."""
     from graphtraj.interfaces.local_tool import bind
@@ -48,6 +49,8 @@ def test_native_owner_retains_control_of_its_recorded_root(
 
         async def read_thread(self, session: str) -> dict:
             """A delegated source stays delegated even when it owns an old root."""
+            if native_source == 'main':
+                return {'id': session, 'source': 'vscode', 'parentThreadId': None}
             return {'id': session, 'source': {'subAgent': {'thread_spawn': {
                 'parent_thread_id': 'native-parent', 'depth': 1, 'agent_path': '1',
             }}}}
@@ -65,11 +68,11 @@ def test_native_owner_retains_control_of_its_recorded_root(
     with pytest.raises(RunnerError, match='direct parent'):
         send(child)
     connection['session'] = 'different-native-child'
-    with pytest.raises(RunnerError, match='direct parent'):
+    with pytest.raises(RunnerError, match='direct parent|association is unavailable'):
         send(target)
     connection['session'] = 'external-owner'
     connection['codex_home'] = '/different-native-home'
-    with pytest.raises(RunnerError, match='direct parent'):
+    with pytest.raises(RunnerError, match='direct parent|association is unavailable'):
         send(target)
     connection['codex_home'] = '/native-owner-home'
     stopped = bind(root)({'action': 'execute', 'feature': 'interrupt',

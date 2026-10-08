@@ -69,8 +69,6 @@ def is_bound_checker(runner: Path, connection: dict) -> bool:
     Native children must be excluded by the caller before entering this check.
     """
     import yaml
-    from graphtraj.execution.runner_models import RunnerError
-    from graphtraj.execution.runner_status import NativeCaller, is_direct_owner, read_alias_mapping
 
     session = connection['session']
     matched = False
@@ -81,8 +79,15 @@ def is_bound_checker(runner: Path, connection: dict) -> bool:
             break
     if not matched:
         return False
+    return not owns_native_root(runner, connection)
 
-    caller = NativeCaller(session, connection)
+
+def owns_native_root(runner: Path, connection: dict) -> bool:
+    """Verify an existing root's exact native owner, independent of Stop setup."""
+    from graphtraj.execution.runner_models import RunnerError
+    from graphtraj.execution.runner_status import NativeCaller, is_direct_owner, read_alias_mapping
+
+    caller = NativeCaller(connection['session'], connection)
     for directory in (runner / 'sessions').glob('*'):
         try:
             mapping, _ = read_alias_mapping(runner, directory.name)
@@ -90,8 +95,8 @@ def is_bound_checker(runner: Path, connection: dict) -> bool:
             # Unrelated withdrawn records do not establish current ownership.
             continue
         if mapping.get('parent') is None and is_direct_owner(caller, mapping):
-            return False
-    return True
+            return True
+    return False
 
 
 def caller_identity(runner: Path, connection: dict) -> str | None:
@@ -120,6 +125,10 @@ def caller_identity(runner: Path, connection: dict) -> str | None:
     key = hashlib.sha256(('codex:' + session).encode()).hexdigest()
     path = runner / 'main-sessions' / ('finalize_' + key) / 'session.yml'
     if source != 'main' or not path.is_file():
+        if source == 'main' and owns_native_root(runner, connection):
+            # Keep the verified native identity: ordinary control still checks
+            # each target's exact parent_connection, never blanket Main access.
+            return session
         raise RunnerError('authority-denied', 'Native Main SessionStart/resume association is unavailable.')
     binding = yaml.safe_load(path.read_text(encoding='utf-8'))
     if (binding['session'] != session or binding['runtime'] != 'codex'

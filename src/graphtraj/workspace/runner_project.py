@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 import shutil
-import shlex
 import subprocess
 from pathlib import Path
 from typing import Dict, List
@@ -66,8 +65,21 @@ def provision_worktree(
     except RunnerError as error:
         raise RunnerError(
             "WORKTREE_PROVISION_FAILED",
-            "The derived Ticket Worktree could not be provisioned from dev.",
+            "The derived Ticket Worktree could not be provisioned from dev. " + error.message,
         ) from error
+
+    # Retain the existing ownership link before any post-add validation can fail.
+    # Retry can then attribute this clean Worktree without inventing a Session.
+    evidence = project.state_directory / "tickets" / (task.ticket_id + "-" + task.ticket_name)
+    try:
+        (worktree / ".state").symlink_to(
+            os.path.relpath(evidence, worktree), target_is_directory=True,
+        )
+    except OSError as error:
+        raise RunnerError(
+            "STATE_LINK_FAILED", "The Ticket Worktree ownership link could not be retained.",
+        ) from error
+
     record = next(
         (
             item
@@ -75,7 +87,8 @@ def provision_worktree(
             if _resolve_path(
                 Path(item["worktree"]),
                 code="GIT_FAILED",
-                message="A required Git operation failed.",
+                message="Could not resolve a listed Git Worktree path.",
+                allow_missing=True,
             )
             == worktree
         ),
@@ -207,13 +220,12 @@ def run_git(
         )
     except OSError as error:
         raise RunnerError(
-            "GIT_FAILED", f"{shlex.join(['git', *arguments])} in {repository}: {error}",
+            "GIT_FAILED", f"{_git_action(arguments)} in {repository} could not start (errno {error.errno}).",
         ) from error
     if result.returncode != 0:
         raise RunnerError(
             "GIT_FAILED",
-            f"{shlex.join(['git', *arguments])} in {repository} exited {result.returncode}: "
-            + result.stderr.strip()[:2000],
+            f"{_git_action(arguments)} in {repository} exited {result.returncode}.",
         )
     return result.stdout.strip()
 
@@ -230,10 +242,22 @@ def git_succeeds(repository: Path, *arguments: str) -> bool:
             stderr=subprocess.DEVNULL,
         )
     except OSError as error:
-        raise RunnerError("GIT_FAILED", "A required Git operation failed.") from error
+        raise RunnerError(
+            "GIT_FAILED",
+            f"{_git_action(arguments)} in {repository} could not start (errno {error.errno}).",
+        ) from error
     if result.returncode not in (0, 1):
-        raise RunnerError("GIT_FAILED", "A required Git operation failed.")
+        raise RunnerError(
+            "GIT_FAILED",
+            f"{_git_action(arguments)} in {repository} exited {result.returncode}.",
+        )
     return result.returncode == 0
+
+
+def _git_action(arguments: tuple[str, ...]) -> str:
+    """Name the Git action without exposing operands, config values or stderr."""
+    action = arguments[:2] if arguments[:1] == ("worktree",) else arguments[:1]
+    return "git " + " ".join(action)
 
 
 def _resolve_path(

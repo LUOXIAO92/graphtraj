@@ -761,7 +761,9 @@ class CodexAppServer:
             raise self._protocol_failure('thread/fork did not preserve the bound source and model.')
         if 'effort' in settings and response.get('reasoningEffort') != settings['effort']:
             raise self._protocol_failure('thread/fork changed the checked turn reasoning effort.')
-        session = CodexSession(thread['id'], None)
+        path = thread.get('path')
+        rollout = Path(path) if isinstance(path, str) and Path(path).is_absolute() else None
+        session = CodexSession(thread['id'], rollout)
         self._sessions[session.thread_id] = session
         return session
 

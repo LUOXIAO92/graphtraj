@@ -13,6 +13,7 @@ from graphtraj.runtimes.codex.app_server import CodexAppServer, CodexServerReque
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 from graphtraj.workspace.runner_project import runtime_executable
 from graphtraj.runtimes.codex.session_entry import session_source, event_record
+from graphtraj.runtimes.codex.usage import CodexCheckUsage
 
 
 def proxy(
@@ -99,7 +100,10 @@ def response(result: dict | None, continued: bool) -> dict:
     if result is None:
         return {}
     reason = result['reason']
-    visible = {'systemMessage': f"Completion check {result['status']}: {reason}"}
+    message = f"Completion check {result['status']}: {reason}"
+    if result.get('usage_summary'):
+        message += '\n' + result['usage_summary']
+    visible = {'systemMessage': message}
     if result['status'] in ('completed', 'waiting'):
         return visible
     if result['status'] == 'actionable':
@@ -162,6 +166,7 @@ def check(
             child = await client.fork_session(parent)
             child_id = child.thread_id
             created(child_id)
+            usage = CodexCheckUsage(child.rollout_path, child_id)
             execution = await client.start_execution(child, prompt)
 
             async def main_stopped() -> None:
@@ -206,5 +211,5 @@ def check(
                 raise RuntimeAdapterError('operation-failed', 'Completion checker was interrupted.')
             return {'output': result['last_agent_message'], 'session': child_id,
                     'model': parent['model'], 'provider': parent['modelProvider'],
-                    'usage': client.token_usage(child)}
+                    'usage': usage.finish(execution.turn_id)}
     return asyncio.run(run())

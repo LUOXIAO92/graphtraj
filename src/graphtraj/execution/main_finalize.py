@@ -140,6 +140,7 @@ def check_main_finalize(binding_file: Path, event: dict[str, Any]) -> dict[str, 
     context = adapter.finalize_event(binding, event)
     if context is None:
         return adapter.finalize_response(None, False)
+    usage = adapter.finalize_usage()
     try:
         prompt = check_prompt(binding)
         child_binding: tuple[str, Path] | None = None
@@ -157,8 +158,10 @@ def check_main_finalize(binding_file: Path, event: dict[str, Any]) -> dict[str, 
             return adapter.finalize_response(None, False)
         if child_binding is None or native.get('session') != child_binding[0]:
             raise ValueError('The completion result does not belong to the bound child.')
-        write_yaml_durably(child_binding[1] / 'execution.yml', native)
+        usage = adapter.finalize_usage(native)
+        write_yaml_durably(child_binding[1] / 'execution.yml', {**native, 'usage': usage.document()})
         result = parse_check_result(native['output'])
     except Exception as error:
         result = {'status': 'error', 'reason': f'Completion check failed: {error}', 'nodes': []}
+    result['usage_summary'] = usage.summary()
     return adapter.finalize_response(result, context['continued'])

@@ -25,10 +25,12 @@ from graphtraj.runtimes.runtime_adapter import (
     RuntimeContextPreflight,
     RuntimeTurn,
     SessionStarted,
+    finalize_usage,
 )
 from graphtraj.execution.runner_transport import record_runtime_identity, runtime_turn_outcome
 from graphtraj.execution.runner_io import write_yaml_durably
 from graphtraj.runtimes.codex.approval import approval_route
+from graphtraj.runtimes.codex.usage import tool_call_id
 from graphtraj.configuration.project_configuration import configuration_exists, load_project_configuration
 from graphtraj.configuration.role_definitions import ResolvedChildRole
 
@@ -336,6 +338,8 @@ def restore_codex_context(
 class CodexRuntimeAdapter:
     """Prepare Codex Context, manage execution, and interpret statistics and diagnostics."""
 
+    finalize_usage = staticmethod(finalize_usage)
+
     def current_host_connection(self) -> dict | None:
         """Capture the native Codex host independently of the child Runtime."""
         from graphtraj.runtimes.codex.host_events import current_connection
@@ -557,16 +561,8 @@ class CodexRuntimeAdapter:
                 payload = item.get("payload")
                 if not isinstance(payload, dict):
                     continue
-                item_type = payload.get("type")
-                if item_type in {"function_call", "custom_tool_call"}:
-                    request_id = payload.get("call_id")
-                elif item_type in {"local_shell_call", "tool_search_call"}:
-                    request_id = payload.get("call_id") or payload.get("id")
-                elif item_type in {"web_search_call", "image_generation_call"}:
-                    request_id = payload.get("id")
-                else:
-                    continue
-                if isinstance(request_id, str) and request_id:
+                request_id = tool_call_id(payload)
+                if request_id is not None:
                     calls.add((session, request_id))
         except (TypeError, json.JSONDecodeError) as error:
             raise RuntimeAdapterError(

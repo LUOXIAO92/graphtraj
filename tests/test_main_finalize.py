@@ -19,6 +19,7 @@ from graphtraj.interfaces.local_tool import bind
 from graphtraj.runtimes.codex import finalize
 from graphtraj.runtimes.codex.app_server import CodexAppServer, CodexServerRequest
 from graphtraj.runtimes.codex.stop_hook import main as stop_hook
+from graphtraj.runtimes.runtime_adapter import CheckUsage, finalize_usage, select_runtime_adapter
 
 
 def test_binding_description_delivers_manual(tmp_path: Path) -> None:
@@ -70,6 +71,11 @@ for line in sys.stdin:
         # The peer owns context inheritance; the caller supplies no history.
         parent_context = ['original developer instructions','private context sentinel']
         child = {'id':options.get('child','checker'),'forkedFromId':'main'}
+        if 'records' in options:
+            child['path'] = str(root / 'checker.jsonl')
+            records = [{'type':'session_meta','payload':{'id':child['id']}}]
+            records.extend(options['records'].get('before', []))
+            Path(child['path']).write_text(''.join(json.dumps(r) + '\n' for r in records))
         (root / 'child-context.json').write_text(json.dumps(parent_context))
         result = {'thread':child, 'model':options.get('fork_model','actual-model'),
                   'modelProvider':'actual-provider', 'reasoningEffort':params.get('config',{}).get('model_reasoning_effort')}
@@ -104,6 +110,10 @@ for line in sys.stdin:
         send({'method':'item/completed','params':{'threadId':params['threadId'],'turnId':'check-turn',
               'item':{'id':'answer','type':'agentMessage','text':text}}})
         turn['status'] = 'completed'
+        if 'records' in options:
+            with (root / 'checker.jsonl').open('a') as stream:
+                for record in options['records'].get('after', []):
+                    stream.write(json.dumps(record) + '\n')
         send({'method':'turn/completed','params':{'threadId':params['threadId'],'turn':turn}})
         if options.get('interrupt_during_check'): options['stopped'] = True
         continue
@@ -264,6 +274,8 @@ def test_other_adapter_uses_opaque_host_event(
     class OtherAdapter:
         """Represent a host with unrelated lifecycle and connection formats."""
 
+        finalize_usage = staticmethod(finalize_usage)
+
         def verify_finalize_main(self, connection: dict) -> str:
             """Attest the root identity on the other host's owned connection."""
             assert connection == {'runtime': 'other', 'endpoint': 'existing'}
@@ -289,12 +301,16 @@ def test_other_adapter_uses_opaque_host_event(
             assert binding['session'] == 'owner'
             created('actual-child')
             calls.append(prompt)
-            return {'session': 'actual-child', 'output': json.dumps({
+            return {'session': 'actual-child', 'usage': CheckUsage(input_tokens=7, tool_calls=2),
+                    'output': json.dumps({
                 'status': 'waiting', 'reason': 'Approval pending', 'nodes': ['237'],
             })}
 
         def finalize_response(self, result: dict | None, continued: bool) -> dict:
             """Return this host's end decision without Codex hook fields."""
+            assert 'input_tokens=7' in result['usage_summary']
+            assert 'tool_calls=2' in result['usage_summary']
+            assert 'reasoning_tokens=none' in result['usage_summary']
             return {'end': result is None or result['status'] == 'waiting'}
 
     monkeypatch.setattr(main_finalize, 'current_host_connection',
@@ -350,13 +366,120 @@ def test_checker_reports_missing_native_approval_interface(host: tuple[Path, Pat
 
 
 def test_only_observed_cache_usage_is_retained(host: tuple[Path, Path]) -> None:
-    """Preserve native token accounting without inventing cache hits or thresholds."""
+    """An unscoped last snapshot cannot establish current-check increments."""
     root, binding = host
     usage = {'last': {'inputTokens': 113, 'cachedInputTokens': 0, 'outputTokens': 19}}
     (root / 'options.json').write_text(json.dumps({'usage': usage}))
     assert stop(binding)['systemMessage']
     evidence = next(binding.parent.glob('checks/*/execution.yml'))
-    assert yaml.safe_load(evidence.read_text())['usage'] == usage
+    assert all(value is None for value in yaml.safe_load(evidence.read_text())['usage'].values())
+
+
+def token_record(**totals: int) -> dict:
+    """Represent an observed native cumulative usage update."""
+    return {'type': 'event_msg', 'payload': {
+        'type': 'token_count', 'info': {'total_token_usage': totals},
+    }}
+
+
+def call_record(identifier: str, kind: str = 'function_call') -> dict:
+    """Represent one native tool call, including the response-level identifier."""
+    key = 'id' if kind in {'web_search_call', 'image_generation_call'} else 'call_id'
+    return {'type': 'response_item', 'payload': {'type': kind, key: identifier}}
+
+
+def check_records(before: list[dict], after: list[dict]) -> dict:
+    """Wrap increments in the peer's actual checker-turn start/end records."""
+    return {'before': before, 'after': [
+        {'type': 'event_msg', 'payload': {'type': 'task_started', 'turn_id': 'check-turn'}},
+        {'type': 'turn_context', 'payload': {'turn_id': 'check-turn'}},
+        *after,
+        {'type': 'event_msg', 'payload': {'type': 'task_complete', 'turn_id': 'check-turn'}},
+    ]}
+
+
+def test_whole_check_usage_excludes_inheritance_and_repeated_records(host: tuple[Path, Path]) -> None:
+    """Two responses can contain multiple tools; lifetime totals and replays do not add usage."""
+    root, binding = host
+    baseline = token_record(input_tokens=10000, cached_input_tokens=8000,
+                            output_tokens=1000, reasoning_output_tokens=500)
+    first = token_record(input_tokens=10100, cached_input_tokens=8000,
+                         output_tokens=1020, reasoning_output_tokens=505)
+    last = token_record(input_tokens=10400, cached_input_tokens=8240,
+                        output_tokens=1030, reasoning_output_tokens=505)
+    records = check_records([baseline, call_record('old')], [
+        first, call_record('one'), call_record('two', 'custom_tool_call'),
+        first, call_record('one'), call_record('old'),
+        call_record('search', 'web_search_call'), last, last,
+    ])
+    # Later native activity is outside this checker turn even in the same file.
+    records['after'].extend([
+        {'type': 'turn_context', 'payload': {'turn_id': 'unrelated'}},
+        token_record(input_tokens=999999), call_record('unrelated'),
+    ])
+    (root / 'options.json').write_text(json.dumps({'records': records}))
+    rollout(root)
+    result = native_hook(root)
+    usage = yaml.safe_load(next(binding.parent.glob('checks/*/execution.yml')).read_text())['usage']
+    assert usage == {'input_tokens': 400, 'cached_input_tokens': 240, 'cache_hit_ratio': 0.6,
+                     'output_tokens': 30, 'reasoning_tokens': 5, 'tool_calls': 3,
+                     'model_requests': None}
+    assert 'input_tokens=400' in result['systemMessage']
+    assert 'cache_hit_ratio=60.0%' in result['systemMessage']
+    assert 'reasoning_tokens=5' in result['systemMessage']
+    assert 'whole check' in result['systemMessage']
+    assert 'decision' not in result
+
+
+@pytest.mark.parametrize('baseline,after,expected', [
+    ({'input_tokens': 800, 'cached_input_tokens': 600, 'output_tokens': 90,
+      'reasoning_output_tokens': 50},
+     {'input_tokens': 800, 'cached_input_tokens': 600, 'output_tokens': 90,
+      'reasoning_output_tokens': 50},
+     {'input_tokens': 0, 'cached_input_tokens': 0, 'output_tokens': 0,
+      'reasoning_tokens': 0, 'cache_hit_ratio': None}),
+    ({'input_tokens': 100, 'cached_input_tokens': 0},
+     {'input_tokens': 125, 'cached_input_tokens': 0},
+     {'input_tokens': 25, 'cached_input_tokens': 0, 'cache_hit_ratio': 0.0}),
+    ({'input_tokens': 100}, {'input_tokens': 125, 'output_tokens': 300},
+     {'input_tokens': 25}),
+    ({}, {'input_tokens': 125, 'output_tokens': 300}, {}),
+    ({'input_tokens': 100}, {'input_tokens': 50}, {}),
+])
+def test_partial_and_zero_usage(
+    host: tuple[Path, Path], baseline: dict, after: dict, expected: dict,
+) -> None:
+    """Preserve known zeros; missing baselines and reset totals cannot supply increments."""
+    root, binding = host
+    records = check_records([token_record(**baseline)], [token_record(**after)])
+    (root / 'options.json').write_text(json.dumps({'records': records}))
+    result = stop(binding)
+    usage = yaml.safe_load(next(binding.parent.glob('checks/*/execution.yml')).read_text())['usage']
+    default = {key: None for key in ('input_tokens', 'cached_input_tokens', 'output_tokens',
+                                    'reasoning_tokens', 'model_requests', 'cache_hit_ratio')}
+    assert usage == {**default, 'tool_calls': 0, **expected}
+    assert 'model_requests=none' in result['systemMessage']
+
+
+def test_each_check_has_a_fresh_usage_boundary(host: tuple[Path, Path]) -> None:
+    """Earlier check totals and tools never carry into the next check."""
+    root, binding = host
+    for child, start, end in [('checker', 100, 140), ('checker-two', 900, 905)]:
+        records = check_records([token_record(input_tokens=start)], [
+            token_record(input_tokens=end), call_record('same-call-id'),
+        ])
+        (root / 'options.json').write_text(json.dumps({'child': child, 'records': records}))
+        result = stop(binding)
+        assert f'input_tokens={end - start}' in result['systemMessage']
+        assert 'tool_calls=1' in result['systemMessage']
+    assert len(list(binding.parent.glob('checks/*/execution.yml'))) == 2
+
+
+@pytest.mark.parametrize('runtime', ['codex', 'pi', 'dsh'])
+def test_unsupported_usage_needs_no_native_hook(runtime: str) -> None:
+    """The Adapter usage contract reports unknowns without starting a Runtime."""
+    usage = select_runtime_adapter(runtime).finalize_usage()
+    assert all(value is None for value in usage.document().values())
 
 
 def test_main_can_bind_its_next_goal_without_reparenting(host: tuple[Path, Path]) -> None:
@@ -537,3 +660,31 @@ def test_hook_configuration_is_only_adoption_material(tmp_path: Path) -> None:
         assert '--binding' not in handler['command']
         assert '--hook-session' not in handler['command']
     assert not list(tmp_path.iterdir())
+
+
+def test_fork_without_baseline_uses_native_request_increments(host: tuple[Path, Path]) -> None:
+    """Huge inherited totals are only replay identities, never checker usage."""
+    root, binding = host
+    first = token_record(input_tokens=956010000, cached_input_tokens=936721800,
+                         output_tokens=3158000, reasoning_output_tokens=1810800)
+    first['payload']['info']['last_token_usage'] = {
+        'input_tokens': 100, 'cached_input_tokens': 80,
+        'output_tokens': 20, 'reasoning_output_tokens': 10}
+    second = token_record(input_tokens=956010225, cached_input_tokens=936721920,
+                          output_tokens=3158058, reasoning_output_tokens=1810854)
+    second['payload']['info']['last_token_usage'] = {
+        'input_tokens': 225, 'cached_input_tokens': 120,
+        'output_tokens': 58, 'reasoning_output_tokens': 54}
+    replay = token_record(input_tokens=900000000)
+    replay['payload']['info']['last_token_usage'] = {'input_tokens': 999999}
+    records = check_records([], [replay, call_record('one'), call_record('two'),
+        first, first, {'type': 'response_item', 'payload': {
+            'type': 'message', 'role': 'assistant', 'content': []}}, second, second])
+    (root / 'options.json').write_text(json.dumps({'records': records}))
+    result = stop(binding)
+    assert 'input_tokens=325' in result['systemMessage']
+    assert 'cached_input_tokens=200' in result['systemMessage']
+    assert 'output_tokens=78' in result['systemMessage']
+    assert 'reasoning_tokens=64' in result['systemMessage']
+    assert 'tool_calls=2' in result['systemMessage']
+    assert 'model_requests=none' in result['systemMessage']

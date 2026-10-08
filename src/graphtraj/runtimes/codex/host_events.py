@@ -82,6 +82,11 @@ def parent_status(
                             if key in thread
                         }
                         result['completion_association'] = association_status(dict(connection), thread)
+                        from graphtraj.runtimes.codex.usage import latest_check_usage
+
+                        result['completion_usage'] = await latest_check_usage(
+                            client, result['completion_association'],
+                        )
                         result['hook_configuration'] = await client.read_hooks(thread.get('cwd'))
                         result['hook_events'] = []
                         result['hook_observation_scope'] = (

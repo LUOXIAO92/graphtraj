@@ -157,6 +157,69 @@ def test_parent_wait_needs_own_host_event(host_peer: Path, mode: str, outcome: s
     assert sum(item['method'] == 'thread/turns/list' for item in wire) == 1
 
 
+def test_public_usage_diagnostic_excludes_conversation(
+    host_peer: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Inspect an existing check's native usage phases without exposing its text."""
+    import yaml
+    from graphtraj.configuration.project_configuration import default_configuration_content
+    from graphtraj.execution.main_finalize import session_binding
+    from graphtraj.runtimes.codex.app_server import CodexAppServer
+
+    config = host_peer / '.graphtraj/config.yml'
+    config.parent.mkdir()
+    config.write_text(default_configuration_content(host_peer, host_peer))
+    path = session_binding(host_peer, 'codex', 'original-host')
+    check = path.parent / 'checks/retained'
+    check.mkdir(parents=True)
+    path.write_text(yaml.safe_dump({'runtime': 'codex', 'session': 'original-host',
+        'connection': {'runtime': 'codex', 'session': 'original-host',
+                       'codex_home': str(host_peer / 'home'), 'hook_session': 'native-session'}}))
+    (check / 'session.yml').write_text(yaml.safe_dump({
+        'runtime': 'codex', 'session': 'checker', 'parent': 'original-host'}))
+    (check / 'execution.yml').write_text('output: private checker prose\n')
+    trace = host_peer / 'checker.jsonl'
+    records = [
+        {'type': 'session_meta', 'payload': {'id': 'checker'}},
+        {'type': 'response_item', 'payload': {'text': 'private inherited prose'}},
+        {'type': 'turn_context', 'payload': {'turn_id': 'check-turn'}},
+        {'type': 'event_msg', 'payload': {'type': 'token_count', 'info': {
+            'total_token_usage': {'input_tokens': 120, 'cached_input_tokens': 90}}}},
+        {'type': 'event_msg', 'payload': {'type': 'task_complete', 'turn_id': 'check-turn'}},
+        {'type': 'event_msg', 'payload': {'type': 'token_count', 'info': {
+            'total_token_usage': {'input_tokens': 150}}}},
+    ]
+    trace.write_text(''.join(json.dumps(record) + '\n' for record in records))
+    original_read = CodexAppServer.read_thread
+    original_status = CodexAppServer.read_host_status
+
+    async def read_thread(client: CodexAppServer, session: str) -> dict:
+        """Supply only the checker's public metadata; retain the real host peer."""
+        if session == 'checker':
+            return {'id': session, 'path': str(trace)}
+        return await original_read(client, session)
+
+    async def read_status(client: CodexAppServer, session: str) -> dict:
+        """Supply the retained checker's terminal turn without loading its items."""
+        if session == 'checker':
+            return {'turn': {'id': 'check-turn', 'status': 'completed'}}
+        return await original_status(client, session)
+
+    monkeypatch.setattr(CodexAppServer, 'read_thread', read_thread)
+    monkeypatch.setattr(CodexAppServer, 'read_host_status', read_status)
+    (host_peer / 'mode').write_text('idle')
+    result = bind(host_peer)({'action': 'execute', 'feature': 'parent_status',
+                             'arguments': {'include_hooks': True}})
+    assert not result.failed, result.document
+    facts = result.document['completion_usage']
+    assert facts['session_matches'] and facts['turn_found'] and facts['completion_found']
+    assert facts['phases']['before_turn']['token_count_events'] == 0
+    assert facts['phases']['in_turn']['totals'] == {'input_tokens': 120, 'cached_input_tokens': 90}
+    assert facts['phases']['after_completion']['totals'] == {'input_tokens': 150}
+    assert 'private checker prose' not in json.dumps(result.document)
+    assert 'private inherited prose' not in json.dumps(result.document)
+
+
 @pytest.mark.parametrize(('mode', 'outcome'), [('stale', 'timeout'), ('disconnect', 'error'), ('wrong', 'error')])
 def test_parent_wait_does_not_invent_idle(host_peer: Path, mode: str, outcome: str) -> None:
     """Inconsistent state, a closed proxy and wrong identity cannot prove idle."""

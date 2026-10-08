@@ -137,6 +137,13 @@ Validate actual host behavior after adopting a fixed installation. Configuration
 material and controlled checks alone do not prove live Session recognition,
 configuration inheritance or the absence of duplicate Main replies.
 
+The visible usage summary covers only the current check after its fork/start,
+including later requests within that check. Read Adapter-provided input,
+cached input, output and `reasoning_tokens` without adding a reasoning subset
+twice. Cached/input is the whole-check ratio; tool calls and model requests are
+distinct. Missing fields and undefined ratios are `none`, not zero. Do not infer
+cache expiry or reasons for the checker's behavior from these metrics alone.
+
 ## Limits and recovery
 
 Honor the existing Ticket budget and Runner's enforced stop. Budget notices go to

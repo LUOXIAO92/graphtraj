@@ -739,6 +739,16 @@ correctness condition or guaranteed saving. Current-host operation must be
 verified after adopting a fixed installation; controlled interface checks and
 hook material alone do not establish it.
 
+Each finish-check result includes usage for that individual check after its
+fork/start boundary: input and cached input tokens, cached/input ratio, output
+tokens, explicit `reasoning_tokens`, tool calls and independently available
+model-request counts. The scope is the whole check, including later requests;
+inherited Main counters and other checks are excluded. For Codex, output already
+includes reasoning, so the separate reasoning count is not added again.
+Unavailable fields and undefined ratios display `none`; observed zero remains
+zero. Tool calls are not model requests, and these counts or cache ratios alone
+do not explain cache expiry, repeated investigation or excessive reasoning.
+
 ## Runtime Adapter boundary
 
 The task graph, Session ownership, result decisions, budgets and retained history

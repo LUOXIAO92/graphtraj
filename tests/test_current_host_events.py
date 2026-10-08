@@ -59,6 +59,12 @@ if sys.argv[1:] == ['app-server', 'proxy']:
                 initialized = True
                 continue
             result = {'id':request['id'], 'result': {}}
+            if request['method'] == 'thread/read':
+                session = request['params']['threadId']
+                result['result'] = {'thread': {
+                    'id':session, 'sessionId':session + '-session',
+                    'source':'appServer', 'status':{'type':'active'},
+                }}
             if request['method'] == 'turn/start':
                 assert initialized
                 params = request['params']
@@ -149,6 +155,25 @@ def test_root_completion_after_entry_and_send_exit(
     environment.update({'CODEX_THREAD_ID': 'original-host',
                         'CODEX_HOME':str(tmp_path / 'owning-home'),
                         'HOST_TEST_ROOT':str(tmp_path)})
+    # The native source is now verified on every external call. Establish
+    # both controlled hosts through SessionStart, not bare environment IDs.
+    for session, home in [('original-host', 'owning-home'), ('different-caller', 'other-home')]:
+        rollout = tmp_path / (session + '.jsonl')
+        rollout.write_text(json.dumps({'type': 'session_meta', 'payload': {
+            'id': session, 'source': 'appServer',
+        }}) + '\n')
+        entered = subprocess.run(
+            [str(installed_commands.runner.with_name('python')), '-m',
+             'graphtraj.runtimes.codex.stop_hook'],
+            input=json.dumps({'hook_event_name': 'SessionStart', 'source': 'startup',
+                              'cwd': str(root), 'session_id': session + '-session',
+                              'transcript_path': str(rollout)}),
+            cwd=root, env={**environment, 'CODEX_THREAD_ID': session,
+                           'CODEX_HOME': str(tmp_path / home)},
+            text=True, capture_output=True, timeout=15,
+        )
+        assert entered.returncode == 0, entered.stderr
+        assert 'associated' in json.loads(entered.stdout)['systemMessage']
     if not capture_host:
         environment.pop('CODEX_THREAD_ID')
     batch = {'tasks': [{'ticket_id': '76', 'role': 'researcher', 'instruction': 'wait for release'}]}

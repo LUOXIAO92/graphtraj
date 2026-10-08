@@ -72,6 +72,9 @@ for line in sys.stdin:
     elif method == 'initialized':
         continue
     elif method in ('thread/start', 'thread/resume'):
+        if os.environ.get('MANAGED_SESSION_LOADING'):
+            Path(os.environ['MANAGED_SESSION_LOADING']).write_text(str(os.getpid()))
+        time.sleep(float(os.environ.get('MANAGED_SESSION_DELAY', '0')))
         session = params.get('threadId', str(uuid.uuid4()))
         parameters = params
         native = Path(os.environ['MANAGED_NATIVE_ROOT']) / ('rollout-' + session + '.jsonl')

@@ -141,12 +141,21 @@ for line in sys.stdin:
         result = {'userAgent': 'controlled-codex'}
     elif method == 'initialized':
         initialized = True
+        if os.environ.get('PEER_PAUSE_BEFORE_SESSION'):
+            while True:
+                time.sleep(1)
         continue
     elif method == 'config/read':
         result = {'config': json.loads(os.environ.get('PEER_CONFIG', '{}')),
                   'origins': {}, 'layers': None}
     elif method in {'thread/start', 'thread/resume'}:
         assert initialized
+        if os.environ.get('PEER_SESSION_DELAY'):
+            emit({'method': 'thread/loading', 'params': {}})
+            time.sleep(float(os.environ['PEER_SESSION_DELAY']))
+        if os.environ.get('PEER_SESSION_FAILURE'):
+            emit({'id': message['id'], 'error': {'code': -32000, 'message': 'Session loading failed'}})
+            continue
         thread_id = params.get('threadId', f'thread-{len(sessions) + 1}')
         sessions[thread_id] = params
         rollout = native_rollout(thread_id)

@@ -409,7 +409,7 @@ class CodexAppServer:
             params.pop('dynamicTools', None)
             params['threadId'] = thread_id
             params['excludeTurns'] = True
-        response = await self._call(method, params)
+        response = await self._call(method, params, wait_for_session=True)
         try:
             thread = response['thread']
             returned_id = _native_id(thread['id'])
@@ -804,7 +804,9 @@ class CodexAppServer:
         self._fail(error)
         return error
 
-    async def _call(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
+    async def _call(
+        self, method: str, params: dict[str, Any], *, wait_for_session: bool = False,
+    ) -> dict[str, Any]:
         """Correlate a client request while the reader consumes interleaved events."""
         self._require_connection()
         self._sequence += 1
@@ -812,8 +814,13 @@ class CodexAppServer:
         future = asyncio.get_running_loop().create_future()
         self._pending[request_id] = future
         try:
-            async with asyncio.timeout(self._timeout):
+            async with asyncio.timeout(self._timeout) as deadline:
                 await self._send({'id': request_id, 'method': method, 'params': params})
+                # Loading a Session is native work, not a transport deadline.
+                # Keep writes bounded; caller cancellation/close still wakes
+                # this owner, while ordinary control RPCs retain their limit.
+                if wait_for_session:
+                    deadline.reschedule(None)
                 response = await asyncio.shield(future)
         except TimeoutError as error:
             failure = CodexAdapterError(

@@ -25,20 +25,26 @@ def native_event(event: dict) -> dict:
         return {}
     root = Path(event['cwd'])
     runner = discover_runner_directory(root)
+
+    def skipped(reason: str) -> dict:
+        """Expose Stop routing without continuing a child or changing ownership."""
+        return {'systemMessage': f'Completion check skipped: {reason}'} if name == 'Stop' else {}
+
     # Existing managed ownership always wins over an inherited Main environment.
-    if process_caller_alias(runner, os.getpid()) is not None:
-        return {}
+    managed = process_caller_alias(runner, os.getpid())
+    if managed is not None:
+        return skipped(f'process ownership resolved to managed Agent {managed}.')
     metadata, _ = event_record(event)
     source = session_source(metadata)
     if source == 'child':
-        return {}
+        return skipped(f'native source identifies child Session {metadata["id"]}.')
     if source != 'main':
         raise ValueError('Unknown Codex Session source; Main was not associated.')
     session = metadata['id']
     for path in (runner / 'main-sessions').glob('*/checks/*/session.yml'):
         checker = yaml.safe_load(path.read_text(encoding='utf-8'))
         if checker['runtime'] == 'codex' and checker['session'] == session:
-            return {}
+            return skipped(f'Session {session} is a recorded completion checker.')
     binding = session_binding(root, 'codex', session)
     if name == 'SessionStart':
         connection = {'runtime': 'codex', 'session': session, 'hook_session': event.get('session_id'),
@@ -47,7 +53,11 @@ def native_event(event: dict) -> dict:
         return {'systemMessage': 'GraphTraj Main Session associated.'}
     if not binding.is_file():
         raise ValueError('Main SessionStart/resume association is unavailable.')
-    return check_main_finalize(binding, event)
+    result = check_main_finalize(binding, event)
+    if not result:
+        return skipped('the bound native Session/turn did not match, or its owning turn stopped. '
+                       'No task completion result is available.')
+    return result
 
 
 @click.command()

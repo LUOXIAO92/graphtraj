@@ -445,7 +445,8 @@ def test_native_children_cannot_overwrite_main(host: tuple[Path, Path], source: 
     original = binding.read_bytes()
     rollout(root, source=source)
     assert native_hook(root, 'SessionStart') == {}
-    assert native_hook(root) == {}
+    result = native_hook(root)
+    assert set(result) == {'systemMessage'} and 'child Session' in result['systemMessage']
     assert binding.read_bytes() == original
 
 
@@ -467,10 +468,31 @@ def test_native_checker_and_changed_turn_do_not_recurse(host: tuple[Path, Path])
     native_hook(root)
     rollout(root, session='checker')
     assert native_hook(root, 'SessionStart') == {}
-    assert native_hook(root) == {}
+    result = native_hook(root)
+    assert set(result) == {'systemMessage'} and 'recorded completion checker' in result['systemMessage']
     rollout(root)
     result = native_hook(root, turn_id='missing-turn')
     assert result['continue'] is False and 'settings' in result['systemMessage']
+
+
+def test_native_stop_reports_managed_and_stale_routing(
+    host: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Quiet skips disclose their routing without a checker or continuation."""
+    from graphtraj.execution import runner_status
+
+    root, binding = host
+    original = binding.read_bytes()
+    rollout(root)
+    with monkeypatch.context() as patch:
+        patch.setattr(runner_status, 'process_caller_alias', lambda runner, pid: 'member@e1')
+        assert native_hook(root, 'SessionStart') == {}
+        result = native_hook(root)
+        assert set(result) == {'systemMessage'} and 'member@e1' in result['systemMessage']
+    result = native_hook(root, session_id='different-native-session')
+    assert set(result) == {'systemMessage'} and 'Session/turn' in result['systemMessage']
+    assert binding.read_bytes() == original
+    assert not (binding.parent / 'checks').exists()
 
 
 def test_native_mcp_call_context_does_not_leak_between_sessions(

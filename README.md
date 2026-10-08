@@ -701,6 +701,20 @@ and actual Runtime settings. The checker resolves the current task and verifies
 its Issue, DAG and Tickets; supplied references are hints that may be outdated.
 Main does not mediate checker preparation, dispatch or collection.
 
+For Codex, generate the SessionStart and Stop configuration using the Python
+interpreter from the installation you intend to keep:
+
+```sh
+python -m graphtraj.runtimes.codex.stop_hook --configuration
+```
+
+Review the generated commands, merge them into the project's existing hook
+configuration, and use the host's normal review and trust controls. Keep the
+installation and its interpreter outside temporary directories. The commands
+receive native event context; they take no fixed Session ID, binding path or
+summary Issue. Actual startup/resume and Stop observations are still needed
+after configuration; generating or trusting the material alone proves neither.
+
 Each activation visibly reports a start and outcome. Completed work and
 legitimate waiting end the hook without another Main input or reply. Actionable
 unfinished work returns to the same Main with the next work to perform. Children

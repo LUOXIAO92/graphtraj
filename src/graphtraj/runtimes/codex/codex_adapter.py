@@ -157,6 +157,7 @@ class _CodexRole:
             filesystem[str(git_common_directory)] = "write"
             filesystem[str(git_common_directory / 'config')] = "read"
             filesystem[str(git_common_directory / 'hooks')] = "read"
+            _grant_worktree_git_directory(filesystem, worktree)
         native_report_paths = _canonical_report_write_paths(
             evidence, report_files
         )
@@ -1354,6 +1355,31 @@ def _canonical_report_write_paths(
     return tuple(paths)
 
 
+def _grant_worktree_git_directory(filesystem: dict, worktree: Path) -> None:
+    """Make an already-authorized linked Git directory explicit to Codex.
+
+    Codex protects the target of a Worktree's .git pointer independently of
+    the common directory. Preserve narrower configured restrictions; only add
+    the exact target beneath an existing writable Git-directory grant.
+    """
+    if filesystem.get(':workspace_roots', {}).get('.') != 'write':
+        return
+    pointer = worktree / '.git'
+    if not pointer.is_file():
+        return
+    prefix, separator, value = pointer.read_text(encoding='utf-8').strip().partition(':')
+    if prefix != 'gitdir' or not separator or not value.strip():
+        raise CodexAdapterError('RUNTIME_REQUEST_INVALID', 'Invalid Worktree Git pointer.')
+    directory = (worktree / value.strip()).resolve()
+    # Do not turn a pointer into new authority outside the existing grant.
+    for ancestor in (directory, *directory.parents):
+        access = filesystem.get(str(ancestor))
+        if access is not None:
+            if access == 'write':
+                filesystem.setdefault(str(directory), 'write')
+            return
+
+
 def refresh_codex_report_paths(
     request: Mapping[str, Any],
     *,
@@ -1425,6 +1451,7 @@ def refresh_codex_report_paths(
                 "The durable Codex launch request has invalid Worktree permissions.",
             )
         workspace_roots["."] = "read"
+    _grant_worktree_git_directory(filesystem, worktree)
     for path, access in tuple(filesystem.items()):
         if access in ("read", "write") and _is_prior_report_path(
             path, evidence, report_files

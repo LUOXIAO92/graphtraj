@@ -102,11 +102,11 @@ rule group; standalone user rules remain unchanged.
 
 ## Optional desktop project graph
 
-The development desktop in `desktop/` displays existing projects and their
-native task graphs. It is optional: installing or running the Python CLI does
-not require Node or Electron. This first desktop slice provides project and
-graph monitoring; Agent activity, usage dashboards and settings are separate
-follow-up work.
+The development desktop in `desktop/` displays existing projects, native task
+graphs and read-only Agent activity, and edits native role and connection
+settings. It is optional: installing or running the Python CLI does not require
+Node or Electron. Usage dashboards and cross-platform installers are separate
+delivery work.
 
 Install the matching Python GraphTraj version in a persistent environment and
 put `graphtraj-tool` on PATH, or set `GRAPHTRAJ_TOOL` to that executable. Use
@@ -132,6 +132,16 @@ Ticket state, dependencies, inactive or replaced nodes, query errors and the
 last successful update. Execution completion does not mean Ticket acceptance;
 a time notice does not mean execution has stopped. The renderer exposes no
 task-control or arbitrary-command interface.
+
+Node details separate current and historical Agents. Select an Agent to read
+recorded Chat activity, expand tool commands/results/errors, copy text, pause
+following, or page through older content. Missing or unreadable content remains
+explicit. Native usage facts retain their source and call attribution; streaming
+and replayed facts must be reconciled before aggregation.
+
+Use the desktop with its matching GraphTraj Python installation. Its native
+human-observer entry is separate from Agent access: starting it from an Agent
+does not grant access to private conversations or reports.
 
 Actual macOS window tests cover native graph queries, project separation,
 refresh, reconnect, persistence and removal. A separate unmocked window was

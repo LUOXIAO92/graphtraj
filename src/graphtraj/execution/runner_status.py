@@ -191,14 +191,29 @@ def is_direct_owner(caller: str | None, mapping: Mapping[str, Any]) -> bool:
     A Session directly owns the children the Runner recorded with it as their
     parent. A caller with no live Session owner is Main or the user, which
     directly owns the top-level Sessions the Runner recorded without a parent;
-    a sibling, a grandchild or another branch stays outside that relation. The
-    recorded parent alone decides, so no request field and no projected
-    environment value can widen the relation.
+    a sibling, a grandchild or another branch stays outside that relation.
+    Existing external roots also retain their native owning connection. That
+    relation requires the verified native caller and its current connection;
+    no request field or projected environment alone can widen it.
     """
     parent = mapping.get("parent")
     if caller is None:
         return parent is None
-    return parent == caller
+    if parent == caller:
+        return True
+    owner = mapping.get('parent_connection')
+    if (parent is not None or not isinstance(owner, dict)
+            or owner.get('session') != caller):
+        return False
+    # Old top-level launches recorded their actual native owner here. A
+    # verified native caller can retain that specific relation without being
+    # reclassified as Main or acquiring authority over unrelated roots.
+    connection = runtime_adapter.current_host_connection()
+    if connection is None:
+        return False
+    return all(connection.get(key) == owner.get(key) for key in (
+        'runtime', 'session', 'codex_home',
+    ))
 
 
 def require_direct_authority(
@@ -214,7 +229,12 @@ def require_direct_authority(
     caller = caller_alias(runner_directory)
     if caller == alias or is_direct_owner(caller, mapping):
         return
-    raise _authority_denied()
+    raise RunnerError(
+        'authority-denied',
+        "Only the target's direct parent may control this Session. "
+        f"Resolved caller: {caller!r}; target is a "
+        f"{'root' if mapping.get('parent') is None else 'child'} Session.",
+    )
 
 
 def require_task_authority(
@@ -268,7 +288,7 @@ def require_descendant_authority(
     approval or replacement authority.
     """
     caller = caller_alias(runner_directory)
-    if caller is None or caller == alias:
+    if caller is None or caller == alias or is_direct_owner(caller, mapping):
         return
     seen = {alias}
     parent = mapping.get("parent")
@@ -276,7 +296,10 @@ def require_descendant_authority(
         if parent == caller:
             return
         seen.add(parent)
-        parent = read_alias_mapping(runner_directory, parent)[0].get("parent")
+        ancestor = read_alias_mapping(runner_directory, parent)[0]
+        if is_direct_owner(caller, ancestor):
+            return
+        parent = ancestor.get("parent")
     raise _authority_denied()
 
 
@@ -541,7 +564,9 @@ def status_tree(
     roots = (
         [alias for alias, mapping in records.items() if mapping.get("parent") is None]
         if caller is None
-        else [caller] if caller in records else []
+        else [caller] if caller in records else [
+            alias for alias, mapping in records.items() if is_direct_owner(caller, mapping)
+        ]
     )
 
     nodes: list[Dict[str, Any]] = []

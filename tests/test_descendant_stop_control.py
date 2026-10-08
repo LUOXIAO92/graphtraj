@@ -11,6 +11,73 @@ import yaml
 from test_managed_sessions import ManagedProject, launch_document, managed_project, observe
 
 
+def test_native_owner_retains_control_of_its_recorded_root(
+    managed_project: ManagedProject, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Actual external ownership survives native classification without global Main authority."""
+    from graphtraj.interfaces.local_tool import bind
+    from graphtraj.execution.runner_models import RunnerError
+    from graphtraj.runtimes import runtime_adapter
+    from graphtraj.runtimes.codex import finalize
+    from graphtraj.execution.runner_connection import parent_connection
+    from graphtraj.execution.runner_batch import parse_batch
+    from graphtraj.execution.runner_launch import launch_batch
+
+    root, cause, call, executable = managed_project
+    monkeypatch.setenv('PATH', str(executable.parent) + os.pathsep + os.environ['PATH'])
+    monkeypatch.setenv('MANAGED_NATIVE_ROOT', str(executable.parent.parent / 'native'))
+    monkeypatch.setenv('CODEX_HOME', str(executable.parent.parent / 'codex-home'))
+    connection = {'runtime': 'codex', 'session': 'external-owner',
+                  'codex_home': '/native-owner-home'}
+    with parent_connection(connection):
+        target = launch_batch(parse_batch(launch_document()), root).document['tasks'][0]['alias']
+    child = call('child', [target, 'descendant@e1'])['alias']
+    before = mapping(root, target)
+    assert before['parent'] is None
+    assert before['parent_connection'] == connection
+
+    class NativeMetadata:
+        """Supply the owning daemon's verified thread response at its public seam."""
+        async def __aenter__(self) -> 'NativeMetadata':
+            """Open this controlled native metadata connection."""
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            """Close without changing any Session."""
+
+        async def read_thread(self, session: str) -> dict:
+            """A delegated source stays delegated even when it owns an old root."""
+            return {'id': session, 'source': {'subAgent': {'thread_spawn': {
+                'parent_thread_id': 'native-parent', 'depth': 1, 'agent_path': '1',
+            }}}}
+
+    monkeypatch.setattr(runtime_adapter, 'current_host_connection', lambda: dict(connection))
+    monkeypatch.setattr(finalize, 'proxy', lambda value: NativeMetadata())
+
+    def send(alias: str) -> dict:
+        """Use the public Tool, not a caller-selected identity parameter."""
+        return bind(root)({'action': 'execute', 'feature': 'send_instruction', 'arguments': {
+            'alias': alias, 'instruction': 'hold', 'caused_by_event_ids': [cause],
+        }}).document
+
+    assert send(target)['send_status'] == 'sent'
+    with pytest.raises(RunnerError, match='direct parent'):
+        send(child)
+    connection['session'] = 'different-native-child'
+    with pytest.raises(RunnerError, match='direct parent'):
+        send(target)
+    connection['session'] = 'external-owner'
+    connection['codex_home'] = '/different-native-home'
+    with pytest.raises(RunnerError, match='direct parent'):
+        send(target)
+    connection['codex_home'] = '/native-owner-home'
+    stopped = bind(root)({'action': 'execute', 'feature': 'interrupt',
+                         'arguments': {'alias': child}}).document
+    assert stopped['interrupt_status'] == 'interrupted'
+    assert mapping(root, target) == before
+    assert not (root / '.graphtraj/runner/main-sessions').exists()
+
+
 def mapping(root: Path, alias: str) -> dict:
     """Read identity retained by a managed Worker in the isolated test project."""
     return yaml.safe_load((root / '.graphtraj/runner/sessions' / alias / 'mapping.yml').read_text())

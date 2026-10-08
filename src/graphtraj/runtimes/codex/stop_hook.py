@@ -11,7 +11,9 @@ from pathlib import Path
 import click
 
 from graphtraj.execution.main_finalize import bind_session, check_main_finalize, session_binding
-from graphtraj.runtimes.codex.session_entry import event_record, session_source, is_bound_checker
+from graphtraj.runtimes.codex.session_entry import (
+    event_record, session_source, is_bound_checker, owns_native_root,
+)
 
 
 def native_event(event: dict) -> dict:
@@ -50,7 +52,11 @@ def native_event(event: dict) -> dict:
         bind_session(connection, root)
         return {'systemMessage': 'GraphTraj Main Session associated.'}
     if not binding.is_file():
-        raise ValueError('Main SessionStart/resume association is unavailable.')
+        if not owns_native_root(runner, connection):
+            raise ValueError('Main Session association is unavailable; no established native root ownership.')
+        # A hook can be adopted after this host's startup event was consumed.
+        # Use the real Stop context and existing owner proof, not a fake start.
+        bind_session(connection, root)
     result = check_main_finalize(binding, event)
     if not result:
         return skipped('the bound native Session/turn did not match, or its owning turn stopped. '

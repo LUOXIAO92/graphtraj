@@ -495,6 +495,16 @@ def test_native_stop_reports_managed_and_stale_routing(
     assert not (binding.parent / 'checks').exists()
 
 
+def test_unassociated_native_stop_needs_existing_owner(host: tuple[Path, Path]) -> None:
+    """Root-like source alone cannot adopt an unrelated running Session."""
+    root, binding = host
+    binding.unlink()
+    rollout(root)
+    result = native_hook(root)
+    assert result['continue'] is False and 'root ownership' in result['systemMessage']
+    assert not binding.exists() and not (binding.parent / 'checks').exists()
+
+
 def test_native_mcp_call_context_does_not_leak_between_sessions(
     host: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch,
 ) -> None:

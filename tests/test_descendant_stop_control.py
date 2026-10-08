@@ -87,8 +87,9 @@ def mapping(root: Path, alias: str) -> dict:
     return yaml.safe_load((root / '.graphtraj/runner/sessions' / alias / 'mapping.yml').read_text())
 
 
+@pytest.mark.parametrize('entry', ['SessionStart', 'Stop'])
 def test_native_root_owner_outlives_historical_checker_membership(
-    managed_project: ManagedProject, monkeypatch: pytest.MonkeyPatch,
+    managed_project: ManagedProject, monkeypatch: pytest.MonkeyPatch, entry: str,
 ) -> None:
     """Native entry, tools and Stop agree without rewriting either ownership record."""
     import json
@@ -135,7 +136,19 @@ def test_native_root_owner_outlives_historical_checker_membership(
     monkeypatch.setattr(runtime_adapter, 'current_host_connection', lambda: dict(connection))
     monkeypatch.setattr(main_finalize, 'current_host_connection', lambda: dict(connection))
     rollout(root, source='vscode')
-    assert 'associated' in native_hook(root, 'SessionStart')['systemMessage']
+    if entry == 'SessionStart':
+        assert 'associated' in native_hook(root, entry)['systemMessage']
+    else:
+        # A real host Stop may be the first hook after hot adoption. It creates
+        # the association only for the established native owner and checks now.
+        binding = main_finalize.session_binding(root, 'codex', 'main')
+        assert not binding.exists()
+        wrong = native_hook(root, session_id='wrong-native-session')
+        assert wrong['continue'] is False and not binding.exists()
+        result = native_hook(root)
+        assert 'completed' in result['systemMessage'] and 'decision' not in result
+        assert binding.is_file()
+        (root / 'options.json').write_text(json.dumps({'source': 'vscode', 'child': 'checker-two'}))
     tool = bind(root)
     assert not tool({'action': 'execute', 'feature': 'bind_main_finalize',
                      'arguments': {'summary_issue': 'tracker:current'}}).failed

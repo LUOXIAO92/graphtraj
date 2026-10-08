@@ -4,8 +4,87 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from graphtraj.runtimes.runtime_adapter import CheckUsage
+import yaml
+
+from graphtraj.runtimes.runtime_adapter import CheckUsage, RuntimeAdapterError
+
+if TYPE_CHECKING:
+    from graphtraj.runtimes.codex.app_server import CodexAppServer
+
+
+async def latest_check_usage(client: CodexAppServer, association: dict) -> dict:
+    """Project only usage counters from the bound Main's latest retained check.
+
+    This existing parent-status observation never returns conversation, tool
+    arguments, checker output or native configuration. It can diagnose checks
+    made before usage diagnostics were retained in their execution result.
+    """
+    if association.get('status') != 'matching':
+        return {'status': 'association-unavailable'}
+    try:
+        binding = Path(association['binding_path'])
+        completed = list(binding.parent.glob('checks/*/execution.yml'))
+        if not completed:
+            return {'status': 'no-completed-check'}
+        latest = max(completed, key=lambda path: path.stat().st_mtime_ns)
+        child = yaml.safe_load(latest.with_name('session.yml').read_text())
+        owner = yaml.safe_load(binding.read_text())
+        if child.get('runtime') != 'codex' or child.get('parent') != owner.get('session'):
+            return {'status': 'association-mismatch'}
+        thread = await client.read_thread(child['session'])
+        state = await client.read_host_status(child['session'])
+        turn = state.get('turn') or {}
+        path = thread.get('path')
+        result = {'session': child['session'], 'turn': turn.get('id'),
+                  'path_available': isinstance(path, str), 'status': 'usage-unavailable'}
+        if not isinstance(path, str) or not turn.get('id'):
+            return result
+        phases = {name: {'token_count_events': 0, 'info_fields': [], 'totals': {},
+                         'usage_event_types': {}, 'payload_fields': []}
+                  for name in ('before_turn', 'in_turn', 'after_completion')}
+        phase = 'before_turn'
+        identity = None
+        matched = False
+        with Path(path).open('rb') as stream:
+            for line in stream:
+                if not line.endswith(b'\n'):
+                    break
+                record = json.loads(line)
+                payload = record.get('payload', {})
+                kind = record.get('type')
+                if kind == 'session_meta':
+                    identity = payload.get('id')
+                if (kind == 'turn_context' or (kind == 'event_msg' and payload.get('type') == 'task_started')):
+                    if payload.get('turn_id') == turn['id']:
+                        phase = 'in_turn'
+                        matched = True
+                    elif matched:
+                        break
+                event = payload.get('type', '')
+                if kind == 'event_msg' and ('token' in event.lower() or 'usage' in event.lower()):
+                    facts = phases[phase]
+                    facts['usage_event_types'][event] = facts['usage_event_types'].get(event, 0) + 1
+                    facts['payload_fields'] = sorted(payload)
+                if kind == 'event_msg' and event == 'token_count':
+                    facts = phases[phase]
+                    facts['token_count_events'] += 1
+                    info = payload.get('info')
+                    if isinstance(info, dict):
+                        facts['info_fields'] = sorted(info)
+                    total = _total(record)
+                    if total is not None:
+                        facts['totals'] = {key: value for key, value in total.items()
+                                           if type(value) is int}
+                if (kind == 'event_msg' and payload.get('type') == 'task_complete'
+                        and payload.get('turn_id') == turn['id']):
+                    phase = 'after_completion'
+        return {**result, 'status': 'observed', 'session_matches': identity == child['session'],
+                'turn_found': matched, 'completion_found': phase == 'after_completion',
+                'phases': phases}
+    except (OSError, ValueError, KeyError, TypeError, yaml.YAMLError, RuntimeAdapterError) as error:
+        return {'status': 'unavailable', 'error_type': type(error).__name__}
 
 
 def tool_call_id(payload: dict) -> str | None:

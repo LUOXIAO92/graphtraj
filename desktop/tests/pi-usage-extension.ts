@@ -34,6 +34,7 @@ export default function (pi: ExtensionAPI) {
       tool: Type.Optional(Type.String({ description: 'Current approved absolute graphtraj-tool path.' })),
       electron: Type.Optional(Type.String({ description: 'Approved absolute Electron executable path.' })),
       artifacts: Type.Optional(Type.String({ description: 'Approved absolute artifact/socket directory.' })),
+      noSandbox: Type.Optional(Type.Boolean({ default: false, description: 'True only after THIS263 exact native/host execution approval; this argument does not grant approval.' })),
       node: Type.Optional(Type.String({ description: 'Absolute Node executable; defaults to this Pi process executable.' })),
     }),
     executionMode: 'sequential',
@@ -53,6 +54,7 @@ export default function (pi: ExtensionAPI) {
         child = spawn(args.node || process.execPath, ['--preserve-symlinks', '--preserve-symlinks-main', '--test', script], {
           cwd: args.project, stdio: ['ignore', 'pipe', 'pipe'],
           env: { ...process.env, GRAPHTRAJ_TOOL: args.tool,
+            GRAPHTRAJ_LIVE_NO_SANDBOX: args.noSandbox ? '1' : '0',
             GRAPHTRAJ_LIVE_PROJECT: args.project, GRAPHTRAJ_LIVE_TICKET: args.ticket,
             GRAPHTRAJ_LIVE_DEADLINE: args.deadline, GRAPHTRAJ_ELECTRON_EXECUTABLE: args.electron,
             GRAPHTRAJ_LIVE_ARTIFACTS: args.artifacts, MAC_CHROMIUM_TMPDIR: args.artifacts },

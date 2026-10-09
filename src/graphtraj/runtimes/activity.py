@@ -65,7 +65,8 @@ def usage_fact(raw: dict, runtime: str, call_id: str | None, phase: str) -> dict
     """Keep reported fields and semantic token names; never fill missing metrics."""
     names = {
         'codex': {'input_tokens': 'input', 'output_tokens': 'output',
-                  'cached_input_tokens': 'cache_read', 'reasoning_output_tokens': 'reasoning'},
+                  'cached_input_tokens': 'cache_read', 'cache_write_input_tokens': 'cache_write',
+                  'reasoning_output_tokens': 'reasoning'},
         'pi': {'input': 'input_uncached', 'output': 'output', 'cacheRead': 'cache_read',
                'cacheWrite': 'cache_write'},
         'dsh': {'inputTokens': 'input_uncached', 'outputTokens': 'output', 'cacheReadTokens': 'cache_read',

@@ -324,3 +324,25 @@ def test_self_query_is_registered_for_authenticated_runtime_hosts(tmp_path: Path
     for identity in ('unknown-native-thread', NativeCaller('research@x1', {'runtime': 'codex'})):
         with runtime_caller(runner, identity), pytest.raises(RunnerError):
             query(tmp_path, alias='research@x1')
+
+
+def test_codex_cache_writes_and_counter_replay_across_turns(tmp_path: Path) -> None:
+    """Actual cache-write telemetry survives; a repeated lifetime counter is one fact."""
+    raw = {'input_tokens': 1000, 'cached_input_tokens': 600,
+           'cache_write_input_tokens': 100, 'output_tokens': 200,
+           'reasoning_output_tokens': 150}
+    count = {'type': 'event_msg', 'payload': {'type': 'token_count',
+             'info': {'last_token_usage': raw, 'total_token_usage': raw}}}
+    prepare(tmp_path, 'codex', [
+        {'type': 'turn_context', 'payload': {'model': 'gpt-6-astra', 'turn_id': 'one'}},
+        count,
+        {'type': 'turn_context', 'payload': {'model': 'gpt-6-astra', 'turn_id': 'two'}},
+        count,
+    ])
+    facts = [event['usage'] for event in query(tmp_path, alias='research@x1')['events']
+             if event['kind'] == 'usage']
+    assert facts[0]['tokens'] == {
+        'input': 1000, 'cache_read': 600, 'cache_write': 100,
+        'output': 200, 'reasoning': 150,
+    }
+    assert facts[0]['identity'] == facts[1]['identity']

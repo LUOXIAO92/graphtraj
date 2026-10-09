@@ -3,6 +3,7 @@ import { Button, Card, Description, Form, Input, Label, TextArea, TextField } fr
 import type { RoleFields, Settings } from '../electron/types';
 import { fieldLabels as labels, ownRole, roleChanges, roleName } from './settings-draft';
 import './settings.css';
+import { PriceInformation } from './UsageDashboard';
 
 /** Edit a project-local draft; only the native save entry can persist it. */
 export function SettingsView({ projectId }: { projectId: string }) {
@@ -74,6 +75,7 @@ export function SettingsView({ projectId }: { projectId: string }) {
   }
   return <Form className="settings" aria-label="Project settings" onSubmit={event => { event.preventDefault(); if (!busy && changes.length) void save(); }}>
     <header><h1>Settings</h1><p>{saved?.effect ?? 'Edit existing project roles and connections through native authorization.'}</p></header>
+    <PriceInformation />
     {error && <div className="error" role="alert">{error}<p>Your draft is retained. Reload to resolve an external change.</p></div>}
     <div role="status">{busy ? 'Waiting for native settings / approval…' : message}</div>
     <div className="settings-actions">

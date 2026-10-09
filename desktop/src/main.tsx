@@ -9,6 +9,7 @@ import type { DesktopAPI, Observation, Preferences, Ticket } from '../electron/t
 import { layout } from './layout';
 import { ActivityView } from './Activity';
 import { SettingsView } from './Settings';
+import { UsageView } from './UsageDashboard';
 import '@xyflow/react/dist/style.css';
 import './style.css';
 
@@ -150,7 +151,7 @@ function GraphView({ projectId }: { projectId: string }) {
 }
 
 function App() {
-  const [view, setView] = useState<'graph' | 'settings'>('graph');
+  const [view, setView] = useState<'graph' | 'settings' | 'usage'>('graph');
   const [preferences, setPreferences] = useState<Preferences | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -185,9 +186,11 @@ function App() {
     <main>{error && <div className="error" role="alert">{error}</div>}
       {preferences?.selected && <nav className="workspace-nav" aria-label="Project views">
         <Button variant={view === 'graph' ? 'primary' : 'secondary'} onPress={() => setView('graph')}>Task graph</Button>
+        <Button variant={view === 'usage' ? 'primary' : 'secondary'} onPress={() => setView('usage')}>Usage</Button>
         <Button variant={view === 'settings' ? 'primary' : 'secondary'} onPress={() => setView('settings')}>Settings</Button>
       </nav>}
-      {preferences?.selected && view === 'settings' ? <SettingsView key={preferences.selected} projectId={preferences.selected} /> :
+      {preferences?.selected && view === 'usage' ? <UsageView key={preferences.selected} projectId={preferences.selected} /> :
+      preferences?.selected && view === 'settings' ? <SettingsView key={preferences.selected} projectId={preferences.selected} /> :
       preferences?.selected ? <ReactFlowProvider key={preferences.selected}>
         <GraphView projectId={preferences.selected} />
       </ReactFlowProvider> : <div className="welcome"><p className="eyebrow">Optional desktop companion</p>

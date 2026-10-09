@@ -36,7 +36,7 @@ def project(record: dict, context: dict) -> list[dict]:
         # A changed counter identifies a usage observation; identical replayed
         # counters must never be charged twice. Do not invent a provider ID.
         total = info.get('total_token_usage')
-        observation = fingerprint([context.get('turn_id'), total]) if total else None
+        observation = fingerprint(total) if total else None
         usage = usage_fact(raw, 'codex', f'counter:{observation}' if observation else None, 'snapshot')
         usage.update(cumulative=total, observation_id=observation,
                      identity_basis='native-cumulative-counter',

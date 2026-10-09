@@ -43,6 +43,7 @@ test('one native window observes its real executing Agent', { timeout: 240000, s
   const liveMarker = '262-live-' + token;
   const pausedMarker = '262-paused-' + token;
   let app;
+  let page;
   let exit = null;
   let stderr = '';
   const facts = { project, ticket, alias: member.alias, launches: 0, steps: [] };
@@ -54,7 +55,35 @@ test('one native window observes its real executing Agent', { timeout: 240000, s
     facts.launches += 1;
     app.process().stderr?.on('data', chunk => { stderr = (stderr + chunk.toString()).slice(-32768); });
     app.process().on('exit', (code, signal) => { exit = { code, signal }; });
-    const page = await app.firstWindow();
+    // Observe the real reader without changing requests, promises, or responses.
+    await app.evaluate(async ({ app }, { alias, markers }) => {
+      const { createRequire } = await import('node:module');
+      const { createHash } = await import('node:crypto');
+      const require = createRequire(app.getAppPath() + '/package.json');
+      const { ActivityReader } = require('./dist-electron/activity.js');
+      const original = ActivityReader.prototype.read;
+      const entries = [];
+      const hash = value => value == null ? null : createHash('sha256').update(String(value)).digest('hex').slice(0, 16);
+      const record = value => { entries.push({ at: new Date().toISOString(), ...value }); if (entries.length > 500) entries.shift(); };
+      globalThis.activityLiveDiagnostics = entries;
+      ActivityReader.prototype.read = function(root, request) {
+        const id = entries.length + ':' + Date.now();
+        record({ stage: 'request', id, ownAlias: request.alias === alias, hasAlias: Boolean(request.alias), cursor: hash(request.cursor) });
+        const promise = original.call(this, root, request);
+        void promise.then(value => {
+          const events = value.events || [];
+          record({ stage: 'response', id, scopeSelf: value.scope === 'self', cursor: hash(value.cursor),
+            hasMore: value.has_more, waiting: value.waiting_for_record,
+            availability: ['available', 'cursor-expired', 'trace-changed', 'unavailable'].includes(value.availability) ? value.availability : 'other',
+            count: events.length, ids: events.map(event => hash(event.id)),
+            markers: markers.map(marker => ({ marker, matches: events.filter(event => JSON.stringify(event).includes(marker)).map(event => ({
+              id: hash(event.id), result: event.phase === 'result', call: event.phase === 'call', tool: event.kind === 'tool',
+            })) })) });
+        }, () => record({ stage: 'error', id, error: 'Native activity read rejected' }));
+        return promise;
+      };
+    }, { alias: member.alias, markers: [liveMarker, pausedMarker] });
+    page = await app.firstWindow();
     page.setDefaultTimeout(15000);
     await page.getByRole('searchbox').fill(ticket);
     await page.getByRole('button', { name: new RegExp('^#' + ticket + ' ') }).click();
@@ -88,7 +117,39 @@ test('one native window observes its real executing Agent', { timeout: 240000, s
     facts.failure = String(error);
     throw error;
   } finally {
-    if (app) await app.close();
+    // Capture both success and failure before owned close. Never dump event text.
+    const diagnostics = { at: new Date().toISOString(), markers: [liveMarker, pausedMarker] };
+    try {
+      if (app) diagnostics.reads = await app.evaluate(() => globalThis.activityLiveDiagnostics || []);
+    } catch { diagnostics.readError = 'Reader diagnostics unavailable'; }
+    try {
+      if (page) diagnostics.dom = await page.evaluate(markers => {
+        const cards = [...document.querySelectorAll('.activity-event')];
+        const text = node => node.textContent || '';
+        const activity = document.querySelector('.activity');
+        return {
+          at: new Date().toISOString(), cardCount: cards.length,
+          follow: [...document.querySelectorAll('.activity-controls button')].map(text).filter(value => /^(Pause following|Follow new messages)/.test(value)),
+          pageCount: (activity?.textContent || '').match(/\d+ events loaded/)?.[0] || null,
+          errors: [...(activity?.querySelectorAll('[role="alert"]') || [])].map(node => ({
+            disconnected: /disconnected|access refused/i.test(text(node)), replay: /replaying/i.test(text(node)),
+            length: text(node).length,
+          })),
+          markers: markers.map(marker => ({ marker, anywhere: document.body.textContent.includes(marker),
+            cards: cards.filter(node => text(node).includes(marker)).map(node => ({
+              visible: Boolean(node.getClientRects().length) && getComputedStyle(node).visibility !== 'hidden',
+              result: text(node).includes('· result'), call: text(node).includes('· call'),
+              diagnostic: text(node).includes('diagnostic'), expanded: Boolean(node.querySelector('details[open]')),
+              markerOccurrences: text(node).split(marker).length - 1,
+            })),
+          })),
+        };
+      }, [liveMarker, pausedMarker]);
+    } catch { diagnostics.domError = 'DOM diagnostics unavailable'; }
+    try { await fs.writeFile(path.join(evidence, 'diagnostics.json'), JSON.stringify(diagnostics, null, 2)); }
+    catch { console.error('DIAGNOSTICS_WRITE_FAILED'); }
+    try { if (app) await app.close(); }
+    catch { facts.closeError = 'Owned app close rejected'; }
     facts.exit = exit;
     await fs.writeFile(path.join(evidence, 'stderr.log'), stderr);
     await fs.writeFile(path.join(evidence, 'result.json'), JSON.stringify(facts, null, 2));

@@ -97,12 +97,18 @@ def is_bound_checker(runner: Path, connection: dict) -> bool:
 def owns_native_root(runner: Path, connection: dict) -> bool:
     """Verify an existing root's exact native owner, independent of Stop setup."""
     from graphtraj.execution.runner_models import RunnerError
-    from graphtraj.execution.runner_status import NativeCaller, is_direct_owner, read_alias_mapping
+    from graphtraj.execution.runner_status import (
+        NativeCaller, is_direct_owner, read_alias_mapping, retained_session_directories,
+    )
 
     caller = NativeCaller(connection['session'], connection)
-    for directory in (runner / 'sessions').glob('*'):
+    aliases = {directory.name for directory in (runner / 'sessions').glob('*')}
+    # Cleanup retains the exact parent connection with the retired Session.
+    # Ending its last child does not revoke an established native Main owner.
+    aliases.update(directory.parent.name for directory in retained_session_directories(runner))
+    for alias in aliases:
         try:
-            mapping, _ = read_alias_mapping(runner, directory.name)
+            mapping, _ = read_alias_mapping(runner, alias)
         except RunnerError:
             # Unrelated withdrawn records do not establish current ownership.
             continue

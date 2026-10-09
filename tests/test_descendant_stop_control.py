@@ -98,6 +98,7 @@ def test_native_root_owner_outlives_historical_checker_membership(
     from graphtraj.execution.runner_batch import parse_batch
     from graphtraj.execution.runner_connection import parent_connection
     from graphtraj.execution.runner_launch import launch_batch
+    from graphtraj.execution.runner_models import RunnerError
     from graphtraj.interfaces.local_tool import bind
     from graphtraj.runtimes import runtime_adapter
     from graphtraj.runtimes.codex import finalize
@@ -110,7 +111,9 @@ def test_native_root_owner_outlives_historical_checker_membership(
     monkeypatch.setenv('CODEX_HOME', str(root))
     connection = {'runtime': 'codex', 'session': 'main', 'codex_home': str(root)}
     with parent_connection(connection):
-        target = launch_batch(parse_batch(launch_document()), root).document['tasks'][0]['alias']
+        launched = launch_batch(parse_batch(launch_document()), root).document
+        assert 'alias' in launched['tasks'][0], json.dumps(launched)
+        target = launched['tasks'][0]['alias']
     original = mapping(root, target)
     historical = main_finalize.bind_checker(
         root / '.graphtraj/runner/main-sessions/old-owner/session.yml',
@@ -156,6 +159,42 @@ def test_native_root_owner_outlives_historical_checker_membership(
     assert 'completed' in result['systemMessage'] and 'decision' not in result
     assert historical.read_bytes() == retained
     assert mapping(root, target) == original
+
+    # Use public retirement, which is also the last-child cleanup path. The
+    # owning Main must still organize roles and dispatch after the active
+    # mapping has moved into the Ticket's retained Trace.
+    stopped = tool({'action': 'execute', 'feature': 'interrupt',
+                    'arguments': {'alias': target}})
+    assert not stopped.failed, stopped.document
+    retired = tool({'action': 'execute', 'feature': 'retire',
+                    'arguments': {'alias': target}})
+    assert not retired.failed, retired.document
+    assert not list((root / '.graphtraj/runner/sessions').glob('*/mapping.yml'))
+    retained_mapping = Path(original['trace_file']).parent / 'runner/session.yml'
+    assert yaml.safe_load(retained_mapping.read_text())['retirement']['mapping'] == original
+    tool = bind(root, recovery_reviewer=lambda proposal: {'decision': 'accept'})
+    role_change = {'change': {'set_presets': {
+        'next-probe': {'runtime': 'codex', 'model': 'gpt-5.6'},
+    }}}
+    before_roles = (root / '.graphtraj/roles.yml').read_bytes()
+    for source in ('unknown', {'subAgent': {'threadSpawn': {'parentThreadId': 'parent'}}}):
+        (root / 'options.json').write_text(json.dumps({'source': source}))
+        with pytest.raises(RunnerError):
+            tool({'action': 'execute', 'feature': 'role_organization',
+                  'arguments': role_change})
+        assert (root / '.graphtraj/roles.yml').read_bytes() == before_roles
+    (root / 'options.json').write_text(json.dumps({'source': 'vscode'}))
+    organized = tool({'action': 'execute', 'feature': 'role_organization',
+                      'arguments': role_change})
+    assert not organized.failed and organized.document['applied'], organized.document
+    with parent_connection(connection):
+        dispatched = tool({'action': 'execute', 'feature': 'swarm',
+                           'arguments': launch_document(role='other-probe')})
+    assert not dispatched.failed, dispatched.document
+    next_task = dispatched.document['tasks'][0]
+    assert 'alias' in next_task, dispatched.document
+    assert mapping(root, next_task['alias'])['parent_connection'] == connection
+    assert historical.read_bytes() == retained
 
     # A real fork has no root owning connection even though its source is root-like.
     rollout(root, session='checker')

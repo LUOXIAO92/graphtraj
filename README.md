@@ -130,9 +130,12 @@ The execution host needs access to the chosen Runtime executable, credentials,
 project files and subprocess sandbox. Role permissions do not replace the
 Runtime's filesystem restrictions.
 
-On macOS, a Pi role can use `pi.allow_mach_lookup` to name the exact Mach
-services available to that Runtime and its subprocesses. Wildcards are not
-accepted. By default no extra services are allowed; filesystem rules stay in place.
+On macOS, `pi.allow_mach_lookup` and `pi.allow_mach_register` separately allow
+service lookup and registration when supported by the sandbox runtime. Entries
+can be exact names or narrowly scoped trailing-`*` prefixes. The optional
+`pi.allow_local_binding` can allow binding and inbound connections on all local
+interfaces and ports. These grants apply to the Pi Runtime and its subprocesses;
+they are off by default and do not change filesystem rules.
 
 For custom hosts, [the local tool binding](src/graphtraj/interfaces/local_tool.py)
 provides a Python callback and the `graphtraj-tool` JSON-lines process interface.

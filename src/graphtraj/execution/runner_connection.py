@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import ctypes
-import fcntl
 import os
 import stat
 import sys
@@ -15,6 +14,9 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from pathlib import Path
 from typing import Callable, Iterator
+
+if os.name != 'nt':
+    import fcntl
 
 from graphtraj.execution.runner_models import RunnerError
 from graphtraj.execution.runner_process import OPERATION_TIMEOUT_SECONDS
@@ -53,6 +55,8 @@ def worker_connection(
     authenticate: Callable[[int], None] | None = None,
 ) -> Iterator[str]:
     """Serve local requests without requiring a listening network/socket permission."""
+    if os.name == 'nt':
+        raise RunnerError('authority-denied', 'Windows does not support the authenticated Runner control pipe.')
     stop = threading.Event()
     with tempfile.TemporaryDirectory(prefix='control-', dir=directory) as address:
         def serve() -> None:
@@ -143,6 +147,9 @@ def connection_operation(
             return select_runtime_adapter(address['runtime']).send_host_event(address, document)
         except RuntimeAdapterError as error:
             raise RunnerError(error.code, error.message) from error
+
+    if os.name == 'nt':
+        raise RunnerError('authority-denied', 'Windows does not support the authenticated Runner control pipe.')
 
     try:
         with tempfile.TemporaryDirectory(dir=address) as directory:

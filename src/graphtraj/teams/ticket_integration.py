@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import fcntl
 import subprocess
 from pathlib import Path
 from typing import TextIO
 
 import yaml
 
+from graphtraj import file_lock
 from graphtraj.execution.runner_models import Batch
 from graphtraj.execution.runner_status import caller_alias, read_alias_mapping, require_task_authority
 from graphtraj.graph.delivery_worldline import append_project_worldline_event, read_worldline
@@ -42,7 +42,7 @@ def integrate_ticket(
         raise ValueError("Integration requires a non-empty validation command argv")
     with (configuration.harness_root / ".graphtraj/integration.lock").open("a") as lock:
         try:
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            file_lock.flock(lock, file_lock.LOCK_EX | file_lock.LOCK_NB)
         except BlockingIOError as error:
             raise ValueError("Another integration is in progress") from error
         return _integrate(configuration, ticket_id, validation_command, diagnosis, role, confirmed_commit)

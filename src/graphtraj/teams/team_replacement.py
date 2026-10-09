@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import fcntl
 
 import yaml
 from dataclasses import replace
 from pathlib import Path
 
+from graphtraj import file_lock
 from graphtraj.configuration.project_roles import configured_role_name
 from graphtraj.execution.runner_batch import read_session_task
 from graphtraj.execution.runner_control import _require_project_events, _session_report_paths
@@ -78,7 +78,7 @@ def _replace_stopped_session(
     if not caused_by_event_ids or len(caused_by_event_ids) != len(set(caused_by_event_ids)):
         raise RunnerError("invalid-input", "Replacement requires unique causal Project Worldline event IDs.")
     with (directory / "launch.yml").open("rb") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
+        file_lock.flock(lock, file_lock.LOCK_EX)
         return _replace_member(alias, caused_by_event_ids, cwd)
 
 

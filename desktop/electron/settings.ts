@@ -1,3 +1,4 @@
+import { nativeCommand } from './native.ts';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import type { RoleFields, Settings, SettingsDraft } from './types';
@@ -26,11 +27,12 @@ export function reviewText(review: SettingsReview): string {
 export class SettingsClient {
   private children = new Set<ChildProcess>();
   constructor(private review: (proposal: SettingsReview) => Promise<boolean>,
-    private executable = process.env.GRAPHTRAJ_TOOL || 'graphtraj-tool') {}
+    private executable?: string) {}
 
   request(root: string, draft?: SettingsDraft): Promise<Settings> {
     return new Promise((resolve, reject) => {
-      const child = spawn(this.executable, ['--desktop-settings'], {
+      const command = nativeCommand(this.executable);
+      const child = spawn(command.executable, [...command.args, '--desktop-settings'], {
         cwd: root, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'],
       });
       this.children.add(child);

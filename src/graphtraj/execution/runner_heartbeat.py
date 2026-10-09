@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import fcntl
 import os
 import time
 from pathlib import Path
@@ -10,6 +9,7 @@ from typing import IO, Any
 
 import yaml
 
+from graphtraj import file_lock
 from graphtraj.execution.runner_io import write_yaml_durably
 
 
@@ -32,7 +32,7 @@ def execution_start_lock(runner_directory: Path) -> IO[bytes]:
     # throughput becomes a measured problem. Running Turns never hold this.
     runner_directory.mkdir(parents=True, exist_ok=True)
     stream = (runner_directory / "execution-start.lock").open("a+b")
-    fcntl.flock(stream, fcntl.LOCK_EX)
+    file_lock.flock(stream, file_lock.LOCK_EX)
     return stream
 
 
@@ -81,7 +81,7 @@ def hold_ownership(directory: Path, pid: int) -> IO[bytes]:
     reused later cannot present an earlier owner's lock.
     """
     stream = _lock_path(directory, pid).open("a+b")
-    fcntl.flock(stream.fileno(), fcntl.LOCK_EX)
+    file_lock.flock(stream.fileno(), file_lock.LOCK_EX)
     return stream
 
 
@@ -98,7 +98,7 @@ def ownership_is_held(directory: Path, pid: int) -> bool:
     try:
         # A shared attempt fails while any owner holds the lock and never
         # blocks an owner that is starting.
-        fcntl.flock(descriptor, fcntl.LOCK_SH | fcntl.LOCK_NB)
+        file_lock.flock(descriptor, file_lock.LOCK_SH | file_lock.LOCK_NB)
     except OSError:
         return True
     finally:

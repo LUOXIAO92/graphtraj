@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import fcntl
 import os
 from contextlib import contextmanager
 from typing import Iterator, BinaryIO
 
+from graphtraj import file_lock
 from graphtraj.configuration.project_configuration import ProjectConfiguration
 from graphtraj.execution.runner_models import Project, RunnerError
 
@@ -27,7 +27,7 @@ def capacity_positions(
                 break
             stream = (directory / str(index)).open("a+b")
             try:
-                fcntl.flock(stream, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                file_lock.flock(stream, file_lock.LOCK_EX | file_lock.LOCK_NB)
             except BlockingIOError:
                 stream.close()
             else:

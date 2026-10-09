@@ -1,3 +1,4 @@
+import { nativeCommand } from './native.ts';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { createInterface } from 'node:readline';
 
@@ -26,13 +27,14 @@ export class ActivityReader {
     child: ChildProcessWithoutNullStreams;
     queue: { resolve: (value: Activity) => void; reject: (error: Error) => void }[];
   }>();
-  private executable: string;
-  constructor(executable = process.env.GRAPHTRAJ_TOOL || 'graphtraj-tool') { this.executable = executable; }
+  private executable: string | undefined;
+  constructor(executable?: string) { this.executable = executable; }
 
   read(root: string, request: ActivityRequest): Promise<Activity> {
     let process = this.processes.get(root);
     if (!process) {
-      const child = spawn(this.executable, ['--desktop-observer', '--allowed-features', 'desktop_activity'], {
+      const command = nativeCommand(this.executable);
+      const child = spawn(command.executable, [...command.args, '--desktop-observer', '--allowed-features', 'desktop_activity'], {
         cwd: root, windowsHide: true, stdio: 'pipe',
       });
       process = { child, queue: [] };

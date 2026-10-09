@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import fcntl
 import json
 import os
 import signal
@@ -16,6 +15,7 @@ from typing import Any
 
 import yaml
 
+from graphtraj import file_lock
 from graphtraj.workspace.project_files import ignore_worktree_documents
 from graphtraj.execution.execution_budget import (
     caller_notice_fd,
@@ -521,7 +521,7 @@ def _run_registered_children(
     # turns. Those Workers must not become a second Driver for this Session.
     with (directory / "children.lock").open("a+b") as driver:
         try:
-            fcntl.flock(driver, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            file_lock.flock(driver, file_lock.LOCK_EX | file_lock.LOCK_NB)
         except BlockingIOError:
             return
         while registration.exists():
@@ -538,7 +538,7 @@ def _run_registered_children(
             # the parent consumes results and finishes any further registration.
             while True:
                 with (directory / "launch.yml").open("rb") as lock:
-                    fcntl.flock(lock, fcntl.LOCK_EX)
+                    file_lock.flock(lock, file_lock.LOCK_EX)
                     mapping, _ = read_alias_mapping(project.runner_directory, alias)
                     if (directory / "execution.yml").is_file():
                         outcome = read_terminal_outcome(directory / "execution.yml")

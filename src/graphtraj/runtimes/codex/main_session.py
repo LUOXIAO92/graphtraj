@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import copy
-import fcntl
 import json
 import re
 import uuid
@@ -12,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Awaitable, Callable
 
+from graphtraj import file_lock
 from graphtraj.configuration.project_configuration import load_project_configuration
 from graphtraj.execution.runner_models import RunnerError
 from graphtraj.execution.runner_status import caller_alias
@@ -70,7 +70,7 @@ async def run_main(
     # Same-Session continuation cannot create a second active Main driver.
     with (record / 'launch.yml').open('a+b') as ownership:
         try:
-            fcntl.flock(ownership, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            file_lock.flock(ownership, file_lock.LOCK_EX | file_lock.LOCK_NB)
         except BlockingIOError as error:
             raise RunnerError('turn-running', 'This Main Session is already executing.') from error
         native_session: str | None = None

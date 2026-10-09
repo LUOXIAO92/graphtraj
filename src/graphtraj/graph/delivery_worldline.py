@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-import fcntl
 import json
 import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Mapping
+
+from graphtraj import file_lock
 
 
 _SHARD_SIZE = 200
@@ -50,7 +51,7 @@ def append_project_worldline_event(
         str(worldline_directory / ".lock"), os.O_RDWR | os.O_CREAT, 0o600
     )
     try:
-        fcntl.flock(lock_descriptor, fcntl.LOCK_EX)
+        file_lock.flock(lock_descriptor, file_lock.LOCK_EX)
         shards, existing = _read_shards(state_directory)
         _validate_causes(event, existing)
         captured = _capture_time()
@@ -92,7 +93,7 @@ def append_project_worldline_event(
             raise
         return recorded
     finally:
-        fcntl.flock(lock_descriptor, fcntl.LOCK_UN)
+        file_lock.flock(lock_descriptor, file_lock.LOCK_UN)
         os.close(lock_descriptor)
 
 
@@ -109,10 +110,10 @@ def read_worldline(
         str(worldline_directory / ".lock"), os.O_RDWR | os.O_CREAT, 0o600
     )
     try:
-        fcntl.flock(lock_descriptor, fcntl.LOCK_SH)
+        file_lock.flock(lock_descriptor, file_lock.LOCK_SH)
         return _read_shards(state_directory)[1]
     finally:
-        fcntl.flock(lock_descriptor, fcntl.LOCK_UN)
+        file_lock.flock(lock_descriptor, file_lock.LOCK_UN)
         os.close(lock_descriptor)
 
 

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import fcntl
 import json
 import os
 import subprocess
@@ -16,6 +15,7 @@ from typing import Any, Dict, Mapping, Tuple
 
 import yaml
 
+from graphtraj import file_lock
 from graphtraj.runtimes import runtime_adapter
 from graphtraj.graph.delivery_worldline import read_worldline
 from graphtraj.execution.execution_budget import caller_notice_fd, execution_budget_monitor
@@ -405,7 +405,7 @@ def _send_session(
         raise _not_resumable()
     with launch_file.open("rb") as lock:
         try:
-            fcntl.flock(lock, fcntl.LOCK_EX | (fcntl.LOCK_NB if system_notice else 0))
+            file_lock.flock(lock, file_lock.LOCK_EX | (file_lock.LOCK_NB if system_notice else 0))
         except BlockingIOError as error:
             raise RunnerError(
                 "operation-failed", "The parent Session input lock is busy; retry this notice.",

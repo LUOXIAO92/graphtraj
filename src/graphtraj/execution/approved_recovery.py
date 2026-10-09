@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import copy
-import fcntl
 import hashlib
 import json
 import math
@@ -12,6 +11,7 @@ from typing import Any
 
 import yaml
 
+from graphtraj import file_lock
 from graphtraj.execution.runner_control import _require_project_events, _send_session_locked
 from graphtraj.execution.runner_heartbeat import execution_start_lock
 from graphtraj.execution.runner_io import write_yaml_durably
@@ -232,7 +232,7 @@ def _apply_recovery(proposal: dict, cwd: Path) -> dict:
         lock = _lock(project.state_directory / 'tickets', exclusive=True)
         try:
             with (paths['budget'].parent / '.execution-budget.lock').open('a+b') as budget_lock:
-                fcntl.flock(budget_lock, fcntl.LOCK_EX)
+                file_lock.flock(budget_lock, file_lock.LOCK_EX)
                 events = read_worldline(project.state_directory, project.harness_root)
                 applied = next((event for event in events if event['event'] == 'recovery-applied'
                                 and event.get('proposal_sha256') == digest), None)
@@ -303,7 +303,7 @@ def _resume(project: Any, applied: dict) -> dict:
     try:
         _, directory = read_alias_mapping(project.runner_directory, applied['alias'])
         with (directory / 'launch.yml').open('rb') as lock:
-            fcntl.flock(lock, fcntl.LOCK_EX)
+            file_lock.flock(lock, file_lock.LOCK_EX)
             return _resume_locked(project, applied, directory)
     except (RunnerError, runtime_adapter.RuntimeAdapterError, OSError, ValueError) as error:
         return {**result, 'error': {'code': getattr(error, 'code', 'operation-failed'), 'message': str(error)}}

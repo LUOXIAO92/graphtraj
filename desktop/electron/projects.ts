@@ -1,3 +1,4 @@
+import { nativeCommand } from './native.ts';
 import { ActivityReader, type ActivityRequest, type Activity } from './activity.ts';
 import { execFile, type ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -10,16 +11,17 @@ import type { Graph, Observation, Preferences, Project } from './types';
 export class GraphReader {
   private children = new Set<ChildProcess>();
   private closed = false;
-  private executable: string;
+  private executable: string | undefined;
 
-  constructor(executable = process.env.GRAPHTRAJ_TOOL || 'graphtraj-tool') {
+  constructor(executable?: string) {
     this.executable = executable;
   }
 
   async read(root: string): Promise<Graph> {
     if (this.closed) throw new Error('Desktop observer is closed.');
     return new Promise((resolve, reject) => {
-      const child = execFile(this.executable, ['--allowed-features', 'ticket_graph'], {
+      const command = nativeCommand(this.executable);
+      const child = execFile(command.executable, [...command.args, '--allowed-features', 'ticket_graph'], {
         cwd: root, timeout: 15000, maxBuffer: 16 * 1024 * 1024, windowsHide: true,
       }, (error, stdout) => {
         this.children.delete(child);

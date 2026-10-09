@@ -10,13 +10,13 @@ happens only when the file still holds the reviewed content.
 from __future__ import annotations
 
 import copy
-import fcntl
 import hashlib
 from pathlib import Path
 from typing import Any, Mapping
 
 import yaml
 
+from graphtraj import file_lock
 from graphtraj.configuration.project_roles import (
     ProjectRoles,
     ProjectRolesError,
@@ -84,7 +84,7 @@ def organize_child_roles(arguments: Mapping[str, Any], *, cwd: Path | None = Non
     # writer holding the replaced inode still rechecks the current path below.
     # External editors need not use our lock, so compare their bytes as well.
     with path.open("rb") as stream:
-        fcntl.flock(stream, fcntl.LOCK_EX)
+        file_lock.flock(stream, file_lock.LOCK_EX)
         if _read_text(path) != before_text:
             return {
                 "applied":     False,

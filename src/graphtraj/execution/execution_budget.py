@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import fcntl
 import json
 import math
 import os
@@ -17,6 +16,7 @@ from typing import Any, Callable, Iterator, Mapping
 
 import yaml
 
+from graphtraj import file_lock
 from graphtraj.configuration.project_roles import configured_role_name
 from graphtraj.execution.runner_io import write_yaml_durably
 from graphtraj.execution.runner_models import RunnerError
@@ -197,7 +197,7 @@ class ExecutionBudgetMonitor:
     def is_stopped(self) -> bool:
         lock_path = self.ticket_directory / ".execution-budget.lock"
         with lock_path.open("a+", encoding="utf-8") as lock:
-            fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+            file_lock.flock(lock.fileno(), file_lock.LOCK_EX)
             try:
                 budget = _current_budget(self.ticket_directory)
                 if budget is None:
@@ -209,14 +209,14 @@ class ExecutionBudgetMonitor:
                     )
                 return state["stopped"]
             finally:
-                fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+                file_lock.flock(lock.fileno(), file_lock.LOCK_UN)
 
     def continue_after_stop(self) -> None:
         """Clear one sampled stop while retaining the Ticket's accounting."""
 
         lock_path = self.ticket_directory / ".execution-budget.lock"
         with lock_path.open("a+", encoding="utf-8") as lock:
-            fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+            file_lock.flock(lock.fileno(), file_lock.LOCK_EX)
             try:
                 budget = _current_budget(self.ticket_directory)
                 if budget is None:
@@ -236,7 +236,7 @@ class ExecutionBudgetMonitor:
                     self.ticket_directory / "execution-budget.yml", state
                 )
             finally:
-                fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+                file_lock.flock(lock.fileno(), file_lock.LOCK_UN)
 
     def deliver_parent_notices(self, session_directory: Path) -> None:
         """Deliver once to the task's recorded parent, outside the budget lock.
@@ -280,7 +280,7 @@ class ExecutionBudgetMonitor:
     def _mark_channel_written(self, key: str) -> None:
         """Retain a caller-channel write without asserting native receipt."""
         with (self.ticket_directory / ".execution-budget.lock").open("a+") as lock:
-            fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+            file_lock.flock(lock.fileno(), file_lock.LOCK_EX)
             try:
                 budget = _current_budget(self.ticket_directory)
                 if budget is None:
@@ -291,7 +291,7 @@ class ExecutionBudgetMonitor:
                         notice["channel_written"] = True
                 write_yaml_durably(self.ticket_directory / "execution-budget.yml", state)
             finally:
-                fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+                file_lock.flock(lock.fileno(), file_lock.LOCK_UN)
 
     def deliver_notices(
         self, deliver: Callable[[list[dict[str, Any]]], list[str]]
@@ -301,7 +301,7 @@ class ExecutionBudgetMonitor:
         # Delivery may need that Session lock, so use a separate persistent lock.
         lock_path = self.ticket_directory / ".execution-budget-notices.lock"
         with lock_path.open("a+", encoding="utf-8") as lock:
-            fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+            file_lock.flock(lock.fileno(), file_lock.LOCK_EX)
             try:
                 pending = self.pending_parent_notices()
                 if not pending:
@@ -310,13 +310,13 @@ class ExecutionBudgetMonitor:
                 if received:
                     self.mark_parent_notices_delivered(received)
             finally:
-                fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+                file_lock.flock(lock.fileno(), file_lock.LOCK_UN)
 
     def pending_parent_notices(self) -> list[dict[str, Any]]:
         """Return retained notices without confirmed parent receipt."""
         lock_path = self.ticket_directory / ".execution-budget.lock"
         with lock_path.open("a+", encoding="utf-8") as lock:
-            fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+            file_lock.flock(lock.fileno(), file_lock.LOCK_EX)
             try:
                 budget = _current_budget(self.ticket_directory)
                 if budget is None:
@@ -328,13 +328,13 @@ class ExecutionBudgetMonitor:
                     if not notice["delivered"]
                 ]
             finally:
-                fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+                file_lock.flock(lock.fileno(), file_lock.LOCK_UN)
 
     def mark_parent_notices_delivered(self, keys: list[str]) -> None:
         """Record only keys acknowledged by the bound parent transport."""
         lock_path = self.ticket_directory / ".execution-budget.lock"
         with lock_path.open("a+", encoding="utf-8") as lock:
-            fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+            file_lock.flock(lock.fileno(), file_lock.LOCK_EX)
             try:
                 budget = _current_budget(self.ticket_directory)
                 if budget is None:
@@ -347,7 +347,7 @@ class ExecutionBudgetMonitor:
                     self.ticket_directory / "execution-budget.yml", state
                 )
             finally:
-                fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+                file_lock.flock(lock.fileno(), file_lock.LOCK_UN)
 
     def _observe(
         self,
@@ -360,7 +360,7 @@ class ExecutionBudgetMonitor:
         notices = []
         lock_path = self.ticket_directory / ".execution-budget.lock"
         with lock_path.open("a+", encoding="utf-8") as lock:
-            fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+            file_lock.flock(lock.fileno(), file_lock.LOCK_EX)
             try:
                 try:
                     budget = _current_budget(self.ticket_directory)
@@ -412,7 +412,7 @@ class ExecutionBudgetMonitor:
                         self.ticket_directory / "execution-budget.yml", state
                     )
             finally:
-                fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+                file_lock.flock(lock.fileno(), file_lock.LOCK_UN)
         return state["stopped"]
 
 

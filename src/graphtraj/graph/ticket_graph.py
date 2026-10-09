@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import fcntl
 import os
 import re
 import shutil
@@ -11,6 +10,7 @@ from typing import Any
 
 import yaml
 
+from graphtraj import file_lock
 from graphtraj.graph.delivery_worldline import append_project_worldline_event
 from graphtraj.execution.execution_budget import (
     ExecutionBudgetError,
@@ -712,10 +712,10 @@ def _remove_ticket_directory(directory: Path) -> None:
 
 def _lock(tickets: Path, *, exclusive: bool) -> int:
     descriptor = os.open(str(tickets / ".lock"), os.O_RDWR | os.O_CREAT, 0o600)
-    fcntl.flock(descriptor, fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH)
+    file_lock.flock(descriptor, file_lock.LOCK_EX if exclusive else file_lock.LOCK_SH)
     return descriptor
 
 
 def _unlock(descriptor: int) -> None:
-    fcntl.flock(descriptor, fcntl.LOCK_UN)
+    file_lock.flock(descriptor, file_lock.LOCK_UN)
     os.close(descriptor)

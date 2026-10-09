@@ -16,13 +16,21 @@ const executablePath = process.env.ADOPTION_EXECUTABLE || '/usr/bin/graphtraj-de
 const installedRoot = process.env.ADOPTION_INSTALL_ROOT || '/opt/graphtraj-desktop';
 process.env.GRAPHTRAJ_TOOL = path.join(installedRoot, 'python/bin/graphtraj-tool');
 const exec = promisify(execFile);
-const facts = { passed: false, platform: process.platform, release: os.release(),
+const facts = { uiPassed: false, platform: process.platform, release: os.release(),
   executablePath, installedRoot, steps: [], unresolved: [], controlledData: true,
   modelExecution: false };
 await fs.mkdir(evidence, { recursive: true });
 let app;
 let page;
 const userData = path.join(root, 'preferences');
+
+/** Compare the public Session identity after each GUI lifecycle boundary. */
+function runningTask(project) {
+  const status = fixtures.operate(project, 'alias_status', { aliases: [process.env.ADOPTION_AGENT_ALIAS] });
+  const task = status.aliases[0];
+  assert.equal(task.activity, 'running', 'The controlled Runner task must remain active');
+  return { session: task.session, execution_id: task.execution_id };
+}
 
 /** Capture the X server, including native dialogs outside the renderer. */
 async function screenshot(name) {
@@ -77,14 +85,14 @@ async function save(model, approve, name) {
 }
 
 try {
+  assert.ok(process.env.ADOPTION_ACTIVITY_PROJECT && process.env.ADOPTION_AGENT_ALIAS && process.env.ADOPTION_TICKET_ID,
+    'Launch via tests/linux_adoption_input.py to create controlled records through public Runner');
   facts.source = JSON.parse(await fs.readFile(path.join(installedRoot, 'source.json'), 'utf8'));
   if (process.env.GITHUB_SHA) assert.equal(facts.source.source, process.env.GITHUB_SHA);
   facts.python = execFileSync(path.join(installedRoot, 'python/bin/python'), ['--version'], { encoding: 'utf8' }).trim();
   facts.systemPackages = execFileSync('dpkg-query', ['-W', 'graphtraj-desktop', 'python3', 'python3-venv',
     'xvfb', 'xdotool', 'openbox', 'libgtk-3-0t64'], { encoding: 'utf8' });
-  const first = process.env.ADOPTION_ACTIVITY_PROJECT
-    ? await fs.realpath(process.env.ADOPTION_ACTIVITY_PROJECT)
-    : await fixtures.makeProject(path.join(root, 'first'), 'linux-first');
+  const first = await fs.realpath(process.env.ADOPTION_ACTIVITY_PROJECT);
   const second = await fixtures.makeProject(path.join(root, 'second'), 'linux-second');
   const roles = path.join(second, '.graphtraj/roles.yml');
   // Only disposable project configuration, never private Runner state.
@@ -92,6 +100,8 @@ try {
   const original = await fs.readFile(roles);
   const firstRoles = await fs.readFile(path.join(first, '.graphtraj/roles.yml'));
   const graphBefore = fixtures.operate(first, 'ticket_graph');
+  const runningBefore = runningTask(first);
+  facts.controlledExecution = runningBefore;
   assert.ok(graphBefore.tickets.length, 'Activity project needs at least one Ticket');
   await launch();
   await pick(first, 'first');
@@ -131,37 +141,54 @@ try {
   await app.close();
   app = null;
   assert.deepEqual(fixtures.operate(first, 'ticket_graph'), graphBefore);
+  assert.deepEqual(runningTask(first), runningBefore);
   await launch();
   await page.locator('.project-button.current').filter({ hasText: first }).waitFor();
   assert.equal(await page.locator('.project-button').count(), 2);
-  const ticketId = process.env.ADOPTION_TICKET_ID || graphBefore.tickets[0].ticket_id;
+  const ticketId = process.env.ADOPTION_TICKET_ID;
   await page.locator('.react-flow__node').filter({ hasText: `#${ticketId}` }).first().click();
   await page.getByRole('complementary', { name: 'Ticket details' }).waitFor();
-  if (process.env.ADOPTION_ACTIVITY_PROJECT) {
-    assert.ok(process.env.ADOPTION_AGENT_ALIAS, 'Specify the controlled activity Agent');
+  {
     const activity = await page.evaluate(async ({ ticketId, alias }) => {
       const { selected } = await window.graphtraj.projects();
       return window.graphtraj.activity(selected, { ticket_id: ticketId, alias });
     }, { ticketId, alias: process.env.ADOPTION_AGENT_ALIAS });
-    const message = activity.events?.find(event => event.kind === 'message' && event.text);
+    const message = activity.events?.find(event => event.kind === 'message' && event.text === 'GraphTraj GUI controlled message');
     const tool = activity.events?.find(event => event.kind === 'tool' && event.name);
     assert.ok(message && tool, 'Controlled input needs readable message and named tool records in its first page');
+    const usage = activity.events.find(event => event.kind === 'usage').usage;
+    assert.deepEqual(usage.tokens, { input: 1000, cache_read: 600, output: 80, reasoning: 20 });
     await page.getByRole('button', { name: process.env.ADOPTION_AGENT_ALIAS, exact: true }).click();
-    await page.locator('.activity-event').filter({ hasText: message.text }).first().waitFor();
+    const messageCard = page.locator('.activity-event').filter({ hasText: message.text });
+    await messageCard.getByRole('button', { name: 'Copy', exact: true }).click();
+    assert.equal(await app.evaluate(({ clipboard }) => clipboard.readText()), message.text);
     const toolCard = page.locator('.activity-event').filter({ hasText: tool.name }).first();
     await toolCard.locator('details summary').click();
-    facts.steps.push('Installed observer projects a retained message and tool into readable Chat');
+    assert.match(await toolCard.locator('pre').innerText(), /echo controlled tool output/);
+    const resultCard = page.locator('.activity-event').filter({ hasText: 'controlled tool output' })
+      .filter({ has: page.locator('summary', { hasText: 'Result / details' }) });
+    await resultCard.locator('summary').click();
+    assert.equal(await resultCard.locator('pre').innerText(), 'controlled tool output');
+    await resultCard.getByRole('button', { name: 'Copy', exact: true }).click();
+    assert.equal(await app.evaluate(({ clipboard }) => clipboard.readText()), 'controlled tool output');
+    facts.steps.push('Controlled message and tool command/result rendered; expansion and real clipboard copy verified');
     await screenshot('chat-message-and-tool');
-  } else facts.unresolved.push('Nonempty Chat: requires publishable controlled activity project prepared through public Runner operations');
+  }
   await page.getByRole('button', { name: 'Usage', exact: true }).click();
   await page.locator('.usage-dashboard').waitFor();
-  if (process.env.ADOPTION_ACTIVITY_PROJECT) {
-    await page.getByRole('table').filter({ has: page.locator('caption', { hasText: 'Model breakdown' }) })
-      .locator('tbody tr').first().waitFor();
-  } else facts.unresolved.push('Nonempty Dashboard: requires attributable retained usage in controlled activity project');
+  const modelRow = page.getByRole('table').filter({ has: page.locator('caption', { hasText: 'Model breakdown' }) })
+    .locator('tbody tr').filter({ hasText: 'gpt-5.3-codex' });
+  await modelRow.waitFor();
+  const cells = await modelRow.locator('td').evaluateAll(cells => cells.map(cell => cell.firstChild.textContent));
+  const input = await page.evaluate(() => (1000).toLocaleString());
+  assert.deepEqual(cells, ['1', input, '80', '600', 'Unknown', '60%', '$0.001925', '0']);
+  facts.steps.push('Controlled usage: input1000/cache600/output80/reasoning20; rate60%; equivalent USD0.001925, reasoning counted within output');
   await screenshot('dashboard');
+  await modelRow.scrollIntoViewIfNeeded();
+  await screenshot('dashboard-model-quantities');
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.forcefullyCrashRenderer());
   assert.deepEqual(fixtures.operate(first, 'ticket_graph'), graphBefore);
+  assert.deepEqual(runningTask(first), runningBefore);
   await app.close();
   app = null;
   fixtures.operate(second, 'ticket_register', fixtures.ticket('3', 'cli-after-gui-failure', ['2']));
@@ -170,18 +197,16 @@ try {
   await page.getByRole('button', { name: `Remove ${second}`, exact: true }).click();
   assert.equal(await page.locator('.project-button').count(), 1);
   assert.equal(fixtures.operate(second, 'ticket_graph').tickets.length, 3);
-  facts.steps.push('Persisted projects, GUI exit/renderer failure leave native queries and CLI mutation operational, removal retains project');
-  facts.reusedEvidenceRequired = 'Leader attaches accepted prior real Main/Runner execution and usage algorithm evidence; this run makes no model calls';
-  // Prior evidence is a separate acceptance responsibility; never report overall
-  // success for missing Linux boundaries or absent controlled activity input.
-  assert.ok(process.env.ADOPTION_ACTIVITY_PROJECT, facts.unresolved.join('; '));
-  facts.passed = true;
+  assert.deepEqual(runningTask(first), runningBefore);
+  facts.steps.push('Persisted projects, GUI exit/renderer failure preserve the active controlled Runner Session/execution and CLI operation; removal retains project');
+  facts.reusedEvidence = 'Accepted A/B/C/D summary supplied via Worldline20261010T042341.450707+0900; integration20261010T030236.725956+0900. This test makes no model calls.';
+  facts.uiPassed = true;
 } catch (error) {
   facts.failure = String(error);
   process.exitCode = 1;
   await screenshot('failure').catch(() => {});
 } finally {
   if (app) await app.close().catch(() => { app.process().kill('SIGKILL'); });
-  await fs.writeFile(path.join(evidence, 'result.json'), JSON.stringify(facts, null, 2));
+  await fs.writeFile(path.join(evidence, 'ui-result.json'), JSON.stringify(facts, null, 2));
   console.log(JSON.stringify(facts, null, 2));
 }

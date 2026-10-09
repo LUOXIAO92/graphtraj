@@ -56,10 +56,9 @@ jobs:
         working-directory: desktop
         run: |
           set -o pipefail
-          # Controlled activity input must be provided through public Runner
-          # operations before approval to push. Missing input fails the test;
-          # an empty Chat or Dashboard cannot claim acceptance.
-          dbus-run-session -- xvfb-run -a -s '-screen 0 1600x1000x24' sh -c 'openbox > "$ADOPTION_ROOT/evidence/openbox.log" 2>&1 & node tests/adoption-linux.mjs' 2>&1 | tee "$ADOPTION_ROOT/evidence/adoption.log"
+          # The fixture host uses public setup/Ticket/swarm operations and keeps
+          # a controlled execution active through GUI exit/failure, with no model calls.
+          dbus-run-session -- xvfb-run -a -s '-screen 0 1600x1000x24' sh -c 'openbox > "$ADOPTION_ROOT/evidence/openbox.log" 2>&1 & /opt/graphtraj-desktop/python/bin/python ../tests/linux_adoption_input.py' 2>&1 | tee "$ADOPTION_ROOT/evidence/adoption.log"
       - name: Restore disposable runner setting
         if: always()
         run: |

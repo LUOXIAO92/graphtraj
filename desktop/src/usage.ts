@@ -62,11 +62,16 @@ export function records(calls: Map<string, Call>, filters: Filters = {}): Call[]
       for (const metric of [...metrics, 'reasoning'] as const) {
         if (tokens[metric] !== undefined && before.row.tokens[metric] !== undefined) {
           before.row.tokens[metric]! += tokens[metric]!;
+        } else if (tokens[metric] === undefined && call.tokens[metric] !== undefined) {
+          // Last-usage fields are per-call snapshots, not stream increments.
+          before.row.tokens[metric] = call.tokens[metric];
         }
       }
       previous.set(key, { totals: call.cumulative, row: before.row });
     } else {
-      const row = { ...call, tokens };
+      // Providers may omit a field from lifetime totals while reporting it
+      // on each call. Preserve that operand instead of dropping coverage.
+      const row = { ...call, tokens: { ...call.tokens, ...tokens } };
       result.push(row); previous.set(key, { totals: call.cumulative, row });
     }
   }

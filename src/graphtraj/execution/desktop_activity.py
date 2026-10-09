@@ -1,7 +1,6 @@
 """Human desktop observation of actual members and their existing native Traces."""
 from __future__ import annotations
 
-from collections import OrderedDict
 from contextvars import ContextVar
 from datetime import datetime, timezone
 from pathlib import Path
@@ -24,7 +23,11 @@ from graphtraj.workspace.runner_project import discover_runner_directory
 human_observer: ContextVar[bool] = ContextVar("human_observer", default=False)
 
 
-_READERS: OrderedDict[tuple[str, str, str], TraceReader] = OrderedDict()
+# ponytail: offset-only reader state grows with observed Sessions until observer exit.
+# Observer-process lifetime owns these offset-only readers. Evicting an active
+# Session breaks round-robin pagination when projects have many Agents. Each
+# TraceReader already bounds its checkpoints; no open Trace handle is retained.
+_READERS: dict[tuple[str, str, str], TraceReader] = {}
 
 
 def observe(
@@ -113,9 +116,6 @@ def observe(
     key = (str(configuration.harness_root), alias, mapping['session'])
     if key not in _READERS:
         _READERS[key] = TraceReader(Path(mapping['trace_file']), mapping['runtime'], mapping['session'])
-    _READERS.move_to_end(key)
-    while len(_READERS) > 64:
-        _READERS.popitem(last=False)
     page = _READERS[key].page(cursor)
     for event in page['events']:
         event.update(ticket_id=ticket_id, agent=alias, session=mapping['session'])

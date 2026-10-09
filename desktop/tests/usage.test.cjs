@@ -113,3 +113,22 @@ test('streamed Codex output retains the original long-context price tier', () =>
   assert.equal(rows.length, 1);
   assert.equal(cost(rows[0]).amount, 4.85); // 2 + .2 + 2.5 + .15
 });
+
+test('per-call cache reads survive sparse lifetime totals and streamed replay', () => {
+  const map = new Map();
+  const make = (id, input, output) => event(id, { input: 100, cache_read: 60, output: 5 }, {
+    cumulative: { input_tokens: input, output_tokens: output },
+  });
+  const first = make('1', 100, 5), second = make('2', 200, 10);
+  collect(map, 'p', [first, second, first, second]);
+  let total = summarize(records(map));
+  assert.equal(total.tokens.cache_read.value, 120);
+  assert.equal(total.cacheRate, .6);
+  assert.ok(Math.abs(total.amount - .000301) < 1e-12);
+  collect(map, 'p', [make('3', 200, 12), make('3', 200, 12)]);
+  total = summarize(records(map));
+  assert.equal(records(map).length, 2);
+  assert.equal(total.tokens.cache_read.value, 120);
+  assert.equal(total.tokens.output.value, 12);
+  assert.equal(total.cacheRate, .6);
+});

@@ -346,3 +346,56 @@ def test_codex_cache_writes_and_counter_replay_across_turns(tmp_path: Path) -> N
         'output': 200, 'reasoning': 150,
     }
     assert facts[0]['identity'] == facts[1]['identity']
+
+
+def test_usage_pages_progress_across_65_readable_agents(tmp_path: Path) -> None:
+    """Round-robin public reads reach later usage and preserve idle totals at scale."""
+    from graphtraj.graph.delivery_state import apply_delivery_state_request
+    from graphtraj.graph.delivery_worldline import read_worldline
+
+    runner, directory, trace = prepare(tmp_path, 'codex', [])
+    template = yaml.safe_load((directory / 'mapping.yml').read_text())
+    aliases = [f'research@x{index}' for index in range(1, 66)]
+    for index, alias in enumerate(aliases, 1):
+        if index > 3:
+            request = {'phase': 'member', 'ticket_id': '148', 'member': f'member{index}',
+                       'role': 'researcher', 'session_ref': alias,
+                       'caused_by_event_ids': [read_worldline(tmp_path / 'state', tmp_path)[-1]['event_id']],
+                       'evidence_refs': ['evidence.md']}
+            apply_delivery_state_request(tmp_path / 'state', tmp_path, request, request)
+        member = runner / 'sessions' / alias
+        member.mkdir(exist_ok=True)
+        native_trace = trace.parent.parent / alias / 'events.jsonl'
+        native_trace.parent.mkdir(exist_ok=True)
+        raw = {'input_tokens': 100, 'cached_input_tokens': 60, 'output_tokens': 5}
+        records = [message('earlier activity')] * 200 + [
+            {'type': 'turn_context', 'payload': {'model': 'gpt-5.3-codex'}},
+            {'type': 'event_msg', 'payload': {'type': 'token_count',
+             'info': {'last_token_usage': raw, 'total_token_usage': raw}}},
+        ]
+        native_trace.write_text(''.join(json.dumps(record) + '\n' for record in records))
+        (member / 'mapping.yml').write_text(yaml.safe_dump({
+            **template, 'alias': alias, 'session': 'native-' + alias,
+            'trace_file': str(native_trace),
+        }))
+        (member / 'execution.yml').write_text('outcome: completed\n')
+
+    cursors = {}
+    for alias in aliases:
+        page = query(tmp_path, alias=alias)
+        assert page['has_more'] and not any(event['kind'] == 'usage' for event in page['events'])
+        cursors[alias] = page['cursor']
+    usage = {}
+    for alias in aliases:
+        page = query(tmp_path, alias=alias, cursor=cursors[alias])
+        assert page['availability'] == 'available' and not page['has_more']
+        fact = next(event['usage'] for event in page['events'] if event['kind'] == 'usage')
+        usage[fact['identity']] = fact['tokens']
+        cursors[alias] = page['cursor']
+    assert len(usage) == 65
+    assert sum(tokens['input'] for tokens in usage.values()) == 6500
+    assert sum(tokens['cache_read'] for tokens in usage.values()) == 3900
+    for alias in aliases:
+        page = query(tmp_path, alias=alias, cursor=cursors[alias])
+        assert page['availability'] == 'available' and page['events'] == []
+    assert len(usage) == 65

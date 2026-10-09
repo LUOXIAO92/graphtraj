@@ -180,6 +180,10 @@ class PiManagedExecution:
                               *(str(p.resolve()) for p in resources if p.exists())],
             },
         }
+        # Service access is opt-in for this Runtime and its descendants; keep
+        # the existing filesystem grants and denials independent of it.
+        if request.get('allow_mach_lookup'):
+            policy['network']['allowMachLookup'] = request['allow_mach_lookup']
         # Grants are native filesystem rules, never a command/path-filter hook.
         policy_file = self.directory / 'pi-policy.json'
         policy_file.write_text(json.dumps(policy), encoding='utf-8')

@@ -33,6 +33,7 @@ def pi_environment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict:
     srt.write_text(f'#!{sys.executable}\nimport os,sys,json\n'
                    'policy=json.load(open(sys.argv[sys.argv.index("--settings")+1]))\n'
                    'assert isinstance(policy["network"]["deniedDomains"],list)\n'
+                   'if os.environ.get("PI_FIXTURE_POLICY"): json.dump(policy,open(os.environ["PI_FIXTURE_POLICY"],"w"))\n'
                    'a=sys.argv[sys.argv.index("--")+1:]\nos.execv(a[0],a)\n')
     srt.chmod(0o755)
     sandbox = tmp_path / 'agent_sandbox'
@@ -143,6 +144,48 @@ def test_pi_startup_failure_preserves_diagnostics(tmp_path: Path, pi_environment
     assert 'fixture-token' not in message
     assert 'old execution stderr' not in message
     assert not ready.is_set()
+
+
+@pytest.mark.parametrize('services', [None, '', 'com.apple.windowserver.active', True,
+                                    [None], [''], ['com.apple.*'], ['service?'],
+                                    ['service[1]'], ['service name'], ['service\nname']])
+def test_pi_rejects_invalid_mach_services(tmp_path: Path, services: object) -> None:
+    """Reject non-list, non-name and wildcard grants before native preflight."""
+    result_project(tmp_path)
+    with pytest.raises(RuntimeAdapterError, match='exact Mach service names'):
+        context(tmp_path, {'allow_mach_lookup': services})
+
+
+def test_pi_mach_services_preserve_native_file_policy(
+    tmp_path: Path, pi_environment: dict, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Observe optional service grants at the native wrapper with unchanged file rules."""
+    result_project(tmp_path)
+    captured = tmp_path / 'native-policy.json'
+    monkeypatch.setenv('PI_FIXTURE_POLICY', str(captured))
+    services = ['com.apple.windowserver.active', 'com.apple.pasteboard.1']
+    policies = []
+    session = None
+    for extra in ({}, {'allow_mach_lookup': []}, {'allow_mach_lookup': services}):
+        with ExitStack() as stack:
+            turn, _, _ = execution(tmp_path, {**pi_environment, **extra}, 'research@x1',
+                                   'policy', stack, session)
+            result = turn.run()
+            assert result['outcome'] == 'completed'
+            session = result['session_id']
+        policy = json.loads(captured.read_text())
+        # Each real hosted CLI connection has a fresh owned address; only that
+        # address may vary between otherwise identical native file policies.
+        for paths in policy['filesystem'].values():
+            paths[:] = ['<owned-cli>' if str(tmp_path / '.graphtraj/cli') in p else p
+                        for p in paths]
+        policies.append(policy)
+    assert policies[0] == policies[1]
+    assert policies[0]['network'] == {
+        'allowedDomains': ['api.deepseek.com', 'openrouter.ai'], 'deniedDomains': [],
+    }
+    assert policies[2]['network'] == {**policies[0]['network'], 'allowMachLookup': services}
+    assert policies[2]['filesystem'] == policies[0]['filesystem']
 
 
 def test_pi_private_stderr_is_not_inherited(tmp_path: Path, pi_environment: dict, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -153,8 +153,10 @@ cache expiry or reasons for the checker's behavior from these metrics alone.
 
 For Codex cache-reuse adoption, compare retained first-response usage with the
 whole-check summary. The native ephemeral fork preserves the applicable parent
-cache affinity and fixes the history boundary; its response notifications supply
-evidence without requiring a persistent rollout. Keep current task queries
+cache affinity and fixes the history boundary; its public usage notifications
+can supply evidence without a persistent rollout. Establish first-response
+attribution from the native protocol and observed sequence; do not invent IDs
+or equate the first observed update with the first response. Keep task queries
 focused rather than attaching the entire graph to every check.
 
 ## Limits and recovery

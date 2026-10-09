@@ -15,6 +15,8 @@ const project = process.env.GRAPHTRAJ_LIVE_PROJECT;
 const ticket = process.env.GRAPHTRAJ_LIVE_TICKET;
 const tool = process.env.GRAPHTRAJ_TOOL;
 const executable = process.env.GRAPHTRAJ_ELECTRON_EXECUTABLE || electronExecutable;
+// The caller may opt in only after this execution's native/host approval.
+const noSandbox = process.env.GRAPHTRAJ_LIVE_NO_SANDBOX === '1';
 const deadlineText = process.env.GRAPHTRAJ_LIVE_DEADLINE;
 const deadline = typeof deadlineText === 'string' && /T.*(?:Z|[+-]\d{2}:\d{2})$/.test(deadlineText)
   ? Date.parse(deadlineText) : NaN;
@@ -38,7 +40,7 @@ test('owned Electron Dashboard matches native quantities, filters and replay', {
   await fs.mkdir(artifactRoot, { recursive: true });
   const evidence = await fs.mkdtemp(path.join(artifactRoot, 'graphtraj-usage-live-'));
   const cutoff = localMinute(Math.floor(Date.now() / 60000) * 60000);
-  const facts = { project, ticket, executable, deadline: deadlineText, cutoff, steps: [], passed: false };
+  const facts = { project, ticket, executable, noSandbox, deadline: deadlineText, cutoff, steps: [], passed: false };
   let launch;
   let app;
   let stopping = false;
@@ -82,7 +84,7 @@ test('owned Electron Dashboard matches native quantities, filters and replay', {
     facts.steps.push('Captured native self quantities through fixed minute; old-host missing cache-write fields remain unknown');
     check();
     launch = electron.launch({ executablePath: executable,
-      args: [desktop, `--project=${project}`, `--user-data-dir=${path.join(evidence, 'profile')}`],
+      args: [...(noSandbox ? ['--no-sandbox'] : []), desktop, `--project=${project}`, `--user-data-dir=${path.join(evidence, 'profile')}`],
       env: { ...process.env, MAC_CHROMIUM_TMPDIR: evidence }, timeout: Math.min(20000, deadline - Date.now() - 3000) });
     app = await launch;
     if (stopping) { await app.close(); return; }

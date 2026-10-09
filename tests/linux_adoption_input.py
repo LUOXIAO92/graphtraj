@@ -55,7 +55,7 @@ def main() -> None:
         (project / '.graphtraj/roles.yml').write_text(
             'roles:\n  observer:\n    runtime: codex\n    model: gpt-5.3-codex\nrole_tree:\n  observer: {}\n')
         registered = operate(call, 'ticket_register', {'ticket_id': '1', 'ticket_name': 'controlled-linux',
-            'title': 'Controlled Linux desktop observation', 'source': 'local:controlled-linux-adoption',
+            'title': 'Controlled Linux desktop observation', 'source': 'https://github.com/example/desktop-test/issues/1',
             'body': 'Controlled message/tool/usage records, not real model execution.', 'dependencies': []})
         graph = operate(call, 'ticket_graph', {})
         assert len(graph['tickets']) == 1, graph

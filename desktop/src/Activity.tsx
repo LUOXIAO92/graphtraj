@@ -41,7 +41,6 @@ export function ActivityView({ projectId, ticketId }: { projectId: string; ticke
   const [pending, setPending] = useState(0);
   const followingRef = useRef(true);
   const bottom = useRef<HTMLDivElement>(null);
-  const history = useRef<HTMLDivElement>(null);
   const loadRequested = useRef(false);
 
   useEffect(() => {
@@ -119,10 +118,7 @@ export function ActivityView({ projectId, ticketId }: { projectId: string; ticke
         <Button size="sm" variant="ghost" isDisabled={pageStart === 0} onPress={() => { follow(false); setPageStart(value => Math.max(0, value - 100)); }}>Earlier</Button>
         <Button size="sm" variant="ghost" isDisabled={pageStart + 100 >= events.length} onPress={() => { follow(false); setPageStart(value => value + 100); }}>Later</Button>
       </div>
-      <div className="activity-history" ref={history} onScroll={() => {
-        const node = history.current;
-        if (node && node.scrollHeight - node.scrollTop - node.clientHeight > 80) follow(false);
-      }}>
+      <div className="activity-history">
         {events.slice(pageStart, pageStart + 100).map(event => <EventCard key={event.id} event={event} />)}
         {!events.length && <p>{activity?.availability === 'available' ? 'No readable activity recorded yet.' : 'Activity is unavailable or loading.'}</p>}
         <div ref={bottom} />

@@ -74,10 +74,20 @@ test('Follow drains long pages and reconnect replay; pause preserves the older v
     return { ...base, availability: 'available', events: records.slice(start, end), cursor: String(end), has_more: end < records.length };
   } } };
   let tree;
-  await act(async () => { tree = create(React.createElement(ActivityView, { projectId: 'p', ticketId: '1' })); });
+  // Layout/programmatic scroll while a page is replaced must not pause fetching.
+  const historyNode = { scrollHeight: 1000, scrollTop: 0, clientHeight: 300 };
+  await act(async () => { tree = create(React.createElement(ActivityView, { projectId: 'p', ticketId: '1' }), {
+    createNodeMock: element => element.props.className === 'activity-history' ? historyNode : {
+      scrollIntoView() {
+        const history = tree.root.findAll(node => node.props.className === 'activity-history')[0];
+        history?.props.onScroll?.({ currentTarget: historyNode });
+      },
+    },
+  }); });
   t.after(async () => { await act(async () => tree.unmount()); });
   const advance = async (ms = 1) => { await act(async () => t.mock.timers.tick(ms)); };
   await act(async () => button(tree, 'worker').props.onClick());
+  assert.ok(button(tree, 'Pause following'), 'page layout must keep follow active');
   await act(async () => button(tree, 'Pause following').props.onClick());
   await advance();
   assert.equal(requests.filter(request => request.alias).length, 1);

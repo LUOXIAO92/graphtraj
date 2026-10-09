@@ -57,7 +57,8 @@ export default function (pi: ExtensionAPI) {
             GRAPHTRAJ_LIVE_NO_SANDBOX: args.noSandbox ? '1' : '0',
             GRAPHTRAJ_LIVE_PROJECT: args.project, GRAPHTRAJ_LIVE_TICKET: args.ticket,
             GRAPHTRAJ_LIVE_DEADLINE: args.deadline, GRAPHTRAJ_ELECTRON_EXECUTABLE: args.electron,
-            GRAPHTRAJ_LIVE_ARTIFACTS: args.artifacts, MAC_CHROMIUM_TMPDIR: args.artifacts },
+            GRAPHTRAJ_LIVE_ARTIFACTS: args.artifacts, TMPDIR: args.artifacts,
+            MAC_CHROMIUM_TMPDIR: args.artifacts, CLAUDE_TMPDIR: args.artifacts },
         });
         // No detached process, shell, identity override or alternate Runtime.
         const append = (chunk: Buffer) => { output = (output + chunk.toString()).slice(-65536); };

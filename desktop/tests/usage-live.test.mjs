@@ -85,7 +85,7 @@ test('owned Electron Dashboard matches native quantities, filters and replay', {
     check();
     launch = electron.launch({ executablePath: executable,
       args: [...(noSandbox ? ['--no-sandbox'] : []), desktop, `--project=${project}`, `--user-data-dir=${path.join(evidence, 'profile')}`],
-      env: { ...process.env, MAC_CHROMIUM_TMPDIR: evidence }, timeout: Math.min(20000, deadline - Date.now() - 3000) });
+      env: { ...process.env, TMPDIR: artifactRoot, MAC_CHROMIUM_TMPDIR: artifactRoot, CLAUDE_TMPDIR: artifactRoot }, timeout: Math.min(20000, deadline - Date.now() - 3000) });
     app = await launch;
     if (stopping) { await app.close(); return; }
     const page = await app.firstWindow();

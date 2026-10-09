@@ -130,6 +130,10 @@ The execution host needs access to the chosen Runtime executable, credentials,
 project files and subprocess sandbox. Role permissions do not replace the
 Runtime's filesystem restrictions.
 
+On macOS, a Pi role can use `pi.allow_mach_lookup` to name the exact Mach
+services available to that Runtime and its subprocesses. Wildcards are not
+accepted. By default no extra services are allowed; filesystem rules stay in place.
+
 For custom hosts, [the local tool binding](src/graphtraj/interfaces/local_tool.py)
 provides a Python callback and the `graphtraj-tool` JSON-lines process interface.
 MCP is optional. CLI or MCP access alone does not connect background events or

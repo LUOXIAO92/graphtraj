@@ -165,6 +165,16 @@ def test_pi_rejects_invalid_local_binding(tmp_path: Path, value: object) -> None
         context(tmp_path, {'allow_local_binding': value})
 
 
+@pytest.mark.parametrize('value', [None, True, '/tmp/owned', [None], [''], ['relative'],
+                                 ['/'], ['/tmp/../'], ['/tmp/*'], ['/tmp/socket?'],
+                                 ['/tmp/[socket]'], ['/tmp/socket\x00']])
+def test_pi_rejects_invalid_unix_sockets(tmp_path: Path, value: object) -> None:
+    """Keep socket capabilities explicit, absolute and free of global/pattern grants."""
+    result_project(tmp_path)
+    with pytest.raises(RuntimeAdapterError, match='absolute non-root paths'):
+        context(tmp_path, {'allow_unix_sockets': value})
+
+
 def test_pi_mach_services_preserve_native_file_policy(
     tmp_path: Path, pi_environment: dict, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -176,14 +186,17 @@ def test_pi_mach_services_preserve_native_file_policy(
                 'com.apple.distributed_notifications@Uv3',
                 'com.github.Electron.MachPortRendezvousServer.*']
     registrations = ['com.example.exact', 'com.github.Electron.MachPortRendezvousServer.*']
+    sockets = ['/private/tmp/claude/262-native-boundary', '/tmp/owned socket/']
     policies = []
     session = None
     cases = [
         ({}, {}),
-        ({'allow_mach_lookup': [], 'allow_mach_register': [], 'allow_local_binding': False}, {}),
+        ({'allow_mach_lookup': [], 'allow_mach_register': [], 'allow_local_binding': False,
+          'allow_unix_sockets': []}, {}),
         ({'allow_mach_lookup': services}, {'allowMachLookup': services}),
         ({'allow_mach_register': registrations}, {'allowMachRegister': registrations}),
         ({'allow_local_binding': True}, {'allowLocalBinding': True}),
+        ({'allow_unix_sockets': sockets}, {'allowUnixSockets': sockets}),
         ({'allow_mach_lookup': services, 'allow_mach_register': registrations, 'allow_local_binding': True},
          {'allowMachLookup': services, 'allowMachRegister': registrations, 'allowLocalBinding': True}),
     ]

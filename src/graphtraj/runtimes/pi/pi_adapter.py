@@ -116,7 +116,7 @@ class PiRuntimeAdapter:
         settings = role.settings
         config = dict(settings.pi or {})
         allowed = {'sandbox_python', 'sandbox_path', 'agent_dir', 'read_paths',
-                   'allow_mach_lookup', 'allow_mach_register', 'allow_local_binding'}
+                   'allow_mach_lookup', 'allow_mach_register', 'allow_local_binding', 'allow_unix_sockets'}
         if set(config) - allowed or requested_skills or settings.codex or settings.base_url:
             raise RuntimeAdapterError('ROLE_CONFIG_UNSUPPORTED',
                                       'Use Pi native provider configuration and pi resource/sandbox settings.')
@@ -131,6 +131,15 @@ class PiRuntimeAdapter:
         if 'allow_local_binding' in config and not isinstance(config['allow_local_binding'], bool):
             raise RuntimeAdapterError('ROLE_CONFIG_INVALID',
                                       'pi.allow_local_binding must be a boolean.')
+        socket_paths = config.get('allow_unix_sockets', [])
+        if not isinstance(socket_paths, list) or any(
+            not isinstance(value, str) or not Path(value).is_absolute()
+            or Path(value) == Path(Path(value).anchor) or '..' in Path(value).parts
+            or any(char in value for char in '*?[]') or any(ord(char) < 32 for char in value)
+            for value in socket_paths
+        ):
+            raise RuntimeAdapterError('ROLE_CONFIG_INVALID',
+                                      'pi.allow_unix_sockets must list absolute non-root paths without patterns or parent traversal.')
         provider, separator, model = settings.model.partition('/')
         if not separator or not provider or not model:
             raise RuntimeAdapterError('ROLE_CONFIG_INVALID', 'Pi model must be provider/model-id.')
@@ -187,6 +196,8 @@ class PiRuntimeAdapter:
         for field in ('allow_mach_lookup', 'allow_mach_register'):
             if config.get(field):
                 request[field] = list(config[field])
+        if socket_paths:
+            request['allow_unix_sockets'] = list(socket_paths)
         if config.get('allow_local_binding'):
             request['allow_local_binding'] = True
         return PiContext(json.dumps(request))

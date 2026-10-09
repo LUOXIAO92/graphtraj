@@ -186,6 +186,7 @@ class PiManagedExecution:
             ('allow_mach_lookup', 'allowMachLookup'),
             ('allow_mach_register', 'allowMachRegister'),
             ('allow_local_binding', 'allowLocalBinding'),
+            ('allow_unix_sockets', 'allowUnixSockets'),
         ):
             if request.get(field):
                 policy['network'][native_field] = request[field]

@@ -631,7 +631,7 @@ def read_desktop_activity(arguments: Mapping[str, Any], *, cwd: Path | None = No
 register_tool(
     "desktop_activity",
     "Read actual Ticket members and bounded native Chat/usage records for the human desktop. "
-    "Agent callers are refused; no messaging or control is provided.",
+    "Verified registered Agents may read only their own Session and mapped Ticket; no messaging or control is provided.",
     {"type": "object", "properties": {
         "ticket_id": {"type": "string"}, "alias": {"type": "string"},
         "cursor": {"type": "string"},

@@ -14,7 +14,7 @@ export type ActivityEvent = {
     phase: string; attributable: boolean; [key: string]: unknown };
 };
 export type Activity = {
-  ticket_id: string; agents: Agent[]; updated_at: string; events?: ActivityEvent[];
+  ticket_id: string; scope?: 'self' | 'human'; agents: Agent[]; updated_at: string; events?: ActivityEvent[];
   cursor?: string | null; has_more?: boolean; waiting_for_record?: boolean;
   availability?: string; reason?: string;
 };

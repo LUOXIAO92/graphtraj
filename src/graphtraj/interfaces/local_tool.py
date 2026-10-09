@@ -70,7 +70,7 @@ def bind(
     across tool calls until explicitly closed. The callback uses the host's
     existing client; its return acknowledges forwarding, not Agent processing.
     ``desktop_observer`` selects the read-only human activity surface and cannot
-    be combined with Agent event/control callbacks; verified Agents are refused.
+    be combined with Agent event/control callbacks; verified Agents retain self-only access.
     ``recovery_reviewer`` must invoke that host's actual selected reviewer and
     return its accept/decline decision; it is never a model-supplied argument.
     """
@@ -247,7 +247,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--desktop-observer", action="store_true",
-        help="Bind the read-only human activity observer; Agent callers remain refused.",
+        help="Bind the read-only activity observer; verified Agents retain self-only access.",
     )
     options = parser.parse_args()
     if options.desktop_settings:

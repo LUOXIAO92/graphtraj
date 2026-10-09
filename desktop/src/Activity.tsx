@@ -99,6 +99,7 @@ export function ActivityView({ projectId, ticketId }: { projectId: string; ticke
 
   return <section className="activity" aria-label="Agent activity">
     <h3>Agents</h3>
+    {activity?.scope === 'self' && <p className="note">This Agent connection shows only its own Session.</p>}
     {(['Current', 'Historical'] as const).map(group => <div key={group}>
       <h4>{group} members</h4>
       {activity?.agents.filter(agent => agent.historical === (group === 'Historical')).map(agent =>

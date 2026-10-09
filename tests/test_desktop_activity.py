@@ -89,13 +89,22 @@ def test_retired_binding_keeps_historical_trace(tmp_path: Path) -> None:
 
 
 def test_agent_cannot_use_human_observation_or_forge_path(tmp_path: Path) -> None:
-    """Verified Agents cannot read even their own Chat via the human-only surface."""
+    """Registered Agents see only their own Session through the authenticated gateway."""
     runner, _, _ = prepare(tmp_path, 'codex', [message('private')])
     with pytest.raises(RunnerError, match='desktop host binding'):
         handle_request({'action': 'execute', 'feature': 'desktop_activity', 'arguments': {'ticket_id': '148'}}, cwd=tmp_path)
     with runtime_caller(runner, 'research@x1'):
-        with pytest.raises(RunnerError, match='human observation'):
-            query(tmp_path, alias='research@x1')
+        allowed = handle_request({'action': 'execute', 'feature': 'desktop_activity',
+            'arguments': {'ticket_id': '148', 'alias': 'research@x1'}}, cwd=tmp_path)
+        assert not allowed.failed
+        assert allowed.document['scope'] == 'self'
+        assert [member['alias'] for member in allowed.document['agents']] == ['research@x1']
+        assert allowed.document['events'][0]['text'] == 'private'
+        for target in ('research@x2', 'research@x3', 'other@x1'):
+            with pytest.raises(RunnerError, match='own Session'):
+                query(tmp_path, alias=target)
+        with pytest.raises(RunnerError, match='own Session'):
+            query(tmp_path, ticket_id='other')
     refused = bind(tmp_path, desktop_observer=True)({'action': 'execute', 'feature': 'desktop_activity',
         'arguments': {'ticket_id': '148', 'path': '/private/elsewhere'}})
     assert refused.failed and 'unexpected parameter' in refused.document['error']
@@ -299,3 +308,19 @@ def test_dsh_external_main_uses_native_node_entrypoint(monkeypatch: pytest.Monke
     monkeypatch.setattr(replacement.subprocess, 'check_output',
                         lambda *args, **kwargs: '/usr/bin/node /installed/@deepseek-ai/dsh/lib/bin.js')
     assert replacement.caller_runtime() == 'dsh'
+
+
+def test_self_query_is_registered_for_authenticated_runtime_hosts(tmp_path: Path) -> None:
+    """Managed Runtime/CLI callers share the self feature; native helpers do not gain it."""
+    from graphtraj.runtimes.codex.managed_session import native_operation_features
+    from graphtraj.execution.runner_status import NativeCaller
+
+    runner, _, _ = prepare(tmp_path, 'codex', [message('own retained content')])
+    request = {'action': 'execute', 'feature': 'desktop_activity', 'arguments': {'ticket_id': '148'}}
+    with runtime_caller(runner, 'research@x1'):
+        result = handle_request(request, cwd=tmp_path, allowed_features=native_operation_features())
+        assert not result.failed and result.document['scope'] == 'self'
+        assert [row['alias'] for row in result.document['agents']] == ['research@x1']
+    for identity in ('unknown-native-thread', NativeCaller('research@x1', {'runtime': 'codex'})):
+        with runtime_caller(runner, identity), pytest.raises(RunnerError):
+            query(tmp_path, alias='research@x1')

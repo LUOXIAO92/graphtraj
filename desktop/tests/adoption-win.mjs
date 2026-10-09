@@ -128,8 +128,8 @@ try {
   facts.source = manifest.commit;
   facts.packages = manifest.packages;
   // Optional supplied roots must be disposable and credential-free, prepared through native operations.
-  const first = process.env.GRAPHTRAJ_WIN_PROJECT_A || await makeProject('first-project');
-  const second = process.env.GRAPHTRAJ_WIN_PROJECT_B || await makeProject('second-project');
+  const first = await fs.realpath(process.env.GRAPHTRAJ_WIN_PROJECT_A || await makeProject('first-project'));
+  const second = await fs.realpath(process.env.GRAPHTRAJ_WIN_PROJECT_B || await makeProject('second-project'));
   const secondRoles = path.join(second, '.graphtraj/roles.yml');
   const secondBefore = await fs.readFile(secondRoles);
   const firstRoles = path.join(first, '.graphtraj/roles.yml');

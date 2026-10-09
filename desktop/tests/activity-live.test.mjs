@@ -46,12 +46,16 @@ test('one native window observes its real executing Agent', { timeout: 240000, s
   let page;
   let exit = null;
   let stderr = '';
+  let stopping = false;
+  const stopOwned = () => { stopping = true; if (app) void app.close().catch(() => {}); };
+  process.once('SIGTERM', stopOwned);
   const facts = { project, ticket, alias: member.alias, launches: 0, steps: [] };
   try {
     app = await electron.launch({ executablePath: electronExecutable,
       args: [...(process.env.GRAPHTRAJ_LIVE_NO_SANDBOX === '1' ? ['--no-sandbox'] : []),
         desktop, `--project=${project}`, `--user-data-dir=${path.join(evidence, 'profile')}`], timeout: 20000,
       env: { ...process.env, GRAPHTRAJ_TOOL: tool, MAC_CHROMIUM_TMPDIR: evidence } });
+    if (stopping) throw new Error('Owned live test stopped.');
     facts.launches += 1;
     app.process().stderr?.on('data', chunk => { stderr = (stderr + chunk.toString()).slice(-32768); });
     app.process().on('exit', (code, signal) => { exit = { code, signal }; });
@@ -188,6 +192,7 @@ test('one native window observes its real executing Agent', { timeout: 240000, s
     catch { console.error('DIAGNOSTICS_WRITE_FAILED'); }
     try { if (app) await app.close(); }
     catch { facts.closeError = 'Owned app close rejected'; }
+    process.removeListener('SIGTERM', stopOwned);
     facts.exit = exit;
     await fs.writeFile(path.join(evidence, 'stderr.log'), stderr);
     await fs.writeFile(path.join(evidence, 'result.json'), JSON.stringify(facts, null, 2));

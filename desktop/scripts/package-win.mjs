@@ -19,6 +19,10 @@ assert.equal(run('git', ['status', '--porcelain', '--untracked-files=no']), '', 
 assert.equal(run(python, ['-c', 'import platform; print(platform.python_version())']), '3.13.7');
 const manifest = JSON.parse(await fs.readFile(path.join(desktop, 'package.json'), 'utf8'));
 assert.equal(manifest.devDependencies.electron, '44.5.1');
+// Electron 44 exposes install-electron explicitly; npm ci does not fetch its binary.
+run(process.execPath, [path.join(desktop, 'node_modules/electron/install.js')], desktop);
+assert.equal((await fs.readFile(path.join(desktop, 'node_modules/electron/dist/version'), 'utf8')).trim().replace(/^v/, ''),
+  manifest.devDependencies.electron);
 const bundle = path.join(output, 'GraphTraj');
 await fs.mkdir(output, { recursive: true });
 await fs.mkdir(bundle); // Refuse to merge with a stale package.

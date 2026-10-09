@@ -146,14 +146,23 @@ def test_pi_startup_failure_preserves_diagnostics(tmp_path: Path, pi_environment
     assert not ready.is_set()
 
 
+@pytest.mark.parametrize('field', ['allow_mach_lookup', 'allow_mach_register'])
 @pytest.mark.parametrize('services', [None, '', 'com.apple.windowserver.active', True,
-                                    [None], [''], ['com.apple.*'], ['service?'],
+                                    [None], [''], ['*'], ['com.*.service'], ['service**'], ['service?'],
                                     ['service[1]'], ['service name'], ['service\nname']])
-def test_pi_rejects_invalid_mach_services(tmp_path: Path, services: object) -> None:
-    """Reject non-list, non-name and wildcard grants before native preflight."""
+def test_pi_rejects_invalid_mach_services(tmp_path: Path, field: str, services: object) -> None:
+    """Reject invalid lists and unrestricted/pattern grants before native preflight."""
     result_project(tmp_path)
     with pytest.raises(RuntimeAdapterError, match='exact Mach service names'):
-        context(tmp_path, {'allow_mach_lookup': services})
+        context(tmp_path, {field: services})
+
+
+@pytest.mark.parametrize('value', [None, 0, 1, 'true', [], {}])
+def test_pi_rejects_invalid_local_binding(tmp_path: Path, value: object) -> None:
+    """Only an explicit boolean can opt into native local binding."""
+    result_project(tmp_path)
+    with pytest.raises(RuntimeAdapterError, match='must be a boolean'):
+        context(tmp_path, {'allow_local_binding': value})
 
 
 def test_pi_mach_services_preserve_native_file_policy(
@@ -164,10 +173,21 @@ def test_pi_mach_services_preserve_native_file_policy(
     captured = tmp_path / 'native-policy.json'
     monkeypatch.setenv('PI_FIXTURE_POLICY', str(captured))
     services = ['com.apple.windowserver.active', 'com.apple.pasteboard.1',
-                'com.apple.distributed_notifications@Uv3']
+                'com.apple.distributed_notifications@Uv3',
+                'com.github.Electron.MachPortRendezvousServer.*']
+    registrations = ['com.example.exact', 'com.github.Electron.MachPortRendezvousServer.*']
     policies = []
     session = None
-    for extra in ({}, {'allow_mach_lookup': []}, {'allow_mach_lookup': services}):
+    cases = [
+        ({}, {}),
+        ({'allow_mach_lookup': [], 'allow_mach_register': [], 'allow_local_binding': False}, {}),
+        ({'allow_mach_lookup': services}, {'allowMachLookup': services}),
+        ({'allow_mach_register': registrations}, {'allowMachRegister': registrations}),
+        ({'allow_local_binding': True}, {'allowLocalBinding': True}),
+        ({'allow_mach_lookup': services, 'allow_mach_register': registrations, 'allow_local_binding': True},
+         {'allowMachLookup': services, 'allowMachRegister': registrations, 'allowLocalBinding': True}),
+    ]
+    for extra, expected in cases:
         with ExitStack() as stack:
             turn, _, _ = execution(tmp_path, {**pi_environment, **extra}, 'research@x1',
                                    'policy', stack, session)
@@ -181,12 +201,14 @@ def test_pi_mach_services_preserve_native_file_policy(
             paths[:] = ['<owned-cli>' if str(tmp_path / '.graphtraj/cli') in p else p
                         for p in paths]
         policies.append(policy)
+        assert policy['network'] == {
+            'allowedDomains': ['api.deepseek.com', 'openrouter.ai'], 'deniedDomains': [], **expected,
+        }
     assert policies[0] == policies[1]
     assert policies[0]['network'] == {
         'allowedDomains': ['api.deepseek.com', 'openrouter.ai'], 'deniedDomains': [],
     }
-    assert policies[2]['network'] == {**policies[0]['network'], 'allowMachLookup': services}
-    assert policies[2]['filesystem'] == policies[0]['filesystem']
+    assert all(policy['filesystem'] == policies[0]['filesystem'] for policy in policies)
 
 
 def test_pi_private_stderr_is_not_inherited(tmp_path: Path, pi_environment: dict, monkeypatch: pytest.MonkeyPatch) -> None:

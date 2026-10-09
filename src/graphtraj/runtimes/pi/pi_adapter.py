@@ -115,17 +115,22 @@ class PiRuntimeAdapter:
 
         settings = role.settings
         config = dict(settings.pi or {})
-        allowed = {'sandbox_python', 'sandbox_path', 'agent_dir', 'read_paths', 'allow_mach_lookup'}
+        allowed = {'sandbox_python', 'sandbox_path', 'agent_dir', 'read_paths',
+                   'allow_mach_lookup', 'allow_mach_register', 'allow_local_binding'}
         if set(config) - allowed or requested_skills or settings.codex or settings.base_url:
             raise RuntimeAdapterError('ROLE_CONFIG_UNSUPPORTED',
                                       'Use Pi native provider configuration and pi resource/sandbox settings.')
-        mach_services = config.get('allow_mach_lookup', [])
-        if not isinstance(mach_services, list) or any(
-            not isinstance(name, str) or re.fullmatch(r'[A-Za-z0-9_.@-]+', name) is None
-            for name in mach_services
-        ):
+        for field in ('allow_mach_lookup', 'allow_mach_register'):
+            services = config.get(field, [])
+            if not isinstance(services, list) or any(
+                not isinstance(name, str) or re.fullmatch(r'[A-Za-z0-9_.@-]+\*?', name) is None
+                for name in services
+            ):
+                raise RuntimeAdapterError('ROLE_CONFIG_INVALID',
+                                          f'pi.{field} must list exact Mach service names or nonempty trailing-* prefixes.')
+        if 'allow_local_binding' in config and not isinstance(config['allow_local_binding'], bool):
             raise RuntimeAdapterError('ROLE_CONFIG_INVALID',
-                                      'pi.allow_mach_lookup must list exact Mach service names without wildcards.')
+                                      'pi.allow_local_binding must be a boolean.')
         provider, separator, model = settings.model.partition('/')
         if not separator or not provider or not model:
             raise RuntimeAdapterError('ROLE_CONFIG_INVALID', 'Pi model must be provider/model-id.')
@@ -179,8 +184,11 @@ class PiRuntimeAdapter:
             'state_directory': str(state),
             'docs_directory': str(project.docs if project else harness_root / 'docs'),
         }
-        if mach_services:
-            request['allow_mach_lookup'] = list(mach_services)
+        for field in ('allow_mach_lookup', 'allow_mach_register'):
+            if config.get(field):
+                request[field] = list(config[field])
+        if config.get('allow_local_binding'):
+            request['allow_local_binding'] = True
         return PiContext(json.dumps(request))
 
     def recovery_environment(self, connection: Mapping[str, Any]) -> Mapping[str, str]:

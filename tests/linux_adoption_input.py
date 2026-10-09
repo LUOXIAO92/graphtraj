@@ -48,6 +48,8 @@ def main() -> None:
         executable.write_text(f'#!{sys.executable}\nimport runpy\nrunpy.run_path({str(runtime)!r}, run_name="__main__")\n')
         executable.chmod(0o755)
         os.environ['PATH'] = str(fixture_bin) + os.pathsep + os.environ['PATH']
+        # Public Ticket operations resolve configuration from the host's cwd.
+        os.chdir(project)
         call = bind(project)
         operate(call, 'project_setup', {'source_repository': str(source), 'apply': True, 'create_dev': True})
         (project / '.graphtraj/roles.yml').write_text(

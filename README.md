@@ -154,12 +154,27 @@ provide a job queue, automatic crash recovery, or automatic promotion from
 ## Optional desktop
 
 The development app in [desktop/](desktop/) offers a project graph, recorded
-Agent activity and settings for existing role presets and dispatch relationships.
+Agent activity, a usage dashboard and settings for existing role presets and
+dispatch relationships.
 Select a task and Agent to read messages, expand tool results, copy text or pause
 following new activity. Unavailable records and usage remain explicitly unknown.
 The CLI works without
 Node or Electron; the desktop is an optional monitoring and configuration window.
-It does not provide task execution controls or a complete usage dashboard.
+It does not provide task execution controls.
+
+Open **Usage** to inspect recorded tokens, cache reads and an estimated token
+cost, filtered by task, Agent or model. Cache-hit rates are weighted by input
+tokens. Missing usage—including unrecorded Main calls—and quantities without
+a known price stay visible; totals cover only the available records.
+
+Cost estimates use bundled prices from the original model vendor, in USD per
+million tokens. They are not provider bills, especially for third-party routes.
+When historical prices cannot be established, the app labels the estimate as a
+current-rate approximation. Unsupported models or unresolved pricing conditions
+remain unpriced. The snapshot's official sources are [OpenAI pricing](https://developers.openai.com/api/docs/pricing),
+[Astra context rates](https://developers.openai.com/api/docs/models/gpt-6-astra),
+[OpenAI cache accounting](https://developers.openai.com/api/docs/guides/prompt-caching)
+and [DeepSeek pricing](https://api-docs.deepseek.com/quick_start/pricing/).
 
 To run it from a source checkout, install the matching Python GraphTraj version
 and make `graphtraj-tool` available on `PATH` (or set `GRAPHTRAJ_TOOL` to its

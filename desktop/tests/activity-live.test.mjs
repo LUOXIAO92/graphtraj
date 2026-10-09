@@ -70,6 +70,35 @@ test('one native window observes its real executing Agent', { timeout: 240000, s
       const hash = value => value == null ? null : createHash('sha256').update(String(value)).digest('hex').slice(0, 16);
       const record = value => { entries.push({ at: new Date().toISOString(), ...value }); if (entries.length > 500) entries.shift(); };
       globalThis.activityLiveDiagnostics = entries;
+      // Observe only this feature-restricted child's existing stdout/lifecycle.
+      // Do not consume stderr or change stdin, response bytes, or process options.
+      const childProcess = require('node:child_process');
+      const { createInterface } = require('node:readline');
+      const spawn = childProcess.spawn;
+      const safeError = value => String(value || '').slice(0, 2000)
+        .replace(/(authorization|api[_-]?key|token|password|secret)\s*[:=]\s*\S+/gi, '$1=[redacted]')
+        .replace(/Bearer\s+\S+/gi, 'Bearer [redacted]')
+        .replace(/[A-Za-z0-9_+\/-]{20,}/g, '[identifier]')
+        .replace(/(?:\/[^\s'"<>]+)+/g, '[path]').slice(0, 400);
+      childProcess.spawn = function(executable, args, options) {
+        const child = spawn.call(this, executable, args, options);
+        if (args?.includes('--desktop-observer') && args?.includes('desktop_activity')) {
+          const pid = child.pid;
+          record({ stage: 'child-start', pid });
+          child.on('error', error => record({ stage: 'child-error', pid, code: safeError(error.code), name: safeError(error.name) }));
+          child.on('exit', (code, signal) => record({ stage: 'child-exit', pid, code, signal }));
+          child.stdin.on('error', error => record({ stage: 'stdin-error', pid, code: safeError(error.code) }));
+          createInterface({ input: child.stdout }).on('line', line => {
+            try {
+              const reply = JSON.parse(line);
+              if (reply.failed) record({ stage: 'wire-rejected', pid,
+                error: safeError(reply.error || reply.result?.error),
+                featureActivity: reply.result?.feature === 'desktop_activity' });
+            } catch (error) { record({ stage: 'wire-parse-error', pid, name: safeError(error.name), bytes: Buffer.byteLength(line) }); }
+          });
+        }
+        return child;
+      };
       ActivityReader.prototype.read = function(root, request) {
         const id = entries.length + ':' + Date.now();
         record({ stage: 'request', id, ownAlias: request.alias === alias, hasAlias: Boolean(request.alias), cursor: hash(request.cursor) });
@@ -83,7 +112,7 @@ test('one native window observes its real executing Agent', { timeout: 240000, s
             markers: markers.map(marker => ({ marker, matches: events.filter(event => JSON.stringify(event).includes(marker)).map(event => ({
               id: hash(event.id), result: event.phase === 'result', call: event.phase === 'call', tool: event.kind === 'tool',
             })) })) });
-        }, () => record({ stage: 'error', id, error: 'Native activity read rejected' }));
+        }, error => record({ stage: 'error', id, name: safeError(error.name), error: safeError(error.message) }));
         return promise;
       };
     }, { alias: member.alias, markers: [liveMarker, pausedMarker] });

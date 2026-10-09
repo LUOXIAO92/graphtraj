@@ -112,3 +112,23 @@ test('Follow drains long pages and reconnect replay; pause preserves the older v
   assert.equal(tree.root.findAllByType('article').length, 100);
   assert.match(text(tree), /407/);
 });
+
+
+test('result selection requires the real expansion control, not quoted phase text', async t => {
+  const { EventCard } = await components(t);
+  const marker = '262-live-regression';
+  let tree;
+  await act(async () => { tree = create(React.createElement(React.Fragment, null,
+    React.createElement(EventCard, { event: event(1, { text: `${marker} · result diagnostic` }) }),
+    React.createElement(EventCard, { event: event(2, { kind: 'tool', phase: 'call', name: 'bash',
+      text: undefined, arguments: { command: `echo '${marker} · result diagnostic'` } }) }),
+    React.createElement(EventCard, { event: event(3, { kind: 'tool', phase: 'result', name: 'bash',
+      text: undefined, result: `${marker} diagnostic` }) }),
+  )); });
+  t.after(async () => { await act(async () => tree.unmount()); });
+  const cards = tree.root.findAllByType('article');
+  const candidates = cards.filter(card => card.findAllByType('summary')
+    .some(summary => summary.props.children === 'Result / details'));
+  assert.equal(candidates.length, 1);
+  assert.equal(candidates[0].findByType('pre').props.children, `${marker} diagnostic`);
+});

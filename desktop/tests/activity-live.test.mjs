@@ -49,7 +49,8 @@ test('one native window observes its real executing Agent', { timeout: 240000, s
   let stopping = false;
   const stopOwned = () => { stopping = true; if (app) void app.close().catch(() => {}); };
   process.once('SIGTERM', stopOwned);
-  const facts = { project, ticket, alias: member.alias, launches: 0, steps: [] };
+  const facts = { project, ticket, alias: member.alias, launches: 0, steps: [],
+    noSandbox: process.env.GRAPHTRAJ_LIVE_NO_SANDBOX === '1' };
   try {
     app = await electron.launch({ executablePath: electronExecutable,
       args: [...(process.env.GRAPHTRAJ_LIVE_NO_SANDBOX === '1' ? ['--no-sandbox'] : []),
@@ -132,9 +133,12 @@ test('one native window observes its real executing Agent', { timeout: 240000, s
     await page.getByText('This Agent connection shows only its own Session.').waitFor();
     facts.steps.push('real native self connection visible');
     console.log(JSON.stringify({ phase: 'READY', token, evidence, alias: member.alias }));
-    const liveCard = page.locator('.activity-event').filter({ hasText: liveMarker }).filter({ hasText: '· result' }).first();
+    const liveCard = page.locator('.activity-event').filter({ hasText: liveMarker })
+      .filter({ has: page.locator('summary', { hasText: /^Result \/ details$/ }) })
+      .filter({ hasText: '· result' }).first();
     await liveCard.waitFor({ timeout: 90000 });
-    await liveCard.locator('summary').click();
+    await liveCard.locator('summary', { hasText: /^Result \/ details$/ }).click();
+    await liveCard.locator('details[open]').waitFor();
     await liveCard.getByRole('button', { name: 'Copy', exact: true }).click();
     await liveCard.getByRole('button', { name: 'Copied', exact: true }).waitFor();
     const copied = await app.evaluate(({ clipboard }) => clipboard.readText());

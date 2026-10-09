@@ -9,6 +9,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { _electron as electron } from 'playwright';
+import electronExecutable from 'electron';
 
 const execute = promisify(execFile);
 const desktop = fileURLToPath(new URL('..', import.meta.url));
@@ -48,7 +49,7 @@ test('one native window observes its real executing Agent', { timeout: 240000, s
   let stderr = '';
   const facts = { project, ticket, alias: member.alias, launches: 0, steps: [] };
   try {
-    app = await electron.launch({ executablePath: path.join(desktop, 'node_modules/electron/dist/Electron.app/Contents/MacOS/Electron'),
+    app = await electron.launch({ executablePath: electronExecutable,
       args: [desktop, `--user-data-dir=${path.join(evidence, 'profile')}`], timeout: 20000,
       env: { ...process.env, GRAPHTRAJ_TOOL: tool } });
     facts.launches += 1;

@@ -50,7 +50,8 @@ test('one native window observes its real executing Agent', { timeout: 240000, s
   const facts = { project, ticket, alias: member.alias, launches: 0, steps: [] };
   try {
     app = await electron.launch({ executablePath: electronExecutable,
-      args: [desktop, `--user-data-dir=${path.join(evidence, 'profile')}`], timeout: 20000,
+      args: [...(process.env.GRAPHTRAJ_LIVE_NO_SANDBOX === '1' ? ['--no-sandbox'] : []),
+        desktop, `--user-data-dir=${path.join(evidence, 'profile')}`], timeout: 20000,
       env: { ...process.env, GRAPHTRAJ_TOOL: tool, MAC_CHROMIUM_TMPDIR: evidence } });
     facts.launches += 1;
     app.process().stderr?.on('data', chunk => { stderr = (stderr + chunk.toString()).slice(-32768); });

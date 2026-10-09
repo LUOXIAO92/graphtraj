@@ -48,7 +48,8 @@ class CheckUsage:
                   for key, value in values.items()]
         fields.insert(2, f'cache_hit_ratio={ratio:.1%}' if ratio is not None
                       else 'cache_hit_ratio=none')
-        return 'Usage (whole check, including later requests): ' + ', '.join(fields)
+        return ('Usage (whole check; input_tokens is the sum across model inputs, '
+                'not context length): ' + ', '.join(fields))
 
 
 def finalize_usage(native: dict | None = None) -> CheckUsage:

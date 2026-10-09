@@ -101,6 +101,8 @@ def response(result: dict | None, continued: bool) -> dict:
         return {}
     reason = result['reason']
     message = f"Completion check {result['status']}: {reason}"
+    if result['status'] == 'error':
+        message = f'Completion check error (task conclusion unavailable): {reason}'
     if result.get('usage_summary'):
         message += '\n' + result['usage_summary']
     visible = {'systemMessage': message}

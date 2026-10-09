@@ -7,7 +7,7 @@ import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const node = '/opt/homebrew/Cellar/node/26.5.0/bin/node';
-const deadline = Date.parse('2026-10-10T00:07:00+09:00');
+const deadline = Date.parse('2026-10-10T00:42:00+09:00');
 
 export default function (pi: ExtensionAPI) {
   if (process.cwd() !== root || process.env.ASB_SANDBOX !== '1'

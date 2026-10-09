@@ -136,6 +136,8 @@ can be exact names or narrowly scoped trailing-`*` prefixes. The optional
 `pi.allow_local_binding` can allow binding and inbound connections on all local
 interfaces and ports. These grants apply to the Pi Runtime and its subprocesses;
 they are off by default and do not change filesystem rules.
+`pi.allow_unix_sockets` allows socket binding and connections beneath the listed
+paths on macOS; it grants no file access and adds no permissions when omitted.
 
 For custom hosts, [the local tool binding](src/graphtraj/interfaces/local_tool.py)
 provides a Python callback and the `graphtraj-tool` JSON-lines process interface.

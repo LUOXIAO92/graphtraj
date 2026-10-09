@@ -174,6 +174,8 @@ npm start
 
 Choose **Add project** and select an existing GraphTraj project root. Removing
 an entry removes it from the app's list; it does not delete the project.
+You can also launch with `npm start -- --project=/absolute/project/path` to
+validate and select a project directly. Without it, the saved selection is used.
 Packaged cross-platform installers are not yet provided.
 
 ## More documentation

@@ -749,6 +749,12 @@ correctness condition or guaranteed saving. Current-host operation must be
 verified after adopting a fixed installation; controlled interface checks and
 hook material alone do not establish it.
 
+Codex completion checks use a native ephemeral fork with the applicable parent
+cache affinity and a fixed history boundary. A superseding Main turn cancels
+the check; later checks use their own current context. The initial checker task
+does not duplicate the full project graph: authoritative task data is read on
+demand. Native response notifications retain usage even without a rollout file.
+
 Each finish-check result includes usage for that individual check after its
 fork/start boundary: input and cached input tokens, cached/input ratio, output
 tokens, explicit `reasoning_tokens`, tool calls and independently available
@@ -758,6 +764,8 @@ includes reasoning, so the separate reasoning count is not added again.
 Unavailable fields and undefined ratios display `none`; observed zero remains
 zero. Tool calls are not model requests, and these counts or cache ratios alone
 do not explain cache expiry, repeated investigation or excessive reasoning.
+Retained per-response evidence identifies the first response separately from
+whole-check totals, so later reuse does not conceal an initially cold request.
 
 ## Runtime Adapter boundary
 

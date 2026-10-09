@@ -151,6 +151,12 @@ twice. Cached/input is the whole-check ratio; tool calls and model requests are
 distinct. Missing fields and undefined ratios are `none`, not zero. Do not infer
 cache expiry or reasons for the checker's behavior from these metrics alone.
 
+For Codex cache-reuse adoption, compare retained first-response usage with the
+whole-check summary. The native ephemeral fork preserves the applicable parent
+cache affinity and fixes the history boundary; its response notifications supply
+evidence without requiring a persistent rollout. Keep current task queries
+focused rather than attaching the entire graph to every check.
+
 ## Limits and recovery
 
 Honor the existing Ticket budget and Runner's enforced stop. Budget notices go to

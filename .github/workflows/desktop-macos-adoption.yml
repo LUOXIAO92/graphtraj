@@ -1,8 +1,13 @@
 name: desktop-macos-adoption
 
-# Manual only: the run installs a macOS artifact and starts the desktop GUI, so
-# it costs time and is triggered when a macOS result must be re-proven.
+# The desktop run installs a macOS artifact and starts the GUI, so it costs time
+# and runs when a macOS result must be re-proven. A first run cannot use
+# workflow_dispatch: GitHub only offers that trigger once the file is on the
+# default branch. This ticket branch therefore triggers by push, and
+# workflow_dispatch stays available for later re-runs.
 on:
+  push:
+    branches: [agent/265-desktop-mac-adoption]
   workflow_dispatch:
 
 permissions:
@@ -82,3 +87,14 @@ jobs:
             desktop/dist-package/adoption-evidence
             desktop/dist-package/GraphTraj-darwin-*.json
           if-no-files-found: error
+
+      # The runner is recycled after the job, so this upload is the only retained
+      # copy of the exact ZIP that was unpacked into /Applications and exercised.
+      - name: Upload the installed artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: graphtraj-macos-app
+          path: desktop/dist-package/GraphTraj-darwin-*.zip
+          if-no-files-found: error
+          retention-days: 7

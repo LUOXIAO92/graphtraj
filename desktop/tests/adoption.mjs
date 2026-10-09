@@ -11,9 +11,12 @@
  *   GRAPHTRAJ_APP       installed `.app` bundle (required)
  *   GRAPHTRAJ_EVIDENCE  evidence output directory (default: dist-package/adoption-evidence)
  *   GRAPHTRAJ_ADOPTION_SECRET random marker used to check for credential leakage
+ *   GRAPHTRAJ_WORK      fixture working directory (default: dist-package/adoption-work)
  *
  * The native tool is resolved from PATH or GRAPHTRAJ_TOOL, the same mechanism
  * the app uses in production. No project, session or credential is uploaded.
+ * Fixtures live outside the evidence directory, so nothing uploaded can contain
+ * a test project, user data or credential.
  */
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
@@ -31,8 +34,10 @@ const require = createRequire(import.meta.url);
 const app = process.env.GRAPHTRAJ_APP && path.resolve(process.env.GRAPHTRAJ_APP);
 const evidence = path.resolve(process.env.GRAPHTRAJ_EVIDENCE || path.join(desktop, 'dist-package', 'adoption-evidence'));
 const screens = path.join(evidence, 'screens');
+// Fixtures are working data, never uploaded: keep them beside the evidence.
+const work = path.resolve(process.env.GRAPHTRAJ_WORK || path.join(desktop, 'dist-package', 'adoption-work'));
 const secret = process.env.GRAPHTRAJ_ADOPTION_SECRET || `adoption-${randomUUID()}`;
-const facts = { app: app ?? null, evidence, steps: [], screenshots: [], passed: false };
+const facts = { app: app ?? null, evidence, work, steps: [], screenshots: [], nativeDialogs: [], passed: false };
 
 /** Record one observed step so the evidence states what was actually exercised. */
 function step(text) {
@@ -84,17 +89,47 @@ function desktopProcesses() {
   }
 }
 
+/** Wait briefly for a killed app's helper processes to be reaped. */
+async function waitForNoDesktopProcesses(timeout = 15000) {
+  const deadline = Date.now() + timeout;
+  let last = '';
+  do {
+    last = desktopProcesses();
+    if (last === '') return '';
+    await new Promise(resolve => setTimeout(resolve, 500));
+  } while (Date.now() < deadline);
+  return last;
+}
+
+/**
+ * Ask the operating system to drive a real native dialog through System Events.
+ *
+ * Returns the attempt outcome instead of throwing, so a blocked automation
+ * becomes recorded evidence rather than a silent fallback.
+ */
+function uiAutomation(lines) {
+  const args = lines.flatMap(line => ['-e', line]);
+  try {
+    const output = execFileSync('osascript', args, { encoding: 'utf8', timeout: 30000 }).trim();
+    return { ok: true, command: `osascript ${args.map(a => JSON.stringify(a)).join(' ')}`, output };
+  } catch (error) {
+    const detail = `${error.stderr ?? ''}${error.stdout ?? ''}`.trim() || error.message;
+    return { ok: false, command: `osascript ${args.map(a => JSON.stringify(a)).join(' ')}`,
+      output: `exit ${error.status ?? 'timeout'}: ${detail}` };
+  }
+}
+
 /**
  * Launch the installed bundle with Playwright's Electron driver.
  *
  * A packaged app cannot be started through the `electron` npm module, so the
  * driver's loader is passed explicitly; everything else is the app's own start.
  */
-async function launch(extraEnvironment = {}) {
+async function launch(extraEnvironment = {}, extraArgs = []) {
   const binary = path.join(app, 'Contents', 'MacOS', path.basename(app, '.app'));
   return electron.launch({
     executablePath: binary,
-    args: ['-r', electronLoader()],
+    args: ['-r', electronLoader(), ...extraArgs],
     env: { ...process.env, ...extraEnvironment },
     timeout: 60000,
   });
@@ -112,6 +147,113 @@ function projectEntry(page, name) {
   return page.locator('.project-button').filter({ hasText: name });
 }
 
+/**
+ * Attempt to drive the app's real native dialogs through OS automation.
+ *
+ * The main flow substitutes Electron's dialog API so the surrounding checks stay
+ * deterministic. This phase instead asks the operating system (System Events) to
+ * operate the real folder open panel and the real approval sheet, and records the
+ * exact command and output of every attempt. When a host blocks assistive control,
+ * the recorded failure is the evidence rather than a silent fallback.
+ */
+async function nativeDialogAttempt(first) {
+  const attempts = [];
+  const attempt = (name, lines) => {
+    const outcome = uiAutomation(lines);
+    attempts.push({ name, ok: outcome.ok, command: outcome.command, output: outcome.output });
+    return outcome.ok;
+  };
+
+  // Establish whether this session may automate another process at all.
+  attempt('system events can list processes', ['tell application "System Events" to return name of first process']);
+
+  // This directory is not preloaded, so it only appears when the real panel
+  // actually returns it; a substituted answer could not add it.
+  const added = path.join(work, 'native-project');
+  await fixtures.makeProject(added, 'native-project');
+  const rolesFile = path.join(first, '.graphtraj', 'roles.yml');
+  const original = await fs.readFile(rolesFile, 'utf8');
+  let native = null;
+  try {
+    native = await launch({ GRAPHTRAJ_ADOPTION_SECRET: secret },
+      [`--project=${first}`, `--user-data-dir=${path.join(work, 'native-user-data')}`]);
+    const page = await native.firstWindow();
+    page.setDefaultTimeout(20000);
+    await projectEntry(page, 'first-project').waitFor();
+
+    // The real open panel raised by the native "Add project" entry.
+    await page.getByRole('button', { name: 'Add project', exact: true }).click();
+    await page.waitForTimeout(3000);
+    attempt('open panel: go to folder, type the path, open it', [
+      'tell application "System Events"',
+      'tell process "GraphTraj"',
+      'set frontmost to true',
+      'keystroke "g" using {command down, shift down}',
+      'delay 1',
+      `keystroke "${added}"`,
+      'delay 1',
+      'key code 36',
+      'delay 1',
+      'key code 36',
+      'end tell',
+      'end tell',
+    ]);
+    await page.waitForTimeout(2000);
+    const picked = await projectEntry(page, 'native-project').count();
+    attempts.push({ name: 'open panel: the typed directory became a project', ok: picked > 0,
+      command: "page.locator('.project-button') text match count",
+      output: `${picked} entry matching native-project` });
+
+    // The real approval sheet raised by the native "Save changes" entry.
+    await projectEntry(page, 'first-project').click();
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await page.getByLabel('Model', { exact: true }).waitFor();
+    await page.getByLabel('Model', { exact: true }).fill('native-approved-model');
+    await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+    await page.waitForTimeout(3000);
+    attempt('approval sheet: click Save settings', [
+      'tell application "System Events"',
+      'tell process "GraphTraj"',
+      'click button "Save settings" of sheet 1 of window 1',
+      'end tell',
+      'end tell',
+    ]);
+    await page.waitForTimeout(2000);
+    const approved = await fs.readFile(rolesFile, 'utf8');
+    attempts.push({ name: 'approval sheet: the approved change was written',
+      ok: approved.includes('model: native-approved-model'),
+      command: `read ${path.relative(work, rolesFile)}`,
+      output: approved.split('\n').filter(line => line.includes('model:')).join('; ') });
+
+    await page.getByLabel('Model', { exact: true }).fill('native-cancelled-model');
+    await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+    await page.waitForTimeout(3000);
+    attempt('approval sheet: click Cancel', [
+      'tell application "System Events"',
+      'tell process "GraphTraj"',
+      'click button "Cancel" of sheet 1 of window 1',
+      'end tell',
+      'end tell',
+    ]);
+    await page.waitForTimeout(2000);
+    const cancelled = await fs.readFile(rolesFile, 'utf8');
+    attempts.push({ name: 'approval sheet: the cancelled change was not written',
+      ok: !cancelled.includes('model: native-cancelled-model'),
+      command: `read ${path.relative(work, rolesFile)}`,
+      output: cancelled.split('\n').filter(line => line.includes('model:')).join('; ') });
+  } catch (error) {
+    attempts.push({ name: 'native dialog attempt', ok: false, command: 'tests/adoption.mjs',
+      output: String((error && error.message) || error) });
+  } finally {
+    if (native) {
+      native.process().kill('SIGKILL');
+      await native.close().catch(() => {});
+    }
+    await fs.writeFile(rolesFile, original);
+  }
+  return attempts;
+}
+
 async function main() {
   assert.ok(app, 'Set GRAPHTRAJ_APP to the installed .app bundle.');
   await fs.access(app);
@@ -127,9 +269,9 @@ async function main() {
   });
   step(`installed bundle launched from ${app}; native tool resolved from PATH at ${tool}`);
 
-  const root = path.join(evidence, 'fixtures');
+  const root = path.join(work, 'fixtures');
   await fs.rm(root, { recursive: true, force: true });
-  await fs.mkdir(root);
+  await fs.mkdir(root, { recursive: true });
   const second = await fixtures.makeProject(path.join(root, 'second-project'), 'second-project');
   const first = await fixtures.makeProject(path.join(root, 'first-project'), 'first-project');
   const rolesFile = path.join(first, '.graphtraj', 'roles.yml');
@@ -149,8 +291,10 @@ async function main() {
     }));
     assert.deepEqual(boundary, { require: 'undefined', process: 'undefined', bridge: 'object' });
 
-    // The native folder dialog cannot be driven by the desktop; the same
-    // "add an existing directory" entry is exercised with a controlled answer.
+    // Controlled entry check: the same "add an existing directory" entry is
+    // driven with a substituted Electron answer so the flow below is
+    // deterministic on every host. The real native dialogs are attempted
+    // separately, with OS automation, in nativeDialogAttempt().
     async function pick(folder) {
       await appHandle.evaluate(({ dialog }, selected) => {
         dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [selected] });
@@ -276,12 +420,20 @@ async function main() {
     // Optionality: the GUI is gone, the native operations are not.
     await appHandle.close();
     appHandle = null;
-    const leftovers = desktopProcesses();
+    const leftovers = await waitForNoDesktopProcesses();
     assert.equal(leftovers, '', `the desktop must leave no process behind: ${leftovers}`);
     fixtures.operate(second, 'ticket_register', fixtures.ticket('3', 'after-gui-exit', ['2']));
     assert.equal(fixtures.operate(second, 'ticket_graph').tickets.length, 3);
     step('native operations still worked after the window closed and no desktop process remained');
     facts.optionality = { leftoverProcesses: leftovers, ticketsAfterExit: 3 };
+
+    // Evidence split: what the controlled entry covered, and the real native
+    // dialog attempts recorded with their exact commands and outcomes.
+    facts.controlledEntry = [
+      'folder open panel: Electron dialog.showOpenDialog substituted',
+      'approval sheet: Electron dialog.showMessageBox substituted (deny, approve, save error)',
+    ];
+    facts.nativeDialogs = await nativeDialogAttempt(first);
   } finally {
     if (appHandle) await appHandle.close().catch(() => {});
   }

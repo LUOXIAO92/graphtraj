@@ -39,23 +39,38 @@ export function collect(calls: Map<string, Call>, project: string, events: Activ
 
 /** Difference Codex counters before filtering, so stream snapshots cannot inflate totals. */
 export function records(calls: Map<string, Call>, filters: Filters = {}): Call[] {
-  const previous = new Map<string, Tokens>();
-  return [...calls.values()].sort((a, b) => a.offset - b.offset).map(call => {
-    if (!call.cumulative) return call;
+  const previous = new Map<string, { totals: Tokens; row: Call }>();
+  const result: Call[] = [];
+  for (const call of [...calls.values()].sort((a, b) => a.offset - b.offset)) {
+    if (!call.cumulative) { result.push(call); continue; }
     const key = JSON.stringify([call.project, call.session]);
     const before = previous.get(key);
-    previous.set(key, call.cumulative);
-    // A first observation may include earlier calls outside the retained Trace.
-    // Only its reported last usage can be attributed to its model/time.
-    if (!before) return call;
+    // First retained totals may include inherited history; use only reported last usage.
+    if (!before) {
+      const row = { ...call, tokens: { ...call.tokens } };
+      result.push(row); previous.set(key, { totals: call.cumulative, row }); continue;
+    }
     const tokens: Tokens = {};
     for (const metric of [...metrics, 'reasoning'] as const) {
       const total = call.cumulative[metric];
-      const prior = before[metric];
+      const prior = before.totals[metric];
       if (total !== undefined && prior !== undefined && total >= prior) tokens[metric] = total - prior;
     }
-    return { ...call, tokens };
-  }).filter(call => (!filters.ticket || call.ticket === filters.ticket) &&
+    // An unchanged input counter with more output is an update to the same call.
+    // Keep its input context for long-context pricing and its original timestamp.
+    if (tokens.input === 0 && call.model === before.row.model) {
+      for (const metric of [...metrics, 'reasoning'] as const) {
+        if (tokens[metric] !== undefined && before.row.tokens[metric] !== undefined) {
+          before.row.tokens[metric]! += tokens[metric]!;
+        }
+      }
+      previous.set(key, { totals: call.cumulative, row: before.row });
+    } else {
+      const row = { ...call, tokens };
+      result.push(row); previous.set(key, { totals: call.cumulative, row });
+    }
+  }
+  return result.filter(call => (!filters.ticket || call.ticket === filters.ticket) &&
     (!filters.agent || call.agent === filters.agent) && (!filters.model || call.model === filters.model) &&
     (!filters.from || call.time !== null && call.time >= new Date(filters.from).toISOString()) &&
     (!filters.to || call.time !== null && call.time <= new Date(filters.to).toISOString()));

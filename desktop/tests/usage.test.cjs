@@ -75,7 +75,8 @@ test('cumulative updates difference before model/time filtering and replay do no
   collect(map, 'p', [a, b, a, b]);
   assert.equal(summarize(records(map)).tokens.output.value, 10);
   assert.equal(summarize(records(map)).tokens.input.value, 100);
-  assert.equal(summarize(records(map, { from: '2026-10-10T10:30:00Z' })).tokens.output.value, 5);
+  assert.equal(records(map).length, 1);
+  assert.equal(summarize(records(map, { from: '2026-10-10T10:30:00Z' })).tokens.output.value, 0);
 });
 
 test('project, ownership, model and time filters preserve unknown/unattributable coverage', () => {
@@ -99,4 +100,16 @@ test('partial cumulative stream fields retain previously reported operands', () 
   assert.equal(result.tokens.input.value, 100);
   assert.equal(result.tokens.output.value, 10);
   assert.equal(result.cacheRate, .2);
+});
+
+test('streamed Codex output retains the original long-context price tier', () => {
+  const map = new Map();
+  const tokens = { input: 300000, cache_read: 100000, cache_write: 100000, output: 1000 };
+  const make = (id, output) => ({ ...event(id, { ...tokens, output }, {
+    cumulative: { input_tokens: 300000, cached_input_tokens: 100000, cache_write_input_tokens: 100000, output_tokens: output },
+  }), model: 'gpt-6-astra' });
+  collect(map, 'p', [make('1', 1000), make('2', 2000)]);
+  const rows = records(map);
+  assert.equal(rows.length, 1);
+  assert.equal(cost(rows[0]).amount, 4.85); // 2 + .2 + 2.5 + .15
 });

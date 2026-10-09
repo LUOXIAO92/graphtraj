@@ -220,6 +220,84 @@ def test_public_usage_diagnostic_excludes_conversation(
     assert 'private inherited prose' not in json.dumps(result.document)
 
 
+def test_completed_stop_refreshes_pathless_usage_and_cli_projection(
+    host_peer: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A completion during the public wait replaces older evidence without a rollout read."""
+    import yaml
+    from graphtraj.configuration.project_configuration import default_configuration_content
+    from graphtraj.execution.main_finalize import session_binding
+    from graphtraj.runtimes.codex.app_server import CodexAppServer
+
+    config = host_peer / '.graphtraj/config.yml'
+    config.parent.mkdir()
+    config.write_text(default_configuration_content(host_peer, host_peer))
+    path = session_binding(host_peer, 'codex', 'original-host')
+    check = path.parent / 'checks/retained'
+    check.mkdir(parents=True)
+    path.write_text(yaml.safe_dump({'runtime': 'codex', 'session': 'original-host',
+        'connection': {'runtime': 'codex', 'session': 'original-host',
+                       'codex_home': str(host_peer / 'home'), 'hook_session': 'native-session'}}))
+    (check / 'session.yml').write_text(yaml.safe_dump({
+        'runtime': 'codex', 'session': 'old-checker', 'parent': 'original-host'}))
+    (check / 'execution.yml').write_text('output: old checker prose\n')
+    settings = {'model': 'actual-model', 'modelProvider': 'actual-provider',
+                'reasoningEffort': 'high', 'serviceTier': None, 'approvalPolicy': 'on-request',
+                'approvalsReviewer': 'user', 'cwd': '/private/current-project',
+                'instructionSources': ['/private/current-project/AGENTS.md'],
+                'sandbox': {'type': 'workspace-write', 'writableRoots': ['/private/current-project']}}
+    first = {'response_id': 'response-one', 'input_tokens': 100, 'cached_input_tokens': 80}
+    second = {'response_id': 'response-two', 'input_tokens': 200, 'cached_input_tokens': 190}
+    original_status = CodexAppServer.read_host_status
+
+    async def read_status(client: CodexAppServer, session: str) -> dict:
+        """Persist the completed Stop's normal result as the peer becomes idle."""
+        state = await original_status(client, session)
+        if state['activity'] == 'idle':
+            latest = path.parent / 'checks/new'
+            latest.mkdir(exist_ok=True)
+            (latest / 'session.yml').write_text(yaml.safe_dump({
+                'runtime': 'codex', 'session': 'new-checker', 'parent': 'original-host'}))
+            (latest / 'execution.yml').write_text(yaml.safe_dump({
+                'session': 'new-checker', 'parent': 'original-host', 'parent_turn': 'main-turn',
+                'turn': 'check-turn', 'outcome': 'completed', 'output': 'private checker prose',
+                'response_usage': {'first_response': first, 'responses': [first, second],
+                                   'terminal_status': 'completed'},
+                'usage': {'input_tokens': 300, 'cached_input_tokens': 270, 'model_requests': 2},
+                'configuration': {**settings, 'thread': {
+                    'id': 'new-checker', 'sessionId': 'native-child', 'forkedFromId': 'original-host',
+                    'ephemeral': True, 'cliVersion': '0.162.0'}},
+                'parent_configuration': settings,
+            }))
+        return state
+
+    monkeypatch.setattr(CodexAppServer, 'read_host_status', read_status)
+    (host_peer / 'mode').write_text('turn')
+    result = bind(host_peer)({'action': 'execute', 'feature': 'parent_status',
+                             'arguments': {'include_hooks': True, 'timeout_seconds': 1}})
+    assert not result.failed, result.document
+    facts = result.document['completion_usage']
+    assert facts['session'] == 'new-checker'
+    assert facts['parent'] == 'original-host' and facts['parent_turn'] == 'main-turn'
+    assert facts['turn'] == 'check-turn' and facts['native_identity']['ephemeral'] is True
+    assert facts['response_usage']['first_response'] == first
+    assert facts['response_usage']['responses'] == [first, second]
+    assert facts['usage']['input_tokens'] == 300 and facts['usage']['model_requests'] == 2
+    assert facts['configuration'] == facts['parent_configuration']
+    assert facts['configuration']['reasoningEffort'] == 'high'
+    assert facts['configuration']['serviceTier'] is None
+    assert len(facts['configuration']['instructionSources_sha256']) == 64
+    assert 'private checker prose' not in json.dumps(result.document)
+    assert '/private/current-project' not in json.dumps(result.document)
+    assert 'runtimeWorkspaceRoots_sha256' not in facts['configuration']
+
+    # A separate public read after completion sees the same latest check. The
+    # peer refuses any checker thread/read or thread/turns/list request.
+    reply = CliRunner().invoke(main, ['parent-status', '--include-hooks', '--timeout-seconds', '0'])
+    assert reply.exit_code == 0, reply.output
+    assert yaml.safe_load(reply.output)['completion_usage'] == facts
+
+
 @pytest.mark.parametrize(('mode', 'outcome'), [('stale', 'timeout'), ('disconnect', 'error'), ('wrong', 'error')])
 def test_parent_wait_does_not_invent_idle(host_peer: Path, mode: str, outcome: str) -> None:
     """Inconsistent state, a closed proxy and wrong identity cannot prove idle."""

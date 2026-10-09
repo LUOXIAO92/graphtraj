@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -15,10 +16,10 @@ if TYPE_CHECKING:
 
 
 async def latest_check_usage(client: CodexAppServer, association: dict) -> dict:
-    """Project only usage counters from the bound Main's latest retained check.
+    """Project usage and bounded identity/settings facts from Main's latest check.
 
     This existing parent-status observation never returns conversation, tool
-    arguments, checker output or native configuration. It can diagnose checks
+    arguments, checker output or raw native configuration. It can diagnose checks
     made before usage diagnostics were retained in their execution result.
     """
     if association.get('status') != 'matching':
@@ -35,9 +36,18 @@ async def latest_check_usage(client: CodexAppServer, association: dict) -> dict:
             return {'status': 'association-mismatch'}
         execution = yaml.safe_load(latest.read_text())
         if execution.get('session') == child['session'] and 'response_usage' in execution:
+            if execution.get('parent') != owner.get('session'):
+                return {'status': 'association-mismatch'}
+            configuration = execution.get('configuration', {})
             return {'status': 'observed', 'session': child['session'],
+                    'parent': execution['parent'], 'parent_turn': execution.get('parent_turn'),
                     'turn': execution.get('turn'), 'usage': execution.get('usage'),
                     'response_usage': execution['response_usage'],
+                    'configuration': configuration_facts(configuration),
+                    'parent_configuration': configuration_facts(execution.get('parent_configuration', {})),
+                    'native_identity': {key: configuration.get('thread', {})[key] for key in (
+                        'id', 'sessionId', 'forkedFromId', 'ephemeral', 'historyMode', 'cliVersion',
+                    ) if key in configuration.get('thread', {})},
                     'outcome': execution.get('outcome')}
         thread = await client.read_thread(child['session'])
         state = await client.read_host_status(child['session'])
@@ -91,6 +101,26 @@ async def latest_check_usage(client: CodexAppServer, association: dict) -> dict:
                 'phases': phases}
     except (OSError, ValueError, KeyError, TypeError, yaml.YAMLError, RuntimeAdapterError) as error:
         return {'status': 'unavailable', 'error_type': type(error).__name__}
+
+
+def configuration_facts(configuration: dict) -> dict:
+    """Allowlist settings and fingerprint paths/permission details without disclosure.
+
+    Fingerprints compare recorded values; they do not prove instruction contents
+    or reconstruct missing settings. Absent fields remain absent, null stays null.
+    """
+    facts = {key: configuration[key] for key in (
+        'model', 'modelProvider', 'serviceTier', 'reasoningEffort',
+        'approvalPolicy', 'approvalsReviewer',
+    ) if key in configuration}
+    for key in ('cwd', 'runtimeWorkspaceRoots', 'instructionSources', 'sandbox',
+                'activePermissionProfile', 'disabledPluginIds'):
+        if key in configuration:
+            value = configuration[key]
+            facts[key + '_sha256'] = None if value is None else hashlib.sha256(
+                json.dumps(value, sort_keys=True, ensure_ascii=False).encode('utf-8')
+            ).hexdigest()
+    return facts
 
 
 def tool_call_id(payload: dict) -> str | None:

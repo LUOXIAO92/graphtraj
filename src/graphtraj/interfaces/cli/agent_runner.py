@@ -172,10 +172,12 @@ def main_session(instruction_file: Path, resume: str | None) -> None:
 
 @main.command(cls=OperationCommand, feature="parent_status")
 @click.option('--timeout-seconds', default=0.0, type=float)
-def parent_status(timeout_seconds: float) -> None:
+@click.option('--include-hooks', is_flag=True)
+def parent_status(timeout_seconds: float, include_hooks: bool) -> None:
     """Observe the root caller's owning host without sending it input."""
     try:
-        result = invoke_tool('parent_status', {'timeout_seconds': timeout_seconds}, cwd=Path.cwd().resolve())
+        result = invoke_tool('parent_status', {'timeout_seconds': timeout_seconds,
+                                             'include_hooks': include_hooks}, cwd=Path.cwd().resolve())
     except (RunnerError, ValueError) as error:
         _fail(RunnerError(getattr(error, 'code', 'invalid-input'), str(error)))
     _emit_result(result.document)

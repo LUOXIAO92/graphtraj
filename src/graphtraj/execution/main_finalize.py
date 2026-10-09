@@ -14,7 +14,6 @@ from graphtraj.configuration.project_configuration import load_project_configura
 from graphtraj.execution.runner_io import write_yaml_durably
 from graphtraj.execution.runner_models import RunnerError
 from graphtraj.execution.runner_status import caller_alias
-from graphtraj.graph.ticket_graph import read_graph
 from graphtraj.runtimes.runtime_adapter import current_host_connection, select_runtime_adapter
 from graphtraj.workspace.runner_project import discover_runner_directory
 
@@ -105,11 +104,9 @@ def parse_check_result(text: str) -> dict[str, Any]:
 
 def check_prompt(binding: dict) -> str:
     """Supply current authoritative graph access and a non-authoritative task hint."""
-    configuration = load_project_configuration(Path(binding['cwd']))
-    graph = read_graph(configuration.state)
     prompt = files('graphtraj').joinpath('prompts/main_finalize_check.md').read_text(encoding='utf-8')
     return prompt + '\n\n' + json.dumps({
-        'summary_issue_hint': binding['summary_issue'], 'task_graph': graph,
+        'summary_issue_hint': binding['summary_issue'],
     }, ensure_ascii=False)
 
 
@@ -160,6 +157,10 @@ def check_main_finalize(binding_file: Path, event: dict[str, Any]) -> dict[str, 
             raise ValueError('The completion result does not belong to the bound child.')
         usage = adapter.finalize_usage(native)
         write_yaml_durably(child_binding[1] / 'execution.yml', {**native, 'usage': usage.document()})
+        if native.get('outcome') == 'cancelled':
+            return adapter.finalize_response(None, False)
+        if native.get('outcome') == 'error':
+            raise ValueError(native['error'])
         result = parse_check_result(native['output'])
     except Exception as error:
         result = {'status': 'error', 'reason': f'Completion check failed: {error}', 'nodes': []}

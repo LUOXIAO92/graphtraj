@@ -33,6 +33,12 @@ async def latest_check_usage(client: CodexAppServer, association: dict) -> dict:
         owner = yaml.safe_load(binding.read_text())
         if child.get('runtime') != 'codex' or child.get('parent') != owner.get('session'):
             return {'status': 'association-mismatch'}
+        execution = yaml.safe_load(latest.read_text())
+        if execution.get('session') == child['session'] and 'response_usage' in execution:
+            return {'status': 'observed', 'session': child['session'],
+                    'turn': execution.get('turn'), 'usage': execution.get('usage'),
+                    'response_usage': execution['response_usage'],
+                    'outcome': execution.get('outcome')}
         thread = await client.read_thread(child['session'])
         state = await client.read_host_status(child['session'])
         turn = state.get('turn') or {}
@@ -120,13 +126,18 @@ class CodexCheckUsage:
     native last_token_usage only after new model output in this turn, deduping
     cumulative snapshots. A pre-output replay is not a current request.
     output_tokens already includes reasoning_output_tokens: expose reasoning
-    separately without adding it to output. Model requests remain unavailable.
+    separately without adding it to output. Exact response notifications or
+    token_usage_record IDs take precedence over cumulative representations.
     Missing/unreadable telemetry does not change the completion decision.
     """
 
     def __init__(self, path: Path | None, session: str) -> None:
         """Remember the exact native file boundary before the checker starts."""
         self.path = path
+        self.session = session
+        self.responses: dict[str, dict[str, dict]] = {}
+        self.native_calls: dict[str, set[str]] = {}
+        self.terminal: dict[str, str] = {}
         self.offset = 0
         self.baseline: dict = {}
         self.calls: set[str] = set()
@@ -155,8 +166,64 @@ class CodexCheckUsage:
         except (OSError, ValueError, TypeError, KeyError):
             return
 
+    def observe(self, notice: dict) -> None:
+        """Keep only this child's native response facts, tool IDs and outcomes.
+
+        App-server exposes rawResponse/completed even for pathless forks. It is
+        optional telemetry: never substitute thread/tokenUsage lifetime totals.
+        """
+        if not isinstance(notice, dict):
+            return
+        params = notice.get('params', {})
+        if params.get('threadId') != self.session:
+            return
+        method = notice.get('method')
+        turn = params.get('turnId')
+        if method == 'turn/completed':
+            completed = params.get('turn', {})
+            self.terminal[completed['id']] = completed['status']
+        elif isinstance(turn, str):
+            if method == 'rawResponse/completed':
+                response = params.get('responseId')
+                if isinstance(response, str) and response:
+                    usage = params.get('usage') or {}
+                    self.responses.setdefault(turn, {}).setdefault(response, {
+                        field: usage.get(native) for field, native in (
+                            ('input_tokens', 'inputTokens'),
+                            ('cached_input_tokens', 'cachedInputTokens'),
+                            ('output_tokens', 'outputTokens'),
+                            ('reasoning_tokens', 'reasoningOutputTokens'),
+                        )
+                    })
+            elif method == 'rawResponseItem/completed':
+                call = tool_call_id(params.get('item', {}))
+                if call is not None:
+                    self.native_calls.setdefault(turn, set()).add(call)
+
+    def response_evidence(self, turn: str) -> dict:
+        """Expose ordered independent response facts, including first-response reuse."""
+        responses = [dict(response_id=key, **value)
+                     for key, value in self.responses.get(turn, {}).items()]
+        return {'responses': responses, 'first_response': responses[0] if responses else None,
+                'terminal_status': self.terminal.get(turn)}
+
+    def _response_totals(self, turn: str) -> CheckUsage:
+        """Aggregate unique current-turn responses only after native completion."""
+        responses = list(self.responses.get(turn, {}).values())
+        if self.terminal.get(turn) != 'completed' or not responses:
+            return CheckUsage()
+        values = {}
+        for field in ('input_tokens', 'cached_input_tokens', 'output_tokens', 'reasoning_tokens'):
+            parts = [response.get(field) for response in responses]
+            if all(type(value) is int and value >= 0 for value in parts):
+                values[field] = sum(parts)
+        return CheckUsage(**values, model_requests=len(responses),
+                          tool_calls=len(self.native_calls.get(turn, set())))
+
     def finish(self, turn: str) -> CheckUsage:
         """Count only complete appended records associated with this native turn."""
+        if self.responses.get(turn):
+            return self._response_totals(turn)
         if not self.ready or self.path is None:
             return CheckUsage()
         try:
@@ -182,6 +249,18 @@ class CodexCheckUsage:
                     current = payload.get('turn_id')
                 if current != turn:
                     continue
+                if (record.get('type') == 'token_usage_record'
+                        and payload.get('thread_id') == self.session
+                        and payload.get('turn_id') == turn
+                        and isinstance(payload.get('response_id'), str)
+                        and payload['response_id']):
+                    usage = payload.get('usage') or {}
+                    self.responses.setdefault(turn, {}).setdefault(payload['response_id'], {
+                        'input_tokens': usage.get('input_tokens'),
+                        'cached_input_tokens': usage.get('cached_input_tokens'),
+                        'output_tokens': usage.get('output_tokens'),
+                        'reasoning_tokens': usage.get('reasoning_output_tokens'),
+                    })
                 snapshot = _total(record)
                 if snapshot is not None:
                     total = snapshot
@@ -207,6 +286,10 @@ class CodexCheckUsage:
             # A partial native flush cannot establish a whole-check aggregate.
             if not completed:
                 return CheckUsage()
+            if self.responses.get(turn):
+                self.terminal[turn] = 'completed'
+                self.native_calls[turn] = calls
+                return self._response_totals(turn)
             if model_output:
                 increments.append({})  # The final response has no usable usage update.
             values = {}

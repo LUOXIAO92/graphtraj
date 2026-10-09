@@ -57,7 +57,7 @@ for line in sys.stdin:
         result = {'thread':main_thread()}
         if options.get('read_id_from_request'): result['thread']['id'] = params['threadId']
     elif method == 'thread/resume':
-        result = {'thread':main_thread()}
+        result = {'thread':main_thread(), **options.get('configuration', {})}
         if options.get('parent_approval'):
             send({'id':'parent-approval','method':'item/commandExecution/requestApproval',
                   'params':{'threadId':'main','turnId':'main-turn','itemId':'parent-command',
@@ -70,7 +70,8 @@ for line in sys.stdin:
             continue
         # The peer owns context inheritance; the caller supplies no history.
         parent_context = ['original developer instructions','private context sentinel']
-        child = {'id':options.get('child','checker'),'forkedFromId':'main'}
+        child = {'id':options.get('child','checker'),'forkedFromId':'main',
+                 'ephemeral':params.get('ephemeral', False)}
         if 'records' in options:
             child['path'] = str(root / 'checker.jsonl')
             records = [{'type':'session_meta','payload':{'id':child['id']}}]
@@ -78,7 +79,9 @@ for line in sys.stdin:
             Path(child['path']).write_text(''.join(json.dumps(r) + '\n' for r in records))
         (root / 'child-context.json').write_text(json.dumps(parent_context))
         result = {'thread':child, 'model':options.get('fork_model','actual-model'),
-                  'modelProvider':'actual-provider', 'reasoningEffort':params.get('config',{}).get('model_reasoning_effort')}
+                  'modelProvider':'actual-provider', **options.get('configuration', {}),
+                  'reasoningEffort':params.get('config',{}).get('model_reasoning_effort')}
+        if options.get('supersede_during_fork'): options['current_turn'] = 'new-main-turn'
     elif method == 'turn/start':
         assert params['threadId'] == options.get('child','checker')
         context = json.loads((root / 'child-context.json').read_text())
@@ -106,6 +109,7 @@ for line in sys.stdin:
         if options.get('usage'):
             send({'method':'thread/tokenUsage/updated','params':{
                 'threadId':params['threadId'],'tokenUsage':options['usage']}})
+        for notice in options.get('notifications', []): send(notice)
         text = options.get('output',json.dumps({'status':'completed','reason':'All required tickets integrated.','nodes':[]}))
         send({'method':'item/completed','params':{'threadId':params['threadId'],'turnId':'check-turn',
               'item':{'id':'answer','type':'agentMessage','text':text}}})
@@ -186,7 +190,7 @@ def test_main_end_decision(
     wire = [json.loads(line) for line in (root / 'wire.jsonl').read_text().splitlines()]
     fork = next(item['params'] for item in wire if item['method'] == 'thread/fork')
     assert fork == {'threadId':'main', 'model':'actual-model', 'modelProvider':'actual-provider',
-                    'excludeTurns':True}
+                    'excludeTurns':True, 'ephemeral':True}
     context = json.loads((root / 'child-context.json').read_text())
     assert context[:2] == ['original developer instructions', 'private context sentinel']
     assert len(context) == 3
@@ -363,6 +367,9 @@ def test_checker_reports_missing_native_approval_interface(host: tuple[Path, Pat
     assert 'no bound user approval interface' in result['systemMessage']
     reply = json.loads((root / 'approval-reply.json').read_text())
     assert 'error' in reply and 'result' not in reply
+    evidence = yaml.safe_load(next(binding.parent.glob('checks/*/execution.yml')).read_text())
+    assert evidence['outcome'] == 'error'
+    assert 'no bound user approval interface' in evidence['error']
 
 
 def test_only_observed_cache_usage_is_retained(host: tuple[Path, Path]) -> None:
@@ -688,3 +695,130 @@ def test_fork_without_baseline_uses_native_request_increments(host: tuple[Path, 
     assert 'reasoning_tokens=64' in result['systemMessage']
     assert 'tool_calls=2' in result['systemMessage']
     assert 'model_requests=none' in result['systemMessage']
+
+
+def response_notice(identifier: str, usage: dict | None, turn: str = 'check-turn') -> dict:
+    """Represent exact app-server response usage, independent of lifetime totals."""
+    return {'method': 'rawResponse/completed', 'params': {
+        'threadId': 'checker', 'turnId': turn, 'responseId': identifier, 'usage': usage,
+    }}
+
+
+def test_pathless_fork_retains_first_response_and_unique_usage(host: tuple[Path, Path]) -> None:
+    """An ephemeral checker retains live usage without requiring native disk history."""
+    root, binding = host
+    first = response_notice('response-one', {
+        'inputTokens': 100, 'cachedInputTokens': 80, 'outputTokens': 20, 'reasoningOutputTokens': 5,
+    })
+    last = response_notice('response-two', {
+        'inputTokens': 300, 'cachedInputTokens': 240, 'outputTokens': 10, 'reasoningOutputTokens': 0,
+    })
+    tool = {'method': 'rawResponseItem/completed', 'params': {
+        'threadId': 'checker', 'turnId': 'check-turn',
+        'item': {'type': 'function_call', 'call_id': 'one-tool'},
+    }}
+    (root / 'options.json').write_text(json.dumps({
+        'notifications': [response_notice('old-response', {'inputTokens': 900000}, 'old-turn'),
+                          tool, tool, first, first, last, last],
+        'usage': {'total': {'inputTokens': 900400}, 'last': {'inputTokens': 300}},
+    }))
+    result = stop(binding)
+    evidence = yaml.safe_load(next(binding.parent.glob('checks/*/execution.yml')).read_text())
+    assert evidence['parent'] == 'main' and evidence['parent_turn'] == 'main-turn'
+    assert evidence['turn'] == 'check-turn' and evidence['outcome'] == 'completed'
+    assert evidence['configuration']['thread']['ephemeral'] is True
+    assert evidence['usage'] == {
+        'input_tokens': 400, 'cached_input_tokens': 320, 'output_tokens': 30,
+        'reasoning_tokens': 5, 'tool_calls': 1, 'model_requests': 2, 'cache_hit_ratio': 0.8,
+    }
+    responses = evidence['response_usage']
+    assert responses['first_response'] == responses['responses'][0]
+    assert responses['first_response']['input_tokens'] == 100
+    assert responses['first_response']['cached_input_tokens'] == 80
+    assert len(responses['responses']) == 2
+    assert 'model_requests=2' in result['systemMessage']
+    assert 'decision' not in result
+
+
+def test_response_with_unknown_usage_does_not_become_zero(host: tuple[Path, Path]) -> None:
+    """A missing response measurement makes the corresponding aggregate unknown."""
+    root, binding = host
+    (root / 'options.json').write_text(json.dumps({'notifications': [
+        response_notice('first', None), response_notice('second', {'inputTokens': 100}),
+    ]}))
+    stop(binding)
+    evidence = yaml.safe_load(next(binding.parent.glob('checks/*/execution.yml')).read_text())
+    assert evidence['usage']['model_requests'] == 2
+    assert evidence['usage']['input_tokens'] is None
+    assert evidence['response_usage']['first_response']['cached_input_tokens'] is None
+
+
+@pytest.mark.parametrize('options', [
+    {'supersede_during_fork': True},
+    {'notifications': [{'method': 'turn/started', 'params': {
+        'threadId': 'main', 'turn': {'id': 'new-main-turn'},
+    }}]},
+])
+def test_superseded_fork_retains_cancellation(host: tuple[Path, Path], options: dict) -> None:
+    """A new Main turn cancels the old snapshot and never wakes Main with its result."""
+    root, binding = host
+    (root / 'options.json').write_text(json.dumps(options))
+    assert stop(binding) == {}
+    evidence = yaml.safe_load(next(binding.parent.glob('checks/*/execution.yml')).read_text())
+    assert evidence['outcome'] == 'cancelled'
+    if options.get('supersede_during_fork'):
+        wire = [json.loads(line) for line in (root / 'wire.jsonl').read_text().splitlines()]
+        assert not any(message['method'] == 'turn/start' for message in wire)
+
+
+def test_fork_preserves_observed_configuration(host: tuple[Path, Path]) -> None:
+    """Live service and approval overrides survive a fork instead of using defaults."""
+    root, binding = host
+    configuration = {
+        'serviceTier': 'fast', 'cwd': str(root), 'runtimeWorkspaceRoots': [str(root)],
+        'approvalPolicy': 'untrusted', 'approvalsReviewer': 'user', 'reasoningEffort': 'high',
+    }
+    (root / 'options.json').write_text(json.dumps({'configuration': configuration}))
+    stop(binding)
+    wire = [json.loads(line) for line in (root / 'wire.jsonl').read_text().splitlines()]
+    fork = next(message['params'] for message in wire if message['method'] == 'thread/fork')
+    assert all(fork[key] == value for key, value in configuration.items() if key != 'reasoningEffort')
+    assert fork['config']['model_reasoning_effort'] == 'high'
+    evidence = yaml.safe_load(next(binding.parent.glob('checks/*/execution.yml')).read_text())
+    assert all(evidence['configuration'][key] == value for key, value in configuration.items())
+
+
+def test_fork_uses_current_turn_collaboration_settings(host: tuple[Path, Path]) -> None:
+    """The checker receives the current mode and instructions, not an old turn's mode."""
+    root, binding = host
+    rollout(root)
+    records = [json.loads(line) for line in (root / 'rollout.jsonl').read_text().splitlines()]
+    collaboration = {'mode': 'plan', 'settings': {
+        'model': 'actual-model', 'reasoning_effort': 'high',
+        'developer_instructions': 'Current custom mode instruction',
+    }}
+    records[-1]['payload']['collaboration_mode'] = collaboration
+    (root / 'rollout.jsonl').write_text(''.join(json.dumps(r) + '\n' for r in records))
+    native_hook(root)
+    wire = [json.loads(line) for line in (root / 'wire.jsonl').read_text().splitlines()]
+    start = next(message['params'] for message in wire if message['method'] == 'turn/start')
+    assert start['collaborationMode'] == collaboration
+
+
+def test_rollout_response_ids_deduplicate_token_count_representations(host: tuple[Path, Path]) -> None:
+    """Available persisted response IDs win over their duplicate cumulative events."""
+    root, binding = host
+    record = {'type': 'token_usage_record', 'payload': {
+        'thread_id': 'checker', 'turn_id': 'check-turn', 'response_id': 'response-one',
+        'usage': {'input_tokens': 100, 'cached_input_tokens': 0, 'output_tokens': 20,
+                  'reasoning_output_tokens': 5},
+    }}
+    records = check_records([token_record(input_tokens=900000)], [
+        record, record, token_record(input_tokens=900100), token_record(input_tokens=900100),
+    ])
+    (root / 'options.json').write_text(json.dumps({'records': records}))
+    stop(binding)
+    evidence = yaml.safe_load(next(binding.parent.glob('checks/*/execution.yml')).read_text())
+    assert evidence['usage']['model_requests'] == 1
+    assert evidence['usage']['input_tokens'] == 100
+    assert evidence['usage']['cached_input_tokens'] == 0

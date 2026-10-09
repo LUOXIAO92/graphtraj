@@ -35,6 +35,19 @@ def native_event(event: dict) -> dict:
     managed = process_caller_alias(runner, os.getpid())
     if managed is not None:
         return skipped(f'process ownership resolved to managed Agent {managed}.')
+    if not event.get('transcript_path'):
+        # Ephemeral root forks have no transcript. Their hook session ID is the
+        # root thread ID; verify it natively and require our creation binding
+        # before skipping, rather than stopping the child at SessionStart.
+        session = event.get('session_id')
+        connection = {'runtime': 'codex', 'session': session,
+                      'hook_session': session,
+                      'codex_home': os.path.abspath(os.environ.get('CODEX_HOME', Path.home() / '.codex'))}
+        if isinstance(session, str) and session and is_bound_checker(runner, connection):
+            from graphtraj.runtimes.codex.finalize import verify_main
+
+            verify_main(connection)
+            return skipped(f'Session {session} is a recorded completion checker.')
     metadata, _ = event_record(event)
     source = session_source(metadata)
     if source == 'child':

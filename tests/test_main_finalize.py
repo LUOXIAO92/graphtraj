@@ -56,6 +56,7 @@ for line in sys.stdin:
     if method == 'thread/read':
         result = {'thread':main_thread()}
         if options.get('read_id_from_request'): result['thread']['id'] = params['threadId']
+        if options.get('session_id_from_request'): result['thread']['sessionId'] = params['threadId']
     elif method == 'thread/resume':
         result = {'thread':main_thread(), **options.get('configuration', {})}
         if options.get('parent_approval'):
@@ -605,6 +606,25 @@ def test_native_checker_and_changed_turn_do_not_recurse(host: tuple[Path, Path])
     assert result['continue'] is False and 'settings' in result['systemMessage']
 
 
+def test_registered_pathless_checker_start_does_not_stop_inference(host: tuple[Path, Path]) -> None:
+    """An ephemeral fork's inherited hook skips before requiring nonexistent history."""
+    root, binding = host
+    main_finalize.bind_checker(binding, yaml.safe_load(binding.read_text()), 'checker')
+    original = binding.read_bytes()
+    (root / 'options.json').write_text(json.dumps({
+        'read_id_from_request': True, 'session_id_from_request': True,
+    }))
+    assert native_hook(root, 'SessionStart', session_id='checker', transcript_path=None) == {}
+    result = native_hook(root, 'Stop', session_id='checker', transcript_path=None)
+    assert set(result) == {'systemMessage'}
+    assert 'recorded completion checker' in result['systemMessage']
+    assert binding.read_bytes() == original
+    # A missing transcript alone is not authority to skip an unrelated Session.
+    assert native_hook(root, 'SessionStart', session_id='unregistered', transcript_path=None)['continue'] is False
+    (root / 'options.json').write_text(json.dumps({'read_id_from_request': True}))
+    assert native_hook(root, 'SessionStart', session_id='checker', transcript_path=None)['continue'] is False
+
+
 def test_native_stop_reports_managed_and_stale_routing(
     host: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -751,6 +771,52 @@ def test_response_with_unknown_usage_does_not_become_zero(host: tuple[Path, Path
     assert evidence['usage']['model_requests'] == 2
     assert evidence['usage']['input_tokens'] is None
     assert evidence['response_usage']['first_response']['cached_input_tokens'] is None
+
+
+@pytest.mark.parametrize('missing_final_usage', [False, True])
+def test_pathless_public_usage_without_raw_subscription(
+    host: tuple[Path, Path], missing_final_usage: bool,
+) -> None:
+    """A native fork suppresses raw events; public increments still exclude history/replays."""
+    root, binding = host
+
+    def update(total: int, current: int, cached: int) -> dict:
+        """Provide the public native cumulative identity and last response usage."""
+        return {'method': 'thread/tokenUsage/updated', 'params': {
+            'threadId': 'checker', 'turnId': 'check-turn', 'tokenUsage': {
+                'total': {'inputTokens': total}, 'last': {
+                    'inputTokens': current, 'cachedInputTokens': cached,
+                    'outputTokens': 10, 'reasoningOutputTokens': 2,
+                }}}}
+
+    tool = {'method': 'item/started', 'params': {
+        'threadId': 'checker', 'turnId': 'check-turn',
+        'item': {'id': 'tool-one', 'type': 'commandExecution'},
+    }}
+    answer = {'method': 'item/completed', 'params': {
+        'threadId': 'checker', 'turnId': 'check-turn', 'item': {
+            'id': 'answer', 'type': 'agentMessage',
+            'text': json.dumps({'status': 'completed', 'reason': 'Verified current task.', 'nodes': []}),
+        },
+    }}
+    first = update(900100, 100, 0)
+    second = update(900400, 300, 240)
+    notices = [update(900000, 99999, 90000), tool, tool, first, first, answer]
+    if not missing_final_usage:
+        notices += [second, second]
+    (root / 'options.json').write_text(json.dumps({'notifications': notices}))
+    result = stop(binding)
+    assert 'completed' in result['systemMessage'] and 'decision' not in result
+    evidence = yaml.safe_load(next(binding.parent.glob('checks/*/execution.yml')).read_text())
+    usage = evidence['usage']
+    assert usage['input_tokens'] == (None if missing_final_usage else 400)
+    assert usage['cached_input_tokens'] == (None if missing_final_usage else 240)
+    assert usage['model_requests'] is None and usage['tool_calls'] == 1
+    facts = evidence['response_usage']
+    assert facts['responses'] == [] and facts['first_response'] is None
+    assert facts['first_usage_update']['input_tokens'] == 100
+    assert facts['first_usage_update']['cached_input_tokens'] == 0
+    assert len(facts['usage_updates']) == (1 if missing_final_usage else 2)
 
 
 @pytest.mark.parametrize('options', [

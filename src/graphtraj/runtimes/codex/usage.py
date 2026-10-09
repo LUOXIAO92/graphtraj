@@ -148,7 +148,7 @@ def _total(record: dict) -> dict | None:
 
 
 class CodexCheckUsage:
-    """Capture a fork baseline before execution and consume its appended records.
+    """Collect current-check usage from live notifications or appended records.
 
     Codex total_token_usage is cumulative across inherited history; last usage
     can be replayed with rate-limit updates and has no independent request ID.
@@ -168,6 +168,7 @@ class CodexCheckUsage:
         self.responses: dict[str, dict[str, dict]] = {}
         self.native_calls: dict[str, set[str]] = {}
         self.terminal: dict[str, str] = {}
+        self.updates: dict[str, dict] = {}
         self.offset = 0
         self.baseline: dict = {}
         self.calls: set[str] = set()
@@ -199,8 +200,9 @@ class CodexCheckUsage:
     def observe(self, notice: dict) -> None:
         """Keep only this child's native response facts, tool IDs and outcomes.
 
-        App-server exposes rawResponse/completed even for pathless forks. It is
-        optional telemetry: never substitute thread/tokenUsage lifetime totals.
+        Fork listeners suppress raw response events in Codex0.162. Use public
+        tokenUsage updates following new canonical model output when raw facts
+        are unavailable. Lifetime totals only deduplicate these updates.
         """
         if not isinstance(notice, dict):
             return
@@ -213,6 +215,37 @@ class CodexCheckUsage:
             completed = params.get('turn', {})
             self.terminal[completed['id']] = completed['status']
         elif isinstance(turn, str):
+            update = self.updates.setdefault(turn, {
+                'items': set(), 'snapshots': set(), 'pending': False, 'usage': [],
+            })
+            if method in {'item/started', 'item/completed'}:
+                item = params.get('item', {})
+                kind = item.get('type')
+                identifier = item.get('id')
+                tools = {'commandExecution', 'fileChange', 'mcpToolCall', 'dynamicToolCall',
+                         'collabAgentToolCall', 'webSearch', 'imageGeneration', 'imageView', 'sleep'}
+                if isinstance(identifier, str) and kind in tools | {'agentMessage', 'reasoning', 'plan'}:
+                    if identifier not in update['items']:
+                        update['items'].add(identifier)
+                        update['pending'] = True
+                    if kind in tools:
+                        self.native_calls.setdefault(turn, set()).add(identifier)
+            elif method == 'thread/tokenUsage/updated':
+                usage = params.get('tokenUsage', {})
+                total = usage.get('total', {})
+                snapshot = tuple(sorted((key, value) for key, value in total.items()
+                                        if type(value) is int))
+                if snapshot and snapshot not in update['snapshots']:
+                    update['snapshots'].add(snapshot)
+                    if update['pending']:
+                        last = usage.get('last') or {}
+                        update['usage'].append({field: last.get(native) for field, native in (
+                            ('input_tokens', 'inputTokens'),
+                            ('cached_input_tokens', 'cachedInputTokens'),
+                            ('output_tokens', 'outputTokens'),
+                            ('reasoning_tokens', 'reasoningOutputTokens'),
+                        )})
+                        update['pending'] = False
             if method == 'rawResponse/completed':
                 response = params.get('responseId')
                 if isinstance(response, str) and response:
@@ -234,7 +267,9 @@ class CodexCheckUsage:
         """Expose ordered independent response facts, including first-response reuse."""
         responses = [dict(response_id=key, **value)
                      for key, value in self.responses.get(turn, {}).items()]
+        updates = self.updates.get(turn, {}).get('usage', [])
         return {'responses': responses, 'first_response': responses[0] if responses else None,
+                'usage_updates': updates, 'first_usage_update': updates[0] if updates else None,
                 'terminal_status': self.terminal.get(turn)}
 
     def _response_totals(self, turn: str) -> CheckUsage:
@@ -254,6 +289,16 @@ class CodexCheckUsage:
         """Count only complete appended records associated with this native turn."""
         if self.responses.get(turn):
             return self._response_totals(turn)
+        update = self.updates.get(turn, {})
+        if self.path is None and update.get('usage') and self.terminal.get(turn) == 'completed':
+            increments = update['usage'] + ([{}] if update['pending'] else [])
+            values = {}
+            for field in ('input_tokens', 'cached_input_tokens', 'output_tokens', 'reasoning_tokens'):
+                parts = [increment.get(field) for increment in increments]
+                if all(type(value) is int and value >= 0 for value in parts):
+                    values[field] = sum(parts)
+            # A cumulative snapshot is not a response ID or independent request.
+            return CheckUsage(**values, tool_calls=len(self.native_calls.get(turn, set())))
         if not self.ready or self.path is None:
             return CheckUsage()
         try:

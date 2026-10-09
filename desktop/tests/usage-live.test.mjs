@@ -91,10 +91,11 @@ test('owned Electron Dashboard matches native quantities, filters and replay', {
     const page = await app.firstWindow();
     page.setDefaultTimeout(Math.min(30000, deadline - Date.now() - 3000));
     await page.getByRole('button', { name: 'Usage', exact: true }).click();
-    await page.getByLabel('Ticket', { exact: true }).selectOption(ticket);
+    // Wrapping select labels include option text; scope to the filter label prefix.
+    await page.locator('.usage-filters > label').filter({ hasText: /^Ticket/ }).locator('select').selectOption(ticket);
     await page.getByLabel('Through (local time)').fill(cutoff);
     await page.getByText('This Agent connection shows only its own Session. Other Agents are not covered.', { exact: true }).waitFor();
-    await page.getByLabel('Agent', { exact: true }).selectOption(alias);
+    await page.locator('.usage-filters > label').filter({ hasText: /^Agent/ }).locator('select').selectOption(alias);
 
     async function matchQuantities() {
       check();

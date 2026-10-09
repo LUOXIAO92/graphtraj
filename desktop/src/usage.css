@@ -1,4 +1,6 @@
-.usage-dashboard { padding: 24px; overflow: auto; display: flex; flex-direction: column; gap: 20px; }
+.usage-dashboard { flex: 1; min-height: 0; padding: 24px; overflow: auto; display: flex; flex-direction: column; gap: 20px; }
+/* Scroll the dashboard instead of shrinking cards and overflow containers. */
+.usage-dashboard > * { flex-shrink: 0; }
 .usage-dashboard > header { display: flex; justify-content: space-between; align-items: center; }
 .usage-dashboard p { font-size: 13px; line-height: 1.6; }
 .usage-filters { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }

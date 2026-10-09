@@ -140,6 +140,52 @@ test('owned Electron Dashboard matches native quantities, filters and replay', {
     }, beforeReplay);
     await matchQuantities();
     facts.steps.push('Time filter excludes native usage; replay restores the same bounded quantities');
+    // DOM values alone do not prove that flex/overflow layout lets a human read them.
+    async function readable(locator, label) {
+      check();
+      await locator.scrollIntoViewIfNeeded();
+      const box = await locator.evaluate(element => {
+        const rect = element.getBoundingClientRect();
+        let top = 0, bottom = window.innerHeight;
+        let shown = true;
+        for (let parent = element; parent; parent = parent.parentElement) {
+          const style = getComputedStyle(parent);
+          shown &&= style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity) > 0;
+          if (parent !== element && /auto|scroll|hidden|clip/.test(style.overflowY)) {
+            const bounds = parent.getBoundingClientRect();
+            top = Math.max(top, bounds.top + parent.clientTop);
+            bottom = Math.min(bottom, bounds.top + parent.clientTop + parent.clientHeight);
+          }
+        }
+        return { shown, height: rect.height, width: rect.width, top: rect.top, bottom: rect.bottom,
+          visibleTop: top, visibleBottom: bottom };
+      });
+      assert.ok(box.shown && box.height > 0 && box.width > 0 &&
+        box.top >= box.visibleTop - 1 && box.bottom <= box.visibleBottom + 1,
+      `${label} must be readable after scrolling: ${JSON.stringify(box)}`);
+    }
+    const dashboard = page.locator('.usage-dashboard');
+    const coverageCard = dashboard.locator(':scope > .card');
+    assert.equal(await coverageCard.count(), 1);
+    const coverageSize = await coverageCard.evaluate(card => ({ height: card.clientHeight, content: card.scrollHeight }));
+    assert.ok(coverageSize.height > 0 && coverageSize.content <= coverageSize.height + 1,
+      'Data coverage card must contain its full body without internal clipping');
+    await readable(coverageCard.locator('.card__title'), 'Data coverage title');
+    const paragraphs = coverageCard.locator('.card__content > p');
+    assert.ok(await paragraphs.count() > 0, 'Coverage body is present');
+    for (const paragraph of await paragraphs.all()) await readable(paragraph, 'Data coverage body paragraph');
+    await page.screenshot({ path: path.join(evidence, 'coverage.png') });
+    for (const caption of ['Model breakdown', 'Daily trend (UTC)']) {
+      const table = page.getByRole('table').filter({ has: page.locator('caption', { hasText: caption }) });
+      await readable(table.locator('caption'), caption);
+      assert.ok(await table.locator('tbody tr').count() > 0, `${caption} has actual rows`);
+      for (const row of await table.locator('tbody tr').all()) await readable(row, `${caption} row`);
+      await page.screenshot({ path: path.join(evidence, caption === 'Model breakdown' ? 'models.png' : 'trend.png') });
+    }
+    const scroll = await dashboard.evaluate(element => ({ top: element.scrollTop, height: element.clientHeight, content: element.scrollHeight }));
+    assert.ok(scroll.height > 0 && scroll.content > scroll.height && scroll.top > 0,
+      'Dashboard must scroll to its lower tables instead of shrinking their content');
+    facts.steps.push('Coverage body and model/daily captions and rows are unclipped after scrolling; dashboard scroll confirmed');
     await page.screenshot({ path: path.join(evidence, 'usage.png') });
     facts.passed = true;
   }

@@ -55,11 +55,15 @@ test('one native window observes its real executing Agent', { timeout: 240000, s
     facts.launches += 1;
     app.process().stderr?.on('data', chunk => { stderr = (stderr + chunk.toString()).slice(-32768); });
     app.process().on('exit', (code, signal) => { exit = { code, signal }; });
+    page = await app.firstWindow();
+    page.setDefaultTimeout(15000);
     // Observe the real reader without changing requests, promises, or responses.
-    await app.evaluate(async ({ app }, { alias, markers }) => {
-      const { createRequire } = await import('node:module');
-      const { createHash } = await import('node:crypto');
+    // Inspector-evaluated functions have no dynamic-import callback or CJS scope.
+    try {
+    await app.evaluate(({ app }, { alias, markers }) => {
+      const { createRequire } = process.getBuiltinModule('module');
       const require = createRequire(app.getAppPath() + '/package.json');
+      const { createHash } = require('node:crypto');
       const { ActivityReader } = require('./dist-electron/activity.js');
       const original = ActivityReader.prototype.read;
       const entries = [];
@@ -83,8 +87,12 @@ test('one native window observes its real executing Agent', { timeout: 240000, s
         return promise;
       };
     }, { alias: member.alias, markers: [liveMarker, pausedMarker] });
-    page = await app.firstWindow();
-    page.setDefaultTimeout(15000);
+    facts.observerInstalled = true;
+    } catch (error) {
+      facts.observerInstalled = false;
+      facts.observerInstallError = 'Activity reader instrumentation installation failed';
+      throw error;
+    }
     await page.getByRole('searchbox').fill(ticket);
     await page.getByRole('button', { name: new RegExp('^#' + ticket + ' ') }).click();
     await page.getByRole('button', { name: member.alias, exact: true }).click();
@@ -118,7 +126,8 @@ test('one native window observes its real executing Agent', { timeout: 240000, s
     throw error;
   } finally {
     // Capture both success and failure before owned close. Never dump event text.
-    const diagnostics = { at: new Date().toISOString(), markers: [liveMarker, pausedMarker] };
+    const diagnostics = { at: new Date().toISOString(), markers: [liveMarker, pausedMarker],
+      observerInstalled: facts.observerInstalled === true, observerInstallError: facts.observerInstallError };
     try {
       if (app) diagnostics.reads = await app.evaluate(() => globalThis.activityLiveDiagnostics || []);
     } catch { diagnostics.readError = 'Reader diagnostics unavailable'; }

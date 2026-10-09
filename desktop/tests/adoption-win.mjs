@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { execFile, execFileSync } from 'node:child_process';
 import { promisify } from 'node:util';
 import fs from 'node:fs/promises';
@@ -127,6 +128,11 @@ async function capture(name) {
 try {
   const manifest = JSON.parse(await fs.readFile(path.join(path.dirname(executable), 'build-manifest.json'), 'utf8'));
   assert.equal(manifest.commit, facts.source || manifest.commit);
+  for (const [relative, expected] of Object.entries(manifest.hashes)) {
+    const bytes = await fs.readFile(path.join(path.dirname(executable), relative));
+    assert.equal(createHash('sha256').update(bytes).digest('hex'), expected, relative);
+  }
+  facts.steps.push('Installed files match the exact packaged manifest');
   facts.source = manifest.commit;
   facts.packages = manifest.packages;
   // Optional supplied roots must be disposable and credential-free, prepared through native operations.

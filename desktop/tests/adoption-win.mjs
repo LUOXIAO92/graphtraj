@@ -19,6 +19,8 @@ const facts = {
   platform: process.platform, os: os.release(), arch: process.arch, node: process.version,
   executable, python, steps: [], unresolved: [],
   data: 'Disposable controlled projects; no model calls or private user records.',
+  controlledInput: { message: 'GraphTraj GUI controlled message', tool: 'controlled tool output',
+    model: 'gpt-5.3-codex', input: 1000, cacheRead: 600, output: 80, reasoning: 20 },
 };
 const execute = promisify(execFile);
 const cli = (entry, args, cwd) => execFileSync(python, ['-I', '-X', 'utf8', '-c', `from ${entry} import main; main()`, ...args], { cwd, encoding: 'utf8' });
@@ -166,14 +168,32 @@ try {
     const tool = observed.events?.find(event => event.kind === 'tool' && event.name);
     assert.ok(message, 'Nonempty Chat messages required');
     assert.ok(tool, 'Nonempty Chat tools required');
+    assert.equal(message.text, facts.controlledInput.message);
+    assert.ok(observed.events.some(event => event.kind === 'tool' && event.result === facts.controlledInput.tool));
+    const usage = observed.events.find(event => event.kind === 'usage')?.usage;
+    assert.ok(usage, 'Controlled Runtime usage required');
+    assert.equal(usage.tokens.input, 1000);
+    assert.equal(usage.tokens.cache_read, 600);
+    assert.equal(usage.tokens.output, 80); // Reasoning 20 is already a subset of output 80.
     await page.locator('.activity-event').filter({ hasText: message.text }).first().waitFor();
     await page.locator('.activity-event').filter({ hasText: tool.name }).first().waitFor();
     await page.locator('.activity-event details summary').first().click();
     facts.steps.push('Nonempty native Chat message/tool rendered');
-  } else facts.unresolved.push('Nonempty node Chat message/tools: no authorized recorded Agent in controlled projects; no private-state fixture was fabricated.');
+  } else facts.unresolved.push('Controlled Chat/usage fixture requires public Runner registration; Windows lacks the POSIX authenticated control transport used by the supplied fixtures. No private-state fixture was fabricated.');
   await capture('node-chat');
   await page.getByRole('button', { name: 'Usage', exact: true }).click();
   await page.locator('.usage-dashboard').waitFor();
+  if (activity.agents.length) {
+    const row = page.getByRole('table', { name: 'Model breakdown', exact: true }).getByRole('row').filter({ hasText: 'gpt-5.3-codex' });
+    await row.waitFor();
+    const cells = row.locator('td');
+    assert.match(await cells.nth(1).innerText(), /^1,?000/);
+    assert.match(await cells.nth(2).innerText(), /^80/);
+    assert.match(await cells.nth(3).innerText(), /^600/);
+    assert.equal(await cells.nth(5).innerText(), '60%');
+    assert.match(await cells.nth(6).innerText(), /^\$0\.001925/);
+    facts.steps.push('Controlled 1000 input / 600 cache / 80 output gives 60% cache and $0.001925 at the bundled C snapshot; reasoning is not added twice');
+  }
   await capture('dashboard');
   facts.steps.push('Installed Dashboard renders; quantity algorithms reuse accepted C evidence');
   await page.getByRole('button', { name: 'Settings', exact: true }).click();

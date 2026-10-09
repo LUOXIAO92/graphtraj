@@ -161,7 +161,7 @@ class CodexCheckUsage:
     Missing/unreadable telemetry does not change the completion decision.
     """
 
-    def __init__(self, path: Path | None, session: str) -> None:
+    def __init__(self, path: Path | None, session: str, baseline: dict | None = None) -> None:
         """Remember the exact native file boundary before the checker starts."""
         self.path = path
         self.session = session
@@ -170,7 +170,7 @@ class CodexCheckUsage:
         self.terminal: dict[str, str] = {}
         self.updates: dict[str, dict] = {}
         self.offset = 0
-        self.baseline: dict = {}
+        self.baseline: dict = baseline or {}
         self.calls: set[str] = set()
         self.ready = False
         if path is None:
@@ -217,11 +217,20 @@ class CodexCheckUsage:
         elif isinstance(turn, str):
             update = self.updates.setdefault(turn, {
                 'items': set(), 'snapshots': set(), 'pending': False, 'usage': [],
+                'attribution_errors': set(),
+                'previous': {native: self.baseline.get(field) for field, native in (
+                    ('input_tokens', 'inputTokens'), ('cached_input_tokens', 'cachedInputTokens'),
+                    ('output_tokens', 'outputTokens'), ('reasoning_output_tokens', 'reasoningOutputTokens'),
+                )},
             })
+            if method == 'error':
+                update['attribution_errors'].add('native_error_or_retry')
             if method in {'item/started', 'item/completed'}:
                 item = params.get('item', {})
                 kind = item.get('type')
                 identifier = item.get('id')
+                if kind == 'contextCompaction':
+                    update['attribution_errors'].add('context_compaction')
                 tools = {'commandExecution', 'fileChange', 'mcpToolCall', 'dynamicToolCall',
                          'collabAgentToolCall', 'webSearch', 'imageGeneration', 'imageView', 'sleep'}
                 if isinstance(identifier, str) and kind in tools | {'agentMessage', 'reasoning', 'plan'}:
@@ -233,12 +242,24 @@ class CodexCheckUsage:
             elif method == 'thread/tokenUsage/updated':
                 usage = params.get('tokenUsage', {})
                 total = usage.get('total', {})
+                previous = update['previous']
+                comparable = all(type(value) is int for value in previous.values())
+                if comparable and all(total.get(key) == value for key, value in previous.items()):
+                    return  # Rate-limit/retry replay, even if a new item preceded it.
+                last = usage.get('last') or {}
+                if comparable:
+                    if not all(type(total.get(key)) is int and type(last.get(key)) is int
+                               and total[key] - value == last[key] >= 0
+                               for key, value in previous.items()):
+                        update['attribution_errors'].add('cumulative_increment_mismatch')
+                    update['previous'] = {key: total.get(key) for key in previous}
+                elif self.path is None:
+                    update['attribution_errors'].add('inherited_baseline_unavailable')
                 snapshot = tuple(sorted((key, value) for key, value in total.items()
                                         if type(value) is int))
                 if snapshot and snapshot not in update['snapshots']:
                     update['snapshots'].add(snapshot)
-                    if update['pending']:
-                        last = usage.get('last') or {}
+                    if update['pending'] or comparable:
                         update['usage'].append({field: last.get(native) for field, native in (
                             ('input_tokens', 'inputTokens'),
                             ('cached_input_tokens', 'cachedInputTokens'),
@@ -246,6 +267,8 @@ class CodexCheckUsage:
                             ('reasoning_tokens', 'reasoningOutputTokens'),
                         )})
                         update['pending'] = False
+                    else:
+                        update['attribution_errors'].add('usage_without_new_model_item')
             if method == 'rawResponse/completed':
                 response = params.get('responseId')
                 if isinstance(response, str) and response:
@@ -268,8 +291,12 @@ class CodexCheckUsage:
         responses = [dict(response_id=key, **value)
                      for key, value in self.responses.get(turn, {}).items()]
         updates = self.updates.get(turn, {}).get('usage', [])
+        errors = sorted(self.updates.get(turn, {}).get('attribution_errors', set()))
         return {'responses': responses, 'first_response': responses[0] if responses else None,
-                'usage_updates': updates, 'first_usage_update': updates[0] if updates else None,
+                'usage_updates': updates,
+                'first_usage_update': updates[0] if updates and not errors else None,
+                'usage_attribution_errors': errors,
+                'inherited_baseline': self.baseline,
                 'terminal_status': self.terminal.get(turn)}
 
     def _response_totals(self, turn: str) -> CheckUsage:
@@ -290,6 +317,8 @@ class CodexCheckUsage:
         if self.responses.get(turn):
             return self._response_totals(turn)
         update = self.updates.get(turn, {})
+        if update.get('attribution_errors'):
+            return CheckUsage()
         if self.path is None and update.get('usage') and self.terminal.get(turn) == 'completed':
             increments = update['usage'] + ([{}] if update['pending'] else [])
             values = {}

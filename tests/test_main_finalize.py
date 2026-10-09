@@ -779,12 +779,18 @@ def test_pathless_public_usage_without_raw_subscription(
 ) -> None:
     """A native fork suppresses raw events; public increments still exclude history/replays."""
     root, binding = host
+    rollout(root)
+    with (root / 'rollout.jsonl').open('a') as stream:
+        stream.write(json.dumps(token_record(input_tokens=900000, cached_input_tokens=0,
+                                            output_tokens=0, reasoning_output_tokens=0)) + '\n')
 
     def update(total: int, current: int, cached: int) -> dict:
         """Provide the public native cumulative identity and last response usage."""
         return {'method': 'thread/tokenUsage/updated', 'params': {
             'threadId': 'checker', 'turnId': 'check-turn', 'tokenUsage': {
-                'total': {'inputTokens': total}, 'last': {
+                'total': {'inputTokens': total, 'cachedInputTokens': cached,
+                          'outputTokens': 20 if total == 900400 else 10 if total == 900100 else 0,
+                          'reasoningOutputTokens': 4 if total == 900400 else 2 if total == 900100 else 0}, 'last': {
                     'inputTokens': current, 'cachedInputTokens': cached,
                     'outputTokens': 10, 'reasoningOutputTokens': 2,
                 }}}}
@@ -801,11 +807,16 @@ def test_pathless_public_usage_without_raw_subscription(
     }}
     first = update(900100, 100, 0)
     second = update(900400, 300, 240)
-    notices = [update(900000, 99999, 90000), tool, tool, first, first, answer]
+    inherited = update(900000, 99999, 90000)
+    inherited['params']['turnId'] = 'inherited-turn'
+    # A hidden first websocket retry can replay Main's last usage after new
+    # output. The inherited total, not an absent retry notice, excludes it.
+    replay = update(900000, 99999, 0)
+    notices = [inherited, tool, tool, replay, first, first, answer]
     if not missing_final_usage:
         notices += [second, second]
     (root / 'options.json').write_text(json.dumps({'notifications': notices}))
-    result = stop(binding)
+    result = native_hook(root)
     assert 'completed' in result['systemMessage'] and 'decision' not in result
     evidence = yaml.safe_load(next(binding.parent.glob('checks/*/execution.yml')).read_text())
     usage = evidence['usage']
@@ -817,6 +828,44 @@ def test_pathless_public_usage_without_raw_subscription(
     assert facts['first_usage_update']['input_tokens'] == 100
     assert facts['first_usage_update']['cached_input_tokens'] == 0
     assert len(facts['usage_updates']) == (1 if missing_final_usage else 2)
+    assert facts['usage_attribution_errors'] == []
+
+
+@pytest.mark.parametrize('uncertain_event', ['retry', 'compaction', 'unattributed'])
+def test_public_usage_does_not_attribute_replayed_or_compacted_values(
+    host: tuple[Path, Path], uncertain_event: str,
+) -> None:
+    """Public exception paths cannot turn inherited last usage into first-response proof."""
+    root, binding = host
+    item = {'method': 'item/started', 'params': {
+        'threadId': 'checker', 'turnId': 'check-turn',
+        'item': {'id': 'answer', 'type': 'agentMessage'},
+    }}
+    usage = {'method': 'thread/tokenUsage/updated', 'params': {
+        'threadId': 'checker', 'turnId': 'check-turn', 'tokenUsage': {
+            'total': {'inputTokens': 900000}, 'last': {'inputTokens': 99999, 'cachedInputTokens': 90000},
+        },
+    }}
+    if uncertain_event == 'retry':
+        # Core may emit unchanged usage after stream failure before willRetry.
+        notices = [item, usage, {'method': 'error', 'params': {
+            'threadId': 'checker', 'turnId': 'check-turn', 'willRetry': True,
+            'error': {'message': 'stream disconnected'},
+        }}]
+    elif uncertain_event == 'compaction':
+        notices = [{'method': 'item/started', 'params': {
+            'threadId': 'checker', 'turnId': 'check-turn',
+            'item': {'type': 'contextCompaction', 'id': 'compact'},
+        }}, item, usage]
+    else:
+        notices = [usage, item]
+    (root / 'options.json').write_text(json.dumps({'notifications': notices}))
+    stop(binding)
+    evidence = yaml.safe_load(next(binding.parent.glob('checks/*/execution.yml')).read_text())
+    assert evidence['usage']['input_tokens'] is None
+    assert evidence['usage']['cached_input_tokens'] is None
+    assert evidence['response_usage']['first_usage_update'] is None
+    assert evidence['response_usage']['usage_attribution_errors']
 
 
 @pytest.mark.parametrize('options', [

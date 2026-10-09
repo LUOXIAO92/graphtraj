@@ -167,7 +167,8 @@ def check(
             child = await client.fork_session(parent)
             child_id = child.thread_id
             created(child_id)
-            usage = CodexCheckUsage(child.rollout_path, child_id)
+            usage = CodexCheckUsage(child.rollout_path, child_id,
+                                    parent['turn_settings'].get('check_usage_baseline'))
             evidence = {
                 'session': child_id, 'parent': binding['session'], 'parent_turn': context['turn'],
                 'model': parent['model'], 'provider': parent['modelProvider'],

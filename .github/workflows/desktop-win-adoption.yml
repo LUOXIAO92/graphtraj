@@ -31,7 +31,7 @@ jobs:
           New-Item -ItemType Directory -Force desktop/test-results/windows | Out-Null
           Add-Type -AssemblyName System.Windows.Forms
           $session = (Get-Process -Id $PID).SessionId
-          $facts = @{ commit=$env:GITHUB_SHA; run=$env:GITHUB_RUN_ID; os=[Environment]::OSVersion.VersionString; session=$session; interactive=[Environment]::UserInteractive; screen=[System.Windows.Forms.SystemInformation]::VirtualScreen.ToString(); image=$env:ImageVersion }
+          $facts = @{ commit=$env:GITHUB_SHA; run=$env:GITHUB_RUN_ID; os=[Environment]::OSVersion.VersionString; session=$session; interactive=[Environment]::UserInteractive; screen=[System.Windows.Forms.SystemInformation]::VirtualScreen.ToString(); image=$env:ImageVersion; node=(node --version); npm=(npm --version); python=(python --version); git=(git --version) }
           $facts | ConvertTo-Json | Set-Content desktop/test-results/windows/environment.json
           if (-not $facts.interactive -or $session -eq 0) { throw 'Runner does not expose an interactive Windows desktop' }
       - name: Install pinned build dependencies

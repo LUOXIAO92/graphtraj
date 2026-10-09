@@ -523,7 +523,14 @@ def status_aliases(
 
     _require_git_pair(baseline, candidate)
     runner_directory = discover_runner_directory(cwd)
-    caller = caller_alias(runner_directory)
+    try:
+        caller = caller_alias(runner_directory)
+    except RunnerError as error:
+        return StatusResponse(document={
+            'error': error.as_document(),
+            'diagnostic': {'feature': 'alias_status', 'stage': 'caller_identity',
+                           'requested_aliases': list(aliases), 'native_error_code': error.code},
+        }, succeeded=False, errors=(error,))
     results = []
     errors = []
     for alias in aliases:
@@ -577,7 +584,14 @@ def status_tree(
     """
     _require_git_pair(baseline, candidate)
     runner_directory = discover_runner_directory(cwd)
-    caller = caller_alias(runner_directory)
+    try:
+        caller = caller_alias(runner_directory)
+    except RunnerError as error:
+        return StatusResponse(document={
+            'error': error.as_document(),
+            'diagnostic': {'feature': 'alias_status', 'stage': 'caller_identity',
+                           'requested_aliases': None, 'native_error_code': error.code},
+        }, succeeded=False, errors=(error,))
     records, failures = _recorded_sessions(runner_directory)
 
     children: Dict[str, list[str]] = {}

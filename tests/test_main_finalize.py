@@ -625,6 +625,75 @@ def test_registered_pathless_checker_start_does_not_stop_inference(host: tuple[P
     assert native_hook(root, 'SessionStart', session_id='checker', transcript_path=None)['continue'] is False
 
 
+@pytest.mark.parametrize('connection_fails', [False, True])
+def test_external_checker_cli_identity_needs_metadata_not_rollout(
+    host: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch, connection_fails: bool,
+) -> None:
+    """The real CLI verifies its native thread before any target lookup, without history."""
+    from graphtraj.interfaces.cli.agent_runner import main as runner_cli
+    from graphtraj.runtimes import runtime_adapter
+    from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
+
+    root, binding = host
+    main_finalize.bind_checker(binding, yaml.safe_load(binding.read_text()), 'checker')
+    monkeypatch.setattr(runtime_adapter, 'current_host_connection', lambda: {
+        'runtime': 'codex', 'session': 'checker', 'codex_home': str(root),
+    })
+    # Deliberately keep native sessionId different: CLI uses CODEX_THREAD_ID,
+    # not an assumed equality with hook_session. No transcript is created.
+    (root / 'options.json').write_text(json.dumps({'read_id_from_request': True}))
+    if connection_fails:
+        def failed_proxy(*args: object, **kwargs: object) -> None:
+            """Represent the observed failure at connection setup, before RPC."""
+            raise RuntimeAdapterError('RUNTIME_CONNECTION_FAILED',
+                                      'Codex WebSocket Upgrade failed: Connection lost')
+        monkeypatch.setattr(finalize, 'proxy', failed_proxy)
+    monkeypatch.chdir(root)
+    reply = CliRunner().invoke(runner_cli, ['status', 'requested-current-alias'])
+    assert reply.exit_code == 1
+    # CLI keeps its structured stdout separate from any human stderr detail.
+    document = yaml.safe_load(reply.stdout)
+    if connection_fails:
+        assert document['diagnostic'] == {
+            'feature': 'alias_status', 'stage': 'caller_identity', 'entry': 'cli',
+            'requested_aliases': ['requested-current-alias'],
+            'native_error_code': 'RUNTIME_CONNECTION_FAILED',
+        }
+        assert 'Connection lost' in document['error']['message']
+        assert 'aliases' not in document  # No target was queried or classified.
+    else:
+        assert document['aliases'][0]['alias'] == 'requested-current-alias'
+        assert document['aliases'][0]['error']['code'] == 'alias-not-found'
+        wire = [json.loads(line) for line in (root / 'wire.jsonl').read_text().splitlines()]
+        assert any(message.get('method') == 'thread/read' and message['params'] == {
+            'threadId': 'checker', 'includeTurns': False,
+        } for message in wire)
+
+
+def test_checker_retains_only_structured_cli_status_failure(host: tuple[Path, Path]) -> None:
+    """Existing canonical command output carries bounded next-call error evidence."""
+    root, binding = host
+    output = yaml.safe_dump({
+        'error': {'code': 'operation-failed', 'message': 'private transport details'},
+        'diagnostic': {'entry': 'cli', 'feature': 'alias_status', 'stage': 'caller_identity',
+                       'requested_aliases': ['current-target']},
+    }, sort_keys=False)
+    (root / 'options.json').write_text(json.dumps({'notifications': [{
+        'method': 'item/completed', 'params': {'threadId': 'checker', 'turnId': 'check-turn',
+            'item': {'id': 'status-command', 'type': 'commandExecution',
+                     'aggregatedOutput': output, 'command': 'private shell details'}},
+    }]}))
+    stop(binding)
+    evidence = yaml.safe_load(next(binding.parent.glob('checks/*/execution.yml')).read_text())
+    assert evidence['response_usage']['status_query_errors'] == [{
+        'item_id': 'status-command', 'entry': 'cli', 'stage': 'caller_identity',
+        'requested_aliases': ['current-target'], 'error_code': 'operation-failed',
+        'native_error_code': None,
+    }]
+    assert 'private transport details' not in json.dumps(evidence)
+    assert 'private shell details' not in json.dumps(evidence)
+
+
 def test_native_stop_reports_managed_and_stale_routing(
     host: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch,
 ) -> None:

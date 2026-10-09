@@ -207,6 +207,8 @@ def status(
         response = invoke_tool("alias_status", arguments, cwd=Path.cwd().resolve())
     except RunnerError as error:
         _fail(error)
+    if 'diagnostic' in response.document:
+        response.document['diagnostic']['entry'] = 'cli'
     _emit_result(response.document)
     if response.failed:
         for entry in response.document.get("aliases", response.document.get("agents", [])):

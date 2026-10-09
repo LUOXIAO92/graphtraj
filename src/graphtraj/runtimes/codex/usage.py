@@ -218,6 +218,7 @@ class CodexCheckUsage:
             update = self.updates.setdefault(turn, {
                 'items': set(), 'snapshots': set(), 'pending': False, 'usage': [],
                 'attribution_errors': set(),
+                'status_query_errors': [],
                 'previous': {native: self.baseline.get(field) for field, native in (
                     ('input_tokens', 'inputTokens'), ('cached_input_tokens', 'cachedInputTokens'),
                     ('output_tokens', 'outputTokens'), ('reasoning_output_tokens', 'reasoningOutputTokens'),
@@ -229,6 +230,28 @@ class CodexCheckUsage:
                 item = params.get('item', {})
                 kind = item.get('type')
                 identifier = item.get('id')
+                output = item.get('aggregatedOutput')
+                if (method == 'item/completed' and kind == 'commandExecution'
+                        and isinstance(output, str) and output.startswith('error:')):
+                    try:
+                        document = yaml.safe_load(output)
+                    except yaml.YAMLError:
+                        document = None
+                    detail = document.get('diagnostic') if isinstance(document, dict) else None
+                    if (isinstance(detail, dict) and detail.get('feature') == 'alias_status'
+                            and detail.get('entry') == 'cli' and detail.get('stage') == 'caller_identity'
+                            and isinstance(document.get('error'), dict)
+                            and (detail.get('requested_aliases') is None or (
+                                isinstance(detail['requested_aliases'], list)
+                                and all(isinstance(alias, str) for alias in detail['requested_aliases'])))):
+                        # Retain the CLI's structured failure facts, never command
+                        # output, error prose, connection paths or credentials.
+                        update['status_query_errors'].append({
+                            'item_id': identifier, 'entry': 'cli', 'stage': 'caller_identity',
+                            'requested_aliases': detail.get('requested_aliases'),
+                            'error_code': (document.get('error') or {}).get('code'),
+                            'native_error_code': detail.get('native_error_code'),
+                        })
                 if kind == 'contextCompaction':
                     update['attribution_errors'].add('context_compaction')
                 tools = {'commandExecution', 'fileChange', 'mcpToolCall', 'dynamicToolCall',
@@ -297,6 +320,7 @@ class CodexCheckUsage:
                 'first_usage_update': updates[0] if updates and not errors else None,
                 'usage_attribution_errors': errors,
                 'inherited_baseline': self.baseline,
+                'status_query_errors': self.updates.get(turn, {}).get('status_query_errors', []),
                 'terminal_status': self.terminal.get(turn)}
 
     def _response_totals(self, turn: str) -> CheckUsage:

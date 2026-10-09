@@ -121,7 +121,7 @@ class PiRuntimeAdapter:
                                       'Use Pi native provider configuration and pi resource/sandbox settings.')
         mach_services = config.get('allow_mach_lookup', [])
         if not isinstance(mach_services, list) or any(
-            not isinstance(name, str) or re.fullmatch(r'[A-Za-z0-9_.-]+', name) is None
+            not isinstance(name, str) or re.fullmatch(r'[A-Za-z0-9_.@-]+', name) is None
             for name in mach_services
         ):
             raise RuntimeAdapterError('ROLE_CONFIG_INVALID',

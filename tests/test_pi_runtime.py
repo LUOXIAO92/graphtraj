@@ -163,7 +163,8 @@ def test_pi_mach_services_preserve_native_file_policy(
     result_project(tmp_path)
     captured = tmp_path / 'native-policy.json'
     monkeypatch.setenv('PI_FIXTURE_POLICY', str(captured))
-    services = ['com.apple.windowserver.active', 'com.apple.pasteboard.1']
+    services = ['com.apple.windowserver.active', 'com.apple.pasteboard.1',
+                'com.apple.distributed_notifications@Uv3']
     policies = []
     session = None
     for extra in ({}, {'allow_mach_lookup': []}, {'allow_mach_lookup': services}):

@@ -7,7 +7,6 @@ import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const node = '/opt/homebrew/Cellar/node/26.5.0/bin/node';
-const deadline = Date.parse('2026-10-10T00:42:00+09:00');
 
 export default function (pi: ExtensionAPI) {
   if (process.cwd() !== root || process.env.ASB_SANDBOX !== '1'
@@ -31,14 +30,17 @@ export default function (pi: ExtensionAPI) {
   pi.on('session_shutdown', close);
   pi.registerTool({
     name: 'ticket262_live', label: 'Ticket262 owned desktop test',
-    description: 'Temporary one-launch fixture. probe starts a non-GUI Pi-owned child; status returns actual stage; stop closes only that child. start launches the existing tracked live test once. Use ordinary bash tools for genuine markers.',
+    description: 'Temporary one-launch fixture; probe/start require an explicitly authorized deadline. probe starts a non-GUI Pi-owned child; status returns actual stage; stop closes only that child. start launches the existing tracked live test once. Use ordinary bash tools for genuine markers.',
     parameters: Type.Object({ action: Type.Union([
       Type.Literal('probe'), Type.Literal('start'), Type.Literal('status'), Type.Literal('stop'),
-    ]) }),
+    ]), deadline: Type.Optional(Type.String({ description: 'Required for probe/start: explicitly authorized ISO deadline with timezone; never extends Runner limits.' })) }),
     executionMode: 'sequential',
-    async execute(_id, { action }) {
+    async execute(_id, { action, deadline: deadlineInput }) {
       if (action === 'stop') await close();
       if (action === 'start' || action === 'probe') {
+        const deadline = typeof deadlineInput === 'string' && /T.*(?:Z|[+-]\d{2}:\d{2})$/.test(deadlineInput)
+          ? Date.parse(deadlineInput) : NaN;
+        if (!Number.isFinite(deadline)) throw new Error('Provide the explicitly authorized deadline with timezone.');
         if (child && child.exitCode === null && child.signalCode === null) throw new Error('Owned child is still running; stop it first.');
         if (Date.now() >= deadline - 5 * 60_000) throw new Error('Delivery reserve reached; no new child allowed.');
         if (action === 'start' && usedGUI) throw new Error('This extension permits only one GUI launch.');

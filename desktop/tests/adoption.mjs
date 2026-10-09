@@ -120,6 +120,22 @@ function uiAutomation(lines) {
 }
 
 /**
+ * Read one Session through the public desktop-activity boundary, exactly as the
+ * installed app's observer process does. The expected UI content is taken from
+ * this boundary so the assertion is not invented at the interface.
+ */
+function queryActivity(root, ticketId, alias) {
+  const reply = JSON.parse(execFileSync(process.env.GRAPHTRAJ_TOOL || 'graphtraj-tool',
+    ['--desktop-observer', '--allowed-features', 'desktop_activity'], {
+      cwd: root, encoding: 'utf8',
+      input: JSON.stringify({ action: 'execute', feature: 'desktop_activity',
+        arguments: { ticket_id: ticketId, ...(alias ? { alias } : {}) } }) + '\n',
+    }));
+  if (reply.failed) throw new Error(JSON.stringify(reply));
+  return reply.result;
+}
+
+/**
  * Launch the installed bundle with Playwright's Electron driver.
  *
  * A packaged app cannot be started through the `electron` npm module, so the
@@ -158,9 +174,11 @@ function projectEntry(page, name) {
  */
 async function nativeDialogAttempt(first) {
   const attempts = [];
-  const attempt = (name, lines) => {
+  // `required` marks the three adoption operations the result depends on;
+  // diagnostic attempts only explain a blocker and never gate the result.
+  const attempt = (name, lines, required = false) => {
     const outcome = uiAutomation(lines);
-    attempts.push({ name, ok: outcome.ok, command: outcome.command, output: outcome.output });
+    attempts.push({ name, required, ok: outcome.ok, command: outcome.command, output: outcome.output });
     return outcome.ok;
   };
 
@@ -200,7 +218,7 @@ async function nativeDialogAttempt(first) {
     ]);
     await page.waitForTimeout(2000);
     const picked = await projectEntry(page, 'native-project').count();
-    attempts.push({ name: 'open panel: the typed directory became a project', ok: picked > 0,
+    attempts.push({ name: 'open panel: the typed directory became a project', required: true, ok: picked > 0,
       command: "page.locator('.project-button') text match count",
       output: `${picked} entry matching native-project` });
 
@@ -221,6 +239,7 @@ async function nativeDialogAttempt(first) {
     await page.waitForTimeout(2000);
     const approved = await fs.readFile(rolesFile, 'utf8');
     attempts.push({ name: 'approval sheet: the approved change was written',
+      required: true,
       ok: approved.includes('model: native-approved-model'),
       command: `read ${path.relative(work, rolesFile)}`,
       output: approved.split('\n').filter(line => line.includes('model:')).join('; ') });
@@ -238,11 +257,12 @@ async function nativeDialogAttempt(first) {
     await page.waitForTimeout(2000);
     const cancelled = await fs.readFile(rolesFile, 'utf8');
     attempts.push({ name: 'approval sheet: the cancelled change was not written',
+      required: true,
       ok: !cancelled.includes('model: native-cancelled-model'),
       command: `read ${path.relative(work, rolesFile)}`,
       output: cancelled.split('\n').filter(line => line.includes('model:')).join('; ') });
   } catch (error) {
-    attempts.push({ name: 'native dialog attempt', ok: false, command: 'tests/adoption.mjs',
+    attempts.push({ name: 'native dialog attempt', required: true, ok: false, command: 'tests/adoption.mjs',
       output: String((error && error.message) || error) });
   } finally {
     if (native) {
@@ -274,6 +294,23 @@ async function main() {
   await fs.mkdir(root, { recursive: true });
   const second = await fixtures.makeProject(path.join(root, 'second-project'), 'second-project');
   const first = await fixtures.makeProject(path.join(root, 'first-project'), 'first-project');
+  // A clearly labeled controlled record set for the selected project. These are
+  // hand-written native rollout records, not a model run: no model is invoked.
+  await fixtures.recordActivity(first, {
+    ticketId: '1', ticketName: 'first-project', alias: 'research@x1',
+    records: [
+      { type: 'turn_context', payload: { model: 'actual-model', turn_id: 'turn-1' } },
+      { type: 'response_item', payload: { type: 'message', role: 'assistant',
+        content: [{ type: 'output_text', text: 'Controlled record: adoption-node-chat-verified.' }] } },
+      { type: 'response_item', payload: { type: 'function_call', call_id: 'adoption-call-1',
+        name: 'adoption_probe_tool', arguments: '{"command":"adoption-tool-verified"}' } },
+      { type: 'response_item', payload: { type: 'function_call_output', call_id: 'adoption-call-1',
+        output: 'adoption-tool-result' } },
+      { type: 'event_msg', payload: { type: 'token_count', info: {
+        last_token_usage: { input_tokens: 4321, cached_input_tokens: 1234, output_tokens: 567 },
+        total_token_usage: { input_tokens: 4321, output_tokens: 567 } } } },
+    ],
+  });
   const rolesFile = path.join(first, '.graphtraj', 'roles.yml');
   const originalRoles = 'roles:\n  custom_group:\n    observer:\n      runtime: codex\n'
     + '      model: original-model\n      api_key_env: GRAPHTRAJ_ADOPTION_SECRET\n      reports: [report.md]\nrole_tree: {}\n';
@@ -312,8 +349,8 @@ async function main() {
     await page.locator('.react-flow__node').first().click();
     await page.getByRole('complementary', { name: 'Ticket details' }).waitFor();
     await page.getByText('No participating Agents recorded.').waitFor();
-    facts.screenshots.push(await shot(page, '02-node-detail-chat.png'));
-    step('opened a node: detail pane and its Agent activity (Chat) surface rendered');
+    facts.screenshots.push(await shot(page, '02-node-detail-chat-empty.png'));
+    step('opened a node without records: the Chat surface rendered its empty state (not adoption evidence)');
 
     await projectEntry(page, 'first-project').click();
     await page.getByText('first project', { exact: true }).waitFor();
@@ -321,11 +358,43 @@ async function main() {
     facts.screenshots.push(await shot(page, '03-project-switched.png'));
     step('switched the selected project: the graph shows only the selected project');
 
+    // Chat adoption evidence: the controlled records must render as message and
+    // tool content through the same public boundary the desktop reads. Expected
+    // text comes from that boundary, never from the interface under test.
+    const chatBoundary = queryActivity(first, '1', 'research@x1');
+    const chatEvents = chatBoundary.events ?? [];
+    const message = chatEvents.find(event => event.kind === 'message' && event.role === 'assistant');
+    const toolCall = chatEvents.find(event => event.kind === 'tool' && event.phase === 'call');
+    assert.ok(message && message.text && toolCall && toolCall.name,
+      'the public boundary must return the controlled message and tool call');
+    await page.locator('.react-flow__node').filter({ hasText: 'first project' }).click();
+    await page.getByRole('complementary', { name: 'Ticket details' }).waitFor();
+    await page.getByRole('button', { name: 'research@x1', exact: true }).click();
+    await page.getByText(message.text).first().waitFor();
+    await page.getByText(toolCall.name, { exact: true }).first().waitFor();
+    await page.getByText(String(toolCall.arguments)).first().waitFor();
+    facts.screenshots.push(await shot(page, '03b-node-chat-records.png'));
+    step('the controlled records rendered in Chat: the recorded message and tool call are visible');
+
     await page.getByRole('button', { name: 'Usage', exact: true }).click();
     await page.locator('section.usage-dashboard').waitFor();
     await page.locator('section.usage-dashboard').getByRole('status').waitFor();
+    await page.getByText('actual-model').first().waitFor();
+    const usage = (chatEvents.find(event => event.kind === 'usage') ?? {}).usage;
+    assert.ok(usage && usage.tokens, 'the public boundary must return the controlled usage record');
+    const dashboard = (await page.locator('section.usage-dashboard').innerText()).replaceAll(/[.,\s]/g, '');
+    for (const [metric, value] of Object.entries(usage.tokens)) {
+      assert.ok(dashboard.includes(String(value)),
+        `usage dashboard must show the boundary value ${metric}=${value}`);
+    }
     facts.screenshots.push(await shot(page, '04-usage-dashboard.png'));
-    step('opened the Usage dashboard for the selected project');
+    facts.controlledRecords = {
+      origin: 'Hand-written native rollout records retained in the fixture project; no model invoked, no cost.',
+      ticket: '1', alias: 'research@x1',
+      chat: { message: message.text, tool: toolCall.name, arguments: toolCall.arguments },
+      usage: usage.tokens,
+    };
+    step(`opened the Usage dashboard: rendered counts match the public boundary (${JSON.stringify(usage.tokens)})`);
 
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
     await page.getByLabel('Model', { exact: true }).waitFor();
@@ -433,11 +502,27 @@ async function main() {
       'folder open panel: Electron dialog.showOpenDialog substituted',
       'approval sheet: Electron dialog.showMessageBox substituted (deny, approve, save error)',
     ];
-    facts.nativeDialogs = await nativeDialogAttempt(first);
+
+    // The overall marker reflects the required native operations, not the
+    // controlled entry. A diagnostic failure only explains a blocker; a
+    // required native failure keeps the result failed and the process red.
+    const native = await nativeDialogAttempt(first);
+    facts.nativeDialogs = native;
+    const required = native.filter(entry => entry.required);
+    const failedNative = required.filter(entry => !entry.ok);
+    facts.requiredNativeOk = required.length === 3 && failedNative.length === 0;
+    facts.blockedReason = facts.requiredNativeOk ? null
+      : 'required native operations did not complete: '
+        + (failedNative.map(entry => `${entry.name} (${entry.output})`).join('; ')
+          || 'no required attempt recorded');
+    facts.passed = facts.requiredNativeOk;
+    if (!facts.passed) {
+      console.error(facts.blockedReason);
+      process.exitCode = 1;
+    }
   } finally {
     if (appHandle) await appHandle.close().catch(() => {});
   }
-  facts.passed = true;
 }
 
 try {

@@ -33,7 +33,10 @@ test('owned Electron Dashboard matches native quantities, filters and replay', {
   assert.ok(Number.isFinite(deadline) && deadline > Date.now() + 10000,
     'Provide GRAPHTRAJ_LIVE_DEADLINE as a future absolute ISO time with timezone; no deadline is inferred.');
   const reader = new ActivityReader(tool);
-  const evidence = await fs.mkdtemp(path.join(os.tmpdir(), 'graphtraj-usage-live-'));
+  const artifactRoot = process.env.GRAPHTRAJ_LIVE_ARTIFACTS || os.tmpdir();
+  assert.ok(path.isAbsolute(artifactRoot) && path.isAbsolute(executable), 'Resource paths must be absolute');
+  await fs.mkdir(artifactRoot, { recursive: true });
+  const evidence = await fs.mkdtemp(path.join(artifactRoot, 'graphtraj-usage-live-'));
   const cutoff = localMinute(Math.floor(Date.now() / 60000) * 60000);
   const facts = { project, ticket, executable, deadline: deadlineText, cutoff, steps: [], passed: false };
   let launch;

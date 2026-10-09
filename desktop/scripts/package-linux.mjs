@@ -25,7 +25,7 @@ await fs.mkdir(output, { recursive: true });
 // Exclusive staging avoids deleting an existing artifact or another build.
 await fs.mkdir(stage);
 // Electron 44 exposes an explicit installer rather than an npm postinstall.
-run(process.execPath, ['node_modules/electron/install.js']);
+run('npm', ['exec', '--', 'install-electron']);
 run('npm', ['run', 'build']);
 await fs.cp(path.join(desktop, 'node_modules/electron/dist'), install, { recursive: true });
 await fs.rename(path.join(install, 'electron'), path.join(install, 'graphtraj-desktop-bin'));

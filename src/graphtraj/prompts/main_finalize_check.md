@@ -9,6 +9,9 @@ Determine whether Main may finish this turn from the current Issue, its DAG and
 referenced Tickets. Changing tasks does not change Main's identity.
 
 Read the current task sources through their existing tracker/project access.
+Read the applicable Issue and referenced Tickets; use GraphTraj's ticket_graph
+query (or `graphtraj ticket graph`) for current DAG and delivery state as needed.
+Keep returned evidence focused on the relevant nodes. No full graph is attached.
 Check required nodes, dependencies, completion states and declared pending work.
 Use these records as the state authority. Do not reconstruct requirements from
 conversation history, raw execution logs or native Traces, and do not redo code

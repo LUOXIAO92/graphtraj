@@ -16,6 +16,7 @@ def session_record(path: Path, turn: str | None = None) -> tuple[dict, dict]:
     """
     metadata: dict[str, Any] = {}
     context: dict[str, Any] = {}
+    current_turn = None
     with path.open(encoding='utf-8') as stream:
         for line in stream:
             record = json.loads(line)
@@ -23,8 +24,19 @@ def session_record(path: Path, turn: str | None = None) -> tuple[dict, dict]:
             if record.get('type') == 'session_meta':
                 metadata = payload
             elif record.get('type') == 'turn_context':
+                current_turn = payload.get('turn_id')
                 if turn is None or payload.get('turn_id') == turn:
                     context = payload
+            elif (turn is not None and current_turn == turn
+                  and record.get('type') == 'event_msg' and payload.get('type') == 'token_count'):
+                info = payload.get('info')
+                total = info.get('total_token_usage') if isinstance(info, dict) else None
+                if isinstance(total, dict):
+                    # Retain counters already read at the trusted Stop boundary;
+                    # later turns cannot supply this fork's inherited baseline.
+                    context['check_usage_baseline'] = {key: total[key] for key in (
+                        'input_tokens', 'cached_input_tokens', 'output_tokens', 'reasoning_output_tokens',
+                    ) if key in total}
     if not isinstance(metadata.get('id'), str) or not metadata['id']:
         raise ValueError('Codex Session metadata is unavailable.')
     if turn is not None and not context:

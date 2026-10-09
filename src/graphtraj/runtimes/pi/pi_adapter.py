@@ -15,7 +15,7 @@ from typing import Any, Mapping
 import yaml
 
 from graphtraj.configuration.role_definitions import ResolvedChildRole
-from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError, SessionStarted
+from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError, SessionStarted, finalize_usage
 
 
 def unsupported(*args: object, **kwargs: object) -> Any:
@@ -59,6 +59,8 @@ class PiContext:
 
 class PiRuntimeAdapter:
     """Prepare and control Pi children; leave all task authority with Runner."""
+
+    finalize_usage = staticmethod(finalize_usage)
 
     finalize_event = staticmethod(unsupported)
     check_main_finalize = staticmethod(unsupported)

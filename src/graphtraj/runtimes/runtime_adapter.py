@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from contextvars import ContextVar
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, Literal, Mapping, Protocol, Sequence, TypedDict
 
@@ -15,6 +16,46 @@ SessionStarted = Callable[[str, int], None]
 NativeReplacement = Callable[[Sequence[str]], dict]
 _recovery_reviewer: ContextVar[Callable[[dict], dict] | None] = ContextVar('recovery_reviewer', default=None)
 _process_owner: ContextVar[Callable[[int, dict | None], None] | None] = ContextVar('process_owner', default=None)
+
+
+@dataclass(frozen=True)
+class CheckUsage:
+    """Observed whole-check increments; None means unavailable, never zero.
+
+    Output includes reasoning where the Runtime counts it as output. Model
+    requests require independent native evidence, not a tool or user-turn count.
+    """
+
+    input_tokens: int | None = None
+    cached_input_tokens: int | None = None
+    output_tokens: int | None = None
+    reasoning_tokens: int | None = None
+    tool_calls: int | None = None
+    model_requests: int | None = None
+
+    def document(self) -> dict:
+        """Return normalized facts with the whole-check cached/input ratio."""
+        ratio = None
+        if self.input_tokens and self.cached_input_tokens is not None:
+            ratio = self.cached_input_tokens / self.input_tokens
+        return {**asdict(self), 'cache_hit_ratio': ratio}
+
+    def summary(self) -> str:
+        """Render supported values and explicit unknowns without native JSON."""
+        values = self.document()
+        ratio = values.pop('cache_hit_ratio')
+        fields = [f'{key}={value if value is not None else "none"}'
+                  for key, value in values.items()]
+        fields.insert(2, f'cache_hit_ratio={ratio:.1%}' if ratio is not None
+                      else 'cache_hit_ratio=none')
+        return ('Usage (whole check; input_tokens is the sum across model inputs, '
+                'not context length): ' + ', '.join(fields))
+
+
+def finalize_usage(native: dict | None = None) -> CheckUsage:
+    """Consume only Adapter-normalized usage; absent support needs no host."""
+    usage = native.get('usage') if native else None
+    return usage if isinstance(usage, CheckUsage) else CheckUsage()
 
 
 @contextmanager
@@ -202,6 +243,9 @@ class RuntimeAdapter(RuntimePreparationAdapter, Protocol):
 
     def finalize_response(self, result: dict | None, continued: bool) -> dict:
         """Translate a check or bounded failure into the native host's end response."""
+
+    def finalize_usage(self, native: dict | None = None) -> CheckUsage:
+        """Return normalized current-check facts, including unsupported fields."""
 
     def send_host_event(self, connection: Mapping[str, Any], event: dict[str, str]) -> dict:
         """Forward an event to the captured owning host, without creating a Session."""

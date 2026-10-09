@@ -130,6 +130,8 @@ class CodexSession:
 
     thread_id: str
     rollout_path: Path | None
+    configuration: dict[str, Any] = field(default_factory=dict)
+    turn_settings: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -492,6 +494,7 @@ class CodexAppServer:
         try:
             result = await self._call('turn/start', {
                 'threadId': session.thread_id, 'input': inputs,
+                **session.turn_settings,
             })
         except BaseException:
             self._active.pop(session.thread_id, None)
@@ -673,7 +676,7 @@ class CodexAppServer:
             raise self._protocol_failure('thread/read returned a different native Session.')
         return thread
 
-    async def subscribe_host(self, thread_id: str) -> None:
+    async def subscribe_host(self, thread_id: str) -> dict[str, Any]:
         """Rejoin an already-loaded host to receive its native lifecycle events.
 
         Codex's public resume operation rejoins a loaded thread. Supply no
@@ -689,6 +692,7 @@ class CodexAppServer:
         joined = response.get('thread')
         if not isinstance(joined, dict) or joined.get('id') != thread_id:
             raise self._protocol_failure('Host subscription returned a different native Session.')
+        return response
 
     async def read_hooks(self, cwd: str) -> dict[str, Any]:
         """Read public discovered hook definitions/trust, not private execution history."""
@@ -744,8 +748,13 @@ class CodexAppServer:
         parameters = {
             'threadId': parent['id'], 'model': parent['model'],
             'modelProvider': parent['modelProvider'], 'excludeTurns': True,
+            'ephemeral': True,
         }
         settings = parent.get('turn_settings', {})
+        configuration = parent.get('configuration', {})
+        for key in ('serviceTier', 'cwd', 'runtimeWorkspaceRoots', 'approvalPolicy', 'approvalsReviewer'):
+            if key in configuration:
+                parameters[key] = configuration[key]
         # Native fork inherits history and permissions but rebuilds model config.
         # Preserve the checked turn's observed effort instead of project defaults.
         if 'effort' in settings:
@@ -755,13 +764,31 @@ class CodexAppServer:
         if (not isinstance(thread, dict) or not isinstance(thread.get('id'), str)
                 or not thread['id'] or thread['id'] == parent['id']
                 or thread['id'] in self._sessions
+                or thread.get('ephemeral') is not True
                 or thread.get('forkedFromId') != parent['id']
                 or response.get('model') != parent['model']
                 or response.get('modelProvider') != parent['modelProvider']):
             raise self._protocol_failure('thread/fork did not preserve the bound source and model.')
         if 'effort' in settings and response.get('reasoningEffort') != settings['effort']:
             raise self._protocol_failure('thread/fork changed the checked turn reasoning effort.')
-        session = CodexSession(thread['id'], None)
+        for key in ('serviceTier', 'cwd', 'runtimeWorkspaceRoots', 'approvalPolicy', 'approvalsReviewer'):
+            if key in configuration and response.get(key) != configuration[key]:
+                raise self._protocol_failure(f'thread/fork changed Main {key}.')
+        path = thread.get('path')
+        rollout = Path(path) if isinstance(path, str) and Path(path).is_absolute() else None
+        # Keep native configuration facts, not inherited conversation or previews.
+        facts = {key: response[key] for key in (
+            'model', 'modelProvider', 'serviceTier', 'cwd', 'runtimeWorkspaceRoots',
+            'approvalPolicy', 'approvalsReviewer', 'sandbox', 'activePermissionProfile',
+            'reasoningEffort', 'instructionSources', 'disabledPluginIds',
+        ) if key in response}
+        facts['thread'] = {key: thread[key] for key in (
+            'id', 'sessionId', 'forkedFromId', 'ephemeral', 'historyMode', 'cliVersion',
+        ) if key in thread}
+        turn_settings = {}
+        if settings.get('collaboration_mode') is not None:
+            turn_settings['collaborationMode'] = settings['collaboration_mode']
+        session = CodexSession(thread['id'], rollout, facts, turn_settings)
         self._sessions[session.thread_id] = session
         return session
 

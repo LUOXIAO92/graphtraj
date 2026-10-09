@@ -1,1344 +1,177 @@
 # GraphTraj
 
-GraphTraj manages a task graph and its execution trajectories: accepted work,
-artifact dependencies, configured Agents, versioned results and retained evidence.
-A Team can contain one Agent. Research, Markdown, LaTeX, data and software tasks
-share execution, submission, acceptance and integration. Projects choose their
-roles and professional methods; a leader or code review is not required by the
-common task protocol.
+GraphTraj coordinates Agent work in your own project. It tracks which tasks
+need which results, runs the Agents you configure, and keeps the submitted
+versions, decisions and execution history together.
 
-Main is started and configured by the user. It follows the user's instructions
-and the `AGENTS.md` files applicable to the task, reading Skills as needed.
-GraphTraj does not generate, install, append or restore developer instructions
-for Main, and using GraphTraj does not assign Main to a coding Team. Setup
-preserves existing user Runtime configuration and prompts without using them
-as template validation conditions. It does not distribute this development
-repository's `AGENTS.md` or operating procedures to user projects.
+Use it when work spans several tasks or Agents and you need to know what is
+ready, what is still blocked, and which results have actually been accepted and
+integrated. Research, documents, data and software can use the same workflow.
+A task can have a single Agent; you choose the roles and methods.
 
-## Install and set up
+## Get started
 
-Python 3.12 or newer is required. Install a reviewed tag or commit:
+You need Python 3.12+, Git, and [uv](https://docs.astral.sh/uv/getting-started/installation/)
+for the installation below. Start with an existing Git repository that has a
+commit and whose primary worktree is on `main`.
 
-```text
+Choose a tag or commit to install, replacing `<tag-or-commit>`:
+
+```sh
 uv tool install "git+https://github.com/LUOXIAO92/graphtraj.git@<tag-or-commit>"
-graphtraj doctor
+cd /path/to/your-project
 graphtraj setup
-```
-
-Run setup from the Harness Project Root. An existing Git repository is the
-default: its Primary Worktree remains on `main`, and the current directory
-becomes both the Harness Project Root and Source Repository. In the separated layout, setup selects the sole direct Git
-child, or asks for an explicit choice when there are zero or several candidates.
-Later commands use the recorded paths.
-
-`uv tool install` installs the Python commands and independent method files under
-`<install-prefix>/share/graphtraj/manuals`. The guides are plain user-manageable
-files outside the Python package and automatic Skill discovery. The separate
-`plugins/graphtraj` artifact contains the thin overview Skill; role instructions
-and professional Skills remain user-selected external files. To check a local
-candidate, build that wheel and install the artifact. The documented flags skip
-pip's build isolation, so the declared build requirement (`setuptools>=61`,
-from `pyproject.toml`) must already be installed in the invoking environment,
-for example with `python -m pip install setuptools`:
-
-```text
-python -m pip wheel --no-build-isolation --no-deps -w dist .
-python -m pip install dist/graphtraj-<version>-py3-none-any.whl
-```
-
-Upgrading the installation does not reset an existing project: running
-`graphtraj setup` again in a configured project keeps its recorded paths, user
-Runtime configuration, role and Skill selections, and Ticket, Team and
-Worldline history.
-
-Setup is interactive and checks conflicts before writing. It preserves
-project-owned content and valid operator configuration, creates or registers
-the `dev` Integration Worktree, and writes an empty role selection for a new
-project. It does not require a Skill catalog, offer Skill installation or
-replace existing Skills. It does not clone a repository, configure credentials,
-modify Runtime-global settings or promote `dev` to `main`.
-
-The default layout is:
-
-```text
-<harness-project-root>/                  also the Source Repository by default
-├── AGENTS.md                           user/project instructions
-├── CONTEXT.md                          shared vocabulary
-├── docs/                               Project Documents
-├── .agents/skills/                     optional Runtime-discovered Skills
-├── .codex/                             optional, when using Codex
-└── .graphtraj/
-    ├── config.yml                      paths and Runner limits
-    ├── roles.yml                       child-role Runtime settings
-    ├── .agent-worktrees/
-    │   ├── dev/                        Integration Worktree
-    │   └── <ticket-id>-<ticket-name>/   disposable Ticket Worktree
-    └── state/
-        ├── batches/                    exact dispatch inputs
-        ├── tickets/                    definitions, Team state and evidence
-        └── worldline/                  append-only event shards
-```
-
-Runner-private execution records also live beneath `.graphtraj`, outside
-durable state. Their filenames are implementation details. The separated
-layout keeps the Source Repository in its configured child directory while
-Project Documents remain at the Harness Project Root. Linked Worktrees expose
-`CONTEXT.md` and `docs/` from their checkout when those already exist. Setup
-and Runner preserve their contents and Git tracking; they create links to the
-shared project documents only where those paths are absent. Existing documents
-are the basis for later updates. Delegated Agents retain read-only document
-access, and Main owns Project Document changes. Source Repository README
-remains ordinary repository content within the assigned implementation scope.
-Runtime-native permissions govern file access; GraphTraj installs no Worktree
-Guard or command-parsing Hook. External instructions and Skill files remain subject to the selected Runtime
-and its configured filesystem permissions.
-
-Generated document links use Worktree-specific Git ignore rules. Existing
-repository documents and new files beneath them remain visible to Git unless
-user rules exclude them. Setup preserves user ignore files and includes their
-current rules in the Worktree-local copy, refreshed when setup or Worktree
-preparation runs. Setup migrates the old installer's complete shared ignore
-rule group; standalone user rules remain unchanged.
-
-## Optional desktop project graph
-
-The development desktop in `desktop/` displays existing projects, native task
-graphs and read-only Agent activity, and edits native role and connection
-settings. It is optional: installing or running the Python CLI does not require
-Node or Electron. Usage dashboards and cross-platform installers are separate
-delivery work.
-
-Install the matching Python GraphTraj version in a persistent environment and
-put `graphtraj-tool` on PATH, or set `GRAPHTRAJ_TOOL` to that executable. Use
-Node 22.18 or newer; the macOS development build was checked with Node 24.18.0.
-From `desktop/`, run:
-
-```sh
-npm ci
-npm exec -- install-electron
-npm start
-```
-
-The second command runs the pinned Electron package's official installer.
-Installation and desktop startup need normal host filesystem and graphical
-session access; restricted Agent environments can block destination path
-resolution. The build preserves linked Worktree paths without broadening
-Agent access. Generated dependencies and build output are not project state.
-
-Use **Add project** to select an existing Harness Project Root. The application
-stores its project list and selection in Electron userData. Removing a project
-only removes its list entry. The graph refreshes every three seconds and shows
-Ticket state, dependencies, inactive or replaced nodes, query errors and the
-last successful update. Execution completion does not mean Ticket acceptance;
-a time notice does not mean execution has stopped. The renderer exposes no
-task-control or arbitrary-command interface.
-
-Node details separate current and historical Agents. Select an Agent to read
-recorded Chat activity, expand tool commands/results/errors, copy text, pause
-following, or page through older content. Missing or unreadable content remains
-explicit. Native usage facts retain their source and call attribution; streaming
-and replayed facts must be reconciled before aggregation.
-
-Use the desktop with its matching GraphTraj Python installation. Its native
-human-observer entry is separate from Agent access: starting it from an Agent
-does not grant access to private conversations or reports.
-
-Actual macOS window tests cover native graph queries, project separation,
-refresh, reconnect, persistence and removal. A separate unmocked window was
-used to add two projects through the OS picker. Opening, closing and reopening
-the tested desktop left the observed independent Runner execution running.
-Cross-platform installers are separate delivery work. Supplied
-dependency notices and their recorded limitations are retained in
-`desktop/THIRD_PARTY_LICENSES.txt` and `desktop/licenses/`.
-
-## Pi child Agents
-
-The `pi` Runtime controls the installed Pi backend through persistent stdio RPC;
-it does not allocate a listening TCP port. Prepare an environment that can run
-Pi with the selected lightweight asb sandbox, then configure a child role:
-
-```yaml
-roles:
-  pi_assistant:
-    runtime: pi
-    model: deepseek/deepseek-flash
-    api_key_env: DEEPSEEK_API_KEY
-    worktree_access: write
-    reports: [result.md]
-    pi:
-      sandbox_python: /path/to/asb-venv/bin/python
-      sandbox_path: /path/to/sandbox-runtime/node_modules/.bin
-      agent_dir: /path/to/existing/pi/agent
-role_tree:
-  pi_assistant: {}
-```
-
-The sandbox paths select the prepared Python environment and helper executables;
-`agent_dir` points to existing Pi configuration. Keep credentials in the selected
-native configuration or referenced environment variable. The qualified model
-routes are `deepseek/deepseek-flash` and
-`openrouter/google/gemini-3.8-flash`; the latter uses the configured OpenRouter
-authentication. Use the same public Runner dispatch, input, interruption and
-recovery operations as other child roles. Native Session identity, context and
-Trace remain associated with that role. This selects Pi for children without
-changing the user's Main Runtime.
-
-## DeepSeek Harness child Agents
-
-The `dsh` Runtime uses the installed DeepSeek Harness backend through its
-authenticated HTTP and WebSocket interfaces. The qualified version is
-DSH `0.2.0-rc.2`; `dsh` and the installed GraphTraj commands must be available
-to the execution host. Configure a child role in `.graphtraj/roles.yml`, for
-example:
-
-```yaml
-roles:
-  dsh_assistant:
-    runtime: dsh
-    model: deepseek-official/deepseek-flash
-    base_url: https://api.deepseek.com/anthropic
-    api_key_env: DEEPSEEK_API_KEY
-    reasoning_effort: high
-    worktree_access: write
-    reports: [result.md]
-role_tree:
-  dsh_assistant: {}
-```
-
-Keep the credential in the referenced environment variable. The optional
-`base_url` is the Messages API base; reasoning effort supports `off`, `low`,
-`high` and `max`. Use ordinary public dispatch and Session control operations.
-Each Agent owns a separate backend service so the existing process-based
-public CLI identity can distinguish callers. Interrupting or retiring one
-Agent leaves unrelated services alone, and retained native Trace remains
-available after task cleanup.
-
-DSH's native file tools permit reads outside the Worktree. Its official write
-sandbox remains enabled, and GraphTraj public report operations still check
-caller identity, hierarchy and report access. The host must support DSH's
-native subprocess sandbox for Bash tools. Native interactive approval or user
-input requests return an explicit unsupported result and stop that execution.
-DSH Main/finalize hosting, native cross-level host approval and tightening an
-existing writable Session to reports-only mode are unsupported.
-
-## Python operations
-
-The CLI calls the Python operations below. Import them from their owning
-modules; inputs and results do not require a Click context or terminal.
-Use `configuration.project_configuration.load_project_configuration(root)`
-with the Harness Project Root to obtain configured paths.
-
-All module names in this table are beneath `graphtraj`.
-
-| Module | Operation and input | Result |
-| --- | --- | --- |
-| `workspace.project_initialization` | `plan_project_setup(root, source_repository)`; then `plan.preflight()` and `plan.apply()` | Existing plan and preview objects; apply returns `ProjectSetupResult` with `integration_worktree`, `integration_action` (`created`, `registered`, `reused`) and `completed_actions`. |
-| `configuration.project_diagnosis` | `diagnose_project(root)` | `ProjectDiagnosis`: whether roles were checked, role diagnostics and `succeeded`. |
-| `graph.ticket_graph` | `register_ticket(state, root, issue)` | Registered Ticket directory as a `Path`. |
-| `graph.ticket_graph` | `revise_tickets(state, root, revision)`; `update_ticket_state(state, root, change)` | Recorded causal event as a dictionary. |
-| `graph.ticket_graph` | `read_graph(state)` | Dictionary containing current Tickets and dependency readiness. |
-| `graph.delivery_state` | `apply_delivery_state_request(state, root, request, authoritative_facts)` | Recorded Ticket/Team event; request must match the supplied authoritative facts. |
-| `graph.delivery_worldline` | `append_project_worldline_event(state, root, event)`; `read_worldline(state, root)` | Recorded event, or chronological event dictionaries. |
-| `execution.runner_batch` | `parse_swarm(document, caller_ticket_id, registered_tickets)`; `read_swarm(path, cwd, caller_ticket_id, registered_tickets)` | Existing validated `Batch` with each task's current Ticket projected into it. A launch input that already names its Tickets retains its exact bytes; one that leaves identity to the calling Session and the registered Ticket state retains the resolved document. |
-| `execution.runner_launch` | `launch_swarm(document, cwd)`; `launch_swarm_file(path, cwd)` | Existing `LaunchResponse` with `document` and `succeeded`, including per-task failures. |
-| `execution.runner_status` | `status_aliases(aliases, cwd, operation_total=False, baseline=None, candidate=None)`; `status_tree(cwd, operation_total=False, baseline=None, candidate=None)` | Existing `StatusResponse` with `document`, `succeeded` and `errors`. The tree operation returns one `agents` document without an alias list. |
-| `execution.runner_control` | `send_instruction(alias, instruction, cwd, caused_by_event_ids)`; `interrupt_session(alias, cwd)` | Session operation result dictionary. |
-| `execution.runner_cleanup` | `cleanup_ticket(cwd, ticket_id)` | Existing `CleanupResponse` with `document` and `succeeded`. |
-| `teams.team_round` | `continue_stopped_ticket(ticket_id, caused_by_event_ids, cwd, *, budget_only=False)` | Continuation result and its causal event ID. |
-| `teams.team_replacement` | `replace_session(alias, actor, caused_by_event_ids, cwd)` | Replacement result dictionary. |
-| `teams.ticket_integration` | `integrate_ticket(configuration, ticket_id, validation_command, diagnosis=None)` | Candidate, integration status, event ID, evidence path and unlocked Ticket IDs. Validation argv is a tuple; failure retains evidence and a non-integrated status. |
-
-Issue, revision, state request and event dictionaries use the same fields as
-the corresponding CLI YAML inputs. Paths are `pathlib.Path` objects; causal
-event IDs in Runner control calls are tuples of strings. For example, read a
-configured project's current graph directly:
-
-```python
-from pathlib import Path
-from graphtraj.configuration.project_configuration import load_project_configuration
-from graphtraj.graph.ticket_graph import read_graph
-
-configuration = load_project_configuration(Path("/path/to/harness"))
-graph = read_graph(configuration.state)
-ready = [ticket for ticket in graph["tickets"] if ticket["ready"]]
-```
-
-Setup's `apply()` is the explicit mutation step. The CLI supplies repository
-selection and confirmation prompts and renders the same plan and result.
-
-Graph and semantic-state validation raise `ValueError`; Setup raises
-`ProjectSetupError`. Doctor reports project and role configuration diagnostics,
-and raises `DoctorError` for invalid configuration or a known child Worktree. Configuration, filesystem
-and stored-document errors retain their existing exception types. Runner
-operations use `RunnerError`; `error.as_document()` supplies the CLI's public
-error code and message. Check response `succeeded` or integration `status`
-as well: a retained failed outcome is a result, not necessarily an exception.
-Only the CLI translates these into usage errors, terminal messages and exits.
-
-Execution keeps the current Runtime backend and inherited Runner authority
-and Session context. Python calls follow the same parent-child registration,
-capacity, recovery, candidate and integration rules. Live budget JSONL can be
-routed to an open descriptor with
-`execution.execution_budget.budget_notice_output(descriptor)` around an
-operation. Without a selected or inherited channel, budget accounting and
-parent notices remain retained and Python produces no terminal output; the
-CLI selects stderr. Conflict integration retains notices in its evidence log.
-
-Task events use the existing Session connection. A mapped Agent notifies its
-actual direct parent; a root Agent can notify the parent Session retained by its
-owning host. A running parent receives input in its current turn, while an idle
-parent continues in that same Session. Completion, failure, result submission,
-approval/input requests and budget notices use the four-field message described
-in the Python host binding below, including events produced after `send` returns.
-A send acknowledgement, recorded event or channel write does not prove the
-parent processed it. Approval/input requests still need an explicit reply.
-Runner enforces stopping independently of notification delivery.
-
-Hosts without the event receiver retain their existing caller-channel behavior.
-For a Codex caller identified by `CODEX_THREAD_ID` or a tool's
-`params._meta.threadId`, the awaited call can return a sampled stop in
-`stop_deliveries`. It preserves the stop identity and actual absolute stop time;
-the call's return time is a separate delivery instant. Ordinary estimate and
-allowance notices retain their existing channel/accounting behavior. This
-in-band result cannot answer a call twice or wake an arbitrary conversation
-after it has returned. To receive later events, the host must keep the explicit
-receiver binding described below alive. Neither path creates another Main,
-continues a Ticket budget or changes user Runtime settings automatically.
-
-`agent-runner send --reports-only` collects a report a Session already holds.
-It resumes that Session read-only without attaching the budget monitor, so
-returning existing evidence advances no stopping check, repeats no sampled stop
-and delivers no new stop instruction. Every other `send` and `continue` keeps
-the Ticket under its budget control; this mode changes no accounting, identity
-or stop history. Restricted recovery instructions must be delivered through the
-actual supported execution channel, not merely attached to a revised Ticket.
-
-## GraphTraj overview and method guides
-
-The [graphtraj Skill](skills/graphtraj/SKILL.md) is the thin discovery overview.
-Select it through the Runtime's supported Skill mechanism. Installing a Skill
-provides instructions; the host must also register the GraphTraj tool. Skill
-installation alone does not register a native callback in an existing session.
-
-The five method guides below live in [manuals](manuals/), outside Skill discovery
-locations. A selected feature's `manual_ref` points to its guide for tool
-explanation and CLI help. Bindings resolve that reference to the delivered file;
-they do not maintain another copy of its text. Read only the method needed for
-the current task. Setup does not install a catalog or require these method names.
-
-| Method | Purpose |
-| --- | --- |
-| [setup-project](manuals/setup-project/guide.md) | Establish missing project paths, tracking and chosen resources while preserving existing conventions. |
-| [task-breakdown](manuals/task-breakdown/guide.md) | Recursively split work to fit available resources, with independently verifiable results and real artifact dependencies. |
-| [task-delivery](manuals/task-delivery/guide.md) | Dispatch, submit, accept, integrate and recover work through the common task protocol. |
-| [research](manuals/research/guide.md) | Investigate questions using primary sources and retain evidence, uncertainty and citations. |
-| [concept-clarification](manuals/concept-clarification/guide.md) | Clarify terminology, concepts, relationships and boundaries. |
-
-These methods have no coding/non-coding router. Obtain specialist methods from
-sources relevant to your work, or write your own. Customized coding methods
-used to develop GraphTraj are retained separately as
-[reference samples](examples/coding-skills/README.md), outside auto-discovery
-locations and outside the runtime distribution. They preserve this project's
-customizations; they are not a required workflow for GraphTraj users.
-
-A direct dependency names an input the consumer actually needs. For example,
-A summarizes paper1 and finds papers2–4; B summarizes only papers2–4; C compares
-all four. C needs both A's paper1 summary and B's summaries, so A→C and B→C are
-both necessary despite A→B. If B instead delivers a complete package containing
-all four summaries and sources, C needs only B: adding A→C supplies no new input.
-Split composite work further when available Agents cannot independently deliver
-it; stop when the selected executor can handle the node within its resources.
-Difficult reasoning is not automatically made easy by more task nodes. The
-Agent organization tree and the task dependency graph describe different things.
-
-Use `agent-runner retire` to release a stopped Agent from its task without
-deleting the shared Worktree or its native Session and retained evidence.
-The Agent and its entire descendant subtree must have stopped; an active or
-unconfirmed execution prevents retirement. Ask the direct child to stop and
-hand off its work normally, or interrupt the subtree when necessary before
-retiring it. An interrupted or failed execution alone does not retire an Agent.
-
-A stopped Team member is replaced with `agent-runner replace <member-alias>
---caused-by-event-id <event-id>`; the Runner's recorded direct parent or the
-user supplies the authority. The replacement starts a new Session for that
-seat and receives the replaced Session's retained reports, Trace and remaining
-work; the stopped Session stays retained and is never executed again, and
-replacing a parent does not promote that member's old children. An unfinished
-Team continues through `agent-runner continue --ticket-id <id>
---caused-by-event-id <event-id>`, which resumes the original root Sessions.
-Add `--budget-only` (MCP `continue`: `budget_only: true`) to restore budget
-permission without executing any old Session, then use ordinary configured
-swarm dispatch to select the next participant. Both modes require authorized
-control of the actual roots and a stopped subtree. Continuation retains elapsed
-accounting, parents and stop history; it does not grant additional time. A
-Ticket stopped before its first Team can also continue without creating a Team. A
-user-installed Matt Pocock `handoff` Skill remains independent.
-
-## Configuration and roles
-
-Role presets select user Runtime settings, permissions and optional external
-instructions. `instructions` names a UTF-8 file, relative to the Harness Project
-Root or absolute. Its contents are passed as text; GraphTraj does not parse
-required Skill names from it. Omit it for the common task context alone.
-Role names do not load an implicit professional template.
-
-The Runtime owns Skill discovery and selection. GraphTraj forwards explicitly
-configured native resources without maintaining a Skill catalog or disabling
-all unselected Skills. For Codex it forwards the Harness `.codex/config.toml`
-`[skills]` configuration; relative override paths resolve from that `.codex`
-directory. Enablement overrides do not by themselves establish discovery of an
-arbitrary external directory: use the Runtime's supported discovery locations,
-links or explicit selection and check access under the executing Session.
-On the verified Codex 0.156.1 interface, an external Skill can be exposed by a
-per-Skill symlink in each consuming Worktree's `.agents/skills` directory:
-
-```text
-mkdir -p <worktree>/.agents/skills
-ln -s <absolute-skill-directory> <worktree>/.agents/skills/<unused-link-name>
-```
-
-Preserve existing entries and use distinct link names where needed. Native
-metadata can contain several Skills with the same declared name; use the exact
-path to select the intended customization. Keep canonical paths in native
-configuration and ensure the executing Session may read the targets and their
-references. Arrange discovery locations for future Worktrees as part of the
-chosen project/Runtime setup; GraphTraj does not automatically place these links.
-The installed 0.156.1 schema used for verification did not expose
-`perCwdExtraUserRoots`, so that newer documented request field is not assumed
-available here.
-
-New task `skills` and role `harness_skills`, `required_skills` or `skills`
-fields are rejected with migration guidance; retained historical inputs stay
-unchanged. Main has no Runner-managed child preset or configuration template.
-
-The default `.graphtraj/config.yml` is:
-
-```yaml
-version: 1
-paths:
-  project_root: .
-  docs: docs
-  agent_worktrees: .graphtraj/.agent-worktrees
-  state: .graphtraj/state
-agent_runner:
-  dispatch_depth: 2
-  max_concurrency: 18
-```
-
-Paths resolve from the Harness Project Root. `dispatch_depth` limits formal
-descendants below Main; a root assignment is depth 1 and its children depth 2.
-`max_concurrency` limits executing Agents across the project. Operating-system
-locks enforce capacity; lock-file presence is not occupancy. A normal Batch
-starts all its tasks or none. At capacity one, separately dispatch work that
-can run sequentially. A
-child Batch beyond `dispatch_depth` returns `authority-denied` before
-registration. Runner counts the retained parent Session chain; resuming a
-Session adds no depth. Dispatch permission comes from explicit `role_tree`
-edges and `dispatch_depth`: a registered member
-registers the direct children its `role_tree` permits, and a child Batch must
-belong to the parent's Ticket.
-
-Setup writes an empty `roles` mapping in `.graphtraj/roles.yml`. For example,
-a project can select a single researcher:
-
-```yaml
-roles:
-  researcher:
-    runtime: codex
-    model: your-selected-model
-    instructions: instructions/researcher.md
-role_tree:
-  researcher: {}
-```
-
-The instruction file is user-provided. A role can also select
-`reasoning_effort`, `base_url` and `api_key_env`; the latter names an environment
-variable and never stores the credential. Omitted settings use Runtime defaults.
-`allow_runtime_swarm` defaults to false. Add direct child edges to `role_tree`
-only for the dispatch relationships this project permits. A preset name alone
-grants neither dispatch nor acceptance authority. Grouped presets and inline
-roles use the same configuration and relationship checks.
-
-Main can manage these declarations through `role_organization`, also available as
-`graphtraj roles organize`. With no change supplied, it reads the current roles
-and dispatch edges without modifying configuration. Ordinary child Sessions
-cannot use this operation to expand their own authority.
-
-To request a change, pass a YAML document to
-`graphtraj roles organize --change-file change.yml`. Supported keys are
-`set_presets`, `remove_presets`, `add_edges` and `remove_edges`; each edge names
-its `parent` and `child`. For example, a change to an existing preset can be:
-
-```yaml
-set_presets:
-  reviewer:
-    model: your-selected-model
-```
-
-A preset can also carry optional, non-empty inline `system_prompt` and
-`developer_prompt` text. These use the same authorized change operation. For an
-existing Pi preset named `pi_worker`, for example:
-
-```yaml
-set_presets:
-  pi_worker:
-    system_prompt: |
-      State the result concisely and identify the evidence supporting it.
-```
-
-The native channels differ by Runtime:
-
-| Runtime | `system_prompt` | `developer_prompt` |
-| --- | --- | --- |
-| Pi | System prompt addition through `--append-system-prompt` | Unsupported |
-| DSH | System text in the session-scoped `persona` plugin's `suffix` | Unsupported |
-| Codex | App-server `baseInstructions` | App-server `developerInstructions` |
-
-Requesting an unsupported layer returns `ROLE_CONFIG_UNSUPPORTED` before
-dispatch. Prompt text is never silently moved to another layer or sent as task
-text. The existing `instructions` UTF-8 file reference remains supported, and
-unrelated preset settings are preserved. Approved prompt changes apply to the
-next dispatch; retained Sessions keep their captured inputs. These operations
-manage dispatched child roles, not Main's own host prompts.
-
-The same operation submits the concrete change to the selected reviewer and
-applies it only after approval. There is no separate apply command or caller
-approval flag. Refusal, an unavailable reviewer, an invalid role graph or a
-target changed during review leaves the configuration unchanged. Unrelated
-settings and historical Agent identities are retained; existing Sessions keep
-their captured settings.
-
-The Runtime Adapter interprets `reasoning_effort`. Codex maps it to
-`model_reasoning_effort`; omission retains the shared Codex projection default (`high`). Invalid
-values produce a configuration error. The effective setting is preserved on
-Session continuation. Batch inline roles accept the same optional field.
-
-A task can use a preset name or a one-entry inline role with the same Runtime
-settings. Inline roles stay in their Batch and never become presets
-automatically. Dispatch requires an explicit root or direct edge in `role_tree`;
-inline Runtime settings cannot add an edge. Existing role instructions and
-file restrictions remain in effect. Setup does not generate
-Runtime-specific child-role directories.
-
-`codex.approval` is Codex-adapter configuration: it makes an HTTP model request
-to review a native approval request. It does not declare a reviewer Runtime or
-start another Codex Session. Put a dedicated reviewer under the role, or use
-the same structure at the top level of `.graphtraj/config.yml` for a project
-default automatic reviewer:
-
-```yaml
-codex:
-  approval:
-    model: your-review-model
-    base_url: https://your-provider.example/v1
-    api_key_env: REVIEW_API_KEY
-```
-
-A configured dedicated reviewer takes precedence over the project default.
-When neither is configured, previously supported native approval stays native;
-a route that requires a custom reviewer fails clearly if none is available.
-Invalid configuration is not absence. A denial, timeout or failed request does
-not try another reviewer. First launch and recovery share this selection while
-preserving the work model, Session identity, parent and permissions.
-
-To change the text returned with an enforced budget stop, set
-`agent_runner.stop_instruction` in `.graphtraj/config.yml`. Omit it for a general
-status/recovery instruction, supply your own text verbatim, or set `""` for stop
-facts alone. Custom text can explicitly reference a user-installed method;
-GraphTraj requires no `retro` file or fixed Skill path. Text does not change the
-stop identity, actual parent, time accounting or authorization needed to resume.
-Runner enforces stopping; the recorded parent coordinates its children.
-
-## Deliver accepted Tickets
-
-The optional [task-delivery](manuals/task-delivery/guide.md) method describes the workflow. Main registers
-accepted GitHub Issue definitions and dependencies, generates the current
-graph with `graphtraj ticket graph`, and selects ready Tickets.
-Only validated `dev` integration satisfies a dependency.
-
-Activate any role authorized as a root in `roles.yml`, for example:
-
-```yaml
-roles:
-  researcher:
-    runtime: codex
-    model: your-selected-model
-role_tree:
-  researcher: {}
-```
-
-A lone researcher uses the same formal Session, Ticket Worktree, Team/Round,
-Trace, report submission and versioned result submission as an engineer.
-Only actual members are registered; no Leader or Engineer seat is required.
-Task files may be committed in the Worktree; project documents and private
-control records retain their restrictions. Reports use the exact assigned
-paths through the `graphtraj` tool (`action: execute`, `feature: submit_report`)
-or `agent-runner submit-report`. Ending execution does not accept or
-complete the Ticket. Use ordinary `send` to continue an eligible existing Session.
-
-Select the ready Ticket with a block-style YAML swarm input:
-
-```yaml
-tasks:
-  - ticket_id: "123"
-    role: researcher
-    instruction: Produce the research document for the current Ticket.
-```
-
-`ticket_id` is Main's own DAG selection result; the Ticket name, scope,
-investigation findings and completion conditions come from that registered
-Ticket's current definition, so the input never repeats them. The input selects
-work; its optional instruction adds concise dispatch details to the accepted
-definition. Several ready Tickets may share one input when capacity permits. It
-has no Delivery Run identifier or input-level Runtime setting. A Session that
-already works inside one Ticket writes each task as its role and launch
-instruction alone, and the entry resolves that Ticket from the calling Session.
-
-Run public commands from the Harness Project Root:
-
-```text
-agent-runner --swarm-input swarm.yml
-agent-runner status [<alias>...]
-agent-runner status --operation-total [<alias>...]
-agent-runner status --baseline <commit-or-ref> --candidate <commit-or-ref> <alias> [<alias>...]
-agent-runner requests <alias> [--execution-id <native-execution-id>]
-agent-runner reply <alias> --request-file request.yml --response '{"decision":"decline"}'
-agent-runner send <alias> --instruction <text> --caused-by-event-id <event-id>
-agent-runner send <alias> --instruction <text> --caused-by-event-id <event-id> --reports-only
-agent-runner interrupt <alias>
-agent-runner continue --ticket-id <id> --caused-by-event-id <event-id>
-agent-runner replace <member-alias> --caused-by-event-id <event-id>
-agent-runner replace <leader-alias> --actor main --caused-by-event-id <event-id>
+graphtraj doctor
 graphtraj ticket graph
-graphtraj worldline read
-graphtraj worldline render
-graphtraj ticket integrate --ticket-id <id> -- <validation-command> <arguments>
-agent-runner cleanup --ticket-id <id>
 ```
 
-The reply payload follows the request's Runtime. The `decline` example above
-is for Codex. For a DSH approval, use `{"decision":"reject"}` to refuse or
-`{"decision":"allow"}` to authorize the displayed operation. Read the actual
-request before replying; a reply error does not establish whether the native
-operation received the decision. Do not retry an uncertain reply blindly.
-Pi extension UI replies use the requested `value`, `confirmed` or `cancelled`
-fields; a UI confirmation alone does not grant sandbox filesystem permissions.
+Setup shows its plan and asks before creating the `dev` branch. It creates or
+registers a separate worktree for integration and stores configuration and task
+history under `.graphtraj/`. Your primary worktree stays on `main`. A new
+project has no tasks or Agent roles yet, so its first graph is empty.
 
-The project assigns implementation, investigation, validation and acceptance
-responsibilities through its selected instructions and actual Agent hierarchy.
-Specialist checks provide evidence for the common result decision; they do not
-create a separate completion protocol. A confirmed result rejection opens the
-next Round. Replacements retain the Ticket branch, Worktree and prior evidence;
-the stopped Session remains retained. The recorded direct parent or the user
-supplies replacement authority, after the target subtree has stopped.
+Running setup again preserves existing configuration and history. For a layout
+with a separate source repository, or other project conventions, see the
+[setup guide](manuals/setup-project/guide.md).
 
-Continue an unfinished Team through `agent-runner continue` after deciding the
-next action. Runner reuses the retained original Sessions, the Worktree,
-candidate, and valid reports. A missing or invalid report returns to its author
-with the failure, Trace, and assigned report path. The executing member commits
-its result and records it with `submit-result`: version, result references,
-completion statement, evidence and unresolved work. The authorized parent
-answers with `decide-result`, which retains the exact submission, decision,
-reason and evidence. No role-specific report filename or prose format is a
-universal submission or acceptance condition. Completing the last missing
-report needs no additional Review Batch. System/provider failures return to the
-caller for an explicit later retry through `send`; `status` reports the existing
-Session and last outcome.
+## Use it with your Agent
 
-After a sampled budget stop, Main analyzes the cause and records its chosen
-action in the existing Worldline. Apply any required corrections or accepted
-budget revision, then explicitly use `agent-runner continue` with that decision
-to resume unfinished Team work. A budget edit alone does not resume execution.
-Original elapsed time, consumption, sampling history and valid results remain;
-continuation does not replace the Team or bypass acceptance.
+Your main Agent runs in the host you already use. To delegate work, install and
+authenticate the chosen Agent Runtime separately; GraphTraj does not supply
+model credentials or change your host's global settings.
 
-Status diagnostics are on demand and do not affect delivery decisions. For a Codex
-Session, `--operation-total` counts each native `response_item` tool request once
-by its native identifier in that Session. `function_call` and `custom_tool_call`
-use `call_id`; `local_shell_call` and `tool_search_call` use `call_id` or their
-legacy `id`; `web_search_call` and `image_generation_call` use `id`, as defined by
-the [Codex 0.153.0 protocol](https://github.com/openai/codex/blob/rust-v0.153.0/codex-rs/protocol/src/models.rs#L959-L1122).
-This counts one `exec` request even when it runs a compound command, includes
-failed requests, and excludes messages, tool outputs, and `event_msg` execution
-views.
-An inspected Codex 0.153.0 Session had 54 native `exec` wrappers alongside 135
-`CommandExecution` and 11 `FileChange` execution views; those views are not added
-to the native request total.
-The `--baseline` and `--candidate` pair resolves both references to commits in the
-selected Session's Worktree and reports Git `--numstat` records for their resulting
-change. Binary additions and deletions are shown as `null`, matching Git's `-`
-fields rather than inventing line counts.
+For a first Codex child Agent, add this preset to `.graphtraj/roles.yml`, replacing
+`your-selected-model` with a model available to your Codex installation:
 
-The project graph keeps required predecessor relationships across delivery
-stages, including completed predecessors. Completion removes waiting, not the
-edge. Source-node descriptions record other origins without creating artificial
-blocking dependencies.
-
-Main corrects Ticket boundaries or dependencies when delivery evidence
-disproves them, using `graphtraj ticket revise --revision-file <revision.yml>`.
-Product-preserving graph corrections retain prior definitions and evidence;
-product changes or new external authority require user direction. Delivery
-State records supplied semantic decisions through validated commands; Runner
-records only the execution facts it observes.
-
-Main integrates accepted candidates serially into `dev` and supplies the
-project's validation command. For an actual textual or semantic conflict,
-the integration command accepts `--resolve-conflict <diagnosis>` to dispatch
-an explicitly selected role (`--role <configured role reference or inline
-role>`). The selected executor submits its resolved version for an authorized
-decision before integration completes.
-Replacement composes retirement with the existing role registration operation.
-If registration fails after retirement, the failure preserves that distinction
-and can be retried without resuming the retired Agent.
-Cleanup verifies integration and a clean disposable Worktree, retires the
-Ticket's Agents, then removes the unused Ticket Worktree/branch. Retirement
-removes active mappings while preserving durable evidence and original parent
-relationships; it does not remove a Worktree still used by another execution.
-
-## Main completion checks
-
-The Runtime's session-entry integration recognizes an external Main from its
-native Session source and automatically carries that association into CLI,
-Tool and MCP operations. GraphTraj members keep their existing identity and
-parent protocol. Native and supported plugin children are excluded from Main
-registration; an unknown source is reported rather than silently promoted.
-
-Pi plugin recognition covers `nicobailon/pi-subagents` (`PI_SUBAGENT_CHILD`
-and child Session parent/depth metadata) and `mjakl/pi-subagent`
-(`PI_SUBAGENT_DEPTH` and `pi-subagent:delegation` records). Support is limited
-to these known plugin markers, including their shared-process Session context.
-
-Main does not manually supply a binding path or pin completion checks to one
-Issue. Adopt the Runtime-specific integration through its normal configuration
-and trust mechanism, preserving existing settings and permissions.
-
-The Adapter executes and collects the checker with Main's current native context
-and actual Runtime settings. The checker resolves the current task and verifies
-its Issue, DAG and Tickets; supplied references are hints that may be outdated.
-Main does not mediate checker preparation, dispatch or collection.
-
-For Codex, generate the SessionStart and Stop configuration using the Python
-interpreter from the installation you intend to keep:
-
-```sh
-python -m graphtraj.runtimes.codex.stop_hook --configuration
+```yaml
+roles:
+  researcher:
+    runtime: codex
+    model: your-selected-model
+    worktree_access: write
+role_tree:
+  researcher: {}
 ```
 
-Review the generated commands, merge them into the project's existing hook
-configuration, and use the host's normal review and trust controls. Keep the
-installation and its interpreter outside temporary directories. The commands
-receive native event context; they take no fixed Session ID, binding path or
-summary Issue. Verify native Main entry and Stop after configuration;
-generating or trusting the material alone proves neither.
-
-If Main is already running when the integration is installed, a trusted Stop
-can establish the missing association from verified native ownership of the
-project's existing root Agents. It reuses the normal entry checks; no restart
-or manual binding is needed.
-
-Each activation visibly reports a start and outcome. Completed work and
-legitimate waiting end the hook without another Main input or reply. Actionable
-unfinished work returns to the same Main with the next work to perform. Children
-and the checker do not recursively activate the hook; user interruption and
-execution limits remain effective.
-
-The checker does not redo code review or reconstruct requirements from native
-Traces. Reference or checker failures are not completion evidence. Native
-inheritance can preserve a reusable prompt prefix, but cache reuse is not a
-correctness condition or guaranteed saving. Current-host operation must be
-verified after adopting a fixed installation; controlled interface checks and
-hook material alone do not establish it.
-
-## Runtime Adapter boundary
-
-The task graph, Session ownership, result decisions, budgets and retained history
-belong to the common core. The selected Runtime Adapter prepares native context,
-provides execution identity and control, interprets captured recovery settings,
-and refreshes native permissions and report access. Core execution consumes that
-contract rather than Codex turn objects or configuration fields.
-
-Native operation statistics and current-execution failure diagnostics also come
-from the Adapter. Missing support is reported explicitly. Replacement first
-checks the actual relationship and stopped subtree, then uses the caller
-Runtime's approval capability: refusal, failure and genuine absence remain
-distinct. A model-supplied actor or role name does not grant authority.
-
-Common project files and Worktree layout belong to workspace handling. Generic
-setup does not require or create `.codex`; Codex's selected adapter owns its
-configuration, native storage and legacy interpretation. Existing captured
-Session settings and parent relationships survive same-Session recovery.
-
-Codex is the delivered production backend. Controlled alternate-Adapter tests
-exercise the real preparation, Worker, control and recovery paths with different
-native objects; they are evidence of the boundary, not another supported runtime.
-The following section documents the legitimate Codex-specific Python interface.
-
-## Codex Session interface in Python
-
-`graphtraj.runtimes.codex.app_server.CodexAppServer` provides native Session
-control using Codex 0.153.0's stdio app-server. Runner Session workers use this
-Adapter and retain the connection and native Trace after a launch or send caller
-returns. The existing registered-task inline-role launch returns `launched` with
-an alias and native `session`.
-
-`launch_batch(parse_batch(document), root)` dispatches a Batch through the same
-Worker and Adapter. A calling Session registers the direct children its
-`role_tree` permits; a Batch that cannot fit starts none of its tasks and
-returns `insufficient-capacity` to the caller Session. Separately register tasks
-that can run sequentially when capacity is limited.
-
-`read_graph(state)` exposes current Ticket states. `read_worldline(state, root)`
-supplies the submitted versions and recorded decisions, including the retained
-`team-round-accepted` event. A parent can be idle while its children execute;
-Session completion alone does not accept the task. Current Round reports remain
-under `tickets/<id>-<name>/teams/<generation>/rounds/<round>/`.
-
-A registered member can submit code, Markdown or LaTeX through the same operation:
-
-```sh
-agent-runner submit-result --commit <full-commit> --result-ref result.md \
-  --evidence-ref .state/teams/1/rounds/1/researcher.md --completion "Research complete"
-agent-runner reports <alias>
-```
-
-Result paths are relative to the member's Worktree and must exist at its current
-committed version. Evidence may name committed files, the member's assigned
-reports, or its Trace. `--evidence-ref` and `--unresolved` may be repeated; evidence
-and unresolved items are optional. The Runner binds the authentic Session,
-Ticket, Team and current Round, and retains evidence copies with the Worldline
-submission so subsequent edits cannot change its meaning. Submission does not
-accept the result or complete the Ticket. The member and its direct parent can
-read submissions through `reports`; original report names remain readable.
-Report assignments use role names and the existing alias to distinguish repeated
-members, and followup preserves each member's assigned names.
-
-The submitter's actual direct parent (including a top-level caller for a
-parentless Session) records acceptance through the same operation for any task:
-
-```sh
-agent-runner decide-result --submission-id <result-submitted-event-id> \
-  --commit <full-commit> --decision accepted --reason "Meets the task criteria" \
-  --evidence-ref <retained-evidence-reference>
-```
-
-Use `rejected` to return work with a reason. Evidence references are
-Harness-relative files: use the submission's returned evidence references,
-committed Worktree files, or the deciding Session's assigned reports. At least
-one reference is required, and the decision retains its bytes. No role name or
-report format grants acceptance authority. The decision must match the latest
-submission in the current Round and its clean current Worktree version.
-Acceptance closes the Round and leaves the Ticket awaiting integration;
-rejection closes the Round for rework. The next report or result submission
-opens the correction Round and retains the earlier decision and causal history.
-Neither decision performs Git integration or marks the Ticket complete.
-
-Before integration starts, the original accepting parent may use `decide-result`
-with `rejected`, the accepted submission ID and commit, and a concrete reason
-and evidence for a necessary correction discovered after acceptance. This retains
-the earlier acceptance and returns the Ticket to rework. The accepted commit
-must still be the current candidate, but the author's Worktree may already
-contain its correction. The same member can submit its report or corrected
-committed result to open the next Round; the replacement requires fresh parent
-acceptance before integration. Results already integrating or integrated cannot
-be returned this way.
-
-Query `status_aliases([alias], root)` to get `session`, `execution_id`, and
-`activity`. An idle execution has `last_outcome`: `completed`, `runtime-error`,
-or `interrupted`. These describe native execution, independently of the service
-PID. The native result, final answer and error details are retained in the
-Session's `execution.yml`; `stderr.log` retains Runtime diagnostics.
-
-`status_tree(root)` reads the Session records the Runner retained for this
-project instead of an alias list, so one query reports the whole Agent tree:
-each node's recorded `parent` and `children`, plus its status. A live Session
-sees the subtree rooted at itself; Main and the user see each recorded
-top-level Session and its subtree. The caller itself and its recorded direct
-children keep the full status, and every deeper Session keeps the coarse
-activity and last outcome. A record that cannot be read, or one Session whose
-status cannot be judged, carries its own `error` while the rest of the tree
-still returns. `agent-runner status` with no alias prints this document, and a
-later caller reads the same tree from those records.
-
-While a Worker holds an execution it publishes a heartbeat record in the
-Session directory, including through every normal wait: a watchdog delay, a
-waiting child, a running tool or a pending request reply. The record updates
-independently of model output, so a quiet native Trace is not read as failure.
-When the Worker does not answer a control request within the control timeout,
-status reports `activity: unreachable` while the owner it recorded still holds
-the process (lost contact, not death) and `activity: abnormal` when that owner
-is gone, or its process identifier now belongs to another process, without a
-terminal record; either report adds `heartbeat_at`, the last moment that owner
-held the execution. Ownership is proven by the lock the Worker holds in the
-Session directory, which the operating system releases when the process ends,
-so a reused process identifier cannot pass for the recorded owner. An existing
-terminal record is never overturned by a missing or stale heartbeat.
-
-`send_instruction(alias, text, root, (event_id,))` uses native active input when
-running. For an idle Session it starts a Worker that restores the same native
-conversation and its resolved Context. A continuation gets a new execution ID
-and preserves the alias and Session ID. Each send must cite an existing Project
-Worldline event. `interrupt_session(alias, root)` stops the target and every
-recorded descendant directly, without asking intermediate Agents to relay it.
-Its `members` results distinguish `interrupted`, already `stopped`, and
-`unconfirmed` members; the overall `interrupt_status` is `incomplete` if any
-member cannot be confirmed. Other branches keep running. The stopped subtree
-cannot create or resume work, including through `send` or report collection.
-This prohibition persists on the old entities after replacement; Sessions,
-aliases and evidence remain retained. Ordinary native completion still permits
-continuation. A send racing native completion never silently queues input.
-
-The Worker closes its connection after the terminal result. A send made
-during that close waits for the prior owner to finish. The
-private file control endpoint is shared by Runner callers; it needs no global
-service or listening socket. Runtime permissions and the existing capacity and
-budget checks still apply. Native requests without a response handler fail
-visibly through the direct Adapter; managed Workers route them to public callers.
-
-For a managed execution, `pending_requests(alias, root)` queries pending native
-interactions after the launch caller has exited. The result contains `alias`,
-`session`, `execution_id` and `requests`. Each request contains its native
-`request_id` (integer or string), `method`, unmodified `params`, `session`,
-`execution_id` and a `request_token`. Queries do not consume requests. Pass
-`execution_id=...` to query only a previously observed execution; a successor
-mapping is rejected. A completed execution returns an empty request list.
-
-```python
-from graphtraj.execution.runner_control import pending_requests, reply_to_request
-
-pending = pending_requests(alias, root)
-request = pending["requests"][0]  # Explicitly select and inspect the request.
-print(request["method"], request["params"])
-# After deciding to decline this command approval:
-reply_to_request(alias, request, {"decision": "decline"}, root)
-```
-
-The installed CLI calls these same operations. `agent-runner requests <alias>`
-emits YAML; save the selected entry from its `requests` list as `request.yml`.
-Then use `agent-runner reply <alias> --request-file request.yml --response
-'{"decision":"decline"}'`. Supply the native response for the reported method:
-command approval accepts an explicit `{"decision":"accept"}` or
-`{"decision":"decline"}`; user input uses its native `answers` object. GraphTraj
-does not infer a decision or translate response schemas.
-
-While waiting, status remains `activity: running` with
-`waiting_for: runtime-request`. The Worker retains the execution and its capacity;
-`interrupt` still targets that execution. Human replies have no RPC deadline.
-Withdrawal, interruption or connection close ends the wait. Replies must match
-the Session, execution and one-time request token; duplicate or stale replies
-cannot answer another request, even if Codex reuses a native ID. `reply_status:
-submitted` acknowledges delivery to the owner's callback; query status and the
-native Trace for the eventual Runtime result. Requests live only in the Worker
-and its existing temporary control channel, with no permanent interaction ledger.
-Permissions, native response decisions and user Runtime configuration remain in
-effect.
-
-A real registered-task probe, including input consumption, continuation,
-interruption and native Trace comparison, is available in the source checkout:
-
-```sh
-CODEX_MANAGED_REAL=1 python -m pytest -p no:cacheprovider -q \
-  tests/test_managed_sessions.py -k real_registered
-```
-
-It uses an isolated project, installation and native store with the operator's
-Codex connection settings. `CODEX_MANAGED_MODEL` can select the model;
-`CODEX_MANAGED_WAIT` sets the observation timeout in seconds (default 120).
-Model/network failures fail this check and retain the actual operations and
-native diagnostics in the pytest temporary project.
-
-A focused recovery probe uses one real Spec Session and controlled peers. It
-loses the current report copy, then checks same-Session report delivery while
-preserving the candidate and unaffected evidence:
-
-```sh
-CODEX_RECOVERY_REAL=1 python -m pytest -p no:cacheprovider -q -s \
-  tests/test_team_recovery.py -k 'missing_current_review and native'
-```
-
-`CODEX_RECOVERY_MODEL` selects the model and `CODEX_RECOVERY_WAIT` sets each
-operation's timeout (default 900 seconds). The probe prints its isolated root,
-Runner and Reviewer alias. Use that Runner's `requests` and `reply` commands
-from the printed root for any native approvals; the probe does not choose
-responses or modify the operator's configuration.
-
-The normal coding-Team probe uses real Agents for a tiny greeting implementation,
-its validation, both Review axes and the Leader decision:
-
-```sh
-CODEX_TEAM_REAL=1 python -m pytest -p no:cacheprovider -q -s \
-  tests/test_team_session_delivery.py -k real_small_team
-```
-
-It installs a clean candidate export in an isolated project and copies the
-operator's native connection settings into a temporary store. It preserves the
-operator's configuration. `CODEX_TEAM_MODEL` selects the model,
-`CODEX_TEAM_CAPACITY` sets project capacity (default 1), and `CODEX_TEAM_WAIT`
-bounds the check in seconds (default 900), including time for explicit approval
-decisions. The probe prints its isolated root and installed Python/Runner paths
-and saves them in `real-team-control.json`. Keep the probe running while handling
-requests from another caller using that installation; no bootstrap tool upgrade
-is needed.
-
-The probe queries the existing `pending_requests` operation and prints each new
-native request, retaining its full identity and contents in
-`real-team-requests.jsonl`. Inspect each request's method, command or file changes,
-cwd, and requested access against the isolated Ticket. Then query that alias's
-current requests and explicitly submit the chosen native response using
-`reply_to_request` or the installed `requests` / `reply` CLI described above. The
-decision and reply result should be retained with the probe evidence. The
-probe never chooses or sends an approval response, and it leaves native
-permissions and the operator's Runtime configuration in effect.
-
-The temporary project retains inputs, results, its control-operation results,
-cleanup observations and native diagnostics. Before interrupting on timeout, it
-also retains unresolved native requests for diagnosis; those observations are not
-replies and their tokens expire with the execution. A network failure or an
-unanswered request leaves the genuine Team check incomplete.
-
-Pass the immutable `RuntimeContext` returned by the existing
-`preflight_runtime_context(...).finalize()`. Its `session_document()` projects
-the resolved role instructions, model, effort, native resources, Worktree and
-native task/report permissions. It does not change persistent Codex configuration.
-
-```python
-from pathlib import Path
-from graphtraj.runtimes.codex.app_server import CodexAppServer
-from graphtraj.runtimes.runtime_adapter import RuntimeContext
-
-async def execute(
-    context: RuntimeContext,
-    worktree: Path,
-    trace_file: Path,
-    prompt: str,
-):
-    async with CodexAppServer(
-        cwd=worktree,
-        environment=context.runtime_environment(),
-    ) as adapter:
-        session = await adapter.create_session(context)
-        adapter.retain_native_trace(session, trace_file)
-        execution = await adapter.start_execution(session, prompt)
-        result = await adapter.wait(execution, timeout=600)
-        return session.thread_id, session.rollout_path, result
-```
-
-Within the same connection, use `start_execution(session, text)` again for idle
-continuation, `send_input(execution, text)` for active input, and
-`interrupt(execution)` followed by `wait(execution)` to confirm interruption.
-On a new connection, `resume_session(context, thread_id)` loads the same native
-conversation with the supplied Context. Handles belong to the connection that
-returned them. The result contains `outcome` (`completed` or `interrupted`),
-`session_id`, `execution_id`, and `last_agent_message`. Native execution failures
-raise `RuntimeAdapterError`; no service PID or process exit code substitutes for
-an execution identity or result.
-
-One connection can own independent Sessions with different roles, models,
-efforts and permissions. Sessions with different endpoint or credential settings
-need separate connections with their respective `runtime_environment()` overrides.
-Use one asyncio event loop and close the Adapter explicitly or with `async with`.
-Turn completion leaves the service usable. Explicit close affects every Session
-on that connection and reaps its service process.
-
-For interaction, pass an async `on_request(request)` callback to the constructor.
-It receives `CodexServerRequest(request_id, method, params)` and returns the
-native response mapping, such as `{"decision": "decline"}` for a command approval.
-Requests are answered using their original IDs while other Sessions continue.
-Return `None` for an unsupported method. Missing, failed or timed-out handlers
-receive a native error response and surface `RuntimeAdapterError` to the owner;
-connection requests without an execution identity invalidate the connection.
-Handlers must yield to the event loop and cooperate with cancellation. Native
-`serverRequest/resolved` cancels a withdrawn request's handler.
-
-Call `retain_native_trace(session, trace_file)` once after `create_session` or
-`resume_session` when the complete native Session record is required. It waits
-for the Runtime to create the rollout at `session.rollout_path` and then makes
-the Trace entry a symbolic link to that Runtime-owned file, so readers see the
-native content, order, timestamps and encrypted fields unchanged, including
-records appended while the Session runs. GraphTraj writes nothing through the
-link. Reuse the same Trace entry after continuation: a resumed Session keeps
-reading the same native file, so retained records are not copied again. A Trace
-entry that already holds an earlier copied record set keeps that content
-unchanged.
-
-`create_session` and `resume_session` accept an optional native `approval_policy`,
-including `"untrusted"` or `"never"`. By default, directory trust, approval policy
-and approval reviewer are resolved by Codex from its native configuration;
-GraphTraj does not impose overrides for them. Native requests that require a
-client response are routed to the callback.
-This is a thread parameter. Codex 0.153.0 rejects `approval_policy = "untrusted"`
-in its configuration file. The callback routes native approvals, tool/input,
-MCP elicitation, authentication and attestation requests without translating
-their response schemas. Command approval has prior live evidence; the other
-request types have controlled protocol checks, not equivalent live coverage.
-
-An observer should drain `next_notification()` for raw native control events.
-They retain native IDs and include retry/error notifications. They do not replace
-the rollout at `session.rollout_path`; `retain_native_trace` links that
-complete native record into the Trace.
-The Adapter buffers notifications for that observer, accepts JSON lines up to
-16 MiB, and retains the last 16 KiB of stderr in `stderr_tail` for diagnostics.
-
-`request_timeout` bounds RPCs, request handlers and each shutdown grace period.
-A separate `request_handler_timeout` overrides only the callback deadline;
-`None` lets a caller wait for human input until native cancellation or close.
-Managed Workers use this override while keeping RPC and shutdown timeouts bounded.
-A timeout or cancellation while waiting for an execution leaves it owned and
-allows another wait or targeted interrupt. An abandoned control RPC has an
-uncertain native outcome: its connection becomes unusable and must be closed.
-Native startup/completion races can return `CodexRPCError`, which retains
-`method`, `request_id` and `native_error`. A newly accepted turn can still be
-initializing; use native activity notifications when timing active control.
-
-## One local tool and progressive disclosure
-
-Local hosts, fresh managed native Sessions and the optional MCP server expose
-one tool named `graphtraj`. Its small outer schema has `action`, optional `query`,
-`feature`, `schema` and `arguments`; each action uses only its applicable fields. Operation
-schemas are disclosed for the selected feature, not registered as more tools or
-combined into one large schema union.
-
-| Request | Example | Result |
-| --- | --- | --- |
-| Discover | `{"action":"discover","query":"task"}` | Relevant feature identifiers and short descriptions. Omit query for the compact directory. |
-| Describe | `{"action":"describe","feature":"task-breakdown"}` | Feature identity, short description and readable absolute guide reference. Read the file when needed. |
-| Describe parameters | `{"action":"describe","feature":"ticket_register","schema":true}` | Only the selected feature's input schema. |
-| Execute | `{"action":"execute","feature":"ticket_graph","arguments":{}}` | The existing operation's result under the actual caller's authority. |
-
-The shared registry is `graphtraj.interfaces.tools`; the gateway is
-`graphtraj.interfaces.gateway`. The delivered registry contains 25 operations
-and five method-only guides. A host can expose a subset. Default describe does
-not expand the guide, schema, examples or call object. Method-only features
-provide guidance without an executable operation. Discovery does not
-execute tasks, and known authorized operations can be called directly without a
-prior describe step. Invalid parameters produce a local error; the host can
-correct them and use the same tool again. Missing guide material is reported
-when describing that feature and does not disable otherwise valid core calls.
-
-CLI operation help is another presentation of the same definition, schema,
-examples and selected guide. Use `graphtraj --help` or `agent-runner --help` for
-the overview, then a concrete command such as `graphtraj ticket register --help`
-or `agent-runner submit-result --help`. Required values, defaults, enums and input
-file mappings come from the shared definition. Python business operations remain
-usable directly, as documented above.
-
-### Python host binding and local process bridge
-
-A Python host registers the descriptor in its own tool API and uses the bound
-callback for requests:
-
-```python
-from pathlib import Path
-from graphtraj.interfaces.local_tool import bind, tool_descriptor
-
-descriptor = tool_descriptor()  # name, description, input_schema
-callback = bind(cwd=Path("/absolute/path/to/harness-project-root"))
-reply = callback({"action": "execute", "feature": "ticket_graph", "arguments": {}})
-print(reply.document, reply.failed)
-```
-
-For task events, an owning Python host can retain its existing parent Session
-connection through the tool binding:
-
-```python
-callback = bind(
-    cwd=Path("/absolute/path/to/harness-project-root"),
-    event_receiver=forward_to_parent,
-)
-# Register callback in the host's tool API and retain it across tool calls.
-# forward_to_parent uses the host's existing Session client.
-# When the host has finished receiving all Agent events:
-callback.close()
-```
-
-The host supplies `forward_to_parent`; it forwards to the Session that the host
-already owns. A running parent receives input in its current turn; an idle
-parent continues in that same Session. The receiver binding stays with the
-original Agent, so a later tool caller cannot retarget its events. Mapped child
-Agents continue to notify their actual direct parent. Model arguments cannot
-supply the receiver or grant caller authority.
-
-Each message contains exactly `source` (`graphtraj`), `alias`, `event` and
-`message`. The alias is the existing Agent identity; the event value and content
-come from the recorded operation. Ordinary user input keeps its Runtime form.
-Completion, failure, result submission, approval/input requests and budget
-notices use this path, including results produced after `send` returns. A send
-acknowledgement or callback return confirms forwarding; parent processing needs
-separate evidence. Pending approval/input requests still require an explicit reply.
-
-Keep the returned binding alive across tool calls and close it when the owning
-host ends that receiving lifetime. Asynchronous hosts should close it off their
-client event loop. Temporary delivery failures receive bounded retries and
-retain concrete errors; a closed or persistently refusing receiver can remain
-undelivered. Runner stopping proceeds independently of notification delivery.
-This uses the existing private Worker transport and the host's existing client;
-it does not create another Main, change user Runtime settings or start a
-separate messaging service. A terminal, GUI or process bridge without this host
-attachment retains its existing result/channel behavior. This binding does not
-inject events into an arbitrary already-running conversation.
-
-The host supplies the project directory, optional `allowed_features` restriction
-and actual caller context. These are not model arguments or a substitute for
-existing ownership checks. Unknown Agent identity does not become Main. The
-binding invokes the gateway directly and does not import or start MCP.
-
-A host needing a process boundary starts `graphtraj-tool` in the project root and
-exchanges one JSON request/response per line. For an existing configured project:
-
-```sh
-graphtraj-tool <<'JSONL'
-{"action":"discover","query":"graph"}
-{"action":"describe","feature":"ticket_graph"}
-{"action":"describe","feature":"ticket_graph","schema":true}
-{"action":"execute","feature":"ticket_graph","arguments":{}}
-JSONL
-```
-
-Replies carry `failed` and the operation document under `result`; malformed input
-or raised errors can carry an `error` message instead. A rejected request leaves
-the process available for subsequent requests. `--allowed-features` is an
-optional host launch restriction, not authority supplied in a request. No plugin
-installation, MCP server or remote orchestration service is needed for this path.
-
-### Thin Skill plugin and Codex native callbacks
-
-The separate `plugins/graphtraj` directory is the plugin artifact. Its manifest
-points to one thin Skill copied from `skills/graphtraj/SKILL.md`. Select that
-artifact through the host's supported plugin mechanism, or select the thin Skill
-independently. The five guides and two task-delivery references are installed as
-plain files under `<install-prefix>/share/graphtraj/manuals`; the gateway resolves
-those delivered files independently of the caller's working directory. Plugin
-files are distributed separately from the Python wheel.
-
-On the verified Codex 0.156.1 interface, the host that owns the app-server
-connection registers the single `graphtraj` dynamic tool when creating a thread
-and handles its callback using the original JSON-RPC request identity. The
-GraphTraj-managed binding preserves its eleven callable operations, exposes the
-five method guides for reading, and retains read-only helper restrictions.
-Broadening readable guides does not broaden execution authority.
-
-A plugin manifest alone cannot inject arbitrary non-MCP callbacks into an
-already running external GUI, CLI or IDE Session. Existing Sessions retain their
-captured tool set, configuration and installation; thread resume does not
-re-register dynamic tools. Use the delivered owning app-server integration or
-the explicit local binding/bridge. No other production host compatibility is
-implied by the controlled Adapter evidence.
-
-### Optional MCP compatibility
-
-`graphtraj-mcp` is an optional stdio projection over the same gateway. It uses
-newline-delimited JSON-RPC 2.0 with `initialize`, `tools/list`, `tools/call` and
-`ping`; it adds no MCP SDK dependency. Configure it with the Harness Project Root
-as its working directory, for example in a compatible host:
+Merge it into existing configuration if the file already contains roles.
+`role_tree` allows this role to receive work directly from your main Agent; an
+empty child mapping gives it no further dispatch roles. Run `graphtraj doctor`
+after editing. Optional `instructions` can point to your own UTF-8 role file.
+Keep credentials in the Runtime's native configuration or an environment
+variable named by `api_key_env`.
+
+Your host must expose the `graphtraj` tool. If it supports MCP, register
+`graphtraj-mcp` as a stdio server with the project root as its working directory.
+For hosts using TOML MCP configuration:
 
 ```toml
 [mcp_servers.graphtraj]
 command = "graphtraj-mcp"
 args = []
-cwd = "/absolute/path/to/harness-project-root"
+cwd = "/absolute/path/to/your-project"
 ```
 
-`tools/list` contains only `graphtraj`. Call a feature through that tool:
+Use your host's normal configuration and trust controls, and open or reload the
+session as that host requires. The optional [GraphTraj Skill](skills/graphtraj/SKILL.md)
+introduces the workflow; installing a Skill alone does not register the tool.
 
-```json
-{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"graphtraj","arguments":{"action":"execute","feature":"ticket_graph","arguments":{}}}}
+With the tool available, start from a task you have agreed to do, for example:
+
+> Use GraphTraj to deliver the research task in this GitHub Issue: [issue URL].
+> Use the researcher role, retain the sources with the document, and show me
+> the result and any remaining work.
+
+The [task delivery guide](manuals/task-delivery/guide.md) covers registration,
+dispatch, result decisions and integration. The tool can describe each operation
+and its inputs when needed. Current Ticket registration requires a GitHub Issue
+URL; provide its accepted scope and completion criteria to your Agent.
+
+## How work progresses
+
+1. **Define the work.** Tasks are registered as Tickets with completion criteria
+   and dependencies on the results they need.
+2. **Run ready tasks.** Configured Agents work in Ticket worktrees. Independent
+   tasks can run in parallel within the project's concurrency and budget limits.
+3. **Assess the result.** An Agent submits a committed version and evidence;
+   its authorized parent accepts it or requests a correction. An Agent finishing
+   its turn does not by itself complete the task.
+4. **Integrate.** Accepted results are merged and validated in `dev`. Successful
+   integration satisfies dependencies and makes subsequent work ready.
+
+GraphTraj retains the original inputs, reports, native Session records and
+project event history so work can be inspected or continued. Your project
+chooses who validates and accepts results; a coding team or review process is
+not required for every kind of work.
+
+These commands give you an overview from the project root:
+
+```sh
+graphtraj ticket graph    # Tasks, dependencies and readiness
+agent-runner status      # Agent tree and current activity
+graphtraj worldline read # Recorded project events
 ```
 
-The response carries the common document as `structuredContent`, a text
-representation and the MCP `isError` flag. Shared feature validation and business
-authority are unchanged. Registry extensions belong to
-`graphtraj.interfaces.tools.register_tool`, not the MCP module. The server is not
-a dependency of CLI, Python, local bridge or native callbacks.
+For direct CLI use, start with `graphtraj --help` and `agent-runner --help`.
+Individual command help includes its input schema; the
+[command input reference](manuals/task-delivery/references/command-inputs.md)
+explains the files used for registration, result decisions and integration.
 
-A Codex host can supply its actual calling thread through `params._meta.threadId`
-for the existing in-band caller-notice binding. The awaited call can return an
-enforced stop in `stop_deliveries`, preserving the stop identity, actual stop time
-and elapsed duration. A thread ID alone does not attach a persistent event
-receiver or prove Agent processing. A host that needs delivery after the tool
-call returns uses the owning Session/receiver binding above; MCP compatibility
-is a separate projection and does not provide that connection by itself.
+## Runtimes and host integration
 
-## Evidence and limits
+Child Agents can use different Runtimes without changing your main Agent's host.
 
-Each Ticket retains its initial definition, accepted revisions, current state,
-successive Teams, closed Round reports and append-only Session Traces. Exact
-Batches and the sharded Project Worldline connect the causal history.
-Readiness and ledger-shaped views are generated on request; they are not
-additional persisted state. Session aliases identify historical conversations,
-not processes or invocation counters.
+| Runtime | Preparation and limits |
+| --- | --- |
+| Codex (`codex`) | An installed, authenticated Codex CLI. Native permissions and approvals remain in effect. |
+| Pi (`pi`) | An installed Pi backend, existing Pi configuration, and an `asb` sandbox with `srt`. The role's optional `pi.sandbox_python`, `pi.sandbox_path` and `pi.agent_dir` select those locations. |
+| DeepSeek Harness (`dsh`) | DSH `0.2.0-rc.2` and a host that supports its native subprocess sandbox. Native replacement and recovery approval routes are unavailable; its native file tools can read outside the task worktree. |
 
-New Project Worldline records use the top-level `event` field for the event type.
-The time-shaped `event_id`, `captured_at`, causal IDs, type values and evidence
-keep their meaning. This storage envelope differs from the four-field Session
-message, whose existing alias already identifies the Agent and Ticket.
+The execution host needs access to the chosen Runtime executable, credentials,
+project files and subprocess sandbox. Role permissions do not replace the
+Runtime's filesystem restrictions.
 
-For an existing current Project Worldline written with `kind`, stop its old
-writers before upgrading and run the one-time script from the reviewed source
-checkout against the explicitly selected directory:
+For custom hosts, [the local tool binding](src/graphtraj/interfaces/local_tool.py)
+provides a Python callback and the `graphtraj-tool` JSON-lines process interface.
+MCP is optional. CLI or MCP access alone does not connect background events or
+completion hooks to an existing conversation; those require integration with
+the host that owns the session. See
+[completion checking](manuals/task-delivery/guide.md#main-completion-checking)
+and [recovery](manuals/task-delivery/references/recovery.md).
 
-```text
-python scripts/migrate_worldline_event_field.py /path/to/harness/.graphtraj/state/worldline
+GraphTraj currently manages one source repository per project. It does not
+provide a job queue, automatic crash recovery, or automatic promotion from
+`dev` to `main`.
+
+## Optional desktop
+
+The development app in [desktop/](desktop/) offers a project graph, recorded
+Agent activity and settings for existing role presets and dispatch relationships.
+Select a task and Agent to read messages, expand tool results, copy text or pause
+following new activity. Unavailable records and usage remain explicitly unknown.
+The CLI works without
+Node or Electron; the desktop is an optional monitoring and configuration window.
+It does not provide task execution controls or a complete usage dashboard.
+
+To run it from a source checkout, install the matching Python GraphTraj version
+and make `graphtraj-tool` available on `PATH` (or set `GRAPHTRAJ_TOOL` to its
+executable). With Node 22.18+ and a graphical desktop session:
+
+```sh
+cd desktop
+npm ci
+npm exec -- install-electron
+npm start
 ```
 
-The script changes only each record's top-level `kind` key to `event` in the
-selected JSONL shards. It validates all shards before writing and replaces each
-changed file atomically. IDs, timestamps, causal links, values and nested fields
-remain unchanged. Already migrated records are unchanged on repeated runs;
-records containing both keys are refused. New core readers do not keep a
-permanent `kind` fallback. Preserve the old installation and retained Session
-records; upgrading commands does not update existing Drivers or their captured
-configuration. Resume work with the accepted new installation only after the
-selected current Worldline has been migrated. Historical Run-local directories
-are outside this script's selected current-state scope.
+Choose **Add project** and select an existing GraphTraj project root. Removing
+an entry removes it from the app's list; it does not delete the project.
+Packaged cross-platform installers are not yet provided.
 
-Historical `state/<run-id>` directories are left byte-for-byte untouched.
-GraphTraj does not migrate them, read them as fallback or offer compatibility
-for the old project command, Run-based Batch syntax or configuration sources.
+## More documentation
 
-Child-Agent Adapters support Codex, Pi and DeepSeek Harness. Dispatched Agents use Runner for formal
-task work. A role configured with `allow_runtime_swarm`
-may use Runtime-native helpers only for temporary read-only investigation;
-those helpers cannot occupy a Team seat, have no independent GraphTraj Trace,
-and do not authorize any formal Runner dispatch edge. No Session starts another
-Agent Runtime directly; formal dispatch uses Runner and `role_tree`. Main's
-Runtime and helper settings remain under user control.
-
-GraphTraj has no queue, daemon, automatic crash-recovery service or automatic
-release promotion. One Harness Project contains one Source Repository.
-
-
-The test suite exercises installed commands with controlled Runtime behavior.
-With an authenticated supported Codex executable, run the narrow live Adapter
-probe explicitly:
-
-```text
-CODEX_REAL_ACCEPTANCE=1 pytest -p no:cacheprovider -q tests/test_harness_root_runtime.py -k test_real_codex --tb=short
-```
-
-## Validation boundary
-
-The local-tool/Runtime-adapter combination was accepted at
-`187ae5976ac802c60fd92d0c393b90b4d4e3cfb8`. Its fixed wheel and installation were
-checked against the committed archive for all 66 package files and seven
-independent manual/reference files. The final commit changes one help test;
-product-file hashes match the earlier accepted combination, allowing unchanged
-evidence to be reused. This README's subsequent documentation changes do not
-claim a different production build.
-
-Controlled installed checks cover non-MCP graph mutation, local/CLI/MCP/native
-result parity, one-tool exposure, selected guides, all 25 CLI help projections,
-user-file preservation, the real Worker with an alternate test Adapter, Codex
-recovery and approval behavior, public pre-Session resolver retry, actual-parent
-notices and enforced stopping. They are scoped checks, not a full-suite pass or
-paid-model acceptance. Retained initial fixture failures and earlier environment
-limitations are not relabeled as passes.
-
-The plugin/native callback limitations above remain. Alternate Runtime objects
-in those earlier controlled checks were test inputs; DeepSeek Harness support
-and its current limits are documented above. A separately recorded
-failure to notify and wake the responsible Agent promptly across task events
-remains open; successful channel writes, retained stop records and controlled
-receipt tests do not establish that broader behavior.
-
-Earlier resource-decoupling and external Skill-discovery evidence remains in its
-original Ticket history. User-selected roles, models, permissions, Skills,
-Sessions, original budgets and stop records remain preserved.
+- [Project setup](manuals/setup-project/guide.md): paths, tracking and resources.
+- [Task breakdown](manuals/task-breakdown/guide.md): scope, dependencies and work sizing.
+- [Task delivery](manuals/task-delivery/guide.md): execution through integration.
+- [Recovery](manuals/task-delivery/references/recovery.md): interruptions, failures and continuation.
+- [Research](manuals/research/guide.md) and [concept clarification](manuals/concept-clarification/guide.md): optional methods for your project.
+- [Coding Skill examples](examples/coding-skills/README.md): optional development methods, separate from the Runtime installation.

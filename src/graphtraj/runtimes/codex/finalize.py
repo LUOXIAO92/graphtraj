@@ -13,6 +13,7 @@ from graphtraj.runtimes.codex.app_server import CodexAppServer, CodexServerReque
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 from graphtraj.workspace.runner_project import runtime_executable
 from graphtraj.runtimes.codex.session_entry import session_source, event_record
+from graphtraj.runtimes.codex.usage import CodexCheckUsage
 
 
 def proxy(
@@ -99,7 +100,12 @@ def response(result: dict | None, continued: bool) -> dict:
     if result is None:
         return {}
     reason = result['reason']
-    visible = {'systemMessage': f"Completion check {result['status']}: {reason}"}
+    message = f"Completion check {result['status']}: {reason}"
+    if result['status'] == 'error':
+        message = f'Completion check error (task conclusion unavailable): {reason}'
+    if result.get('usage_summary'):
+        message += '\n' + result['usage_summary']
+    visible = {'systemMessage': message}
     if result['status'] in ('completed', 'waiting'):
         return visible
     if result['status'] == 'actionable':
@@ -153,21 +159,40 @@ def check(
             parent = await client.read_thread(binding['session'])
             if not await client.is_current_turn(binding['session'], context['turn']):
                 return None
-            await client.subscribe_host(binding['session'])
+            configuration = await client.subscribe_host(binding['session'])
             # Hook model is the active turn's slug; Thread.model is configuration,
             # and can differ from actual per-turn model selection.
-            parent = {**parent, 'model': context['model']}
-            if 'settings' in context:
-                parent['turn_settings'] = context['settings']
+            parent = {**parent, 'model': context['model'], 'configuration': configuration}
+            parent['turn_settings'] = dict(context.get('settings', {}))
+            if 'effort' not in parent['turn_settings'] and 'reasoningEffort' in configuration:
+                parent['turn_settings']['effort'] = configuration['reasoningEffort']
             child = await client.fork_session(parent)
             child_id = child.thread_id
             created(child_id)
-            execution = await client.start_execution(child, prompt)
+            usage = CodexCheckUsage(child.rollout_path, child_id,
+                                    parent['turn_settings'].get('check_usage_baseline'))
+            evidence = {
+                'session': child_id, 'parent': binding['session'], 'parent_turn': context['turn'],
+                'model': parent['model'], 'provider': parent['modelProvider'],
+                'configuration': child.configuration,
+                'parent_configuration': {key: configuration[key] for key in child.configuration
+                                         if key != 'thread' and key in configuration},
+            }
+            # Stop's turn is still in progress, so native lastTurnId is invalid.
+            # The fork itself fixes its history boundary. Reject a superseding
+            # Main turn before starting any model request against that snapshot.
+            if not await client.is_current_turn(binding['session'], context['turn']):
+                return {**evidence, 'outcome': 'cancelled', 'usage': usage.finish('')}
+            try:
+                execution = await client.start_execution(child, prompt)
+            except Exception as error:
+                return {**evidence, 'outcome': 'error', 'error': str(error), 'usage': usage.finish('')}
 
             async def main_stopped() -> None:
                 """Observe the owning turn's native stop without polling or waking it."""
                 while True:
                     notice = await client.next_notification()
+                    usage.observe(notice)
                     params = notice.get('params', {})
                     if params.get('threadId') != binding['session']:
                         continue
@@ -180,31 +205,57 @@ def check(
 
             stopped = asyncio.create_task(main_stopped())
             checked = asyncio.create_task(client.wait(execution, timeout=540))
+
+            async def cancel_execution() -> None:
+                """Confirm termination even if completion raced with cancellation."""
+                try:
+                    await client.interrupt(execution)
+                except RuntimeAdapterError:
+                    # A terminal result proves no execution remains to interrupt.
+                    # A failed wait still exposes the cleanup failure to the caller.
+                    await client.wait(execution, timeout=10)
+                else:
+                    await client.wait(execution, timeout=10)
+
+            outcome = 'completed'
+            failure = None
+            result = {}
             try:
                 # Leave time for native cancellation before the default 600s hook deadline.
                 finished, _ = await asyncio.wait((stopped, checked), return_when=asyncio.FIRST_COMPLETED)
                 if stopped in finished:
                     stopped.result()
-                    await client.interrupt(execution)
-                    await client.wait(execution, timeout=10)
-                    return None
-                result = checked.result()
+                    await cancel_execution()
+                    outcome = 'cancelled'
+                else:
+                    result = checked.result()
             except BaseException as error:
                 try:
-                    await client.interrupt(execution)
-                    await client.wait(execution, timeout=10)
+                    await cancel_execution()
                 except RuntimeAdapterError as cleanup_error:
                     error.add_note(f'Checker cancellation: {cleanup_error}')
-                raise
+                if not isinstance(error, Exception):
+                    raise
+                outcome = 'error'
+                failure = str(error)
             finally:
                 stopped.cancel()
                 checked.cancel()
                 await asyncio.gather(stopped, checked, return_exceptions=True)
-            if not await client.is_current_turn(binding['session'], context['turn']):
-                return None
-            if result['outcome'] != 'completed':
-                raise RuntimeAdapterError('operation-failed', 'Completion checker was interrupted.')
-            return {'output': result['last_agent_message'], 'session': child_id,
-                    'model': parent['model'], 'provider': parent['modelProvider'],
-                    'usage': client.token_usage(child)}
+                for notice in client.drain_notifications():
+                    usage.observe(notice)
+            try:
+                if (not await client.is_current_turn(binding['session'], context['turn'])
+                        and outcome != 'error'):
+                    outcome = 'cancelled'
+            except Exception as error:
+                outcome = 'error'
+                failure = failure or str(error)
+            if outcome == 'completed' and result.get('outcome') != 'completed':
+                outcome = 'error'
+                failure = 'Completion checker was interrupted.'
+            observed_usage = usage.finish(execution.turn_id)
+            return {**evidence, 'output': result.get('last_agent_message'),
+                    'outcome': outcome, 'error': failure, 'turn': execution.turn_id,
+                    'usage': observed_usage, 'response_usage': usage.response_evidence(execution.turn_id)}
     return asyncio.run(run())

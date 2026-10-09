@@ -37,6 +37,13 @@ resources through the configured Runtime's supported mechanisms; GraphTraj
 does not choose a professional Skill by its name.
 If child dispatch returns `registered`, end that dispatch turn so the existing
 Driver can start the child.
+
+For a failure before Session registration, preserve and retry the unchanged
+original swarm input. Reuse is limited to a clean canonical Worktree with
+matching recorded ownership and branch. Dirty, foreign or unmarked leftovers
+remain refused. Direct cleanup still requires integration. After successful
+retry, use ordinary delivery and cleanup.
+
 Keep one execution per Session and communicate only with direct parents/children.
 
 ## Receive and decide results
@@ -136,6 +143,21 @@ acceptance. It does not redo code Review or create another task ledger.
 Validate actual host behavior after adopting a fixed installation. Configuration
 material and controlled checks alone do not prove live Session recognition,
 configuration inheritance or the absence of duplicate Main replies.
+
+The visible usage summary covers only the current check after its fork/start,
+including later requests within that check. Read Adapter-provided input,
+cached input, output and `reasoning_tokens` without adding a reasoning subset
+twice. Cached/input is the whole-check ratio; tool calls and model requests are
+distinct. Missing fields and undefined ratios are `none`, not zero. Do not infer
+cache expiry or reasons for the checker's behavior from these metrics alone.
+
+For Codex cache-reuse adoption, compare retained first-response usage with the
+whole-check summary. The native ephemeral fork preserves the applicable parent
+cache affinity and fixes the history boundary; its public usage notifications
+can supply evidence without a persistent rollout. Establish first-response
+attribution from the native protocol and observed sequence; do not invent IDs
+or equate the first observed update with the first response. Keep task queries
+focused rather than attaching the entire graph to every check.
 
 ## Limits and recovery
 

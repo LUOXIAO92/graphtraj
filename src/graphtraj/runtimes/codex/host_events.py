@@ -82,6 +82,8 @@ def parent_status(
                             if key in thread
                         }
                         result['completion_association'] = association_status(dict(connection), thread)
+                        from graphtraj.runtimes.codex.usage import latest_check_usage
+
                         result['hook_configuration'] = await client.read_hooks(thread.get('cwd'))
                         result['hook_events'] = []
                         result['hook_observation_scope'] = (
@@ -105,14 +107,17 @@ def parent_status(
                         observations.append({**state, 'observed_at': datetime.now(timezone.utc).isoformat(),
                                              'trigger': trigger})
                         terminal = state['turn'] is not None and state['turn']['status'] != 'inProgress'
-                        if state['activity'] == 'idle' and terminal:
+                        idle = state['activity'] == 'idle' and terminal
+                        if idle or not timeout_seconds or state['activity'] in {'notLoaded', 'systemError'}:
                             for notification in client.drain_notifications():
                                 retain_hook(notification)
-                            return {**result, 'outcome': 'idle'}
-                        if not timeout_seconds or state['activity'] in {'notLoaded', 'systemError'}:
-                            for notification in client.drain_notifications():
-                                retain_hook(notification)
-                            return {**result, 'outcome': 'observed'}
+                            if include_hooks:
+                                # The Stop may finish during this wait. Select the
+                                # latest retained check now, not at subscription.
+                                result['completion_usage'] = await latest_check_usage(
+                                    client, result['completion_association'],
+                                )
+                            return {**result, 'outcome': 'idle' if idle else 'observed'}
                         while True:
                             notification = await client.next_notification()
                             params = notification.get('params', {})

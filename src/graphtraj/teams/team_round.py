@@ -49,6 +49,7 @@ from graphtraj.execution.runner_models import (
 from graphtraj.workspace.runner_project import (
     discover_project,
     discover_project_root,
+    preflight_worktree,
     provision_worktree,
     run_git,
 )
@@ -438,15 +439,22 @@ def _deliver_ticket(
             if state["status"] != "ready":
                 raise RunnerError("TICKET_ALREADY_ACTIVE", "The selected Ticket is not ready.")
             generation = 1
-            worktree = (project.worktree_root / (task.ticket_id + "-" + task.ticket_name)).resolve()
+            worktree = project.worktree_root / (task.ticket_id + "-" + task.ticket_name)
             branch = "agent/" + task.ticket_id + "-" + task.ticket_name
-            if worktree.exists():
+            if os.path.lexists(worktree):
                 # Another selected root may be preparing this same Team.
-                if (worktree / ".state").resolve() != evidence or run_git(worktree, "branch", "--show-current") != branch:
+                if (
+                    worktree.is_symlink()
+                    or not (worktree / ".state").is_symlink()
+                    or (worktree / ".state").resolve() != evidence
+                    or not preflight_worktree(project, task, branch, worktree)
+                ):
                     raise RunnerError("WORKTREE_CONFLICT", "The task Worktree belongs to another launch.")
             else:
                 provision_worktree(project, task, branch, worktree)
-                _link_worktree(project, worktree, evidence)
+            _link_worktree(project, worktree, evidence)
+            if run_git(worktree, "status", "--porcelain", "--untracked-files=all"):
+                raise RunnerError("WORKTREE_CONFLICT", "The unregistered Ticket Worktree is not clean.")
         else:
             team_file = evidence / "teams" / str(generation) / "team.yml"
             team = yaml.safe_load(team_file.read_text())
@@ -1187,6 +1195,8 @@ def _link_worktree(project: Any, worktree: Path, evidence: Path) -> None:
             if (name == "docs" and (link.is_dir() or link.is_symlink())) or (
                 name == "CONTEXT.md" and (link.is_file() or link.is_symlink())
             ):
+                if link.is_symlink():
+                    created_documents.append(name)
                 continue
             if not link.is_symlink() or link.resolve() != target.resolve():
                 raise RunnerError("STATE_LINK_FAILED", "A Ticket Worktree retained path points elsewhere.")

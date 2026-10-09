@@ -6,12 +6,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { _electron as electron } from 'playwright';
 import electronExecutable from 'electron';
 
-const execute = promisify(execFile);
 const desktop = fileURLToPath(new URL('..', import.meta.url));
 const worktree = path.dirname(desktop);
 const tool = process.env.GRAPHTRAJ_TOOL;
@@ -51,29 +49,13 @@ test('one native window observes its real executing Agent', { timeout: 240000, s
   try {
     app = await electron.launch({ executablePath: electronExecutable,
       args: [...(process.env.GRAPHTRAJ_LIVE_NO_SANDBOX === '1' ? ['--no-sandbox'] : []),
-        desktop, `--user-data-dir=${path.join(evidence, 'profile')}`], timeout: 20000,
+        desktop, `--project=${project}`, `--user-data-dir=${path.join(evidence, 'profile')}`], timeout: 20000,
       env: { ...process.env, GRAPHTRAJ_TOOL: tool, MAC_CHROMIUM_TMPDIR: evidence } });
     facts.launches += 1;
     app.process().stderr?.on('data', chunk => { stderr = (stderr + chunk.toString()).slice(-32768); });
     app.process().on('exit', (code, signal) => { exit = { code, signal }; });
     const page = await app.firstWindow();
     page.setDefaultTimeout(15000);
-    await page.getByRole('button', { name: 'Add project', exact: true }).click();
-    const pid = app.process().pid;
-    assert.ok(Number.isInteger(pid));
-    const quotedProject = JSON.stringify(project);
-    await execute('/usr/bin/osascript', ['-e', `tell application "System Events"
-      tell first application process whose unix id is ${pid}
-        set frontmost to true
-        delay 1
-        keystroke "g" using {command down, shift down}
-        delay 1
-        keystroke ${quotedProject}
-        key code 36
-        delay 1
-        key code 36
-      end tell
-    end tell`], { timeout: 15000 });
     await page.getByRole('searchbox').fill(ticket);
     await page.getByRole('button', { name: new RegExp('^#' + ticket + ' ') }).click();
     await page.getByRole('button', { name: member.alias, exact: true }).click();

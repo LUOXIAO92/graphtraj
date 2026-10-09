@@ -40,6 +40,7 @@ else {
     reader = new GraphReader();
     projects = new Projects(path.join(app.getPath('userData'), 'projects.json'), reader);
     await projects.load();
+    if (app.commandLine.hasSwitch('project')) await projects.add(app.commandLine.getSwitchValue('project'));
     settings = new SettingsClient(async proposal => {
       if (!window) return false;
       const answer = await dialog.showMessageBox(window, {

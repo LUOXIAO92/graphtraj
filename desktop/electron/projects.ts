@@ -98,6 +98,7 @@ export class Projects {
   }
 
   async add(folder: string): Promise<Preferences> {
+    if (typeof folder !== 'string' || !path.isAbsolute(folder)) throw new Error('Choose an absolute project directory.');
     const root = await realpath(folder);
     if (!(await stat(root)).isDirectory()) throw new Error('Choose a project directory.');
     await access(root, constants.R_OK | constants.X_OK);

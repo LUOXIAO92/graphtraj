@@ -5,6 +5,45 @@ const os = require('node:os');
 const path = require('node:path');
 const { operate, ticket, makeProject } = require('./fixtures.cjs');
 
+test('explicit project paths retain directory and native validation before saving', async t => {
+  const { Projects } = await import('../electron/projects.ts');
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'graphtraj-startup-'));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const valid = path.join(root, 'valid');
+  const invalid = path.join(root, 'uninitialized');
+  await fs.mkdir(valid);
+  await fs.mkdir(invalid);
+  const calls = [];
+  const reader = { read: async folder => {
+    calls.push(folder);
+    if (folder === await fs.realpath(invalid)) throw new Error('Native configuration unavailable');
+    return { tickets: [] };
+  } };
+  const projects = new Projects(path.join(root, 'prefs/projects.json'), reader);
+  t.after(() => projects.close());
+  await projects.load();
+  for (const folder of ['', 'relative-project']) await assert.rejects(projects.add(folder), /absolute/);
+  await assert.rejects(projects.add(path.join(root, 'missing')), /ENOENT/);
+  const notDirectory = path.join(root, 'file');
+  await fs.writeFile(notDirectory, 'not a directory');
+  await assert.rejects(projects.add(notDirectory), /project directory/);
+  const unreadable = path.join(root, 'unreadable');
+  await fs.mkdir(unreadable, { mode: 0o000 });
+  try { await assert.rejects(projects.add(unreadable), /EACCES|EPERM/); }
+  finally { await fs.chmod(unreadable, 0o700); }
+  assert.equal(calls.length, 0);
+  await assert.rejects(projects.add(invalid), /Native configuration unavailable/);
+  assert.deepEqual(projects.list(), { projects: [], selected: null });
+  const added = await projects.add(valid);
+  assert.equal(added.projects[0].root, await fs.realpath(valid));
+  assert.equal(added.selected, added.projects[0].id);
+  assert.equal((await projects.add(valid)).projects.length, 1);
+  const reopened = new Projects(path.join(root, 'prefs/projects.json'), reader);
+  t.after(() => reopened.close());
+  await reopened.load();
+  assert.deepEqual(reopened.list(), added);
+});
+
 test('native desktop bridge isolates projects, persists preferences and reconnects without project writes', async t => {
   const { Projects, GraphReader } = await import('../electron/projects.ts');
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'graphtraj-desktop-'));

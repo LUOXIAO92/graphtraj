@@ -8,6 +8,7 @@ import os from 'node:os';
 import { _electron as electron } from 'playwright';
 
 assert.equal(process.platform, 'win32', 'Adoption requires an actual Windows desktop');
+assert.equal(process.env.GITHUB_ACTIONS, 'true', 'Controlled retained-record construction is restricted to isolated CI');
 const evidence = path.resolve(process.env.GRAPHTRAJ_WIN_EVIDENCE || 'test-results/windows');
 const executable = process.env.GRAPHTRAJ_WIN_EXE;
 assert.ok(executable && path.isAbsolute(executable), 'Set GRAPHTRAJ_WIN_EXE to the installed GraphTraj.exe');
@@ -34,7 +35,7 @@ function operate(project, feature, args = {}) {
   return reply.result;
 }
 /** Set up disposable source/configuration, then register tickets through public operations. */
-async function makeProject(name) {
+async function makeProject(name, retained = false) {
   const project = path.join(root, name);
   await fs.mkdir(project);
   const git = args => execFileSync('git', args, { cwd: project, encoding: 'utf8' });
@@ -44,14 +45,69 @@ async function makeProject(name) {
   git(['-c', 'user.name=Windows adoption', '-c', 'user.email=test@example.invalid', 'commit', '-m', 'Controlled project']);
   operate(project, 'project_setup', { source_repository: project, apply: true, create_dev: true });
   await fs.writeFile(path.join(project, '.graphtraj/roles.yml'), 'roles:\n  observation:\n    reader:\n      runtime: codex\n      model: controlled-original\n      api_key_env: WINDOWS_ADOPTION_TEST_KEY\nrole_tree: {}\n');
+  let ticketDirectory;
   for (const [id, title, dependencies] of [['1', name, []], ['2', 'dependent', ['1']]]) {
-    operate(project, 'ticket_register', {
+    const registered = operate(project, 'ticket_register', {
       ticket_id: id, ticket_name: title, title, dependencies,
       source: `https://github.com/example/controlled-windows/issues/${id}`,
       body: 'Controlled Windows adoption record. No model execution.',
     });
+    if (id === '1') ticketDirectory = registered.ticket_directory;
   }
+  if (retained) await retainedRecords(project, ticketDirectory);
   return project;
+}
+
+/** Only seed the new disposable test project; these are retained controlled records, not live identities. */
+async function retainedRecords(project, ticketDirectory) {
+  assert.equal(await fs.readFile(path.join(project, 'seed.txt'), 'utf8'),
+    'Controlled Windows adoption project; no model execution.\n');
+  const alias = 'controlled@retained';
+  const session = 'controlled-retained-session';
+  const team = path.join(ticketDirectory, 'teams/1');
+  const record = path.join(project, '.graphtraj/runner/sessions', alias);
+  await fs.mkdir(team, { recursive: true });
+  await fs.mkdir(record, { recursive: true });
+  const trace = path.join(team, 'controlled.jsonl');
+  const time = '2026-10-10T00:00:00Z';
+  const tokens = { input_tokens: 1000, cached_input_tokens: 600, output_tokens: 80, reasoning_output_tokens: 20 };
+  // JSON is valid YAML. Shapes match the existing retained desktop_activity fixture.
+  const write = (filename, value) => fs.writeFile(filename, JSON.stringify(value, null, 2), { flag: 'wx' });
+  await write(path.join(team, 'team.yml'), { team_ordinal: 1, status: 'active', current_round: 1,
+    started_at: time, members: { controlled: { role: 'controlled', session_ref: alias } } });
+  await write(path.join(record, 'session.yml'), { retirement: { mapping: {
+    alias, runtime: 'codex', session, ticket_id: '1', team_generation: 1,
+    role: 'controlled', parent: null, retained_batch_file: 'controlled-test-input',
+    worktree_path: project, trace_file: trace, worker_pid: 2147483647, runtime_pid: 2147483647,
+  } } });
+  await write(path.join(record, 'launch.yml'), { context_evidence: { model: 'gpt-5.3-codex' } });
+  const records = [
+    { type: 'turn_context', payload: { model: 'gpt-5.3-codex', turn_id: 'controlled-turn' } },
+    { type: 'response_item', payload: { type: 'message', role: 'assistant',
+      content: [{ type: 'output_text', text: facts.controlledInput.message }] } },
+    { type: 'response_item', payload: { type: 'function_call', call_id: 'controlled-echo', name: 'echo',
+      arguments: JSON.stringify({ text: facts.controlledInput.tool }) } },
+    { type: 'response_item', payload: { type: 'function_call_output', call_id: 'controlled-echo', output: facts.controlledInput.tool } },
+    { type: 'event_msg', payload: { type: 'token_count', info: { last_token_usage: tokens, total_token_usage: tokens } } },
+  ];
+  await fs.writeFile(trace, records.map(value => JSON.stringify({ timestamp: time, ...value })).join('\n') + '\n', { flag: 'wx' });
+  facts.steps.push('Seeded retained controlled records only in the newly created test project; no Agent execution or caller identity was created');
+}
+
+/** Detect any task/Runner mutation while the installed observer and settings UI operate. */
+async function taskFiles(project) {
+  const hashes = {};
+  async function visit(directory) {
+    for (const entry of await fs.readdir(directory, { withFileTypes: true })) {
+      const filename = path.join(directory, entry.name);
+      if (entry.isDirectory()) await visit(filename);
+      else if (entry.isFile()) hashes[path.relative(project, filename)] = createHash('sha256').update(await fs.readFile(filename)).digest('hex');
+    }
+  }
+  await visit(path.join(project, '.graphtraj/state'));
+  const runner = path.join(project, '.graphtraj/runner');
+  try { await visit(runner); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+  return hashes;
 }
 
 // Windows UI Automation invokes actual OS controls. It never replaces Electron dialogs.
@@ -109,7 +165,6 @@ async function native(action, folder = '') {
 const preferences = path.join(root, 'user-data');
 async function launch() {
   const env = { ...process.env, WINDOWS_ADOPTION_TEST_KEY: 'CONTROLLED-SECRET-MUST-NOT-APPEAR' };
-  delete env.GRAPHTRAJ_TOOL;
   delete env.ELECTRON_RUN_AS_NODE;
   app = await electron.launch({ executablePath: executable, args: [`--user-data-dir=${preferences}`], env });
   page = await app.firstWindow();
@@ -135,9 +190,9 @@ try {
   facts.steps.push('Installed files match the exact packaged manifest');
   facts.source = manifest.commit;
   facts.packages = manifest.packages;
-  // Optional supplied roots must be disposable and credential-free, prepared through native operations.
-  const first = await fs.realpath(process.env.GRAPHTRAJ_WIN_PROJECT_A || await makeProject('first-project'));
-  const second = await fs.realpath(process.env.GRAPHTRAJ_WIN_PROJECT_B || await makeProject('second-project'));
+  // Never seed supplied user projects: both roots must be newly created by this test.
+  const first = await fs.realpath(await makeProject('first-project', true));
+  const second = await fs.realpath(await makeProject('second-project'));
   const secondRoles = path.join(second, '.graphtraj/roles.yml');
   const secondBefore = await fs.readFile(secondRoles);
   const firstRoles = path.join(first, '.graphtraj/roles.yml');
@@ -145,17 +200,14 @@ try {
   cli('graphtraj.interfaces.cli.graphtraj', ['--help'], first);
   cli('graphtraj.interfaces.cli.agent_runner', ['--help'], first);
   const before = operate(first, 'ticket_graph');
-  const liveAlias = process.env.GRAPHTRAJ_WIN_LIVE_ALIAS;
-  const liveBefore = liveAlias ? operate(first, 'alias_status', { aliases: [liveAlias] }).agents.find(agent => agent.alias === liveAlias) : null;
-  if (liveAlias) assert.equal(liveBefore?.activity, 'running', 'The supplied controlled execution must actually be running');
-  const checkLive = () => {
-    if (!liveAlias) return;
-    const current = operate(first, 'alias_status', { aliases: [liveAlias] }).agents.find(agent => agent.alias === liveAlias);
-    assert.equal(current?.execution_id, liveBefore.execution_id);
-    assert.equal(current?.session, liveBefore.session);
-    assert.equal(current?.activity, 'running');
-  };
+  const secondGraph = operate(second, 'ticket_graph');
+  const firstState = await taskFiles(first);
+  const secondState = await taskFiles(second);
   await launch();
+  const surface = await page.evaluate(() => ({ methods: Object.keys(window.graphtraj).sort(), require: typeof window.require, process: typeof window.process }));
+  assert.deepEqual(surface.methods, ['activity', 'addProject', 'copyText', 'graph', 'projects', 'removeProject', 'saveSettings', 'selectProject', 'settings']);
+  assert.equal(surface.require, 'undefined');
+  assert.equal(surface.process, 'undefined');
   await pick(first);
   await pick(first);
   assert.equal(await page.locator('.project-button').count(), 1);
@@ -166,7 +218,10 @@ try {
   await page.locator('.react-flow__node').filter({ hasText: '#1' }).click();
   await page.getByRole('complementary', { name: 'Ticket details' }).waitFor();
   const activity = operate(first, 'desktop_activity', { ticket_id: '1' });
-  if (activity.agents.length) {
+  assert.equal(activity.agents.length, 1);
+  assert.equal(activity.agents[0].historical, true);
+  assert.equal(activity.agents[0].state, 'retired');
+  {
     await page.getByRole('button', { name: activity.agents[0].alias, exact: true }).click();
     await page.locator('.activity-event').first().waitFor();
     const observed = operate(first, 'desktop_activity', { ticket_id: '1', alias: activity.agents[0].alias });
@@ -183,13 +238,14 @@ try {
     assert.equal(usage.tokens.output, 80); // Reasoning 20 is already a subset of output 80.
     await page.locator('.activity-event').filter({ hasText: message.text }).first().waitFor();
     await page.locator('.activity-event').filter({ hasText: tool.name }).first().waitFor();
-    await page.locator('.activity-event details summary').first().click();
+    await page.locator('.activity-event details summary').filter({ hasText: 'Result / details' }).first().click();
+    await page.getByText(facts.controlledInput.tool, { exact: true }).first().waitFor();
     facts.steps.push('Nonempty native Chat message/tool rendered');
-  } else facts.unresolved.push('Controlled Chat/usage fixture requires public Runner registration; Windows lacks the POSIX authenticated control transport used by the supplied fixtures. No private-state fixture was fabricated.');
+  }
   await capture('node-chat');
   await page.getByRole('button', { name: 'Usage', exact: true }).click();
   await page.locator('.usage-dashboard').waitFor();
-  if (activity.agents.length) {
+  {
     const row = page.getByRole('table', { name: 'Model breakdown', exact: true }).getByRole('row').filter({ hasText: 'gpt-5.3-codex' });
     await row.waitFor();
     const cells = row.locator('td');
@@ -227,7 +283,6 @@ try {
   await capture('settings-conflict');
   await app.close(); app = null;
   assert.deepEqual(operate(first, 'ticket_graph'), before);
-  checkLive();
   await launch();
   await page.locator('.project-button.current').filter({ hasText: first }).waitFor();
   await page.getByRole('button', { name: `Remove ${second}`, exact: true }).click();
@@ -242,9 +297,11 @@ try {
   cli('graphtraj.interfaces.cli.agent_runner', ['--help'], first);
   assert.deepEqual(operate(first, 'ticket_graph'), before);
   facts.steps.push('CLI and native graph survive GUI normal exit and process termination; removed project retained');
-  checkLive();
-  if (liveAlias) facts.steps.push('Supplied live execution retains its Session, execution ID and running status through GUI exit/failure');
-  else facts.unresolved.push('Running Main/Runner isolation needs an authorized live Windows execution; CLI/graph survival alone does not establish it.');
+  assert.deepEqual(operate(second, 'ticket_graph'), secondGraph);
+  assert.deepEqual(await taskFiles(first), firstState);
+  assert.deepEqual(await taskFiles(second), secondState);
+  assert.deepEqual(await fs.readFile(secondRoles), secondBefore);
+  facts.steps.push('Installed GUI exposes no execution-control methods and leaves both projects task/Runner records unchanged; actual task independence reuses accepted A/B/C/D evidence, not a Windows Runtime claim');
   facts.passed = facts.unresolved.length === 0;
 } catch (error) {
   facts.error = String(error);

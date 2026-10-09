@@ -25,12 +25,11 @@ def write_yaml_durably(path: Path, document: Any) -> None:
             yaml.safe_dump(document, stream, sort_keys=False, allow_unicode=True)
             stream.flush()
             os.fsync(stream.fileno())
-        os.replace(str(temporary), str(path))
-        directory = os.open(str(path.parent), os.O_RDONLY)
-        try:
-            os.fsync(directory)
-        finally:
-            os.close(directory)
+        if os.name == 'nt':
+            _replace_windows(temporary, path)
+        else:
+            os.replace(str(temporary), str(path))
+            _sync_directory(path.parent)
     finally:
         if temporary.exists():
             temporary.unlink()
@@ -62,3 +61,20 @@ def _sync_directory(path: Path) -> None:
         os.fsync(descriptor)
     finally:
         os.close(descriptor)
+
+
+def _replace_windows(source: Path, destination: Path) -> None:
+    """Replace a flushed sibling file with Windows write-through semantics.
+
+    Windows cannot open a directory with os.open for the POSIX fsync step.
+    No copy/delete fallback is allowed; both paths are on the same volume.
+    """
+    import ctypes
+    from ctypes import wintypes
+
+    move = ctypes.WinDLL('kernel32', use_last_error=True).MoveFileExW
+    move.argtypes = [wintypes.LPCWSTR, wintypes.LPCWSTR, wintypes.DWORD]
+    move.restype = wintypes.BOOL
+    # MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH
+    if not move(str(source), str(destination), 0x1 | 0x8):
+        raise ctypes.WinError(ctypes.get_last_error())

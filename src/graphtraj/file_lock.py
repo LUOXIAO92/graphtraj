@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
-from typing import IO
+from contextlib import contextmanager
+from pathlib import Path
+from typing import IO, Iterator
 
 if os.name != 'nt':
     from fcntl import LOCK_EX, LOCK_NB, LOCK_SH, LOCK_UN, flock
@@ -60,3 +63,49 @@ else:
             if error == 33:  # ERROR_LOCK_VIOLATION
                 raise BlockingIOError(errno.EAGAIN, 'The file is locked by another handle.')
             raise ctypes.WinError(error)
+
+
+@contextmanager
+def replacement_lock(path: Path) -> Iterator[None]:
+    """Serialize a compare-and-replace without holding a Windows data handle.
+
+    Windows byte locks block reads from other handles, and ordinary open files
+    cannot be replaced. A kernel mutex uses the canonical destination name and
+    leaves the target available for validation and atomic replacement. Its
+    default security descriptor is retained; access errors fail closed.
+    """
+    if os.name != 'nt':
+        with path.open('rb') as stream:
+            flock(stream, LOCK_EX)
+            yield
+        return
+
+    name = 'Global\\GraphTraj-replace-' + hashlib.sha256(
+        os.path.normcase(str(path.resolve())).encode('utf-8')
+    ).hexdigest()
+    create = _kernel.CreateMutexW
+    create.argtypes = [ctypes.c_void_p, wintypes.BOOL, wintypes.LPCWSTR]
+    create.restype = wintypes.HANDLE
+    wait = _kernel.WaitForSingleObject
+    wait.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+    wait.restype = wintypes.DWORD
+    release = _kernel.ReleaseMutex
+    release.argtypes = [wintypes.HANDLE]
+    release.restype = wintypes.BOOL
+    close = _kernel.CloseHandle
+    close.argtypes = [wintypes.HANDLE]
+    close.restype = wintypes.BOOL
+    handle = create(None, False, name)
+    if not handle:
+        raise ctypes.WinError(ctypes.get_last_error())
+    try:
+        result = wait(handle, 0xFFFFFFFF)
+        if result not in (0, 0x80):  # Acquired or abandoned by a terminated owner.
+            raise ctypes.WinError(ctypes.get_last_error())
+        try:
+            yield
+        finally:
+            if not release(handle):
+                raise ctypes.WinError(ctypes.get_last_error())
+    finally:
+        close(handle)

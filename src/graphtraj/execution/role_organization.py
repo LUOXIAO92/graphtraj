@@ -80,11 +80,10 @@ def organize_child_roles(arguments: Mapping[str, Any], *, cwd: Path | None = Non
         return {**_view(path, before, current), "revision": revision, "applied": False}
     reviewed = _validated(after)
     _approve({"request": dict(arguments), "before": before, "after": after}, root)
-    # Serialize the compare/write interval between native saves. A waiting
-    # writer holding the replaced inode still rechecks the current path below.
+    # Serialize the compare/write interval without locking Windows file contents.
+    # Every approved writer rechecks the current path under the lock.
     # External editors need not use our lock, so compare their bytes as well.
-    with path.open("rb") as stream:
-        file_lock.flock(stream, file_lock.LOCK_EX)
+    with file_lock.replacement_lock(path):
         if _read_text(path) != before_text:
             return {
                 "applied":     False,

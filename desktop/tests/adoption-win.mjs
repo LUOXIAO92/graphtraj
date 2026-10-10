@@ -7,6 +7,9 @@ import path from 'node:path';
 import os from 'node:os';
 import { _electron as electron } from 'playwright';
 import { controlledInput, retainedRecords } from './retained-records.mjs';
+import { settingsAdoption } from './settings-adoption.mjs';
+import { datedUsage, parallelChat } from './adoption-shared.mjs';
+import { localDate } from '../src/usage.ts';
 
 assert.equal(process.platform, 'win32', 'Adoption requires an actual Windows desktop');
 assert.equal(process.env.GITHUB_ACTIONS, 'true', 'Controlled retained-record construction is restricted to isolated CI');
@@ -65,7 +68,7 @@ async function makeProject(name, retained = false) {
     if (id === '1') ticketDirectory = registered.ticket_directory;
   }
   if (retained) {
-    await retainedRecords(project, ticketDirectory);
+    await retainedRecords(project, ticketDirectory, true);
     facts.steps.push('Seeded retained controlled records only in the newly created test project; no Agent execution or caller identity was created');
   }
   return project;
@@ -138,7 +141,7 @@ while ((Get-Date) -lt $deadline -and -not $target) {
     [NativeWindows]::GetWindowText($window, $title, $title.Capacity) | Out-Null
     [NativeWindows]::GetClassName($window, $class, $class.Capacity) | Out-Null
     $observed += @{ handle=$window.ToInt64(); process=$windowProcess; ownerProcess=$ownerProcess; title=$title.ToString(); class=$class.ToString() }
-    $expected = if ($Action -eq 'pick') { 'Add existing GraphTraj project' } else { 'Save project settings?' }
+    $expected = if ($Action -eq 'pick') { 'Add existing GraphTraj project' } else { 'Save configuration?' }
     if ($title.ToString() -eq $expected -or $class.ToString() -eq '#32770') {
       $dialogHandle = $window
       $target = [System.Windows.Automation.AutomationElement]::FromHandle($window)
@@ -232,13 +235,14 @@ async function pick(folder) {
     throw error;
   }
   await page.locator('.project-button.current').filter({ hasText: folder }).waitFor();
-  await page.getByText('Connected', { exact: false }).waitFor();
+  await page.locator('.monitor-page:visible .react-flow__node').first().waitFor();
 }
 async function capture(name) {
   assert.ok(!(await page.locator('body').innerText()).includes('CONTROLLED-SECRET-MUST-NOT-APPEAR'));
-  await page.screenshot({ path: path.join(evidence, name + '.png') });
+  await page.screenshot({ path: path.join(evidence, name.endsWith('.png') ? name : name + '.png') });
 }
 try {
+  await assert.rejects(fs.access(path.join(os.homedir(), '.graphtraj/projects.json')), { code: 'ENOENT' });
   const manifest = JSON.parse(await fs.readFile(path.join(path.dirname(executable), 'build-manifest.json'), 'utf8'));
   assert.equal(manifest.commit, facts.source || manifest.commit);
   for (const [relative, expected] of Object.entries(manifest.hashes)) {
@@ -263,7 +267,7 @@ try {
   const secondState = await taskFiles(second);
   await launch();
   const surface = await bounded('Read renderer surface', page.evaluate(() => ({ methods: Object.keys(window.graphtraj).sort(), require: typeof window.require, process: typeof window.process })));
-  assert.deepEqual(surface.methods, ['activity', 'addProject', 'copyText', 'graph', 'projects', 'relocateProject', 'removeProject', 'saveSettings', 'selectProject', 'settings']);
+  assert.deepEqual(surface.methods, ['activity', 'addProject', 'connections', 'copyText', 'graph', 'projects', 'relocateProject', 'removeProject', 'saveSettings', 'selectProject', 'settings', 'usage']);
   assert.equal(surface.require, 'undefined');
   assert.equal(surface.process, 'undefined');
   await pick(first);
@@ -273,16 +277,16 @@ try {
   assert.equal(await page.locator('.project-button').count(), 2);
   await capture('two-projects');
   await page.locator('.project-button').filter({ hasText: first }).click();
-  await page.locator('.react-flow__node[data-id="1"]').click();
+  await page.locator('.monitor-page:visible .react-flow__node[data-id="1"]').filter({ hasText: 'first-project' }).click();
   await page.getByRole('complementary', { name: 'Ticket details' }).waitFor();
   const activity = operate(first, 'desktop_activity', { ticket_id: '1' });
-  assert.equal(activity.agents.length, 1);
-  assert.equal(activity.agents[0].historical, true);
-  assert.equal(activity.agents[0].state, 'retired');
+  assert.equal(activity.agents.length, 2);
+  const historical = activity.agents.find(agent => agent.historical);
+  assert.equal(historical.state, 'retired');
+  await parallelChat({ page, members: activity.agents, shot: capture });
   {
-    await page.getByRole('button', { name: 'Expand chat', exact: true }).click();
     await page.locator('.activity-event').first().waitFor();
-    const observed = operate(first, 'desktop_activity', { ticket_id: '1', alias: activity.agents[0].alias });
+    const observed = operate(first, 'desktop_activity', { ticket_id: '1', alias: historical.alias });
     const message = observed.events?.find(event => event.kind === 'message' && event.text);
     const tool = observed.events?.find(event => event.kind === 'tool' && event.name);
     assert.ok(message, 'Nonempty Chat messages required');
@@ -303,8 +307,9 @@ try {
   await capture('node-chat');
   await page.getByRole('button', { name: 'Project usage', exact: true }).click();
   await page.locator('.usage-dashboard').waitFor();
-  await page.getByLabel('Start date').fill('2026-10-09');
-  await page.getByLabel('End date').fill('2026-10-11');
+  const usageDate = localDate(new Date(operate(first, 'desktop_activity', { ticket_id: '1', alias: historical.alias }).events.find(event => event.kind === 'usage').time));
+  await page.getByLabel('Start date').fill(usageDate);
+  await page.getByLabel('End date').fill(usageDate);
   {
     const row = page.getByRole('table', { name: 'Model breakdown', exact: true }).getByRole('row').filter({ hasText: 'gpt-5.3-codex' });
     await row.waitFor();
@@ -341,12 +346,31 @@ try {
   assert.deepEqual(await fs.readFile(firstRoles), concurrent);
   assert.deepEqual(await fs.readFile(secondRoles), secondBefore);
   await capture('settings-conflict');
+  await datedUsage({ page, first, second, agent: historical.alias, date: usageDate, shot: capture });
+  const projects = await page.evaluate(() => window.graphtraj.projects());
+  const storedIndex = JSON.parse(await fs.readFile(path.join(os.homedir(), '.graphtraj/projects.json'), 'utf8'));
+  assert.deepEqual(storedIndex.projects.map(project => project.root).sort(), [first, second].sort());
+  facts.index = { path: path.join(os.homedir(), '.graphtraj/projects.json'), projects: storedIndex.projects };
+  const firstId = projects.projects.find(project => project.root === first).id;
+  const secondId = projects.projects.find(project => project.root === second).id;
+  let decision = 1;
+  const settings = await settingsAdoption({ page, firstId, secondId,
+    legacyRole: 'observation.reader', runtimeHome: path.join(root, 'runtime-home'),
+    decide: async response => { decision = response; },
+    review: action => Promise.all([action(), native(decision ? 'approve' : 'deny')]),
+    shot: capture, step: text => facts.steps.push(text),
+  });
+  facts.settings = settings;
+  facts.steps.push('D navigation/current-history parallel readers, global/project dates and multi-team settings checked through installed native bridge and real OS approvals.');
   facts.phase = 'normal-close';
   await persist();
   await bounded('Normal GUI close', app.close()); app = null;
   assert.deepEqual(operate(first, 'ticket_graph'), before);
   await launch();
   await page.locator('.project-button.current').filter({ hasText: first }).waitFor();
+  assert.deepEqual(await page.evaluate(id => window.graphtraj.settings(id), firstId), settings.roles);
+  assert.deepEqual((await page.evaluate(id => window.graphtraj.connections(id, { action: 'read' }), firstId)).catalog, settings.global.catalog);
+  await datedUsage({ page, first, second, agent: historical.alias, date: usageDate, shot: name => capture(`reopened-${name}`) });
   await page.getByRole('button', { name: `Remove ${second}`, exact: true }).click();
   assert.equal(await page.locator('.project-button').count(), 1);
   assert.equal(operate(second, 'ticket_graph').tickets.length, 2);

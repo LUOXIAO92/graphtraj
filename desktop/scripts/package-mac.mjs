@@ -31,6 +31,11 @@ function option(name) {
   return found === undefined ? undefined : found.slice(prefix.length);
 }
 
+const source = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: desktop, encoding: 'utf8' }).trim();
+if (execFileSync('git', ['status', '--porcelain', '--untracked-files=no'], { cwd: desktop, encoding: 'utf8' }).trim()) {
+  throw new Error('Package a committed source tree');
+}
+
 const arch = option('arch') || process.env.GRAPHTRAJ_PACKAGE_ARCH || process.arch;
 if (!['arm64', 'x64'].includes(arch)) throw new Error(`Unsupported macOS architecture: ${arch}`);
 if (process.platform !== 'darwin') throw new Error('The macOS artifact is built on macOS only.');
@@ -91,7 +96,7 @@ execFileSync('zip', ['-q', '-r', '-y', zipPath, `${appName}.app`], { cwd: bundle
 
 const bytes = await fsp.readFile(zipPath);
 const digest = createHash('sha256').update(bytes).digest('hex');
-const clean = { name: appName, version, platform: 'darwin', arch, electron: '44.5.1',
+const clean = { source, name: appName, version, platform: 'darwin', arch, electron: '44.5.1',
   app: path.relative(desktop, appPath), zip: path.relative(desktop, zipPath),
   bytes: bytes.length, sha256: digest, resources: licenses };
 await fsp.writeFile(path.join(out, `${appName}-darwin-${arch}.json`), JSON.stringify(clean, null, 2) + '\n');

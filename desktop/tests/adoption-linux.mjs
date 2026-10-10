@@ -6,6 +6,9 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { _electron as electron } from 'playwright';
 import fixtures from './fixtures.cjs';
+import { settingsAdoption } from './settings-adoption.mjs';
+import { datedUsage, parallelChat } from './adoption-shared.mjs';
+import { localDate } from '../src/usage.ts';
 
 // This is an installed-product check, not a mocked-dialog window test. It only
 // uses disposable projects and explicitly supplied, publishable activity data.
@@ -34,7 +37,7 @@ function runningTask(project) {
 
 /** Capture the X server, including native dialogs outside the renderer. */
 async function screenshot(name) {
-  await exec('import', ['-window', 'root', path.join(evidence, `${name}.png`)], { timeout: 10000 });
+  await exec('import', ['-window', 'root', path.join(evidence, name.endsWith('.png') ? name : `${name}.png`)], { timeout: 10000 });
 }
 
 /** Wait for an actual native window and send input through X11. */
@@ -51,7 +54,9 @@ async function launch() {
   assert.notEqual(process.geteuid(), 0, 'Run desktop checks as the ordinary CI user');
   app = await electron.launch({ executablePath,
     args: [`--user-data-dir=${userData}`, '--ozone-platform=x11'],
-    env: { ...process.env, LINUX_ADOPTION_SECRET: 'controlled-secret-never-display-267' },
+    // The controlled Runner peer is not a real model-discovery executable.
+    env: { ...process.env, PATH: process.env.PATH.split(path.delimiter).filter(entry => entry !== path.join(root, 'fixture-bin')).join(path.delimiter),
+      LINUX_ADOPTION_SECRET: 'controlled-secret-never-display-267' },
     timeout: 30000 });
   page = await app.firstWindow();
   page.setDefaultTimeout(15000);
@@ -108,7 +113,7 @@ async function save(model, approve, name) {
   facts.stage = `${name} native settings dialog`;
   await page.getByLabel('Model', { exact: true }).fill(model);
   await page.getByRole('button', { name: 'Save changes', exact: true }).click();
-  await nativeWindow('Save project settings');
+  await nativeWindow('Save configuration');
   await screenshot(`${name}-native-approval`);
   await exec('xdotool', ['key', '--clearmodifiers', ...(approve ? ['Tab', 'Return'] : ['Return'])]);
   if (approve) await page.getByRole('status').getByText('Settings saved.', { exact: true }).waitFor();
@@ -116,6 +121,7 @@ async function save(model, approve, name) {
 }
 
 try {
+  await assert.rejects(fs.access(path.join(os.homedir(), '.graphtraj/projects.json')), { code: 'ENOENT' });
   assert.ok(process.env.ADOPTION_ACTIVITY_PROJECT && process.env.ADOPTION_AGENT_ALIAS && process.env.ADOPTION_TICKET_ID,
     'Launch via tests/linux_adoption_input.py to create controlled records through public Runner');
   facts.source = JSON.parse(await fs.readFile(path.join(installedRoot, 'source.json'), 'utf8'));
@@ -125,6 +131,13 @@ try {
     'xvfb', 'xdotool', 'openbox', 'libgtk-3-0t64'], { encoding: 'utf8' });
   const first = await fs.realpath(process.env.ADOPTION_ACTIVITY_PROJECT);
   const second = await fixtures.makeProject(path.join(root, 'second'), 'linux-second');
+  await fixtures.recordActivity(second, { ticketId: '1', ticketName: 'linux-second', alias: 'historical@x1',
+    records: [{ type: 'response_item', payload: { type: 'message', role: 'assistant',
+      content: [{ type: 'output_text', text: 'Controlled historical message; no model execution.' }] } }],
+    additionalMembers: [{ alias: 'current@x2', historical: false, records: [{ type: 'response_item',
+      payload: { type: 'message', role: 'assistant', content: [{ type: 'output_text',
+        text: 'Controlled current member already completed; no model execution.' }] } }] }],
+  });
   const roles = path.join(second, '.graphtraj/roles.yml');
   // Only disposable project configuration, never private Runner state.
   await fs.writeFile(roles, 'roles:\n  custom_group:\n    observer:\n      runtime: codex\n      model: original-model\n      api_key_env: LINUX_ADOPTION_SECRET\n      reports: [report.md]\nrole_tree: {}\n');
@@ -141,6 +154,8 @@ try {
   assert.equal(await page.locator('.project-button').count(), 2);
   await screenshot('two-projects');
   facts.steps.push('Installed executable, actual directory picker, two project graphs and deduplication');
+  await page.locator('.monitor-page:visible .react-flow__node[data-id="1"]').click();
+  await parallelChat({ page, members: fixtures.operate(second, 'desktop_activity', { ticket_id: '1' }).agents, shot: screenshot });
   await page.getByRole('button', { name: 'Teams & roles', exact: true }).click();
   await page.getByLabel('Model', { exact: true }).waitFor();
   await save('denied-model', false, 'denied');
@@ -166,9 +181,28 @@ try {
   assert.deepEqual(await fs.readFile(path.join(first, '.graphtraj/roles.yml')), firstRoles);
   assert.ok(!(await page.locator('body').innerText()).includes('controlled-secret-never-display-267'));
   facts.steps.push('Native reject/approve, conflict retention, restoration, preserved fields and cross-project isolation');
+  const projects = await page.evaluate(() => window.graphtraj.projects());
+  const storedIndex = JSON.parse(await fs.readFile(path.join(os.homedir(), '.graphtraj/projects.json'), 'utf8'));
+  assert.deepEqual(storedIndex.projects.map(project => project.root).sort(), [first, second].sort());
+  facts.index = { path: path.join(os.homedir(), '.graphtraj/projects.json'), projects: storedIndex.projects };
+  const activityId = projects.projects.find(project => project.root === first).id;
+  const settingsId = projects.projects.find(project => project.root === second).id;
+  let decision = 1;
+  let reviewNumber = 0;
+  const settings = await settingsAdoption({ page, firstId: settingsId, secondId: activityId,
+    runtimeHome: path.join(root, 'runtime-home'),
+    decide: async response => { decision = response; },
+    review: action => Promise.all([action(), (async () => {
+      await nativeWindow('Save configuration');
+      await screenshot(`configuration-${++reviewNumber}-${decision ? 'approved' : 'denied'}`);
+      await exec('xdotool', ['key', '--clearmodifiers', ...(decision ? ['Tab', 'Return'] : ['Return'])]);
+    })()]),
+    shot: screenshot, step: text => facts.steps.push(text),
+  });
+  facts.settings = settings;
   await page.getByRole('button', { name: 'Monitor', exact: true }).click();
   await page.locator('.project-button').filter({ hasText: first }).click();
-  await page.locator('.react-flow__node').first().waitFor();
+  await page.locator('.monitor-page:visible .react-flow__node').filter({ hasText: graphBefore.tickets[0].title }).waitFor();
   await closeApp();
   assert.deepEqual(fixtures.operate(first, 'ticket_graph'), graphBefore);
   assert.deepEqual(runningTask(first), runningBefore);
@@ -176,8 +210,10 @@ try {
   await page.locator('.project-button.current').filter({ hasText: first }).waitFor();
   assert.equal(await page.locator('.project-button').count(), 2);
   const ticketId = process.env.ADOPTION_TICKET_ID;
+  assert.deepEqual(await page.evaluate(id => window.graphtraj.settings(id), settingsId), settings.roles);
+  assert.deepEqual((await page.evaluate(id => window.graphtraj.connections(id, { action: 'read' }), activityId)).catalog, settings.global.catalog);
   facts.stage = 'controlled Chat';
-  await page.locator(`.react-flow__node[data-id="${ticketId}"]`).click();
+  await page.locator(`.monitor-page:visible .react-flow__node[data-id="${ticketId}"]`).click();
   await page.getByRole('complementary', { name: 'Ticket details' }).waitFor();
   {
     const activity = await page.evaluate(async ({ ticketId, alias }) => {
@@ -189,7 +225,7 @@ try {
     assert.ok(message && tool, 'Controlled input needs readable message and named tool records in its first page');
     const usage = activity.events.find(event => event.kind === 'usage').usage;
     assert.deepEqual(usage.tokens, { input: 1000, cache_read: 600, output: 80, reasoning: 20 });
-    await page.getByRole('button', { name: process.env.ADOPTION_AGENT_ALIAS, exact: true }).click();
+    await page.getByRole('button', { name: 'Expand chat', exact: true }).click();
     const messageCard = page.locator('.activity-event').filter({ hasText: message.text });
     await messageCard.getByRole('button', { name: 'Copy', exact: true }).click();
     assert.equal(await app.evaluate(({ clipboard }) => clipboard.readText()), message.text);
@@ -208,8 +244,10 @@ try {
   facts.stage = 'controlled Dashboard';
   await page.getByRole('button', { name: 'Project usage', exact: true }).click();
   await page.locator('.usage-dashboard').waitFor();
-  await page.getByLabel('Start date').fill('2026-10-09');
-  await page.getByLabel('End date').fill('2026-10-11');
+  const activity = fixtures.operate(first, 'desktop_activity', { ticket_id: ticketId, alias: process.env.ADOPTION_AGENT_ALIAS });
+  const usageDate = localDate(new Date(activity.events.find(event => event.kind === 'usage').time));
+  await page.getByLabel('Start date').fill(usageDate);
+  await page.getByLabel('End date').fill(usageDate);
   const modelRow = page.getByRole('table').filter({ has: page.locator('caption', { hasText: 'Model breakdown' }) })
     .locator('tbody tr').filter({ hasText: 'gpt-5.3-codex' });
   await modelRow.waitFor();
@@ -220,6 +258,7 @@ try {
   await screenshot('dashboard');
   await modelRow.scrollIntoViewIfNeeded();
   await screenshot('dashboard-model-quantities');
+  await datedUsage({ page, first, second, agent: process.env.ADOPTION_AGENT_ALIAS, date: usageDate, shot: screenshot });
   // Test application failure at the OS boundary. A crashed renderer leaves the
   // main process alive and makes Playwright's browser-context close ambiguous.
   facts.stage = 'GUI main-process termination';
@@ -241,6 +280,8 @@ try {
   fixtures.operate(second, 'ticket_register', fixtures.ticket('3', 'cli-after-gui-failure', ['2']));
   assert.equal(fixtures.operate(second, 'ticket_graph').tickets.length, 3);
   await launch();
+  await page.locator('.project-button.current').filter({ hasText: first }).waitFor();
+  await datedUsage({ page, first, second, agent: process.env.ADOPTION_AGENT_ALIAS, date: usageDate, shot: name => screenshot(`reopened-${name}`) });
   await page.getByRole('button', { name: `Remove ${second}`, exact: true }).click();
   assert.equal(await page.locator('.project-button').count(), 1);
   assert.equal(fixtures.operate(second, 'ticket_graph').tickets.length, 3);

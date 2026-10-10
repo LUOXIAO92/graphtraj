@@ -1,7 +1,7 @@
 name: Windows desktop adoption 266
 on:
   push:
-    branches: [agent/266-desktop-win-adoption]
+    branches: [agent/266-desktop-win-adoption, agent/288-desktop-d-integrated-adoption-win]
 permissions:
   contents: read
 jobs:
@@ -46,6 +46,8 @@ jobs:
           npm --prefix desktop run build
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python -m pytest -p no:cacheprovider -q tests/test_desktop_settings.py tests/test_windows_desktop.py tests/test_desktop_activity.py::test_windows_adoption_fixture_projects_retired_content_and_usage --junitxml=desktop/test-results/windows/native-tests.xml
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node --test desktop/tests/activity.test.cjs desktop/tests/project-index.test.cjs desktop/tests/settings-draft.test.cjs desktop/tests/settings-view.test.cjs desktop/tests/settings-keyboard.test.cjs desktop/tests/usage.test.cjs desktop/tests/usage-view.test.cjs desktop/tests/usage-history.test.cjs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Package pinned runtime and application
         run: |

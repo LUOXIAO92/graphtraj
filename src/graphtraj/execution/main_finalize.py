@@ -88,10 +88,12 @@ def session_binding(cwd: Path, runtime: str, session: str) -> Path:
 def parse_check_result(text: str) -> dict[str, Any]:
     """Validate the checker result without interpreting or persisting task truth."""
     result = json.loads(text)
-    if not isinstance(result, dict) or set(result) != {'status', 'reason', 'nodes'}:
-        raise ValueError('The completion checker must return status, reason and nodes.')
+    if not isinstance(result, dict) or set(result) != {'status', 'reason', 'nodes', 'conclusion'}:
+        raise ValueError('The completion checker must return status, conclusion, reason and nodes.')
     if result['status'] not in ('completed', 'waiting', 'actionable', 'error'):
         raise ValueError('The completion checker returned an unknown status.')
+    if not isinstance(result['conclusion'], str) or not result['conclusion'].strip():
+        raise ValueError('The completion checker returned no conclusion.')
     if not isinstance(result['reason'], str) or not result['reason'].strip():
         raise ValueError('The completion checker returned no reason.')
     nodes = result['nodes']

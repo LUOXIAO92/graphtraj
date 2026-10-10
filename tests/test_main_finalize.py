@@ -111,7 +111,8 @@ for line in sys.stdin:
             send({'method':'thread/tokenUsage/updated','params':{
                 'threadId':params['threadId'],'tokenUsage':options['usage']}})
         for notice in options.get('notifications', []): send(notice)
-        text = options.get('output',json.dumps({'status':'completed','reason':'All required tickets integrated.','nodes':[]}))
+        text = options.get('output',json.dumps({'status':'completed',
+            'conclusion':'Main may end this turn.','reason':'All required tickets integrated.','nodes':[]}))
         send({'method':'item/completed','params':{'threadId':params['threadId'],'turnId':'check-turn',
               'item':{'id':'answer','type':'agentMessage','text':text}}})
         turn['status'] = 'completed'
@@ -179,8 +180,9 @@ def test_main_end_decision(
 ) -> None:
     """Only actionable nodes block Stop; all checks use a native context fork."""
     root, binding = host
+    conclusion = f'Checker conclusion for {status}.'
     (root / 'options.json').write_text(json.dumps({'output':json.dumps({
-        'status':status, 'reason':reason, 'nodes':nodes,
+        'status':status, 'conclusion':conclusion, 'reason':reason, 'nodes':nodes,
     })}))
     result = stop(binding)
     if status == 'actionable':
@@ -195,8 +197,19 @@ def test_main_end_decision(
         assert reason in result['systemMessage']
     visible = [result[key] for key in ('systemMessage', 'reason', 'stopReason') if key in result]
     assert len(visible) == 1 and visible[0].count(reason) == 1
-    assert visible[0].index(reason) > visible[0].index('Main')
-    assert visible[0].index('本轮审查 Agent 用量') > visible[0].index(reason)
+    # One layered message: English title/status, checker conclusion and reason,
+    # optional related Tickets, then this check's usage line, with no blank rows.
+    lines = visible[0].splitlines()
+    assert lines[0] == f'Completion Check · {status}'
+    assert lines[1] == f'Conclusion · {conclusion}'
+    assert lines[2] == f'Reason · {reason}'
+    related = ['Related · ' + ', '.join(nodes)] if nodes else []
+    assert lines[3:3 + len(related)] == related
+    usage_line = lines[3 + len(related)]
+    assert len(lines) == 4 + len(related)
+    assert usage_line.startswith('Reviewer Usage · This Check · ')
+    assert all(name in usage_line for name in ('Input ', 'Cached ', 'Output ', 'Reasoning ', 'Tools '))
+    assert not any(not line.strip() for line in lines)
     wire = [json.loads(line) for line in (root / 'wire.jsonl').read_text().splitlines()]
     assert sum(item['method'] == 'thread/fork' for item in wire) == 1
     fork = next(item['params'] for item in wire if item['method'] == 'thread/fork')
@@ -216,7 +229,8 @@ def test_main_end_decision(
     # Identical conclusions in an independent Main turn are still delivered.
     (root / 'options.json').write_text(json.dumps({
         'child': 'checker-two', 'current_turn': 'main-turn-two',
-        'output': json.dumps({'status': status, 'reason': reason, 'nodes': nodes}),
+        'output': json.dumps({'status': status, 'conclusion': conclusion,
+                              'reason': reason, 'nodes': nodes}),
     }))
     assert stop(binding, turn_id='main-turn-two') == result
     wire = [json.loads(line) for line in (root / 'wire.jsonl').read_text().splitlines()]
@@ -237,8 +251,11 @@ def test_non_main_and_interrupt_skip_before_private_binding(tmp_path: Path, even
 @pytest.mark.parametrize('options', [
     {'fork_error':True}, {'fork_model':'wrong-model'}, {'child':'main'},
     {'output':'not JSON'},
-    {'output':json.dumps({'status':'actionable', 'reason':'Unfinished', 'nodes':[]})},
-    {'output':json.dumps({'status':'error', 'reason':'Referenced Issue unavailable', 'nodes':['237']})},
+    {'output':json.dumps({'status':'actionable', 'conclusion':'Main must continue this turn.',
+                          'reason':'Unfinished', 'nodes':[]})},
+    {'output':json.dumps({'status':'error', 'conclusion':'Unable to determine.',
+                          'reason':'Referenced Issue unavailable', 'nodes':['237']})},
+    {'output':json.dumps({'status':'completed', 'reason':'Missing conclusion.', 'nodes':[]})},
 ])
 def test_checker_failures_are_visible_and_bounded(host: tuple[Path, Path], options: dict) -> None:
     """An error is returned once to Main and cannot generate endless error turns."""
@@ -262,7 +279,8 @@ def test_checker_failures_are_visible_and_bounded(host: tuple[Path, Path], optio
 def test_stopped_or_changed_main_is_not_continued(host: tuple[Path, Path], options: dict) -> None:
     """A stale Stop cannot wake a stopped Main, including interruption mid-check."""
     root, binding = host
-    options['output'] = json.dumps({'status':'actionable', 'reason':'unfinished', 'nodes':['237']})
+    options['output'] = json.dumps({'status':'actionable', 'conclusion':'Main must continue this turn.',
+                                    'reason':'unfinished', 'nodes':['237']})
     (root / 'options.json').write_text(json.dumps(options))
     assert stop(binding) == {}
 
@@ -331,14 +349,15 @@ def test_other_adapter_uses_opaque_host_event(
             calls.append(prompt)
             return {'session': 'actual-child', 'usage': CheckUsage(input_tokens=7, tool_calls=2),
                     'output': json.dumps({
-                'status': 'waiting', 'reason': 'Approval pending', 'nodes': ['237'],
+                'status': 'waiting', 'conclusion': 'Main may end this turn: pending.',
+                'reason': 'Approval pending', 'nodes': ['237'],
             })}
 
         def finalize_response(self, result: dict | None, continued: bool) -> dict:
             """Return this host's end decision without Codex hook fields."""
-            assert '输入 7' in result['usage_summary']
-            assert '工具 2' in result['usage_summary']
-            assert '其中推理 未知' in result['usage_summary']
+            assert 'Input 7' in result['usage_summary']
+            assert 'Tools 2' in result['usage_summary']
+            assert 'Reasoning unknown' in result['usage_summary']
             return {'end': result is None or result['status'] == 'waiting'}
 
     monkeypatch.setattr(main_finalize, 'current_host_connection',
@@ -377,7 +396,7 @@ def test_checker_observer_does_not_answer_main_approval(
         'parent_approval': True, 'resolve_parent_approval': resolved,
     }))
     result = stop(binding)
-    assert '任务已完成' in result['systemMessage']
+    assert 'Completion Check · completed' in result['systemMessage']
     wire = [json.loads(line) for line in (root / 'wire.jsonl').read_text().splitlines()]
     assert not any(item.get('id') == 'parent-approval' for item in wire)
 
@@ -455,10 +474,10 @@ def test_whole_check_usage_excludes_inheritance_and_repeated_records(host: tuple
     assert usage == {'input_tokens': 400, 'cached_input_tokens': 240, 'cache_hit_ratio': 0.6,
                      'output_tokens': 30, 'reasoning_tokens': 5, 'tool_calls': 3,
                      'model_requests': None}
-    assert '输入 400' in result['systemMessage']
-    assert '命中 60.0%' in result['systemMessage']
-    assert '其中推理 5' in result['systemMessage']
-    assert '本轮审查 Agent 用量' in result['systemMessage']
+    assert 'Input 400' in result['systemMessage']
+    assert 'Cached 240 (60.0%)' in result['systemMessage']
+    assert 'Output 30 (Reasoning 5)' in result['systemMessage']
+    assert 'Reviewer Usage · This Check' in result['systemMessage']
     assert 'decision' not in result
 
 
@@ -489,7 +508,7 @@ def test_partial_and_zero_usage(
     default = {key: None for key in ('input_tokens', 'cached_input_tokens', 'output_tokens',
                                     'reasoning_tokens', 'model_requests', 'cache_hit_ratio')}
     assert usage == {**default, 'tool_calls': 0, **expected}
-    assert '本轮审查 Agent 用量' in result['systemMessage']
+    assert 'Reviewer Usage · This Check' in result['systemMessage']
 
 
 def test_each_check_has_a_fresh_usage_boundary(host: tuple[Path, Path]) -> None:
@@ -501,8 +520,8 @@ def test_each_check_has_a_fresh_usage_boundary(host: tuple[Path, Path]) -> None:
         ])
         (root / 'options.json').write_text(json.dumps({'child': child, 'records': records}))
         result = stop(binding)
-        assert f'输入 {end - start}' in result['systemMessage']
-        assert '工具 1' in result['systemMessage']
+        assert f'Input {end - start}' in result['systemMessage']
+        assert 'Tools 1' in result['systemMessage']
     assert len(list(binding.parent.glob('checks/*/execution.yml'))) == 2
 
 
@@ -580,7 +599,7 @@ def test_native_start_resume_and_stop_need_no_main_binding_input(host: tuple[Pat
     for source in ('startup', 'resume'):
         assert native_hook(root, 'SessionStart', source=source)['systemMessage']
     result = native_hook(root)
-    assert '任务已完成' in result['systemMessage']
+    assert 'Completion Check · completed' in result['systemMessage']
     assert 'decision' not in result and 'continue' not in result
     wire = [json.loads(line) for line in (root / 'wire.jsonl').read_text().splitlines()]
     forks = [r['params'] for r in wire if r['method'] == 'thread/fork']
@@ -807,7 +826,7 @@ def test_fork_without_baseline_does_not_guess_request_increments(host: tuple[Pat
         'reasoning_tokens': None, 'model_requests': None, 'cache_hit_ratio': None,
         'tool_calls': 2,
     }
-    assert '未知' in result['systemMessage']
+    assert 'unknown' in result['systemMessage']
 
 
 def response_notice(identifier: str, usage: dict | None, turn: str = 'check-turn') -> dict:
@@ -849,7 +868,7 @@ def test_pathless_fork_retains_first_response_and_unique_usage(host: tuple[Path,
     assert responses['first_response']['input_tokens'] == 100
     assert responses['first_response']['cached_input_tokens'] == 80
     assert len(responses['responses']) == 2
-    assert '本轮审查 Agent 用量' in result['systemMessage']
+    assert 'Reviewer Usage · This Check' in result['systemMessage']
     assert 'decision' not in result
 
 
@@ -895,7 +914,8 @@ def test_pathless_public_usage_without_raw_subscription(
     answer = {'method': 'item/completed', 'params': {
         'threadId': 'checker', 'turnId': 'check-turn', 'item': {
             'id': 'answer', 'type': 'agentMessage',
-            'text': json.dumps({'status': 'completed', 'reason': 'Verified current task.', 'nodes': []}),
+            'text': json.dumps({'status': 'completed', 'conclusion': 'Main may end this turn.',
+                                'reason': 'Verified current task.', 'nodes': []}),
         },
     }}
     first = update(900100, 100, 0)
@@ -910,7 +930,7 @@ def test_pathless_public_usage_without_raw_subscription(
         notices += [second, second]
     (root / 'options.json').write_text(json.dumps({'notifications': notices}))
     result = native_hook(root)
-    assert '任务已完成' in result['systemMessage'] and 'decision' not in result
+    assert 'Completion Check · completed' in result['systemMessage'] and 'decision' not in result
     evidence = yaml.safe_load(next(binding.parent.glob('checks/*/execution.yml')).read_text())
     usage = evidence['usage']
     assert usage['input_tokens'] == (None if missing_final_usage else 400)
@@ -1053,9 +1073,11 @@ def test_consecutive_native_checks_attribute_all_counters_to_current_checker(
         for item_id, increment in [('tool', first), ('answer', second)]:
             notices.append({'method': 'item/completed', 'params': {
                 'threadId': child, 'turnId': 'check-turn',
-                'item': {'id': item_id, 'type': 'commandExecution' if item_id == 'tool' else 'agentMessage',
-                         'text': json.dumps({'status': 'completed', 'reason': 'Task complete.', 'nodes': []})},
-            }})
+                        'item': {'id': item_id, 'type': 'commandExecution' if item_id == 'tool' else 'agentMessage',
+                         'text': json.dumps({'status': 'completed',
+                                             'conclusion': 'Main may end this turn.',
+                                             'reason': 'Task complete.', 'nodes': []})},
+                    }})
             if item_id == 'tool':
                 # Main's last usage can replay even after new checker output.
                 notices.append({'method': 'thread/tokenUsage/updated', 'params': {
@@ -1089,14 +1111,23 @@ def test_consecutive_native_checks_attribute_all_counters_to_current_checker(
 
 
 def test_check_usage_summary_groups_large_counters() -> None:
-    """Keep input/cache and output/reasoning readable without changing totals."""
+    """One compact English line keeps counters readable and units distinct."""
     usage = CheckUsage(input_tokens=1234567, cached_input_tokens=1000000,
                        output_tokens=2345, reasoning_tokens=1234, tool_calls=6)
-    lines = usage.summary().splitlines()
-    assert any('1,234,567' in line and '1,000,000' in line and '2,345' not in line
-               for line in lines)
-    assert any('2,345' in line and '1,234' in line and '1,234,567' not in line
-               for line in lines)
-    assert '81.0%' in usage.summary()
-    assert '本轮审查 Agent 用量' in usage.summary()
-    assert '未知' in CheckUsage().summary()
+    summary = usage.summary()
+    assert 'Input 1,234,567' in summary
+    assert 'Cached 1,000,000 (81.0%)' in summary
+    assert 'Output 2,345 (Reasoning 1,234)' in summary
+    assert 'Tools 6' in summary
+    assert '\n' not in summary
+    assert 'reasoning_tokens' not in summary and 'cache_hit_ratio' not in summary
+
+
+def test_check_usage_summary_keeps_unknowns_unknown() -> None:
+    """A missing counter or an underivable hit rate is never shown as zero."""
+    empty = CheckUsage().summary()
+    assert 'Input unknown' in empty and 'Cached unknown' in empty and 'Tools unknown' in empty
+    assert 'Output unknown (Reasoning unknown)' in empty
+    # A known cache count without a usable input baseline keeps the rate unknown.
+    assert 'Cached 5 (unknown)' in CheckUsage(cached_input_tokens=5).summary()
+    assert 'Cached 0 (unknown)' in CheckUsage(input_tokens=0, cached_input_tokens=0).summary()

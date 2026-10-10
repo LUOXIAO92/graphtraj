@@ -96,26 +96,37 @@ def event_context(binding: dict, event: dict) -> dict | None:
 
 
 def response(result: dict | None, continued: bool) -> dict:
-    """Return a Stop decision; repeated checker errors cannot self-continue forever."""
+    """Return one layered Stop message; repeated checker errors cannot self-continue forever.
+
+    The message keeps an English title with its status token, the checker's own
+    conclusion and reason, related Tickets, and this check's compact usage on
+    separate lines without blank separators. A mechanical failure that never
+    reached a checker conclusion falls back to fixed English, since the checker
+    language is unknown; all four statuses still produce exactly one message.
+    """
     if result is None:
         return {}
-    headings = {
-        'completed': 'Main 可以结束本轮 · 任务已完成',
-        'waiting': 'Main 可以结束本轮 · 等待中，任务未完成',
-        'actionable': 'Main 需要继续本轮',
-        'error': '无法判定 Main 是否可以结束本轮 · 检查故障',
+    status = result['status']
+    conclusions = {
+        'completed': 'Main may end this turn: the task is complete.',
+        'waiting': 'Main may end this turn: the task is still pending.',
+        'actionable': 'Main must continue this turn.',
+        'error': 'Unable to determine whether Main may end this turn: check failure.',
     }
-    sections = [headings[result['status']], result['reason'].strip()]
+    conclusion = str(result.get('conclusion') or conclusions[status]).strip()
+    lines = [f'Completion Check · {status}',
+             f'Conclusion · {conclusion}',
+             f'Reason · {result["reason"].strip()}']
     if result['nodes']:
-        sections.append('相关任务：' + '、'.join(dict.fromkeys(result['nodes'])))
+        lines.append('Related · ' + ', '.join(dict.fromkeys(result['nodes'])))
     if result.get('usage_summary'):
-        sections.append(result['usage_summary'])
-    message = '\n\n'.join(sections)
+        lines.append('Reviewer Usage · This Check · ' + result['usage_summary'])
+    message = '\n'.join(lines)
     # Codex renders each of these fields as a separate hook entry. The block
     # reason is already both visible feedback and the same Main's continuation.
-    if result['status'] in ('completed', 'waiting'):
+    if status in ('completed', 'waiting'):
         return {'systemMessage': message}
-    if result['status'] == 'actionable':
+    if status == 'actionable':
         return {'decision': 'block', 'reason': message}
     return {'continue': False, 'stopReason': message}
 

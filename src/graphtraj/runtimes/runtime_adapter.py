@@ -41,18 +41,29 @@ class CheckUsage:
         return {**asdict(self), 'cache_hit_ratio': ratio}
 
     def summary(self) -> str:
-        """Render supported values and explicit unknowns without native JSON."""
+        """Render one compact English usage line without native protocol keys.
+
+        Counters use thousands separators and stay explicitly unknown when
+        unavailable. Cached input carries its hit rate, while reasoning is shown
+        as the part of output rather than a parallel total.
+        """
         def count(value: int | None) -> str:
             """Keep unavailable counters distinct from measured zero."""
-            return f'{value:,}' if value is not None else '未知'
+            return f'{value:,}' if value is not None else 'unknown'
 
         ratio = self.document()['cache_hit_ratio']
-        hit = f'{ratio:.1%}' if ratio is not None else '未知'
-        return (
-            f'本轮审查 Agent 用量 · 命中 {hit} · 工具 {count(self.tool_calls)} 次\n'
-            f'输入 {count(self.input_tokens)}（缓存 {count(self.cached_input_tokens)}，多次请求合计）\n'
-            f'输出 {count(self.output_tokens)}（其中推理 {count(self.reasoning_tokens)}）'
-        )
+        if self.cached_input_tokens is None:
+            cached = 'Cached unknown'
+        elif ratio is None:
+            cached = f'Cached {count(self.cached_input_tokens)} (unknown)'
+        else:
+            cached = f'Cached {count(self.cached_input_tokens)} ({ratio:.1%})'
+        return ' · '.join((
+            f'Input {count(self.input_tokens)}',
+            cached,
+            f'Output {count(self.output_tokens)} (Reasoning {count(self.reasoning_tokens)})',
+            f'Tools {count(self.tool_calls)}',
+        ))
 
 
 def finalize_usage(native: dict | None = None) -> CheckUsage:

@@ -402,7 +402,7 @@ async function usageHistoryAdoption() {
     await selectDates(localDate(today), localDate(today));
     await waitInput('Model breakdown', 'gpt-5.3-codex', 1000);
     assert.match(await table('Model breakdown').innerText(), /0\.001925/);
-    await page.getByLabel('Ticket', { exact: false }).selectOption('1');
+    await page.locator('.usage-filters').getByLabel('Ticket', { exact: false }).selectOption('1');
     await page.locator('.usage-filters select').nth(1).selectOption('research@x1');
     await page.locator('.usage-filters select').nth(2).selectOption('gpt-5.3-codex');
     await waitInput('Daily trend (local dates)', localDate(today), 1000);

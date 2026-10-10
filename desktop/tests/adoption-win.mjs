@@ -353,7 +353,7 @@ try {
   const exited = new Promise(resolve => crashed.once('exit', resolve));
   crashed.kill();
   await bounded('Terminated GUI exit', exited);
-  app = null;
+  // Retain the connection for final cleanup: the launcher and Electron main PIDs can differ.
   cli('graphtraj.interfaces.cli.agent_runner', ['--help'], first);
   assert.deepEqual(operate(first, 'ticket_graph'), before);
   facts.steps.push('CLI and native graph survive GUI normal exit and process termination; removed project retained');
@@ -392,7 +392,7 @@ try {
 }
 if (!facts.passed) {
   console.error(JSON.stringify({ passed: false, error: facts.error, cleanupError: facts.cleanupError, captureError: facts.captureError, unresolved: facts.unresolved }));
-  process.exitCode = 1;
-  // A timed-out Playwright close can leave protocol handles alive after evidence is saved.
-  if (facts.cleanupError) process.exit(1);
 }
+// All assertions, bounded cleanup and evidence writes finished; leftover protocol handles
+// must not keep this standalone CI test alive. Preserve the actual result as the exit code.
+process.exit(facts.passed ? 0 : 1);

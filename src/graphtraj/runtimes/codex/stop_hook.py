@@ -112,8 +112,11 @@ def main(binding: Path | None, hook_session: str | None, configuration: bool) ->
     except KeyboardInterrupt:
         raise SystemExit(130)
     except Exception as error:
-        reason = f'Completion hook failed: {error}'
-        result = {'continue': False, 'stopReason': reason, 'systemMessage': reason}
+        from graphtraj.runtimes.codex.finalize import response
+        from graphtraj.runtimes.runtime_adapter import CheckUsage
+
+        result = response({'status': 'error', 'reason': f'Completion hook failed: {error}',
+                           'nodes': [], 'usage_summary': CheckUsage().summary()}, False)
     click.echo(json.dumps(result, ensure_ascii=False))
 
 

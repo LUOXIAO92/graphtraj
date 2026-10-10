@@ -99,18 +99,25 @@ def response(result: dict | None, continued: bool) -> dict:
     """Return a Stop decision; repeated checker errors cannot self-continue forever."""
     if result is None:
         return {}
-    reason = result['reason']
-    message = f"Completion check {result['status']}: {reason}"
-    if result['status'] == 'error':
-        message = f'Completion check error (task conclusion unavailable): {reason}'
+    headings = {
+        'completed': 'Main 可以结束本轮 · 任务已完成',
+        'waiting': 'Main 可以结束本轮 · 等待中，任务未完成',
+        'actionable': 'Main 需要继续本轮',
+        'error': '无法判定 Main 是否可以结束本轮 · 检查故障',
+    }
+    sections = [headings[result['status']], result['reason'].strip()]
+    if result['nodes']:
+        sections.append('相关任务：' + '、'.join(dict.fromkeys(result['nodes'])))
     if result.get('usage_summary'):
-        message += '\n' + result['usage_summary']
-    visible = {'systemMessage': message}
+        sections.append(result['usage_summary'])
+    message = '\n\n'.join(sections)
+    # Codex renders each of these fields as a separate hook entry. The block
+    # reason is already both visible feedback and the same Main's continuation.
     if result['status'] in ('completed', 'waiting'):
-        return visible
+        return {'systemMessage': message}
     if result['status'] == 'actionable':
-        return {**visible, 'decision': 'block', 'reason': '\n'.join([reason, *result['nodes']])}
-    return {**visible, 'continue': False, 'stopReason': reason}
+        return {'decision': 'block', 'reason': message}
+    return {'continue': False, 'stopReason': message}
 
 
 def check(

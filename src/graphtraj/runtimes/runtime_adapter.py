@@ -42,14 +42,18 @@ class CheckUsage:
 
     def summary(self) -> str:
         """Render supported values and explicit unknowns without native JSON."""
-        values = self.document()
-        ratio = values.pop('cache_hit_ratio')
-        fields = [f'{key}={value if value is not None else "none"}'
-                  for key, value in values.items()]
-        fields.insert(2, f'cache_hit_ratio={ratio:.1%}' if ratio is not None
-                      else 'cache_hit_ratio=none')
-        return ('Usage (whole check; input_tokens is the sum across model inputs, '
-                'not context length): ' + ', '.join(fields))
+        def count(value: int | None) -> str:
+            """Keep unavailable counters distinct from measured zero."""
+            return str(value) if value is not None else '未知'
+
+        ratio = self.document()['cache_hit_ratio']
+        hit = f'{ratio:.1%}' if ratio is not None else '未知'
+        return (
+            '本轮审查 Agent 用量（多次请求合计）\n'
+            f'输入 {count(self.input_tokens)} · 缓存 {count(self.cached_input_tokens)} '
+            f'（命中 {hit}） · 输出 {count(self.output_tokens)} '
+            f'（其中推理 {count(self.reasoning_tokens)}） · 工具 {count(self.tool_calls)} 次'
+        )
 
 
 def finalize_usage(native: dict | None = None) -> CheckUsage:

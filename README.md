@@ -153,7 +153,7 @@ provide a job queue, automatic crash recovery, or automatic promotion from
 
 ## Optional desktop
 
-The development app in [desktop/](desktop/) offers a project graph, recorded
+The app in [desktop/](desktop/) offers a project graph, recorded
 Agent activity, a usage dashboard and settings for existing role presets and
 dispatch relationships.
 Select a task and Agent to read messages, expand tool results, copy text or pause
@@ -161,6 +161,13 @@ following new activity. Unavailable records and usage remain explicitly unknown.
 The CLI works without
 Node or Electron; the desktop is an optional monitoring and configuration window.
 It does not provide task execution controls.
+
+For the Windows x64 ZIP, install Git, extract the archive, and run
+`.\Install-GraphTraj.ps1` from its folder in PowerShell. Then open GraphTraj from
+the Start menu and add an existing project. The installer copies the app to
+`%LOCALAPPDATA%\Programs\GraphTraj`; Python and Electron are included, so the
+extracted archive is no longer needed after installation. Desktop support does
+not add Windows execution support to Agent Runtimes that lack it.
 
 Open **Usage** to inspect recorded tokens, cache reads and an estimated token
 cost, filtered by task, Agent or model. Cache-hit rates are weighted by input

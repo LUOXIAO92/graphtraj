@@ -631,6 +631,21 @@ class CodexAppServer:
                 return state
         raise CodexAdapterError('RUNTIME_LIFECYCLE_INVALID', 'The execution belongs to another connection.')
 
+    async def list_models(self) -> list[dict]:
+        """Read the public native catalog without creating a Session or model turn."""
+        models = []
+        cursor = None
+        seen = set()
+        while True:
+            response = await self._call('model/list', {'cursor': cursor, 'limit': 100})
+            models.extend(response['data'])
+            cursor = response.get('nextCursor')
+            if cursor is None:
+                return models
+            if cursor in seen:
+                raise self._protocol_failure('Repeated model-list cursor.')
+            seen.add(cursor)
+
     async def read_configuration(self, cwd: Path) -> dict[str, Any]:
         """Read effective native configuration without changing any user setting."""
         response = await self._call('config/read', {'cwd': str(cwd), 'includeLayers': False})

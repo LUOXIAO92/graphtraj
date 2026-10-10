@@ -379,3 +379,18 @@ def native_replacement_approval(runtime: str | None) -> NativeReplacement | None
     if runtime is None:
         raise RuntimeAdapterError("RUNTIME_UNSUPPORTED", "The calling Runtime is unknown.")
     return select_runtime_adapter(runtime).native_replacement_approval()
+
+
+def credential_environment(name: str | None) -> dict[str, str]:
+    """Require a named execution credential without retaining or exposing its value."""
+    import os
+    import re
+
+    if name is None:
+        return {}
+    if not isinstance(name, str) or re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name) is None:
+        raise RuntimeAdapterError('ROLE_CONFIG_INVALID', 'api_key_env must name an environment variable.')
+    value = os.environ.get(name)
+    if not value:
+        raise RuntimeAdapterError('RUNTIME_CREDENTIAL_MISSING', 'The configured api_key_env is missing or empty.')
+    return {name: value}

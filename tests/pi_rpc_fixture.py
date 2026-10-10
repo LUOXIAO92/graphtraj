@@ -16,6 +16,20 @@ def main() -> None:
     if '--version' in sys.argv:
         print('1.0.0-fixture')
         return
+    if '--no-session' in sys.argv:
+        # Controlled public metadata boundary; actual Pi catalog evidence lives
+        # in the opt-in Runtime connection tests and does not use this peer.
+        provider = sys.argv[sys.argv.index('--provider') + 1]
+        model = sys.argv[sys.argv.index('--model') + 1]
+        domain = {'deepseek': 'api.deepseek.com', 'openrouter': 'openrouter.ai',
+                  'openai': 'api.openai.com'}.get(provider, 'custom.invalid')
+        for line in sys.stdin:
+            request = json.loads(line)
+            assert request['type'] == 'get_available_models'
+            print(json.dumps({'id': request['id'], 'success': True, 'data': {'models': [{
+                'provider': provider, 'id': model, 'baseUrl': 'https://' + domain,
+            }]}}), flush=True)
+        return
     if os.environ.get('PI_FIXTURE_PIPE_STDERR') and not stat.S_ISFIFO(os.fstat(2).st_mode):
         print('fixture refuses private regular-file stderr', file=sys.stderr)
         raise SystemExit(71)

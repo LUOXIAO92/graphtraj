@@ -16,7 +16,7 @@ from typing import Any, Mapping
 import yaml
 
 from graphtraj.configuration.role_definitions import ResolvedChildRole
-from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError, SessionStarted, finalize_usage
+from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError, SessionStarted, finalize_usage, credential_environment
 
 
 def unsupported(*args: object, **kwargs: object) -> Any:
@@ -46,7 +46,10 @@ class PiContext:
         request = json.loads(self.document)
         return {'runtime': 'pi', 'model': request['model'], 'provider': request['provider'],
                 'version': request['version'], 'resources': request['resources'],
-                'worktree_access': request['worktree_access']}
+                'worktree_access': request['worktree_access'],
+                **({'connection': request['connection'],
+                    'connection_revision': request['connection_revision'],
+                    'runtime_home': request['agent_dir']} if request.get('connection') else {})}
 
     def session_document(self) -> dict:
         """Return the same captured request for native Session operations."""
@@ -55,7 +58,7 @@ class PiContext:
     def runtime_environment(self) -> Mapping[str, str]:
         """Resolve only the selected credential name, keeping its value transient."""
         name = json.loads(self.document).get('api_key_env')
-        return {name: os.environ[name]} if name and name in os.environ else {}
+        return credential_environment(name)
 
 
 class PiRuntimeAdapter:
@@ -117,7 +120,7 @@ class PiRuntimeAdapter:
         config = dict(settings.pi or {})
         allowed = {'sandbox_python', 'sandbox_path', 'agent_dir', 'read_paths',
                    'allow_mach_lookup', 'allow_mach_register', 'allow_local_binding', 'allow_unix_sockets'}
-        if set(config) - allowed or requested_skills or settings.codex or settings.base_url:
+        if set(config) - allowed or requested_skills or settings.codex:
             raise RuntimeAdapterError('ROLE_CONFIG_UNSUPPORTED',
                                       'Use Pi native provider configuration and pi resource/sandbox settings.')
         for field in ('allow_mach_lookup', 'allow_mach_register'):
@@ -140,9 +143,12 @@ class PiRuntimeAdapter:
         ):
             raise RuntimeAdapterError('ROLE_CONFIG_INVALID',
                                       'pi.allow_unix_sockets must list absolute non-root paths without patterns or parent traversal.')
+        credential_environment(settings.api_key_env)
         provider, separator, model = settings.model.partition('/')
         if not separator or not provider or not model:
             raise RuntimeAdapterError('ROLE_CONFIG_INVALID', 'Pi model must be provider/model-id.')
+        if settings.base_url and not settings.provider_api:
+            raise RuntimeAdapterError('ROLE_CONFIG_INVALID', 'Custom Pi connections require a catalog provider API.')
         reasoning = settings.reasoning_effort
         if reasoning is not None and reasoning not in {'off', 'minimal', 'low', 'medium', 'high', 'xhigh'}:
             raise RuntimeAdapterError('ROLE_CONFIG_INVALID', 'Pi does not support this thinking level.')
@@ -167,7 +173,7 @@ class PiRuntimeAdapter:
         except (OSError, subprocess.SubprocessError) as error:
             raise RuntimeAdapterError('RUNTIME_EXECUTABLE_INVALID',
                                       'Pi and agent-sandbox must be installed in the selected environment.') from error
-        agent_path = config.get('agent_dir', os.environ.get('PI_CODING_AGENT_DIR', str(Path.home() / '.pi/agent')))
+        agent_path = settings.runtime_home or config.get('agent_dir', os.environ.get('PI_CODING_AGENT_DIR', str(Path.home() / '.pi/agent')))
         if not isinstance(agent_path, str) or not agent_path:
             raise RuntimeAdapterError('ROLE_CONFIG_INVALID', 'pi.agent_dir must name a native resource directory.')
         agent_dir = Path(agent_path).resolve()
@@ -185,14 +191,22 @@ class PiRuntimeAdapter:
             'worktree_path': str(worktree), 'harness_root': str(harness_root),
             'git_common_directory': str(git_common_directory), 'evidence': str(evidence),
             'executable': str(executable), 'sandbox_python': python, 'sandbox_path': sandbox_path,
-            'provider': provider, 'model': model, 'reasoning_effort': reasoning,
+            'provider': 'graphtraj-role' if settings.base_url else provider,
+            'model': model, 'reasoning_effort': reasoning,
             'api_key_env': settings.api_key_env, 'version': version,
+            'base_url': settings.base_url, 'provider_api': settings.provider_api,
+            'connection': settings.connection,
+            'connection_revision': settings.connection_revision,
             'instructions': role.instructions, 'agent_dir': str(agent_dir),
             'resources': resources, 'worktree_access': settings.worktree_access,
             'reports': report_paths(report_files, evidence),
             'state_directory': str(state),
             'docs_directory': str(project.docs if project else harness_root / 'docs'),
         }
+        if not settings.base_url:
+            from graphtraj.runtimes.model_discovery import pi_model_domain
+
+            request['provider_domain'] = pi_model_domain(str(agent_dir), provider, model, settings.api_key_env)
         for field in ('allow_mach_lookup', 'allow_mach_register'):
             if config.get(field):
                 request[field] = list(config[field])
@@ -209,7 +223,7 @@ class PiRuntimeAdapter:
         name = connection.get('api_key_env')
         if name is not None and (not isinstance(name, str) or not name.isidentifier()):
             raise RuntimeAdapterError('RUNTIME_REQUEST_INVALID', 'Invalid Pi credential variable name.')
-        return {name: os.environ[name]} if name and name in os.environ else {}
+        return credential_environment(name)
 
     def read_session_identity(self, session_directory: Path) -> str:
         """Read the actual Pi identity recorded before its first task prompt."""

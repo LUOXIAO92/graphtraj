@@ -122,6 +122,7 @@ class _CodexRole:
     agents: Mapping[str, Any]
     native_settings: Mapping[str, Any]
     approval: Mapping[str, str] | None = None
+    runtime_home: str | None = None
 
     def _launch_request(
         self,
@@ -154,7 +155,7 @@ class _CodexRole:
 
         # Control now runs on the private native callback, not through files
         # writable by an Agent or by a helper inheriting its tool permissions.
-        filesystem.update(private_filesystem(runtime_store))
+        filesystem.update(private_filesystem(runtime_store, self.runtime_home))
         if filesystem.get(":workspace_roots", {}).get(".") == "write":
             filesystem[str(git_common_directory)] = "write"
             filesystem[str(git_common_directory / 'config')] = "read"
@@ -233,6 +234,8 @@ class _CodexRuntimePreflight:
     _evidence: Path
     _native_skills: Mapping[str, Any] | None
     _report_files: Tuple[Path, ...]
+    _connection_reference: str | None = None
+    _connection_revision: str | None = None
 
     def finalize(self) -> RuntimeContext:
         """Resolve Ticket Worktree facts shared by supported role boundaries."""
@@ -254,6 +257,7 @@ class _CodexRuntimePreflight:
                 "connection": {
                     key: value for key, value in (
                         ("base_url", self._base_url), ("api_key_env", self._api_key_env),
+                        ("runtime_home", self._role.runtime_home),
                     ) if value is not None
                 },
             }),
@@ -262,6 +266,10 @@ class _CodexRuntimePreflight:
                 "model": self._model,
                 "model_reasoning_effort": self._role.reasoning_effort,
                 "native_skills": self._native_skills,
+                **({"connection": self._connection_reference,
+                    "connection_revision": self._connection_revision,
+                    "runtime_home": self._role.runtime_home}
+                   if self._connection_reference else {}),
             }),
             _environment=self._environment,
         )
@@ -403,7 +411,7 @@ class CodexRuntimeAdapter:
     def recovery_environment(self, connection: Mapping[str, Any]) -> Mapping[str, str]:
         """Validate captured Codex connection settings and resolve their secrets."""
         if any(
-            key not in {"base_url", "api_key_env"}
+            key not in {"base_url", "api_key_env", "runtime_home"}
             or not isinstance(value, str)
             or not value
             for key, value in connection.items()
@@ -412,7 +420,7 @@ class CodexRuntimeAdapter:
                 "RUNTIME_REQUEST_INVALID", "The retained Codex connection is invalid.",
             )
         return codex_connection_environment(
-            connection.get("base_url"), connection.get("api_key_env"),
+            connection.get("base_url"), connection.get("api_key_env"), connection.get("runtime_home"),
         )
 
     def recover_report_files(
@@ -606,7 +614,7 @@ def preflight_runtime_context(
 ) -> RuntimeContextPreflight:
     """Prepare one Codex role without crossing role-specific boundaries."""
 
-    _reject_legacy_user_sandbox_config()
+    _reject_legacy_user_sandbox_config(Path(role.settings.runtime_home) if role.settings.runtime_home else None)
     _require_codex_permissions(executable)
     resolved_role = _resolve_codex_role(role, runtime_store.parent)
     settings = role.settings
@@ -635,11 +643,13 @@ def preflight_runtime_context(
         _model=settings.model,
         _base_url=settings.base_url,
         _api_key_env=settings.api_key_env,
-        _environment=_connection_environment(settings.base_url, settings.api_key_env),
+        _environment=_connection_environment(settings.base_url, settings.api_key_env, settings.runtime_home),
         _worktree=worktree,
         _evidence=evidence,
         _native_skills=native_skills,
         _report_files=report_files,
+        _connection_reference=settings.connection,
+        _connection_revision=settings.connection_revision,
     )
 
 
@@ -1213,12 +1223,18 @@ def _resolve_codex_role(role: ResolvedChildRole, harness_root: Path) -> _CodexRo
     document["permissions"][document["default_permissions"]]["filesystem"][
         ":workspace_roots"
     ]["."] = role.settings.worktree_access
-    if role.settings.base_url is not None:
+    api_key_env = role.settings.api_key_env
+    if role.settings.connection is None:
+        api_key_env = _legacy_codex_api_key_env(role.settings.base_url, api_key_env)
+    if role.settings.runtime_provider is not None:
+        document["model_provider"] = role.settings.runtime_provider
+    if role.settings.base_url is not None or (role.settings.connection and role.settings.api_key_env):
         document["model_provider"] = "graphtraj-role"
         document["model_providers"] = {"graphtraj-role": {
             "name": "GraphTraj role",
-            "base_url": role.settings.base_url,
-            "env_key": role.settings.api_key_env or "OPENAI_API_KEY",
+            "base_url": role.settings.base_url or "https://api.openai.com/v1",
+            **({"env_key": api_key_env} if api_key_env else {}),
+            "requires_openai_auth": False,
             "wire_api": "responses",
         }}
     reasoning_effort = (
@@ -1238,9 +1254,10 @@ def _resolve_codex_role(role: ResolvedChildRole, harness_root: Path) -> _CodexRo
     )
     return _CodexRole(
         name=role.name,
+        runtime_home=role.settings.runtime_home,
         approval=approval_route(
             role.settings.codex,
-            custom=role.settings.base_url is not None,
+            custom=document.get("model_provider", "openai") != "openai",
             defaults=defaults,
         ),
         reasoning_effort=reasoning_effort,
@@ -1278,27 +1295,49 @@ def _nonempty_string(value: Any) -> bool:
     return isinstance(value, str) and bool(value.strip())
 
 
+def _legacy_codex_api_key_env(base_url: str | None, name: str | None) -> str | None:
+    """Retain the legacy default key only for its official HTTPS API origin."""
+    from urllib.parse import urlsplit
+
+    if name is None and base_url is not None:
+        parsed = urlsplit(base_url)
+        if parsed.scheme == 'https' and parsed.netloc.lower() in {'api.openai.com', 'api.openai.com:443'}:
+            return 'OPENAI_API_KEY'
+    return name
+
+
 def _connection_environment(
     base_url: str | None,
     api_key_env: str | None,
+    runtime_home: str | None = None,
 ) -> Mapping[str, str]:
-    """Translate optional role connection choices without persisting a key."""
-    environment: dict[str, str] = {}
+    """Resolve explicit credentials transiently; never fall back to official auth."""
+    from graphtraj.runtimes.runtime_adapter import credential_environment
+
+    if runtime_home is None:
+        api_key_env = _legacy_codex_api_key_env(base_url, api_key_env)
+    environment = dict(credential_environment(api_key_env))
+    if runtime_home is not None:
+        environment["CODEX_HOME"] = runtime_home
+        # Home-bound references carry routing in native per-Session provider
+        # settings. Do not create process-wide overrides inherited by children.
+        return environment
+    api_key = environment.get(api_key_env) if api_key_env is not None else None
     if base_url is not None:
         environment["OPENAI_BASE_URL"] = base_url
-    if api_key_env is not None:
-        api_key = os.environ.get(api_key_env)
-        if api_key:
-            environment["OPENAI_API_KEY"] = api_key
+        environment["OPENAI_API_KEY"] = ""
+    if api_key is not None:
+        environment["OPENAI_API_KEY"] = api_key
     return environment
 
 
 def codex_connection_environment(
     base_url: str | None,
     api_key_env: str | None,
+    runtime_home: str | None = None,
 ) -> Mapping[str, str]:
-    """Return transient Codex connection overrides for a resumed Session."""
-    return _connection_environment(base_url, api_key_env)
+    """Return transient overrides for the captured connection on resume."""
+    return _connection_environment(base_url, api_key_env, runtime_home)
 
 
 def _harness_native_skills(runtime_store: Path) -> Mapping[str, Any] | None:

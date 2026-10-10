@@ -156,6 +156,11 @@ class DshExecution:
 
     def _prepare(self) -> dict[str, str]:
         """Compose an isolated native profile, retaining defaults outside this Agent."""
+        from graphtraj.runtimes.runtime_adapter import credential_environment
+
+        key = self.request.get('api_key_env')
+        credentials = ({key: 'local'} if self.request.get('unauthenticated')
+                       else credential_environment(key))
         home = self.directory / 'dsh-home'
         profile = home / 'profiles' / 'web'
         profile.mkdir(parents=True, exist_ok=True)
@@ -173,22 +178,31 @@ class DshExecution:
                 'presets': {mode: {'sandbox': mode, 'approval': 'ask'}}, 'defaultPreset': mode,
             }},
             {'id': 'llm-deepseek', 'config': {
-                'baseURL': self.request['base_url'], 'apiKeyEnv': self.request['api_key_env'],
+                **({'baseURL': self.request['base_url']} if self.request.get('base_url') else {}),
+                **({'apiKeyEnv': self.request['api_key_env']} if self.request.get('api_key_env') else {}),
+                **({'models': [{'id': self.request['model']}]}
+                   if self.request.get('connection') and (
+                       self.request.get('model_source') == 'manual' or self.request.get('base_url')
+                   ) else {}),
                 **({'reasoningEffort': self.request['reasoning_effort']}
                    if self.request['reasoning_effort'] is not None else {}),
             }},
             {'id': 'system-prompt', 'config': {'personaSuffix': self.request['instructions']}},
             {'insert': [{'id': 'graphtraj', 'name': str(Path(__file__).with_name('tool.mjs'))}]},
         ]
+        if self.request.get('connection'):
+            # Native selectModel otherwise saves the selection to the shared
+            # profile. This service must keep it scoped to its own Session.
+            patches.append({'id': 'config-editor', 'disabled': True})
         preset = _deployment_agent_preset(
             Path(self.request['package']).parent, self.request['instructions'],
         )
         if preset is not None:
             patches.append(preset)
         (profile / 'cordis.patch.yml').write_text(_dump_profile_patches(patches), encoding='utf-8')
-        environment = dict(os.environ)
+        environment = {**os.environ, **credentials}
         environment.update({
-            'DSH_HOME': str(home), 'DSH_PERMISSION_MODE': mode, 'NO_COLOR': '1',
+            'DSH_HOME': self.request.get('runtime_home') or str(home), 'DSH_PERMISSION_MODE': mode, 'NO_COLOR': '1',
             'GRAPHTRAJ_DSH_PACKAGE': self.request['package'],
             'GRAPHTRAJ_DSH_TOOL': self.request['tool'],
             'GRAPHTRAJ_HARNESS_ROOT': self.request['harness_root'],
@@ -370,7 +384,11 @@ class DshExecution:
             Path(self.request['harness_root']), self.directory.name, native_operation_features(),
             directory=channel,
         ))
-        self.service = DshService(self.request['executable'], Path(self.request['worktree_path']), environment)
+        options = ({'profile_patch': self.directory / 'dsh-home/profiles/web/cordis.patch.yml'}
+                   if self.request.get('runtime_home') else {})
+        self.service = DshService(
+            self.request['executable'], Path(self.request['worktree_path']), environment, **options,
+        )
         try:
             self.service.start()
             request = {'cwd': self.request['worktree_path']}

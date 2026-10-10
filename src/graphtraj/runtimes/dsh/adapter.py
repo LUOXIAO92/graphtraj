@@ -11,7 +11,7 @@ from typing import Any, Mapping
 from urllib.parse import urlsplit
 
 from graphtraj.configuration.role_definitions import ResolvedChildRole
-from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError, finalize_usage
+from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError, finalize_usage, credential_environment
 
 
 class DshContext:
@@ -36,7 +36,10 @@ class DshContext:
         """Disclose effective settings and the accepted native read limitation."""
         return {**copy.deepcopy(self.evidence), 'runtime': self.runtime,
                 'model': self.request['model'], 'native_read_isolation': False,
-                'sandbox': self.request['sandbox'], 'service_scope': 'agent'}
+                'sandbox': self.request['sandbox'], 'service_scope': 'agent',
+                **({'connection': self.request['connection'],
+                    'connection_revision': self.request['connection_revision'],
+                    'runtime_home': self.request['runtime_home']} if self.request.get('connection') else {})}
 
     def session_document(self) -> dict:
         """Return a detached copy of native launch inputs."""
@@ -67,7 +70,8 @@ class DshRuntimeAdapter:
         if requested_skills or role.settings.codex or role.allow_runtime_swarm:
             raise RuntimeAdapterError('ROLE_CONFIG_UNSUPPORTED',
                                       'DSH uses native resource discovery; Codex settings/helpers are unsupported.')
-        if role.settings.model not in {'deepseek-flash', 'deepseek-official/deepseek-flash'}:
+        credential_environment(role.settings.api_key_env)
+        if not role.settings.connection and role.settings.model not in {'deepseek-flash', 'deepseek-official/deepseek-flash'}:
             raise RuntimeAdapterError('ROLE_CONFIG_UNSUPPORTED', 'DSH requires deepseek-official/deepseek-flash.')
         effort = role.settings.reasoning_effort
         if effort not in {None, 'off', 'low', 'high', 'max'}:
@@ -84,9 +88,17 @@ class DshRuntimeAdapter:
             raise RuntimeAdapterError('RUNTIME_UNSUPPORTED', 'DSH 0.2.0-rc.2 is required.') from error
         base_url = role.settings.base_url or 'https://api.deepseek.com/anthropic'
         parsed = urlsplit(base_url)
-        if (parsed.scheme != 'https' or not parsed.netloc or parsed.username or parsed.password
+        schemes = {'http', 'https'} if role.settings.connection else {'https'}
+        if (parsed.scheme not in schemes or not parsed.netloc or parsed.username or parsed.password
                 or parsed.query or parsed.fragment):
-            raise RuntimeAdapterError('ROLE_CONFIG_INVALID', 'DSH requires a credential-free HTTPS Messages root.')
+            raise RuntimeAdapterError('ROLE_CONFIG_INVALID', 'DSH requires a credential-free Messages root (HTTPS for legacy inline roles).')
+        legacy_official = (
+            not role.settings.connection and parsed.scheme == 'https'
+            and parsed.netloc.lower() in {'api.deepseek.com', 'api.deepseek.com:443'}
+        )
+        unauthenticated = bool(
+            role.settings.base_url and not role.settings.api_key_env and not legacy_official
+        )
         reports = []
         for path in report_files:
             if path.is_absolute() or '..' in path.parts or path.parts[:1] != ('.state',):
@@ -95,9 +107,20 @@ class DshRuntimeAdapter:
         return DshContext({
             'executable': executable, 'package': str(package), 'tool': tool,
             'worktree_path': str(worktree), 'harness_root': str(harness_root),
-            'model': 'deepseek-flash', 'provider': 'deepseek-official',
-            'reasoning_effort': effort, 'base_url': base_url,
-            'api_key_env': role.settings.api_key_env or 'DEEPSEEK_API_KEY',
+            'model': (role.settings.model if role.settings.connection else
+                      role.settings.model.removeprefix('deepseek-official/')),
+            'provider': 'deepseek-official',
+            'runtime_home': role.settings.runtime_home,
+            'connection': role.settings.connection,
+            'connection_revision': role.settings.connection_revision,
+            'model_source': role.settings.model_source,
+            'reasoning_effort': effort,
+            'base_url': role.settings.base_url if role.settings.connection else base_url,
+            'api_key_env': role.settings.api_key_env or (
+                'GRAPHTRAJ_CONNECTION_KEY' if unauthenticated else
+                None if role.settings.connection else 'DEEPSEEK_API_KEY'
+            ),
+            'unauthenticated': unauthenticated,
             'instructions': role.instructions, 'reports': reports,
             'sandbox': 'read-only' if role.settings.worktree_access == 'read' else 'workspace-write',
         }, {'effective_role': role.name})

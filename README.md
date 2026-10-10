@@ -174,6 +174,11 @@ the Start menu and add an existing project. The installer copies the app to
 extracted archive is no longer needed after installation. Desktop support does
 not add Windows execution support to Agent Runtimes that lack it.
 
+On Ubuntu 24.04 amd64, install the package with
+`sudo apt install ./graphtraj-desktop_0.1.0_amd64.deb`, then run
+`graphtraj-desktop`. The app and its matching Python environment are installed
+under `/opt/graphtraj-desktop`.
+
 Open **Usage** to inspect recorded tokens, cache reads and an estimated token
 cost, filtered by task, Agent or model. Cache-hit rates are weighted by input
 tokens. Missing usage—including unrecorded Main calls—and quantities without

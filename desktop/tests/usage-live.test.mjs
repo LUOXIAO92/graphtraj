@@ -90,7 +90,7 @@ test('owned Electron Dashboard matches native quantities, filters and replay', {
     if (stopping) { await app.close(); return; }
     const page = await app.firstWindow();
     page.setDefaultTimeout(Math.min(30000, deadline - Date.now() - 3000));
-    await page.getByRole('button', { name: 'Usage', exact: true }).click();
+    await page.getByRole('button', { name: 'Project usage', exact: true }).click();
     // Wrapping select labels include option text; scope to the filter label prefix.
     await page.locator('.usage-filters > label').filter({ hasText: /^Ticket/ }).locator('select').selectOption(ticket);
     await page.getByLabel('Through (local time)').fill(cutoff);

@@ -13,11 +13,22 @@ test('actual Electron window uses native graph, safe preload, refresh and persis
   const first = await fixtures.makeProject(path.join(root, 'first'), 'first-project');
   const second = await fixtures.makeProject(path.join(root, 'second'), 'second-project');
   const canonicalSecond = await fs.realpath(second);
+  const canonicalFirst = await fs.realpath(first);
   const desktop = fileURLToPath(new URL('..', import.meta.url));
   const args = [desktop, `--user-data-dir=${path.join(root, 'userData')}`];
   let app = await electron.launch({ args });
-  t.after(async () => { if (app) await app.close(); });
   let page = await app.firstWindow();
+  const originalSelection = (await page.evaluate(() => window.graphtraj.projects())).selected;
+  t.after(async () => {
+    if (!app) return;
+    await page.evaluate(async ({ roots, originalSelection }) => {
+      for (const project of (await window.graphtraj.projects()).projects) {
+        if (roots.includes(project.root)) await window.graphtraj.removeProject(project.id);
+      }
+      if (originalSelection) await window.graphtraj.selectProject(originalSelection);
+    }, { roots: [canonicalFirst, canonicalSecond], originalSelection }).catch(() => {});
+    await app.close();
+  });
 
   // The native dialog's selection is controlled here; real OS-picker interaction
   // is a separate manual acceptance check, never claimed by this test.
@@ -32,19 +43,19 @@ test('actual Electron window uses native graph, safe preload, refresh and persis
   await page.getByText('first project', { exact: true }).waitFor();
   await pick(second);
   await page.getByText('second project', { exact: true }).waitFor();
-  assert.equal(await page.getByText('first project', { exact: true }).count(), 0);
+  assert.equal(await page.locator('.monitor-page:visible').getByText('first project', { exact: true }).count(), 0);
   const boundary = await page.evaluate(() => ({
     require: typeof window.require, process: typeof window.process,
     methods: Object.keys(window.graphtraj).sort(),
   }));
   assert.equal(boundary.require, 'undefined');
   assert.equal(boundary.process, 'undefined');
-  assert.deepEqual(boundary.methods, ['activity', 'addProject', 'copyText', 'graph', 'projects', 'removeProject', 'saveSettings', 'selectProject', 'settings']);
+  assert.deepEqual(boundary.methods, ['activity', 'addProject', 'copyText', 'graph', 'projects', 'relocateProject', 'removeProject', 'saveSettings', 'selectProject', 'settings']);
   assert.match(await page.evaluate(async () => {
     try { await window.graphtraj.graph('/'); return 'unexpected'; }
     catch (error) { return String(error); }
   }), /Choose an added project/);
-  await page.locator('.react-flow__node').first().click();
+  await page.locator('.monitor-page:visible .react-flow__node').first().click();
   await page.getByRole('complementary', { name: 'Ticket details' }).waitFor();
   await page.getByText('No participating Agents recorded.').waitFor();
   await page.evaluate(() => window.graphtraj.copyText('Observed plain text'));
@@ -70,8 +81,8 @@ test('actual Electron window uses native graph, safe preload, refresh and persis
   await fs.rename(moved, second);
   await page.getByText('Connected', { exact: false }).waitFor({ timeout: 15000 });
   await page.getByRole('button', { name: `Remove ${canonicalSecond}`, exact: true }).click();
+  await page.locator('.project-button').filter({ hasText: canonicalFirst }).click();
   await page.getByText('first project', { exact: true }).waitFor();
   assert.equal(fixtures.operate(second, 'ticket_graph').tickets.length, 3);
-  await app.close();
-  app = null;
+  // The after hook removes the remaining fixture entry and closes this window.
 });

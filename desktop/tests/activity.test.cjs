@@ -86,7 +86,6 @@ test('Follow drains long pages and reconnect replay; pause preserves the older v
   }); });
   t.after(async () => { await act(async () => tree.unmount()); });
   const advance = async (ms = 1) => { await act(async () => t.mock.timers.tick(ms)); };
-  await act(async () => button(tree, 'worker').props.onClick());
   assert.ok(button(tree, 'Pause following'), 'page layout must keep follow active');
   await act(async () => button(tree, 'Pause following').props.onClick());
   await advance();
@@ -109,7 +108,7 @@ test('Follow drains long pages and reconnect replay; pause preserves the older v
   records.push(event(406));
   await advance(3000); await advance(3000); await advance(); await advance();
   assert.match(text(tree), /record 406/);
-  assert.equal(tree.root.findAllByType('article').length, 100);
+  assert.equal(tree.root.findAll(node => node.props.className === 'activity-event').filter(node => node.type === 'article').length, 100);
   assert.match(text(tree), /407/);
 });
 
@@ -131,4 +130,41 @@ test('result selection requires the real expansion control, not quoted phase tex
     .some(summary => summary.props.children === 'Result / details'));
   assert.equal(candidates.length, 1);
   assert.equal(candidates[0].findByType('pre').props.children, `${marker} diagnostic`);
+});
+
+
+test('parallel current/history columns retain independent pause and cursor state while hidden', async t => {
+  const { ActivityView } = await components(t);
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const members = [{ alias: 'current', historical: false, state: 'running' },
+    { alias: 'old', historical: true, state: 'retired' }];
+  const requests = [];
+  let count = 2;
+  globalThis.window = { graphtraj: { activity: async (projectId, request) => {
+    requests.push({ projectId, ...request });
+    const base = { ticket_id: '1', agents: members, updated_at: '2026-10-11T00:00:00Z' };
+    if (!request.alias) return base;
+    return { ...base, availability: 'available', cursor: String(count), events:
+      Array.from({ length: count }, (_, i) => event(i, { text: `${request.alias} message ${i}` })) };
+  } } };
+  let tree;
+  await act(async () => { tree = create(React.createElement(ActivityView, { projectId: 'one', ticketId: '1' })); });
+  t.after(async () => { await act(async () => tree.unmount()); });
+  const columns = tree.root.findAll(node => node.type === 'article' && node.props.className === 'agent-column');
+  assert.equal(columns.length, 2);
+  assert.match(text(tree), /Historical/);
+  await act(async () => { columns[0].findAllByType('button')[0].props.onClick(); });
+  count = 3;
+  await act(async () => t.mock.timers.tick(3000));
+  assert.match(text(tree), /current message 2/);
+  assert.ok(button(tree, 'Follow new messages (1)'));
+  assert.ok(button(tree, 'Pause following'));
+  await act(async () => { tree.update(React.createElement(ActivityView, { projectId: 'one', ticketId: '1', active: false })); });
+  const before = requests.length;
+  await act(async () => t.mock.timers.tick(6000));
+  assert.equal(requests.length, before, 'hidden monitor must stop polling');
+  await act(async () => { tree.update(React.createElement(ActivityView, { projectId: 'one', ticketId: '1', active: true })); });
+  assert.ok(button(tree, 'Follow new messages (1)'));
+  assert.deepEqual(requests.filter(request => request.alias).slice(-2).map(request => request.cursor), ['3', '3']);
+  assert.ok(requests.every(request => request.projectId === 'one'));
 });

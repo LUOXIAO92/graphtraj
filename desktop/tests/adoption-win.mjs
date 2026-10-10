@@ -263,7 +263,7 @@ try {
   const secondState = await taskFiles(second);
   await launch();
   const surface = await bounded('Read renderer surface', page.evaluate(() => ({ methods: Object.keys(window.graphtraj).sort(), require: typeof window.require, process: typeof window.process })));
-  assert.deepEqual(surface.methods, ['activity', 'addProject', 'copyText', 'graph', 'projects', 'removeProject', 'saveSettings', 'selectProject', 'settings']);
+  assert.deepEqual(surface.methods, ['activity', 'addProject', 'copyText', 'graph', 'projects', 'relocateProject', 'removeProject', 'saveSettings', 'selectProject', 'settings']);
   assert.equal(surface.require, 'undefined');
   assert.equal(surface.process, 'undefined');
   await pick(first);
@@ -280,7 +280,7 @@ try {
   assert.equal(activity.agents[0].historical, true);
   assert.equal(activity.agents[0].state, 'retired');
   {
-    await page.getByRole('button', { name: activity.agents[0].alias, exact: true }).click();
+    await page.getByRole('button', { name: 'Expand chat', exact: true }).click();
     await page.locator('.activity-event').first().waitFor();
     const observed = operate(first, 'desktop_activity', { ticket_id: '1', alias: activity.agents[0].alias });
     const message = observed.events?.find(event => event.kind === 'message' && event.text);
@@ -301,7 +301,7 @@ try {
     facts.steps.push('Nonempty native Chat message/tool rendered');
   }
   await capture('node-chat');
-  await page.getByRole('button', { name: 'Usage', exact: true }).click();
+  await page.getByRole('button', { name: 'Project usage', exact: true }).click();
   await page.locator('.usage-dashboard').waitFor();
   {
     const row = page.getByRole('table', { name: 'Model breakdown', exact: true }).getByRole('row').filter({ hasText: 'gpt-5.3-codex' });
@@ -316,7 +316,7 @@ try {
   }
   await capture('dashboard');
   facts.steps.push('Installed Dashboard renders; quantity algorithms reuse accepted C evidence');
-  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByRole('button', { name: 'Teams & roles', exact: true }).click();
   await page.getByLabel('Model', { exact: true }).fill('controlled-denied');
   await page.getByRole('button', { name: 'Save changes', exact: true }).click();
   await native('deny');

@@ -22,7 +22,7 @@ test('Electron settings draft, diff, native save, denial, conflict and restorati
     dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [folder] });
   }, project);
   await page.getByRole('button', { name: 'Add project', exact: true }).click();
-  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByRole('button', { name: 'Teams & roles', exact: true }).click();
   await page.getByLabel('Model', { exact: true }).waitFor();
   const original = await fs.readFile(rolesFile);
   await page.getByLabel('Model', { exact: true }).fill('cancelled-model');

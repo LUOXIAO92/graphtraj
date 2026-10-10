@@ -1,5 +1,6 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, session } from 'electron';
 import path from 'node:path';
+import { homedir } from 'node:os';
 import { pathToFileURL } from 'node:url';
 import { GraphReader, Projects } from './projects';
 import { SettingsClient, reviewText } from './settings';
@@ -38,7 +39,8 @@ else {
   app.on('second-instance', () => { window?.show(); window?.focus(); });
   void app.whenReady().then(async () => {
     reader = new GraphReader();
-    projects = new Projects(path.join(app.getPath('userData'), 'projects.json'), reader);
+    projects = new Projects(path.join(homedir(), '.graphtraj', 'projects.json'), reader,
+      path.join(app.getPath('userData'), 'projects.json'));
     await projects.load();
     if (app.commandLine.hasSwitch('project')) await projects.add(app.commandLine.getSwitchValue('project'));
     settings = new SettingsClient(async proposal => {
@@ -58,7 +60,13 @@ else {
         if (typeof text !== 'string') throw new Error('Copy requires text.');
         clipboard.writeText(text);
       },
-      'projects:list': () => projects.list(),
+      'projects:list': () => projects.refreshAvailability(),
+      'projects:relocate': async id => {
+        const result = await dialog.showOpenDialog(window!, {
+          title: 'Relocate GraphTraj project', properties: ['openDirectory'],
+        });
+        return result.canceled ? projects.list() : projects.relocate(id, result.filePaths[0]);
+      },
       'projects:add': async () => {
         const result = await dialog.showOpenDialog(window!, {
           title: 'Add existing GraphTraj project', properties: ['openDirectory'],
@@ -85,7 +93,7 @@ else {
             event.senderFrame.url !== pathToFileURL(page).href) {
           throw new Error('Desktop request from an untrusted frame.');
         }
-        if (channel === 'activity:copy' || channel === 'projects:activity' || channel === 'projects:graph' || channel === 'projects:list') return handler(id);
+        if (channel === 'activity:copy' || channel === 'projects:activity' || channel === 'projects:graph') return handler(id);
         // Serialize preference changes, including the native folder dialog.
         const next = writes.then(() => handler(id, draft));
         writes = next.catch(() => undefined);

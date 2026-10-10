@@ -141,7 +141,7 @@ try {
   assert.equal(await page.locator('.project-button').count(), 2);
   await screenshot('two-projects');
   facts.steps.push('Installed executable, actual directory picker, two project graphs and deduplication');
-  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByRole('button', { name: 'Teams & roles', exact: true }).click();
   await page.getByLabel('Model', { exact: true }).waitFor();
   await save('denied-model', false, 'denied');
   assert.deepEqual(await fs.readFile(roles), original);
@@ -166,7 +166,7 @@ try {
   assert.deepEqual(await fs.readFile(path.join(first, '.graphtraj/roles.yml')), firstRoles);
   assert.ok(!(await page.locator('body').innerText()).includes('controlled-secret-never-display-267'));
   facts.steps.push('Native reject/approve, conflict retention, restoration, preserved fields and cross-project isolation');
-  await page.getByRole('button', { name: 'Task graph', exact: true }).click();
+  await page.getByRole('button', { name: 'Monitor', exact: true }).click();
   await page.locator('.project-button').filter({ hasText: first }).click();
   await page.locator('.react-flow__node').first().waitFor();
   await closeApp();
@@ -206,7 +206,7 @@ try {
     await screenshot('chat-message-and-tool');
   }
   facts.stage = 'controlled Dashboard';
-  await page.getByRole('button', { name: 'Usage', exact: true }).click();
+  await page.getByRole('button', { name: 'Project usage', exact: true }).click();
   await page.locator('.usage-dashboard').waitFor();
   const modelRow = page.getByRole('table').filter({ has: page.locator('caption', { hasText: 'Model breakdown' }) })
     .locator('tbody tr').filter({ hasText: 'gpt-5.3-codex' });

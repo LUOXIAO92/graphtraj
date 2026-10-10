@@ -1,7 +1,7 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Button, Card } from '@heroui/react';
 import Markdown from 'react-markdown';
-import type { Activity, ActivityEvent } from '../electron/activity';
+import type { Activity, ActivityEvent, Agent } from '../electron/activity';
 import './activity.css';
 
 const readable = (value: unknown) => typeof value === 'string' ? value : JSON.stringify(value, null, 2);
@@ -31,100 +31,139 @@ export function EventCard({ event }: { event: ActivityEvent }) {
   </Card>;
 }
 
-export function ActivityView({ projectId, ticketId }: { projectId: string; ticketId: string }) {
+/** Keep each actual member in its own independently scrolling column. */
+export function ActivityView({ projectId, ticketId, active = true, expanded = true }: {
+  projectId: string; ticketId: string; active?: boolean; expanded?: boolean;
+}) {
   const [activity, setActivity] = useState<Activity | null>(null);
-  const [alias, setAlias] = useState('');
+  const [error, setError] = useState('');
+  const columns = useRef<HTMLDivElement>(null);
+  const horizontal = useRef(0);
+  useLayoutEffect(() => {
+    if (active && expanded && columns.current) columns.current.scrollLeft = horizontal.current;
+  }, [active, expanded]);
+  useEffect(() => {
+    if (!active) return;
+    let alive = true;
+    let timer: ReturnType<typeof setTimeout>;
+    async function refresh() {
+      try {
+        const next = await window.graphtraj.activity(projectId, { ticket_id: ticketId });
+        if (alive) { setActivity(next); setError(next.reason || ''); }
+      } catch { if (alive) setError('Member status disconnected; retained content remains readable.'); }
+      finally { if (alive) timer = setTimeout(refresh, 3000); }
+    }
+    void refresh();
+    return () => { alive = false; clearTimeout(timer); };
+  }, [projectId, ticketId, active]);
+  return <section className="activity" aria-label="Agent activity">
+    {activity?.scope === 'self' && <p className="note">This Agent connection shows only its own Session.</p>}
+    {error && <p className="error" role="alert">{error}</p>}
+    <p className="note">{activity ? `Last update ${new Date(activity.updated_at).toLocaleTimeString()}` : 'Loading members…'} · Chat · Read only</p>
+    {activity?.agents.length === 0 && <p>No participating Agents recorded.</p>}
+    {!expanded && <div className="agent-roster" aria-label="Participating Agents">{activity?.agents.map(agent =>
+      <div className="roster-member" key={agent.alias}><strong>{agent.alias}</strong>
+        <span>{agent.historical ? 'Historical' : 'Current'} · {agent.state}</span>
+        <span>{agent.runtime || 'Runtime unknown'} · {agent.model || 'Model not recorded'}</span>
+      </div>)}</div>}
+    <div className="agent-columns" hidden={!expanded} ref={columns} tabIndex={0} aria-label="Agent columns"
+      onScroll={event => { if (active && expanded) horizontal.current = event.currentTarget.scrollLeft; }}>
+      {activity?.agents.map(agent => <AgentColumn key={agent.alias} projectId={projectId}
+        ticketId={ticketId} agent={agent} active={active && expanded} />)}
+    </div>
+  </section>;
+}
+
+function AgentColumn({ projectId, ticketId, agent, active }: {
+  projectId: string; ticketId: string; agent: Agent; active: boolean;
+}) {
+  const [activity, setActivity] = useState<Activity | null>(null);
   const [error, setError] = useState('');
   const [events, setEvents] = useState<ActivityEvent[]>([]);
   const [following, setFollowing] = useState(true);
   const [pageStart, setPageStart] = useState(0);
   const [pending, setPending] = useState(0);
   const followingRef = useRef(true);
-  const bottom = useRef<HTMLDivElement>(null);
+  const history = useRef<HTMLDivElement>(null);
+  const vertical = useRef(0);
+  useLayoutEffect(() => {
+    if (active && history.current && !followingRef.current) history.current.scrollTop = vertical.current;
+  }, [active]);
   const loadRequested = useRef(false);
+  const cursor = useRef<string | undefined>(undefined);
+  const more = useRef(false);
+  const seen = useRef(new Set<string>());
 
   useEffect(() => {
+    if (!active) return;
     let alive = true;
-    let cursor: string | undefined;
-    let more = false;
     let timer: ReturnType<typeof setTimeout>;
-    const seen = new Set<string>();
-    setEvents([]); setPageStart(0); setPending(0); loadRequested.current = false;
     async function refresh() {
       try {
         const next = await window.graphtraj.activity(projectId, {
-          ticket_id: ticketId, ...(alias ? { alias } : {}), ...(cursor ? { cursor } : {}),
+          ticket_id: ticketId, alias: agent.alias, ...(cursor.current ? { cursor: cursor.current } : {}),
         });
         if (!alive) return;
         if (next.availability === 'cursor-expired' || next.availability === 'trace-changed') {
-          cursor = undefined; more = false;
+          cursor.current = undefined; more.current = false;
           setError('Observer reconnected or Trace changed. Replaying recorded events; existing content is retained.');
         } else {
           setActivity(next); setError(next.reason || '');
-          cursor = next.cursor ?? undefined;
-          more = Boolean(next.has_more && !next.waiting_for_record);
-          const added = (next.events ?? []).filter(event => !seen.has(event.id));
-          added.forEach(event => seen.add(event.id));
+          cursor.current = next.cursor ?? undefined;
+          more.current = Boolean(next.has_more && !next.waiting_for_record);
+          const added = (next.events ?? []).filter(event => !seen.current.has(event.id));
+          added.forEach(event => seen.current.add(event.id));
           if (added.length) {
             setEvents(previous => [...previous, ...added]);
-            if (followingRef.current) setPageStart(Math.max(0, seen.size - 100));
-            if (!followingRef.current) setPending(value => value + added.length);
+            if (followingRef.current) setPageStart(Math.max(0, seen.current.size - 100));
+            else setPending(value => value + added.length);
           }
         }
       } catch {
         if (alive) setError('Activity disconnected or access refused. Retrying; retained messages remain readable.');
-      } finally { if (alive) timer = setTimeout(tick, more && followingRef.current ? 0 : 3000); }
+      } finally { if (alive) timer = setTimeout(tick, more.current && followingRef.current ? 0 : 3000); }
     }
     function tick() {
-      if (more && !followingRef.current && !loadRequested.current) {
-        void window.graphtraj.activity(projectId, { ticket_id: ticketId }).then(next => {
-          if (alive) setActivity(previous => ({ ...previous, ...next }));
-        }, () => { if (alive) setError('Member status disconnected; retained content remains readable.'); })
-          .finally(() => { if (alive) timer = setTimeout(tick, 3000); });
+      if (more.current && !followingRef.current && !loadRequested.current) {
+        timer = setTimeout(tick, 3000);
       } else { loadRequested.current = false; void refresh(); }
     }
     void refresh();
     return () => { alive = false; clearTimeout(timer); };
-  }, [projectId, ticketId, alias]);
+  }, [projectId, ticketId, agent.alias, active]);
 
   useEffect(() => {
-    if (following) bottom.current?.scrollIntoView({ block: 'nearest' });
-  }, [events, following]);
+    if (active && following && history.current) history.current.scrollTop = history.current.scrollHeight;
+  }, [events, following, active]);
 
   function follow(value: boolean) {
     followingRef.current = value; setFollowing(value);
     if (value) { setPageStart(Math.max(0, events.length - 100)); setPending(0); }
   }
 
-  return <section className="activity" aria-label="Agent activity">
-    <h3>Agents</h3>
-    {activity?.scope === 'self' && <p className="note">This Agent connection shows only its own Session.</p>}
-    {(['Current', 'Historical'] as const).map(group => <div key={group}>
-      <h4>{group} members</h4>
-      {activity?.agents.filter(agent => agent.historical === (group === 'Historical')).map(agent =>
-        <div className="activity-member" key={agent.alias}>
-          <Button size="sm" variant={alias === agent.alias ? 'primary' : 'secondary'} onPress={() => setAlias(agent.alias)}>{agent.alias}</Button>
-          <p>{agent.runtime || 'Runtime unknown'} · {agent.model || 'Model not recorded'} · {agent.state}
-            {agent.last_outcome && ` · ${agent.last_outcome}`}<br />Parent: {agent.parent ?? 'Not recorded / root'}
-            {agent.reason && <><br />{agent.reason}</>}</p>
-        </div>)}
-    </div>)}
-    {activity?.agents.length === 0 && <p>No participating Agents recorded.</p>}
+  return <article className="agent-column" aria-label={agent.alias}>
+    <header className="activity-member"><h3>{agent.alias}</h3>
+      <span className="status">{agent.historical ? 'Historical' : 'Current'} · {agent.state}</span>
+      <p>{agent.runtime || 'Runtime unknown'} · {agent.model || 'Model not recorded'}
+        {agent.last_outcome && ` · ${agent.last_outcome}`}<br />Parent: {agent.parent ?? 'Not recorded / root'}
+        {agent.reason && <><br />{agent.reason}</>}</p>
+    </header>
+    <div className="activity-controls">
+      <Button size="sm" variant="secondary" onPress={() => follow(!following)}>{following ? 'Pause following' : `Follow new messages${pending ? ` (${pending})` : ''}`}</Button>
+      <Button size="sm" variant="ghost" isDisabled={pageStart === 0} onPress={() => { follow(false); setPageStart(value => Math.max(0, value - 100)); }}>Earlier</Button>
+      <Button size="sm" variant="ghost" isDisabled={pageStart + 100 >= events.length} onPress={() => { follow(false); setPageStart(value => value + 100); }}>Later</Button>
+    </div>
     {error && <p className="error" role="alert">{error}</p>}
-    <p className="note">{activity ? `Last update ${new Date(activity.updated_at).toLocaleTimeString()}` : 'Loading members…'}</p>
-    {alias && <>
-      <div className="activity-controls"><h3>Chat · Read only</h3>
-        <Button size="sm" variant="secondary" onPress={() => follow(!following)}>{following ? 'Pause following' : `Follow new messages${pending ? ` (${pending})` : ''}`}</Button>
-        <Button size="sm" variant="ghost" isDisabled={pageStart === 0} onPress={() => { follow(false); setPageStart(value => Math.max(0, value - 100)); }}>Earlier</Button>
-        <Button size="sm" variant="ghost" isDisabled={pageStart + 100 >= events.length} onPress={() => { follow(false); setPageStart(value => value + 100); }}>Later</Button>
-      </div>
-      <div className="activity-history">
-        {events.slice(pageStart, pageStart + 100).map(event => <EventCard key={event.id} event={event} />)}
-        {!events.length && <p>{activity?.availability === 'available' ? 'No readable activity recorded yet.' : 'Activity is unavailable or loading.'}</p>}
-        <div ref={bottom} />
-      </div>
-      {activity?.has_more && !activity.waiting_for_record && <Button size="sm" variant="secondary" onPress={() => { loadRequested.current = true; }}>Load next recorded page</Button>}
-      <p className="note">{events.length} events loaded · Missing usage stays unknown. Stream and final usage retain their native identity; values are not summed here.</p>
-    </>}
-  </section>;
+    <div className="activity-history" ref={history} tabIndex={0} aria-label={`${agent.alias} messages`}
+      onScroll={event => {
+        const element = event.currentTarget;
+        if (active) vertical.current = element.scrollTop;
+        if (active && followingRef.current && element.scrollHeight - element.clientHeight - element.scrollTop > 32) follow(false);
+      }}>
+      {events.slice(pageStart, pageStart + 100).map(event => <EventCard key={event.id} event={event} />)}
+      {!events.length && <p>{activity?.availability === 'available' ? 'No readable activity recorded yet.' : 'Activity is unavailable or loading.'}</p>}
+    </div>
+    {activity?.has_more && !activity.waiting_for_record && <Button size="sm" variant="secondary" onPress={() => { loadRequested.current = true; }}>Load next recorded page</Button>}
+    <p className="note">{events.length} events loaded · Missing usage stays unknown.</p>
+  </article>;
 }

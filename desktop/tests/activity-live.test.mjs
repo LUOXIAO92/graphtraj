@@ -129,7 +129,7 @@ test('one native window observes its real executing Agent', { timeout: 240000, s
     }
     await page.getByRole('searchbox').fill(ticket);
     await page.getByRole('button', { name: new RegExp('^#' + ticket + ' ') }).click();
-    await page.getByRole('button', { name: member.alias, exact: true }).click();
+    await page.getByRole('button', { name: 'Expand chat', exact: true }).click();
     await page.getByText('This Agent connection shows only its own Session.').waitFor();
     facts.steps.push('real native self connection visible');
     console.log(JSON.stringify({ phase: 'READY', token, evidence, alias: member.alias }));

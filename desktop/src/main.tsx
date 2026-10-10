@@ -34,7 +34,7 @@ function TicketCard({ data, selected }: NodeProps<TicketNode>) {
 }
 const nodeTypes = { ticket: TicketCard };
 
-function GraphView({ projectId }: { projectId: string }) {
+function GraphView({ projectId, active }: { projectId: string; active: boolean }) {
   const [observation, setObservation] = useState<Observation | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -42,11 +42,13 @@ function GraphView({ projectId }: { projectId: string }) {
   const [selected, setSelected] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('all');
-  const [detailWidth, setDetailWidth] = useState(340);
+  const [detailWidth, setDetailWidth] = useState(380);
+  const [expanded, setExpanded] = useState(false);
   const [nodes, setNodes, onNodesChange] = useNodesState<TicketNode>([]);
   const flow = useReactFlow<TicketNode>();
 
   useEffect(() => {
+    if (!active) return;
     let alive = true;
     let timer: ReturnType<typeof setTimeout>;
     async function refresh() {
@@ -62,7 +64,7 @@ function GraphView({ projectId }: { projectId: string }) {
     }
     void refresh();
     return () => { alive = false; clearTimeout(timer); };
-  }, [projectId, retry]);
+  }, [projectId, retry, active]);
 
   const tickets = observation?.graph.tickets;
   const positions = useMemo(() => layout(tickets ?? []), [tickets]);
@@ -119,7 +121,7 @@ function GraphView({ projectId }: { projectId: string }) {
       {matches.length ? matches.map(ticket => <Button key={ticket.ticket_id} size="sm" variant="secondary"
         onPress={() => locate(ticket)}>#{ticket.ticket_id} {ticket.title}</Button>) : 'No matching visible tickets'}
     </div>}
-    <div className="graph-workspace">
+    <div className={`graph-workspace ${expanded && detail ? 'chat-expanded' : ''}`}>
       <div className="graph" aria-label="Task dependency graph">
         {!observation && <div className="empty">{loading ? 'Loading native task graph…' : 'Graph unavailable'}</div>}
         {observation && tickets?.length === 0 && <div className="empty">No tickets registered in this project.</div>}
@@ -131,19 +133,20 @@ function GraphView({ projectId }: { projectId: string }) {
           <Background /><Controls showInteractive={false} /><MiniMap pannable zoomable />
         </ReactFlow>
       </div>
-      {detail && <aside className="details" style={{ width: detailWidth }} aria-label="Ticket details">
+      {detail && <aside className="details" style={{ '--column-width': `${detailWidth}px` } as React.CSSProperties} aria-label="Ticket details">
         <div className="detail-controls"><Button size="sm" variant="ghost" onPress={() => setSelected(null)}>Close details</Button>
-          <label>Width<input aria-label="Detail width" type="range" min="280" max="640" value={detailWidth}
+          <Button size="sm" variant="secondary" onPress={() => setExpanded(value => !value)}>{expanded ? 'Collapse chat' : 'Expand chat'}</Button>
+          <label>Column width<input aria-label="Detail width" type="range" min="280" max="640" value={detailWidth}
             onChange={event => setDetailWidth(Number(event.target.value))} /></label></div>
         <p className="eyebrow">Ticket #{detail.ticket_id}</p><h2>{detail.title}</h2>
         <span className={`status status-${detail.status}`}>{detail.status}</span>
-        <dl><dt>Ticket name</dt><dd>{detail.ticket_name}</dd>
+        <details className="ticket-facts"><summary>Ticket facts</summary><dl><dt>Ticket name</dt><dd>{detail.ticket_name}</dd>
           <dt>Active</dt><dd>{detail.active ? 'Yes' : 'No — replaced / inactive'}</dd>
           <dt>Dependencies</dt><dd>{detail.dependencies.join(', ') || 'None'}</dd>
           <dt>Replaced by</dt><dd>{detail.replaced_by.join(', ') || 'None'}</dd>
-          <dt>Dependency readiness</dt><dd>{detail.ready ? 'Ready' : 'Not ready to start'}</dd></dl>
+          <dt>Dependency readiness</dt><dd>{detail.ready ? 'Ready' : 'Not ready to start'}</dd></dl></details>
         {!visible.has(detail.ticket_id) && <p>This ticket is hidden by the current filter.</p>}
-        <ActivityView key={`${projectId}:${detail.ticket_id}`} projectId={projectId} ticketId={detail.ticket_id} />
+        <ActivityView key={`${projectId}:${detail.ticket_id}`} projectId={projectId} ticketId={detail.ticket_id} active={active} expanded={expanded} />
         <p className="note">This is the recorded Ticket state. An execution finishing is not acceptance. A time notice is not an actual stop.</p>
       </aside>}
     </div>
@@ -151,13 +154,22 @@ function GraphView({ projectId }: { projectId: string }) {
 }
 
 function App() {
-  const [view, setView] = useState<'graph' | 'settings' | 'usage'>('graph');
+  const [view, setView] = useState<'graph' | 'settings' | 'usage' | 'models'>('graph');
+  const [sidebar, setSidebar] = useState(true);
+  const [globalOpen, setGlobalOpen] = useState(true);
+  const [projectsOpen, setProjectsOpen] = useState(true);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [visited, setVisited] = useState<string[]>([]);
   const [preferences, setPreferences] = useState<Preferences | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   async function change(operation: () => Promise<Preferences>): Promise<void> {
     setBusy(true);
-    try { setPreferences(await operation()); setError(''); }
+    try {
+      const next = await operation();
+      setPreferences(next); setError('');
+      if (next.selected) setVisited(previous => [...new Set([...previous, next.selected!])]);
+    }
     catch (error) { setError(String(error)); }
     finally { setBusy(false); }
   }
@@ -168,32 +180,64 @@ function App() {
     update(); theme.addEventListener('change', update);
     return () => theme.removeEventListener('change', update);
   }, []);
+  const selected = preferences?.projects.find(project => project.id === preferences.selected);
+  const projectName = selected?.root.split(/[\\/]/).filter(Boolean).at(-1);
   return <div className="app">
-    <nav className="projects" aria-label="Projects">
+    {sidebar && <nav className="projects" aria-label="Projects">
       <div className="brand">GraphTraj<span>Project monitor</span></div>
-      <Button isDisabled={busy} onPress={() => { void change(() => window.graphtraj.addProject()); }}>Add project</Button>
-      <div className="project-list">{preferences?.projects.map(project => <div className="project-entry" key={project.id}>
-        <button className={`project-button ${preferences.selected === project.id ? 'current' : ''}`}
-          aria-current={preferences.selected === project.id ? 'page' : undefined} disabled={busy}
-          onClick={() => { void change(() => window.graphtraj.selectProject(project.id)); }}>
-          <strong>{project.root.split(/[\\/]/).filter(Boolean).at(-1)}</strong><span>{project.root}</span>
-        </button>
-        <Button size="sm" variant="ghost" isDisabled={busy} aria-label={`Remove ${project.root}`}
-          onPress={() => { void change(() => window.graphtraj.removeProject(project.id)); }}>Remove from list</Button>
-      </div>)}</div>
-      <p className="note">Removing a project only changes this list. Projects and running tasks remain independent of this window.</p>
-    </nav>
-    <main>{error && <div className="error" role="alert">{error}</div>}
-      {preferences?.selected && <nav className="workspace-nav" aria-label="Project views">
-        <Button variant={view === 'graph' ? 'primary' : 'secondary'} onPress={() => setView('graph')}>Task graph</Button>
-        <Button variant={view === 'usage' ? 'primary' : 'secondary'} onPress={() => setView('usage')}>Usage</Button>
-        <Button variant={view === 'settings' ? 'primary' : 'secondary'} onPress={() => setView('settings')}>Settings</Button>
+      <section className="sidebar-group">
+        <Button className="group-toggle" variant="ghost" aria-expanded={globalOpen} onPress={() => setGlobalOpen(value => !value)}>GLOBAL <span>{globalOpen ? '⌄' : '›'}</span></Button>
+        {globalOpen && <>
+          <Button variant="ghost" aria-expanded={settingsOpen} onPress={() => setSettingsOpen(value => !value)}>Settings <span>{settingsOpen ? '⌄' : '›'}</span></Button>
+          {settingsOpen && <Button className="submenu" variant={view === 'models' ? 'secondary' : 'ghost'} onPress={() => setView('models')}>Agents &amp; models</Button>}
+        </>}
+      </section>
+      <section className="sidebar-group project-group">
+        <Button className="group-toggle" variant="ghost" aria-expanded={projectsOpen} onPress={() => setProjectsOpen(value => !value)}>PROJECTS <span>{projectsOpen ? '⌄' : '›'}</span></Button>
+        {projectsOpen && <>
+          <div className="project-list">{preferences?.projects.map(project => <div className="project-entry" key={project.id}>
+            <button className={`project-button ${preferences.selected === project.id ? 'current' : ''}`}
+              aria-current={preferences.selected === project.id ? 'page' : undefined} disabled={busy}
+              onClick={() => { void change(() => window.graphtraj.selectProject(project.id)); }}>
+              <strong>{project.root.split(/[\\/]/).filter(Boolean).at(-1)}</strong><span>{project.root}</span>
+              {project.unavailable && <span className="path-unavailable" title={project.unavailable}>Path unavailable</span>}
+            </button>
+            <div className="project-actions">
+              <Button size="sm" variant="ghost" isDisabled={busy} aria-label={`Relocate ${project.root}`}
+                onPress={() => { void change(() => window.graphtraj.relocateProject(project.id)); }}>Relocate</Button>
+              <Button size="sm" variant="ghost" isDisabled={busy} aria-label={`Remove ${project.root}`}
+                onPress={() => { void change(() => window.graphtraj.removeProject(project.id)); }}>Remove</Button>
+            </div>
+          </div>)}</div>
+          <Button variant="ghost" isDisabled={busy} onPress={() => { void change(() => window.graphtraj.addProject()); }}>Add project</Button>
+          <Button size="sm" variant="ghost" isDisabled={busy} onPress={() => { void change(() => window.graphtraj.projects()); }}>Check paths</Button>
+        </>}
+      </section>
+      {selected && <nav className="current-project" aria-label="Project views">
+        <h2 title={selected.root}>{projectName}</h2>
+        <Button variant={view === 'graph' ? 'secondary' : 'ghost'} onPress={() => setView('graph')}>Monitor</Button>
+        <Button variant={view === 'settings' ? 'secondary' : 'ghost'} onPress={() => setView('settings')}>Teams &amp; roles</Button>
+        <Button variant={view === 'usage' ? 'secondary' : 'ghost'} onPress={() => setView('usage')}>Project usage</Button>
       </nav>}
-      {preferences?.selected && view === 'usage' ? <UsageView key={preferences.selected} projectId={preferences.selected} /> :
-      preferences?.selected && view === 'settings' ? <SettingsView key={preferences.selected} projectId={preferences.selected} /> :
-      preferences?.selected ? <ReactFlowProvider key={preferences.selected}>
-        <GraphView projectId={preferences.selected} />
-      </ReactFlowProvider> : <div className="welcome"><p className="eyebrow">Optional desktop companion</p>
+      <p className="note sidebar-note">Optional project monitor. Removing an index entry or closing this window does not stop tasks.</p>
+    </nav>}
+    <main>
+      <header className="workspace-heading"><Button size="sm" variant="ghost" aria-label={sidebar ? 'Hide sidebar' : 'Show sidebar'}
+        aria-expanded={sidebar} onPress={() => setSidebar(value => !value)}>☰</Button>
+        <strong>{projectName || 'GraphTraj'}</strong><span>{view === 'graph' ? 'Monitor' : view === 'usage' ? 'Project usage' : view === 'models' ? 'Agents & models' : 'Teams & roles'}</span>
+        <span className="read-only">Optional desktop companion</span>
+      </header>
+      {error && <div className="error" role="alert">{error}</div>}
+      {preferences?.projects.filter(project => visited.includes(project.id)).map(project =>
+        <div className="monitor-page" key={`${project.id}:${project.root}`} hidden={view !== 'graph' || project.id !== preferences.selected}>
+          <ReactFlowProvider><GraphView projectId={project.id} active={view === 'graph' && project.id === preferences.selected} /></ReactFlowProvider>
+        </div>)}
+      {selected && view === 'usage' && <UsageView key={selected.id} projectId={selected.id} />}
+      {selected && view === 'settings' && <SettingsView key={selected.id} projectId={selected.id} />}
+      {view === 'models' && <div className="welcome"><p className="eyebrow">Settings</p><h1>Agents &amp; models</h1>
+        <p>Global connection editing is not available in this version. Existing project Runtime and model settings remain available in Teams &amp; roles.</p>
+        {selected && <Button onPress={() => setView('settings')}>Open Teams &amp; roles</Button>}</div>}
+      {!selected && view !== 'models' && <div className="welcome"><p className="eyebrow">Optional desktop companion</p>
         <h1>Your projects, in view.</h1><p>Add an existing GraphTraj project directory to see its complete task graph.</p>
         <p>GraphTraj continues to work through its native CLI when this window is closed.</p></div>}
     </main>

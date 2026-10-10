@@ -243,7 +243,7 @@ async function nativeDialogAttempt(first) {
 
     // The real approval sheet raised by the native "Save changes" entry.
     await projectEntry(page, 'first-project').click();
-    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await page.getByRole('button', { name: 'Teams & roles', exact: true }).click();
     await page.getByLabel('Model', { exact: true }).waitFor();
     await page.getByLabel('Model', { exact: true }).fill('native-approved-model');
     await page.getByRole('button', { name: 'Save changes', exact: true }).click();
@@ -399,7 +399,7 @@ async function main() {
     facts.screenshots.push(await shot(page, '03b-node-chat-records.png'));
     step('the controlled records rendered in Chat: the recorded message and tool call are visible');
 
-    await page.getByRole('button', { name: 'Usage', exact: true }).click();
+    await page.getByRole('button', { name: 'Project usage', exact: true }).click();
     await page.locator('section.usage-dashboard').waitFor();
     await page.locator('section.usage-dashboard').getByRole('status').waitFor();
     // The hidden `<option>` in the Model filter carries the same model name, so
@@ -423,7 +423,7 @@ async function main() {
     };
     step(`opened the Usage dashboard: rendered counts match the public boundary (${JSON.stringify(usage.tokens)})`);
 
-    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await page.getByRole('button', { name: 'Teams & roles', exact: true }).click();
     await page.getByLabel('Model', { exact: true }).waitFor();
     facts.screenshots.push(await shot(page, '05-settings-form.png'));
     step('opened the Settings form for the selected project');

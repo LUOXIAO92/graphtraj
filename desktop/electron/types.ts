@@ -10,8 +10,8 @@ export type Ticket = {
   replaced_by: string[];
 };
 export type Graph = { tickets: Ticket[] };
-export type Project = { id: string; root: string };
-export type Preferences = { projects: Project[]; selected: string | null };
+export type Project = { id: string; root: string; unavailable?: string };
+export type Preferences = { projects: Project[]; selected: string | null; importedLegacy?: string[] };
 export type Observation = { projectId: string; graph: Graph; updatedAt: string };
 export type RoleFields = Partial<Record<'runtime' | 'model' | 'base_url' | 'api_key_env' |
   'reasoning_effort' | 'instructions' | 'system_prompt' | 'developer_prompt', string | null>>;
@@ -27,6 +27,7 @@ export type DesktopAPI = {
   activity: (projectId: string, request: ActivityRequest) => Promise<Activity>;
   projects: () => Promise<Preferences>;
   addProject: () => Promise<Preferences>;
+  relocateProject: (id: string) => Promise<Preferences>;
   selectProject: (id: string) => Promise<Preferences>;
   removeProject: (id: string) => Promise<Preferences>;
   graph: (id: string) => Promise<Observation>;

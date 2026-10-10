@@ -12,8 +12,8 @@
     "start": "npm run build && electron .",
     "package:mac": "npm run build && node --preserve-symlinks --preserve-symlinks-main scripts/package-mac.mjs",
     "adoption:macos": "node --preserve-symlinks --preserve-symlinks-main tests/adoption.mjs",
-    "test": "npm run build && node --test tests/*.test.cjs",
-    "test:desktop": "npm run build && node --test tests/*.test.mjs"
+    "test": "npm run build && node --preserve-symlinks --preserve-symlinks-main --test tests/*.test.cjs",
+    "test:desktop": "npm run build && node --preserve-symlinks --preserve-symlinks-main --test --test-concurrency=1 tests/*.test.mjs"
   },
   "dependencies": {
     "@heroui/react": "3.0.1",

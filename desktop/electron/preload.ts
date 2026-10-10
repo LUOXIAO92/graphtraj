@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 import type { DesktopAPI } from './types';
 
 const api: DesktopAPI = {
+  usage: id => ipcRenderer.invoke('projects:usage', id),
   copyText: text => ipcRenderer.invoke('activity:copy', text),
   activity: (projectId, request) => ipcRenderer.invoke('projects:activity', { ...request, projectId }),
   projects: () => ipcRenderer.invoke('projects:list'),

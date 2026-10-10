@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { _electron as electron } from 'playwright';
 import electronExecutable from 'electron';
 import { ActivityReader } from '../dist-electron/activity.js';
-import { collect, records, groups, metrics } from '../src/usage.ts';
+import { collect, records, groups, metrics, localDate, defaultDates } from '../src/usage.ts';
 
 const desktop = fileURLToPath(new URL('..', import.meta.url));
 const project = process.env.GRAPHTRAJ_LIVE_PROJECT;
@@ -21,13 +21,6 @@ const deadlineText = process.env.GRAPHTRAJ_LIVE_DEADLINE;
 const deadline = typeof deadlineText === 'string' && /T.*(?:Z|[+-]\d{2}:\d{2})$/.test(deadlineText)
   ? Date.parse(deadlineText) : NaN;
 
-/** Match datetime-local's minute precision without changing the selected timezone. */
-function localMinute(time) {
-  const date = new Date(time);
-  const pad = value => String(value).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
 test('owned Electron Dashboard matches native quantities, filters and replay', {
   timeout: Number.isFinite(deadline) ? Math.max(1, deadline - Date.now()) : 1000,
   skip: !project || !ticket || !tool,
@@ -39,7 +32,8 @@ test('owned Electron Dashboard matches native quantities, filters and replay', {
   assert.ok(path.isAbsolute(artifactRoot) && path.isAbsolute(executable), 'Resource paths must be absolute');
   await fs.mkdir(artifactRoot, { recursive: true });
   const evidence = await fs.mkdtemp(path.join(artifactRoot, 'graphtraj-usage-live-'));
-  const cutoff = localMinute(Math.floor(Date.now() / 60000) * 60000);
+  const cutoff = localDate(new Date());
+  const start = defaultDates().from;
   const facts = { project, ticket, executable, noSandbox, deadline: deadlineText, cutoff, steps: [], passed: false };
   let launch;
   let app;
@@ -76,12 +70,12 @@ test('owned Electron Dashboard matches native quantities, filters and replay', {
       collect(calls, project, page.events ?? []);
       cursor = page.has_more ? page.cursor : undefined;
     } while (cursor);
-    const selected = records(calls, { ticket, agent: alias, to: cutoff });
+    const selected = records(calls, { ticket, agent: alias, from: start, to: cutoff });
     const expected = groups(selected, 'model');
-    assert.ok(expected.some(row => row.tokens.input.value > 0), 'Requires real usage before the fixed time boundary');
+    assert.ok(expected.some(row => row.tokens.input.value > 0), 'Requires real usage in the selected local calendar dates');
     facts.expected = expected;
     facts.cacheWriteMissing = selected.filter(row => row.tokens.cache_write === undefined).length;
-    facts.steps.push('Captured native self quantities through fixed minute; old-host missing cache-write fields remain unknown');
+    facts.steps.push('Captured native self quantities within the selected local dates; old-host missing cache-write fields remain unknown');
     check();
     launch = electron.launch({ executablePath: executable,
       args: [...(noSandbox ? ['--no-sandbox'] : []), desktop, `--project=${project}`, `--user-data-dir=${path.join(evidence, 'profile')}`],
@@ -93,8 +87,9 @@ test('owned Electron Dashboard matches native quantities, filters and replay', {
     await page.getByRole('button', { name: 'Project usage', exact: true }).click();
     // Wrapping select labels include option text; scope to the filter label prefix.
     await page.locator('.usage-filters > label').filter({ hasText: /^Ticket/ }).locator('select').selectOption(ticket);
-    await page.getByLabel('Through (local time)').fill(cutoff);
-    await page.getByText('This Agent connection shows only its own Session. Other Agents are not covered.', { exact: true }).waitFor();
+    await page.getByLabel('Start date').fill(start);
+    await page.getByLabel('End date').fill(cutoff);
+    await page.getByText('This connection covers only its own Session.', { exact: true }).waitFor();
     await page.locator('.usage-filters > label').filter({ hasText: /^Agent/ }).locator('select').selectOption(alias);
 
     async function matchQuantities() {
@@ -115,7 +110,7 @@ test('owned Electron Dashboard matches native quantities, filters and replay', {
         assert.deepEqual(values, numbers, `Native/rendered quantities for ${expectedRow.name}`);
       }
       const daily = groups(selected, 'day');
-      const trend = page.getByRole('table').filter({ has: page.locator('caption', { hasText: 'Daily trend (UTC)' }) });
+      const trend = page.getByRole('table').filter({ has: page.locator('caption', { hasText: 'Daily trend (local dates)' }) });
       assert.equal(await trend.locator('tbody tr').count(), daily.length);
       for (const day of daily) {
         const row = trend.locator('tbody tr').filter({ has: page.getByRole('rowheader', { name: day.name, exact: true }) });
@@ -129,9 +124,9 @@ test('owned Electron Dashboard matches native quantities, filters and replay', {
     }
     await matchQuantities();
     facts.steps.push('Model and daily rendered input/output/cache quantities, rate, cost and unpriced counts match actual native records');
-    await page.getByLabel('From (local time)').fill('2099-01-01T00:00');
+    await page.getByLabel('Start date').fill('2099-01-01');
     await page.getByText('No usage records match this view.', { exact: true }).waitFor();
-    await page.getByLabel('From (local time)').fill('');
+    await page.getByLabel('Start date').fill(start);
     const beforeReplay = await page.locator('.usage-dashboard > [role="status"]').textContent();
     await page.getByRole('button', { name: 'Reconnect usage', exact: true }).click();
     await page.waitForFunction(before => {
@@ -175,7 +170,7 @@ test('owned Electron Dashboard matches native quantities, filters and replay', {
     assert.ok(await paragraphs.count() > 0, 'Coverage body is present');
     for (const paragraph of await paragraphs.all()) await readable(paragraph, 'Data coverage body paragraph');
     await page.screenshot({ path: path.join(evidence, 'coverage.png') });
-    for (const caption of ['Model breakdown', 'Daily trend (UTC)']) {
+    for (const caption of ['Model breakdown', 'Daily trend (local dates)']) {
       const table = page.getByRole('table').filter({ has: page.locator('caption', { hasText: caption }) });
       await readable(table.locator('caption'), caption);
       assert.ok(await table.locator('tbody tr').count() > 0, `${caption} has actual rows`);

@@ -208,6 +208,8 @@ try {
   facts.stage = 'controlled Dashboard';
   await page.getByRole('button', { name: 'Project usage', exact: true }).click();
   await page.locator('.usage-dashboard').waitFor();
+  await page.getByLabel('Start date').fill('2026-10-09');
+  await page.getByLabel('End date').fill('2026-10-11');
   const modelRow = page.getByRole('table').filter({ has: page.locator('caption', { hasText: 'Model breakdown' }) })
     .locator('tbody tr').filter({ hasText: 'gpt-5.3-codex' });
   await modelRow.waitFor();

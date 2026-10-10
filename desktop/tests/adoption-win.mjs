@@ -303,6 +303,8 @@ try {
   await capture('node-chat');
   await page.getByRole('button', { name: 'Project usage', exact: true }).click();
   await page.locator('.usage-dashboard').waitFor();
+  await page.getByLabel('Start date').fill('2026-10-09');
+  await page.getByLabel('End date').fill('2026-10-11');
   {
     const row = page.getByRole('table', { name: 'Model breakdown', exact: true }).getByRole('row').filter({ hasText: 'gpt-5.3-codex' });
     await row.waitFor();

@@ -7,7 +7,7 @@ name: desktop-macos-adoption
 # workflow_dispatch stays available for later re-runs.
 on:
   push:
-    branches: [agent/265-desktop-mac-adoption, agent/285-desktop-d-monitor-projects]
+    branches: [agent/265-desktop-mac-adoption, agent/285-desktop-d-monitor-projects, agent/286-desktop-usage-history-range]
   workflow_dispatch:
 
 permissions:
@@ -76,6 +76,7 @@ jobs:
       - name: Installed app adoption, optionality and security
         env:
           GRAPHTRAJ_APP: /Applications/GraphTraj.app
+          GRAPHTRAJ_ADOPTION_USAGE_ONLY: ${{ github.ref_name == 'agent/286-desktop-usage-history-range' && '1' || '0' }}
         run: node --preserve-symlinks --preserve-symlinks-main tests/adoption.mjs
 
       - name: Upload adoption evidence

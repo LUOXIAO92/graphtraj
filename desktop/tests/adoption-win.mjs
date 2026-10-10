@@ -126,6 +126,14 @@ public static class NativeWindows {
   public delegate bool Visitor(IntPtr window, IntPtr parameter);
   [DllImport("user32.dll")] public static extern bool EnumWindows(Visitor visitor, IntPtr parameter);
   [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr window);
+  [DllImport("user32.dll")] public static extern bool EnumChildWindows(IntPtr parent, Visitor visitor, IntPtr parameter);
+  [DllImport("user32.dll")] public static extern bool IsWindowEnabled(IntPtr window);
+  [DllImport("user32.dll")] public static extern int GetDlgCtrlID(IntPtr window);
+  [DllImport("user32.dll")] public static extern IntPtr GetNextDlgTabItem(IntPtr dialog, IntPtr control, bool previous);
+  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr window);
+  [DllImport("user32.dll", EntryPoint="SendMessageW", CharSet=CharSet.Unicode)] public static extern IntPtr SetText(IntPtr window, uint message, IntPtr parameter, string text);
+  [DllImport("user32.dll", EntryPoint="SendMessageW", CharSet=CharSet.Unicode)] public static extern IntPtr ReadText(IntPtr window, uint message, IntPtr size, StringBuilder text);
+  [DllImport("user32.dll", EntryPoint="SendMessageW")] public static extern IntPtr ClickButton(IntPtr window, uint message, IntPtr parameter, IntPtr data);
   [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr window, out uint process);
   [DllImport("user32.dll")] public static extern IntPtr GetAncestor(IntPtr window, uint flags);
   [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetWindowText(IntPtr window, StringBuilder text, int count);
@@ -155,6 +163,7 @@ while ((Get-Date) -lt $deadline -and -not $target) {
     $observed += @{ handle=$window.ToInt64(); process=$windowProcess; ownerProcess=$ownerProcess; title=$title.ToString(); class=$class.ToString() }
     $expected = if ($Action -eq 'pick') { 'Add existing GraphTraj project' } else { 'Save project settings?' }
     if ($title.ToString() -eq $expected -or $class.ToString() -eq '#32770') {
+      $dialogHandle = $window
       $target = [System.Windows.Automation.AutomationElement]::FromHandle($window)
       break
     }
@@ -172,44 +181,43 @@ function Save-DesktopCapture([string]$Destination) {
 }
 Save-DesktopCapture $Capture
 if (-not $target) { throw "Native dialog unavailable for $Action; see HWND evidence and desktop capture" }
+# The real Windows artifact exposes these controls as UIA Panes without patterns.
+# Use their actual HWND classes and dialog navigation, not guessed AutomationIds.
+$children = New-Object 'System.Collections.Generic.List[IntPtr]'
+$childVisitor = [NativeWindows+Visitor]{ param($window, $parameter) $children.Add($window); return $true }
+[NativeWindows]::EnumChildWindows($dialogHandle, $childVisitor, [IntPtr]::Zero) | Out-Null
+$controls = @()
+foreach ($child in $children) {
+  $class = New-Object System.Text.StringBuilder 256
+  [NativeWindows]::GetClassName($child, $class, $class.Capacity) | Out-Null
+  $caption = New-Object System.Text.StringBuilder 1024
+  [NativeWindows]::ReadText($child, 0x000D, [IntPtr]$caption.Capacity, $caption) | Out-Null
+  $controls += @{ handle=$child.ToInt64(); id=[NativeWindows]::GetDlgCtrlID($child);
+    class=$class.ToString(); text=$caption.ToString();
+    visible=[NativeWindows]::IsWindowVisible($child); enabled=[NativeWindows]::IsWindowEnabled($child) }
+}
+$controls | ConvertTo-Json -Depth 4 | Set-Content -Encoding UTF8 ($Capture + '.win32-controls.json')
+[NativeWindows]::SetForegroundWindow($dialogHandle) | Out-Null
 if ($Action -eq 'pick') {
-  $controls = @()
-  $edits = @()
-  foreach ($control in $target.FindAll([System.Windows.Automation.TreeScope]::Descendants,[System.Windows.Automation.Condition]::TrueCondition)) {
-    $current = $control.Current
-    $label = if ($current.LabeledBy) { $current.LabeledBy.Current.Name } else { '' }
-    $controls += @{ name=$current.Name; label=$label; automationId=$current.AutomationId;
-      type=$current.ControlType.ProgrammaticName; enabled=$current.IsEnabled; offscreen=$current.IsOffscreen;
-      patterns=@($control.GetSupportedPatterns() | ForEach-Object { $_.ProgrammaticName }) }
-    if ($current.ControlType -ne [System.Windows.Automation.ControlType]::Edit -or
-        -not $current.IsEnabled -or $current.IsOffscreen) { continue }
-    if ($current.Name.Trim().TrimEnd(':') -ne 'Folder' -and $label.Trim().TrimEnd(':') -ne 'Folder') { continue }
-    $value = $null
-    if ($control.TryGetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern,[ref]$value) -and -not $value.Current.IsReadOnly) {
-      $edits += @{ element=$control; value=$value }
-    }
-  }
-  $controls | ConvertTo-Json -Depth 5 | Set-Content -Encoding UTF8 ($Capture + '.controls.json')
-  if ($edits.Count -ne 1) { throw "Expected one writable native Folder edit; found $($edits.Count). See control evidence." }
-  $edit = $edits[0].element
-  $value = $edits[0].value
-  $edit.SetFocus()
-  $value.SetValue($Folder)
-  if ($value.Current.Value -ne $Folder) { throw 'Native Folder edit did not retain the selected path' }
-  @{ name=$edit.Current.Name; automationId=$edit.Current.AutomationId; value=$value.Current.Value } |
+  $labels = @($controls | Where-Object { $_.visible -and $_.class -eq 'Static' -and $_.text.Replace('&','').Trim() -eq 'Folder:' })
+  if ($labels.Count -ne 1) { throw 'Expected one actual native Folder label; see Win32 control evidence' }
+  $edit = [NativeWindows]::GetNextDlgTabItem($dialogHandle, [IntPtr]$labels[0].handle, $false)
+  $field = @($controls | Where-Object { $_.handle -eq $edit.ToInt64() -and $_.class -eq 'Edit' -and $_.visible -and $_.enabled })
+  if ($field.Count -ne 1) { throw 'Folder label does not lead to one native Edit; see Win32 control evidence' }
+  if ([NativeWindows]::SetText($edit, 0x000C, [IntPtr]::Zero, $Folder) -eq [IntPtr]::Zero) { throw 'WM_SETTEXT failed for the native Folder edit' }
+  $value = New-Object System.Text.StringBuilder 32768
+  [NativeWindows]::ReadText($edit, 0x000D, [IntPtr]$value.Capacity, $value) | Out-Null
+  if ($value.ToString() -ne $Folder) { throw 'WM_GETTEXT did not return the entered Folder path' }
+  @{ handle=$edit.ToInt64(); id=$field[0].id; class=$field[0].class; value=$value.ToString() } |
     ConvertTo-Json | Set-Content -Encoding UTF8 ($Capture + '.selection.json')
   Save-DesktopCapture ($Capture + '.filled.png')
-  $names = @('Select Folder','Select folder','Open')
+  $names = @('Select Folder')
 } elseif ($Action -eq 'approve') { $names = @('Save settings') } else { $names = @('Cancel') }
-$button = $null
-foreach ($name in $names) {
-  $byName = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty,$name)
-  $button = $target.FindFirst([System.Windows.Automation.TreeScope]::Descendants,$byName)
-  if ($button) { break }
-}
-if (-not $button) { throw "Native button unavailable for $Action" }
+$buttons = @($controls | Where-Object { $_.class -eq 'Button' -and $_.visible -and $_.enabled -and $names -contains $_.text.Replace('&','').Trim() })
+if ($buttons.Count -ne 1) { throw "Expected one actual native button for $Action; see Win32 control evidence" }
 $dialogTitle = $target.Current.Name
-$button.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+# BM_CLICK drives the actual button and its parent notification; no dialog result is fabricated.
+[NativeWindows]::ClickButton([IntPtr]$buttons[0].handle, 0x00F5, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
 @{ action=$Action; dialog=$dialogTitle; session=(Get-Process -Id $PID).SessionId; interactive=[Environment]::UserInteractive } | ConvertTo-Json -Compress
 `);
 let app;

@@ -402,7 +402,11 @@ async function main() {
     await page.getByRole('button', { name: 'Usage', exact: true }).click();
     await page.locator('section.usage-dashboard').waitFor();
     await page.locator('section.usage-dashboard').getByRole('status').waitFor();
-    await page.getByText('actual-model').first().waitFor();
+    // The hidden `<option>` in the Model filter carries the same model name, so
+    // wait on the visible Model breakdown row instead of the first text match.
+    const modelRow = page.getByRole('table', { name: 'Model breakdown', exact: true })
+      .getByRole('row').filter({ hasText: 'actual-model' });
+    await modelRow.waitFor();
     const usage = (chatEvents.find(event => event.kind === 'usage') ?? {}).usage;
     assert.ok(usage && usage.tokens, 'the public boundary must return the controlled usage record');
     const dashboard = (await page.locator('section.usage-dashboard').innerText()).replaceAll(/[.,\s]/g, '');

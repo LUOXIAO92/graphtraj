@@ -4,7 +4,7 @@ import { homedir } from 'node:os';
 import { pathToFileURL } from 'node:url';
 import { GraphReader, Projects } from './projects';
 import { SettingsClient, reviewText } from './settings';
-import type { SettingsDraft } from './types';
+import type { ConnectionsRequest, SettingsDraft } from './types';
 
 app.setName('GraphTraj');
 // The standard Chromium switch also isolates Electron preferences for desktop checks.
@@ -46,7 +46,7 @@ else {
     settings = new SettingsClient(async proposal => {
       if (!window) return false;
       const answer = await dialog.showMessageBox(window, {
-        type: 'question', title: 'Save project settings?', message: 'Approve these configuration changes?',
+        type: 'question', title: 'Save configuration?', message: 'Approve these configuration changes?',
         detail: reviewText(proposal), buttons: ['Cancel', 'Save settings'],
         defaultId: 0, cancelId: 0, noLink: true,
       });
@@ -55,7 +55,7 @@ else {
     session.defaultSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
     session.defaultSession.setPermissionCheckHandler(() => false);
 
-    const handlers: Record<string, (id?: unknown, draft?: SettingsDraft) => unknown> = {
+    const handlers: Record<string, (id?: unknown, draft?: unknown) => unknown> = {
       'activity:copy': text => {
         if (typeof text !== 'string') throw new Error('Copy requires text.');
         clipboard.writeText(text);
@@ -77,13 +77,18 @@ else {
       'projects:remove': id => projects.remove(id),
       'projects:graph': id => projects.graph(id),
       'projects:activity': value => projects.activity(value),
+      'connections:request': async (id, request) => {
+        if (!request || typeof request !== 'object' || Object.keys(request).some(key =>
+          !['action', 'catalog', 'expected_revision', 'runtime'].includes(key))) throw new Error('Invalid connections request.');
+        return settings.connections(id === null ? homedir() : await projects.settingsRoot(id), request as ConnectionsRequest);
+      },
       'settings:read': async id => settings.request(await projects.settingsRoot(id)),
       'settings:save': async (id, draft) => {
         if (!draft || typeof draft !== 'object' || Object.keys(draft).some(key =>
-          !['revision', 'edits', 'renames', 'add_edges', 'remove_edges'].includes(key))) {
+          !['revision', 'edits', 'renames', 'add_edges', 'remove_edges', 'remove_presets', 'role_tree'].includes(key))) {
           throw new Error('Invalid settings draft.');
         }
-        return settings.request(await projects.settingsRoot(id), draft);
+        return settings.request(await projects.settingsRoot(id), draft as SettingsDraft);
       },
     };
     for (const [channel, handler] of Object.entries(handlers)) {

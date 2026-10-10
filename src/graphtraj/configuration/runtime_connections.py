@@ -151,6 +151,20 @@ def resolve_connection(reference: str, effort: str | None) -> dict:
     }
 
 
+def connection_context(cwd: Path) -> tuple[Path, Path]:
+    """Use project caller bindings when present, or the user directory for a standalone GUI."""
+    from graphtraj.workspace.runner_project import discover_project_root, discover_runner_directory
+
+    try:
+        root = discover_project_root(cwd)
+        return root, discover_runner_directory(root)
+    except RunnerError as error:
+        if error.code != 'PROJECT_NOT_FOUND':
+            raise
+        root = Path.home()
+        return root, root / '.graphtraj' / 'runner'
+
+
 def manage_connections(arguments: dict, *, cwd: Path) -> dict:
     """Read, preview, discover or atomically save a natively reviewed catalog.
 
@@ -158,9 +172,8 @@ def manage_connections(arguments: dict, *, cwd: Path) -> dict:
     replacement lock; the reviewed bytes are compared again under that lock.
     Existing Sessions keep the resolved configuration captured at dispatch.
     """
-    from graphtraj.execution.role_organization import _approve
+    from graphtraj.execution.approved_recovery import review_proposal
     from graphtraj.execution.runner_status import caller_alias
-    from graphtraj.workspace.runner_project import discover_project_root, discover_runner_directory
 
     action = arguments.get('action', 'read')
     before, revision = read_catalog()
@@ -188,14 +201,16 @@ def manage_connections(arguments: dict, *, cwd: Path) -> dict:
         return {**view, 'catalog': after, 'applied': False}
     if action != 'save':
         raise ValueError('Choose read, preview, save or discover.')
-    root = discover_project_root(cwd)
-    if caller_alias(discover_runner_directory(root)) is not None:
+    root, runner_directory = connection_context(cwd)
+    if caller_alias(runner_directory) is not None:
         raise RunnerError('authority-denied', 'Only the owning host may save user connections.')
     if arguments.get('expected_revision') != revision:
         raise RunnerError('configuration-conflict', 'Connections changed; reload before saving.')
     if before == after:
         return {**view, 'applied': False}
-    _approve({'scope': 'user', 'path': str(path), 'before': before, 'after': after}, root)
+    decision = review_proposal({'scope': 'user', 'path': str(path), 'before': before, 'after': after}, root, runner_directory)
+    if not isinstance(decision, dict) or decision.get('decision') != 'accept':
+        raise RunnerError('role-change-denied', 'The selected reviewer did not approve this configuration change; nothing was written.')
     path.parent.mkdir(parents=True, exist_ok=True)
     lock = path.with_suffix(".lock")
     lock.touch(exist_ok=True)

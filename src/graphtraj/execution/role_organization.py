@@ -35,7 +35,7 @@ from graphtraj.workspace.runner_project import (
 
 CHANGE_FIELDS = (
     "set_presets", "remove_presets", "add_edges", "remove_edges",
-    "unset_fields", "rename_presets",
+    "unset_fields", "rename_presets", "role_tree",
 )
 
 
@@ -79,6 +79,11 @@ def organize_child_roles(arguments: Mapping[str, Any], *, cwd: Path | None = Non
     if after == before:
         return {**_view(path, before, current), "revision": revision, "applied": False}
     reviewed = _validated(after)
+    # Inline dispatch names remain valid. A deleted preset must not silently
+    # leave its old dispatch references behind.
+    removed = set(change.get("remove_presets", ()))
+    if removed & set(reviewed.children):
+        raise RunnerError("invalid-input", "The role tree contains a dangling role reference.")
     for reference in change.get("set_presets", {}):
         reviewed.preset(change.get("rename_presets", {}).get(reference, reference))
     _approve({"request": dict(arguments), "before": before, "after": after}, root)
@@ -145,6 +150,12 @@ def _changed(document: dict, change: object) -> dict:
         _change_edge(tree, edge, present=True)
     for edge in change.get("remove_edges", ()):
         _change_edge(tree, edge, present=False)
+    if "role_tree" in change:
+        if change.get("add_edges") or change.get("remove_edges"):
+            raise RunnerError("invalid-input", "Choose a tree replacement or individual edge edits.")
+        tree = after["role_tree"] = copy.deepcopy(change["role_tree"])
+        if not isinstance(tree, dict):
+            raise RunnerError("invalid-input", "role_tree must be a mapping.")
     for old, new in change.get("rename_presets", {}).items():
         entries, name = _preset_location(roles, old)
         settings = copy.deepcopy(entries[name])

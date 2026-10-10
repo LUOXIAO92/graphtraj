@@ -97,6 +97,8 @@ def test_revision_conflict_before_and_during_review(project: Path) -> None:
     {"runtime": "pi", "model": "/model"},
     {"runtime": "pi", "model": "provider/model", "developer_prompt": "unsupported"},
     {"api_key_env": "sk-plaintext-secret"},
+    {"approval_api_key_env": "sk-plaintext-secret"},
+    {"approval_base_url": "https://user:secret@example.invalid/v1"},
     {"base_url": "https://user:secret@example.invalid/v1"},
     {"model": ""}, {"runtime": "unknown"}, {"reasoning_effort": "impossible"},
     {"instructions": "missing-instructions.txt"}, {"api_key": "not-supported"},
@@ -167,3 +169,104 @@ def test_concurrent_approved_saves_do_not_overwrite_one_another(project: Path) -
     assert sorted(result["failed"] for result in results) == [False, True]
     successful = next(result["result"] for result in results if not result["failed"])
     assert read(project)["roles"] == successful["roles"]
+
+
+def test_team_creation_reparent_deletion_and_empty_recovery(project: Path) -> None:
+    """Whole tree edits preserve custom presets and allow a recoverable empty tree."""
+    original = yaml.safe_load(roles_path(project).read_text())
+    state = read(project)
+    tree = {**state['role_tree'], 'research.lead': {'research.worker': {'research.leaf': {}}}}
+    request = {'action': 'save', 'revision': state['revision'], 'role_tree': tree,
+               'edits': {f'research.{name}': {'runtime': 'codex', 'model': f'{name}-model'}
+                         for name in ('lead', 'worker', 'leaf')}}
+    preview = call(project, {**request, 'action': 'preview'})[-1]
+    assert not preview['failed'] and not preview['result']['applied']
+    assert yaml.safe_load(roles_path(project).read_text()) == original
+    denied = call(project, request)[-1]
+    assert denied['failed']
+    assert yaml.safe_load(roles_path(project).read_text()) == original
+    saved = call(project, request, 'accept')[-1]['result']
+    assert saved['role_tree'] == tree
+    assert yaml.safe_load(roles_path(project).read_text())['roles']['coding_team'] == original['roles']['coding_team']
+
+    # Delete only the middle node and explicitly reconnect its leaf.
+    tree['research.lead'] = {'research.leaf': {}}
+    saved = call(project, {'action': 'save', 'revision': saved['revision'],
+                          'remove_presets': ['research.worker'], 'role_tree': tree}, 'accept')[-1]['result']
+    assert 'research.worker' not in saved['roles']
+    assert ['research.lead', 'research.leaf'] in saved['edges']
+    renamed = call(project, {'action': 'save', 'revision': saved['revision'],
+                            'renames': {'research.lead': 'renamed.lead', 'research.leaf': 'renamed.leaf'}}, 'accept')[-1]['result']
+    assert renamed['role_tree']['renamed.lead'] == {'renamed.leaf': {}}
+
+    # Delete all configured roles and trees, then create a new unambiguous root.
+    empty = call(project, {'action': 'save', 'revision': renamed['revision'],
+                          'remove_presets': list(renamed['roles']), 'role_tree': {}}, 'accept')[-1]['result']
+    assert empty['roles'] == empty['role_tree'] == {}
+    recovered = call(project, {'action': 'save', 'revision': empty['revision'],
+                              'edits': {'new.root': {'runtime': 'codex', 'model': 'root-model'}},
+                              'role_tree': {'new.root': {}}}, 'accept')[-1]['result']
+    assert recovered['role_tree'] == {'new.root': {}}
+
+
+@pytest.mark.parametrize('change', [
+    {'remove_presets': ['coding_team.engineer']},
+    {'role_tree': {'missing': {}}},
+    {'role_tree': {'analyst': {'analyst': {}}}},
+    {'edits': {'new.role': {'model': 'missing-runtime'}}},
+])
+def test_invalid_tree_changes_are_atomic(project: Path, change: dict) -> None:
+    """No dangling references, cycles or incomplete new roles reach review or disk."""
+    before = snapshot(project)
+    replies = call(project, {'action': 'save', 'revision': read(project)['revision'], **change}, 'accept')
+    assert len(replies) == 1 and replies[0]['failed']
+    assert snapshot(project) == before
+
+
+def test_global_connection_role_reference_and_project_isolation(project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A reviewed global connection resolves from two isolated project role catalogs."""
+    from graphtraj.configuration.project_roles import load_project_roles
+    from test_role_organization import CONFIG
+
+    home = project / 'user-home'
+    home.mkdir()
+    monkeypatch.setenv('HOME', str(home))
+    connection = {'version': 1, 'runtimes': {'shared': {'runtime': 'codex', 'home': str(home / 'native'),
+        'providers': {'custom': {'base_url': 'https://provider.invalid/v1', 'api_key_env': 'CUSTOM_KEY',
+            'models': {'model': {'id': 'custom-model', 'alias': 'My model', 'source': 'manual', 'supported_efforts': ['low']}}}}}}}
+    initial = call(project, {'scope': 'user', 'action': 'read'})[-1]['result']
+    saved = call(project, {'scope': 'user', 'action': 'save', 'expected_revision': initial['revision'],
+                          'catalog': connection}, 'accept')[-1]['result']
+    assert saved['catalog'] == connection
+    second = project / 'other'
+    (second / '.graphtraj').mkdir(parents=True)
+    (second / '.graphtraj/config.yml').write_text(CONFIG)
+    (second / '.graphtraj/roles.yml').write_text('roles: {}\n')
+    untouched = snapshot(second)
+    request = {'action': 'save', 'revision': read(project)['revision'], 'edits': {
+        'coding_team.engineer': {'connection': 'shared/custom/model', 'runtime': None,
+                                'model': None, 'api_key_env': None, 'reasoning_effort': 'low',
+                                'approval_model': 'review-model', 'approval_base_url': 'https://review.invalid/v1',
+                                'approval_api_key_env': 'REVIEW_KEY'}},
+    }
+    reply = call(project, request, 'accept')[-1]
+    assert not reply['failed'], reply
+    assert snapshot(second) == untouched
+    resolved = load_project_roles(project).dispatch_preset('coding_team.team_leader', 'coding_team.engineer')
+    assert (resolved.runtime, resolved.model, resolved.runtime_home, resolved.reasoning_effort) == (
+        'codex', 'custom-model', str(home / 'native'), 'low')
+    assert resolved.api_key_env == 'CUSTOM_KEY'
+    assert call(second, {'scope': 'user', 'action': 'read'})[-1]['result']['catalog'] == connection
+    assert read(project)['roles']['coding_team.engineer']['connection'] == 'shared/custom/model'
+
+
+def test_standalone_global_settings_use_native_review(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The global page works before adding a project without creating project state."""
+    monkeypatch.setenv('HOME', str(tmp_path))
+    state = call(tmp_path, {'scope': 'user', 'action': 'read'})[-1]['result']
+    catalog = {'version': 1, 'runtimes': {'local': {'runtime': 'codex', 'providers': {}}}}
+    request = {'scope': 'user', 'action': 'save', 'expected_revision': state['revision'], 'catalog': catalog}
+    assert call(tmp_path, request)[-1]['failed']
+    assert not (tmp_path / '.graphtraj/connections.yml').exists()
+    assert call(tmp_path, request, 'accept')[-1]['result']['applied']
+    assert {path.name for path in (tmp_path / '.graphtraj').iterdir()} == {'connections.lock', 'connections.yml'}

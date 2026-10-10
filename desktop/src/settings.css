@@ -11,3 +11,8 @@
 .settings table { width: 100%; border-collapse: collapse; table-layout: fixed; }
 .settings th, .settings td { text-align: left; vertical-align: top; padding: 10px; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; white-space: pre-wrap; font-size: 13px; }
 .workspace-nav { display: flex; gap: 10px; padding: 12px 24px; border-bottom: 1px solid var(--border); }
+.settings fieldset { border: 1px solid var(--border); padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.settings legend { font-weight: 600; padding: 0 6px; }
+.settings select { display: block; max-width: 100%; padding: 8px; color: inherit; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; }
+.settings ul { padding-left: 20px; }
+.settings pre { white-space: pre-wrap; overflow-wrap: anywhere; }

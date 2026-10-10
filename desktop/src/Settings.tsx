@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Button, Card, Description, Form, Input, Label, TextArea, TextField } from '@heroui/react';
-import type { RoleFields, Settings } from '../electron/types';
-import { fieldLabels as labels, ownRole, roleChanges, roleName } from './settings-draft';
+import type { Connections, RoleFields, RoleTree, Settings } from '../electron/types';
+import { branchRoles, treeEdges, moveNode, removeNodes, fieldLabels as labels, ownRole, roleChanges, roleName } from './settings-draft';
 import './settings.css';
 import { PriceInformation } from './UsageDashboard';
 
@@ -10,21 +10,27 @@ export function SettingsView({ projectId }: { projectId: string }) {
   const [saved, setSaved] = useState<Settings | null>(null);
   const [roles, setRoles] = useState<Record<string, RoleFields>>({});
   const [renames, setRenames] = useState<Record<string, string>>({});
-  const [edges, setEdges] = useState<[string, string][]>([]);
   const [selected, setSelected] = useState('');
-  const [parent, setParent] = useState('');
-  const [child, setChild] = useState('');
+  const [tree, setTree] = useState<RoleTree>({});
+  const [team, setTeam] = useState('');
+  const [teamName, setTeamName] = useState('');
+  const [nodeName, setNodeName] = useState('');
+  const [newModel, setNewModel] = useState('');
+  const [newRuntime, setNewRuntime] = useState('codex');
+  const [connections, setConnections] = useState<Connections>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
 
   function reset(value: Settings): void {
-    setSaved(value); setRoles(structuredClone(value.roles)); setEdges(value.edges); setRenames({});
-    setSelected(current => Object.hasOwn(value.roles, current) ? current : Object.keys(value.roles)[0] ?? '');
+    setSaved(value); setRoles(structuredClone(value.roles)); setTree(value.role_tree); setRenames({});
+    setTeam(current => Object.keys(value.roles).some(ref => group(ref) === current) ? current : group(Object.keys(value.roles)[0] ?? ''));
+    setSelected(current => Object.hasOwn(value.roles, current) ? current : Object.keys(value.roles).find(ref => group(ref) === team) ?? Object.keys(value.roles)[0] ?? '');
   }
   useEffect(() => {
     let alive = true;
     setBusy(true);
+    window.graphtraj.connections(projectId, { action: 'read' }).then(value => { if (alive) setConnections(value); }).catch(() => { /* Inline roles remain editable if the catalog is unavailable. */ });
     window.graphtraj.settings(projectId).then(value => { if (alive) reset(value); })
       .catch(error => { if (alive) setError(String(error)); })
       .finally(() => { if (alive) setBusy(false); });
@@ -34,11 +40,51 @@ export function SettingsView({ projectId }: { projectId: string }) {
   const { edits, changes } = roleChanges(roles, saved?.roles);
   const names = Object.fromEntries(Object.entries(renames).filter(([old, name]) => old !== name));
   for (const [old, name] of Object.entries(names)) changes.push({ label: 'Role name', before: old, after: name });
-  const same = (a: [string, string], b: [string, string]) => a[0] === b[0] && a[1] === b[1];
-  const added = edges.filter(edge => !saved?.edges.some(previous => same(edge, previous)));
-  const removed = (saved?.edges ?? []).filter(edge => !edges.some(next => same(edge, next)));
-  for (const edge of added) changes.push({ label: 'Dispatch', before: '(not allowed)', after: edge.join(' → ') });
-  for (const edge of removed) changes.push({ label: 'Dispatch', before: edge.join(' → '), after: '(removed)' });
+  const removed = Object.keys(saved?.roles ?? {}).filter(ref => !Object.hasOwn(roles, ref));
+  for (const ref of removed) changes.push({ label: 'Delete role', before: ref, after: '(removed)' });
+  if (JSON.stringify(tree) !== JSON.stringify(saved?.role_tree ?? {})) changes.push({ label: 'Organization tree', before: JSON.stringify(saved?.role_tree), after: JSON.stringify(tree) });
+  const teams = [...new Set(Object.keys(roles).map(group))];
+  const edges = treeEdges(tree);
+  const availableConnections = Object.entries(connections?.catalog.runtimes ?? {}).flatMap(([runtime, entry]) =>
+    Object.entries(entry.providers).flatMap(([provider, value]) => Object.entries(value.models).map(([model, metadata]) => ({
+      reference: `${runtime}/${provider}/${model}`, metadata,
+    }))));
+  const selectedConnection = ownRole(roles, selected)?.connection;
+  const selectedModel = availableConnections.find(item => item.reference === selectedConnection)?.metadata;
+  const teamRoles = Object.keys(roles).filter(ref => group(ref) === team);
+  function group(ref: string): string { return ref.includes('.') ? ref.split('.')[0] : ''; }
+  function isTeamRoot(ref: string): boolean {
+    const occurs = Object.hasOwn(tree, ref) || edges.some(edge => edge[1] === ref);
+    return occurs && !edges.some(([parent, child]) => child === ref && group(parent) === group(ref));
+  }
+  function attempt(action: () => void): void {
+    try { action(); setError(''); setMessage(''); } catch (error) { setError(String(error)); }
+  }
+  function addNode(newTeam: boolean, child: boolean): void {
+    const targetTeam = newTeam ? teamName : team;
+    if (newTeam && (!/^[a-z0-9]+(?:[_-][a-z0-9]+)*$/.test(targetTeam) || teams.includes(targetTeam))) throw new Error('Choose a new lowercase team name.');
+    if (!/^[a-z0-9]+(?:[_-][a-z0-9]+)*$/.test(nodeName) || !newModel.trim()) throw new Error('Enter a lowercase Agent name and a model.');
+    if (!newTeam && !child && teamRoles.some(ref => isTeamRoot(ref))) throw new Error('This team already has a root. Add a child or adjust the parent.');
+    const reference = targetTeam ? `${targetTeam}.${nodeName}` : nodeName;
+    if (Object.hasOwn(roles, reference)) throw new Error('Agent name already exists.');
+    setRoles(current => ({ ...current, [reference]: { runtime: newRuntime, model: newModel } }));
+    setTree(moveNode(tree, reference, child ? selected : '')); setSelected(reference); setTeam(targetTeam); setNodeName('');
+  }
+  function deleteNode(reconnect: boolean): void {
+    const affected = reconnect ? new Set([selected]) : branchRoles(tree, selected);
+    if (reconnect && isTeamRoot(selected) && new Set(edges.filter(edge => edge[0] === selected).map(edge => edge[1])).size > 1) throw new Error('A root with several children cannot be reconnected to one root. Reparent the children first or delete the whole branch.');
+    setTree(removeNodes(tree, affected, reconnect));
+    setRoles(current => Object.fromEntries(Object.entries(current).filter(([ref]) => !affected.has(ref))));
+    setRenames(current => Object.fromEntries(Object.entries(current).filter(([ref]) => !affected.has(ref)))); setSelected('');
+  }
+  function renderTree(nodes: RoleTree) {
+    return Object.entries(nodes).map(([ref, children]) => <li key={ref}>
+      {Object.keys(children).length ? <details><summary>{roleName(renames, ref)}</summary>
+        {Object.hasOwn(roles, ref) && <Button size="sm" isDisabled={busy} aria-pressed={selected === ref} variant={selected === ref ? 'primary' : 'secondary'} onPress={() => { setSelected(ref); setTeam(group(ref)); }}>Select {roleName(renames, ref)}</Button>}
+        <ul>{renderTree(children)}</ul>
+      </details> : Object.hasOwn(roles, ref) ? <Button size="sm" isDisabled={busy} aria-pressed={selected === ref} variant={selected === ref ? 'primary' : 'secondary'} onPress={() => { setSelected(ref); setTeam(group(ref)); }}>{roleName(renames, ref)}</Button> : <span>{ref} · inline dispatch role</span>}
+    </li>);
+  }
 
   async function reload(): Promise<void> {
     setBusy(true); setError('');
@@ -52,8 +98,7 @@ export function SettingsView({ projectId }: { projectId: string }) {
     try {
       const next = await window.graphtraj.saveSettings(projectId, {
         revision: saved.revision, edits, renames: names,
-        add_edges: added.map(([parent, child]) => ({ parent, child })),
-        remove_edges: removed.map(([parent, child]) => ({ parent, child })),
+        add_edges: [], remove_edges: [], remove_presets: removed, role_tree: tree,
       });
       reset(next); setMessage(next.applied ? 'Settings saved.' : 'No changes to save.');
     } catch (error) { setError(String(error)); }
@@ -74,7 +119,7 @@ export function SettingsView({ projectId }: { projectId: string }) {
     </TextField>;
   }
   return <Form className="settings" aria-label="Project settings" onSubmit={event => { event.preventDefault(); if (!busy && changes.length) void save(); }}>
-    <header><h1>Settings</h1><p>{saved?.effect ?? 'Edit existing project roles and connections through native authorization.'}</p></header>
+    <header><h1>Teams &amp; roles</h1><p>{saved?.effect ?? 'Edit project teams and roles through native authorization.'}</p></header>
     <PriceInformation />
     {error && <div className="error" role="alert">{error}<p>Your draft is retained. Reload to resolve an external change.</p></div>}
     <div role="status">{busy ? 'Waiting for native settings / approval…' : message}</div>
@@ -85,15 +130,42 @@ export function SettingsView({ projectId }: { projectId: string }) {
       <Button variant="tertiary" isDisabled={busy} onPress={() => { void reload(); }}>Reload and discard draft</Button>
     </div>
     {saved && <div className="settings-columns">
-      <nav aria-label="Configured roles">{Object.keys(roles).map(reference => <Button key={reference}
-        variant={selected === reference ? 'primary' : 'secondary'} isDisabled={busy}
-        onPress={() => setSelected(reference)}>{roleName(renames, reference)}</Button>)}
-        {!Object.keys(roles).length && <p>No existing role presets. Configure roles through the native project setup first.</p>}
+      <nav aria-label="Configured roles">
+        <label>Team<select value={team} disabled={busy} onChange={event => { const value = event.target.value; setTeam(value); setSelected(Object.keys(roles).find(ref => group(ref) === value) ?? ''); }}>{teams.map(name => <option key={name} value={name}>{name || 'Ungrouped roles'}</option>)}</select></label>
+        {teamRoles.map(reference => <Button key={reference} aria-pressed={selected === reference} variant={selected === reference ? 'primary' : 'secondary'} isDisabled={busy} onPress={() => setSelected(reference)}>{roleName(renames, reference)}</Button>)}
+        {!teamRoles.length && <p>No configured Agents. Add a team and root below.</p>}
+        {team && <><TextField value={teamName} onChange={setTeamName} isDisabled={busy}><Label>New team name</Label><Input /></TextField>
+          <Button isDisabled={busy} onPress={() => attempt(() => {
+            if (!/^[a-z0-9]+(?:[_-][a-z0-9]+)*$/.test(teamName) || teams.includes(teamName)) throw new Error('Choose a new lowercase team name.');
+            setRenames(current => ({ ...current, ...Object.fromEntries(teamRoles.map(ref => [ref, `${teamName}.${roleName(renames, ref).split('.').pop()}`])) }));
+          })}>Rename team</Button>
+          <Button variant="danger" isDisabled={busy} onPress={() => attempt(() => {
+            const affected = new Set(teamRoles);
+            setTree(removeNodes(tree, affected, true));
+            setRoles(current => Object.fromEntries(Object.entries(current).filter(([ref]) => !affected.has(ref))));
+            setRenames(current => Object.fromEntries(Object.entries(current).filter(([ref]) => !affected.has(ref)))); setSelected('');
+          })}>Delete team</Button><p>Deletes this team's presets. Other teams' descendants reconnect to the nearest surviving parent. Review the resulting tree before saving.</p></>}
       </nav>
-      {selected && <div className="settings-fields">
+      {selected && Object.hasOwn(roles, selected) && <div className="settings-fields">
         <Card><Card.Header><Card.Title>Connections and model</Card.Title></Card.Header><Card.Content>
-          {field('runtime')}{field('model')}{field('base_url')}{field('api_key_env')}
-          <details><summary>Runtime parameters</summary>{field('reasoning_effort')}</details>
+          <label>Global connection<select value={ownRole(roles, selected)?.connection ?? ''} disabled={busy} onChange={event => {
+            const connection = event.target.value;
+            setRoles(current => ({ ...current, [selected]: { ...ownRole(current, selected), connection: connection || null,
+              runtime: connection ? null : 'codex', model: connection ? null : '', base_url: null, api_key_env: null } }));
+          }}><option value="">Inline Runtime and model</option>
+            {availableConnections.map(({ reference, metadata }) => <option key={reference} value={reference}>{reference} · {metadata.alias || metadata.id} · {metadata.source}</option>)}
+            {selectedConnection && !selectedModel && <option value={selectedConnection}>{selectedConnection} · unavailable</option>}
+          </select></label>
+          {!ownRole(roles, selected)?.connection && <>{field('runtime')}{field('model')}{field('base_url')}{field('api_key_env')}</>}
+
+          <details><summary>Runtime parameters</summary>{field('reasoning_effort')}
+            {selectedConnection && <p>Model-supported efforts: {selectedModel?.supported_efforts?.join(', ') || 'unknown'}.</p>}
+            <p>Supported model efforts describe capabilities; this role's effort is selected for later dispatches. Existing Sessions retain their choice.</p>
+            <details><summary>Codex approval route</summary><p>Custom Codex providers require a role or project approval route. Blank role fields retain project defaults. These fields configure the existing native review mechanism; they do not approve execution.</p>
+              {field('approval_model')}{field('approval_base_url')}{field('approval_api_key_env')}
+              <p>HTTPS endpoint and environment variable NAME only. No credential values.</p>
+            </details>
+          </details>
         </Card.Content></Card>
         <Card><Card.Header><Card.Title>Role</Card.Title></Card.Header><Card.Content>
           <TextField value={roleName(renames, selected)} isDisabled={busy}
@@ -104,31 +176,35 @@ export function SettingsView({ projectId }: { projectId: string }) {
         </Card.Content></Card>
       </div>}
     </div>}
-    {saved && <Card><Card.Header><Card.Title>Dispatch relationships</Card.Title></Card.Header><Card.Content>
-      <p>These are configured relationships, not running Agents. Removing an edge does not stop an existing Session.</p>
-      <ul>{edges.map(([parent, child]) => <li key={`${parent}:${child}`}>
-        {roleName(renames, parent)} → {roleName(renames, child)}{' '}
-        <Button size="sm" variant="ghost" isDisabled={busy} aria-label={`Remove dispatch ${parent} to ${child}`}
-          onPress={() => setEdges(current => current.filter(edge => !same(edge, [parent, child])))}>Remove</Button>
-      </li>)}</ul>
-      <div className="settings-actions">
-        <label>Dispatch parent<select value={parent} disabled={busy} onChange={event => setParent(event.target.value)}>
-          <option value="">Choose parent</option>{[...new Set([...Object.keys(roles), ...edges.map(edge => edge[0])])].map(ref => <option key={ref}>{ref}</option>)}
-        </select></label>
-        <label>Dispatch child<select value={child} disabled={busy} onChange={event => setChild(event.target.value)}>
-          <option value="">Choose child</option>{Object.keys(roles).map(ref => <option key={ref}>{ref}</option>)}
-        </select></label>
-        <Button variant="secondary" isDisabled={busy || !parent || !child || edges.some(edge => same(edge, [parent, child]))}
-          onPress={() => setEdges(current => [...current, [parent, child]])}>Add relationship</Button>
-      </div>
+    {saved && <Card><Card.Header><Card.Title>Team organization</Card.Title></Card.Header><Card.Content>
+      <p>Configuration only. Deleting teams or Agents never stops a running Session. Expand an arrow independently from selecting its Agent.</p>
+      <ul aria-label="Organization tree">{renderTree(tree)}</ul>
+      {!Object.keys(tree).length && <p>Empty organization. Add a root Agent to recover.</p>}
+      <fieldset disabled={busy}><legend>Add team or Agent</legend>
+        <TextField value={teamName} onChange={setTeamName}><Label>Team name for new team</Label><Input /></TextField>
+        <TextField value={nodeName} onChange={setNodeName}><Label>New Agent name</Label><Input /></TextField>
+        <label>New Agent Runtime<select value={newRuntime} onChange={event => setNewRuntime(event.target.value)}><option>codex</option><option>pi</option><option>dsh</option></select></label>
+        <TextField value={newModel} onChange={setNewModel}><Label>New Agent model</Label><Input /></TextField>
+        <div className="settings-actions"><Button onPress={() => attempt(() => addNode(true, false))}>Add team with root</Button>
+          <Button onPress={() => attempt(() => addNode(false, false))}>Add root Agent</Button>
+          <Button isDisabled={!selected || busy} onPress={() => attempt(() => addNode(false, true))}>Add child Agent</Button></div>
+      </fieldset>
+      {selected && Object.hasOwn(roles, selected) && <fieldset disabled={busy}><legend>Selected Agent: {roleName(renames, selected)}</legend>
+        <label>Agent parent<select value={edges.find(edge => edge[1] === selected)?.[0] ?? ''} onChange={event => attempt(() => {
+          const parent = event.target.value;
+          if (!parent && teamRoles.some(ref => ref !== selected && isTeamRoot(ref))) throw new Error('A team must have one clear root. Move this Agent below the existing root.');
+          const next = moveNode(tree, selected, parent); setTree(next);
+        })}><option value="">Root</option>{[...new Set([...Object.keys(roles), ...edges.map(edge => edge[0])])].filter(ref => !branchRoles(tree, selected).has(ref)).map(ref => <option key={ref} value={ref}>{roleName(renames, ref)}</option>)}</select></label>
+        {new Set(edges.filter(edge => edge[1] === selected).map(edge => edge[0])).size > 1 && <p>This native role has several parents. Choosing a parent moves all occurrences and retains their children.</p>}
+        <p>Delete branch removes this Agent and all descendants: {[...branchRoles(tree, selected)].join(', ')}. Reconnect removes only this Agent and keeps its children under its parent; a root needs at most one child.</p>
+        <div className="settings-actions"><Button variant="danger" onPress={() => attempt(() => deleteNode(false))}>Delete Agent and branch</Button>
+          <Button variant="secondary" onPress={() => attempt(() => deleteNode(true))}>Delete Agent, reconnect children</Button></div>
+      </fieldset>}
     </Card.Content></Card>}
     <Card><Card.Header><Card.Title>Changes to review</Card.Title></Card.Header><Card.Content>
       {changes.length ? <table><thead><tr><th>Setting</th><th>Before</th><th>After</th></tr></thead>
         <tbody>{changes.map((change, index) => <tr key={index}><th>{change.label}</th><td>{change.before}</td><td>{change.after}</td></tr>)}</tbody>
       </table> : <p>No staged changes.</p>}
-    </Card.Content></Card>
-    <Card><Card.Header><Card.Title>Pricing information</Card.Title></Card.Header><Card.Content>
-      <p>Official price data is unavailable in this version. No cost estimate is shown.</p>
     </Card.Content></Card>
   </Form>;
 }

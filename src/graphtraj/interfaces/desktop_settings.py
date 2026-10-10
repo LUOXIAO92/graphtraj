@@ -24,6 +24,7 @@ from graphtraj.workspace.runner_project import discover_project_root, discover_r
 FIELDS = (
     "runtime", "model", "base_url", "api_key_env", "reasoning_effort",
     "instructions", "system_prompt", "developer_prompt", "connection",
+    "approval_model", "approval_base_url", "approval_api_key_env",
 )
 EFFECT = (
     "Saved presets apply when a later dispatch resolves these roles. Existing Sessions "
@@ -38,12 +39,19 @@ def _entries(document: dict) -> dict:
         group, _, name = reference.rpartition(".")
         entry = document["roles"][group][name] if group else document["roles"][name]
         result[reference] = {key: entry[key] for key in FIELDS if key in entry}
+        approval = entry.get("codex", {}).get("approval", {})
+        if isinstance(approval, dict):
+            result[reference].update({f"approval_{key}": approval[key]
+                                      for key in ("model", "base_url", "api_key_env") if key in approval})
         _check_connection(result[reference])
     return result
 
 
 def _check_connection(settings: dict) -> None:
     """Keep credentials out of connection fields and their validation errors."""
+    if any(key.startswith("approval_") for key in settings):
+        _check_connection({key.removeprefix("approval_"): value for key, value in settings.items()
+                           if key.startswith("approval_")})
     env = settings.get("api_key_env")
     if env is not None and (
         not isinstance(env, str) or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", env)
@@ -61,13 +69,18 @@ def _check_connection(settings: dict) -> None:
 
 
 def settings_request(request: dict, cwd: Path, reviewer: Callable[[dict], dict]) -> dict:
-    """Read safe fields or save an existing-role draft through native review.
+    """Read safe fields or save a role/tree draft through native review.
 
     The reviewer is trusted host context, never a field accepted in request.
     Both reads and writes retain the actual process/callback caller boundary.
     """
-    root = discover_project_root(cwd)
-    if caller_alias(discover_runner_directory(root)) is not None:
+    from graphtraj.configuration.runtime_connections import connection_context
+
+    user_scope = isinstance(request, dict) and request.get("scope") == "user"
+    root, runner_directory = connection_context(cwd) if user_scope else (
+        discover_project_root(cwd), discover_runner_directory(cwd),
+    )
+    if caller_alias(runner_directory) is not None:
         raise RunnerError(
             "authority-denied",
             "Desktop settings require the human project owner; "
@@ -82,10 +95,10 @@ def settings_request(request: dict, cwd: Path, reviewer: Callable[[dict], dict])
         _validate(arguments, TOOLS['runtime_connections'].input_schema, 'arguments')
         with recovery_review(reviewer):
             return manage_connections(arguments, cwd=root)
-    if not isinstance(request, dict) or request.get("action") not in {"read", "save"}:
-        raise ValueError("Choose read or save settings.")
+    if not isinstance(request, dict) or request.get("action") not in {"read", "preview", "save"}:
+        raise ValueError("Choose read, preview or save settings.")
     allowed = {"action"} if request["action"] == "read" else {
-        "action", "revision", "edits", "renames", "add_edges", "remove_edges",
+        "action", "revision", "edits", "renames", "add_edges", "remove_edges", "remove_presets", "role_tree",
     }
     if set(request) - allowed:
         raise ValueError("Unsupported settings request field.")
@@ -93,7 +106,7 @@ def settings_request(request: dict, cwd: Path, reviewer: Callable[[dict], dict])
     before = _entries(current)
     if request["action"] == "read":
         return {"revision": current["revision"], "roles": before,
-                "edges": current["edges"], "effect": EFFECT}
+                "edges": current["edges"], "role_tree": current["role_tree"], "effect": EFFECT}
     if request.get("revision") != current["revision"]:
         raise ValueError(
             "Configuration changed while editing. Reload settings and reapply "
@@ -105,18 +118,32 @@ def settings_request(request: dict, cwd: Path, reviewer: Callable[[dict], dict])
         raise ValueError("Role edits and names must be mappings.")
     change: dict = {"set_presets": {}, "unset_fields": {}, "rename_presets": renames}
     for reference, fields in edits.items():
-        if reference not in before or not isinstance(fields, dict) or set(fields) - set(FIELDS):
-            raise ValueError("Edit an existing role using the supported settings fields.")
+        if not isinstance(fields, dict) or set(fields) - set(FIELDS):
+            raise ValueError("Edit a role using the supported settings fields.")
         if any(value is not None and not isinstance(value, str) for value in fields.values()):
             raise ValueError("Role fields must contain text, or null to clear an optional field.")
         _check_connection(fields)
         change["set_presets"][reference] = {
-            key: value for key, value in fields.items() if value is not None
+            key: value for key, value in fields.items() if value is not None and not key.startswith("approval_")
         }
-        change["unset_fields"][reference] = [key for key, value in fields.items() if value is None]
+        change["unset_fields"][reference] = [key for key, value in fields.items()
+                                             if value is None and not key.startswith("approval_")]
+        approval_edits = {key.removeprefix("approval_"): value for key, value in fields.items()
+                          if key.startswith("approval_")}
+        if approval_edits:
+            group, _, name = reference.rpartition(".")
+            entries = current["roles"].get(group, {}) if group else current["roles"]
+            codex = dict(entries.get(name, {}).get("codex", {}))
+            approval = {**codex.get("approval", {}), **approval_edits}
+            approval = {key: value for key, value in approval.items() if value is not None}
+            if approval:
+                codex["approval"] = approval
+            else:
+                codex.pop("approval", None)
+            change["set_presets"][reference]["codex"] = codex
     for old, new in renames.items():
-        if old not in before or not isinstance(new, str):
-            raise ValueError("Rename an existing role to a valid role reference.")
+        if (old not in before and old not in edits) or not isinstance(new, str):
+            raise ValueError("Rename a declared role to a valid role reference.")
     for field in ("add_edges", "remove_edges"):
         edges = request.get(field, [])
         if not isinstance(edges, list) or any(
@@ -125,10 +152,21 @@ def settings_request(request: dict, cwd: Path, reviewer: Callable[[dict], dict])
         ):
             raise ValueError("Dispatch edges require parent and child role references.")
         change[field] = edges
+    removed = request.get("remove_presets", [])
+    if not isinstance(removed, list) or any(not isinstance(ref, str) or ref not in before for ref in removed):
+        raise ValueError("Remove existing role references.")
+    if set(removed) & (set(edits) | set(renames)):
+        raise ValueError("A removed role cannot also be edited or renamed.")
+    change["remove_presets"] = removed
+    if "role_tree" in request:
+        change["role_tree"] = request["role_tree"]
     after = _changed(
         {"roles": current["roles"], "role_tree": current["role_tree"]}, change,
     )
     roles = _validated(after)
+    previous = _validated({"roles": current["roles"], "role_tree": current["role_tree"]})
+    if set(removed) & set(roles.children) or set(roles.children) - set(previous.children) - set(roles.presets):
+        raise ValueError("The role tree contains a dangling role reference.")
     for old in set(edits) | set(renames):
         reference = renames.get(old, old)
         preset = roles.preset(reference)
@@ -177,11 +215,17 @@ def settings_request(request: dict, cwd: Path, reviewer: Callable[[dict], dict])
         """Show only edited safe fields, never the full native role document."""
         return reviewer({
             "project": str(root), "edits": edits, "renames": renames,
-            "before": {ref: {field: before[ref].get(field) for field in fields}
+            "before": {ref: {field: before.get(ref, {}).get(field) for field in fields}
                        for ref, fields in edits.items()},
             "add_edges": change["add_edges"], "remove_edges": change["remove_edges"],
+            "remove_presets": removed,
+            "tree_before": current["role_tree"], "tree_after": after["role_tree"],
             "effect": EFFECT,
         })
+
+    if request["action"] == "preview":
+        return {"revision": current["revision"], "roles": _entries({**after, "presets": roles.presets}),
+                "role_tree": after["role_tree"], "effect": EFFECT, "applied": False}
 
     with recovery_review(review):
         result = organize_child_roles(
@@ -190,7 +234,7 @@ def settings_request(request: dict, cwd: Path, reviewer: Callable[[dict], dict])
     if result.get("status") == "stale":
         raise ValueError("Configuration changed during approval. Reload settings; nothing was written.")
     return {"revision": result["revision"], "roles": _entries(result), "edges": result["edges"],
-            "effect": EFFECT, "applied": result["applied"]}
+            "role_tree": result["role_tree"], "effect": EFFECT, "applied": result["applied"]}
 
 
 def serve(input_stream: TextIO, output_stream: TextIO, cwd: Path) -> None:

@@ -511,3 +511,22 @@ def test_supported_prompt_layers_resolve_into_the_role_text(project: Path) -> No
         assert SYSTEM_TEXT in resolved.instructions
         assert resolved.system_instructions == ""
         assert DEVELOPER_TEXT not in resolved.instructions
+
+
+def test_atomic_tree_replacement_preserves_native_inline_dispatch(project: Path) -> None:
+    """The public editor moves nested branches while retaining native inline-role semantics."""
+    document = execute(project, {}).document
+    change = {'set_presets': {'second.root': {'runtime': 'codex', 'model': 'second-model'}},
+              'role_tree': {'second.root': {'coding_team.team_leader': {
+                  'coding_team.engineer': {'future_inline': {}}}}}}
+    saved = execute(project, {'change': change, 'expected_revision': document['revision']}, accept)
+    assert not saved.failed, saved.document
+    roles = load_project_roles(project)
+    assert roles.dispatch_preset(None, 'second.root').model == 'second-model'
+    assert roles.dispatch_preset('coding_team.engineer', {'future_inline': {
+        'runtime': 'codex', 'model': 'inline-model',
+    }}).model == 'inline-model'
+    before = roles_path(project).read_bytes()
+    code, message = refusal(project, {'change': {'remove_presets': ['coding_team.engineer']}}, accept)
+    assert 'dangling' in message
+    assert roles_path(project).read_bytes() == before

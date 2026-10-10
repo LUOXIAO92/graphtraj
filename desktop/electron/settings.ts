@@ -1,9 +1,10 @@
 import { nativeCommand } from './native.ts';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createInterface } from 'node:readline';
-import type { RoleFields, Settings, SettingsDraft } from './types';
+import type { Connections, ConnectionsRequest, RoleFields, RoleTree, Settings, SettingsDraft } from './types';
 
 export type SettingsReview = {
+  scope?: string; path?: string; after?: unknown; remove_presets?: string[]; tree_before?: RoleTree; tree_after?: RoleTree;
   project: string; effect: string;
   edits: SettingsDraft['edits']; before: SettingsDraft['edits']; renames: Record<string, string>;
   add_edges: { parent: string; child: string }[]; remove_edges: { parent: string; child: string }[];
@@ -11,6 +12,7 @@ export type SettingsReview = {
 
 /** Format only the native operation's safe edited fields for human approval. */
 export function reviewText(review: SettingsReview): string {
+  if (review.scope === 'user') return `Global connections: ${review.path}\nExisting Sessions keep their captured settings.\nBefore:\n${JSON.stringify(review.before, null, 2)}\nAfter:\n${JSON.stringify(review.after, null, 2)}`;
   const lines = [review.project, '', review.effect, ''];
   for (const [role, fields] of Object.entries(review.edits)) {
     for (const [field, value] of Object.entries(fields)) {
@@ -20,6 +22,8 @@ export function reviewText(review: SettingsReview): string {
   for (const [before, after] of Object.entries(review.renames)) lines.push(`Role name: ${before} → ${after}`);
   for (const edge of review.add_edges) lines.push(`Allow dispatch: ${edge.parent} → ${edge.child}`);
   for (const edge of review.remove_edges) lines.push(`Remove dispatch: ${edge.parent} → ${edge.child}`);
+  for (const ref of review.remove_presets ?? []) lines.push(`Delete role: ${ref}`);
+  if (JSON.stringify(review.tree_before) !== JSON.stringify(review.tree_after)) lines.push(`Organization before:\n${JSON.stringify(review.tree_before, null, 2)}\nOrganization after:\n${JSON.stringify(review.tree_after, null, 2)}`);
   return lines.join('\n');
 }
 
@@ -30,6 +34,14 @@ export class SettingsClient {
     private executable?: string) {}
 
   request(root: string, draft?: SettingsDraft): Promise<Settings> {
+    return this.exchange<Settings>(root, draft ? { action: 'save', ...draft } : { action: 'read' });
+  }
+
+  connections(root: string, request: ConnectionsRequest): Promise<Connections> {
+    return this.exchange<Connections>(root, { ...request, scope: 'user' });
+  }
+
+  private exchange<T>(root: string, request: Record<string, unknown> & { action: string }): Promise<T> {
     return new Promise((resolve, reject) => {
       const command = nativeCommand(this.executable);
       const child = spawn(command.executable, [...command.args, '--desktop-settings'], {
@@ -48,7 +60,7 @@ export class SettingsClient {
         void (async () => {
           const reply = JSON.parse(line);
           if (reply.review) {
-            if (!draft || reviewing) throw new Error('Unexpected native review request.');
+            if (request.action !== 'save' || reviewing) throw new Error('Unexpected native review request.');
             reviewing = true;
             const accepted = await this.review(reply.review);
             child.stdin.end(JSON.stringify({ decision: accepted ? 'accept' : 'decline' }) + '\n');
@@ -66,7 +78,7 @@ export class SettingsClient {
         lines.close();
         if (!finished) fail(new Error('Native settings connection ended. Reload to check the saved state.'));
       });
-      child.stdin.write(JSON.stringify(draft ? { action: 'save', ...draft } : { action: 'read' }) + '\n');
+      child.stdin.write(JSON.stringify(request) + '\n');
     });
   }
 

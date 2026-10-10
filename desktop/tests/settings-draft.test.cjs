@@ -20,3 +20,21 @@ test('prototype-named roles keep serialized edits and literal or explicitly rena
     assert.equal(ownRole(roles, role).model, 'edited-model');
   }
 });
+
+test('tree editing moves complete branches and explicitly reconnects or deletes children', async () => {
+  const { moveNode, removeNodes, branchRoles } = await import('../src/settings-draft.ts');
+  const tree = { 'team.root': { 'team.middle': { 'team.leaf': {} }, 'team.other': {} }, 'second.root': {} };
+  const plain = value => JSON.parse(JSON.stringify(value));
+  assert.deepEqual([...branchRoles(tree, 'team.middle')], ['team.middle', 'team.leaf']);
+  assert.deepEqual(plain(moveNode(tree, 'team.middle', 'team.other')), {
+    'team.root': { 'team.other': { 'team.middle': { 'team.leaf': {} } } }, 'second.root': {},
+  });
+  assert.throws(() => moveNode(tree, 'team.middle', 'team.leaf'), /outside this branch/);
+  assert.deepEqual(plain(removeNodes(tree, new Set(['team.middle']), true)), {
+    'team.root': { 'team.leaf': {}, 'team.other': {} }, 'second.root': {},
+  });
+  assert.deepEqual(plain(removeNodes(tree, branchRoles(tree, 'team.middle'), false)), {
+    'team.root': { 'team.other': {} }, 'second.root': {},
+  });
+  assert.deepEqual(tree['team.root']['team.middle'], { 'team.leaf': {} });
+});

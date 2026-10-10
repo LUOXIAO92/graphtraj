@@ -28,6 +28,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { _electron as electron } from 'playwright';
 import fixtures from './fixtures.cjs';
+import { settingsAdoption } from './settings-adoption.mjs';
 
 const desktop = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 const require = createRequire(import.meta.url);
@@ -36,6 +37,8 @@ const evidence = path.resolve(process.env.GRAPHTRAJ_EVIDENCE || path.join(deskto
 const screens = path.join(evidence, 'screens');
 // Fixtures are working data, never uploaded: keep them beside the evidence.
 const work = path.resolve(process.env.GRAPHTRAJ_WORK || path.join(desktop, 'dist-package', 'adoption-work'));
+const isolatedHome = path.join(work, 'home');
+const userData = path.join(work, 'user-data');
 const secret = process.env.GRAPHTRAJ_ADOPTION_SECRET || `adoption-${randomUUID()}`;
 const facts = { app: app ?? null, evidence, work, steps: [], screenshots: [], nativeDialogs: [], passed: false };
 
@@ -165,8 +168,8 @@ async function launch(extraEnvironment = {}, extraArgs = []) {
   const binary = path.join(app, 'Contents', 'MacOS', path.basename(app, '.app'));
   return electron.launch({
     executablePath: binary,
-    args: ['-r', electronLoader(), ...extraArgs],
-    env: { ...process.env, ...extraEnvironment },
+    args: ['-r', electronLoader(), `--user-data-dir=${userData}`, ...extraArgs],
+    env: { ...process.env, HOME: isolatedHome, ...extraEnvironment },
     timeout: 60000,
   });
 }
@@ -376,8 +379,9 @@ async function main() {
   await fs.writeFile(rolesFile, originalRoles);
 
   // This CI runs in a fresh OS account. Refuse to overwrite any existing index.
-  const projectsFile = path.join(os.homedir(), '.graphtraj', 'projects.json');
-  const legacyFile = path.join(os.homedir(), 'Library', 'Application Support', 'GraphTraj', 'projects.json');
+  await fs.mkdir(isolatedHome, { recursive: true });
+  const projectsFile = path.join(isolatedHome, '.graphtraj', 'projects.json');
+  const legacyFile = path.join(userData, 'projects.json');
   await assert.rejects(fs.access(projectsFile), { code: 'ENOENT' });
   const firstAlias = path.join(root, 'first-alias');
   await fs.symlink(first, firstAlias);
@@ -678,6 +682,13 @@ async function main() {
       step('an approved save that failed in the native entry reported an error and left the file unchanged');
     } finally { await fs.chmod(state, 0o700); }
 
+    const settingsProjects = await page.evaluate(() => window.graphtraj.projects());
+    const firstId = settingsProjects.projects.find(project => project.root === first).id;
+    const secondId = settingsProjects.projects.find(project => project.root === second).id;
+    facts.settings = await settingsAdoption({ page, decide, firstId, secondId,
+      runtimeHome: path.join(isolatedHome, 'codex'), step,
+      shot: async name => { facts.screenshots.push(await shot(page, name)); },
+    });
     const after = await snapshot(second);
     const firstAfter = await snapshot(first);
     assert.deepEqual(changed(before, after), [], 'saving settings for one project must not write another');
@@ -734,6 +745,9 @@ async function main() {
     facts.index.reopened = reopened;
     facts.screenshots.push(await shot(page, '08-restarted-persisted.png'));
     step('restarting the installed app restored the project list from HOME/.graphtraj');
+    assert.deepEqual(await page.evaluate(id => window.graphtraj.settings(id), firstId), facts.settings.roles);
+    assert.deepEqual((await page.evaluate(id => window.graphtraj.connections(id, { action: 'read' }), firstId)).catalog, facts.settings.global.catalog);
+    step('Reopening read back the final team tree and global model references from native configuration.');
 
     const rendered = await bounded('read window text', page.evaluate(() => document.body.innerText));
     for (const text of [rendered, ...consoleMessages]) {

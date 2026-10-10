@@ -9,6 +9,7 @@ import type { DesktopAPI, Observation, Preferences, Ticket } from '../electron/t
 import { layout } from './layout';
 import { ActivityView } from './Activity';
 import { SettingsView } from './Settings';
+import { ConnectionsView } from './Connections';
 import { UsageView } from './UsageDashboard';
 import '@xyflow/react/dist/style.css';
 import './style.css';
@@ -234,9 +235,7 @@ function App() {
         </div>)}
       {selected && view === 'usage' && <UsageView key={selected.id} projectId={selected.id} />}
       {selected && view === 'settings' && <SettingsView key={selected.id} projectId={selected.id} />}
-      {view === 'models' && <div className="welcome"><p className="eyebrow">Settings</p><h1>Agents &amp; models</h1>
-        <p>Global connection editing is not available in this version. Existing project Runtime and model settings remain available in Teams &amp; roles.</p>
-        {selected && <Button onPress={() => setView('settings')}>Open Teams &amp; roles</Button>}</div>}
+      {view === 'models' && <ConnectionsView projectId={selected?.unavailable ? undefined : selected?.id} />}
       {!selected && view !== 'models' && <div className="welcome"><p className="eyebrow">Optional desktop companion</p>
         <h1>Your projects, in view.</h1><p>Add an existing GraphTraj project directory to see its complete task graph.</p>
         <p>GraphTraj continues to work through its native CLI when this window is closed.</p></div>}

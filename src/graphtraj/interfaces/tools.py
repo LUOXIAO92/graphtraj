@@ -879,6 +879,7 @@ _ROLE_ORGANIZATION_SCHEMA = {
             "properties": {
                 "unset_fields": {"type": "object", "additionalProperties": {"type": "array", "items": {"type": "string"}}},
                 "rename_presets": {"type": "object", "additionalProperties": {"type": "string"}},
+                "role_tree": {"type": "object", "description": "Complete nested dispatch tree; reviewed and saved atomically with preset changes."},
                 "set_presets": {
                     "type": "object",
                     "description": "Exact preset reference to settings; a declared preset merges, a new reference is added.",

@@ -83,14 +83,18 @@ async function closeApp() {
 async function pick(folder, name) {
   facts.stage = `${name} native directory picker`;
   await page.getByRole('button', { name: 'Add project', exact: true }).click();
-  await nativeWindow('Add existing GraphTraj project');
+  const chooser = await nativeWindow('Add existing GraphTraj project');
   await exec('xdotool', ['key', '--clearmodifiers', 'ctrl+l']);
-  await exec('xdotool', ['type', '--clearmodifiers', '--delay', '1', folder + '/']);
+  await exec('xdotool', ['type', '--clearmodifiers', '--delay', '1', folder]);
   await screenshot(`${name}-native-picker`);
-  await exec('xdotool', ['key', '--clearmodifiers', 'Return']);
-  // GTK resolves the entered folder before its Open action can be selected.
-  await new Promise(resolve => setTimeout(resolve, 500));
-  await exec('xdotool', ['key', '--clearmodifiers', 'alt+o']);
+  // The retained GTK screenshot places Open in the lower-right corner. Click
+  // that native control rather than depending on location-entry key handling.
+  const { stdout } = await exec('xdotool', ['getwindowgeometry', '--shell', chooser]);
+  const width = Number(stdout.match(/^WIDTH=(\d+)$/m)[1]);
+  const height = Number(stdout.match(/^HEIGHT=(\d+)$/m)[1]);
+  facts.pickerInput = { folder, chooser, width, height, action: 'native Open button click' };
+  await exec('xdotool', ['mousemove', '--sync', '--window', chooser,
+    String(width - 50), String(height - 26), 'click', '1']);
   await page.locator('.project-button.current').filter({ hasText: folder }).waitFor();
   const graph = fixtures.operate(folder, 'ticket_graph');
   await page.getByText(graph.tickets[0].title, { exact: true }).waitFor();
@@ -227,6 +231,7 @@ try {
   facts.uiPassed = true;
 } catch (error) {
   facts.failure = String(error);
+  if (page && !page.isClosed()) facts.visibleErrors = await page.getByRole('alert').allTextContents().catch(() => []);
   process.exitCode = 1;
   await screenshot('failure').catch(() => {});
 } finally {

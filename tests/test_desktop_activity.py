@@ -415,15 +415,19 @@ def test_windows_adoption_fixture_projects_retired_content_and_usage(temporary_g
         'source': 'https://github.com/example/controlled/issues/1',
         'body': 'Controlled fixture, no Runtime execution.', 'dependencies': [],
     })
-    (root / 'seed.txt').write_text('Controlled Windows adoption project; no model execution.\n', encoding='utf-8')
+    # Match Node's adoption seed bytes on Windows as well as POSIX.
+    (root / 'seed.txt').write_text(
+        'Controlled Windows adoption project; no model execution.\n', encoding='utf-8', newline='\n',
+    )
     fixture = (PROJECT_ROOT / 'desktop/tests/retained-records.mjs').as_uri()
     generated = subprocess.run(
         ['node', '--preserve-symlinks', '--preserve-symlinks-main', '--input-type=module', '-e',
          f'import {{retainedRecords}} from {json.dumps(fixture)}; '
          'console.log(await retainedRecords(process.argv[1], process.argv[2]));',
          str(root), registered['ticket_directory']],
-        text=True, capture_output=True, timeout=15, check=True,
+        text=True, capture_output=True, timeout=15, check=False,
     )
+    assert generated.returncode == 0, generated.stderr
     alias = generated.stdout.strip()
     observer = bind(root, desktop_observer=True)
     arguments = {'ticket_id': '1', 'alias': alias}

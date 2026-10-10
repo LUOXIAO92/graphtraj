@@ -226,6 +226,8 @@ def run_git(
         raise RunnerError(
             "GIT_FAILED",
             f"{_git_action(arguments)} in {repository} exited {result.returncode}.",
+        ) from subprocess.CalledProcessError(
+            result.returncode, _git_action(arguments), stderr=result.stderr,
         )
     return result.stdout.strip()
 

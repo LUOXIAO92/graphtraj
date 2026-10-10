@@ -151,6 +151,7 @@ function queryActivity(root, ticketId, alias) {
         arguments: { ticket_id: ticketId, ...(alias ? { alias } : {}) } }) + '\n',
     }));
   if (reply.failed) throw new Error(JSON.stringify(reply));
+  assert.equal(reply.result.scope, 'human', 'CI must be an unbound desktop host; never strip Agent identity to obtain access');
   return reply.result;
 }
 
@@ -180,6 +181,27 @@ async function shot(page, name) {
 /** Locate a project entry in the sidebar by its directory name. */
 function projectEntry(page, name) {
   return page.locator('.project-button').filter({ hasText: name });
+}
+
+/** Read only the selected project's visible monitor, including paused offsets. */
+async function monitorPosition(page) {
+  return page.locator('.monitor-page:visible').evaluate(element => ({
+    query: element.querySelector('input[type="search"]').value,
+    filter: element.querySelector('select').value,
+    selected: element.querySelector('.react-flow__node.selected')?.getAttribute('data-id'),
+    viewport: element.querySelector('.react-flow__viewport').getAttribute('style'),
+    horizontal: element.querySelector('.agent-columns').scrollLeft,
+    vertical: [...element.querySelectorAll('.activity-history')].map(column => column.scrollTop),
+    following: [...element.querySelectorAll('.activity-controls')].map(controls => controls.querySelector('button').textContent),
+  }));
+}
+
+/** Generate long, visibly controlled native message records without model calls. */
+function longRecords(member) {
+  return Array.from({ length: 70 }, (_, index) => ({ type: 'response_item', payload: {
+    type: 'message', role: 'assistant', content: [{ type: 'output_text',
+      text: `Controlled retained ${member} message ${index}.\n` + 'Long native record for independent scrolling. '.repeat(18) }],
+  } }));
 }
 
 /**
@@ -294,6 +316,8 @@ async function nativeDialogAttempt(first) {
 }
 
 async function main() {
+  assert.ok(!process.env.GRAPHTRAJ_CLI_CONNECTION && !process.env.GRAPHTRAJ_PARENT_ALIAS,
+    'Use the unbound CI desktop host; do not remove inherited Agent identity markers to run adoption.');
   assert.ok(app, 'Set GRAPHTRAJ_APP to the installed .app bundle.');
   await fs.access(app);
   await fs.mkdir(screens, { recursive: true });
@@ -304,9 +328,12 @@ async function main() {
   Object.assign(facts, {
     os: capture('sw_vers', ['-productVersion']), kernel: capture('uname', ['-r']),
     arch: capture('uname', ['-m']), node: process.version, tool,
+    candidate: capture('git', ['rev-parse', 'HEAD']), ciCommit: process.env.GITHUB_SHA ?? null,
+    ciRun: process.env.GITHUB_RUN_ID ?? null, entryCommand: process.argv.join(' '),
     codesign: capture('codesign', ['-dv', app]),
   });
-  step(`installed bundle launched from ${app}; native tool resolved from PATH at ${tool}`);
+  if (facts.ciCommit) assert.equal(facts.candidate, facts.ciCommit);
+  step(`installed bundle prepared at ${app}; native tool resolved from PATH at ${tool}`);
 
   const root = path.join(work, 'fixtures');
   await fs.rm(root, { recursive: true, force: true });
@@ -315,7 +342,7 @@ async function main() {
   const first = await fixtures.makeProject(path.join(root, 'first-project'), 'first-project');
   // A clearly labeled controlled record set for the selected project. These are
   // hand-written native rollout records, not a model run: no model is invoked.
-  await fixtures.recordActivity(first, {
+  const primaryTrace = await fixtures.recordActivity(first, {
     ticketId: '1', ticketName: 'first-project', alias: 'research@x1',
     records: [
       { type: 'turn_context', payload: { model: 'actual-model', turn_id: 'turn-1' } },
@@ -325,15 +352,45 @@ async function main() {
         name: 'adoption_probe_tool', arguments: '{"command":"adoption-tool-verified"}' } },
       { type: 'response_item', payload: { type: 'function_call_output', call_id: 'adoption-call-1',
         output: 'adoption-tool-result' } },
+      ...longRecords('first/research'),
       { type: 'event_msg', payload: { type: 'token_count', info: {
         last_token_usage: { input_tokens: 4321, cached_input_tokens: 1234, output_tokens: 567 },
         total_token_usage: { input_tokens: 4321, output_tokens: 567 } } } },
     ],
+    additionalMembers: [
+      { alias: 'current@x2', historical: false, records: longRecords('first/current') },
+      { alias: 'current@x3', historical: false, records: longRecords('first/other') },
+      { alias: 'previous@x4', historical: true, records: longRecords('first/previous') },
+    ],
   });
+  await fixtures.recordActivity(second, { ticketId: '1', ticketName: 'second-project', alias: 'research@x1',
+    records: longRecords('second/research') });
+  fixtures.operate(first, 'ticket_revise', { product_preserving: true, caused_by_event_ids: [],
+    evidence_refs: ['evidence.md'], tickets: [
+      { ...fixtures.ticket('2', 'dependent', ['1']), active: false, replaced_by: ['3'] },
+      { ...fixtures.ticket('3', 'successor', ['1']), active: true, replaced_by: [] },
+    ] });
   const rolesFile = path.join(first, '.graphtraj', 'roles.yml');
   const originalRoles = 'roles:\n  custom_group:\n    observer:\n      runtime: codex\n'
     + '      model: original-model\n      api_key_env: GRAPHTRAJ_ADOPTION_SECRET\n      reports: [report.md]\nrole_tree: {}\n';
   await fs.writeFile(rolesFile, originalRoles);
+
+  // This CI runs in a fresh OS account. Refuse to overwrite any existing index.
+  const projectsFile = path.join(os.homedir(), '.graphtraj', 'projects.json');
+  const legacyFile = path.join(os.homedir(), 'Library', 'Application Support', 'GraphTraj', 'projects.json');
+  await assert.rejects(fs.access(projectsFile), { code: 'ENOENT' });
+  const firstAlias = path.join(root, 'first-alias');
+  await fs.symlink(first, firstAlias);
+  const missing = path.join(root, 'missing-project');
+  const legacyText = JSON.stringify({ projects: [
+    { id: 'first', root: first }, { id: 'alias', root: firstAlias }, { id: 'missing', root: missing },
+  ], selected: 'alias' }, null, 2);
+  await fs.mkdir(path.dirname(legacyFile), { recursive: true });
+  await fs.writeFile(legacyFile, legacyText, { flag: 'wx' });
+  facts.index = { global: projectsFile, legacy: legacyFile };
+  facts.nativeEvidence = { controlled: 'Disposable native fixture memberships and retained records; no Runtime/model launched.',
+    reused: ['#265 run38043523309 installed macOS/native dialogs', '#262/#263 actual dynamic-chain evidence'],
+    limits: 'Reused evidence does not prove D UI; this run must produce its own installed D observations and screenshots.' };
 
   const consoleMessages = [];
   let appHandle = await launch({ GRAPHTRAJ_ADOPTION_SECRET: secret });
@@ -362,14 +419,23 @@ async function main() {
       await page.getByRole('button', { name: 'Add project', exact: true }).click();
       await page.getByRole('button', { name: 'Add project', exact: true }).waitFor({ state: 'visible' });
     }
-    await pick(first);
+    await projectEntry(page, 'first-project').waitFor();
+    const migrated = await page.evaluate(() => window.graphtraj.projects());
+    assert.equal(migrated.selected, 'first');
+    assert.equal(migrated.projects.length, 2, 'legacy symlink alias deduplicates, missing path remains');
+    assert.ok(migrated.projects.find(project => project.id === 'missing').unavailable);
+    await page.getByText('Path unavailable', { exact: true }).waitFor();
+    assert.equal(await fs.readFile(legacyFile, 'utf8'), legacyText);
+    await pick(firstAlias);
+    assert.equal((await page.evaluate(() => window.graphtraj.projects())).projects.length, 2);
+    step('global index imported the legacy list, selected its canonical project, deduplicated alias and marked missing path');
     await page.getByText('first project', { exact: true }).waitFor();
     await pick(second);
     await page.getByText('second project', { exact: true }).waitFor();
     facts.screenshots.push(await shot(page, '01-two-projects-added.png'));
     step('added two isolated fixture projects and selected the second one');
 
-    await page.locator('.react-flow__node[data-id="2"]').click();
+    await page.locator('.monitor-page:visible .react-flow__node[data-id="2"]').click();
     await page.getByRole('complementary', { name: 'Ticket details' }).waitFor();
     await page.getByText('No participating Agents recorded.').waitFor();
     facts.screenshots.push(await shot(page, '02-node-detail-chat-empty.png'));
@@ -377,9 +443,48 @@ async function main() {
 
     await projectEntry(page, 'first-project').click();
     await page.getByText('first project', { exact: true }).waitFor();
-    assert.equal(await page.getByText('second project', { exact: true }).count(), 0);
+    assert.equal(await page.locator('.monitor-page:visible').getByText('second project', { exact: true }).count(), 0);
     facts.screenshots.push(await shot(page, '03-project-switched.png'));
     step('switched the selected project: the graph shows only the selected project');
+
+    const monitor = page.locator('.monitor-page:visible');
+    const nativeGraph = fixtures.operate(first, 'ticket_graph');
+    for (const ticket of nativeGraph.tickets) {
+      const node = monitor.locator(`.react-flow__node[data-id="${ticket.ticket_id}"]`);
+      await node.waitFor();
+      assert.equal(await node.locator('.status').innerText(), ticket.status);
+      if (!ticket.active) assert.match(await node.innerText(), /Replaced \/ inactive/);
+    }
+    facts.graph = nativeGraph;
+    const globalToggle = page.getByRole('button', { name: /^GLOBAL/ });
+    const projectsToggle = page.getByRole('button', { name: /^PROJECTS/ });
+    await globalToggle.click();
+    assert.equal(await page.getByRole('button', { name: 'Settings', exact: true }).isVisible(), false);
+    assert.equal(await projectEntry(page, 'first-project').isVisible(), true);
+    await globalToggle.click();
+    await projectsToggle.click();
+    assert.equal(await projectEntry(page, 'first-project').isVisible(), false);
+    assert.equal(await page.getByRole('button', { name: 'Settings', exact: true }).isVisible(), true);
+    const projectNavigation = page.getByRole('navigation', { name: 'Project views', exact: true });
+    assert.equal(await projectNavigation.locator('h2').innerText(), 'first-project');
+    assert.deepEqual(await projectNavigation.getByRole('button').allTextContents(), ['Monitor', 'Teams & roles', 'Project usage']);
+    facts.screenshots.push(await shot(page, '03c-project-list-collapsed.png'));
+    await projectsToggle.click();
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await page.getByRole('button', { name: 'Agents & models', exact: true }).click();
+    await page.getByRole('heading', { name: 'Agents & models', exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    assert.equal(await page.getByRole('button', { name: 'Agents & models', exact: true }).isVisible(), false);
+    await page.getByRole('button', { name: 'Monitor', exact: true }).click();
+    step('GLOBAL and PROJECTS independently toggle; selected project/navigation remain outside list; Settings submenu toggles itself');
+
+    // Retain a deliberately changed viewport and filter, not merely defaults.
+    const initialViewport = await monitor.locator('.react-flow__viewport').getAttribute('style');
+    await monitor.locator('.react-flow__controls-zoomin').click();
+    await page.waitForFunction(before => document.querySelector('.monitor-page:not([hidden]) .react-flow__viewport')?.getAttribute('style') !== before, initialViewport);
+    const status = nativeGraph.tickets.find(ticket => ticket.ticket_id === '1').status;
+    await monitor.getByRole('combobox').selectOption(status);
+    await monitor.getByRole('searchbox').fill('first project');
 
     // Chat adoption evidence: the controlled records must render as message and
     // tool content through the same public boundary the desktop reads. Expected
@@ -390,14 +495,103 @@ async function main() {
     const toolCall = chatEvents.find(event => event.kind === 'tool' && event.phase === 'call');
     assert.ok(message && message.text && toolCall && toolCall.name,
       'the public boundary must return the controlled message and tool call');
-    await page.locator('.react-flow__node[data-id="1"]').click();
+    await page.locator('.monitor-page:visible .react-flow__node[data-id="1"]').click();
     await page.getByRole('complementary', { name: 'Ticket details' }).waitFor();
-    await page.getByRole('button', { name: 'research@x1', exact: true }).click();
+    await page.getByRole('button', { name: 'Expand chat', exact: true }).click();
     await page.getByText(message.text).first().waitFor();
     await page.getByText(toolCall.name, { exact: true }).first().waitFor();
-    await page.getByText(String(toolCall.arguments)).first().waitFor();
+    const primaryColumn = page.locator('.monitor-page:visible').getByRole('article', { name: 'research@x1', exact: true });
+    const toolCard = primaryColumn.locator('.activity-event').filter({ hasText: toolCall.name }).first();
+    for (const open of [true, false, true]) {
+      await toolCard.locator('summary').click();
+      assert.equal(await toolCard.locator('details').evaluate(element => element.open), open);
+    }
+    assert.equal(await toolCard.locator('pre').first().innerText(), typeof toolCall.arguments === 'string'
+      ? toolCall.arguments : JSON.stringify(toolCall.arguments, null, 2));
     facts.screenshots.push(await shot(page, '03b-node-chat-records.png'));
     step('the controlled records rendered in Chat: the recorded message and tool call are visible');
+
+    const members = queryActivity(first, '1').agents;
+    assert.equal(members.length, 4);
+    assert.ok(members.some(member => member.historical) && members.some(member => !member.historical));
+    const columns = monitor.locator('.agent-column');
+    assert.equal(await columns.count(), members.length);
+    for (const member of members) {
+      const column = monitor.getByRole('article', { name: member.alias, exact: true });
+      await column.getByText(`${member.historical ? 'Historical' : 'Current'} · ${member.state}`, { exact: true }).waitFor();
+      const native = queryActivity(first, '1', member.alias);
+      const lastMessage = native.events.filter(event => event.kind === 'message').at(-1);
+      assert.ok(lastMessage?.text);
+      await column.getByText(lastMessage.text, { exact: true }).waitFor();
+    }
+    await columns.first().getByRole('button', { name: 'Pause following', exact: true }).click();
+    assert.equal(await columns.nth(1).getByRole('button', { name: 'Pause following', exact: true }).count(), 1,
+      'pausing one column must not pause its neighbor');
+    for (const column of await columns.all()) {
+      const pause = column.getByRole('button', { name: 'Pause following', exact: true });
+      if (await pause.count()) await pause.click();
+    }
+    await monitor.evaluate(element => {
+      element.querySelector('.agent-columns').scrollLeft = 155;
+      element.querySelectorAll('.activity-history').forEach((column, index) => { column.scrollTop = 200 + index * 170; });
+    });
+    // Let native scroll events reach the real renderer's position handlers.
+    await page.waitForTimeout(100);
+    const position = await monitorPosition(page);
+    assert.equal(position.selected, '1');
+    assert.equal(position.query, 'first project');
+    assert.equal(position.filter, status);
+    assert.ok(position.horizontal > 0 && position.vertical.every((top, index) => top === 200 + index * 170));
+    const appended = { type: 'response_item', payload: { type: 'message', role: 'assistant',
+      content: [{ type: 'output_text', text: 'Controlled appended native record: paused D columns stay put.' }] } };
+    await fs.appendFile(primaryTrace, JSON.stringify(appended) + '\n');
+    assert.ok(queryActivity(first, '1', 'research@x1').events.some(event => event.text === appended.payload.content[0].text));
+    await primaryColumn.getByRole('button', { name: /Follow new messages \(1\)/ }).waitFor();
+    const updated = await monitorPosition(page);
+    assert.deepEqual(updated.vertical, position.vertical);
+    assert.equal(updated.horizontal, position.horizontal);
+    facts.screenshots.push(await shot(page, '03d-parallel-current-history-paused.png'));
+    facts.dReading = { before: updated, members, source: 'Native public desktop_activity over controlled retained records' };
+    for (const view of ['Teams & roles', 'Project usage']) {
+      await page.getByRole('button', { name: view, exact: true }).click();
+      await page.getByRole('button', { name: 'Monitor', exact: true }).click();
+      assert.deepEqual(await monitorPosition(page), updated, `${view} return must preserve every reading position`);
+    }
+    await projectEntry(page, 'second-project').click();
+    await page.getByRole('button', { name: 'Close details', exact: true }).click();
+    await monitor.locator('.react-flow__node[data-id="1"]').click();
+    await page.getByRole('button', { name: 'Expand chat', exact: true }).click();
+    const secondNative = queryActivity(second, '1', 'research@x1');
+    const secondMessage = secondNative.events.find(event => event.kind === 'message').text;
+    await monitor.getByText(secondMessage, { exact: true }).waitFor();
+    assert.equal(await monitor.getByText(message.text, { exact: true }).count(), 0);
+    facts.screenshots.push(await shot(page, '03e-second-project-native-chat.png'));
+    await projectEntry(page, 'first-project').click();
+    assert.deepEqual(await monitorPosition(page), updated, 'switching projects must retain first-project state');
+    facts.dReading.afterReturn = await monitorPosition(page);
+    // Also test the visible graph after returning, not only its hidden DOM in chat.
+    await page.getByRole('button', { name: 'Collapse chat', exact: true }).click();
+    const graphFields = ({ query, filter, selected, viewport }) => ({ query, filter, selected, viewport });
+    const graphReading = graphFields(await monitorPosition(page));
+    await monitor.locator('.graph').waitFor({ state: 'visible' });
+    await page.getByRole('button', { name: 'Teams & roles', exact: true }).click();
+    await page.getByRole('button', { name: 'Monitor', exact: true }).click();
+    assert.deepEqual(graphFields(await monitorPosition(page)), graphReading);
+    facts.dReading.visibleGraph = graphReading;
+    facts.screenshots.push(await shot(page, '03h-restored-graph-filter-node.png'));
+    await page.getByRole('button', { name: 'Expand chat', exact: true }).click();
+    assert.deepEqual(await monitorPosition(page), updated, 'collapse/expand must also restore paused column positions');
+    await monitor.locator('.agent-columns').evaluate(element => { element.scrollLeft = element.scrollWidth; });
+    await page.waitForTimeout(100);
+    assert.ok((await monitorPosition(page)).horizontal > updated.horizontal, 'bottom horizontal scroll reaches offscreen columns');
+    facts.screenshots.push(await shot(page, '03f-rightmost-agent-column.png'));
+    await page.getByRole('button', { name: 'Hide sidebar', exact: true }).click();
+    assert.equal(await page.getByRole('navigation', { name: 'Projects', exact: true }).count(), 0);
+    facts.screenshots.push(await shot(page, '03g-sidebar-hidden-chat.png'));
+    await page.getByRole('button', { name: 'Show sidebar', exact: true }).click();
+    await primaryColumn.getByRole('button', { name: /Follow new messages/ }).click();
+    await primaryColumn.getByText(appended.payload.content[0].text, { exact: true }).waitFor();
+    step('parallel current/history columns, independent pause/native append, page/project reading retention and bottom horizontal access passed');
 
     await page.getByRole('button', { name: 'Project usage', exact: true }).click();
     await page.locator('section.usage-dashboard').waitFor();
@@ -488,12 +682,38 @@ async function main() {
     const firstChanged = changed(firstBefore, firstAfter);
     assert.ok(firstChanged.every(name => name === path.join('.graphtraj', 'roles.yml')),
       `only the selected project's roles file may change, saw ${JSON.stringify(firstChanged)}`);
-    const projectsFile = path.join(os.homedir(), 'Library', 'Application Support', 'GraphTraj', 'projects.json');
     const stored = JSON.parse(await fs.readFile(projectsFile, 'utf8'));
     assert.ok(stored.projects.some(project => project.root === first)
       && stored.projects.some(project => project.root === second),
-    'desktop preferences must persist in the standard macOS user data directory');
+    'project index must persist under HOME/.graphtraj');
     step(`settings - one project changed (${firstChanged.join(', ')}); the other stayed byte-identical`);
+
+    // Relocation changes only an indexed path. Use a separate disposable project
+    // so the retained first/second activity records never need to be rewritten.
+    const relocated = await fixtures.makeProject(path.join(root, 'relocated-project'), 'relocated-project');
+    const relocationBefore = await snapshot(relocated);
+    await page.getByRole('button', { name: 'Monitor', exact: true }).click();
+    await projectEntry(page, 'missing-project').click();
+    await page.getByRole('button', { name: 'Check paths', exact: true }).click();
+    await page.getByText('Path unavailable', { exact: true }).waitFor();
+    await appHandle.evaluate(({ dialog }, folder) => {
+      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [folder] });
+    }, relocated);
+    await page.getByRole('button', { name: `Relocate ${missing}`, exact: true }).click();
+    await page.locator('.monitor-page:visible').getByText('relocated project', { exact: true }).waitFor();
+    const relocatedIndex = await page.evaluate(() => window.graphtraj.projects());
+    const relocatedEntry = relocatedIndex.projects.find(project => project.id === 'missing');
+    assert.equal(relocatedEntry.root, await fs.realpath(relocated));
+    assert.equal(relocatedEntry.unavailable, undefined);
+    assert.equal(relocatedIndex.selected, 'missing');
+    facts.screenshots.push(await shot(page, '07b-relocated-index.png'));
+    await page.getByRole('button', { name: `Remove ${relocatedEntry.root}`, exact: true }).click();
+    await projectEntry(page, 'relocated-project').waitFor({ state: 'detached' });
+    assert.deepEqual(changed(relocationBefore, await snapshot(relocated)), [], 'relocate/remove must not modify project files');
+    assert.equal(fixtures.operate(relocated, 'ticket_graph').tickets.length, 2);
+    assert.equal(await fs.readFile(legacyFile, 'utf8'), legacyText, 'migration/relocation/removal must leave legacy input intact');
+    facts.index.relocated = { id: relocatedEntry.id, root: relocatedEntry.root, projectFilesUnchanged: true };
+    step('invalid legacy path relocated through the native dialog entry; removing its index preserved every project file');
 
     // Restart the installed app without any user-data override: the standard
     // persistent location must restore the project list.
@@ -504,14 +724,28 @@ async function main() {
     appHandle.on('console', message => consoleMessages.push(message.text()));
     await projectEntry(page, 'first-project').waitFor();
     await projectEntry(page, 'second-project').waitFor();
+    const reopened = await page.evaluate(() => window.graphtraj.projects());
+    assert.equal(reopened.projects.length, 2);
+    assert.equal(reopened.selected, 'first');
+    assert.ok(!reopened.projects.some(project => project.id === 'missing'), 'legacy import must not resurrect removed entries');
+    assert.equal(await fs.readFile(legacyFile, 'utf8'), legacyText);
+    facts.index.reopened = reopened;
     facts.screenshots.push(await shot(page, '08-restarted-persisted.png'));
-    step('restarting the installed app restored the project list from the standard user data path');
+    step('restarting the installed app restored the project list from HOME/.graphtraj');
 
     const rendered = await bounded('read window text', page.evaluate(() => document.body.innerText));
     for (const text of [rendered, ...consoleMessages]) {
       assert.ok(!text.includes(secret), 'the credential value must not appear in the window or its logs');
     }
     facts.consoleMessages = consoleMessages.length;
+
+    const removalBefore = await snapshot(second);
+    const secondRoot = reopened.projects.find(project => project.root === second).root;
+    await page.getByRole('button', { name: `Remove ${secondRoot}`, exact: true }).click();
+    await projectEntry(page, 'second-project').waitFor({ state: 'detached' });
+    assert.deepEqual(changed(removalBefore, await snapshot(second)), [], 'removing second-project must only edit the global index');
+    assert.equal(fixtures.operate(second, 'ticket_graph').tickets.length, 2);
+    facts.screenshots.push(await shot(page, '08b-index-only-removal.png'));
 
     // Optionality: the GUI is gone, the native operations are not.
     await bounded('close installed app before optionality check', appHandle.close(), 15000);
@@ -548,6 +782,11 @@ async function main() {
       process.exitCode = 1;
     }
   } finally {
+    // Preserve the first failing screen when available; never restart to obtain it.
+    if (!facts.passed && page && appHandle) {
+      try { facts.screenshots.push(await shot(page, 'failure.png')); }
+      catch (error) { facts.failureScreenshotError = String(error.message || error); }
+    }
     // Preserve the observed facts before shutdown so the evidence survives even
     // when the installed app cannot close cleanly.
     await persist();

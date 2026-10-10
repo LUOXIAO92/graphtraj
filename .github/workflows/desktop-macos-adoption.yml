@@ -7,7 +7,7 @@ name: desktop-macos-adoption
 # workflow_dispatch stays available for later re-runs.
 on:
   push:
-    branches: [agent/265-desktop-mac-adoption]
+    branches: [agent/265-desktop-mac-adoption, agent/285-desktop-d-monitor-projects]
   workflow_dispatch:
 
 permissions:

@@ -75,6 +75,7 @@ else {
       },
       'projects:select': id => projects.select(id),
       'projects:remove': id => projects.remove(id),
+      'projects:usage': id => projects.usage(id),
       'projects:graph': id => projects.graph(id),
       'projects:activity': value => projects.activity(value),
       'settings:read': async id => settings.request(await projects.settingsRoot(id)),
@@ -93,7 +94,7 @@ else {
             event.senderFrame.url !== pathToFileURL(page).href) {
           throw new Error('Desktop request from an untrusted frame.');
         }
-        if (channel === 'activity:copy' || channel === 'projects:activity' || channel === 'projects:graph') return handler(id);
+        if (channel === 'activity:copy' || channel === 'projects:activity' || channel === 'projects:graph' || channel === 'projects:usage') return handler(id);
         // Serialize preference changes, including the native folder dialog.
         const next = writes.then(() => handler(id, draft));
         writes = next.catch(() => undefined);

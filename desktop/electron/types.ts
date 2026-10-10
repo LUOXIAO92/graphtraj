@@ -1,3 +1,4 @@
+import type { Call } from './usage';
 import type { Activity, ActivityRequest } from './activity';
 export type Ticket = {
   ticket_id: string;
@@ -22,7 +23,11 @@ export type SettingsDraft = {
   revision: string; edits: Record<string, RoleFields>; renames: Record<string, string>;
   add_edges: { parent: string; child: string }[]; remove_edges: { parent: string; child: string }[];
 };
+export type UsageObservation = {
+  projectId: string; calls: Call[]; notices: string[]; pending: boolean; updatedAt: string;
+};
 export type DesktopAPI = {
+  usage: (id: string) => Promise<UsageObservation>;
   copyText: (text: string) => Promise<void>;
   activity: (projectId: string, request: ActivityRequest) => Promise<Activity>;
   projects: () => Promise<Preferences>;

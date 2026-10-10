@@ -154,7 +154,7 @@ function GraphView({ projectId, active }: { projectId: string; active: boolean }
 }
 
 function App() {
-  const [view, setView] = useState<'graph' | 'settings' | 'usage' | 'models'>('graph');
+  const [view, setView] = useState<'graph' | 'settings' | 'usage' | 'global-usage' | 'models'>('graph');
   const [sidebar, setSidebar] = useState(true);
   const [globalOpen, setGlobalOpen] = useState(true);
   const [projectsOpen, setProjectsOpen] = useState(true);
@@ -188,6 +188,7 @@ function App() {
       <section className="sidebar-group">
         <Button className="group-toggle" variant="ghost" aria-expanded={globalOpen} onPress={() => setGlobalOpen(value => !value)}>GLOBAL <span>{globalOpen ? '⌄' : '›'}</span></Button>
         {globalOpen && <>
+          <Button variant={view === 'global-usage' ? 'secondary' : 'ghost'} onPress={() => setView('global-usage')}>Global usage</Button>
           <Button variant="ghost" aria-expanded={settingsOpen} onPress={() => setSettingsOpen(value => !value)}>Settings <span aria-hidden="true">{settingsOpen ? '⌄' : '›'}</span></Button>
           {settingsOpen && <Button className="submenu" variant={view === 'models' ? 'secondary' : 'ghost'} onPress={() => setView('models')}>Agents &amp; models</Button>}
         </>}
@@ -224,7 +225,7 @@ function App() {
     <main>
       <header className="workspace-heading"><Button size="sm" variant="ghost" aria-label={sidebar ? 'Hide sidebar' : 'Show sidebar'}
         aria-expanded={sidebar} onPress={() => setSidebar(value => !value)}>☰</Button>
-        <strong>{projectName || 'GraphTraj'}</strong><span>{view === 'graph' ? 'Monitor' : view === 'usage' ? 'Project usage' : view === 'models' ? 'Agents & models' : 'Teams & roles'}</span>
+        <strong>{projectName || 'GraphTraj'}</strong><span>{view === 'graph' ? 'Monitor' : view === 'global-usage' ? 'Global usage' : view === 'usage' ? 'Project usage' : view === 'models' ? 'Agents & models' : 'Teams & roles'}</span>
         <span className="read-only">Optional desktop companion</span>
       </header>
       {error && <div className="error" role="alert">{error}</div>}
@@ -232,12 +233,13 @@ function App() {
         <div className="monitor-page" key={`${project.id}:${project.root}`} hidden={view !== 'graph' || project.id !== preferences.selected}>
           <ReactFlowProvider><GraphView projectId={project.id} active={view === 'graph' && project.id === preferences.selected} /></ReactFlowProvider>
         </div>)}
+      {view === 'global-usage' && <UsageView key="global" projects={preferences?.projects ?? []} />}
       {selected && view === 'usage' && <UsageView key={selected.id} projectId={selected.id} />}
       {selected && view === 'settings' && <SettingsView key={selected.id} projectId={selected.id} />}
       {view === 'models' && <div className="welcome"><p className="eyebrow">Settings</p><h1>Agents &amp; models</h1>
         <p>Global connection editing is not available in this version. Existing project Runtime and model settings remain available in Teams &amp; roles.</p>
         {selected && <Button onPress={() => setView('settings')}>Open Teams &amp; roles</Button>}</div>}
-      {!selected && view !== 'models' && <div className="welcome"><p className="eyebrow">Optional desktop companion</p>
+      {!selected && view !== 'models' && view !== 'global-usage' && <div className="welcome"><p className="eyebrow">Optional desktop companion</p>
         <h1>Your projects, in view.</h1><p>Add an existing GraphTraj project directory to see its complete task graph.</p>
         <p>GraphTraj continues to work through its native CLI when this window is closed.</p></div>}
     </main>

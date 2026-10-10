@@ -1,3 +1,5 @@
+import { UsageHistory } from './history.ts';
+import type { UsageObservation } from './types';
 import { nativeCommand } from './native.ts';
 import { ActivityReader, type ActivityRequest, type Activity } from './activity.ts';
 import { execFile, type ChildProcess } from 'node:child_process';
@@ -62,9 +64,14 @@ export class Projects {
   private reader: GraphReader;
   private legacyFile?: string;
   private activityReader = new ActivityReader();
+  private history: UsageHistory;
+  private usageCursors = new Map<string, string>();
+  private closed = false;
+  private usageReads = new Map<string, Promise<UsageObservation>>();
 
   constructor(file: string, reader: GraphReader, legacyFile?: string) {
     this.file = file;
+    this.history = new UsageHistory(path.join(path.dirname(file), 'usage-history'));
     this.legacyFile = legacyFile;
     this.reader = reader;
   }
@@ -127,6 +134,7 @@ export class Projects {
   list(): Preferences { return structuredClone(this.preferences); }
 
   private project(id: unknown): Project {
+    if (this.closed) throw new Error('Desktop observer is closed.');
     const project = this.preferences.projects.find(p => p.id === id);
     if (typeof id !== 'string' || !project) throw new Error('Choose an added project.');
     return project;
@@ -185,7 +193,7 @@ export class Projects {
       ? projects[0]?.id ?? null : this.preferences.selected });
   }
 
-  close(): void { this.activityReader.close(); }
+  close(): void { this.closed = true; this.activityReader.close(); }
 
   async activity(value: unknown): Promise<Activity> {
     if (!value || typeof value !== 'object') throw new Error('Choose a Ticket.');
@@ -196,7 +204,51 @@ export class Projects {
     if (await realpath(project.root) !== project.root) throw new Error('Project directory changed. Add it again.');
     const request: ActivityRequest = { ticket_id, ...(alias === undefined ? {} : { alias }),
       ...(cursor === undefined ? {} : { cursor }) };
-    return this.activityReader.read(project.root, request);
+    const page = await this.activityReader.read(project.root, request);
+    if (page.events?.some(event => event.kind === 'usage')) await this.history.receive(project.id, page.events);
+    return page;
+  }
+
+  /** Backfill retained native records one bounded page per Agent, independently of UI filters. */
+  usage(id: unknown): Promise<UsageObservation> {
+    const project = this.project(id);
+    const running = this.usageReads.get(project.id);
+    if (running) return running;
+    const next = this.readUsage(project).finally(() => this.usageReads.delete(project.id));
+    this.usageReads.set(project.id, next);
+    return next;
+  }
+
+  private async readUsage(project: Project): Promise<UsageObservation> {
+    // Read persistence first, so offline projects can still be queried after reopening.
+    let calls = await this.history.receive(project.id);
+    const notices: string[] = [];
+    let pending = false;
+    try {
+      const { graph } = await this.graph(project.id);
+      for (const ticket of graph.tickets) {
+        try {
+          const members = await this.activity({ projectId: project.id, ticket_id: ticket.ticket_id });
+          if (members.scope === 'self') notices.push('This connection covers only its own Session.');
+          for (const agent of members.agents) {
+            const key = JSON.stringify([project.id, ticket.ticket_id, agent.alias]);
+            const page = await this.activity({ projectId: project.id, ticket_id: ticket.ticket_id,
+              alias: agent.alias, cursor: this.usageCursors.get(key) });
+            if (page.availability === 'cursor-expired' || page.availability === 'trace-changed') {
+              this.usageCursors.delete(key);
+              pending = true;
+              notices.push('Replaying retained native history; saved usage remains available.');
+              continue;
+            }
+            if (page.cursor) this.usageCursors.set(key, page.cursor);
+            if (page.has_more) pending = true;
+            if (page.availability !== 'available') notices.push('Some Agent history is unavailable or has no reported usage.');
+          }
+        } catch { notices.push('Some usage could not be read or saved; history coverage is incomplete.'); }
+      }
+      calls = await this.history.receive(project.id);
+    } catch { notices.push('Native connection unavailable. Showing saved history; reconnecting.'); }
+    return { projectId: project.id, calls, notices, pending, updatedAt: new Date().toISOString() };
   }
 
   async graph(id: unknown): Promise<Observation> {

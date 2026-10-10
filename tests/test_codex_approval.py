@@ -594,3 +594,31 @@ def test_response_contract_binds_exact_id_without_repairing_live_malformed_shape
     else:
         assert result['outcome'] == 'completed'
         assert reply['result'] == {'decision': 'accept'}
+
+
+def test_resume_reference_preserves_captured_work_after_catalog_removal(
+    tmp_path: Path, peer: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Current approval can be read without resolving a removed work connection."""
+    request, directory = managed(tmp_path, peer, monkeypatch)
+    completion_stub(monkeypatch, 'accept', [])
+    first = CodexManagedExecution(
+        request, 'request: first', directory, lambda *_: None, {}, directory / 'events.jsonl',
+    ).run()
+    root = resume_settings(tmp_path, directory, monkeypatch, {'approval': ROUTE}, {}, False)
+    path = root / '.graphtraj/roles.yml'
+    roles = yaml.safe_load(path.read_text())
+    roles['roles']['expert']['temporary-role'] = {
+        'connection': 'removed/provider/model', 'codex': {'approval': ROUTE},
+    }
+    path.write_text(yaml.safe_dump(roles))
+    before = copy.deepcopy(request)
+    ownership = (directory / 'mapping.yml').read_bytes()
+    resumed = CodexManagedExecution(
+        request, 'request: second', directory, lambda *_: None, {}, directory / 'events.jsonl',
+        expected_session=first['session_id'],
+    )
+    assert resumed.run()['session_id'] == first['session_id']
+    assert resumed.context.session_document()['adapter_request']['model'] == 'work-model'
+    assert request == before
+    assert (directory / 'mapping.yml').read_bytes() == ownership

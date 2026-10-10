@@ -36,11 +36,19 @@ class DshService:
     This is a Session worker resource, not a user-owned/global daemon.
     """
 
-    def __init__(self, executable: str, cwd: Path, environment: dict[str, str]) -> None:
+    def __init__(
+        self,
+        executable: str,
+        cwd: Path,
+        environment: dict[str, str],
+        *,
+        profile_patch: Path | None = None,
+    ) -> None:
         """Capture launch settings without starting any native work."""
         self.executable = executable
         self.cwd = cwd
         self.environment = environment
+        self.profile_patch = profile_patch
         self.process: subprocess.Popen | None = None
         self.origin = ''
         self.cookie = ''
@@ -55,9 +63,8 @@ class DshService:
         urls: queue.Queue[str | None] = queue.Queue()
         try:
             argv = [self.executable, 'web']
-            if self.environment.get('GRAPHTRAJ_DSH_PATCH'):
-                argv = [self.executable, '--profile', 'web', '--patch',
-                        self.environment['GRAPHTRAJ_DSH_PATCH']]
+            if self.profile_patch is not None:
+                argv = [self.executable, '--profile', 'web', '--patch', str(self.profile_patch)]
             self.process = subprocess.Popen(
                 [*argv, '--no-open', '--port', '0'],
                 cwd=self.cwd, env=self.environment,

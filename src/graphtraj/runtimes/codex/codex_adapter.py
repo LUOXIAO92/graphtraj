@@ -1303,6 +1303,9 @@ def _connection_environment(
     environment = dict(credential_environment(api_key_env))
     if runtime_home is not None:
         environment["CODEX_HOME"] = runtime_home
+        # Home-bound references carry routing in native per-Session provider
+        # settings. Do not create process-wide overrides inherited by children.
+        return environment
     if base_url is not None:
         environment["OPENAI_BASE_URL"] = base_url
         environment["OPENAI_API_KEY"] = ""

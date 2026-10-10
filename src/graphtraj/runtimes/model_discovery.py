@@ -10,26 +10,25 @@ import subprocess
 import tempfile
 
 
-def discover_models(runtime: dict, cwd: Path) -> dict:
+def discover_models(runtime: dict) -> dict:
     """Query native catalogs without creating a turn or testing account access.
 
     Native diagnostics may contain endpoint credentials, so failures disclose
     only capability and a stable instruction to check the original client.
-    DSH's supported adapter has no boot-free model-list operation.
+    DSH uses its host catalog endpoint without creating a Session.
     """
     result = {'runtime': runtime['runtime'], 'source': 'native', 'account_access': 'unknown',
               'models': [], 'supported_efforts': 'unknown', 'catalog_scope': 'runtime'}
-    if runtime['runtime'] == 'dsh':
-        return {**result, 'status': 'unsupported', 'capability': 'model-list',
-                'message': 'DSH has no supported standalone metadata query; configure models manually.'}
     try:
         # No project resources, extensions or task prompt enter a discovery query.
         with tempfile.TemporaryDirectory(prefix='graphtraj-models-') as directory:
             if runtime['runtime'] == 'codex':
-                models = asyncio.run(_codex(runtime, Path(directory)))
+                metadata = {'models': asyncio.run(_codex(runtime, Path(directory)))}
+            elif runtime['runtime'] == 'pi':
+                metadata = {'models': _pi(runtime, Path(directory))}
             else:
-                models = _pi(runtime, Path(directory))
-        return {**result, 'status': 'available', 'models': models,
+                metadata = _dsh(runtime, Path(directory))
+        return {**result, 'status': 'available', **metadata,
                 'message': 'Native catalog metadata does not establish account calling permission.'}
     except Exception:
         return {**result, 'status': 'unknown',
@@ -79,3 +78,32 @@ def _pi(runtime: dict, cwd: Path) -> list[dict]:
                 'supported_efforts': None,
             } for model in reply['data']['models']]
     raise ValueError('Pi did not return model metadata.')
+
+
+def _dsh(runtime: dict, cwd: Path) -> dict:
+    """Read the public host-generation catalog; never create or prompt a Session."""
+    from graphtraj.runtimes.dsh.service import DshService
+    import shutil
+
+    environment = dict(os.environ)
+    if runtime.get('home'):
+        environment['DSH_HOME'] = runtime['home']
+    executable = shutil.which('dsh')
+    if executable is None:
+        raise ValueError('DSH is unavailable.')
+    service = DshService(executable, cwd, environment)
+    try:
+        service.start()
+        catalog = service.rpc('session/modelCatalog')
+        models = [{
+            'id': model['id'], 'alias': model.get('name') or model['id'],
+            'provider': group['id'], 'source': 'native',
+            'supported_efforts': ([effort['id'] for effort in model['reasoning']['efforts']]
+                                  if model.get('reasoning') is not None else None),
+        } for group in catalog['groups'] for model in group['models']]
+        providers = {group['id']: 'available' for group in catalog['groups']}
+        providers.update({failure['id']: 'unknown' for failure in catalog.get('failures', [])})
+        return {'models': models, 'provider_status': providers,
+                'status': 'available' if models or not catalog.get('failures') else 'unknown'}
+    finally:
+        service.close()

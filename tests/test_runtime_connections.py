@@ -168,7 +168,7 @@ def test_codex_recovery_requires_exact_key_and_home(project: Path, monkeypatch: 
     connection = {'base_url': 'https://custom.example', 'api_key_env': 'CUSTOM_KEY',
                   'runtime_home': str(project.parent / 'native')}
     env = adapter.recovery_environment(connection)
-    assert env['OPENAI_API_KEY'] == 'custom-only' and env['CODEX_HOME'] == connection['runtime_home']
+    assert env == {'CUSTOM_KEY': 'custom-only', 'CODEX_HOME': connection['runtime_home']}
     assert adapter.recovery_environment({'base_url': 'http://localhost:8000'})['OPENAI_API_KEY'] == ''
     assert os.environ['OPENAI_API_KEY'] == 'official-must-not-leak'
 
@@ -223,12 +223,48 @@ def test_pi_reference_captures_overlay(project: Path, pi_environment: dict,
             assert native['model'] == {'provider': 'graphtraj-role', 'id': 'actual-model'}
 
 
-def test_dsh_discovery_is_explicitly_unsupported(project: Path) -> None:
-    """No static catalog is represented as account availability."""
+def test_dsh_discovery_uses_only_the_host_catalog(
+    project: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Native provider failures stay unknown and no Session/prompt method is called."""
+    from graphtraj.runtimes.dsh import service
+
+    calls = []
+
+    class Host:
+        """A controlled native host offering a catalog without a Session."""
+
+        def __init__(self, executable: str, cwd: Path, environment: dict) -> None:
+            """Require the selected shared native Home at process construction."""
+            assert environment['DSH_HOME'] == str(project.parent / 'native')
+
+        def start(self) -> None:
+            """Record the native host startup boundary."""
+            calls.append('start')
+
+        def rpc(self, method: str) -> dict:
+            """Return only the public catalog response shape."""
+            calls.append(method)
+            return {'groups': [{'id': 'deepseek-official', 'models': [{
+                'id': 'deepseek-flash', 'name': 'Flash',
+                'reasoning': {'efforts': [{'id': 'low'}, {'id': 'high'}]},
+            }]}], 'failures': [{'id': 'unavailable', 'message': 'secret diagnostic'}]}
+
+        def close(self) -> None:
+            """Record ownership cleanup even after a failed query."""
+            calls.append('close')
+
+    monkeypatch.setattr(service, 'DshService', Host)
+    import shutil
+
+    monkeypatch.setattr(shutil, 'which', lambda runtime: 'controlled-dsh')
     save(project, catalog(project, 'dsh'))
     result = operation(project, {'action': 'discover', 'runtime': 'shared'})['discovery']
-    assert result['status'] == 'unsupported' and result['account_access'] == 'unknown'
-    assert result['models'] == []
+    assert result['status'] == 'available' and result['account_access'] == 'unknown'
+    assert result['models'][0]['supported_efforts'] == ['low', 'high']
+    assert result['provider_status']['unavailable'] == 'unknown'
+    assert 'secret diagnostic' not in json.dumps(result)
+    assert calls == ['start', 'session/modelCatalog', 'close']
 
 
 def test_dsh_reference_home_and_overrides_survive_resume(
@@ -256,11 +292,20 @@ def test_dsh_reference_home_and_overrides_survive_resume(
     class Peer(NativePeer):
         """Interpret the supplied native overlay, without making vendor requests."""
 
-        def __init__(self, executable: str, cwd: Path, environment: dict) -> None:
+        def __init__(
+            self,
+            executable: str,
+            cwd: Path,
+            environment: dict,
+            *,
+            profile_patch: Path,
+        ) -> None:
             """Record the actual connection and service-local patch before startup."""
-            patch = Path(environment['GRAPHTRAJ_DSH_PATCH'])
+            patch = profile_patch
             rows = yaml.load(patch.read_text(), Loader=TaggedLoader)
             route = next(row['config'] for row in rows if row.get('id') == 'llm-deepseek')
+            assert next(row for row in rows if row.get('id') == 'config-editor')['disabled']
+            assert route['models'] == [{'id': 'actual-model'}]
             observed.append((environment['DSH_HOME'], route))
             assert 'route-secret' not in patch.read_text()
             super().__init__(executable, cwd, {**environment, 'DSH_HOME': str(patch.parents[2])})
@@ -308,19 +353,23 @@ def test_codex_references_reach_fresh_and_resumed_native_sessions(
     """Controlled native sessions receive separate routes with the same Home."""
     monkeypatch.setenv('CUSTOM_KEY', 'first-secret')
     monkeypatch.setenv('OTHER_KEY', 'second-secret')
-    save(project, catalog(project))
+    document = catalog(project)
+    document['runtimes']['shared']['providers']['openai'] = {'models': {
+        'model': {'id': 'actual-model', 'source': 'native'},
+    }}
+    save(project, document)
     approval = {'approval': {'model': 'review', 'base_url': 'https://review.example/v1',
                              'api_key_env': 'REVIEW_KEY'}}
     request = {'change': {'set_presets': {
         name: {'connection': f'shared/{provider}/model', 'codex': approval}
-        for name, provider in [('one', 'first'), ('two', 'second')]
+        for name, provider in [('one', 'first'), ('two', 'second'), ('native', 'openai')]
     }}}
     bind(project, recovery_reviewer=lambda proposal: {'decision': 'accept'})(
         {'action': 'execute', 'feature': 'role_organization', 'arguments': request},
     )
     contexts = [codex_context(project.parent / name, peer, resolve_child_role(
         name, load_project_roles(project).preset(name), project,
-    )) for name in ('one', 'two')]
+    )) for name in ('one', 'two', 'native')]
     retained = [item.launch_document() for item in contexts]
     save(project, {'version': 1, 'runtimes': {}})
 
@@ -336,8 +385,12 @@ def test_codex_references_reach_fresh_and_resumed_native_sessions(
                     session_id = session.thread_id
                     turn = await server.start_execution(session, 'configuration')
                     observed = json.loads((await server.wait(turn, timeout=2))['last_agent_message'])
-                    provider = observed['config']['model_providers']['graphtraj-role']
                     assert observed['model'] == 'actual-model'
+                    if index == 2:
+                        assert observed['config']['model_provider'] == 'openai'
+                        assert set(context.runtime_environment()) == {'CODEX_HOME'}
+                        continue
+                    provider = observed['config']['model_providers']['graphtraj-role']
                     assert provider['base_url'] == ['https://provider.example/v1',
                                                     'http://localhost:8080/v1'][index]
                     assert provider['env_key'] == ['CUSTOM_KEY', 'OTHER_KEY'][index]
@@ -352,7 +405,7 @@ def test_codex_references_reach_fresh_and_resumed_native_sessions(
 
 @pytest.mark.skipif(os.environ.get('GRAPHTRAJ_NATIVE_METADATA') != '1',
                     reason='Opt-in installed Runtime metadata query; never inference.')
-@pytest.mark.parametrize('runtime', ['codex', 'pi'])
+@pytest.mark.parametrize('runtime', ['codex', 'pi', 'dsh'])
 def test_installed_runtime_metadata(project: Path, runtime: str) -> None:
     """Exercise actual public metadata on an isolated native Home without turns."""
     document = catalog(project, runtime)
@@ -363,3 +416,81 @@ def test_installed_runtime_metadata(project: Path, runtime: str) -> None:
     assert result['status'] == 'available', result
     assert result['account_access'] == 'unknown'
     print(f"{runtime}: native metadata, {len(result['models'])} models; account access unknown; no inference")
+
+
+@pytest.mark.skipif(os.environ.get('GRAPHTRAJ_NATIVE_METADATA') != '1',
+                    reason='Opt-in installed DSH configuration query; never inference.')
+def test_installed_dsh_accepts_execution_overlays_without_creating_sessions(
+    project: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The real native host consumes each captured overlay; Session work is stubbed."""
+    from graphtraj.interfaces import hosted_cli
+    from graphtraj.runtimes.dsh import execution
+    from graphtraj.runtimes.dsh.service import DshService
+
+    monkeypatch.setenv('CUSTOM_KEY', 'metadata-only-key')
+    monkeypatch.setenv('OTHER_KEY', 'other-metadata-only-key')
+    monkeypatch.setattr(hosted_cli, 'cli_connection', lambda *args, **kwargs: nullcontext('/bound-channel'))
+    document = catalog(project, 'dsh')
+    native_home = Path(document['runtimes']['shared']['home'])
+    native_home.mkdir()
+    marker = native_home / 'cordis.patch.yml'
+    marker.write_text('[]\n')
+    observed = []
+
+    class MetadataHost:
+        """Replace Agent creation with a real, read-only native catalog query."""
+
+        def __init__(
+            self,
+            executable: str,
+            cwd: Path,
+            environment: dict,
+            *,
+            profile_patch: Path,
+        ) -> None:
+            """Use the production service with the exact execution environment."""
+            self.native = DshService(executable, cwd, environment, profile_patch=profile_patch)
+
+        def start(self) -> None:
+            """Start the installed native host, without creating an Agent."""
+            self.native.start()
+
+        def rpc(self, method: str, request: dict) -> dict:
+            """Stop before Session creation; query only host metadata."""
+            assert method == 'session/create'
+            observed.append(self.native.rpc('session/modelCatalog'))
+            raise RuntimeAdapterError('METADATA_CHECK_COMPLETE', 'Stopped before Session creation.')
+
+        def close(self) -> None:
+            """Always reap the owned native metadata service."""
+            self.native.close()
+
+    monkeypatch.setattr(execution, 'DshService', MetadataHost)
+    save(project, document)
+    (project / '.graphtraj/roles.yml').write_text(yaml.safe_dump({'roles': {
+        'one': {'connection': 'shared/first/model'},
+        'two': {'connection': 'shared/second/model'},
+    }}))
+    adapter = select_runtime_adapter('dsh')
+    for name in ('one', 'two'):
+        role = resolve_child_role(name, load_project_roles(project).preset(name), project)
+        captured = adapter.preflight_runtime_context(
+            harness_root=project, git_common_directory=project / '.git', role=role,
+            worktree=project, evidence=project.parent / 'evidence', requested_skills=(),
+        ).finalize()
+        directory = project.parent / ('native-' + name)
+        directory.mkdir()
+        turn = adapter.managed_execution(
+            captured.launch_document()['adapter_request'], 'must not be sent', directory,
+            lambda session, pid: None, {}, trace_file=directory / 'trace.jsonl',
+            session_created=lambda session, pid: None,
+        )
+        with pytest.raises(RuntimeAdapterError, match='Stopped before Session creation'):
+            turn.run()
+    assert marker.read_text() == '[]\n'
+    for result in observed:
+        models = [model['id'] for group in result['groups']
+                  if group['id'] == 'deepseek-official' for model in group['models']]
+        assert models == ['actual-model']
+    print('dsh: real host accepted both shared-Home overlays; no Sessions or inference')

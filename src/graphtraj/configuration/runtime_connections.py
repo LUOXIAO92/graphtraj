@@ -151,6 +151,7 @@ def resolve_connection(reference: str, effort: str | None) -> dict:
         'runtime_home': str(Path(home).resolve()), 'runtime_provider': provider_id,
         'base_url': provider.get('base_url'), 'api_key_env': provider.get('api_key_env'),
         'provider_api': provider.get('api'), 'connection_revision': revision,
+        'model_source': model['source'],
     }
 
 
@@ -171,7 +172,7 @@ def manage_connections(arguments: dict, *, cwd: Path) -> dict:
     view = {'scope': 'user', 'path': str(path), 'revision': revision, 'catalog': before,
             'account_access': 'unknown',
             'capabilities': {'read': True, 'preview': True, 'save': True,
-                             'model_discovery': {'codex': 'native', 'pi': 'native', 'dsh': 'unsupported'},
+                             'model_discovery': {'codex': 'native', 'pi': 'native', 'dsh': 'native-host'},
                              'custom_api': {'codex': ['responses'],
                                             'pi': ['openai-completions', 'openai-responses', 'anthropic-messages'],
                                             'dsh': ['anthropic-messages']}}}
@@ -183,7 +184,9 @@ def manage_connections(arguments: dict, *, cwd: Path) -> dict:
         runtime = before['runtimes'].get(arguments.get('runtime'))
         if runtime is None:
             raise ValueError('Choose a configured Runtime entry.')
-        return {**view, 'discovery': discover_models(runtime, cwd)}
+        return {**view, 'discovery': {
+            'runtime_entry': arguments['runtime'], **discover_models(runtime),
+        }}
     after = validate_catalog(arguments.get('catalog'))
     if action == 'preview':
         return {**view, 'catalog': after, 'applied': False}

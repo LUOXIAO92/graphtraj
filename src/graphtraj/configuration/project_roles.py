@@ -56,6 +56,7 @@ class RolePreset:
     runtime_home: str | None = None
     provider_api: str | None = None
     runtime_provider: str | None = None
+    model_source: str | None = None
 
 
 @dataclass(frozen=True)

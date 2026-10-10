@@ -106,6 +106,7 @@ class DshRuntimeAdapter:
             'runtime_home': role.settings.runtime_home,
             'connection': role.settings.connection,
             'connection_revision': role.settings.connection_revision,
+            'model_source': role.settings.model_source,
             'reasoning_effort': effort,
             'base_url': role.settings.base_url if role.settings.connection else base_url,
             'api_key_env': role.settings.api_key_env or (

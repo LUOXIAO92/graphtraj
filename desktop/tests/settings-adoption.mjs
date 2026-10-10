@@ -4,6 +4,12 @@ import assert from 'node:assert/strict';
 export async function settingsAdoption({ page, decide, firstId, secondId, runtimeHome, shot, step }) {
   const button = name => page.getByRole('button', { name, exact: true });
   const input = name => page.getByLabel(name, { exact: true });
+  async function expectDisclosure(summary, open) {
+    // Keyboard activation may finish after the input protocol reply. Await the
+    // observable native state, without replaying input or prescribing a delay.
+    await summary.locator(open ? 'xpath=parent::details[@open]' : 'xpath=parent::details[not(@open)]').waitFor({ state: 'attached' });
+    assert.equal(await summary.locator('..').getAttribute('open'), open ? '' : null);
+  }
   async function globalPage() {
     if (!await button('Agents & models').isVisible()) await button('Settings').click();
     await button('Agents & models').click();
@@ -28,22 +34,36 @@ export async function settingsAdoption({ page, decide, firstId, secondId, runtim
   await saveConnections();
   const summary = page.locator('summary').filter({ hasText: /^shared · codex$/ });
   await summary.click();
-  const disclosure = summary.locator('..');
-  assert.equal(await disclosure.getAttribute('open'), '');
+  await expectDisclosure(summary, true);
+  await summary.click();
+  await expectDisclosure(summary, false);
+  await summary.click();
+  await expectDisclosure(summary, true);
   await summary.press('Enter');
-  assert.equal(await disclosure.getAttribute('open'), null);
+  await expectDisclosure(summary, false);
   await summary.press('Space');
-  assert.equal(await disclosure.getAttribute('open'), '');
+  await expectDisclosure(summary, true);
+  step('Runtime disclosure repeat-click, Enter and Space reached their expected native states.');
   await button('Refresh native models').click();
   await page.getByText(/account access: unknown/).waitFor();
   const discoveryText = await page.getByText(/account access: unknown/).innerText();
   assert.match(discoveryText, /^(available|unknown)/);
   step(`Native discovery display: ${discoveryText}. No login or model run.`);
 
+  const discoveredModel = page.getByRole('button', { name: /^Use / }).first();
+  const canUseDiscoveredModel = await discoveredModel.count() > 0;
+  if (canUseDiscoveredModel) await discoveredModel.click();
+
   await input('Provider name').fill('custom');
   await button('Add Provider').click();
   await input('Provider Base URL').fill('https://provider.invalid/v1');
   await input('Provider api_key_env name').fill('GRAPHTRAJ_ADOPTION_SECRET');
+  if (canUseDiscoveredModel) {
+    // Keep the discovered identifier unchanged: changing it would independently
+    // reset metadata and conceal the destination-change regression.
+    await input('Model entry name').fill('moved-discovery');
+    await button('Add Model').click();
+  }
   await input('Model entry name').fill('model');
   await input('Model identifier').fill('custom-model');
   await input('Model alias').fill('Manual model');
@@ -59,6 +79,14 @@ export async function settingsAdoption({ page, decide, firstId, secondId, runtim
   await page.getByRole('status').getByText('Connections saved.', { exact: true }).waitFor();
   const saved = await page.evaluate(id => window.graphtraj.connections(id, { action: 'read' }), firstId);
   assert.equal(saved.catalog.runtimes.shared.providers.custom.models.model.alias, 'Manual model');
+  if (canUseDiscoveredModel) {
+    const moved = saved.catalog.runtimes.shared.providers.custom.models['moved-discovery'];
+    assert.equal(moved.source, 'manual');
+    assert.equal(moved.supported_efforts, undefined);
+    step('Real discovered model moved to a custom Provider saved as manual with no unverified efforts.');
+  } else {
+    step('Discovery returned no usable model; destination-change regression remains covered by focused component tests, not this installed run.');
+  }
   assert.equal(saved.catalog.runtimes.shared.home, runtimeHome);
   assert.equal((await page.evaluate(id => window.graphtraj.connections(id, { action: 'read' }), secondId)).revision, saved.revision);
   await shot('09-global-connections.png');
@@ -96,14 +124,14 @@ export async function settingsAdoption({ page, decide, firstId, secondId, runtim
   await input('Codex approval model').fill('approval-model');
   await input('Codex approval Base URL').fill('https://review.invalid/v1');
   await input('Codex approval api_key_env name').fill('GRAPHTRAJ_APPROVAL_KEY');
+  await input('New team name').fill('delivery');
+  await button('Rename team').click();
   await input('New Agent name').fill('middle');
   await button('Add child Agent').click();
   await input('New Agent name').fill('leaf');
   await button('Add child Agent').click();
   await input('Agent parent').selectOption('research.root');
   await input('Agent parent').selectOption('research.middle');
-  await input('New team name').fill('delivery');
-  await button('Rename team').click();
   await saveRoles();
   const created = await page.evaluate(id => window.graphtraj.settings(id), firstId);
   assert.equal(created.roles['delivery.root'].connection, 'shared/custom/model');

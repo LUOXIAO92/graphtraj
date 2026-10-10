@@ -40,12 +40,12 @@ def refresh_approval_route(request: dict, session_directory: Path) -> None:
     mapping = yaml.safe_load((session_directory / 'mapping.yml').read_text(encoding='utf-8'))
     task = read_session_task(mapping, harness_root)
     # Inline roles live in their retained Batch, not in the reusable presets.
-    roles = load_project_roles(harness_root)
-    # Approval configuration can change without resolving a new work connection.
-    # In particular, a removed catalog entry must not invalidate a captured Session.
-    settings = task.inline_preset or roles.presets[
-        roles.resolve(mapping.get('role_reference') or mapping['role'])
-    ]
+    settings = task.inline_preset
+    if settings is None:
+        roles = load_project_roles(harness_root)
+        # Approval can change without resolving a new work connection. Removing
+        # a catalog entry must not invalidate a captured Session.
+        settings = roles.presets[roles.resolve(mapping.get('role_reference') or mapping['role'])]
     defaults = (
         load_project_configuration(harness_root).codex
         if configuration_exists(harness_root) else None

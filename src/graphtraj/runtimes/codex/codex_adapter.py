@@ -1223,6 +1223,9 @@ def _resolve_codex_role(role: ResolvedChildRole, harness_root: Path) -> _CodexRo
     document["permissions"][document["default_permissions"]]["filesystem"][
         ":workspace_roots"
     ]["."] = role.settings.worktree_access
+    api_key_env = role.settings.api_key_env
+    if role.settings.connection is None:
+        api_key_env = _legacy_codex_api_key_env(role.settings.base_url, api_key_env)
     if role.settings.runtime_provider is not None:
         document["model_provider"] = role.settings.runtime_provider
     if role.settings.base_url is not None or (role.settings.connection and role.settings.api_key_env):
@@ -1230,7 +1233,7 @@ def _resolve_codex_role(role: ResolvedChildRole, harness_root: Path) -> _CodexRo
         document["model_providers"] = {"graphtraj-role": {
             "name": "GraphTraj role",
             "base_url": role.settings.base_url or "https://api.openai.com/v1",
-            **({"env_key": role.settings.api_key_env} if role.settings.api_key_env else {}),
+            **({"env_key": api_key_env} if api_key_env else {}),
             "requires_openai_auth": False,
             "wire_api": "responses",
         }}
@@ -1292,6 +1295,17 @@ def _nonempty_string(value: Any) -> bool:
     return isinstance(value, str) and bool(value.strip())
 
 
+def _legacy_codex_api_key_env(base_url: str | None, name: str | None) -> str | None:
+    """Retain the legacy default key only for its official HTTPS API origin."""
+    from urllib.parse import urlsplit
+
+    if name is None and base_url is not None:
+        parsed = urlsplit(base_url)
+        if parsed.scheme == 'https' and parsed.netloc.lower() in {'api.openai.com', 'api.openai.com:443'}:
+            return 'OPENAI_API_KEY'
+    return name
+
+
 def _connection_environment(
     base_url: str | None,
     api_key_env: str | None,
@@ -1300,17 +1314,20 @@ def _connection_environment(
     """Resolve explicit credentials transiently; never fall back to official auth."""
     from graphtraj.runtimes.runtime_adapter import credential_environment
 
+    if runtime_home is None:
+        api_key_env = _legacy_codex_api_key_env(base_url, api_key_env)
     environment = dict(credential_environment(api_key_env))
     if runtime_home is not None:
         environment["CODEX_HOME"] = runtime_home
         # Home-bound references carry routing in native per-Session provider
         # settings. Do not create process-wide overrides inherited by children.
         return environment
+    api_key = environment.get(api_key_env) if api_key_env is not None else None
     if base_url is not None:
         environment["OPENAI_BASE_URL"] = base_url
         environment["OPENAI_API_KEY"] = ""
-    if api_key_env is not None:
-        environment["OPENAI_API_KEY"] = environment[api_key_env]
+    if api_key is not None:
+        environment["OPENAI_API_KEY"] = api_key
     return environment
 
 

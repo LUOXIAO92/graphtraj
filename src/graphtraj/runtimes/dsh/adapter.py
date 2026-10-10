@@ -92,6 +92,13 @@ class DshRuntimeAdapter:
         if (parsed.scheme not in schemes or not parsed.netloc or parsed.username or parsed.password
                 or parsed.query or parsed.fragment):
             raise RuntimeAdapterError('ROLE_CONFIG_INVALID', 'DSH requires a credential-free Messages root (HTTPS for legacy inline roles).')
+        legacy_official = (
+            not role.settings.connection and parsed.scheme == 'https'
+            and parsed.netloc.lower() in {'api.deepseek.com', 'api.deepseek.com:443'}
+        )
+        unauthenticated = bool(
+            role.settings.base_url and not role.settings.api_key_env and not legacy_official
+        )
         reports = []
         for path in report_files:
             if path.is_absolute() or '..' in path.parts or path.parts[:1] != ('.state',):
@@ -110,10 +117,10 @@ class DshRuntimeAdapter:
             'reasoning_effort': effort,
             'base_url': role.settings.base_url if role.settings.connection else base_url,
             'api_key_env': role.settings.api_key_env or (
-                'GRAPHTRAJ_LOCAL_KEY' if role.settings.base_url else
+                'GRAPHTRAJ_CONNECTION_KEY' if unauthenticated else
                 None if role.settings.connection else 'DEEPSEEK_API_KEY'
             ),
-            'local_unauthenticated': bool(role.settings.base_url and not role.settings.api_key_env),
+            'unauthenticated': unauthenticated,
             'instructions': role.instructions, 'reports': reports,
             'sandbox': 'read-only' if role.settings.worktree_access == 'read' else 'workspace-write',
         }, {'effective_role': role.name})

@@ -33,12 +33,6 @@ DEFAULT_ROUTE = {'model': 'default-review', 'base_url': 'https://default.example
                  'api_key_env': 'DEFAULT_REVIEW_KEY'}
 
 
-@pytest.fixture(autouse=True)
-def work_credential(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Keep approval-only peers supplied with their explicit work credential."""
-    monkeypatch.setenv('WORK_KEY', 'controlled-work-key')
-
-
 def project_defaults(root: Path, codex: object) -> None:
     """Write project settings through the supported general configuration file."""
     directory = root / '.graphtraj'
@@ -69,6 +63,7 @@ def managed(
     route_source: str = 'role',
 ):
     """Use the controlled external peer with the real managed adapter."""
+    monkeypatch.setenv("WORK_KEY", "controlled-work-key")
     resolved = custom_context(tmp_path, peer, route_source)
     executable = tmp_path / 'managed-peer'
     executable.write_text('#!' + sys.executable + '\n' +
@@ -596,8 +591,9 @@ def test_response_contract_binds_exact_id_without_repairing_live_malformed_shape
         assert reply['result'] == {'decision': 'accept'}
 
 
+@pytest.mark.parametrize("inline", [False, True])
 def test_resume_reference_preserves_captured_work_after_catalog_removal(
-    tmp_path: Path, peer: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path, peer: Path, monkeypatch: pytest.MonkeyPatch, inline: bool,
 ) -> None:
     """Current approval can be read without resolving a removed work connection."""
     request, directory = managed(tmp_path, peer, monkeypatch)
@@ -605,13 +601,15 @@ def test_resume_reference_preserves_captured_work_after_catalog_removal(
     first = CodexManagedExecution(
         request, 'request: first', directory, lambda *_: None, {}, directory / 'events.jsonl',
     ).run()
-    root = resume_settings(tmp_path, directory, monkeypatch, {'approval': ROUTE}, {}, False)
+    root = resume_settings(tmp_path, directory, monkeypatch, {'approval': ROUTE}, {}, inline)
     path = root / '.graphtraj/roles.yml'
     roles = yaml.safe_load(path.read_text())
     roles['roles']['expert']['temporary-role'] = {
         'connection': 'removed/provider/model', 'codex': {'approval': ROUTE},
     }
     path.write_text(yaml.safe_dump(roles))
+    if inline:
+        path.unlink()
     before = copy.deepcopy(request)
     ownership = (directory / 'mapping.yml').read_bytes()
     resumed = CodexManagedExecution(

@@ -5,6 +5,9 @@ import asyncio
 from contextlib import nullcontext
 import json
 import os
+import shutil
+import subprocess
+from typing import Any
 from pathlib import Path
 
 import pytest
@@ -18,6 +21,10 @@ from test_role_organization import CONFIG
 from test_pi_runtime import pi_environment
 from test_codex_app_server import context as codex_context, peer
 from graphtraj.runtimes.codex.app_server import CodexAppServer
+
+
+NATIVE_METADATA = os.environ.get('GRAPHTRAJ_NATIVE_METADATA') == '1'
+NATIVE_PI = shutil.which('pi')
 
 
 @pytest.fixture
@@ -170,6 +177,7 @@ def test_codex_recovery_requires_exact_key_and_home(project: Path, monkeypatch: 
     env = adapter.recovery_environment(connection)
     assert env == {'CUSTOM_KEY': 'custom-only', 'CODEX_HOME': connection['runtime_home']}
     assert adapter.recovery_environment({'base_url': 'http://localhost:8000'})['OPENAI_API_KEY'] == ''
+    assert adapter.recovery_environment({'base_url': 'https://api.openai.com/v1'})['OPENAI_API_KEY'] == 'official-must-not-leak'
     assert os.environ['OPENAI_API_KEY'] == 'official-must-not-leak'
 
 
@@ -189,6 +197,17 @@ def test_pi_reference_captures_overlay(project: Path, pi_environment: dict,
     from graphtraj.interfaces import hosted_cli
 
     monkeypatch.setattr(hosted_cli, 'cli_connection', lambda *args, **kwargs: nullcontext('/bound-channel'))
+    native_homes = set()
+    original_popen = subprocess.Popen
+
+    def observe_process(*args: object, **kwargs: Any) -> subprocess.Popen:
+        """Observe the native process environment without retaining any credential."""
+        environment = kwargs.get('env', {})
+        if environment.get('PI_ASB_NO_ALIAS_PROMPT') == '1':
+            native_homes.add(environment['PI_CODING_AGENT_DIR'])
+        return original_popen(*args, **kwargs)
+
+    monkeypatch.setattr(subprocess, 'Popen', observe_process)
     contexts = []
     for name in ('one', 'two'):
         settings = load_project_roles(project).preset(name)
@@ -221,6 +240,19 @@ def test_pi_reference_captures_overlay(project: Path, pi_environment: dict,
             assert result['outcome'] == 'completed'
             native = yaml.safe_load((directory / 'session.yml').read_text())
             assert native['model'] == {'provider': 'graphtraj-role', 'id': 'actual-model'}
+    if NATIVE_METADATA:
+        assert NATIVE_PI is not None
+        monkeypatch.setenv('PATH', str(Path(NATIVE_PI).parent) + os.pathsep + os.environ['PATH'])
+        assert len(native_homes) == 2
+        for home in native_homes:
+            save(project, {'version': 1, 'runtimes': {'metadata': {
+                'runtime': 'pi', 'home': home, 'providers': {},
+            }}})
+            discovered = operation(project, {'action': 'discover', 'runtime': 'metadata'})['discovery']
+            assert discovered['status'] == 'available', discovered
+            assert any(model['provider'] == 'graphtraj-role' and model['id'] == 'actual-model'
+                       for model in discovered['models'])
+        print('pi: real RPC accepted both generated provider catalogs; no inference')
 
 
 def test_dsh_discovery_uses_only_the_host_catalog(
@@ -316,6 +348,8 @@ def test_dsh_reference_home_and_overrides_survive_resume(
     (project / '.graphtraj/roles.yml').write_text(yaml.safe_dump({'roles': {
         'one': {'connection': 'shared/first/model'},
         'two': {'connection': 'shared/second/model'},
+        'legacy': {'runtime': 'dsh', 'model': 'deepseek-flash',
+                   'base_url': 'https://api.deepseek.com/anthropic'},
     }}))
     adapter = select_runtime_adapter('dsh')
     captures = []
@@ -325,6 +359,13 @@ def test_dsh_reference_home_and_overrides_survive_resume(
             harness_root=project, git_common_directory=project / '.git', role=role,
             worktree=project, evidence=project.parent / 'evidence', requested_skills=(),
         ).finalize().launch_document())
+    legacy = resolve_child_role('legacy', load_project_roles(project).preset('legacy'), project)
+    legacy_request = adapter.preflight_runtime_context(
+        harness_root=project, git_common_directory=project / '.git', role=legacy,
+        worktree=project, evidence=project.parent / 'evidence', requested_skills=(),
+    ).finalize().launch_document()['adapter_request']
+    assert legacy_request['api_key_env'] == 'DEEPSEEK_API_KEY'
+    assert legacy_request['unauthenticated'] is False
     save(project, {'version': 1, 'runtimes': {}})
     for index, capture in enumerate(captures):
         directory = project.parent / f'dsh-control-{index}'

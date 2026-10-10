@@ -159,7 +159,7 @@ class DshExecution:
         from graphtraj.runtimes.runtime_adapter import credential_environment
 
         key = self.request.get('api_key_env')
-        credentials = ({key: 'local'} if self.request.get('local_unauthenticated')
+        credentials = ({key: 'local'} if self.request.get('unauthenticated')
                        else credential_environment(key))
         home = self.directory / 'dsh-home'
         profile = home / 'profiles' / 'web'

@@ -81,10 +81,6 @@ def validate_catalog(document: object) -> dict:
                 if (parsed.scheme not in {'http', 'https'} or not parsed.hostname
                         or parsed.username or parsed.password or parsed.query or parsed.fragment):
                     raise ValueError('Base URL must be HTTP(S) without credentials, query or fragment.')
-                # Remote custom routes must explicitly name their own key. Local
-                # servers can be unauthenticated; neither route inherits OAuth.
-                if 'api_key_env' not in provider and parsed.hostname not in {'localhost', '127.0.0.1', '::1'}:
-                    raise ValueError('A remote custom provider requires api_key_env.')
             if kind == 'dsh' and not endpoint and provider_id != 'deepseek-official':
                 raise ValueError('DSH custom providers require a Messages Base URL.')
             env = provider.get('api_key_env')

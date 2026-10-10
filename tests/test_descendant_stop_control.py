@@ -172,6 +172,27 @@ def test_native_root_owner_outlives_historical_checker_membership(
     assert not list((root / '.graphtraj/runner/sessions').glob('*/mapping.yml'))
     retained_mapping = Path(original['trace_file']).parent / 'runner/session.yml'
     assert yaml.safe_load(retained_mapping.read_text())['retirement']['mapping'] == original
+
+    # Check Stop before another dispatch can supply an active root mapping.
+    (root / 'options.json').write_text(json.dumps({'source': 'vscode', 'child': 'checker-after-retire'}))
+    result = native_hook(root)
+    assert 'completed' in result['systemMessage'] and 'decision' not in result
+    wire = (root / 'wire.jsonl').read_bytes()
+    rollout(root, session='checker-after-retire')
+    assert 'recorded completion checker' in native_hook(root)['systemMessage']
+    assert native_hook(root, 'SessionStart') == {}
+    rollout(root, source={'subagent': {'thread_spawn': {'parent_thread_id': 'parent'}}})
+    assert 'child Session' in native_hook(root)['systemMessage']
+    assert native_hook(root, 'SessionStart') == {}
+    rollout(root, source='unknown')
+    assert native_hook(root)['continue'] is False
+    assert native_hook(root, 'SessionStart')['continue'] is False
+    assert (root / 'wire.jsonl').read_bytes() == wire
+    assert not list((root / '.graphtraj/runner/sessions').glob('*/mapping.yml'))
+    assert historical.read_bytes() == retained
+    assert yaml.safe_load(retained_mapping.read_text())['retirement']['mapping'] == original
+    rollout(root, source='vscode')
+
     tool = bind(root, recovery_reviewer=lambda proposal: {'decision': 'accept'})
     role_change = {'change': {'set_presets': {
         'next-probe': {'runtime': 'codex', 'model': 'gpt-5.6'},

@@ -47,6 +47,8 @@ async function nativeWindow(title) {
 
 /** Start the installed launcher; no development app directory is passed. */
 async function launch() {
+  facts.stage = 'installed application launch';
+  assert.notEqual(process.geteuid(), 0, 'Run desktop checks as the ordinary CI user');
   app = await electron.launch({ executablePath,
     args: [`--user-data-dir=${userData}`, '--ozone-platform=x11'],
     env: { ...process.env, LINUX_ADOPTION_SECRET: 'controlled-secret-never-display-267' },
@@ -55,10 +57,31 @@ async function launch() {
   page.setDefaultTimeout(15000);
   assert.equal(await app.evaluate(({ app }) => app.isPackaged), true);
   assert.equal(await app.evaluate(({ app }) => app.getAppPath()), path.join(installedRoot, 'resources/app'));
+  facts.sandbox = await app.evaluate(({ app, BrowserWindow }) => ({
+    disabled: app.commandLine.hasSwitch('no-sandbox'),
+    renderer: BrowserWindow.getAllWindows()[0].webContents.getLastWebPreferences().sandbox,
+  }));
+  assert.deepEqual(facts.sandbox, { disabled: false, renderer: true });
+}
+
+/** Close the test application with a bounded fallback, retaining failed cleanup. */
+async function closeApp() {
+  const closing = app;
+  app = null;
+  let timer;
+  try {
+    await Promise.race([closing.close(), new Promise((_, reject) => {
+      timer = setTimeout(() => {
+        closing.process().kill('SIGKILL');
+        reject(new Error('Installed application did not close within 5 seconds'));
+      }, 5000);
+    })]);
+  } finally { clearTimeout(timer); }
 }
 
 /** Choose a directory with the GTK chooser; never replace Electron dialog APIs. */
 async function pick(folder, name) {
+  facts.stage = `${name} native directory picker`;
   await page.getByRole('button', { name: 'Add project', exact: true }).click();
   await nativeWindow('Add existing GraphTraj project');
   await exec('xdotool', ['key', '--clearmodifiers', 'ctrl+l']);
@@ -75,6 +98,7 @@ async function pick(folder, name) {
 
 /** Exercise the shared writer after a real OS approval or rejection. */
 async function save(model, approve, name) {
+  facts.stage = `${name} native settings dialog`;
   await page.getByLabel('Model', { exact: true }).fill(model);
   await page.getByRole('button', { name: 'Save changes', exact: true }).click();
   await nativeWindow('Save project settings');
@@ -138,15 +162,15 @@ try {
   await page.getByRole('button', { name: 'Task graph', exact: true }).click();
   await page.locator('.project-button').filter({ hasText: first }).click();
   await page.locator('.react-flow__node').first().waitFor();
-  await app.close();
-  app = null;
+  await closeApp();
   assert.deepEqual(fixtures.operate(first, 'ticket_graph'), graphBefore);
   assert.deepEqual(runningTask(first), runningBefore);
   await launch();
   await page.locator('.project-button.current').filter({ hasText: first }).waitFor();
   assert.equal(await page.locator('.project-button').count(), 2);
   const ticketId = process.env.ADOPTION_TICKET_ID;
-  await page.locator('.react-flow__node').filter({ hasText: `#${ticketId}` }).first().click();
+  facts.stage = 'controlled Chat';
+  await page.locator(`.react-flow__node[data-id="${ticketId}"]`).click();
   await page.getByRole('complementary', { name: 'Ticket details' }).waitFor();
   {
     const activity = await page.evaluate(async ({ ticketId, alias }) => {
@@ -174,6 +198,7 @@ try {
     facts.steps.push('Controlled message and tool command/result rendered; expansion and real clipboard copy verified');
     await screenshot('chat-message-and-tool');
   }
+  facts.stage = 'controlled Dashboard';
   await page.getByRole('button', { name: 'Usage', exact: true }).click();
   await page.locator('.usage-dashboard').waitFor();
   const modelRow = page.getByRole('table').filter({ has: page.locator('caption', { hasText: 'Model breakdown' }) })
@@ -189,8 +214,7 @@ try {
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.forcefullyCrashRenderer());
   assert.deepEqual(fixtures.operate(first, 'ticket_graph'), graphBefore);
   assert.deepEqual(runningTask(first), runningBefore);
-  await app.close();
-  app = null;
+  await closeApp();
   fixtures.operate(second, 'ticket_register', fixtures.ticket('3', 'cli-after-gui-failure', ['2']));
   assert.equal(fixtures.operate(second, 'ticket_graph').tickets.length, 3);
   await launch();
@@ -206,7 +230,13 @@ try {
   process.exitCode = 1;
   await screenshot('failure').catch(() => {});
 } finally {
-  if (app) await app.close().catch(() => { app.process().kill('SIGKILL'); });
+  // Retain the observed boundary before cleanup can itself fail or be stopped.
+  await fs.writeFile(path.join(evidence, 'ui-result.json'), JSON.stringify(facts, null, 2));
+  if (app) await closeApp().catch(error => {
+    facts.uiPassed = false;
+    facts.cleanupFailure = String(error);
+    process.exitCode = 1;
+  });
   await fs.writeFile(path.join(evidence, 'ui-result.json'), JSON.stringify(facts, null, 2));
   console.log(JSON.stringify(facts, null, 2));
 }

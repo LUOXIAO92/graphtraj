@@ -57,6 +57,7 @@ def main() -> None:
         registered = operate(call, 'ticket_register', {'ticket_id': '1', 'ticket_name': 'controlled-linux',
             'title': 'Controlled Linux desktop observation', 'source': 'https://github.com/example/desktop-test/issues/1',
             'body': 'Controlled message/tool/usage records, not real model execution.', 'dependencies': []})
+        result['registration'] = registered
         graph = operate(call, 'ticket_graph', {})
         assert len(graph['tickets']) == 1, graph
         ticket_id = graph['tickets'][0]['ticket_id']
@@ -82,7 +83,6 @@ def main() -> None:
                         'role': 'observer', 'instruction': 'Emit the controlled desktop records and await test release.'}]})
                     task = launched['tasks'][0]
                     assert task['launch_status'] == 'launched', launched
-                    result['registration'] = registered
                     result['task'] = task
                     try:
                         with listener.accept()[0] as connection:
@@ -106,6 +106,10 @@ def main() -> None:
                         assert result['uiExitCode'] == 0 and result['ui']['uiPassed'], result['ui']
                         assert {key: final[key] for key in ('session', 'execution_id')} == result['ui']['controlledExecution']
                         result['passed'] = True
+                    except Exception as error:
+                        result['failure'] = str(error)
+                        (evidence / 'result.json').write_text(json.dumps(result, indent=2))
+                        raise
                     finally:
                         if not terminal.is_set():
                             result['cleanup'] = operate(host, 'interrupt', {'alias': task['alias']})

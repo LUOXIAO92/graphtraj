@@ -31,10 +31,14 @@ user stops, execution limits and approval requirements. This check grants no new
 authority, time, acceptance or permission to modify state. Historical failed
 nodes that the current graph explicitly replaces are not new blocking work.
 
-Return one JSON object with status, reason and nodes. status is one of the four
-conclusions above. Keep reason brief: the decisive fact explaining this outcome,
+Return one JSON object with status, conclusion, reason and nodes. status is one
+of the four conclusions above. Write conclusion and reason in the current
+conversation's language; the hook supplies English field labels. conclusion is
+one short sentence stating whether Main may finish this turn, must continue, or
+cannot be assessed. Distinguish completed work from legitimate waiting.
+Keep reason brief: the decisive fact explaining this outcome,
 followed only by the next action or pending event needed to act on it. The hook
-already displays a status heading and the nodes; reason supplies the explanation,
+already displays conclusion and the nodes; reason supplies the explanation,
 not another status list, full task history or routine permission disclaimer.
 For actionable, state the concrete remaining work. For waiting, identify what
 prevents authorized work now and which event or approval permits it to resume;

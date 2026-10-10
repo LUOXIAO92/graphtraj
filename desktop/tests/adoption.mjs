@@ -51,6 +51,25 @@ function capture(command, args) {
   catch (error) { return `unavailable: ${error.message}`; }
 }
 
+/** Write the evidence file; safe to call repeatedly and before cleanup. */
+async function persist() {
+  await fs.mkdir(evidence, { recursive: true });
+  await fs.writeFile(path.join(evidence, 'evidence.json'), JSON.stringify(facts, null, 2) + '\n');
+}
+
+/**
+ * Bound one asynchronous step so a stuck renderer or helper reports a recorded
+ * failure instead of hanging the whole run.
+ */
+async function bounded(label, operation, milliseconds = 30000) {
+  let timer;
+  try {
+    return await Promise.race([operation, new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${label} timed out after ${milliseconds}ms`)), milliseconds);
+    })]);
+  } finally { clearTimeout(timer); }
+}
+
 /** Snapshot every regular file below a root as `relative path -> sha256`. */
 async function snapshot(root) {
   const found = new Map();
@@ -323,9 +342,13 @@ async function main() {
   appHandle.on('console', message => consoleMessages.push(message.text()));
 
   try {
-    const boundary = await page.evaluate(() => ({
+    // The packaged window navigates to the renderer just after it is created.
+    // Wait for the real application markup before the first evaluate, or the
+    // evaluate can run against the replaced, destroyed context.
+    await page.getByRole('button', { name: 'Add project', exact: true }).waitFor();
+    const boundary = await bounded('read renderer boundary', page.evaluate(() => ({
       require: typeof window.require, process: typeof window.process, bridge: typeof window.graphtraj,
-    }));
+    })));
     assert.deepEqual(boundary, { require: 'undefined', process: 'undefined', bridge: 'object' });
 
     // Controlled entry check: the same "add an existing directory" entry is
@@ -346,7 +369,7 @@ async function main() {
     facts.screenshots.push(await shot(page, '01-two-projects-added.png'));
     step('added two isolated fixture projects and selected the second one');
 
-    await page.locator('.react-flow__node').first().click();
+    await page.locator('.react-flow__node[data-id="2"]').click();
     await page.getByRole('complementary', { name: 'Ticket details' }).waitFor();
     await page.getByText('No participating Agents recorded.').waitFor();
     facts.screenshots.push(await shot(page, '02-node-detail-chat-empty.png'));
@@ -367,7 +390,7 @@ async function main() {
     const toolCall = chatEvents.find(event => event.kind === 'tool' && event.phase === 'call');
     assert.ok(message && message.text && toolCall && toolCall.name,
       'the public boundary must return the controlled message and tool call');
-    await page.locator('.react-flow__node').filter({ hasText: 'first project' }).click();
+    await page.locator('.react-flow__node[data-id="1"]').click();
     await page.getByRole('complementary', { name: 'Ticket details' }).waitFor();
     await page.getByRole('button', { name: 'research@x1', exact: true }).click();
     await page.getByText(message.text).first().waitFor();
@@ -470,7 +493,7 @@ async function main() {
 
     // Restart the installed app without any user-data override: the standard
     // persistent location must restore the project list.
-    await appHandle.close();
+    await bounded('close installed app before restart', appHandle.close(), 15000);
     appHandle = await launch({ GRAPHTRAJ_ADOPTION_SECRET: secret });
     page = await appHandle.firstWindow();
     page.setDefaultTimeout(30000);
@@ -480,14 +503,14 @@ async function main() {
     facts.screenshots.push(await shot(page, '08-restarted-persisted.png'));
     step('restarting the installed app restored the project list from the standard user data path');
 
-    const rendered = await page.evaluate(() => document.body.innerText);
+    const rendered = await bounded('read window text', page.evaluate(() => document.body.innerText));
     for (const text of [rendered, ...consoleMessages]) {
       assert.ok(!text.includes(secret), 'the credential value must not appear in the window or its logs');
     }
     facts.consoleMessages = consoleMessages.length;
 
     // Optionality: the GUI is gone, the native operations are not.
-    await appHandle.close();
+    await bounded('close installed app before optionality check', appHandle.close(), 15000);
     appHandle = null;
     const leftovers = await waitForNoDesktopProcesses();
     assert.equal(leftovers, '', `the desktop must leave no process behind: ${leftovers}`);
@@ -521,7 +544,14 @@ async function main() {
       process.exitCode = 1;
     }
   } finally {
-    if (appHandle) await appHandle.close().catch(() => {});
+    // Preserve the observed facts before shutdown so the evidence survives even
+    // when the installed app cannot close cleanly.
+    await persist();
+    if (appHandle) {
+      try { await bounded('close installed app', appHandle.close(), 15000); }
+      catch (error) { facts.cleanupError = String(error && error.message ? error.message : error); }
+    }
+    await persist();
   }
 }
 
@@ -532,7 +562,6 @@ try {
   console.error(facts.failure);
   process.exitCode = 1;
 } finally {
-  await fs.mkdir(evidence, { recursive: true });
-  await fs.writeFile(path.join(evidence, 'evidence.json'), JSON.stringify(facts, null, 2) + '\n');
+  await persist();
   console.log(`evidence: ${path.join(evidence, 'evidence.json')}`);
 }

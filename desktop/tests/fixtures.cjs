@@ -33,11 +33,6 @@ async function makeProject(root, name) {
   return root;
 }
 
-/** Quote one YAML scalar so identifiers and paths survive parsing unchanged. */
-function scalar(value) {
-  return typeof value === 'number' ? String(value) : JSON.stringify(value);
-}
-
 /**
  * Attach a controlled, clearly labeled record set to one fixture Ticket.
  *
@@ -69,16 +64,19 @@ async function recordActivity(root, { ticketId, ticketName, alias, records }) {
   await fs.mkdir(path.dirname(trace), { recursive: true });
   await fs.writeFile(trace, records.map(record => JSON.stringify(record)).join('\n') + '\n');
 
+  // A retired Session record: these are retained, controlled records, not a
+  // live member, so the mapping names pids that cannot be running. The public
+  // boundary then reports an honestly retired, historical Session.
   const mapping = {
     alias, runtime: 'codex', session: `native-${alias}`, ticket_id: ticketId,
     team_generation: 1, role: 'researcher', parent: null, retained_batch_file: 'batch.yml',
     worktree_path: path.join(root, 'worktrees', 'research'), trace_file: trace,
-    worker_pid: 1, runtime_pid: 1,
+    worker_pid: 2147483647, runtime_pid: 2147483647,
   };
-  const lines = Object.entries(mapping).map(([key, value]) => `${key}: ${scalar(value)}`);
-  await fs.writeFile(path.join(session, 'mapping.yml'), lines.join('\n') + '\n');
+  // JSON is valid YAML; the retirement envelope matches the retained-record form.
+  await fs.writeFile(path.join(session, 'session.yml'),
+    JSON.stringify({ retirement: { mapping } }, null, 2) + '\n');
   await fs.writeFile(path.join(session, 'launch.yml'), 'context_evidence:\n  model: recorded-model\n');
-  await fs.writeFile(path.join(session, 'execution.yml'), 'outcome: completed\n');
   return trace;
 }
 

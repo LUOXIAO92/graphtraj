@@ -162,18 +162,43 @@ while ((Get-Date) -lt $deadline -and -not $target) {
   if (-not $target) { Start-Sleep -Milliseconds 100 }
 }
 $observed | ConvertTo-Json -Depth 4 | Set-Content -Encoding UTF8 ($Capture + '.windows.json')
-$bounds = [System.Windows.Forms.SystemInformation]::VirtualScreen
-$bitmap = New-Object System.Drawing.Bitmap($bounds.Width,$bounds.Height)
-$graphics = [System.Drawing.Graphics]::FromImage($bitmap)
-$graphics.CopyFromScreen($bounds.Left,$bounds.Top,0,0,$bitmap.Size)
-$bitmap.Save($Capture,[System.Drawing.Imaging.ImageFormat]::Png)
-$graphics.Dispose(); $bitmap.Dispose()
+function Save-DesktopCapture([string]$Destination) {
+  $bounds = [System.Windows.Forms.SystemInformation]::VirtualScreen
+  $bitmap = New-Object System.Drawing.Bitmap($bounds.Width,$bounds.Height)
+  $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+  $graphics.CopyFromScreen($bounds.Left,$bounds.Top,0,0,$bitmap.Size)
+  $bitmap.Save($Destination,[System.Drawing.Imaging.ImageFormat]::Png)
+  $graphics.Dispose(); $bitmap.Dispose()
+}
+Save-DesktopCapture $Capture
 if (-not $target) { throw "Native dialog unavailable for $Action; see HWND evidence and desktop capture" }
 if ($Action -eq 'pick') {
-  $editCondition = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::AutomationIdProperty,'1148')
-  $edit = $target.FindFirst([System.Windows.Automation.TreeScope]::Descendants,$editCondition)
-  if (-not $edit) { throw 'Native folder path control unavailable' }
-  $edit.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).SetValue($Folder)
+  $controls = @()
+  $edits = @()
+  foreach ($control in $target.FindAll([System.Windows.Automation.TreeScope]::Descendants,[System.Windows.Automation.Condition]::TrueCondition)) {
+    $current = $control.Current
+    $label = if ($current.LabeledBy) { $current.LabeledBy.Current.Name } else { '' }
+    $controls += @{ name=$current.Name; label=$label; automationId=$current.AutomationId;
+      type=$current.ControlType.ProgrammaticName; enabled=$current.IsEnabled; offscreen=$current.IsOffscreen;
+      patterns=@($control.GetSupportedPatterns() | ForEach-Object { $_.ProgrammaticName }) }
+    if ($current.ControlType -ne [System.Windows.Automation.ControlType]::Edit -or
+        -not $current.IsEnabled -or $current.IsOffscreen) { continue }
+    if ($current.Name.Trim().TrimEnd(':') -ne 'Folder' -and $label.Trim().TrimEnd(':') -ne 'Folder') { continue }
+    $value = $null
+    if ($control.TryGetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern,[ref]$value) -and -not $value.Current.IsReadOnly) {
+      $edits += @{ element=$control; value=$value }
+    }
+  }
+  $controls | ConvertTo-Json -Depth 5 | Set-Content -Encoding UTF8 ($Capture + '.controls.json')
+  if ($edits.Count -ne 1) { throw "Expected one writable native Folder edit; found $($edits.Count). See control evidence." }
+  $edit = $edits[0].element
+  $value = $edits[0].value
+  $edit.SetFocus()
+  $value.SetValue($Folder)
+  if ($value.Current.Value -ne $Folder) { throw 'Native Folder edit did not retain the selected path' }
+  @{ name=$edit.Current.Name; automationId=$edit.Current.AutomationId; value=$value.Current.Value } |
+    ConvertTo-Json | Set-Content -Encoding UTF8 ($Capture + '.selection.json')
+  Save-DesktopCapture ($Capture + '.filled.png')
   $names = @('Select Folder','Select folder','Open')
 } elseif ($Action -eq 'approve') { $names = @('Save settings') } else { $names = @('Cancel') }
 $button = $null

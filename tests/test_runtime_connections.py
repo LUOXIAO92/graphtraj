@@ -7,7 +7,7 @@ import json
 import os
 import shutil
 import subprocess
-from typing import Any
+from typing import Any, Callable
 from pathlib import Path
 
 import pytest
@@ -56,7 +56,7 @@ def catalog(project: Path, runtime: str = 'codex') -> dict:
     }}}
 
 
-def operation(project: Path, arguments: dict, reviewer=None) -> dict:
+def operation(project: Path, arguments: dict, reviewer: Callable[[dict], dict] | None = None) -> dict:
     """Call the same public operation used by CLI and downstream desktop hosts."""
     return bind(project, recovery_reviewer=reviewer)(
         {'action': 'execute', 'feature': 'runtime_connections', 'arguments': arguments},
@@ -186,7 +186,14 @@ def test_pi_reference_captures_overlay(project: Path, pi_environment: dict,
     """A shared native Home yields separate captured custom routes for recovery."""
     monkeypatch.setenv('CUSTOM_KEY', 'controlled-secret-value')
     monkeypatch.setenv('OTHER_KEY', 'other-private')
-    save(project, catalog(project, 'pi'))
+    document = catalog(project, 'pi')
+    original_home = Path(document['runtimes']['shared']['home'])
+    original_home.mkdir()
+    original_models = json.dumps({'providers': {'original': {'models': [{'id': 'original-model'}]}}})
+    (original_home / 'models.json').write_text(original_models)
+    (original_home / 'auth.json').write_text('{"graphtraj-role":{"type":"api_key","key":"controlled-old-key"}}')
+    original_auth_stat = (original_home / 'auth.json').stat()
+    save(project, document)
     (project / '.graphtraj/roles.yml').write_text(yaml.safe_dump({'roles': {
         'one': {'connection': 'shared/first/model', 'pi': pi_environment},
         'two': {'connection': 'shared/second/model', 'pi': pi_environment},
@@ -228,6 +235,12 @@ def test_pi_reference_captures_overlay(project: Path, pi_environment: dict,
         trace = project.parent / f'trace-{index}.jsonl'
         session = None
         for resume in (False, True):
+            if resume:
+                # Reproduce the retained links made by the prior implementation.
+                agent = trace.with_suffix('.pi') / 'agent'
+                for name in ('models.json', 'auth.json'):
+                    (agent / name).unlink(missing_ok=True)
+                    (agent / name).symlink_to(original_home / name)
             turn = adapter.managed_execution(
                 captured['adapter_request'], 'controlled route', directory,
                 lambda session, pid: None, {}, trace_file=trace, expected_session=session,
@@ -240,6 +253,12 @@ def test_pi_reference_captures_overlay(project: Path, pi_environment: dict,
             assert result['outcome'] == 'completed'
             native = yaml.safe_load((directory / 'session.yml').read_text())
             assert native['model'] == {'provider': 'graphtraj-role', 'id': 'actual-model'}
+            agent = trace.with_suffix('.pi') / 'agent'
+            assert not (agent / 'models.json').is_symlink()
+            assert not (agent / 'auth.json').is_symlink()
+            assert (original_home / 'models.json').read_text() == original_models
+            assert (original_home / 'auth.json').stat() == original_auth_stat
+            assert 'controlled-secret-value' not in (directory / 'pi-process.json').read_text()
     if NATIVE_METADATA:
         assert NATIVE_PI is not None
         monkeypatch.setenv('PATH', str(Path(NATIVE_PI).parent) + os.pathsep + os.environ['PATH'])
@@ -535,3 +554,193 @@ def test_installed_dsh_accepts_execution_overlays_without_creating_sessions(
                   if group['id'] == 'deepseek-official' for model in group['models']]
         assert models == ['actual-model']
     print('dsh: real host accepted both shared-Home overlays; no Sessions or inference')
+
+
+@pytest.mark.skipif(not NATIVE_METADATA, reason='requires explicitly enabled native metadata checks')
+@pytest.mark.parametrize('provider,model,domain', [
+    ('nativecustom', 'native-custom-model', 'custom.invalid'),
+    ('openai', 'gpt-4o', 'api.openai.com'),
+    ('graphtraj-role', 'local-model', 'localhost'),
+])
+def test_pi_native_key_precedence_and_destination(
+    project: Path,
+    pi_environment: dict,
+    monkeypatch: pytest.MonkeyPatch,
+    provider: str,
+    model: str,
+    domain: str,
+) -> None:
+    """Real Pi resolves native models and runtime keys without receiving a prompt.
+
+    The sandbox wrapper is controlled; this checks native configuration and the
+    generated network policy, not OS isolation or provider calling permission.
+    """
+    assert NATIVE_PI is not None
+    from graphtraj.interfaces import hosted_cli
+
+    monkeypatch.setattr(hosted_cli, 'cli_connection', lambda *args, **kwargs: nullcontext('/bound-channel'))
+    monkeypatch.setenv('PATH', str(Path(NATIVE_PI).parent) + os.pathsep + os.environ['PATH'])
+    monkeypatch.setenv('CUSTOM_KEY', 'first-explicit-test-key')
+    monkeypatch.setenv('OTHER_KEY', 'second-explicit-test-key')
+    monkeypatch.setenv('OPENAI_API_KEY', 'ambient-key-must-not-win')
+    home = project.parent / 'native'
+    (home / 'extensions').mkdir(parents=True)
+    original_models = json.dumps({'providers': {'nativecustom': {
+        'baseUrl': 'https://custom.invalid/v1', 'api': 'openai-completions',
+        'apiKey': 'model-key-must-not-win', 'models': [{'id': 'native-custom-model'}],
+    }}})
+    (home / 'models.json').write_text(original_models)
+    (home / 'auth.json').write_text(json.dumps({provider: {'type': 'api_key', 'key': 'stored-key-must-not-win'}}))
+    auth_stat = (home / 'auth.json').stat()
+    # Native extension context exposes resolved auth. Persist comparisons only,
+    # never credentials; no stream/complete API or prompt is used.
+    (home / 'extensions' / 'observe.js').write_text('''
+import fs from 'node:fs';
+import path from 'node:path';
+export default function(pi) {
+  pi.on('session_start', async (_event, ctx) => {
+    const auth = await ctx.modelRegistry.getApiKeyAndHeaders(ctx.model);
+    fs.writeFileSync(path.join(process.env.PI_CODING_AGENT_DIR, 'observed.json'), JSON.stringify({
+      first: auth.ok && auth.apiKey === process.env.CUSTOM_KEY,
+      second: auth.ok && auth.apiKey === process.env.OTHER_KEY,
+      stored: auth.ok && auth.apiKey === 'stored-key-must-not-win',
+      local: auth.ok && auth.apiKey === 'local',
+      provider: ctx.model.provider, id: ctx.model.id, baseUrl: ctx.model.baseUrl
+    }));
+  });
+}
+''')
+    worktree = project.parent / 'worktree'
+    worktree.mkdir()
+    adapter = select_runtime_adapter('pi')
+    contexts = []
+    manual = provider == 'graphtraj-role'
+    for key in ('CUSTOM_KEY', 'OTHER_KEY', None):
+        save(project, {'version': 1, 'runtimes': {'shared': {
+            'runtime': 'pi', 'home': str(home), 'providers': {provider: {
+                **({'api_key_env': key} if key else {}),
+                **({'base_url': 'http://localhost:8080/v1', 'api': 'openai-completions'} if manual else {}),
+                'models': {'selected': {'id': model, 'source': 'native'}},
+            }},
+        }}})
+        role_fields = {'connection': f'shared/{provider}/selected', 'pi': pi_environment}
+        if key is None and not manual:
+            role_fields = {'runtime': 'pi', 'model': f'{provider}/{model}',
+                           'pi': {**pi_environment, 'agent_dir': str(home)}}
+        (project / '.graphtraj/roles.yml').write_text(yaml.safe_dump({'roles': {'one': role_fields}}))
+        settings = load_project_roles(project).preset('one')
+        context = adapter.preflight_runtime_context(
+            harness_root=project, git_common_directory=project / '.git',
+            role=resolve_child_role('one', settings, project), worktree=worktree,
+            evidence=project.parent / 'evidence', requested_skills=(),
+        ).finalize().launch_document()
+        if not manual:
+            assert context['adapter_request']['provider_domain'] == domain
+        contexts.append(context)
+    save(project, {'version': 1, 'runtimes': {}})
+    for index, context in enumerate(contexts):
+        directory = project.parent / f'native-control-{index}'
+        directory.mkdir()
+        trace = project.parent / f'native-trace-{index}.jsonl'
+        agent = trace.with_suffix('.pi') / 'agent'
+        if index:
+            agent.mkdir(parents=True)
+            for name in ('auth.json', 'models.json'):
+                (agent / name).symlink_to(home / name)
+            # Exercise recovery of a captured request predating destination capture.
+            context['adapter_request'].pop('provider_domain', None)
+
+        def stop_before_prompt(session: str, pid: int) -> None:
+            """Stop at native Session binding before any inference can occur."""
+            raise RuntimeAdapterError('METADATA_CHECK_COMPLETE', 'Native configuration observed without inference.')
+
+        turn = adapter.managed_execution(
+            context['adapter_request'], 'MUST NOT BE SENT', directory, lambda session, pid: None,
+            {}, trace_file=trace, expected_session=None, session_created=stop_before_prompt,
+        )
+        with pytest.raises(RuntimeAdapterError, match='Native configuration observed'):
+            turn.run()
+        assert not turn.prompt_started
+        observed = json.loads((agent / 'observed.json').read_text())
+        assert observed['first'] is (index == 0)
+        assert observed['second'] is (index == 1)
+        assert observed['stored'] is (index == 2 and not manual)
+        assert observed['local'] is (index == 2 and manual)
+        assert (observed['provider'], observed['id']) == (provider, model)
+        if manual:
+            assert not (agent / 'models.json').is_symlink()
+        else:
+            assert agent.joinpath('models.json').resolve() == home / 'models.json'
+        assert (agent / 'auth.json').is_symlink() is (index == 2 and not manual)
+        policy = json.loads((directory / 'pi-policy.json').read_text())
+        assert domain in policy['network']['allowedDomains']
+        assert (home / 'models.json').read_text() == original_models
+        current = (home / 'auth.json').stat()
+        assert (current.st_ino, current.st_mtime_ns, current.st_size) == (
+            auth_stat.st_ino, auth_stat.st_mtime_ns, auth_stat.st_size)
+        assert 'explicit-test-key' not in (directory / 'pi-process.json').read_text()
+    print(f'pi: native {provider} model/key precedence and destination verified; no inference')
+
+    save(project, {'version': 1, 'runtimes': {'shared': {
+        'runtime': 'pi', 'home': str(home), 'providers': {provider: {
+            'api_key_env': 'CUSTOM_KEY', 'models': {'selected': {'id': 'unknown-model', 'source': 'native'}},
+        }},
+    }}})
+    (project / '.graphtraj/roles.yml').write_text(yaml.safe_dump({'roles': {'one': {
+        'connection': f'shared/{provider}/selected', 'pi': pi_environment,
+    }}}))
+    settings = load_project_roles(project).preset('one')
+    with pytest.raises(RuntimeAdapterError, match='supported native destination'):
+        adapter.preflight_runtime_context(
+            harness_root=project, git_common_directory=project / '.git',
+            role=resolve_child_role('one', settings, project), worktree=worktree,
+            evidence=project.parent / 'evidence', requested_skills=(),
+        )
+
+
+def test_pi_key_only_legacy_links_survive_resume(
+    project: Path, pi_environment: dict, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A retained key-only execution preserves native custom models on recovery."""
+    from graphtraj.interfaces import hosted_cli
+    from test_pi_runtime import context
+
+    monkeypatch.setattr(hosted_cli, 'cli_connection', lambda *args, **kwargs: nullcontext('/bound-channel'))
+    monkeypatch.setenv('CUSTOM_KEY', 'explicit-key-only')
+    home = Path(pi_environment['agent_dir'])
+    home.mkdir()
+    models = json.dumps({'providers': {'nativecustom': {
+        'baseUrl': 'https://custom.invalid/v1', 'api': 'openai-completions',
+        'apiKey': 'original-model-key', 'models': [{'id': 'native-model'}],
+    }}})
+    (home / 'models.json').write_text(models)
+    (home / 'auth.json').write_text('{"nativecustom":{"type":"api_key","key":"old-stored-key"}}')
+    auth_stat = (home / 'auth.json').stat()
+    (project / 'worktrees/research').mkdir(parents=True)
+    adapter, prepared = context(project, pi_environment, 'nativecustom/native-model', api_key_env='CUSTOM_KEY')
+    request = prepared.launch_document()['adapter_request']
+    directory = project.parent / 'key-only-control'
+    directory.mkdir()
+    trace = project.parent / 'key-only.jsonl'
+    session = None
+    for resume in (False, True):
+        agent = trace.with_suffix('.pi') / 'agent'
+        if resume:
+            for name in ('models.json', 'auth.json'):
+                (agent / name).unlink(missing_ok=True)
+                (agent / name).symlink_to(home / name)
+        turn = adapter.managed_execution(
+            request, 'controlled key-only recovery', directory, lambda session, pid: None,
+            {}, trace_file=trace, expected_session=session, session_created=lambda session, pid: None,
+        )
+        result = turn.run()
+        assert result['outcome'] == 'completed'
+        if resume:
+            assert result['session_id'] == session
+        session = result['session_id']
+        assert (agent / 'models.json').resolve() == home / 'models.json'
+        assert not (agent / 'auth.json').is_symlink()
+        assert (home / 'models.json').read_text() == models
+        assert (home / 'auth.json').stat() == auth_stat
+        assert 'explicit-key-only' not in (directory / 'pi-process.json').read_text()
+        assert 'custom.invalid' in json.loads((directory / 'pi-policy.json').read_text())['network']['allowedDomains']

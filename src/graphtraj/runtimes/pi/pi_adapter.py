@@ -203,6 +203,10 @@ class PiRuntimeAdapter:
             'state_directory': str(state),
             'docs_directory': str(project.docs if project else harness_root / 'docs'),
         }
+        if not settings.base_url:
+            from graphtraj.runtimes.model_discovery import pi_model_domain
+
+            request['provider_domain'] = pi_model_domain(str(agent_dir), provider, model, settings.api_key_env)
         for field in ('allow_mach_lookup', 'allow_mach_register'):
             if config.get(field):
                 request[field] = list(config[field])

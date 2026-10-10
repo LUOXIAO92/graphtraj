@@ -31,7 +31,14 @@ def main() -> None:
         'ASB_PROFILE_JSON': Path(policy).read_text(encoding='utf-8'),
         'PI_ASB_NO_ALIAS_PROMPT': '1',
     })
-    command = wrap_command(document['argv'], policy)
+    argv = document['argv']
+    # Pi's documented runtime key wins over stored auth and native model keys.
+    # Resolve only in memory after loading the nonsecret retained process spec.
+    if document.get('api_key_env'):
+        argv += ['--api-key', environment[document['api_key_env']]]
+    elif document.get('unauthenticated'):
+        argv += ['--api-key', 'local']
+    command = wrap_command(argv, policy)
     if command == document['argv']:
         raise SystemExit('srt disappeared before launch; refusing unsandboxed execution.')
     os.execvpe(command[0], command, environment)

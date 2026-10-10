@@ -153,10 +153,16 @@ class PiManagedExecution:
                 str(Path(sys.prefix).resolve()), str(Path(sys.base_prefix).resolve()),
                 str(Path(__file__).resolve().parents[2]), *request['resources']]
         write = [str(native), address]
+        override = bool(request.get('base_url') or request.get('api_key_env'))
+        if override:
+            # Retained executions may contain links created by older versions.
+            # Unlink the private entry, never write through it into the native Home.
+            (agent / 'auth.json').unlink(missing_ok=True)
+            (agent / 'models.json').unlink(missing_ok=True)
         for name in ('settings.json', 'models.json', 'auth.json', 'trust.json', 'keybindings.json', 'npm', 'extensions',
                      'skills', 'prompts', 'themes', 'mcp.json', 'AGENTS.md',
                      'AGENTS.override.md', 'AGENTS.MD', 'CLAUDE.md', 'CLAUDE.MD', 'SYSTEM.md', 'APPEND_SYSTEM.md'):
-            if (request.get('base_url') or request.get('api_key_env')) and name in {'auth.json', 'models.json'}:
+            if (override and name == 'auth.json') or (request.get('base_url') and name == 'models.json'):
                 continue
             original = source / name
             link = agent / name
@@ -165,15 +171,13 @@ class PiManagedExecution:
                     link.symlink_to(original)
                 read.append(str(original.resolve()))
         provider = request['provider']
-        if request.get('base_url') or request.get('api_key_env'):
-            # This private overlay references only the selected variable. It does
-            # not link native auth or overwrite the shared Home's model settings.
-            custom = {'apiKey': '$' + request['api_key_env'] if request.get('api_key_env') else 'local'}
-            if request.get('base_url'):
-                provider = 'graphtraj-role'
-                custom.update(baseUrl=request['base_url'], api=request['provider_api'],
-                              models=[{'id': request['model'],
-                                       'reasoning': request.get('reasoning_effort') not in {None, 'off'}}])
+        if request.get('base_url'):
+            # Only an explicit route needs a model overlay. Key-only overrides
+            # retain the native definitions and use Pi's higher-priority runtime key.
+            custom = {'baseUrl': request['base_url'], 'api': request['provider_api'],
+                      'apiKey': '$' + request['api_key_env'] if request.get('api_key_env') else 'local',
+                      'models': [{'id': request['model'],
+                                  'reasoning': request.get('reasoning_effort') not in {None, 'off'}}]}
             (agent / 'models.json').write_text(json.dumps({'providers': {provider: custom}}), encoding='utf-8')
         if request['worktree_access'] == 'write':
             write.extend((str(worktree), request['git_common_directory']))
@@ -200,6 +204,15 @@ class PiManagedExecution:
             from urllib.parse import urlsplit
 
             policy['network']['allowedDomains'].append(urlsplit(request['base_url']).hostname)
+        else:
+            from graphtraj.runtimes.model_discovery import pi_model_domain
+
+            # Older captured requests have no destination yet. Resolve their
+            # retained native Home/model, never the current global connection.
+            domain = request.get('provider_domain') or pi_model_domain(
+                str(source), provider, request['model'], request.get('api_key_env'))
+            if domain not in policy['network']['allowedDomains']:
+                policy['network']['allowedDomains'].append(domain)
         # Service access is opt-in for this Runtime and its descendants; keep
         # the existing filesystem grants and denials independent of it.
         for field, native_field in (
@@ -224,21 +237,20 @@ class PiManagedExecution:
         if request.get('reasoning_effort'):
             argv += ['--thinking', request['reasoning_effort']]
         spec = self.directory / 'pi-process.json'
-        spec.write_text(json.dumps({'policy': str(policy_file), 'argv': argv}), encoding='utf-8')
+        spec.write_text(json.dumps({'policy': str(policy_file), 'argv': argv,
+                                    'api_key_env': request.get('api_key_env'),
+                                    'unauthenticated': bool(request.get('base_url'))}), encoding='utf-8')
         env = dict(os.environ)
         # Do not forward Runner bookkeeping as model-declared authority. The only
         # child operation address is authenticated by the existing hosted CLI.
         for key in tuple(env):
             if key.startswith('GRAPHTRAJ_'):
                 del env[key]
+        env.update(credential_environment(request.get('api_key_env')))
         env.update({'PATH': str(Path(sys.executable).parent) + os.pathsep + request['sandbox_path'],
                     'PI_CODING_AGENT_DIR': str(agent),
                     'GRAPHTRAJ_CLI_CONNECTION': address, 'GRAPHTRAJ_HARNESS_ROOT': str(root),
                     'PI_ASB_NO_ALIAS_PROMPT': '1'})
-        key = request.get('api_key_env')
-        native_key = {'deepseek': 'DEEPSEEK_API_KEY', 'openrouter': 'OPENROUTER_API_KEY'}.get(request['provider'])
-        if key and native_key and key in os.environ:
-            env[native_key] = os.environ[key]
         # Pi's native find accepts an existing fd on PATH; do not download it or
         # alter the user's installation to populate the isolated cache.
         fd = source / 'bin/fd'

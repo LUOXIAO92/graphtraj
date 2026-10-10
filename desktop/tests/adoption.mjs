@@ -379,8 +379,13 @@ async function usageHistoryAdoption() {
     await projectEntry(page, 'usage-second').waitFor();
     await projectEntry(page, 'usage-first').click();
     await page.locator('.monitor-page:visible .react-flow__node[data-id="1"]').click();
-    const column = page.locator('.monitor-page:visible .activity-history').first();
-    await column.getByText(/Controlled retained usage-first message 69/).waitFor();
+    // The collapsed Ticket detail shows the roster; chat readers activate on expansion.
+    await page.getByRole('button', { name: 'Expand chat', exact: true }).click();
+    const column = page.locator('.monitor-page:visible')
+      .getByRole('article', { name: 'research@x1', exact: true }).locator('.activity-history');
+    const lastMessage = native.events.filter(event => event.kind === 'message').at(-1);
+    assert.ok(lastMessage?.text);
+    await column.getByText(lastMessage.text, { exact: true }).waitFor();
     await column.evaluate(element => { element.scrollTop = 200; element.dispatchEvent(new Event('scroll')); });
     const position = await monitorPosition(page);
     await page.getByRole('button', { name: 'Project usage', exact: true }).click();

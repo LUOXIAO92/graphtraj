@@ -168,8 +168,8 @@ async function launch(extraEnvironment = {}, extraArgs = []) {
   const binary = path.join(app, 'Contents', 'MacOS', path.basename(app, '.app'));
   return electron.launch({
     executablePath: binary,
-    args: ['-r', electronLoader(), `--user-data-dir=${userData}`, ...extraArgs],
-    env: { ...process.env, HOME: isolatedHome, ...extraEnvironment },
+    args: ['-r', electronLoader(), ...(process.env.GRAPHTRAJ_ADOPTION_USAGE_ONLY === '1' ? [] : [`--user-data-dir=${userData}`]), ...extraArgs],
+    env: { ...process.env, ...(process.env.GRAPHTRAJ_ADOPTION_USAGE_ONLY === '1' ? {} : { HOME: isolatedHome }), ...extraEnvironment },
     timeout: 60000,
   });
 }
@@ -318,6 +318,165 @@ async function nativeDialogAttempt(first) {
   return attempts;
 }
 
+/** Focused #286 installed-app check; prior native dialogs/settings evidence is reused. */
+async function usageHistoryAdoption() {
+  const root = await fs.mkdtemp(path.join(work, 'usage-'));
+  const first = await fixtures.makeProject(path.join(root, 'usage-first'), 'usage-first');
+  const second = await fixtures.makeProject(path.join(root, 'usage-second'), 'usage-second');
+  const { localDate, defaultDates } = await import('../src/usage.ts');
+  const today = new Date();
+  today.setHours(12, 0, 0, 0);
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const count = (time, input, cache, output, totalInput = input, totalOutput = output) => ({
+    ...(time ? { timestamp: time.toISOString() } : {}), type: 'event_msg',
+    payload: { type: 'token_count', info: {
+      last_token_usage: { input_tokens: input, cached_input_tokens: cache, output_tokens: output,
+        reasoning_output_tokens: 20 },
+      total_token_usage: { input_tokens: totalInput, output_tokens: totalOutput },
+    } },
+  });
+  const trace = await fixtures.recordActivity(first, { ticketId: '1', ticketName: 'usage-first', alias: 'research@x1',
+    records: [
+      { type: 'turn_context', payload: { model: 'gpt-5.3-codex' } },
+      ...longRecords('usage-first'), count(yesterday, 2000, 1000, 160), count(today, 1000, 600, 80, 3000, 240),
+    ], additionalMembers: [{ alias: 'undated@x2', historical: true, records: [count(null, 11, 1, 2)] }],
+  });
+  await fixtures.recordActivity(second, { ticketId: '1', ticketName: 'usage-second', alias: 'second-only@x1',
+    records: [{ type: 'turn_context', payload: { model: 'unpriced-controlled-model' } }, count(today, 500, 50, 40)] });
+  const native = queryActivity(first, '1', 'research@x1');
+  assert.equal(native.events.filter(event => event.kind === 'usage').length, 2);
+  assert.equal(queryActivity(first, '1', 'undated@x2').events.find(event => event.kind === 'usage').time, null);
+  facts.nativeEvidence = {
+    controlled: 'Disposable retained usage over public desktop_activity; no model execution or new real-cost evidence.',
+    reused: ['#285 installed macOS run38082337444: native directory/index and D monitor', '#262/#263 real ownership, pricing and Runtime evidence'],
+  };
+  await assert.rejects(fs.access(path.join(os.homedir(), '.graphtraj/projects.json')), { code: 'ENOENT' });
+  let handle;
+  let page;
+  const selectDates = async (from, to) => {
+    await page.getByLabel('Start date', { exact: true }).fill(from);
+    await page.getByLabel('End date', { exact: true }).fill(to);
+  };
+  const table = caption => page.getByRole('table', { name: caption, exact: true });
+  const inputValue = async (caption, name) => table(caption).getByRole('row').filter({ hasText: name })
+    .locator('td').nth(1).evaluate(cell => cell.firstChild.textContent.replaceAll(',', ''));
+  const waitInput = async (caption, name, value) => {
+    const until = Date.now() + 30000;
+    while (Date.now() < until) {
+      if (await inputValue(caption, name).catch(() => '') === String(value)) return;
+      await page.waitForTimeout(250);
+    }
+    assert.equal(await inputValue(caption, name), String(value));
+  };
+  try {
+    handle = await launch({}, [`--project=${first}`]);
+    page = await handle.firstWindow();
+    page.setDefaultTimeout(30000);
+    await projectEntry(page, 'usage-first').waitFor();
+    // Reuse established native-picker evidence; only its controlled answer is needed here.
+    await handle.evaluate(({ dialog }, folder) => {
+      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [folder] });
+    }, second);
+    await page.getByRole('button', { name: 'Add project', exact: true }).click();
+    await projectEntry(page, 'usage-second').waitFor();
+    await projectEntry(page, 'usage-first').click();
+    // Selection saves asynchronously; both retained project monitors have a Ticket 1.
+    // Require this project's title so click cannot latch onto the outgoing monitor.
+    const firstNode = page.locator('.monitor-page:visible .react-flow__node[data-id="1"]')
+      .filter({ has: page.getByText('usage first', { exact: true }) });
+    await firstNode.click();
+    // The collapsed Ticket detail shows the roster; chat readers activate on expansion.
+    await page.getByRole('button', { name: 'Expand chat', exact: true }).click();
+    const column = page.locator('.monitor-page:visible')
+      .getByRole('article', { name: 'research@x1', exact: true }).locator('.activity-history');
+    const lastMessage = native.events.filter(event => event.kind === 'message').at(-1);
+    assert.ok(lastMessage?.text);
+    await column.getByText(lastMessage.text, { exact: true }).waitFor();
+    await column.evaluate(element => { element.scrollTop = 200; element.dispatchEvent(new Event('scroll')); });
+    const position = await monitorPosition(page);
+    await page.getByRole('button', { name: 'Project usage', exact: true }).click();
+    assert.equal(await page.getByLabel('Start date').inputValue(), defaultDates().from);
+    assert.equal(await page.getByLabel('End date').inputValue(), localDate(today));
+    await waitInput('Model breakdown', 'gpt-5.3-codex', 3000);
+    await page.locator('.usage-filters select').nth(1).selectOption('undated@x2');
+    assert.equal(await table('Model breakdown').locator('tbody tr').count(), 0);
+    await page.locator('.usage-filters select').nth(1).selectOption('');
+    await selectDates(localDate(today), localDate(today));
+    await waitInput('Model breakdown', 'gpt-5.3-codex', 1000);
+    assert.match(await table('Model breakdown').innerText(), /0\.001925/);
+    await page.locator('.usage-filters').getByLabel('Ticket', { exact: false }).selectOption('1');
+    await page.locator('.usage-filters select').nth(1).selectOption('research@x1');
+    await page.locator('.usage-filters select').nth(2).selectOption('gpt-5.3-codex');
+    await waitInput('Daily trend (local dates)', localDate(today), 1000);
+    assert.doesNotMatch(await page.locator('.usage-dashboard').innerText(), /second-only|unpriced-controlled-model/);
+    facts.screenshots.push(await shot(page, 'usage-project-today.png'));
+    await selectDates(localDate(today), localDate(yesterday));
+    const invalidAlert = page.locator('.usage-dashboard').getByRole('alert');
+    await invalidAlert.waitFor({ state: 'visible' });
+    assert.ok((await invalidAlert.innerText()).trim());
+    assert.equal(await table('Model breakdown').locator('tbody tr').count(), 0);
+    assert.equal(await table('Daily trend (local dates)').locator('tbody tr').count(), 0);
+    await selectDates('2099-01-01', '2099-01-01');
+    assert.equal(await table('Model breakdown').locator('tbody tr').count(), 0);
+    assert.equal(await table('Daily trend (local dates)').locator('tbody tr').count(), 0);
+    facts.screenshots.push(await shot(page, 'usage-no-records.png'));
+    await page.getByRole('button', { name: 'Global usage', exact: true }).click();
+    await waitInput('Project comparison', first, 3000);
+    await waitInput('Project comparison', second, 500);
+    assert.equal(await page.locator('.usage-filters select').count(), 0);
+    assert.equal(await table('Model breakdown').count(), 0);
+    assert.doesNotMatch(await page.locator('.usage-dashboard').innerText(), /research@x1|second-only|unpriced-controlled-model/);
+    await selectDates(localDate(today), localDate(today));
+    await waitInput('Project comparison', first, 1000);
+    await waitInput('Project comparison', second, 500);
+    await waitInput('Daily trend (local dates)', localDate(today), 1500);
+    facts.screenshots.push(await shot(page, 'usage-global-today.png'));
+    await selectDates(localDate(yesterday), localDate(yesterday));
+    await waitInput('Project comparison', first, 2000);
+    assert.equal(await inputValue('Project comparison', second), 'Unknown');
+    await page.getByRole('button', { name: 'Monitor', exact: true }).click();
+    assert.deepEqual(await monitorPosition(page), position);
+    step('Installed project/global date totals, daily trends, internal isolation, unknown-time and empty/reversed ranges; Monitor reading position preserved.');
+    // Remove only the controlled Trace after closing, proving persisted history rather than re-reading it.
+    await bounded('close before history reopen', handle.close(), 15000);
+    handle = null;
+    await fs.rename(trace, trace + '.retained-for-test');
+    handle = await launch();
+    page = await handle.firstWindow();
+    page.setDefaultTimeout(30000);
+    await page.getByRole('button', { name: 'Global usage', exact: true }).click();
+    await selectDates(localDate(today), localDate(today));
+    await waitInput('Project comparison', first, 1000);
+    await waitInput('Project comparison', second, 500);
+    const gap = page.locator('.usage-dashboard details[open] li').first();
+    await gap.waitFor({ state: 'visible' });
+    assert.ok((await gap.innerText()).trim());
+    const history = path.join(os.homedir(), '.graphtraj/usage-history');
+    for (const file of await fs.readdir(history)) {
+      assert.doesNotMatch(await fs.readFile(path.join(history, file), 'utf8'), /Controlled retained|Long native record|provider_usage/);
+    }
+    facts.screenshots.push(await shot(page, 'usage-reopened-without-source.png'));
+    await fs.rename(trace + '.retained-for-test', trace);
+    await page.getByRole('button', { name: 'Reconnect usage', exact: true }).click();
+    await waitInput('Project comparison', first, 1000);
+    await page.waitForTimeout(3500);
+    assert.equal(await inputValue('Project comparison', first), '1000');
+    step('Reopened installed app retained dated history without the original Trace; restoring/replaying it did not duplicate totals. Saved files contain normalized usage only.');
+    facts.usageHistory = { firstToday: 1000, firstYesterday: 2000, secondToday: 500,
+      officialEquivalentTodayUSD: 0.001925, history, unknownTimeExcluded: true };
+    await bounded('close usage adoption', handle.close(), 15000);
+    handle = null;
+    assert.equal(await waitForNoDesktopProcesses(), '');
+    assert.equal(fixtures.operate(first, 'ticket_graph').tickets.length, 2);
+    facts.passed = true;
+  } finally {
+    if (!facts.passed && page && handle) facts.screenshots.push(await shot(page, 'usage-failure.png').catch(() => 'screenshot unavailable'));
+    if (handle) await bounded('close usage check', handle.close(), 15000);
+    await persist();
+  }
+}
+
 async function main() {
   assert.ok(!process.env.GRAPHTRAJ_CLI_CONNECTION && !process.env.GRAPHTRAJ_PARENT_ALIAS,
     'Use the unbound CI desktop host; do not remove inherited Agent identity markers to run adoption.');
@@ -338,6 +497,11 @@ async function main() {
   if (facts.ciCommit) assert.equal(facts.candidate, facts.ciCommit);
   step(`installed bundle prepared at ${app}; native tool resolved from PATH at ${tool}`);
 
+  if (process.env.GRAPHTRAJ_ADOPTION_USAGE_ONLY === '1') {
+    await fs.mkdir(work, { recursive: true });
+    return usageHistoryAdoption();
+  }
+
   const root = path.join(work, 'fixtures');
   await fs.rm(root, { recursive: true, force: true });
   await fs.mkdir(root, { recursive: true });
@@ -356,7 +520,7 @@ async function main() {
       { type: 'response_item', payload: { type: 'function_call_output', call_id: 'adoption-call-1',
         output: 'adoption-tool-result' } },
       ...longRecords('first/research'),
-      { type: 'event_msg', payload: { type: 'token_count', info: {
+      { timestamp: new Date().toISOString(), type: 'event_msg', payload: { type: 'token_count', info: {
         last_token_usage: { input_tokens: 4321, cached_input_tokens: 1234, output_tokens: 567 },
         total_token_usage: { input_tokens: 4321, output_tokens: 567 } } } },
     ],

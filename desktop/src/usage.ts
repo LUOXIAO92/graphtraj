@@ -1,85 +1,7 @@
-import type { ActivityEvent } from '../electron/activity';
 import { prices, type Price } from './prices.ts';
-
-export type Tokens = Partial<Record<'input' | 'input_uncached' | 'output' | 'cache_read' | 'cache_write' | 'reasoning', number>>;
-export type Call = {
-  key: string; project: string; ticket: string; agent: string; session: string;
-  model: string; time: string | null; tokens: Tokens; phase: string; offset: number;
-  counter: boolean; cumulative?: Tokens; attributable: boolean;
-};
-export type Filters = { ticket?: string; agent?: string; model?: string; from?: string; to?: string };
-export const metrics = ['input', 'output', 'cache_read', 'cache_write'] as const;
-
-/** Retain only native usage, keyed by actual ownership rather than its display parent. */
-export function collect(calls: Map<string, Call>, project: string, events: ActivityEvent[]): void {
-  for (const event of events) {
-    const usage = event.usage;
-    if (event.kind !== 'usage' || !usage) continue;
-    const session = String(usage.session ?? '');
-    const identity = usage.identity;
-    const key = JSON.stringify([project, identity || event.id]);
-    const old = calls.get(key);
-    if (old && (old.phase === 'final' && usage.phase !== 'final' || old.offset > event.source.offset)) continue;
-    if (old?.counter) continue; // Preserve the original time/model of replayed counters.
-    const tokens = Object.fromEntries(Object.entries(usage.tokens).filter(([, value]) =>
-      Number.isFinite(value) && value >= 0)) as Tokens;
-    const raw = usage.cumulative as Record<string, number> | undefined;
-    const cumulative = raw ? Object.fromEntries(Object.entries({ input: raw.input_tokens,
-      output: raw.output_tokens, cache_read: raw.cached_input_tokens,
-      cache_write: raw.cache_write_input_tokens, reasoning: raw.reasoning_output_tokens,
-    }).filter(([, value]) => Number.isFinite(value) && value >= 0)) as Tokens : undefined;
-    calls.set(key, { key, project, session, ticket: String(usage.ticket_id ?? ''),
-      agent: String(usage.agent ?? ''), model: event.model || 'Unknown model',
-      time: event.time == null || !Number.isFinite(new Date(event.time).getTime()) ? null : new Date(event.time).toISOString(),
-      tokens: { ...old?.tokens, ...tokens }, phase: usage.phase, offset: event.source.offset, counter: Boolean(cumulative), cumulative,
-      attributable: usage.attributable && Boolean(identity) && Boolean(session),
-    });
-  }
-}
-
-/** Difference Codex counters before filtering, so stream snapshots cannot inflate totals. */
-export function records(calls: Map<string, Call>, filters: Filters = {}): Call[] {
-  const previous = new Map<string, { totals: Tokens; row: Call }>();
-  const result: Call[] = [];
-  for (const call of [...calls.values()].sort((a, b) => a.offset - b.offset)) {
-    if (!call.cumulative) { result.push(call); continue; }
-    const key = JSON.stringify([call.project, call.session]);
-    const before = previous.get(key);
-    // First retained totals may include inherited history; use only reported last usage.
-    if (!before) {
-      const row = { ...call, tokens: { ...call.tokens } };
-      result.push(row); previous.set(key, { totals: call.cumulative, row }); continue;
-    }
-    const tokens: Tokens = {};
-    for (const metric of [...metrics, 'reasoning'] as const) {
-      const total = call.cumulative[metric];
-      const prior = before.totals[metric];
-      if (total !== undefined && prior !== undefined && total >= prior) tokens[metric] = total - prior;
-    }
-    // An unchanged input counter with more output is an update to the same call.
-    // Keep its input context for long-context pricing and its original timestamp.
-    if (tokens.input === 0 && call.model === before.row.model) {
-      for (const metric of [...metrics, 'reasoning'] as const) {
-        if (tokens[metric] !== undefined && before.row.tokens[metric] !== undefined) {
-          before.row.tokens[metric]! += tokens[metric]!;
-        } else if (tokens[metric] === undefined && call.tokens[metric] !== undefined) {
-          // Last-usage fields are per-call snapshots, not stream increments.
-          before.row.tokens[metric] = call.tokens[metric];
-        }
-      }
-      previous.set(key, { totals: call.cumulative, row: before.row });
-    } else {
-      // Providers may omit a field from lifetime totals while reporting it
-      // on each call. Preserve that operand instead of dropping coverage.
-      const row = { ...call, tokens: { ...call.tokens, ...tokens } };
-      result.push(row); previous.set(key, { totals: call.cumulative, row });
-    }
-  }
-  return result.filter(call => (!filters.ticket || call.ticket === filters.ticket) &&
-    (!filters.agent || call.agent === filters.agent) && (!filters.model || call.model === filters.model) &&
-    (!filters.from || call.time !== null && call.time >= new Date(filters.from).toISOString()) &&
-    (!filters.to || call.time !== null && call.time <= new Date(filters.to).toISOString()));
-}
+import { localDate, metrics, type Call, type Tokens } from '../electron/usage.ts';
+export { collect, records, metrics, localDate, defaultDates } from '../electron/usage.ts';
+export type { Call, Tokens, Filters } from '../electron/usage.ts';
 
 export type Cost = { amount: number | null; price?: Price; basis: string; reason?: string; parts: Partial<Record<keyof Tokens, number>> };
 
@@ -144,11 +66,11 @@ export function summarize(rows: Call[]) {
   };
 }
 
-/** Use the same arithmetic for model breakdowns and UTC daily trends. */
+/** Use the same arithmetic for model breakdowns and local daily trends. */
 export function groups(rows: Call[], by: 'model' | 'day') {
   const grouped = new Map<string, Call[]>();
   for (const row of rows) {
-    const key = by === 'model' ? row.model : row.time?.slice(0, 10) ?? 'Unknown time';
+    const key = by === 'model' ? row.model : row.time ? localDate(new Date(row.time)) : 'Unknown time';
     if (!grouped.has(key)) grouped.set(key, []);
     grouped.get(key)!.push(row);
   }

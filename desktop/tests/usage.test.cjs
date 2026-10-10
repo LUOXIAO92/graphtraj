@@ -132,3 +132,25 @@ test('per-call cache reads survive sparse lifetime totals and streamed replay', 
   assert.equal(total.tokens.output.value, 12);
   assert.equal(total.cacheRate, .6);
 });
+
+test('local date ranges include whole days across DST and filter after counter differences', () => {
+  const { defaultDates, localDate } = require('../src/usage.ts');
+  const zone = process.env.TZ;
+  process.env.TZ = 'America/New_York';
+  try {
+    assert.deepEqual(defaultDates(new Date(2026, 2, 8, 23, 30)), { from: '2026-03-02', to: '2026-03-08' });
+    const map = new Map();
+    const times = ['2026-03-08T04:59:59Z', '2026-03-08T05:00:00Z',
+      '2026-03-09T03:59:59.999Z', '2026-03-09T04:00:00Z', null];
+    collect(map, 'p', times.map((time, i) => ({ ...event(String(i), { input: 100, output: 10 }), time })));
+    const rows = records(map, { from: '2026-03-08', to: '2026-03-08' });
+    assert.equal(rows.length, 2);
+    assert.equal(summarize(rows).tokens.input.value, 200);
+    assert.deepEqual(groups(rows, 'day').map(row => row.name), ['2026-03-08']);
+    assert.equal(localDate(new Date(rows[1].time)), '2026-03-08');
+    assert.equal(records(map, { from: '2026-03-09', to: '2026-03-08' }).length, 0);
+    assert.equal(records(map, { from: '2026-02-30' }).length, 0);
+    assert.equal(records(map, { from: '2099-01-01', to: '2099-01-01' }).length, 0);
+    assert.equal(records(map).filter(row => row.time === null).length, 1);
+  } finally { if (zone === undefined) delete process.env.TZ; else process.env.TZ = zone; }
+});

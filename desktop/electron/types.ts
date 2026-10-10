@@ -1,3 +1,4 @@
+import type { Call } from './usage';
 import type { Activity, ActivityRequest } from './activity';
 export type Ticket = {
   ticket_id: string;
@@ -34,8 +35,12 @@ export type Connections = { revision: string; catalog: Catalog; applied?: boolea
   discovery?: { runtime_entry: string; status: string; message?: string; account_access: string;
     provider_status?: Record<string, string>; models: (CatalogModel & { provider: string; supported_efforts?: string[] | null })[] };
 };
+export type UsageObservation = {
+  projectId: string; calls: Call[]; notices: string[]; pending: boolean; updatedAt: string;
+};
 export type DesktopAPI = {
   connections: (id: string | null, request: ConnectionsRequest) => Promise<Connections>;
+  usage: (id: string) => Promise<UsageObservation>;
   copyText: (text: string) => Promise<void>;
   activity: (projectId: string, request: ActivityRequest) => Promise<Activity>;
   projects: () => Promise<Preferences>;

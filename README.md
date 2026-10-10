@@ -60,6 +60,10 @@ after editing. Optional `instructions` can point to your own UTF-8 role file.
 Keep credentials in the Runtime's native configuration or an environment
 variable named by `api_key_env`.
 
+To share models and providers across projects, use `graphtraj connections`.
+Project roles can reference this user-level catalog while login stays in the
+original Runtime. See [shared connections](manuals/setup-project/guide.md#share-runtime-connections-across-projects).
+
 Your host must expose the `graphtraj` tool. If it supports MCP, register
 `graphtraj-mcp` as a stdio server with the project root as its working directory.
 For hosts using TOML MCP configuration:
@@ -156,8 +160,12 @@ provide a job queue, automatic crash recovery, or automatic promotion from
 The app in [desktop/](desktop/) offers a project graph, recorded
 Agent activity, a usage dashboard and settings for existing role presets and
 dispatch relationships.
-Select a task and Agent to read messages, expand tool results, copy text or pause
-following new activity. Unavailable records and usage remain explicitly unknown.
+Select a task and expand chat to read its Agents in parallel columns. Each column
+scrolls independently; the bottom scrollbar reaches offscreen Agents. Hide the
+sidebar for more room, expand tool results, copy text or pause following new
+activity. Returning from another page preserves your reading position.
+The project list is stored in `~/.graphtraj/projects.json`; removing an entry
+leaves its project files intact. Unavailable records remain explicitly unknown.
 The CLI works without
 Node or Electron; the desktop is an optional monitoring and configuration window.
 It does not provide task execution controls.
@@ -179,10 +187,15 @@ On Ubuntu 24.04 amd64, install the package with
 `graphtraj-desktop`. The app and its matching Python environment are installed
 under `/opt/graphtraj-desktop`.
 
-Open **Usage** to inspect recorded tokens, cache reads and an estimated token
-cost, filtered by task, Agent or model. Cache-hit rates are weighted by input
-tokens. Missing usage—including unrecorded Main calls—and quantities without
-a known price stay visible; totals cover only the available records.
+Open **Global usage** to compare projects, or **Project usage** to filter the
+selected project's records by task, Agent or model. Choose a start and end date;
+the default covers today and the preceding six local calendar days. Normalized
+history is saved under `~/.graphtraj/usage-history` and survives reopening the
+app. It contains usage facts, not copies of conversations.
+
+Cache-hit rates are weighted by input tokens. Missing usage—including unrecorded
+Main calls—and quantities without a known price stay visible. Date totals exclude
+records whose time is unknown; totals cover only the available records.
 
 Cost estimates use bundled prices from the original model vendor, in USD per
 million tokens. They are not provider bills, especially for third-party routes.

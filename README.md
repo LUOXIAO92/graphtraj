@@ -162,6 +162,11 @@ The CLI works without
 Node or Electron; the desktop is an optional monitoring and configuration window.
 It does not provide task execution controls.
 
+For Apple Silicon macOS, extract the ZIP and copy `GraphTraj.app` to
+`/Applications`. Install the matching Python package as above; Electron is
+included, but the app needs `graphtraj-tool` on its launch environment's `PATH`
+or `GRAPHTRAJ_TOOL` set to that executable. The macOS build is unsigned.
+
 For the Windows x64 ZIP, install Git, extract the archive, and run
 `.\Install-GraphTraj.ps1` from its folder in PowerShell. Then open GraphTraj from
 the Start menu and add an existing project. The installer copies the app to

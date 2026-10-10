@@ -62,6 +62,9 @@ async function launch() {
     renderer: BrowserWindow.getAllWindows()[0].webContents.getLastWebPreferences().sandbox,
   }));
   assert.deepEqual(facts.sandbox, { disabled: false, renderer: true });
+  const mainPid = await app.evaluate(() => process.pid);
+  assert.equal(mainPid, app.process().pid, 'The Linux launcher must exec the installed main process');
+  facts.mainPid = mainPid;
 }
 
 /** Close the test application with a bounded fallback, retaining failed cleanup. */
@@ -215,10 +218,24 @@ try {
   await screenshot('dashboard');
   await modelRow.scrollIntoViewIfNeeded();
   await screenshot('dashboard-model-quantities');
-  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.forcefullyCrashRenderer());
+  // Test application failure at the OS boundary. A crashed renderer leaves the
+  // main process alive and makes Playwright's browser-context close ambiguous.
+  facts.stage = 'GUI main-process termination';
+  const terminated = app.process();
+  let exitTimer;
+  const exited = new Promise((resolve, reject) => {
+    terminated.once('exit', (code, signal) => resolve({ pid: terminated.pid, code, signal }));
+    exitTimer = setTimeout(() => {
+      terminated.kill('SIGKILL');
+      reject(new Error('Terminated GUI main process did not exit within 5 seconds'));
+    }, 5000);
+  });
+  terminated.kill('SIGTERM');
+  try { facts.terminatedProcess = await exited; }
+  finally { clearTimeout(exitTimer); }
+  app = null;
   assert.deepEqual(fixtures.operate(first, 'ticket_graph'), graphBefore);
   assert.deepEqual(runningTask(first), runningBefore);
-  await closeApp();
   fixtures.operate(second, 'ticket_register', fixtures.ticket('3', 'cli-after-gui-failure', ['2']));
   assert.equal(fixtures.operate(second, 'ticket_graph').tickets.length, 3);
   await launch();
@@ -226,7 +243,7 @@ try {
   assert.equal(await page.locator('.project-button').count(), 1);
   assert.equal(fixtures.operate(second, 'ticket_graph').tickets.length, 3);
   assert.deepEqual(runningTask(first), runningBefore);
-  facts.steps.push('Persisted projects, GUI exit/renderer failure preserve the active controlled Runner Session/execution and CLI operation; removal retains project');
+  facts.steps.push('Persisted projects, GUI normal exit and main-process termination preserve the active controlled Runner Session/execution and CLI operation; removal retains project');
   facts.reusedEvidence = 'Accepted A/B/C/D summary supplied via Worldline20261010T042341.450707+0900; integration20261010T030236.725956+0900. This test makes no model calls.';
   facts.uiPassed = true;
 } catch (error) {
@@ -245,3 +262,6 @@ try {
   await fs.writeFile(path.join(evidence, 'ui-result.json'), JSON.stringify(facts, null, 2));
   console.log(JSON.stringify(facts, null, 2));
 }
+// Native app exits and evidence writes above must finish before protocol handles
+// can be abandoned; the standalone test retains its actual result exit status.
+process.exit(process.exitCode || 0);

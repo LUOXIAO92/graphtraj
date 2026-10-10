@@ -31,16 +31,17 @@ user stops, execution limits and approval requirements. This check grants no new
 authority, time, acceptance or permission to modify state. Historical failed
 nodes that the current graph explicitly replaces are not new blocking work.
 
-Return only a JSON object with status, reason and nodes. status is one of the
-four conclusions above. Begin reason with the decisive fact and why it permits
-or prevents Main from ending this turn; a list of Ticket states alone is not a
-reason. For waiting, explain what prevents further authorized work and what
-event or approval permits it to resume; do not imply the unfinished goal is
-complete. Add only the task-state evidence needed to support that decision.
-nodes is a list of relevant existing Ticket identifiers or URLs; use an empty
-list when none applies. For actionable, name the concrete unfinished nodes and
-next work so the same Main can continue. For waiting, identify the pending event
-or stop condition. This is a check result, not a second persistent task ledger.
+Return one JSON object with status, reason and nodes. status is one of the four
+conclusions above. Keep reason brief: the decisive fact explaining this outcome,
+followed only by the next action or pending event needed to act on it. The hook
+already displays a status heading and the nodes; reason supplies the explanation,
+not another status list, full task history or routine permission disclaimer.
+For actionable, state the concrete remaining work. For waiting, identify what
+prevents authorized work now and which event or approval permits it to resume;
+waiting does not mean the unfinished task is complete. For error, name the
+specific unavailable source or failed operation. nodes lists relevant existing
+Ticket identifiers or URLs, or is empty when none applies. This single result
+serves the hook and Main; do not generate duplicate versions of its explanation.
 
 Return the result to the invoking finish-check operation. Do not send a separate
 message to Main, mutate project/task state, change identities, dispatch further

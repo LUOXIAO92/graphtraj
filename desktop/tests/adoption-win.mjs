@@ -6,6 +6,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { _electron as electron } from 'playwright';
+import { controlledInput, retainedRecords } from './retained-records.mjs';
 
 assert.equal(process.platform, 'win32', 'Adoption requires an actual Windows desktop');
 assert.equal(process.env.GITHUB_ACTIONS, 'true', 'Controlled retained-record construction is restricted to isolated CI');
@@ -21,8 +22,7 @@ const facts = {
   platform: process.platform, os: os.release(), arch: process.arch, node: process.version,
   executable, python, steps: [], unresolved: [],
   data: 'Disposable controlled projects; no model calls or private user records.',
-  controlledInput: { message: 'GraphTraj GUI controlled message', tool: 'controlled tool output',
-    model: 'gpt-5.3-codex', input: 1000, cacheRead: 600, output: 80, reasoning: 20 },
+  controlledInput,
 };
 const execute = promisify(execFile);
 const cli = (entry, args, cwd) => execFileSync(python, ['-I', '-X', 'utf8', '-c', `from ${entry} import main; main()`, ...args], { cwd, encoding: 'utf8' });
@@ -54,44 +54,11 @@ async function makeProject(name, retained = false) {
     });
     if (id === '1') ticketDirectory = registered.ticket_directory;
   }
-  if (retained) await retainedRecords(project, ticketDirectory);
+  if (retained) {
+    await retainedRecords(project, ticketDirectory);
+    facts.steps.push('Seeded retained controlled records only in the newly created test project; no Agent execution or caller identity was created');
+  }
   return project;
-}
-
-/** Only seed the new disposable test project; these are retained controlled records, not live identities. */
-async function retainedRecords(project, ticketDirectory) {
-  assert.equal(await fs.readFile(path.join(project, 'seed.txt'), 'utf8'),
-    'Controlled Windows adoption project; no model execution.\n');
-  const alias = 'controlled@retained';
-  const session = 'controlled-retained-session';
-  const team = path.join(ticketDirectory, 'teams/1');
-  const record = path.join(project, '.graphtraj/runner/sessions', alias);
-  await fs.mkdir(team, { recursive: true });
-  await fs.mkdir(record, { recursive: true });
-  const trace = path.join(team, 'controlled.jsonl');
-  const time = '2026-10-10T00:00:00Z';
-  const tokens = { input_tokens: 1000, cached_input_tokens: 600, output_tokens: 80, reasoning_output_tokens: 20 };
-  // JSON is valid YAML. Shapes match the existing retained desktop_activity fixture.
-  const write = (filename, value) => fs.writeFile(filename, JSON.stringify(value, null, 2), { flag: 'wx' });
-  await write(path.join(team, 'team.yml'), { team_ordinal: 1, status: 'active', current_round: 1,
-    started_at: time, members: { controlled: { role: 'controlled', session_ref: alias } } });
-  await write(path.join(record, 'session.yml'), { retirement: { mapping: {
-    alias, runtime: 'codex', session, ticket_id: '1', team_generation: 1,
-    role: 'controlled', parent: null, retained_batch_file: 'controlled-test-input',
-    worktree_path: project, trace_file: trace, worker_pid: 2147483647, runtime_pid: 2147483647,
-  } } });
-  await write(path.join(record, 'launch.yml'), { context_evidence: { model: 'gpt-5.3-codex' } });
-  const records = [
-    { type: 'turn_context', payload: { model: 'gpt-5.3-codex', turn_id: 'controlled-turn' } },
-    { type: 'response_item', payload: { type: 'message', role: 'assistant',
-      content: [{ type: 'output_text', text: facts.controlledInput.message }] } },
-    { type: 'response_item', payload: { type: 'function_call', call_id: 'controlled-echo', name: 'echo',
-      arguments: JSON.stringify({ text: facts.controlledInput.tool }) } },
-    { type: 'response_item', payload: { type: 'function_call_output', call_id: 'controlled-echo', output: facts.controlledInput.tool } },
-    { type: 'event_msg', payload: { type: 'token_count', info: { last_token_usage: tokens, total_token_usage: tokens } } },
-  ];
-  await fs.writeFile(trace, records.map(value => JSON.stringify({ timestamp: time, ...value })).join('\n') + '\n', { flag: 'wx' });
-  facts.steps.push('Seeded retained controlled records only in the newly created test project; no Agent execution or caller identity was created');
 }
 
 /** Detect any task/Runner mutation while the installed observer and settings UI operate. */

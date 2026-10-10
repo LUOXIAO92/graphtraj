@@ -399,3 +399,67 @@ def test_usage_pages_progress_across_65_readable_agents(tmp_path: Path) -> None:
         page = query(tmp_path, alias=alias, cursor=cursors[alias])
         assert page['availability'] == 'available' and page['events'] == []
     assert len(usage) == 65
+
+
+def test_windows_adoption_fixture_projects_retired_content_and_usage(temporary_git_repository: Path) -> None:
+    """The exact desktop fixture must survive native validation and Dashboard arithmetic."""
+    import subprocess
+
+    from conftest import PROJECT_ROOT
+    from test_windows_desktop import operation
+
+    root = temporary_git_repository
+    operation(root, 'project_setup', {'source_repository': str(root), 'apply': True, 'create_dev': True})
+    registered = operation(root, 'ticket_register', {
+        'ticket_id': '1', 'ticket_name': 'controlled', 'title': 'Controlled',
+        'source': 'https://github.com/example/controlled/issues/1',
+        'body': 'Controlled fixture, no Runtime execution.', 'dependencies': [],
+    })
+    (root / 'seed.txt').write_text('Controlled Windows adoption project; no model execution.\n', encoding='utf-8')
+    fixture = (PROJECT_ROOT / 'desktop/tests/retained-records.mjs').as_uri()
+    generated = subprocess.run(
+        ['node', '--preserve-symlinks', '--preserve-symlinks-main', '--input-type=module', '-e',
+         f'import {{retainedRecords}} from {json.dumps(fixture)}; '
+         'console.log(await retainedRecords(process.argv[1], process.argv[2]));',
+         str(root), registered['ticket_directory']],
+        text=True, capture_output=True, timeout=15, check=True,
+    )
+    alias = generated.stdout.strip()
+    observer = bind(root, desktop_observer=True)
+    arguments = {'ticket_id': '1', 'alias': alias}
+    response = observer({'action': 'execute', 'feature': 'desktop_activity', 'arguments': arguments})
+    assert not response.failed, response.document
+    observed = response.document
+    assert len(observed['agents']) == 1
+    agent = observed['agents'][0]
+    assert agent['alias'] == alias and agent['historical'] and agent['state'] == 'retired', agent
+    assert agent['model'] == 'gpt-5.3-codex'
+    assert observed['availability'] == 'available'
+    events = observed['events']
+    assert any(event.get('text') == 'GraphTraj GUI controlled message' for event in events)
+    assert any(event.get('name') == 'echo' and event['phase'] == 'call' for event in events)
+    assert any(event.get('result') == 'controlled tool output' for event in events)
+    usage = next(event['usage'] for event in events if event['kind'] == 'usage')
+    assert usage['tokens'] == {'input': 1000, 'cache_read': 600, 'output': 80, 'reasoning': 20}
+    assert usage['session'] == agent['session'] and usage['agent'] == alias and usage['ticket_id'] == '1'
+    assert usage['attributable'] and usage['identity']
+    replay = observer({'action': 'execute', 'feature': 'desktop_activity', 'arguments': arguments})
+    assert not replay.failed, replay.document
+
+    arithmetic = (PROJECT_ROOT / 'desktop/src/usage.ts').as_uri()
+    checked = subprocess.run(
+        ['node', '--preserve-symlinks', '--preserve-symlinks-main', '--input-type=module', '-e',
+         'import fs from "node:fs"; '
+         f'import {{collect,records,summarize}} from {json.dumps(arithmetic)}; '
+         'const pages=JSON.parse(fs.readFileSync(0,"utf8")); const calls=new Map(); '
+         'for(const events of pages) collect(calls,"controlled",events); '
+         'console.log(JSON.stringify(summarize(records(calls))));'],
+        input=json.dumps([events, replay.document['events']]), text=True,
+        capture_output=True, timeout=15, check=True,
+    )
+    total = json.loads(checked.stdout)
+    assert total['count'] == 1 and total['unpriced'] == 0
+    assert total['tokens']['input']['value'] == 1000 and total['tokens']['output']['value'] == 80
+    assert total['tokens']['cache_read']['value'] == 600
+    assert total['tokens']['cache_write']['known'] == 0
+    assert total['cacheRate'] == 0.6 and total['amount'] == pytest.approx(0.001925)

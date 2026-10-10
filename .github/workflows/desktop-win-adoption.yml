@@ -45,7 +45,7 @@ jobs:
         run: |
           npm --prefix desktop run build
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python -m pytest -p no:cacheprovider -q tests/test_desktop_settings.py tests/test_windows_desktop.py --junitxml=desktop/test-results/windows/native-tests.xml
+          python -m pytest -p no:cacheprovider -q tests/test_desktop_settings.py tests/test_windows_desktop.py tests/test_desktop_activity.py::test_windows_adoption_fixture_projects_retired_content_and_usage --junitxml=desktop/test-results/windows/native-tests.xml
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Package pinned runtime and application
         run: |

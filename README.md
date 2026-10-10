@@ -60,6 +60,10 @@ after editing. Optional `instructions` can point to your own UTF-8 role file.
 Keep credentials in the Runtime's native configuration or an environment
 variable named by `api_key_env`.
 
+To share models and providers across projects, use `graphtraj connections`.
+Project roles can reference this user-level catalog while login stays in the
+original Runtime. See [shared connections](manuals/setup-project/guide.md#share-runtime-connections-across-projects).
+
 Your host must expose the `graphtraj` tool. If it supports MCP, register
 `graphtraj-mcp` as a stdio server with the project root as its working directory.
 For hosts using TOML MCP configuration:

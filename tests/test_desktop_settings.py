@@ -231,6 +231,8 @@ def test_global_connection_role_reference_and_project_isolation(project: Path, m
     home = project / 'user-home'
     home.mkdir()
     monkeypatch.setenv('HOME', str(home))
+    monkeypatch.setenv('USERPROFILE', str(home))
+    assert Path.home() == home
     connection = {'version': 1, 'runtimes': {'shared': {'runtime': 'codex', 'home': str(home / 'native'),
         'providers': {'custom': {'base_url': 'https://provider.invalid/v1', 'api_key_env': 'CUSTOM_KEY',
             'models': {'model': {'id': 'custom-model', 'alias': 'My model', 'source': 'manual', 'supported_efforts': ['low']}}}}}}}
@@ -263,6 +265,9 @@ def test_global_connection_role_reference_and_project_isolation(project: Path, m
 def test_standalone_global_settings_use_native_review(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The global page works before adding a project without creating project state."""
     monkeypatch.setenv('HOME', str(tmp_path))
+    # Windows resolves Path.home() from USERPROFILE rather than HOME.
+    monkeypatch.setenv('USERPROFILE', str(tmp_path))
+    assert Path.home() == tmp_path
     state = call(tmp_path, {'scope': 'user', 'action': 'read'})[-1]['result']
     catalog = {'version': 1, 'runtimes': {'local': {'runtime': 'codex', 'providers': {}}}}
     request = {'scope': 'user', 'action': 'save', 'expected_revision': state['revision'], 'catalog': catalog}

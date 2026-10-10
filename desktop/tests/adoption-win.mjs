@@ -25,11 +25,21 @@ const facts = {
   controlledInput,
 };
 const execute = promisify(execFile);
-const cli = (entry, args, cwd) => execFileSync(python, ['-I', '-X', 'utf8', '-c', `from ${entry} import main; main()`, ...args], { cwd, encoding: 'utf8' });
+/** Bound test waits without changing the installed application's behavior. */
+async function bounded(label, operation, milliseconds = 20000) {
+  let timer;
+  try {
+    return await Promise.race([operation, new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${label} timed out after ${milliseconds}ms`)), milliseconds);
+    })]);
+  } finally { clearTimeout(timer); }
+}
+const persist = () => fs.writeFile(path.join(evidence, 'adoption.json'), JSON.stringify(facts, null, 2));
+const cli = (entry, args, cwd) => execFileSync(python, ['-I', '-X', 'utf8', '-c', `from ${entry} import main; main()`, ...args], { cwd, encoding: 'utf8', timeout: 30000 });
 /** Exercise public installed operations without editing delivery state. */
 function operate(project, feature, args = {}) {
   const reply = JSON.parse(execFileSync(python, ['-I', '-X', 'utf8', '-c', 'from graphtraj.interfaces.local_tool import main; main()', ...(feature === 'desktop_activity' ? ['--desktop-observer'] : [])], {
-    cwd: project, encoding: 'utf8', input: JSON.stringify({ action: 'execute', feature, arguments: args }) + '\n',
+    cwd: project, encoding: 'utf8', timeout: 30000, input: JSON.stringify({ action: 'execute', feature, arguments: args }) + '\n',
   }));
   assert.ok(!reply.failed, JSON.stringify(reply));
   return reply.result;
@@ -38,7 +48,7 @@ function operate(project, feature, args = {}) {
 async function makeProject(name, retained = false) {
   const project = path.join(root, name);
   await fs.mkdir(project);
-  const git = args => execFileSync('git', args, { cwd: project, encoding: 'utf8' });
+  const git = args => execFileSync('git', args, { cwd: project, encoding: 'utf8', timeout: 30000 });
   git(['init', '--initial-branch=main']);
   await fs.writeFile(path.join(project, 'seed.txt'), 'Controlled Windows adoption project; no model execution.\n');
   git(['add', 'seed.txt']);
@@ -202,18 +212,23 @@ const preferences = path.join(root, 'user-data');
 async function launch() {
   const env = { ...process.env, WINDOWS_ADOPTION_TEST_KEY: 'CONTROLLED-SECRET-MUST-NOT-APPEAR' };
   delete env.ELECTRON_RUN_AS_NODE;
-  app = await electron.launch({ executablePath: executable, args: [`--user-data-dir=${preferences}`], env });
-  page = await app.firstWindow();
-  mainProcess = await app.evaluate(() => process.pid);
+  mainProcess = undefined;
+  app = await electron.launch({ executablePath: executable, args: [`--user-data-dir=${preferences}`], env, timeout: 30000 });
+  page = await app.firstWindow({ timeout: 20000 });
+  mainProcess = await bounded('Read main process', app.evaluate(() => process.pid));
   facts.processes = { launched: app.process().pid, main: mainProcess };
-  await app.evaluate(({ BrowserWindow }) => { const window = BrowserWindow.getAllWindows()[0]; window.show(); window.focus(); });
+  await bounded('Focus installed window', app.evaluate(({ BrowserWindow }) => { const window = BrowserWindow.getAllWindows()[0]; window.show(); window.focus(); }));
   page.setDefaultTimeout(20000);
 }
 async function pick(folder) {
   await page.getByRole('button', { name: 'Add project', exact: true }).click();
   try { await native('pick', folder); } catch (error) {
-    await page.screenshot({ path: path.join(evidence, 'picker-failure-renderer.png') });
-    facts.pickerAlert = await page.getByRole('alert').allTextContents();
+    facts.error = error.stack || String(error);
+    await persist();
+    try {
+      await page.screenshot({ path: path.join(evidence, 'picker-failure-renderer.png'), timeout: 5000 });
+      facts.pickerAlert = await bounded('Read picker alert', page.getByRole('alert').allTextContents(), 5000);
+    } catch (captureError) { facts.captureError = String(captureError); }
     throw error;
   }
   await page.locator('.project-button.current').filter({ hasText: folder }).waitFor();
@@ -247,7 +262,7 @@ try {
   const firstState = await taskFiles(first);
   const secondState = await taskFiles(second);
   await launch();
-  const surface = await page.evaluate(() => ({ methods: Object.keys(window.graphtraj).sort(), require: typeof window.require, process: typeof window.process }));
+  const surface = await bounded('Read renderer surface', page.evaluate(() => ({ methods: Object.keys(window.graphtraj).sort(), require: typeof window.require, process: typeof window.process })));
   assert.deepEqual(surface.methods, ['activity', 'addProject', 'copyText', 'graph', 'projects', 'removeProject', 'saveSettings', 'selectProject', 'settings']);
   assert.equal(surface.require, 'undefined');
   assert.equal(surface.process, 'undefined');
@@ -324,7 +339,9 @@ try {
   assert.deepEqual(await fs.readFile(firstRoles), concurrent);
   assert.deepEqual(await fs.readFile(secondRoles), secondBefore);
   await capture('settings-conflict');
-  await app.close(); app = null;
+  facts.phase = 'normal-close';
+  await persist();
+  await bounded('Normal GUI close', app.close()); app = null;
   assert.deepEqual(operate(first, 'ticket_graph'), before);
   await launch();
   await page.locator('.project-button.current').filter({ hasText: first }).waitFor();
@@ -335,7 +352,7 @@ try {
   const crashed = app.process();
   const exited = new Promise(resolve => crashed.once('exit', resolve));
   crashed.kill();
-  await exited;
+  await bounded('Terminated GUI exit', exited);
   app = null;
   cli('graphtraj.interfaces.cli.agent_runner', ['--help'], first);
   assert.deepEqual(operate(first, 'ticket_graph'), before);
@@ -347,12 +364,35 @@ try {
   facts.steps.push('Installed GUI exposes no execution-control methods and leaves both projects task/Runner records unchanged; actual task independence reuses accepted A/B/C/D evidence, not a Windows Runtime claim');
   facts.passed = facts.unresolved.length === 0;
 } catch (error) {
-  facts.error = String(error);
+  facts.error = error.stack || String(error);
 } finally {
-  if (app) await app.close().catch(() => {});
-  await fs.writeFile(path.join(evidence, 'adoption.json'), JSON.stringify(facts, null, 2));
+  const completed = facts.passed;
+  facts.passed = false;
+  facts.phase = 'before-cleanup';
+  // Preserve the original result even if screenshots or Electron shutdown cannot finish.
+  await persist();
+  if (page && !page.isClosed()) {
+    try { await page.screenshot({ path: path.join(evidence, 'before-cleanup.png'), timeout: 5000 }); }
+    catch (error) { facts.captureError = error.stack || String(error); }
+  }
+  await persist();
+  if (app) {
+    try { await bounded('Final GUI cleanup', app.close(), 10000); }
+    catch (error) {
+      facts.cleanupError = error.stack || String(error);
+      await persist();
+      // Only terminate this test's installed app tree after graceful cleanup failed.
+      try { await execute('taskkill.exe', ['/PID', String(mainProcess || app.process().pid), '/T', '/F'], { timeout: 10000 }); }
+      catch (killError) { facts.cleanupKillError = String(killError); }
+    }
+  }
+  facts.phase = 'finished';
+  facts.passed = completed && !facts.cleanupError && !facts.captureError;
+  await persist();
 }
 if (!facts.passed) {
-  console.error(JSON.stringify({ passed: false, error: facts.error, unresolved: facts.unresolved }));
+  console.error(JSON.stringify({ passed: false, error: facts.error, cleanupError: facts.cleanupError, captureError: facts.captureError, unresolved: facts.unresolved }));
   process.exitCode = 1;
+  // A timed-out Playwright close can leave protocol handles alive after evidence is saved.
+  if (facts.cleanupError) process.exit(1);
 }

@@ -130,6 +130,7 @@ function GraphView({ projectId, active }: { projectId: string; active: boolean }
           edges={edges} nodeTypes={nodeTypes} onNodesChange={onNodesChange}
           onNodeClick={(_event, node) => setSelected(node.id)}
           nodesConnectable={false} edgesReconnectable={false} deleteKeyCode={null}
+          panActivationKeyCode={active ? 'Space' : null}
           fitView minZoom={0.05} maxZoom={2} colorMode="system">
           <Background /><Controls showInteractive={false} /><MiniMap pannable zoomable />
         </ReactFlow>

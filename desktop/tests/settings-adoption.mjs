@@ -41,7 +41,17 @@ export async function settingsAdoption({ page, decide, firstId, secondId, runtim
   await expectDisclosure(summary, true);
   await summary.press('Enter');
   await expectDisclosure(summary, false);
+  await summary.evaluate(element => {
+    // Observe after document listeners, including any mounted graph shortcuts.
+    window.addEventListener('keydown', event => {
+      element.spaceInput = { key: event.key, code: event.code,
+        defaultPrevented: event.defaultPrevented, targetIsSummary: event.target === element };
+    }, { once: true });
+  });
   await summary.press('Space');
+  const spaceInput = await summary.evaluate(element => element.spaceInput);
+  step(`Summary Space input after document handlers: ${JSON.stringify(spaceInput)}`);
+  assert.deepEqual(spaceInput, { key: ' ', code: 'Space', defaultPrevented: false, targetIsSummary: true });
   await expectDisclosure(summary, true);
   step('Runtime disclosure repeat-click, Enter and Space reached their expected native states.');
   await button('Refresh native models').click();

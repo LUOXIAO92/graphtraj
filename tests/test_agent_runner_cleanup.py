@@ -335,6 +335,88 @@ def test_installed_cleanup_uses_only_ticket_identity_and_preserves_trajectory(
     assert historical_marker.read_text(encoding="utf-8") == "historical evidence\n"
 
 
+@pytest.mark.parametrize("residual", [
+    "unchanged", "changed-branch", "registered", "dirty-path", "unmerged-dev",
+])
+def test_installed_cleanup_retries_reference_failure(
+    integrated_ticket: DeliveredTicket, residual: str,
+) -> None:
+    """A real Git lock failure leaves a retryable, exactly attributed branch."""
+    ticket = integrated_ticket
+    durable_before = _durable_contents(ticket)
+    sessions = ticket.root / ".graphtraj/runner/sessions"
+    commit = run_process(["git", "rev-parse", ticket.branch], cwd=ticket.repository).stdout.strip()
+    ref_path = run_process(
+        ["git", "rev-parse", "--git-path", "refs/heads/" + ticket.branch],
+        cwd=ticket.repository,
+    ).stdout.strip()
+    lock = Path(str(ticket.repository / ref_path) + ".lock")
+    lock.write_text("controlled cleanup lock\n")
+    try:
+        failed = _cleanup(ticket)
+        document = yaml.safe_load(failed.stdout)
+        assert failed.returncode == 1, failed.stdout + failed.stderr
+        assert document["error"]["code"] == "cleanup-failed"
+        assert document["evidence"]["completed_actions"][-3:] == [
+            "members-retired", "worktree-removed", "mappings-removed",
+        ]
+        assert "exited 128" in document["evidence"]["cause"]["message"]
+        assert "lock file already exists" in document["evidence"]["cause"]["message"]
+        assert not ticket.worktree.exists()
+        assert not _ticket_mappings(ticket)
+        assert run_process(["git", "rev-parse", ticket.branch], cwd=ticket.repository).stdout.strip() == commit
+        remaining_sessions = sorted(path.name for path in sessions.iterdir())
+        retired_before = {path: path.read_bytes() for path in ticket.ticket_directory.rglob("session.yml")}
+        assert retired_before
+
+        # Retry while the real fault persists, without inventing more retirement.
+        retry_failed = yaml.safe_load(_cleanup(ticket).stdout)
+        assert retry_failed["error"]["code"] == "cleanup-failed"
+        assert retry_failed["evidence"]["completed_actions"] == []
+    finally:
+        lock.unlink()
+
+    if residual == "changed-branch":
+        # Even another already-merged commit is not this Ticket's accepted ref.
+        changed = run_process(["git", "update-ref", "refs/heads/" + ticket.branch, commit + "^"],
+                              cwd=ticket.repository)
+        assert changed.returncode == 0, changed.stderr
+    elif residual == "registered":
+        registered = run_process(["git", "worktree", "add", str(ticket.root / "foreign"), ticket.branch],
+                                 cwd=ticket.repository)
+        assert registered.returncode == 0, registered.stderr
+    elif residual == "dirty-path":
+        ticket.worktree.mkdir()
+        (ticket.worktree / "user-data").write_text("preserve me\n")
+    elif residual == "unmerged-dev":
+        run_process(["git", "update-ref", "refs/heads/dev", commit + "^"],
+                    cwd=ticket.repository).check_returncode()
+
+    retried = _cleanup(ticket)
+    result = yaml.safe_load(retried.stdout)
+    if residual == "unchanged":
+        assert retried.returncode == 0, retried.stdout + retried.stderr
+        assert result["cleanup_status"] == "cleaned"
+        assert result["aliases_removed"] == []
+        assert result["evidence"]["ticket_commit"] == commit
+        repeated = _cleanup(ticket)
+        assert repeated.returncode == 0, repeated.stdout + repeated.stderr
+        assert yaml.safe_load(repeated.stdout)["cleanup_status"] == "already-cleaned"
+    else:
+        assert retried.returncode == 1, retried.stdout + retried.stderr
+        assert result["error"]["code"] == (
+            "cleanup-not-integrated" if residual == "unmerged-dev"
+            else "cleanup-ownership-mismatch"
+        )
+        assert run_process(["git", "show-ref", "--verify", "refs/heads/" + ticket.branch],
+                           cwd=ticket.repository).returncode == 0
+        if residual == "dirty-path":
+            assert (ticket.worktree / "user-data").read_text() == "preserve me\n"
+    assert sorted(path.name for path in sessions.iterdir()) == remaining_sessions
+    assert {path: path.read_bytes() for path in retired_before} == retired_before
+    _assert_durable_contents(ticket, durable_before)
+
+
 def test_installed_cleanup_allows_missing_worldline_evidence(
     integrated_ticket: DeliveredTicket,
 ) -> None:

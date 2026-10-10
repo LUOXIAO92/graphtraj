@@ -7,6 +7,7 @@ import os
 import re
 import shutil
 import stat
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -39,6 +40,7 @@ class CleanupTarget:
     worktree: Path
     branch: str
     status: str
+    candidate: str | None
 
 
 def cleanup_ticket(cwd: Path, ticket_id: str) -> CleanupResponse:
@@ -109,6 +111,7 @@ def _target(project: Project, ticket_id: str) -> CleanupTarget | CleanupResponse
         worktree=worktree,
         branch=branch,
         status=state["status"],
+        candidate=state["current_candidate"],
     )
 
 
@@ -164,7 +167,14 @@ def _cleanup(target: CleanupTarget) -> CleanupResponse:
                 {"mappings": [path.name for path in mappings]},
             )
         return _already_cleaned(target)
-    if (
+    # Integration retains the exact accepted branch even after its Worktree and
+    # mappings have been removed. Absence alone never authorizes ref deletion.
+    branch_only = (
+        branch_exists and not worktree_exists and not path_records
+        and not branch_records and not mappings and target.candidate is not None
+        and run_git(target.project.repository, "rev-parse", expected_ref) == target.candidate
+    )
+    if not branch_only and (
         not branch_exists
         or not worktree_exists
         or target.worktree.is_symlink()
@@ -180,7 +190,7 @@ def _cleanup(target: CleanupTarget) -> CleanupResponse:
             {"worktree": str(target.worktree), "branch": target.branch},
         )
 
-    status = run_git(
+    status = [] if branch_only else run_git(
         target.worktree, "status", "--porcelain", "--untracked-files=all"
     ).splitlines()
     if status:
@@ -190,12 +200,13 @@ def _cleanup(target: CleanupTarget) -> CleanupResponse:
             "The Ticket Worktree is not clean.",
             {"worktree_status": status},
         )
-    ticket_commit = run_git(target.project.repository, "rev-parse", target.branch)
+    ticket_commit = (target.candidate if branch_only else
+                     run_git(target.project.repository, "rev-parse", target.branch))
     if not git_succeeds(
         target.project.repository,
         "merge-base",
         "--is-ancestor",
-        target.branch,
+        ticket_commit,
         target.project.dev_commit,
     ):
         return _refused(
@@ -218,22 +229,34 @@ def _cleanup(target: CleanupTarget) -> CleanupResponse:
             else:
                 trace = next(target.ticket_directory.glob("teams/*/traces/" + directory.name))
                 directory.rename(trace / "runner")
-        completed_actions.append("members-retired")
+        if not branch_only:
+            completed_actions.append("members-retired")
         # A shared Worktree user can start between the initial check and retirement.
         # Hold the same lock as every execution startup through resource deletion.
         with execution_start_lock(target.project.runner_directory):
-            _, errors, busy = _ticket_mappings(target)
-            if errors or busy:
+            remaining, errors, busy = _ticket_mappings(target)
+            if errors or busy or (branch_only and remaining):
                 return _refused(target, "worktree-busy", "The Worktree is still in use.",
                                 {"aliases": busy, "mapping_mismatches": errors,
                                  "completed_actions": completed_actions})
-            run_git(target.project.repository, "worktree", "remove", str(target.worktree))
-        if os.path.lexists(str(target.worktree)):
-            raise OSError("Ticket Worktree path still exists")
-        completed_actions.append("worktree-removed")
-        # Session directories retain original launch, native Session and result records.
-        completed_actions.append("mappings-removed")
-        _delete_branch_if_dev_unchanged(target, ticket_commit)
+            if branch_only:
+                # Recheck under the startup lock: a new allocation must not lose
+                # its branch after the earlier absence/ownership checks.
+                records = registered_worktrees(target.project.repository)
+                if os.path.lexists(str(target.worktree)) or any(
+                    record.get("worktree") == str(target.worktree)
+                    or record.get("branch") == expected_ref for record in records
+                ):
+                    return _refused(target, "cleanup-ownership-mismatch",
+                                    "The Ticket resources changed during cleanup.", {})
+            else:
+                run_git(target.project.repository, "worktree", "remove", str(target.worktree))
+                if os.path.lexists(str(target.worktree)):
+                    raise OSError("Ticket Worktree path still exists")
+                completed_actions.append("worktree-removed")
+                # Original Session and result records remain retained.
+                completed_actions.append("mappings-removed")
+            _delete_branch_if_dev_unchanged(target, ticket_commit)
         completed_actions.append("branch-removed")
     except (OSError, RunnerError, shutil.Error) as error:
         return _refused(
@@ -530,6 +553,7 @@ def _process_alive(pid: int) -> bool:
 def _delete_branch_if_dev_unchanged(
     target: CleanupTarget, ticket_commit: str
 ) -> None:
+    """Delete only the verified ref while dev still names the checked commit."""
     project = target.project
     transaction = (
         "option no-deref\n"
@@ -544,7 +568,22 @@ def _delete_branch_if_dev_unchanged(
         target.branch,
         ticket_commit,
     )
-    run_git(project.repository, "update-ref", "--stdin", input_text=transaction)
+    try:
+        run_git(project.repository, "update-ref", "--stdin", input_text=transaction)
+    except RunnerError as error:
+        # Git diagnostics can contain private hook/configuration output. Expose
+        # only known failure classes, retaining the original command exit code.
+        cause = error.__cause__
+        if isinstance(cause, subprocess.CalledProcessError):
+            diagnostic = cause.stderr or ""
+            reason = next((label for text, label in (
+                ("Permission denied", "permission denied"),
+                ("File exists", "lock file already exists"),
+                ("but expected", "reference changed"),
+                ("cannot lock ref", "reference lock failed"),
+            ) if text in diagnostic), "unclassified Git failure")
+            raise RunnerError(error.code, error.message + " " + reason + ".") from error
+        raise
 
 
 def _refused(

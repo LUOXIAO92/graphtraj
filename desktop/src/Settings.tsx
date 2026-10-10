@@ -134,7 +134,7 @@ export function SettingsView({ projectId }: { projectId: string }) {
     </div>
     {saved && <div className="settings-columns">
       <nav aria-label="Configured roles">
-        <label>Team<select value={team} disabled={busy} onChange={event => { const value = event.target.value; setTeam(value); setSelected(Object.keys(roles).find(ref => group(ref) === value) ?? ''); }}>{teams.map(name => <option key={name} value={name}>{ownRole(teamRenames, name) ?? (name || 'Ungrouped roles')}</option>)}</select></label>
+        <label>Team<select aria-label="Team" value={team} disabled={busy} onChange={event => { const value = event.target.value; setTeam(value); setSelected(Object.keys(roles).find(ref => group(ref) === value) ?? ''); }}>{teams.map(name => <option key={name} value={name}>{ownRole(teamRenames, name) ?? (name || 'Ungrouped roles')}</option>)}</select></label>
         {teamRoles.map(reference => <Button key={reference} aria-pressed={selected === reference} variant={selected === reference ? 'primary' : 'secondary'} isDisabled={busy} onPress={() => setSelected(reference)}>{roleName(renames, reference)}</Button>)}
         {!teamRoles.length && <p>No configured Agents. Add a team and root below.</p>}
         {team && <><TextField value={teamName} onChange={setTeamName} isDisabled={busy}><Label>New team name</Label><Input /></TextField>
@@ -152,7 +152,7 @@ export function SettingsView({ projectId }: { projectId: string }) {
       </nav>
       {selected && Object.hasOwn(roles, selected) && <div className="settings-fields">
         <Card><Card.Header><Card.Title>Connections and model</Card.Title></Card.Header><Card.Content>
-          <label>Global connection<select value={ownRole(roles, selected)?.connection ?? ''} disabled={busy} onChange={event => {
+          <label>Global connection<select aria-label="Global connection" value={ownRole(roles, selected)?.connection ?? ''} disabled={busy} onChange={event => {
             const connection = event.target.value;
             setRoles(current => ({ ...current, [selected]: { ...ownRole(current, selected), connection: connection || null,
               runtime: connection ? null : 'codex', model: connection ? null : '', base_url: null, api_key_env: null } }));
@@ -187,14 +187,14 @@ export function SettingsView({ projectId }: { projectId: string }) {
       <fieldset disabled={busy}><legend>Add team or Agent</legend>
         <TextField value={teamName} onChange={setTeamName}><Label>Team name for new team</Label><Input /></TextField>
         <TextField value={nodeName} onChange={setNodeName}><Label>New Agent name</Label><Input /></TextField>
-        <label>New Agent Runtime<select value={newRuntime} onChange={event => setNewRuntime(event.target.value)}><option>codex</option><option>pi</option><option>dsh</option></select></label>
+        <label>New Agent Runtime<select aria-label="New Agent Runtime" value={newRuntime} onChange={event => setNewRuntime(event.target.value)}><option>codex</option><option>pi</option><option>dsh</option></select></label>
         <TextField value={newModel} onChange={setNewModel}><Label>New Agent model</Label><Input /></TextField>
         <div className="settings-actions"><Button onPress={() => attempt(() => addNode(true, false))}>Add team with root</Button>
           <Button onPress={() => attempt(() => addNode(false, false))}>Add root Agent</Button>
           <Button isDisabled={!selected || busy} onPress={() => attempt(() => addNode(false, true))}>Add child Agent</Button></div>
       </fieldset>
       {selected && Object.hasOwn(roles, selected) && <fieldset disabled={busy}><legend>Selected Agent: {roleName(renames, selected)}</legend>
-        <label>Agent parent<select value={edges.find(edge => edge[1] === selected)?.[0] ?? ''} onChange={event => attempt(() => {
+        <label>Agent parent<select aria-label="Agent parent" value={edges.find(edge => edge[1] === selected)?.[0] ?? ''} onChange={event => attempt(() => {
           const parent = event.target.value;
           if (!parent && teamRoles.some(ref => ref !== selected && isTeamRoot(ref))) throw new Error('A team must have one clear root. Move this Agent below the existing root.');
           const next = moveNode(tree, selected, parent); setTree(next);

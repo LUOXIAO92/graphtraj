@@ -37,7 +37,7 @@ async function form(t, file, component, api, props) {
   return { tree,
     fill: async (label, value) => act(async () => tree.root.findAllByType('field').find(node => node.findByType('label').children.join('') === label).props.onChange(value)),
     click: async label => act(async () => tree.root.findAllByType('button').find(node => node.children.join('') === label).props.onClick()),
-    select: async (label, value) => act(async () => tree.root.findAllByType('select').find(node => node.parent.children[0] === label).props.onChange({ target: { value } })),
+    select: async (label, value) => act(async () => tree.root.findAllByType('select').find(node => node.props['aria-label'] === label).props.onChange({ target: { value } })),
     submit: async () => act(async () => tree.root.findByType('form').props.onSubmit({ preventDefault() {} })),
   };
 }
@@ -52,6 +52,8 @@ test('team draft creates, reparents, renames and references a model while preser
     settings: async () => saved, connections: async () => connections,
     saveSettings: async (_id, value) => { submitted = value; throw new Error('Controlled refusal; retain draft.'); },
   }, { projectId: 'project' });
+  await ui.select('Team', 'existing');
+  await ui.select('New Agent Runtime', 'codex');
   await ui.fill('Team name for new team', 'research');
   await ui.fill('New Agent name', 'root'); await ui.fill('New Agent model', 'draft-model');
   await ui.click('Add team with root'); await ui.select('Global connection', 'shared/openai/model');
@@ -68,6 +70,25 @@ test('team draft creates, reparents, renames and references a model while preser
   assert.deepEqual(submitted.remove_presets, []); assert.equal(submitted.decision, undefined);
   assert.match(JSON.stringify(ui.tree.toJSON()), /Controlled refusal/);
   await ui.click('Cancel draft'); assert.doesNotMatch(JSON.stringify(ui.tree.toJSON()), /research.root/);
+});
+
+test('native Runtime and Provider API selects keep explicit names as options change', async t => {
+  let preview;
+  const original = { ...connections, catalog: { version: 1, runtimes: {} },
+    capabilities: { model_discovery: { pi: 'native' }, custom_api: { pi: ['openai-completions'] } } };
+  const ui = await form(t, 'Connections.tsx', 'ConnectionsView', {
+    connections: async (_id, request) => {
+      if (request.action === 'preview') preview = request.catalog;
+      return { ...original, catalog: request.catalog ?? original.catalog };
+    },
+  }, {});
+  await ui.select('Runtime type', 'pi');
+  await ui.fill('Runtime entry name', 'pi'); await ui.click('Add Runtime');
+  await ui.fill('Provider name', 'custom'); await ui.click('Add Provider');
+  await ui.select('Provider API', 'openai-completions');
+  await ui.click('Preview connections');
+  assert.equal(preview.runtimes.pi.runtime, 'pi');
+  assert.equal(preview.runtimes.pi.providers.custom.api, 'openai-completions');
 });
 
 for (const name of ['ordinary', '__proto__']) test(`global form preserves ${name} catalog keys and sends only native save fields`, async t => {
@@ -123,7 +144,7 @@ test('rename team then add child saves and reloads one renamed group', async t =
     add_edges: [], remove_edges: [], remove_presets: [], role_tree: { 'a.root': { 'a.worker': {} } },
   });
   await ui.click('Reload and discard draft');
-  const team = ui.tree.root.findAllByType('select').find(node => node.parent.children[0] === 'Team');
+  const team = ui.tree.root.findAllByType('select').find(node => node.props['aria-label'] === 'Team');
   assert.equal(team.props.value, 'b');
   assert.deepEqual(team.findAllByType('option').map(node => node.props.value), ['b']);
   const labels = ui.tree.root.findAllByType('button').map(node => node.children.join(''));

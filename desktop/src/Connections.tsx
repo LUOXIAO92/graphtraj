@@ -91,7 +91,7 @@ export function ConnectionsView({ projectId }: { projectId?: string }) {
         <div className="settings-fields">
           <fieldset disabled={busy}><legend>Add Runtime</legend>
             {text('Runtime entry name', runtimeName, setRuntimeName)}
-            <label>Runtime type<select value={kind} onChange={event => setKind(event.target.value as CatalogRuntime['runtime'])}><option>codex</option><option>pi</option><option>dsh</option></select></label>
+            <label>Runtime type<select aria-label="Runtime type" value={kind} onChange={event => setKind(event.target.value as CatalogRuntime['runtime'])}><option>codex</option><option>pi</option><option>dsh</option></select></label>
             <Button onPress={() => {
               if (!validName(runtimeName)) return;
               if (Object.hasOwn(catalog.runtimes, runtimeName)) { setError('Runtime entry already exists.'); return; }
@@ -127,7 +127,7 @@ export function ConnectionsView({ projectId }: { projectId?: string }) {
             {text('Provider Base URL', provider.base_url ?? '', value => edit(draft => { if (value) draft.runtimes[runtimeId].providers[providerId].base_url = value; else delete draft.runtimes[runtimeId].providers[providerId].base_url; for (const model of Object.values(draft.runtimes[runtimeId].providers[providerId].models)) { model.source = 'manual'; delete model.supported_efforts; } }))}
             {text('Provider api_key_env name', provider.api_key_env ?? '', value => edit(draft => { if (value) draft.runtimes[runtimeId].providers[providerId].api_key_env = value; else delete draft.runtimes[runtimeId].providers[providerId].api_key_env; }))}
             <p>Environment variable NAME only, for example OPENROUTER_API_KEY. Set its value outside this app in the Runtime launch environment. Third-party endpoints require their own authentication; no official login fallback.</p>
-            {runtime.runtime === 'pi' && <label>Provider API<select value={provider.api ?? ''} onChange={event => edit(draft => { if (event.target.value) draft.runtimes[runtimeId].providers[providerId].api = event.target.value; else delete draft.runtimes[runtimeId].providers[providerId].api; })}><option value="">Native default</option>{saved.capabilities.custom_api.pi.map(api => <option key={api}>{api}</option>)}</select></label>}
+            {runtime.runtime === 'pi' && <label>Provider API<select aria-label="Provider API" value={provider.api ?? ''} onChange={event => edit(draft => { if (event.target.value) draft.runtimes[runtimeId].providers[providerId].api = event.target.value; else delete draft.runtimes[runtimeId].providers[providerId].api; })}><option value="">Native default</option>{saved.capabilities.custom_api.pi.map(api => <option key={api}>{api}</option>)}</select></label>}
             {text('Model entry name', modelName, setModelName)}
             {text('Model identifier', model.id, id => setModel({ ...model, id, source: 'manual', supported_efforts: undefined }))}
             {text('Model alias', model.alias ?? '', alias => setModel({ ...model, alias: alias || undefined }))}

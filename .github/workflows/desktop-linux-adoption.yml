@@ -1,0 +1,79 @@
+name: Linux installed desktop adoption
+
+on:
+  push:
+    branches: [agent/267-desktop-linux-adoption]
+
+permissions:
+  contents: read
+
+jobs:
+  installed-desktop:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      ADOPTION_ROOT: ${{ github.workspace }}/desktop/test-results/linux-adoption
+      ADOPTION_EXECUTABLE: /usr/bin/graphtraj-desktop
+      ADOPTION_INSTALL_ROOT: /opt/graphtraj-desktop
+      GRAPHTRAJ_TOOL: /opt/graphtraj-desktop/python/bin/graphtraj-tool
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22.18.0
+      - name: Install disposable desktop test prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-venv xvfb xauth xdotool openbox imagemagick dbus-x11 libgtk-3-0t64 libnss3 libasound2t64 libgbm1 libxss1 libxtst6 libatk-bridge2.0-0t64
+          mkdir -p "$ADOPTION_ROOT/evidence"
+          dpkg-query -W > "$ADOPTION_ROOT/evidence/system-packages.txt"
+      - name: Install locked frontend dependencies and package
+        working-directory: desktop
+        run: |
+          npm ci
+          node scripts/package-linux.mjs "$GITHUB_WORKSPACE/desktop/test-results/linux-package"
+      - name: Install the actual Debian artifact
+        run: |
+          cd desktop/test-results/linux-package
+          sha256sum -c SHA256SUMS
+          sudo apt-get install -y ./graphtraj-desktop_0.1.0_amd64.deb
+          /opt/graphtraj-desktop/python/bin/python -m pip check
+          /opt/graphtraj-desktop/python/bin/python -m pip freeze > "$ADOPTION_ROOT/evidence/installed-python.txt"
+          ldd /opt/graphtraj-desktop/graphtraj-desktop-bin > "$ADOPTION_ROOT/evidence/electron-libraries.txt"
+          echo /opt/graphtraj-desktop/python/bin >> "$GITHUB_PATH"
+      - name: Focused desktop development checks
+        working-directory: desktop
+        run: node --test tests/*.test.cjs
+      - name: Configure only this disposable Ubuntu runner
+        run: |
+          # Upstream Playwright test_electron uses this Ubuntu 24 prerequisite.
+          # This is never in the installer, launcher or user configuration.
+          sysctl -n kernel.apparmor_restrict_unprivileged_userns > "$ADOPTION_ROOT/evidence/original-userns-setting.txt"
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - name: Exercise the installed desktop under Xvfb
+        working-directory: desktop
+        run: |
+          set -o pipefail
+          # The fixture host uses public setup/Ticket/swarm operations and keeps
+          # a controlled execution active through GUI exit/failure, with no model calls.
+          dbus-run-session -- xvfb-run -a -s '-screen 0 1600x1000x24' sh -c 'openbox > "$ADOPTION_ROOT/evidence/openbox.log" 2>&1 & /opt/graphtraj-desktop/python/bin/python ../tests/linux_adoption_input.py' 2>&1 | tee "$ADOPTION_ROOT/evidence/adoption.log"
+      - name: Restore disposable runner setting
+        if: always()
+        run: |
+          if test -f "$ADOPTION_ROOT/evidence/original-userns-setting.txt"; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns="$(cat "$ADOPTION_ROOT/evidence/original-userns-setting.txt")"
+          fi
+      - name: Retain exact artifact and sanitized evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: linux-desktop-${{ github.sha }}
+          retention-days: 3
+          if-no-files-found: error
+          path: |
+            desktop/test-results/linux-package/*.deb
+            desktop/test-results/linux-package/SHA256SUMS
+            desktop/test-results/linux-package/source.json
+            desktop/test-results/linux-adoption/evidence/

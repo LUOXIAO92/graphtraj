@@ -291,7 +291,7 @@ try {
   assert.equal(await page.locator('.project-button').count(), 2);
   await capture('two-projects');
   await page.locator('.project-button').filter({ hasText: first }).click();
-  await page.locator('.react-flow__node').filter({ hasText: '#1' }).click();
+  await page.locator('.react-flow__node[data-id="1"]').click();
   await page.getByRole('complementary', { name: 'Ticket details' }).waitFor();
   const activity = operate(first, 'desktop_activity', { ticket_id: '1' });
   assert.equal(activity.agents.length, 1);

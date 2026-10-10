@@ -70,7 +70,7 @@ test('team draft creates, reparents, renames and references a model while preser
   await ui.click('Cancel draft'); assert.doesNotMatch(JSON.stringify(ui.tree.toJSON()), /research.root/);
 });
 
-test('global form previews a manual catalog and sends only native save fields', async t => {
+for (const name of ['ordinary', '__proto__']) test(`global form preserves ${name} catalog keys and sends only native save fields`, async t => {
   const original = { ...connections, catalog: { version: 1, runtimes: {} } };
   const calls = [];
   const ui = await form(t, 'Connections.tsx', 'ConnectionsView', {
@@ -79,22 +79,22 @@ test('global form previews a manual catalog and sends only native save fields', 
       return request.action === 'read' ? original : { ...original, catalog: request.catalog, applied: request.action === 'save' };
     },
   }, {});
-  await ui.fill('Runtime entry name', 'shared'); await ui.click('Add Runtime');
+  await ui.fill('Runtime entry name', name); await ui.click('Add Runtime');
   await ui.fill('Shared Runtime Home', '/isolated/native');
-  await ui.fill('Provider name', 'custom'); await ui.click('Add Provider');
+  await ui.fill('Provider name', name); await ui.click('Add Provider');
   await ui.fill('Provider Base URL', 'https://provider.invalid/v1');
   await ui.fill('Provider api_key_env name', 'CUSTOM_KEY');
-  await ui.fill('Model entry name', 'model'); await ui.fill('Model identifier', 'actual-model');
+  await ui.fill('Model entry name', name); await ui.fill('Model identifier', 'actual-model');
   await ui.fill('Model alias', 'Display name'); await ui.click('Add Model');
   await ui.click('Preview connections'); await ui.click('Save connections');
   const { id, request } = calls.at(-1);
   assert.equal(id, null);
   assert.deepEqual(Object.keys(request).sort(), ['action', 'catalog', 'expected_revision']);
   assert.equal(request.expected_revision, 'catalog-revision');
-  assert.deepEqual(JSON.parse(JSON.stringify(request.catalog.runtimes.shared)), {
-    runtime: 'codex', home: '/isolated/native', providers: { custom: {
+  assert.deepEqual(JSON.parse(JSON.stringify(request.catalog.runtimes[name])), {
+    runtime: 'codex', home: '/isolated/native', providers: { [name]: {
       base_url: 'https://provider.invalid/v1', api_key_env: 'CUSTOM_KEY',
-      models: { model: { id: 'actual-model', alias: 'Display name', source: 'manual' } },
+      models: { [name]: { id: 'actual-model', alias: 'Display name', source: 'manual' } },
     } },
   });
   assert.match(JSON.stringify(ui.tree.toJSON()), /Connections saved/);

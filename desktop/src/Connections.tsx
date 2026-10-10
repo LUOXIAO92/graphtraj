@@ -89,7 +89,7 @@ export function ConnectionsView({ projectId }: { projectId?: string }) {
             <Button onPress={() => {
               if (!validName(runtimeName)) return;
               if (Object.hasOwn(catalog.runtimes, runtimeName)) { setError('Runtime entry already exists.'); return; }
-              edit(draft => { draft.runtimes[runtimeName] = { runtime: kind, providers: {} }; }); setRuntimeId(runtimeName); setProviderId(''); setRuntimeName('');
+              edit(draft => { draft.runtimes = { ...draft.runtimes, [runtimeName]: { runtime: kind, providers: {} } }; }); setRuntimeId(runtimeName); setProviderId(''); setRuntimeName('');
             }}>Add Runtime</Button>
           </fieldset>
           {runtime && <fieldset disabled={busy}><legend>Runtime: {runtimeId}</legend>
@@ -103,7 +103,7 @@ export function ConnectionsView({ projectId }: { projectId?: string }) {
               {Object.entries(discovery.provider_status ?? {}).map(([name, status]) => <p key={name}>{name}: {status}</p>)}
               <ul>{discovery.models.map((value, index) => <li key={index}>{value.provider} / {value.alias || value.id} · native · efforts: {value.supported_efforts?.join(', ') || 'unknown'} <Button size="sm" onPress={() => {
                 const { provider: name, supported_efforts, ...fields } = value;
-                if (!Object.hasOwn(runtime.providers, name)) edit(draft => { draft.runtimes[runtimeId].providers[name] = { models: {} }; });
+                if (!Object.hasOwn(runtime.providers, name)) edit(draft => { draft.runtimes[runtimeId].providers = { ...draft.runtimes[runtimeId].providers, [name]: { models: {} } }; });
                 setProviderId(name); setModel({ ...fields, ...(supported_efforts ? { supported_efforts } : {}) }); setModelName(value.id.replace(/[^A-Za-z0-9_-]/g, '_'));
               }}>Use {value.id}</Button></li>)}</ul>
             </div>}
@@ -111,7 +111,7 @@ export function ConnectionsView({ projectId }: { projectId?: string }) {
             <Button onPress={() => {
               if (!validName(providerName)) return;
               if (Object.hasOwn(runtime.providers, providerName)) { setError('Provider already exists.'); return; }
-              edit(draft => { draft.runtimes[runtimeId].providers[providerName] = { models: {} }; }); setProviderId(providerName); setProviderName('');
+              edit(draft => { draft.runtimes[runtimeId].providers = { ...draft.runtimes[runtimeId].providers, [providerName]: { models: {} } }; }); setProviderId(providerName); setProviderName('');
             }}>Add Provider</Button>
           </fieldset>}
           {provider && <fieldset disabled={busy}><legend>Provider: {providerId}</legend>
@@ -126,7 +126,7 @@ export function ConnectionsView({ projectId }: { projectId?: string }) {
             <Button onPress={() => {
               if (!validName(modelName) || !model.id.trim()) { setError('Model needs a name and identifier.'); return; }
               if (Object.hasOwn(provider.models, modelName)) { setError('Model entry already exists.'); return; }
-              edit(draft => { draft.runtimes[runtimeId].providers[providerId].models[modelName] = model; }); setModelName(''); setModel({ id: '', source: 'manual' });
+              edit(draft => { draft.runtimes[runtimeId].providers[providerId].models = { ...draft.runtimes[runtimeId].providers[providerId].models, [modelName]: model }; }); setModelName(''); setModel({ id: '', source: 'manual' });
             }}>Add Model</Button>
           </fieldset>}
         </div>

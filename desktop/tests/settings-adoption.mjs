@@ -89,6 +89,7 @@ export async function settingsAdoption({ page, decide, firstId, secondId, runtim
   await button('Add team with root').click();
   await input('Global connection').selectOption('shared/custom/model');
   await input('System prompt').fill('Keep the selected role instructions.');
+  await input('Instruction file reference').fill('seed.txt');
   await page.locator('summary').filter({ hasText: /^Runtime parameters$/ }).click();
   await input('Reasoning effort').fill('low');
   await page.locator('summary').filter({ hasText: /^Codex approval route$/ }).click();
@@ -107,6 +108,7 @@ export async function settingsAdoption({ page, decide, firstId, secondId, runtim
   const created = await page.evaluate(id => window.graphtraj.settings(id), firstId);
   assert.equal(created.roles['delivery.root'].connection, 'shared/custom/model');
   assert.equal(created.roles['delivery.root'].reasoning_effort, 'low');
+  assert.equal(created.roles['delivery.root'].instructions, 'seed.txt');
   assert.equal(created.roles['delivery.root'].system_prompt, 'Keep the selected role instructions.');
   assert.deepEqual(created.role_tree['delivery.root'], { 'delivery.middle': { 'delivery.leaf': {} } });
   assert.deepEqual(created.roles['custom_group.observer'], originalFirst.roles['custom_group.observer']);
@@ -130,6 +132,16 @@ export async function settingsAdoption({ page, decide, firstId, secondId, runtim
   await button('Delete Agent and branch').click();
   await button('Cancel draft').click();
   assert.ok((await page.evaluate(id => window.graphtraj.settings(id), firstId)).roles['delivery.leaf']);
+  await roles.getByRole('button', { name: 'delivery.leaf', exact: true }).click();
+  await button('Delete Agent and branch').click();
+  await saveRoles();
+  assert.ok(!(await page.evaluate(id => window.graphtraj.settings(id), firstId)).roles['delivery.leaf']);
+  await roles.getByRole('button', { name: 'delivery.root', exact: true }).click();
+  await input('New Agent name').fill('branch');
+  await button('Add child Agent').click();
+  await input('New Agent name').fill('leaf');
+  await button('Add child Agent').click();
+  await saveRoles();
   await roles.getByRole('button', { name: 'delivery.root', exact: true }).click();
   await button('Delete Agent and branch').click();
   await decide(0);
@@ -139,6 +151,7 @@ export async function settingsAdoption({ page, decide, firstId, secondId, runtim
   await decide(1);
   await saveRoles();
   assert.ok(!(await page.evaluate(id => window.graphtraj.settings(id), firstId)).roles['delivery.root']);
+  await page.getByText('Empty organization. Add a root Agent to recover.', { exact: true }).waitFor();
 
   // Keep one final globally referenced team for restart/native resolution checks.
   await input('Team name for new team').fill('final');

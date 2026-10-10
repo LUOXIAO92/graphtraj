@@ -378,7 +378,11 @@ async function usageHistoryAdoption() {
     await page.getByRole('button', { name: 'Add project', exact: true }).click();
     await projectEntry(page, 'usage-second').waitFor();
     await projectEntry(page, 'usage-first').click();
-    await page.locator('.monitor-page:visible .react-flow__node[data-id="1"]').click();
+    // Selection saves asynchronously; both retained project monitors have a Ticket 1.
+    // Require this project's title so click cannot latch onto the outgoing monitor.
+    const firstNode = page.locator('.monitor-page:visible .react-flow__node[data-id="1"]')
+      .filter({ has: page.getByText('usage first', { exact: true }) });
+    await firstNode.click();
     // The collapsed Ticket detail shows the roster; chat readers activate on expansion.
     await page.getByRole('button', { name: 'Expand chat', exact: true }).click();
     const column = page.locator('.monitor-page:visible')

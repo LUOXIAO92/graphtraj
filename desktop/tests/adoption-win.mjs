@@ -116,24 +116,59 @@ await fs.writeFile(nativeScript, String.raw`param([int]$AppProcess, [string]$Act
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName UIAutomationClient,UIAutomationTypes,System.Windows.Forms,System.Drawing
 if (-not [Environment]::UserInteractive -or (Get-Process -Id $PID).SessionId -eq 0) { throw 'No interactive Windows desktop session' }
-$root = [System.Windows.Automation.AutomationElement]::RootElement
-$condition = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ProcessIdProperty,$AppProcess)
+# Owned native dialogs need not be immediate children in the UIA control view.
+# Enumerate real HWNDs, verify their process/owner, then enter UIA at that HWND.
+Add-Type @'
+using System;
+using System.Text;
+using System.Runtime.InteropServices;
+public static class NativeWindows {
+  public delegate bool Visitor(IntPtr window, IntPtr parameter);
+  [DllImport("user32.dll")] public static extern bool EnumWindows(Visitor visitor, IntPtr parameter);
+  [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr window);
+  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr window, out uint process);
+  [DllImport("user32.dll")] public static extern IntPtr GetAncestor(IntPtr window, uint flags);
+  [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetWindowText(IntPtr window, StringBuilder text, int count);
+  [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetClassName(IntPtr window, StringBuilder text, int count);
+}
+'@
 $deadline = (Get-Date).AddSeconds(20)
 $target = $null
+$observed = @()
 while ((Get-Date) -lt $deadline -and -not $target) {
-  foreach ($window in $root.FindAll([System.Windows.Automation.TreeScope]::Children,$condition)) {
-    $title = $window.Current.Name
-    if (($Action -eq 'pick' -and $title -eq 'Add existing GraphTraj project') -or ($Action -ne 'pick' -and $title -eq 'Save project settings?')) { $target = $window; break }
+  $windows = New-Object 'System.Collections.Generic.List[IntPtr]'
+  $visitor = [NativeWindows+Visitor]{ param($window, $parameter) $windows.Add($window); return $true }
+  [NativeWindows]::EnumWindows($visitor, [IntPtr]::Zero) | Out-Null
+  $observed = @()
+  foreach ($window in $windows) {
+    if (-not [NativeWindows]::IsWindowVisible($window)) { continue }
+    [uint32]$windowProcess = 0
+    [uint32]$ownerProcess = 0
+    [NativeWindows]::GetWindowThreadProcessId($window, [ref]$windowProcess) | Out-Null
+    $owner = [NativeWindows]::GetAncestor($window, 3)
+    [NativeWindows]::GetWindowThreadProcessId($owner, [ref]$ownerProcess) | Out-Null
+    if ($windowProcess -ne $AppProcess -and $ownerProcess -ne $AppProcess) { continue }
+    $title = New-Object System.Text.StringBuilder 512
+    $class = New-Object System.Text.StringBuilder 256
+    [NativeWindows]::GetWindowText($window, $title, $title.Capacity) | Out-Null
+    [NativeWindows]::GetClassName($window, $class, $class.Capacity) | Out-Null
+    $observed += @{ handle=$window.ToInt64(); process=$windowProcess; ownerProcess=$ownerProcess; title=$title.ToString(); class=$class.ToString() }
+    $expected = if ($Action -eq 'pick') { 'Add existing GraphTraj project' } else { 'Save project settings?' }
+    if ($title.ToString() -eq $expected -or $class.ToString() -eq '#32770') {
+      $target = [System.Windows.Automation.AutomationElement]::FromHandle($window)
+      break
+    }
   }
   if (-not $target) { Start-Sleep -Milliseconds 100 }
 }
-if (-not $target) { throw "Native dialog unavailable for $Action" }
+$observed | ConvertTo-Json -Depth 4 | Set-Content -Encoding UTF8 ($Capture + '.windows.json')
 $bounds = [System.Windows.Forms.SystemInformation]::VirtualScreen
 $bitmap = New-Object System.Drawing.Bitmap($bounds.Width,$bounds.Height)
 $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
 $graphics.CopyFromScreen($bounds.Left,$bounds.Top,0,0,$bitmap.Size)
 $bitmap.Save($Capture,[System.Drawing.Imaging.ImageFormat]::Png)
 $graphics.Dispose(); $bitmap.Dispose()
+if (-not $target) { throw "Native dialog unavailable for $Action; see HWND evidence and desktop capture" }
 if ($Action -eq 'pick') {
   $editCondition = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::AutomationIdProperty,'1148')
   $edit = $target.FindFirst([System.Windows.Automation.TreeScope]::Descendants,$editCondition)
@@ -154,12 +189,13 @@ $button.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).In
 `);
 let app;
 let page;
+let mainProcess;
 let dialogNumber = 0;
 /** Observe and operate only the installed app's actual native modal dialog. */
 async function native(action, folder = '') {
   const capture = path.join(evidence, `native-${++dialogNumber}-${action}.png`);
   const result = await execute('powershell.exe', ['-NoProfile', '-File', nativeScript,
-    '-AppProcess', String(app.process().pid), '-Action', action, '-Folder', folder, '-Capture', capture], { timeout: 30000 });
+    '-AppProcess', String(mainProcess), '-Action', action, '-Folder', folder, '-Capture', capture], { timeout: 30000 });
   facts.steps.push(JSON.parse(result.stdout));
 }
 const preferences = path.join(root, 'user-data');
@@ -168,11 +204,18 @@ async function launch() {
   delete env.ELECTRON_RUN_AS_NODE;
   app = await electron.launch({ executablePath: executable, args: [`--user-data-dir=${preferences}`], env });
   page = await app.firstWindow();
+  mainProcess = await app.evaluate(() => process.pid);
+  facts.processes = { launched: app.process().pid, main: mainProcess };
+  await app.evaluate(({ BrowserWindow }) => { const window = BrowserWindow.getAllWindows()[0]; window.show(); window.focus(); });
   page.setDefaultTimeout(20000);
 }
 async function pick(folder) {
   await page.getByRole('button', { name: 'Add project', exact: true }).click();
-  await native('pick', folder);
+  try { await native('pick', folder); } catch (error) {
+    await page.screenshot({ path: path.join(evidence, 'picker-failure-renderer.png') });
+    facts.pickerAlert = await page.getByRole('alert').allTextContents();
+    throw error;
+  }
   await page.locator('.project-button.current').filter({ hasText: folder }).waitFor();
   await page.getByText('Connected', { exact: false }).waitFor();
 }

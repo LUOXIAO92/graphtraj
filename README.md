@@ -158,8 +158,8 @@ provide a job queue, automatic crash recovery, or automatic promotion from
 ## Optional desktop
 
 The app in [desktop/](desktop/) offers a project graph, recorded
-Agent activity, a usage dashboard and settings for existing role presets and
-dispatch relationships.
+Agent activity, a usage dashboard, shared model connections and project team
+configuration.
 Select a task and expand chat to read its Agents in parallel columns. Each column
 scrolls independently; the bottom scrollbar reaches offscreen Agents. Hide the
 sidebar for more room, expand tool results, copy text or pause following new
@@ -206,6 +206,21 @@ remain unpriced. The snapshot's official sources are [OpenAI pricing](https://de
 [OpenAI cache accounting](https://developers.openai.com/api/docs/guides/prompt-caching)
 and [DeepSeek pricing](https://api-docs.deepseek.com/quick_start/pricing/).
 
+Open **Settings → Agents & models** to manage Runtime Homes, providers and
+models. Refresh models through the Runtime's public interface or add a manual
+connection; API keys are referenced by environment variable name only. Login
+stays in the original Runtime, and discovering a model does not establish
+account access. If discovery is unavailable, follow the displayed client setup
+guidance rather than entering credentials into GraphTraj.
+
+Open **Teams & roles** for the selected project to add or rename teams, connect
+Agent nodes, select shared models and edit instructions. When deleting a node,
+choose whether to remove its branch or reconnect its children; an empty team
+can be rebuilt with a new root. Preview changes before approving a save, cancel
+to keep the original, and reload if another editor changed the configuration.
+These settings apply to future dispatch; editing them does not stop running
+Agents.
+
 To run it from a source checkout, install the matching Python GraphTraj version
 and make `graphtraj-tool` available on `PATH` (or set `GRAPHTRAJ_TOOL` to its
 executable). With Node 22.18+ and a graphical desktop session:
@@ -221,7 +236,6 @@ Choose **Add project** and select an existing GraphTraj project root. Removing
 an entry removes it from the app's list; it does not delete the project.
 You can also launch with `npm start -- --project=/absolute/project/path` to
 validate and select a project directly. Without it, the saved selection is used.
-Packaged cross-platform installers are not yet provided.
 
 ## More documentation
 

@@ -270,3 +270,28 @@ def test_standalone_global_settings_use_native_review(tmp_path: Path, monkeypatc
     assert not (tmp_path / '.graphtraj/connections.yml').exists()
     assert call(tmp_path, request, 'accept')[-1]['result']['applied']
     assert {path.name for path in (tmp_path / '.graphtraj').iterdir()} == {'connections.lock', 'connections.yml'}
+
+
+def test_staged_team_rename_and_new_child_round_trip(project: Path) -> None:
+    """The renderer's rename/add payload persists one group and preserves untouched settings."""
+    path = roles_path(project)
+    (project / 'instructions.txt').write_text('Retained role instructions.', encoding='utf-8')
+    original = {'runtime': 'codex', 'model': 'original', 'reports': ['report.md'],
+                'instructions': 'instructions.txt', 'codex': {'retained_custom_field': 'preserved'}}
+    path.write_text(yaml.safe_dump({'roles': {'a': {'root': original}}, 'role_tree': {'a.root': {}}}))
+    request = {
+        'action': 'save', 'revision': read(project)['revision'],
+        'edits': {'a.worker': {'runtime': 'codex', 'model': 'worker-model'}},
+        'renames': {'a.root': 'b.root', 'a.worker': 'b.worker'},
+        'add_edges': [], 'remove_edges': [], 'remove_presets': [],
+        'role_tree': {'a.root': {'a.worker': {}}},
+    }
+    reply = call(project, request, 'accept')[-1]
+    assert not reply['failed'], reply
+    reloaded = read(project)
+    assert reloaded['role_tree'] == {'b.root': {'b.worker': {}}}
+    assert set(reloaded['roles']) == {'b.root', 'b.worker'}
+    assert reloaded['roles']['b.worker']['model'] == 'worker-model'
+    assert yaml.safe_load(path.read_text())['roles'] == {
+        'b': {'root': original, 'worker': {'runtime': 'codex', 'model': 'worker-model'}},
+    }

@@ -14,6 +14,7 @@ export function SettingsView({ projectId }: { projectId: string }) {
   const [tree, setTree] = useState<RoleTree>({});
   const [team, setTeam] = useState('');
   const [teamName, setTeamName] = useState('');
+  const [teamRenames, setTeamRenames] = useState<Record<string, string>>({});
   const [nodeName, setNodeName] = useState('');
   const [newModel, setNewModel] = useState('');
   const [newRuntime, setNewRuntime] = useState('codex');
@@ -23,7 +24,7 @@ export function SettingsView({ projectId }: { projectId: string }) {
   const [message, setMessage] = useState('');
 
   function reset(value: Settings): void {
-    setSaved(value); setRoles(structuredClone(value.roles)); setTree(value.role_tree); setRenames({});
+    setSaved(value); setRoles(structuredClone(value.roles)); setTree(value.role_tree); setRenames({}); setTeamRenames({});
     setTeam(current => Object.keys(value.roles).some(ref => group(ref) === current) ? current : group(Object.keys(value.roles)[0] ?? ''));
     setSelected(current => Object.hasOwn(value.roles, current) ? current : Object.keys(value.roles).find(ref => group(ref) === team) ?? Object.keys(value.roles)[0] ?? '');
   }
@@ -62,12 +63,14 @@ export function SettingsView({ projectId }: { projectId: string }) {
   }
   function addNode(newTeam: boolean, child: boolean): void {
     const targetTeam = newTeam ? teamName : team;
-    if (newTeam && (!/^[a-z0-9]+(?:[_-][a-z0-9]+)*$/.test(targetTeam) || teams.includes(targetTeam))) throw new Error('Choose a new lowercase team name.');
+    if (newTeam && (!/^[a-z0-9]+(?:[_-][a-z0-9]+)*$/.test(targetTeam) || teams.some(name => name === targetTeam || ownRole(teamRenames, name) === targetTeam))) throw new Error('Choose a new lowercase team name.');
     if (!/^[a-z0-9]+(?:[_-][a-z0-9]+)*$/.test(nodeName) || !newModel.trim()) throw new Error('Enter a lowercase Agent name and a model.');
     if (!newTeam && !child && teamRoles.some(ref => isTeamRoot(ref))) throw new Error('This team already has a root. Add a child or adjust the parent.');
     const reference = targetTeam ? `${targetTeam}.${nodeName}` : nodeName;
     if (Object.hasOwn(roles, reference)) throw new Error('Agent name already exists.');
     setRoles(current => ({ ...current, [reference]: { runtime: newRuntime, model: newModel } }));
+    if (newTeam) setTeamRenames(current => Object.fromEntries(Object.entries(current).filter(([name]) => name !== targetTeam)));
+    else if (ownRole(teamRenames, team)) setRenames(current => ({ ...current, [reference]: `${teamRenames[team]}.${nodeName}` }));
     setTree(moveNode(tree, reference, child ? selected : '')); setSelected(reference); setTeam(targetTeam); setNodeName('');
   }
   function deleteNode(reconnect: boolean): void {
@@ -131,12 +134,13 @@ export function SettingsView({ projectId }: { projectId: string }) {
     </div>
     {saved && <div className="settings-columns">
       <nav aria-label="Configured roles">
-        <label>Team<select value={team} disabled={busy} onChange={event => { const value = event.target.value; setTeam(value); setSelected(Object.keys(roles).find(ref => group(ref) === value) ?? ''); }}>{teams.map(name => <option key={name} value={name}>{name || 'Ungrouped roles'}</option>)}</select></label>
+        <label>Team<select value={team} disabled={busy} onChange={event => { const value = event.target.value; setTeam(value); setSelected(Object.keys(roles).find(ref => group(ref) === value) ?? ''); }}>{teams.map(name => <option key={name} value={name}>{ownRole(teamRenames, name) ?? (name || 'Ungrouped roles')}</option>)}</select></label>
         {teamRoles.map(reference => <Button key={reference} aria-pressed={selected === reference} variant={selected === reference ? 'primary' : 'secondary'} isDisabled={busy} onPress={() => setSelected(reference)}>{roleName(renames, reference)}</Button>)}
         {!teamRoles.length && <p>No configured Agents. Add a team and root below.</p>}
         {team && <><TextField value={teamName} onChange={setTeamName} isDisabled={busy}><Label>New team name</Label><Input /></TextField>
           <Button isDisabled={busy} onPress={() => attempt(() => {
-            if (!/^[a-z0-9]+(?:[_-][a-z0-9]+)*$/.test(teamName) || teams.includes(teamName)) throw new Error('Choose a new lowercase team name.');
+            if (!/^[a-z0-9]+(?:[_-][a-z0-9]+)*$/.test(teamName) || teams.some(name => name === teamName || ownRole(teamRenames, name) === teamName)) throw new Error('Choose a new lowercase team name.');
+            setTeamRenames(current => ({ ...current, [team]: teamName }));
             setRenames(current => ({ ...current, ...Object.fromEntries(teamRoles.map(ref => [ref, `${teamName}.${roleName(renames, ref).split('.').pop()}`])) }));
           })}>Rename team</Button>
           <Button variant="danger" isDisabled={busy} onPress={() => attempt(() => {

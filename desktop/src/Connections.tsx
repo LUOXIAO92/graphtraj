@@ -14,6 +14,7 @@ export function ConnectionsView({ projectId }: { projectId?: string }) {
   const [providerName, setProviderName] = useState('');
   const [modelName, setModelName] = useState('');
   const [model, setModel] = useState<CatalogModel>({ id: '', source: 'manual' });
+  const [modelOrigin, setModelOrigin] = useState<string>();
   const [discovery, setDiscovery] = useState<Connections['discovery']>();
   const [preview, setPreview] = useState<Catalog>();
   const [busy, setBusy] = useState(false);
@@ -21,6 +22,11 @@ export function ConnectionsView({ projectId }: { projectId?: string }) {
   const [message, setMessage] = useState('');
   const runtime = catalog.runtimes[runtimeId];
   const provider = runtime?.providers[providerId];
+  const destination = JSON.stringify([runtimeId, runtime?.runtime, runtime?.home ?? null, providerId,
+    provider?.base_url ?? null, provider?.api ?? null, provider?.api_key_env ?? null]);
+  // Native metadata belongs only to the queried Home/provider, without manual route overrides.
+  const draftModel: CatalogModel = model.source === 'native' && modelOrigin !== destination
+    ? { id: model.id, alias: model.alias, source: 'manual' } : model;
   const dirty = JSON.stringify(catalog) !== JSON.stringify(saved?.catalog);
 
   function reset(value: Connections): void {
@@ -104,6 +110,9 @@ export function ConnectionsView({ projectId }: { projectId?: string }) {
               <ul>{discovery.models.map((value, index) => <li key={index}>{value.provider} / {value.alias || value.id} · native · efforts: {value.supported_efforts?.join(', ') || 'unknown'} <Button size="sm" onPress={() => {
                 const { provider: name, supported_efforts, ...fields } = value;
                 if (!Object.hasOwn(runtime.providers, name)) edit(draft => { draft.runtimes[runtimeId].providers = { ...draft.runtimes[runtimeId].providers, [name]: { models: {} } }; });
+                const discoveredRuntime = saved.catalog.runtimes[discovery.runtime_entry];
+                setModelOrigin(JSON.stringify([discovery.runtime_entry, discoveredRuntime.runtime,
+                  discoveredRuntime.home ?? null, name, null, null, null]));
                 setProviderId(name); setModel({ ...fields, ...(supported_efforts ? { supported_efforts } : {}) }); setModelName(value.id.replace(/[^A-Za-z0-9_-]/g, '_'));
               }}>Use {value.id}</Button></li>)}</ul>
             </div>}
@@ -122,11 +131,11 @@ export function ConnectionsView({ projectId }: { projectId?: string }) {
             {text('Model entry name', modelName, setModelName)}
             {text('Model identifier', model.id, id => setModel({ ...model, id, source: 'manual', supported_efforts: undefined }))}
             {text('Model alias', model.alias ?? '', alias => setModel({ ...model, alias: alias || undefined }))}
-            <p>Source: {model.source}. Supported efforts: {model.supported_efforts?.join(', ') || 'unknown; choose a Runtime-supported effort on the role'}.</p>
+            <p>Source: {draftModel.source}. Supported efforts: {draftModel.supported_efforts?.join(', ') || 'unknown; choose a Runtime-supported effort on the role'}.</p>
             <Button onPress={() => {
               if (!validName(modelName) || !model.id.trim()) { setError('Model needs a name and identifier.'); return; }
               if (Object.hasOwn(provider.models, modelName)) { setError('Model entry already exists.'); return; }
-              edit(draft => { draft.runtimes[runtimeId].providers[providerId].models = { ...draft.runtimes[runtimeId].providers[providerId].models, [modelName]: model }; }); setModelName(''); setModel({ id: '', source: 'manual' });
+              edit(draft => { draft.runtimes[runtimeId].providers[providerId].models = { ...draft.runtimes[runtimeId].providers[providerId].models, [modelName]: draftModel }; }); setModelName(''); setModel({ id: '', source: 'manual' });
             }}>Add Model</Button>
           </fieldset>}
         </div>

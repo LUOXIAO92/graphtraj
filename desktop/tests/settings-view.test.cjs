@@ -99,3 +99,78 @@ for (const name of ['ordinary', '__proto__']) test(`global form preserves ${name
   });
   assert.match(JSON.stringify(ui.tree.toJSON()), /Connections saved/);
 });
+
+test('rename team then add child saves and reloads one renamed group', async t => {
+  let saved = { revision: 'before', roles: { 'a.root': { runtime: 'codex', model: 'original', instructions: 'instructions.txt' } },
+    role_tree: { 'a.root': {} }, edges: [], effect: 'Later dispatches only.' };
+  let submitted;
+  const ui = await form(t, 'Settings.tsx', 'SettingsView', {
+    settings: async () => saved, connections: async () => connections,
+    saveSettings: async (_id, draft) => {
+      submitted = JSON.parse(JSON.stringify(draft));
+      saved = { ...saved, revision: 'after', roles: {
+        'b.root': saved.roles['a.root'], 'b.worker': { runtime: 'codex', model: 'worker-model' },
+      }, role_tree: { 'b.root': { 'b.worker': {} } }, edges: [['b.root', 'b.worker']] };
+      return { ...saved, applied: true };
+    },
+  }, { projectId: 'project' });
+  await ui.fill('New team name', 'b'); await ui.click('Rename team');
+  await ui.fill('New Agent name', 'worker'); await ui.fill('New Agent model', 'worker-model');
+  await ui.click('Add child Agent'); await ui.submit();
+  assert.deepEqual(submitted, {
+    revision: 'before', edits: { 'a.worker': { runtime: 'codex', model: 'worker-model' } },
+    renames: { 'a.root': 'b.root', 'a.worker': 'b.worker' },
+    add_edges: [], remove_edges: [], remove_presets: [], role_tree: { 'a.root': { 'a.worker': {} } },
+  });
+  await ui.click('Reload and discard draft');
+  const team = ui.tree.root.findAllByType('select').find(node => node.parent.children[0] === 'Team');
+  assert.equal(team.props.value, 'b');
+  assert.deepEqual(team.findAllByType('option').map(node => node.props.value), ['b']);
+  const labels = ui.tree.root.findAllByType('button').map(node => node.children.join(''));
+  assert.ok(labels.includes('b.worker')); assert.ok(!labels.includes('a.worker'));
+});
+
+for (const change of ['same destination', 'select provider', 'create provider', 'select runtime', 'create runtime', 'home', 'base URL', 'reuse after home change', 'existing override']) {
+  test(`discovered model metadata follows its destination: ${change}`, async t => {
+    const catalog = { version: 1, runtimes: {
+      shared: { runtime: 'codex', home: '/original/home', providers: {
+        openai: { models: {}, ...(change === 'existing override' ? { base_url: 'https://override.invalid/v1' } : {}) },
+        custom: { base_url: 'https://custom.invalid/v1', models: {} },
+      } },
+      second: { runtime: 'codex', home: '/second/home', providers: { alternate: { models: {} } } },
+    } };
+    let preview;
+    const ui = await form(t, 'Connections.tsx', 'ConnectionsView', {
+      connections: async (_id, request) => {
+        if (request.action === 'preview') preview = request.catalog;
+        return { ...connections, catalog: request.catalog ?? catalog, discovery: request.action === 'discover' ? {
+          runtime_entry: 'shared', status: 'available', account_access: 'unknown', models: [
+            { provider: 'openai', id: 'discovered', alias: 'Native label', source: 'native', supported_efforts: ['low'] },
+          ],
+        } : undefined };
+      },
+    }, { projectId: 'project' });
+    await ui.click('Refresh native models'); await ui.click('Use discovered');
+    let targetRuntime = 'shared'; let targetProvider = 'openai';
+    if (change === 'select provider') { await ui.click('Select Provider custom'); targetProvider = 'custom'; }
+    if (change === 'create provider') {
+      await ui.fill('Provider name', 'created'); await ui.click('Add Provider'); targetProvider = 'created';
+    }
+    if (change === 'select runtime') {
+      await ui.click('Select Runtime second'); await ui.click('Select Provider alternate');
+      targetRuntime = 'second'; targetProvider = 'alternate';
+    }
+    if (change === 'create runtime') {
+      await ui.fill('Runtime entry name', 'created'); await ui.click('Add Runtime');
+      await ui.fill('Provider name', 'openai'); await ui.click('Add Provider'); targetRuntime = 'created';
+    }
+    if (change === 'home' || change === 'reuse after home change') await ui.fill('Shared Runtime Home', '/changed/home');
+    if (change === 'reuse after home change') await ui.click('Use discovered');
+    if (change === 'base URL') await ui.fill('Provider Base URL', 'https://changed.invalid/v1');
+    await ui.click('Add Model'); await ui.click('Preview connections');
+    const model = preview.runtimes[targetRuntime].providers[targetProvider].models.discovered;
+    assert.equal(model.id, 'discovered'); assert.equal(model.alias, 'Native label');
+    assert.equal(model.source, change === 'same destination' ? 'native' : 'manual');
+    assert.deepEqual(model.supported_efforts, change === 'same destination' ? ['low'] : undefined);
+  });
+}

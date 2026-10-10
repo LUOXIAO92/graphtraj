@@ -37,6 +37,7 @@ test('D navigation preserves separate project graphs and independent column read
   });
   await page.goto(new URL('../dist/index.html', import.meta.url).href);
   const monitor = page.locator('.monitor-page:visible');
+  await page.getByRole('button', { name: 'Settings', exact: true }).waitFor({ state: 'visible' });
   await page.getByRole('button', { name: 'GLOBAL', exact: false }).click();
   assert.equal(await page.getByRole('button', { name: 'Settings', exact: true }).isVisible(), false);
   await page.getByRole('button', { name: 'PROJECTS', exact: false }).click();

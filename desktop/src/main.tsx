@@ -188,7 +188,7 @@ function App() {
       <section className="sidebar-group">
         <Button className="group-toggle" variant="ghost" aria-expanded={globalOpen} onPress={() => setGlobalOpen(value => !value)}>GLOBAL <span>{globalOpen ? '⌄' : '›'}</span></Button>
         {globalOpen && <>
-          <Button variant="ghost" aria-expanded={settingsOpen} onPress={() => setSettingsOpen(value => !value)}>Settings <span>{settingsOpen ? '⌄' : '›'}</span></Button>
+          <Button variant="ghost" aria-expanded={settingsOpen} onPress={() => setSettingsOpen(value => !value)}>Settings <span aria-hidden="true">{settingsOpen ? '⌄' : '›'}</span></Button>
           {settingsOpen && <Button className="submenu" variant={view === 'models' ? 'secondary' : 'ghost'} onPress={() => setView('models')}>Agents &amp; models</Button>}
         </>}
       </section>

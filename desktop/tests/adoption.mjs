@@ -458,6 +458,8 @@ async function main() {
     facts.graph = nativeGraph;
     const globalToggle = page.getByRole('button', { name: /^GLOBAL/ });
     const projectsToggle = page.getByRole('button', { name: /^PROJECTS/ });
+    // Establish the exact accessible name before testing its absence.
+    await page.getByRole('button', { name: 'Settings', exact: true }).waitFor({ state: 'visible' });
     await globalToggle.click();
     assert.equal(await page.getByRole('button', { name: 'Settings', exact: true }).isVisible(), false);
     assert.equal(await projectEntry(page, 'first-project').isVisible(), true);

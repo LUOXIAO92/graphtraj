@@ -1,0 +1,100 @@
+name: desktop-macos-adoption
+
+# The desktop run installs a macOS artifact and starts the GUI, so it costs time
+# and runs when a macOS result must be re-proven. A first run cannot use
+# workflow_dispatch: GitHub only offers that trigger once the file is on the
+# default branch. This ticket branch therefore triggers by push, and
+# workflow_dispatch stays available for later re-runs.
+on:
+  push:
+    branches: [agent/265-desktop-mac-adoption]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  installed-macos:
+    name: Installed macOS artifact and adoption
+    runs-on: macos-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+
+      # Pinned toolchains: the evidence names the versions that produced it.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.18.0'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      # The desktop reads the task graph through the public native tool, so the
+      # runner installs the same GraphTraj package this checkout builds.
+      - name: Install the native GraphTraj tool
+        working-directory: .
+        run: python -m pip install --disable-pip-version-check .
+
+      - name: Install desktop dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Build desktop
+        run: npm run build
+
+      - name: Desktop unit checks
+        run: node --test tests/*.test.cjs
+
+      - name: Package the macOS artifact
+        run: npm run package:mac
+
+      - name: Install the artifact under /Applications
+        run: |
+          rm -rf /Applications/GraphTraj.app
+          unzip -q dist-package/GraphTraj-darwin-*.zip -d /Applications
+          test -x /Applications/GraphTraj.app/Contents/MacOS/GraphTraj
+
+      - name: Record environment, commands and artifact digest
+        run: |
+          mkdir -p dist-package/adoption-evidence
+          {
+            echo "date: $(date -u +%FT%TZ)"
+            echo "node: $(node --version)"
+            echo "python: $(python --version 2>&1)"
+            echo "npm: $(npm --version)"
+            sw_vers
+            uname -a
+            echo "tool: $(which graphtraj-tool)"
+            shasum -a 256 dist-package/GraphTraj-darwin-*.zip dist-package/GraphTraj-darwin-*.json
+          } 2>&1 | tee dist-package/adoption-evidence/environment.txt
+
+      # Starts the installed bundle and exercises the real picker entry, graph
+      # and project switching, node detail, dashboard, settings save/deny/error,
+      # persistence, credential non-leakage and GUI-less native operation.
+      - name: Installed app adoption, optionality and security
+        env:
+          GRAPHTRAJ_APP: /Applications/GraphTraj.app
+        run: node --preserve-symlinks --preserve-symlinks-main tests/adoption.mjs
+
+      - name: Upload adoption evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: graphtraj-macos-adoption-evidence
+          path: |
+            desktop/dist-package/adoption-evidence
+            desktop/dist-package/GraphTraj-darwin-*.json
+          if-no-files-found: error
+
+      # The runner is recycled after the job, so this upload is the only retained
+      # copy of the exact ZIP that was unpacked into /Applications and exercised.
+      - name: Upload the installed artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: graphtraj-macos-app
+          path: desktop/dist-package/GraphTraj-darwin-*.zip
+          if-no-files-found: error
+          retention-days: 7

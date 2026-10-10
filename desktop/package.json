@@ -10,6 +10,8 @@
   "scripts": {
     "build": "node --preserve-symlinks --preserve-symlinks-main node_modules/typescript/lib/tsc.js -p tsconfig.electron.json && node --preserve-symlinks --preserve-symlinks-main node_modules/typescript/lib/tsc.js --noEmit && node --preserve-symlinks --preserve-symlinks-main node_modules/vite/bin/vite.js build --configLoader native",
     "start": "npm run build && electron .",
+    "package:mac": "npm run build && node --preserve-symlinks --preserve-symlinks-main scripts/package-mac.mjs",
+    "adoption:macos": "node --preserve-symlinks --preserve-symlinks-main tests/adoption.mjs",
     "test": "npm run build && node --test tests/*.test.cjs",
     "test:desktop": "npm run build && node --test tests/*.test.mjs"
   },
@@ -23,6 +25,7 @@
     "tailwind-variants": "3.2.2"
   },
   "devDependencies": {
+    "@electron/packager": "20.3.0",
     "@tailwindcss/vite": "4.1.18",
     "@types/node": "22.19.7",
     "@types/react": "19.2.7",

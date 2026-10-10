@@ -33,4 +33,51 @@ async function makeProject(root, name) {
   return root;
 }
 
-module.exports = { operate, ticket, makeProject };
+/**
+ * Attach a controlled, clearly labeled record set to one fixture Ticket.
+ *
+ * The records are a hand-written native Trace for this fixture only: no model
+ * is invoked and no cost is incurred. Membership is created through the public
+ * semantic-state entry, so the desktop reads the records through the same
+ * desktop_activity boundary it uses in production.
+ */
+async function recordActivity(root, { ticketId, ticketName, alias, records }) {
+  const ticketDirectory = path.join(root, '.graphtraj', 'state', 'tickets',
+    `${ticketId}-${ticketName}`);
+  await fs.writeFile(path.join(root, 'evidence.md'), 'Controlled adoption fixture. No model execution.\n');
+
+  const ready = operate(root, 'ticket_update', {
+    ticket_id: ticketId, status: 'ready', active_team_ordinal: null, worktree: null,
+    branch: null, current_candidate: null, caused_by_event_ids: [], evidence_refs: ['evidence.md'],
+  });
+  const request = {
+    phase: 'start', ticket_id: ticketId, caused_by_event_ids: [ready.event_id],
+    evidence_refs: ['evidence.md'], worktree: 'worktrees/research',
+    branch: `agent/${ticketId}-${ticketName}`,
+    members: { first: { role: 'researcher', session_ref: alias } },
+  };
+  operate(root, 'delivery_state_apply', { request, facts: request });
+
+  const session = path.join(root, '.graphtraj', 'runner', 'sessions', alias);
+  const trace = path.join(ticketDirectory, 'teams', '1', 'traces', alias, 'events.jsonl');
+  await fs.mkdir(session, { recursive: true });
+  await fs.mkdir(path.dirname(trace), { recursive: true });
+  await fs.writeFile(trace, records.map(record => JSON.stringify(record)).join('\n') + '\n');
+
+  // A retired Session record: these are retained, controlled records, not a
+  // live member, so the mapping names pids that cannot be running. The public
+  // boundary then reports an honestly retired, historical Session.
+  const mapping = {
+    alias, runtime: 'codex', session: `native-${alias}`, ticket_id: ticketId,
+    team_generation: 1, role: 'researcher', parent: null, retained_batch_file: 'batch.yml',
+    worktree_path: path.join(root, 'worktrees', 'research'), trace_file: trace,
+    worker_pid: 2147483647, runtime_pid: 2147483647,
+  };
+  // JSON is valid YAML; the retirement envelope matches the retained-record form.
+  await fs.writeFile(path.join(session, 'session.yml'),
+    JSON.stringify({ retirement: { mapping } }, null, 2) + '\n');
+  await fs.writeFile(path.join(session, 'launch.yml'), 'context_evidence:\n  model: recorded-model\n');
+  return trace;
+}
+
+module.exports = { operate, ticket, makeProject, recordActivity };

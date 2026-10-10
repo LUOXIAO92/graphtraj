@@ -44,15 +44,14 @@ class CheckUsage:
         """Render supported values and explicit unknowns without native JSON."""
         def count(value: int | None) -> str:
             """Keep unavailable counters distinct from measured zero."""
-            return str(value) if value is not None else '未知'
+            return f'{value:,}' if value is not None else '未知'
 
         ratio = self.document()['cache_hit_ratio']
         hit = f'{ratio:.1%}' if ratio is not None else '未知'
         return (
-            '本轮审查 Agent 用量（多次请求合计）\n'
-            f'输入 {count(self.input_tokens)} · 缓存 {count(self.cached_input_tokens)} '
-            f'（命中 {hit}） · 输出 {count(self.output_tokens)} '
-            f'（其中推理 {count(self.reasoning_tokens)}） · 工具 {count(self.tool_calls)} 次'
+            f'本轮审查 Agent 用量 · 命中 {hit} · 工具 {count(self.tool_calls)} 次\n'
+            f'输入 {count(self.input_tokens)}（缓存 {count(self.cached_input_tokens)}，多次请求合计）\n'
+            f'输出 {count(self.output_tokens)}（其中推理 {count(self.reasoning_tokens)}）'
         )
 
 

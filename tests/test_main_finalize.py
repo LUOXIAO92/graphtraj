@@ -1086,3 +1086,17 @@ def test_consecutive_native_checks_attribute_all_counters_to_current_checker(
         'checker-0', 'checker-1',
     ]
     assert len(list(binding.parent.glob('checks/*/execution.yml'))) == 2
+
+
+def test_check_usage_summary_groups_large_counters() -> None:
+    """Keep input/cache and output/reasoning readable without changing totals."""
+    usage = CheckUsage(input_tokens=1234567, cached_input_tokens=1000000,
+                       output_tokens=2345, reasoning_tokens=1234, tool_calls=6)
+    lines = usage.summary().splitlines()
+    assert any('1,234,567' in line and '1,000,000' in line and '2,345' not in line
+               for line in lines)
+    assert any('2,345' in line and '1,234' in line and '1,234,567' not in line
+               for line in lines)
+    assert '81.0%' in usage.summary()
+    assert '本轮审查 Agent 用量' in usage.summary()
+    assert '未知' in CheckUsage().summary()

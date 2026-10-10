@@ -33,6 +33,12 @@ DEFAULT_ROUTE = {'model': 'default-review', 'base_url': 'https://default.example
                  'api_key_env': 'DEFAULT_REVIEW_KEY'}
 
 
+@pytest.fixture(autouse=True)
+def work_credential(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep approval-only peers supplied with their explicit work credential."""
+    monkeypatch.setenv('WORK_KEY', 'controlled-work-key')
+
+
 def project_defaults(root: Path, codex: object) -> None:
     """Write project settings through the supported general configuration file."""
     directory = root / '.graphtraj'

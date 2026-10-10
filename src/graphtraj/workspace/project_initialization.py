@@ -666,7 +666,7 @@ def plan_project_setup(
             else proposed_base
         )
         codex_files = CodexProjectFiles.for_project(
-            root, (preset.runtime for preset in roles.presets.values()),
+            root, (roles.preset(reference).runtime for reference in roles.presets),
         )
         project_files = ProjectFiles.load()
     except (

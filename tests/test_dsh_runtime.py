@@ -19,6 +19,12 @@ from graphtraj.configuration.role_definitions import ResolvedChildRole
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError, select_runtime_adapter
 
 
+@pytest.fixture(autouse=True)
+def credential(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Supply the explicitly selected credential for controlled native peers."""
+    monkeypatch.setenv('DSH_TEST_KEY', 'controlled-peer-key')
+
+
 def request(
     tmp_path: Path, instructions: str = 'Assigned responsibility',
     package: str = '/installed/dsh/package.json',
@@ -59,8 +65,9 @@ class NativePeer:
         config = yaml.load((home / 'profiles/web/cordis.patch.yml').read_text(), Loader=TaggedLoader)
         root = next(row['config']['root'] for row in config if row.get('id') == 'session-persistence-jsonl')
         log = Path(root) / 'workspace' / self.session / 'v4.jsonl'
-        log.parent.mkdir(parents=True)
-        log.write_text('{"type":"session/header","data":{"id":"native-dsh"}}\n')
+        log.parent.mkdir(parents=True, exist_ok=True)
+        if not log.exists():
+            log.write_text('{"type":"session/header","data":{"id":"native-dsh"}}\n')
         self.instances.append(self)
 
     def start(self) -> None:
@@ -146,6 +153,7 @@ def peer(monkeypatch: pytest.MonkeyPatch) -> list:
     from graphtraj.runtimes.dsh import execution
     from graphtraj.interfaces import hosted_cli
 
+    monkeypatch.setenv('DSH_TEST_KEY', 'controlled-peer-key')
     NativePeer.instances = []
     monkeypatch.setattr(execution, 'DshService', NativePeer)
     monkeypatch.setattr(hosted_cli, 'cli_connection', lambda *args, **kwargs: nullcontext('/bound-channel'))

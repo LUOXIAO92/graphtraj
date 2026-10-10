@@ -9,7 +9,7 @@ from pathlib import Path
 from graphtraj.configuration.project_configuration import configuration_exists, load_project_configuration
 
 
-def private_filesystem(runtime_store: Path) -> dict[str, str]:
+def private_filesystem(runtime_store: Path, runtime_home: str | None = None) -> dict[str, str]:
     """Protect control records, native history and the installed control code.
 
     Exact Worktree, Skill and owned-report grants are added by the caller. No
@@ -17,10 +17,13 @@ def private_filesystem(runtime_store: Path) -> dict[str, str]:
     filesystem entries. The host-side Runner remains outside the tool sandbox.
     """
     root = runtime_store.parent
-    native_home = Path(os.environ.get('CODEX_HOME', Path.home() / '.codex')).resolve()
+    original_home = Path(os.environ.get('CODEX_HOME', Path.home() / '.codex')).resolve()
+    native_home = Path(runtime_home).resolve() if runtime_home else original_home
     filesystem = {
         str(root / '.graphtraj'): 'none',
         str(runtime_store): 'none',
+        str(original_home): 'none',
+        str(original_home / 'skills'): 'read',
         str(native_home): 'none',
         str(native_home / 'skills'): 'read',
         str(Path(sys.prefix).resolve()): 'read',

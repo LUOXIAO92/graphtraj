@@ -909,6 +909,34 @@ _ROLE_ORGANIZATION_SCHEMA = {
 }
 
 
+def runtime_connections(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> ToolResult:
+    """Manage user connections through the same public host and native review seam."""
+    from graphtraj.configuration.runtime_connections import manage_connections
+
+    return ToolResult(manage_connections(dict(arguments), cwd=cwd or Path.cwd()))
+
+
+register_tool(
+    'runtime_connections',
+    'Read, preview, save or discover user Runtime/provider/model connections. '
+    'Save requires expected_revision and native host review. Discovery never runs inference; '
+    'account access remains unknown. Secrets are never returned.',
+    {'type': 'object', 'properties': {
+        'action': {'type': 'string', 'enum': ['read', 'preview', 'save', 'discover']},
+        'catalog': {'type': 'object', 'description':
+            'Complete version: 1 catalog. runtimes maps names to runtime (codex/pi/dsh), '
+            'optional absolute home, and providers. Each provider has models and optional '
+            'base_url, api_key_env (variable name), and Pi api. models maps reference keys '
+            'to id, source (manual/native), optional alias and supported_efforts. '
+            'Project roles select connection: runtime-name/provider-name/model-key.'},
+        'expected_revision': {'type': 'string', 'description': 'Exact revision returned by read; required to save.'},
+        'runtime': {'type': 'string', 'description': 'Configured runtime entry name to query for discovery.'},
+    }, 'additionalProperties': False},
+    runtime_connections, manual_ref='manuals/setup-project/guide.md',
+    examples=({'action': 'read'},),
+)
+
+
 def organize_roles(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> ToolResult:
     """Preview child role presets and dispatch edges, or apply one approved change."""
     from graphtraj.execution.role_organization import organize_child_roles
@@ -1160,6 +1188,7 @@ _CLI = {
     "decide_result": (("agent-runner", "decide-result"), {}),
     "retire": (("agent-runner", "retire"), {}),
     "replace": (("agent-runner", "replace"), {"caused_by_event_id": ("caused_by_event_ids", "value")}),
+    "runtime_connections": (("graphtraj", "connections"), {"catalog_file": ("catalog", "yaml")}),
     "role_organization": (("graphtraj", "roles", "organize"), {"change_file": ("change", "yaml")}),
     "cleanup": (("agent-runner", "cleanup"), {}),
     "main": (("agent-runner", "main"), {"instruction_file": ("instruction", "text")}),

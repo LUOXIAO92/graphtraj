@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from graphtraj.configuration.project_roles import RolePreset
+from graphtraj.configuration.project_roles import RolePreset, resolve_preset
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 
 
@@ -63,6 +63,7 @@ def resolve_child_role(
     exposes; a declared layer that Runtime does not expose is refused before
     any dispatch and is never folded into another layer.
     """
+    settings = resolve_preset(settings)
     instructions = ""
     if settings.instructions is not None:
         path = harness_root / settings.instructions

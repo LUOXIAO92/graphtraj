@@ -54,8 +54,12 @@ class DshService:
         """Launch an owned Web backend and exchange its single-use launch token."""
         urls: queue.Queue[str | None] = queue.Queue()
         try:
+            argv = [self.executable, 'web']
+            if self.environment.get('GRAPHTRAJ_DSH_PATCH'):
+                argv = [self.executable, '--profile', 'web', '--patch',
+                        self.environment['GRAPHTRAJ_DSH_PATCH']]
             self.process = subprocess.Popen(
-                [self.executable, 'web', '--no-open', '--port', '0'],
+                [*argv, '--no-open', '--port', '0'],
                 cwd=self.cwd, env=self.environment,
                 stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT, start_new_session=True,

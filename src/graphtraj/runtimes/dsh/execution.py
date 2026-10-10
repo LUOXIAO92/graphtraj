@@ -156,6 +156,11 @@ class DshExecution:
 
     def _prepare(self) -> dict[str, str]:
         """Compose an isolated native profile, retaining defaults outside this Agent."""
+        from graphtraj.runtimes.runtime_adapter import credential_environment
+
+        key = self.request.get('api_key_env')
+        credentials = ({key: 'local'} if self.request.get('local_unauthenticated')
+                       else credential_environment(key))
         home = self.directory / 'dsh-home'
         profile = home / 'profiles' / 'web'
         profile.mkdir(parents=True, exist_ok=True)
@@ -173,7 +178,8 @@ class DshExecution:
                 'presets': {mode: {'sandbox': mode, 'approval': 'ask'}}, 'defaultPreset': mode,
             }},
             {'id': 'llm-deepseek', 'config': {
-                'baseURL': self.request['base_url'], 'apiKeyEnv': self.request['api_key_env'],
+                **({'baseURL': self.request['base_url']} if self.request.get('base_url') else {}),
+                **({'apiKeyEnv': self.request['api_key_env']} if self.request.get('api_key_env') else {}),
                 **({'reasoningEffort': self.request['reasoning_effort']}
                    if self.request['reasoning_effort'] is not None else {}),
             }},
@@ -186,9 +192,11 @@ class DshExecution:
         if preset is not None:
             patches.append(preset)
         (profile / 'cordis.patch.yml').write_text(_dump_profile_patches(patches), encoding='utf-8')
-        environment = dict(os.environ)
+        environment = {**os.environ, **credentials}
+        if self.request.get('runtime_home'):
+            environment['GRAPHTRAJ_DSH_PATCH'] = str(profile / 'cordis.patch.yml')
         environment.update({
-            'DSH_HOME': str(home), 'DSH_PERMISSION_MODE': mode, 'NO_COLOR': '1',
+            'DSH_HOME': self.request.get('runtime_home') or str(home), 'DSH_PERMISSION_MODE': mode, 'NO_COLOR': '1',
             'GRAPHTRAJ_DSH_PACKAGE': self.request['package'],
             'GRAPHTRAJ_DSH_TOOL': self.request['tool'],
             'GRAPHTRAJ_HARNESS_ROOT': self.request['harness_root'],

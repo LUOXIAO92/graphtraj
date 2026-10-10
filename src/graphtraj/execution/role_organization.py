@@ -79,6 +79,8 @@ def organize_child_roles(arguments: Mapping[str, Any], *, cwd: Path | None = Non
     if after == before:
         return {**_view(path, before, current), "revision": revision, "applied": False}
     reviewed = _validated(after)
+    for reference in change.get("set_presets", {}):
+        reviewed.preset(change.get("rename_presets", {}).get(reference, reference))
     _approve({"request": dict(arguments), "before": before, "after": after}, root)
     # Serialize the compare/write interval without locking Windows file contents.
     # Every approved writer rechecks the current path under the lock.
@@ -267,7 +269,7 @@ def _approve(proposal: dict, root: Path) -> None:
     if isinstance(decision, dict) and decision.get("decision") == "accept":
         return
     rationale = decision.get("rationale") if isinstance(decision, dict) else None
-    message = "The selected reviewer did not approve this role change; nothing was written."
+    message = "The selected reviewer did not approve this configuration change; nothing was written."
     if isinstance(rationale, str) and rationale.strip():
         message += " Reviewer reason: " + rationale
     raise RunnerError("role-change-denied", message)

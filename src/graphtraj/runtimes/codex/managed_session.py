@@ -40,10 +40,12 @@ def refresh_approval_route(request: dict, session_directory: Path) -> None:
     mapping = yaml.safe_load((session_directory / 'mapping.yml').read_text(encoding='utf-8'))
     task = read_session_task(mapping, harness_root)
     # Inline roles live in their retained Batch, not in the reusable presets.
-    settings = (
-        task.inline_preset or
-        load_project_roles(harness_root).preset(mapping.get('role_reference') or mapping['role'])
-    )
+    roles = load_project_roles(harness_root)
+    # Approval configuration can change without resolving a new work connection.
+    # In particular, a removed catalog entry must not invalidate a captured Session.
+    settings = task.inline_preset or roles.presets[
+        roles.resolve(mapping.get('role_reference') or mapping['role'])
+    ]
     defaults = (
         load_project_configuration(harness_root).codex
         if configuration_exists(harness_root) else None
@@ -642,4 +644,4 @@ def native_operation_features() -> set[str]:
 
     return (set(NATIVE_RUNNER_TOOLS.values()) | set(METHOD_FEATURE_NAMES)
             | {'parent_status', 'retire', 'replace', 'cleanup', 'approved_recovery',
-               'role_organization', 'desktop_activity'})
+               'role_organization', 'runtime_connections', 'desktop_activity'})

@@ -138,6 +138,9 @@ class PiManagedExecution:
     def _prepare(self, address: str) -> tuple[list[str], dict]:
         """Project native asb fields and preserve user resources through references."""
         request = self.request
+        from graphtraj.runtimes.runtime_adapter import credential_environment
+
+        credential_environment(request.get('api_key_env'))
         worktree = Path(request['worktree_path']).resolve()
         root = Path(request['harness_root']).resolve()
         # This directory belongs to retained Trace evidence, not disposable Worker state.
@@ -153,12 +156,25 @@ class PiManagedExecution:
         for name in ('settings.json', 'models.json', 'auth.json', 'trust.json', 'keybindings.json', 'npm', 'extensions',
                      'skills', 'prompts', 'themes', 'mcp.json', 'AGENTS.md',
                      'AGENTS.override.md', 'AGENTS.MD', 'CLAUDE.md', 'CLAUDE.MD', 'SYSTEM.md', 'APPEND_SYSTEM.md'):
+            if (request.get('base_url') or request.get('api_key_env')) and name in {'auth.json', 'models.json'}:
+                continue
             original = source / name
             link = agent / name
             if original.exists():
                 if not link.exists() and not link.is_symlink():
                     link.symlink_to(original)
                 read.append(str(original.resolve()))
+        provider = request['provider']
+        if request.get('base_url') or request.get('api_key_env'):
+            # This private overlay references only the selected variable. It does
+            # not link native auth or overwrite the shared Home's model settings.
+            custom = {'apiKey': '$' + request['api_key_env'] if request.get('api_key_env') else 'local'}
+            if request.get('base_url'):
+                provider = 'graphtraj-role'
+                custom.update(baseUrl=request['base_url'], api=request['provider_api'],
+                              models=[{'id': request['model'],
+                                       'reasoning': request.get('reasoning_effort') not in {None, 'off'}}])
+            (agent / 'models.json').write_text(json.dumps({'providers': {provider: custom}}), encoding='utf-8')
         if request['worktree_access'] == 'write':
             write.extend((str(worktree), request['git_common_directory']))
         read.extend(request['reports'])
@@ -180,6 +196,10 @@ class PiManagedExecution:
                               *(str(p.resolve()) for p in resources if p.exists())],
             },
         }
+        if request.get('base_url'):
+            from urllib.parse import urlsplit
+
+            policy['network']['allowedDomains'].append(urlsplit(request['base_url']).hostname)
         # Service access is opt-in for this Runtime and its descendants; keep
         # the existing filesystem grants and denials independent of it.
         for field, native_field in (
@@ -198,7 +218,7 @@ class PiManagedExecution:
         native_trace = native / 'session.jsonl'
         if self.expected and not native_trace.is_file():
             raise RuntimeAdapterError('RUNTIME_SESSION_NOT_RESUMABLE', 'Pi native Session file is missing.')
-        argv = [request['executable'], '--mode', 'rpc', '--provider', request['provider'],
+        argv = [request['executable'], '--mode', 'rpc', '--provider', provider,
                 '--model', request['model'], '--session', str(native_trace),
                 '--append-system-prompt', str(instructions)]
         if request.get('reasoning_effort'):

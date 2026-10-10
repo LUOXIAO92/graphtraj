@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -51,6 +51,11 @@ class RolePreset:
     developer_prompt: str | None = None
     worktree_access: str = "write"
     reports: tuple[str, ...] = ()
+    connection: str | None = None
+    connection_revision: str | None = None
+    runtime_home: str | None = None
+    provider_api: str | None = None
+    runtime_provider: str | None = None
 
 
 @dataclass(frozen=True)
@@ -116,7 +121,7 @@ class ProjectRoles:
 
     def preset(self, reference: str) -> RolePreset:
         """Return the Runtime settings declared for the selected current role."""
-        return self.presets[self.resolve(reference)]
+        return resolve_preset(self.presets[self.resolve(reference)])
 
 
 def configured_role_name(reference: str) -> str:
@@ -359,9 +364,16 @@ def _role_preset(
         diagnostics.append("{0} must be a mapping.".format(name))
         return None
     initial_count = len(diagnostics)
+    reference = entry.get("connection")
+    if reference is not None:
+        if (not isinstance(reference, str)
+                or re.fullmatch(r"[A-Za-z0-9_-]+/[A-Za-z0-9_-]+/[A-Za-z0-9_-]+", reference) is None
+                or set(entry) & (_REQUIRED_FIELDS | _CONNECTION_FIELDS)):
+            diagnostics.append(f"{name}.connection must be a reference without inline connection fields.")
+            return None
     allowed = _REQUIRED_FIELDS | _CONNECTION_FIELDS | {
         "reasoning_effort", "codex", "pi", "allow_runtime_swarm", "instructions",
-        "system_prompt", "developer_prompt", "worktree_access", "reports",
+        "system_prompt", "developer_prompt", "worktree_access", "reports", "connection",
     }
     if "instructions" in entry and (
         not isinstance(entry["instructions"], str)
@@ -402,7 +414,7 @@ def _role_preset(
             )
         elif field not in allowed:
             diagnostics.append("{0}.{1} is not supported.".format(name, field))
-    for field in _REQUIRED_FIELDS:
+    for field in (() if reference is not None else _REQUIRED_FIELDS):
         value = entry.get(field)
         if not isinstance(value, str) or not value.strip():
             diagnostics.append(
@@ -441,10 +453,11 @@ def _role_preset(
     if len(diagnostics) != initial_count:
         return None
     return RolePreset(
+        connection=reference,
         codex=entry.get("codex"),
         pi=entry.get("pi"),
-        runtime=str(entry["runtime"]),
-        model=str(entry["model"]),
+        runtime=str(entry.get("runtime", "")),
+        model=str(entry.get("model", "")),
         base_url=str(entry["base_url"]) if "base_url" in entry else None,
         api_key_env=(
             str(entry["api_key_env"]) if "api_key_env" in entry else None
@@ -461,3 +474,15 @@ def _role_preset(
             else None
         ),
     )
+
+
+def resolve_preset(preset: RolePreset) -> RolePreset:
+    """Resolve a fresh reference once; retained Runtime contexts never use the catalog."""
+    if preset.connection is None or preset.connection_revision is not None:
+        return preset
+    from graphtraj.configuration.runtime_connections import resolve_connection
+
+    try:
+        return replace(preset, **resolve_connection(preset.connection, preset.reasoning_effort))
+    except (ValueError, OSError) as error:
+        raise ProjectRolesError((str(error),)) from error

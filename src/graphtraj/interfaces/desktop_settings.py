@@ -23,7 +23,7 @@ from graphtraj.workspace.runner_project import discover_project_root, discover_r
 
 FIELDS = (
     "runtime", "model", "base_url", "api_key_env", "reasoning_effort",
-    "instructions", "system_prompt", "developer_prompt",
+    "instructions", "system_prompt", "developer_prompt", "connection",
 )
 EFFECT = (
     "Saved presets apply when a later dispatch resolves these roles. Existing Sessions "
@@ -73,6 +73,15 @@ def settings_request(request: dict, cwd: Path, reviewer: Callable[[dict], dict])
             "Desktop settings require the human project owner; "
             "Agent callers must use their authorized native operations.",
         )
+    if isinstance(request, dict) and request.get("scope") == "user":
+        from graphtraj.configuration.runtime_connections import manage_connections
+        from graphtraj.interfaces.gateway import _validate
+        from graphtraj.interfaces.tools import TOOLS
+
+        arguments = {key: value for key, value in request.items() if key != "scope"}
+        _validate(arguments, TOOLS['runtime_connections'].input_schema, 'arguments')
+        with recovery_review(reviewer):
+            return manage_connections(arguments, cwd=root)
     if not isinstance(request, dict) or request.get("action") not in {"read", "save"}:
         raise ValueError("Choose read or save settings.")
     allowed = {"action"} if request["action"] == "read" else {
@@ -122,7 +131,7 @@ def settings_request(request: dict, cwd: Path, reviewer: Callable[[dict], dict])
     roles = _validated(after)
     for old in set(edits) | set(renames):
         reference = renames.get(old, old)
-        preset = roles.presets[reference]
+        preset = roles.preset(reference)
         if preset.runtime not in {"codex", "pi", "dsh"}:
             raise ValueError("Choose a supported Runtime: codex, pi or dsh.")
         # Reuse native prompt capability and instruction-file validation without
@@ -146,18 +155,18 @@ def settings_request(request: dict, cwd: Path, reviewer: Callable[[dict], dict])
             provider, separator, model = preset.model.partition("/")
             if not separator or not provider or not model:
                 raise ValueError("Pi model must be provider/model-id with a nonempty provider and model.")
-            if preset.base_url or preset.codex:
+            if (preset.base_url and not preset.connection) or preset.codex:
                 raise ValueError(
                     "Pi requires native provider configuration; clear Base URL and "
                     "update incompatible Codex settings through the native role entry."
                 )
-        if preset.runtime == "dsh" and preset.model not in {
+        if preset.runtime == "dsh" and not preset.connection and preset.model not in {
             "deepseek-flash", "deepseek-official/deepseek-flash",
         }:
             raise ValueError("DSH requires deepseek-official/deepseek-flash.")
         if preset.runtime == "dsh" and (
             preset.codex or preset.allow_runtime_swarm
-            or (preset.base_url and urlsplit(preset.base_url).scheme != "https")
+            or (not preset.connection and preset.base_url and urlsplit(preset.base_url).scheme != "https")
         ):
             raise ValueError(
                 "DSH requires HTTPS and does not support Codex settings or native helpers. "

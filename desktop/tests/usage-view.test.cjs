@@ -49,7 +49,7 @@ test('Dashboard filters persisted usage by local dates and keeps global comparis
   await act(async () => { tree = create(React.createElement(UsageView, { projectId: 'p' })); });
   t.after(async () => { await act(async () => tree.unmount()); });
   const text = () => JSON.stringify(tree.toJSON());
-  assert.match(text(), /Observation active/);
+  assert.ok(tree.root.findByProps({ role: 'status' }).children.join('').trim());
   assert.match(text(), /\$2.205000/);
   assert.match(text(), /Main calls are not covered/);
   assert.match(text(), /unknown-model/);
@@ -58,6 +58,18 @@ test('Dashboard filters persisted usage by local dates and keeps global comparis
   await act(async () => { selects[2].props.onChange({ target: { value: 'unknown-model' } }); });
   assert.doesNotMatch(text(), /\$2.205000/);
   await act(async () => { selects[2].props.onChange({ target: { value: '' } }); });
+  const dataRows = caption => tree.root.findAllByType('table')
+    .find(table => table.findAllByType('caption').some(node => node.children.join('') === caption))
+    .findByType('tbody').findAllByType('tr');
+  const invalidAlert = () => {
+    const alert = tree.root.findByProps({ role: 'alert' });
+    assert.notEqual(alert.props.hidden, true);
+    assert.ok(alert.children.join('').trim());
+  };
+  const emptyProjectRows = () => {
+    assert.equal(dataRows('Model breakdown').length, 0);
+    assert.equal(dataRows('Daily trend (local dates)').length, 0);
+  };
   const inputs = tree.root.findAllByType('input');
   assert.equal(inputs[0].props.type, 'date');
   assert.equal(inputs[0].props.value, defaultDates().from);
@@ -65,12 +77,14 @@ test('Dashboard filters persisted usage by local dates and keeps global comparis
   await act(async () => { inputs[0].props.onChange({ target: { value: localDate(new Date()) } }); });
   assert.match(text(), /\$2.205000/);
   await act(async () => { inputs[0].props.onChange({ target: { value: '2099-01-01' } }); });
-  assert.match(text(), /start on or before the end/);
+  invalidAlert();
+  emptyProjectRows();
   assert.doesNotMatch(text(), /\$2.205000/);
   await act(async () => { inputs[1].props.onChange({ target: { value: '2099-01-01' } }); });
-  assert.match(text(), /No usage records match/);
+  emptyProjectRows();
   await act(async () => { inputs[0].props.onChange({ target: { value: '' } }); });
-  assert.match(text(), /Choose both dates/);
+  invalidAlert();
+  emptyProjectRows();
   assert.ok(requests.every(id => id === 'p'));
   await act(async () => { tree.update(React.createElement(UsageView, { key: 'global', projects: [
     { id: 'p', root: '/projects/first' }, { id: 'q', root: '/projects/second' },
@@ -86,6 +100,9 @@ test('Dashboard filters persisted usage by local dates and keeps global comparis
     globalInputs[0].props.onChange({ target: { value: '2099-01-01' } });
     globalInputs[1].props.onChange({ target: { value: '2099-01-01' } });
   });
-  assert.match(text(), /No usage records match/);
+  assert.equal(dataRows('Daily trend (local dates)').length, 0);
+  const comparison = dataRows('Project comparison');
+  assert.equal(comparison.length, 2);
+  for (const row of comparison) assert.equal(row.findAllByType('td')[1].children[0], 'Unknown');
   assert.doesNotMatch(text(), /\$2.205000/);
 });

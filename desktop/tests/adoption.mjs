@@ -387,7 +387,9 @@ async function usageHistoryAdoption() {
     assert.equal(await page.getByLabel('Start date').inputValue(), defaultDates().from);
     assert.equal(await page.getByLabel('End date').inputValue(), localDate(today));
     await waitInput('Model breakdown', 'gpt-5.3-codex', 3000);
-    assert.match(await page.locator('.usage-dashboard').innerText(), /1 records have unknown time/);
+    await page.locator('.usage-filters select').nth(1).selectOption('undated@x2');
+    assert.equal(await table('Model breakdown').locator('tbody tr').count(), 0);
+    await page.locator('.usage-filters select').nth(1).selectOption('');
     await selectDates(localDate(today), localDate(today));
     await waitInput('Model breakdown', 'gpt-5.3-codex', 1000);
     assert.match(await table('Model breakdown').innerText(), /0\.001925/);
@@ -398,10 +400,14 @@ async function usageHistoryAdoption() {
     assert.doesNotMatch(await page.locator('.usage-dashboard').innerText(), /second-only|unpriced-controlled-model/);
     facts.screenshots.push(await shot(page, 'usage-project-today.png'));
     await selectDates(localDate(today), localDate(yesterday));
-    await page.getByRole('alert').filter({ hasText: 'start on or before' }).waitFor();
-    await page.getByText('No usage records match this view.', { exact: true }).waitFor();
+    const invalidAlert = page.locator('.usage-dashboard').getByRole('alert');
+    await invalidAlert.waitFor({ state: 'visible' });
+    assert.ok((await invalidAlert.innerText()).trim());
+    assert.equal(await table('Model breakdown').locator('tbody tr').count(), 0);
+    assert.equal(await table('Daily trend (local dates)').locator('tbody tr').count(), 0);
     await selectDates('2099-01-01', '2099-01-01');
-    await page.getByText('No usage records match this view.', { exact: true }).waitFor();
+    assert.equal(await table('Model breakdown').locator('tbody tr').count(), 0);
+    assert.equal(await table('Daily trend (local dates)').locator('tbody tr').count(), 0);
     facts.screenshots.push(await shot(page, 'usage-no-records.png'));
     await page.getByRole('button', { name: 'Global usage', exact: true }).click();
     await waitInput('Project comparison', first, 3000);
@@ -431,7 +437,9 @@ async function usageHistoryAdoption() {
     await selectDates(localDate(today), localDate(today));
     await waitInput('Project comparison', first, 1000);
     await waitInput('Project comparison', second, 500);
-    assert.match(await page.locator('.usage-dashboard').innerText(), /unavailable|inaccessible/);
+    const gap = page.locator('.usage-dashboard details[open] li').first();
+    await gap.waitFor({ state: 'visible' });
+    assert.ok((await gap.innerText()).trim());
     const history = path.join(os.homedir(), '.graphtraj/usage-history');
     for (const file of await fs.readdir(history)) {
       assert.doesNotMatch(await fs.readFile(path.join(history, file), 'utf8'), /Controlled retained|Long native record|provider_usage/);

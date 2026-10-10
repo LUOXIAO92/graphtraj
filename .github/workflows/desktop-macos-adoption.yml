@@ -45,7 +45,12 @@ jobs:
         run: npm run build
 
       - name: Desktop unit checks
-        run: node --test tests/*.test.cjs
+        run: |
+          if [ "${{ github.ref_name }}" = "agent/287-desktop-agents-models-teams" ]; then
+            node --test tests/settings*.test.cjs
+          else
+            node --test tests/*.test.cjs
+          fi
 
       - name: Package the macOS artifact
         run: npm run package:mac
@@ -76,6 +81,7 @@ jobs:
       - name: Installed app adoption, optionality and security
         env:
           GRAPHTRAJ_APP: /Applications/GraphTraj.app
+          GRAPHTRAJ_ADOPTION_SETTINGS_ONLY: ${{ github.ref_name == 'agent/287-desktop-agents-models-teams' && '1' || '0' }}
           GRAPHTRAJ_ADOPTION_USAGE_ONLY: ${{ github.ref_name == 'agent/286-desktop-usage-history-range' && '1' || '0' }}
         run: node --preserve-symlinks --preserve-symlinks-main tests/adoption.mjs
 

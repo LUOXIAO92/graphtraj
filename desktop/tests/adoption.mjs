@@ -477,6 +477,107 @@ async function usageHistoryAdoption() {
   }
 }
 
+/** Validate only the new Settings path, reusing accepted monitor/usage evidence. */
+async function settingsOnlyAdoption() {
+  const root = path.join(work, 'settings-fixtures');
+  await fs.mkdir(root, { recursive: true });
+  await fs.mkdir(isolatedHome, { recursive: true });
+  const first = await fixtures.makeProject(path.join(root, 'settings-first'), 'settings-first');
+  const second = await fixtures.makeProject(path.join(root, 'settings-second'), 'settings-second');
+  await fixtures.recordActivity(first, { ticketId: '1', ticketName: 'settings-first', alias: 'research@x1',
+    records: longRecords('settings-monitor'),
+  });
+  const rolesFile = path.join(first, '.graphtraj', 'roles.yml');
+  await fs.writeFile(rolesFile, 'roles:\n  custom_group:\n    observer:\n      runtime: codex\n      model: original-model\n      reports: [report.md]\n      codex:\n        retained_custom_field: preserved\nrole_tree: {}\n');
+  const secondBefore = await snapshot(second);
+  let handle;
+  let page;
+  try {
+    handle = await launch({ GRAPHTRAJ_ADOPTION_SECRET: secret }, [`--project=${first}`]);
+    page = await handle.firstWindow();
+    page.setDefaultTimeout(30000);
+    await projectEntry(page, 'settings-first').waitFor();
+    await handle.evaluate(({ dialog }, folder) => {
+      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [folder] });
+      globalThis.__gtRealMessageBox = dialog.showMessageBox;
+    }, second);
+    await page.getByRole('button', { name: 'Add project', exact: true }).click();
+    await projectEntry(page, 'settings-second').waitFor();
+    await projectEntry(page, 'settings-first').click();
+    await page.locator('.monitor-page:visible .react-flow__node[data-id="1"]')
+      .filter({ has: page.getByText('settings first', { exact: true }) }).click();
+    await page.getByRole('button', { name: 'Expand chat', exact: true }).click();
+    const column = page.locator('.monitor-page:visible').getByRole('article', { name: 'research@x1', exact: true }).locator('.activity-history');
+    await column.getByText(/Controlled retained settings-monitor message 69/).waitFor();
+    await column.evaluate(element => { element.scrollTop = 200; element.dispatchEvent(new Event('scroll')); });
+    const position = await monitorPosition(page);
+    const projects = await page.evaluate(() => window.graphtraj.projects());
+    const firstId = projects.projects.find(project => project.root === first).id;
+    const secondId = projects.projects.find(project => project.root === second).id;
+    const decide = async response => handle.evaluate(({ dialog }, response) => {
+      dialog.showMessageBox = async () => ({ response, checkboxChecked: false });
+    }, response);
+    facts.settings = await settingsAdoption({ page, decide, firstId, secondId,
+      runtimeHome: path.join(isolatedHome, 'codex'), step,
+      shot: async name => { facts.screenshots.push(await shot(page, name)); },
+    });
+    assert.match(await fs.readFile(rolesFile, 'utf8'), /retained_custom_field: preserved/);
+    assert.match(await fs.readFile(rolesFile, 'utf8'), /report.md/);
+    assert.deepEqual(changed(secondBefore, await snapshot(second)), []);
+
+    // Restore the actual host dialog and exercise the global review path in
+    // this same installed window. Failure is retained, never retried in a new window.
+    await handle.evaluate(({ dialog }) => { dialog.showMessageBox = globalThis.__gtRealMessageBox; });
+    await page.getByRole('button', { name: 'Agents & models', exact: true }).click();
+    await page.getByRole('button', { name: 'Reload connections', exact: true }).waitFor();
+    for (const [provider, answer] of [['native-approved', 'Save settings'], ['native-declined', 'Cancel']]) {
+      const before = await page.evaluate(id => window.graphtraj.connections(id, { action: 'read' }), firstId);
+      await page.getByLabel('Provider name', { exact: true }).fill(provider);
+      await page.getByRole('button', { name: 'Add Provider', exact: true }).click();
+      await page.getByRole('button', { name: 'Preview connections', exact: true }).click();
+      await page.getByRole('button', { name: 'Save connections', exact: true }).click();
+      await page.waitForTimeout(2500);
+      const outcome = uiAutomation(['tell application "System Events"', 'tell process "GraphTraj"',
+        `click button "${answer}" of sheet 1 of window 1`, 'end tell', 'end tell']);
+      facts.nativeDialogs.push({ name: `Global approval: ${answer}`, required: true, ...outcome });
+      assert.ok(outcome.ok, outcome.output);
+      if (answer === 'Save settings') {
+        await page.getByRole('status').getByText('Connections saved.', { exact: true }).waitFor();
+        const saved = await page.evaluate(id => window.graphtraj.connections(id, { action: 'read' }), firstId);
+        assert.ok(Object.hasOwn(saved.catalog.runtimes.shared.providers, provider));
+      } else {
+        await page.getByRole('alert').filter({ hasText: 'did not approve' }).waitFor();
+        assert.equal((await page.evaluate(id => window.graphtraj.connections(id, { action: 'read' }), firstId)).revision, before.revision);
+      }
+    }
+    facts.settings.global = await page.evaluate(id => window.graphtraj.connections(id, { action: 'read' }), firstId);
+    facts.screenshots.push(await shot(page, '11-native-global-refusal.png'));
+    await page.getByRole('button', { name: 'Global usage', exact: true }).click();
+    await page.getByRole('heading', { name: 'Global usage', exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Monitor', exact: true }).click();
+    assert.deepEqual(await monitorPosition(page), position);
+    step('Real global native dialogs approved/refused writes; merged Global usage routing is present; returning from Settings retained monitor selection, viewport and paused reading position.');
+
+    await bounded('close before Settings readback', handle.close(), 15000);
+    handle = await launch({ GRAPHTRAJ_ADOPTION_SECRET: secret });
+    page = await handle.firstWindow();
+    page.setDefaultTimeout(30000);
+    await projectEntry(page, 'settings-first').waitFor();
+    assert.deepEqual(await page.evaluate(id => window.graphtraj.settings(id), firstId), facts.settings.roles);
+    assert.deepEqual((await page.evaluate(id => window.graphtraj.connections(id, { action: 'read' }), firstId)).catalog, facts.settings.global.catalog);
+    const rendered = await page.evaluate(() => document.body.innerText);
+    assert.ok(!JSON.stringify(facts).includes(secret) && !rendered.includes(secret));
+    facts.nativeEvidence = { reused: ['#284 actual Codex/Pi/DSH Runtime evidence (parent retained)', '#286 macOS 38089086556 accepted usage/history', '#285 accepted monitor/index'],
+      controlled: 'Disposable project/Trace fixtures and deterministic host replies for draft scenarios; real OS global dialogs separately verified above. No model execution.' };
+    facts.passed = true;
+    step('Reopened installed app read back final global connections and project roles. Predecessor execution/usage evidence is reused.');
+  } finally {
+    if (!facts.passed && page && handle) facts.screenshots.push(await shot(page, 'settings-failure.png').catch(() => 'screenshot unavailable'));
+    if (handle) await bounded('close Settings adoption', handle.close(), 15000);
+    await persist();
+  }
+}
+
 async function main() {
   assert.ok(!process.env.GRAPHTRAJ_CLI_CONNECTION && !process.env.GRAPHTRAJ_PARENT_ALIAS,
     'Use the unbound CI desktop host; do not remove inherited Agent identity markers to run adoption.');
@@ -496,6 +597,8 @@ async function main() {
   });
   if (facts.ciCommit) assert.equal(facts.candidate, facts.ciCommit);
   step(`installed bundle prepared at ${app}; native tool resolved from PATH at ${tool}`);
+
+  if (process.env.GRAPHTRAJ_ADOPTION_SETTINGS_ONLY === '1') return settingsOnlyAdoption();
 
   if (process.env.GRAPHTRAJ_ADOPTION_USAGE_ONLY === '1') {
     await fs.mkdir(work, { recursive: true });

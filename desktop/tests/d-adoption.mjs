@@ -161,7 +161,9 @@ try {
   await decide(1); await dialogButton('Save connections').click(); await page.getByRole('status').filter({hasText:'Connections saved.'}).waitFor();
   await page.locator('.library-select').filter({hasText:'shared'}).click();
   for (const [width,height] of [[1440,1000],[1024,820]]) { await size(width,height); await shot('agents-models'); }
-  await page.getByRole('button',{name:'Expand shared / custom provider',exact:true}).click();
+  for (const expanded of [false,true,false,true]) { const toggle=page.getByRole('button',{name:/^(Expand|Collapse) shared Runtime$/}); await toggle.click(); assert.equal(await toggle.getAttribute('aria-expanded'), String(expanded)); }
+  const providerToggle=page.getByRole('button',{name:/^(Expand|Collapse) shared \/ custom provider$/});
+  if(await providerToggle.getAttribute('aria-expanded') !== 'true') await providerToggle.click();
   await page.locator('.library-models').getByRole('button',{name:'Configured model',exact:true}).click();
   await field('Model alias').fill('Updated model alias');
   for (const [width,height] of [[1440,1000],[1024,820]]) { await size(width,height); await shot('model-edit'); }

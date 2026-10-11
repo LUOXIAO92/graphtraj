@@ -290,7 +290,9 @@ try {
   await launch();
   await page.locator('.project-button.current').filter({ hasText: first }).waitFor();
   await datedUsage({ page, first, second, agent: process.env.ADOPTION_AGENT_ALIAS, date: usageDate, shot: name => screenshot(`reopened-${name}`) });
+  facts.stage = 'remove project after reopen';
   await page.getByRole('button', { name: `Remove ${second}`, exact: true }).click();
+  await page.locator('.project-button').filter({ hasText: second }).waitFor({ state: 'detached' });
   assert.equal(await page.locator('.project-button').count(), 1);
   assert.equal(fixtures.operate(second, 'ticket_graph').tickets.length, 3);
   assert.deepEqual(runningTask(first), runningBefore);
@@ -298,7 +300,7 @@ try {
   facts.reusedEvidence = 'Accepted A/B/C/D summary supplied via Worldline20261010T042341.450707+0900; integration20261010T030236.725956+0900. This test makes no model calls.';
   facts.uiPassed = true;
 } catch (error) {
-  facts.failure = String(error);
+  facts.failure = error.stack || String(error);
   if (page && !page.isClosed()) facts.visibleErrors = await page.getByRole('alert').allTextContents().catch(() => []);
   process.exitCode = 1;
   await screenshot('failure').catch(() => {});

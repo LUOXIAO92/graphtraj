@@ -19,9 +19,9 @@ from graphtraj.execution.runner_models import RunnerError
 NAME = re.compile(r"^[A-Za-z0-9_-]+$")
 ENV_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 EFFORTS = {
-    'codex': {'none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'},
-    'pi': {'off', 'minimal', 'low', 'medium', 'high', 'xhigh'},
-    'dsh': {'off', 'low', 'high', 'max'},
+    'codex': ('none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'),
+    'pi': ('off', 'minimal', 'low', 'medium', 'high', 'xhigh'),
+    'dsh': ('off', 'low', 'high', 'max'),
 }
 
 
@@ -189,6 +189,8 @@ def _manage_connections(arguments: dict, *, cwd: Path, review: bool) -> dict:
     view = {'scope': 'user', 'path': str(path), 'revision': revision, 'catalog': before,
             'account_access': 'unknown',
             'capabilities': {'read': True, 'preview': True, 'save': True,
+                             # Runtime request values, not a claim of model support.
+                             'reasoning_efforts': {kind: list(values) for kind, values in EFFORTS.items()},
                              'model_discovery': {'codex': 'native', 'pi': 'native', 'dsh': 'native-host'},
                              'custom_api': {'codex': ['responses'],
                                             'pi': ['openai-completions', 'openai-responses', 'anthropic-messages'],

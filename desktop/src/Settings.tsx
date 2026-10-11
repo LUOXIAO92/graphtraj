@@ -131,13 +131,24 @@ export function SettingsView({ projectId, active = true, onModels }: { projectId
   const catalogNotice = catalogError ? `Global model catalog unavailable: ${catalogError}`
     : !connections ? 'Loading global model catalog…'
     : !availableConnections.length ? 'No global models configured.' : '';
+  /** Prefer declared model capabilities; otherwise expose native Runtime request values. */
+  function effortOptions(connection?: string | null, runtime?: string | null): string[] | undefined {
+    const model = availableConnections.find(item => item.reference === connection)?.metadata;
+    const kind = connection ? ownRole(runtimeEntries, connection.split('/')[0])?.runtime : runtime;
+    return model?.supported_efforts ?? (kind ? connections?.capabilities.reasoning_efforts?.[kind] : undefined);
+  }
+  const selectedEfforts = effortOptions(selectedRole?.connection, selectedRole?.runtime) ?? [];
   function chooseConnection(connection: string): void {
     const model = availableConnections.find(item => item.reference === connection)?.metadata;
-    if (!model) return;
+    if (!model || selectedRole?.connection === connection) return;
+    const effort = selectedRole?.reasoning_effort;
+    const supported = effortOptions(connection);
+    // Missing metadata is not evidence that a retained effort is unsupported.
+    const nextEffort = !effort || !supported || supported.includes(effort) ? effort : null;
+    if (effort && nextEffort === null) setMessage('The previous effort is not available for this selection. Runtime default selected.');
     setRoles(current => ({ ...current, [selected]: { ...ownRole(current, selected), connection,
       runtime: null, model: null, base_url: null, api_key_env: null,
-      reasoning_effort: model.supported_efforts?.includes(ownRole(current, selected)?.reasoning_effort ?? '')
-        ? ownRole(current, selected)?.reasoning_effort : null,
+      reasoning_effort: nextEffort,
     } }));
   }
   function modelFields(reference: string, choose: (connection: string) => void, prefix: string, legacy?: RoleFields) {
@@ -218,9 +229,9 @@ export function SettingsView({ projectId, active = true, onModels }: { projectId
           {!selectedRole.connection && <details className="d-prompt-layers"><summary>Saved project model settings</summary><p>These existing settings are preserved. Selecting a global model replaces this role’s Runtime, model and provider settings when saved.</p>{field('runtime')}{field('model')}{field('base_url')}{field('api_key_env')}</details>}
           <label className="native-field"><span>This agent’s effort</span><select aria-label="This agent's effort" value={selectedRole.reasoning_effort || ''} onChange={event => setRoles(current => ({ ...current, [selected]: { ...ownRole(current, selected), reasoning_effort: event.target.value || null } }))}>
             <option value="">Runtime default</option>
-            {selectedRole.reasoning_effort && !selectedModel?.supported_efforts?.includes(selectedRole.reasoning_effort) && <option value={selectedRole.reasoning_effort} disabled>{selectedRole.reasoning_effort} · saved; support unconfirmed</option>}
-            {selectedModel?.supported_efforts?.map(effort => <option key={effort} value={effort}>{effort}</option>)}
-          </select><small>{selectedModel?.supported_efforts?.length ? 'Changing models keeps this effort only when supported; otherwise uses Runtime default.' : 'Supported efforts unknown. Saved effort is retained; no additional levels are offered.'}</small></label>
+            {selectedRole.reasoning_effort && !selectedEfforts.includes(selectedRole.reasoning_effort) && <option value={selectedRole.reasoning_effort} disabled>{selectedRole.reasoning_effort} · saved; support unconfirmed</option>}
+            {selectedEfforts.map(effort => <option key={effort} value={effort}>{effort}</option>)}
+          </select><small>{selectedModel?.supported_efforts !== undefined ? 'Source: saved model capabilities. Changing models retains an available effort.' : selectedEfforts.length ? 'Source: native Runtime configuration options. Model support is not reported; the provider may restrict these values.' : 'Model capabilities and Runtime options unavailable. Saved effort is retained.'}</small></label>
         </fieldset><label className="native-field"><span>Parent agent</span><select aria-label="Agent parent" value={parents.length > 1 ? '__multiple__' : parents[0] ?? ''} onChange={event => attempt(() => {
           setTree(moveNode(tree, selected, event.target.value));
         })}>{parents.length > 1 && <option value="__multiple__" disabled>Multiple parents (preserved)</option>}<option value="">Root</option>{[...new Set([...Object.keys(roles), ...edges.map(edge => edge[0])])].filter(ref => !branchRoles(tree, selected).has(ref)).map(ref => <option key={ref} value={ref}>{roleName(renames, ref)}</option>)}</select><small>{parents.length > 1 ? `Existing parents: ${parents.map(ref => roleName(renames, ref)).join(', ')}. Choosing a parent moves all occurrences.` : 'Self and descendants are excluded. Cross-team parents are shown in the tree.'}</small></label>{field('instructions')}<details className="d-prompt-layers"><summary>Prompt layers</summary>{field('developer_prompt', true)}</details><details className="d-prompt-layers"><summary>Codex approval route</summary><p>Blank fields retain project defaults. These configure native review, not execution approval.</p>{field('approval_model')}{field('approval_base_url')}{field('approval_api_key_env')}</details>

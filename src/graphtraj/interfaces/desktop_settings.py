@@ -13,6 +13,7 @@ from typing import TextIO
 from urllib.parse import urlsplit
 
 from graphtraj.configuration.role_definitions import resolve_child_role
+from graphtraj.configuration.runtime_connections import EFFORTS
 from graphtraj.execution.role_organization import (
     _changed, _organize_child_roles, _validated, organize_child_roles,
 )
@@ -180,15 +181,10 @@ def settings_request(request: dict, cwd: Path) -> dict:
             from graphtraj.runtimes.codex.codex_adapter import _resolve_codex_role
 
             _resolve_codex_role(resolved, root)
-        efforts = {
-            "codex": {"none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"},
-            "pi": {"off", "minimal", "low", "medium", "high", "xhigh"},
-            "dsh": {"off", "low", "high", "max"},
-        }
-        if preset.reasoning_effort is not None and preset.reasoning_effort not in efforts[preset.runtime]:
+        if preset.reasoning_effort is not None and preset.reasoning_effort not in EFFORTS[preset.runtime]:
             raise ValueError(
                 f"Unsupported reasoning effort for {preset.runtime}; "
-                f"choose {', '.join(sorted(efforts[preset.runtime]))}."
+                f"choose {', '.join(EFFORTS[preset.runtime])}."
             )
         if preset.runtime == "pi":
             provider, separator, model = preset.model.partition("/")

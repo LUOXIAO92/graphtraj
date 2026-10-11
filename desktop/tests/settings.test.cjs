@@ -26,6 +26,13 @@ role_tree:
 test('desktop main-process settings pipe saves directly, detects conflict and restores through native entry', async t => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'graphtraj-settings-'));
   t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const previousHome = process.env.HOME;
+  const previousProfile = process.env.USERPROFILE;
+  process.env.HOME = root; process.env.USERPROFILE = root;
+  t.after(() => {
+    if (previousHome === undefined) delete process.env.HOME; else process.env.HOME = previousHome;
+    if (previousProfile === undefined) delete process.env.USERPROFILE; else process.env.USERPROFILE = previousProfile;
+  });
   const project = await fixtures.makeProject(path.join(root, 'project'), 'settings-project');
   const file = path.join(project, '.graphtraj', 'roles.yml');
   // Initial isolated configuration only. Every subsequent change and restoration
@@ -34,11 +41,14 @@ test('desktop main-process settings pipe saves directly, detects conflict and re
   const client = new SettingsClient();
   t.after(() => client.close());
   const before = await client.request(project);
+  const catalog = await client.connections(project, { action: 'read' });
+  assert.ok(catalog.capabilities.reasoning_efforts.codex.includes('max'));
   const graph = fixtures.operate(project, 'ticket_graph');
-  const draft = { revision: before.revision, edits: { 'custom_group.observer': { model: 'saved-model' } },
+  const draft = { revision: before.revision, edits: { 'custom_group.observer': { model: 'saved-model', reasoning_effort: 'max' } },
     renames: {}, add_edges: [], remove_edges: [] };
   const saved = await client.request(project, draft);
   assert.equal(saved.roles['custom_group.observer'].model, 'saved-model');
+  assert.equal((await client.request(project)).roles['custom_group.observer'].reasoning_effort, 'max');
   assert.equal(JSON.stringify(saved).includes('unknown_future_field'), false);
   assert.match(await fs.readFile(file, 'utf8'), /unknown_future_field: preserved/);
   const savedBytes = await fs.readFile(file);
@@ -46,7 +56,7 @@ test('desktop main-process settings pipe saves directly, detects conflict and re
   assert.deepEqual(await fs.readFile(file), savedBytes);
   assert.equal((await client.request(project, { ...draft, revision: saved.revision })).applied, false);
   const restored = await client.request(project, { ...draft, revision: saved.revision,
-    edits: { 'custom_group.observer': { model: before.roles['custom_group.observer'].model } } });
+    edits: { 'custom_group.observer': { model: before.roles['custom_group.observer'].model, reasoning_effort: null } } });
   assert.deepEqual(restored.roles, before.roles);
   assert.deepEqual(restored.edges, before.edges);
   assert.deepEqual(fixtures.operate(project, 'ticket_graph'), graph);

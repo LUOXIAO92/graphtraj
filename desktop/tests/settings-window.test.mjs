@@ -65,9 +65,12 @@ test('desktop Save, Cancel, reopen and conflicts in both settings pages', async 
     await field('Model').fill('cancelled-model'); await button('Cancel').click();
     assert.equal(await field('Model').inputValue(), 'original-model');
     assert.deepEqual(await fs.readFile(rolesFile), original);
-    await field('Model').fill('saved-model'); await button('Save').click();
+    await field('Model').fill('saved-model');
+    await field("This agent's effort").selectOption('high');
+    await button('Save').click();
     await page.getByRole('status').filter({ hasText: 'Settings saved.' }).waitFor();
     assert.equal((await readRoles()).roles['custom_group.observer'].model, 'saved-model');
+    assert.equal((await readRoles()).roles['custom_group.observer'].reasoning_effort, 'high');
     await shot('roles-saved'); facts.steps.push('Role edit, Cancel without write, one Save persisted.');
 
     await field('Model').fill('stale-model');
@@ -113,6 +116,19 @@ test('desktop Save, Cancel, reopen and conflicts in both settings pages', async 
     assert.equal(await field('Base URL').inputValue(), 'https://stale.invalid/v1');
     assert.equal((await readCatalog()).catalog.runtimes.shared.providers.custom.base_url, 'https://external.invalid/v1');
     await shot('global-conflict'); facts.steps.push('Global Runtime/provider/model Save, Cancel, invalid input and conflict.');
+    await button('Teams & roles').click();
+    await field('Agent Runtime').selectOption('shared');
+    assert.equal(await field("This agent's effort").inputValue(), 'high');
+    await field('Agent model').selectOption('shared/custom/model');
+    assert.equal(await field("This agent's effort").inputValue(), 'high');
+    await field("This agent's effort").selectOption('max');
+    await page.getByText('Codex approval route', { exact: true }).click();
+    await field('Codex approval model').fill('review-model');
+    await field('Codex approval Base URL').fill('https://review.invalid/v1');
+    await field('Codex approval api_key_env name').fill('REVIEW_TEST_KEY');
+    await button('Save').click(); await page.getByRole('status').filter({ hasText: 'Settings saved.' }).waitFor();
+    assert.equal((await readRoles()).roles['custom_group.observer'].reasoning_effort, 'max');
+    await shot('effort-saved'); facts.steps.push('Inline high effort retained on switching to a manual connection and reselecting it; max saved once.');
     assert.equal(await app.evaluate(() => globalThis.settingsDialogs), 0);
     await app.close(); app = null;
 
@@ -120,8 +136,9 @@ test('desktop Save, Cancel, reopen and conflicts in both settings pages', async 
     await page.locator('.library-select').filter({ hasText: 'custom' }).click();
     assert.equal(await field('Base URL').inputValue(), 'https://external.invalid/v1');
     await shot('global-reopened');
-    await button('Teams & roles').click(); await page.getByText('Saved project model settings', { exact: true }).click();
-    assert.equal(await field('Model').inputValue(), 'external-model');
+    await button('Teams & roles').click();
+    assert.equal(await field('Agent model').inputValue(), 'shared/custom/model');
+    assert.equal(await field("This agent's effort").inputValue(), 'max');
     assert.match(await fs.readFile(rolesFile, 'utf8'), /reports:\s*- report.md/);
     assert.equal(await app.evaluate(() => globalThis.settingsDialogs), 0);
     await shot('roles-reopened'); facts.steps.push('Actual window close/reopen reads both saved configurations; zero approval dialogs.');

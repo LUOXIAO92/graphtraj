@@ -331,3 +331,48 @@ test('global Cancel never writes and failed Save retains edits on the page', asy
   const home = ui.tree.root.findAllByType('field').find(node => node.findByType('label').children.join('') === 'Runtime Home');
   assert.equal(home.props.value, '/retain-after-error');
 });
+
+for (const legacy of [false, true]) test(`native Runtime effort choices work for ${legacy ? 'inline' : 'referenced'} roles without model metadata`, async t => {
+  const catalog = structuredClone(connections);
+  catalog.capabilities.reasoning_efforts = { codex: ['low', 'medium', 'high', 'max'] };
+  catalog.catalog.runtimes.shared.providers.openai.models.model = { id: 'manual-model', source: 'manual' };
+  catalog.catalog.runtimes.shared.providers.openai.models.other = { id: 'other-model', source: 'manual' };
+  let saved = { revision: 'before', roles: { 'team.root': {
+    ...(legacy ? { runtime: 'codex', model: 'manual-model' } : { connection: 'shared/openai/model' }), reasoning_effort: 'high',
+  } }, role_tree: { 'team.root': {} }, edges: [] };
+  const requests = [];
+  const ui = await form(t, 'Settings.tsx', 'SettingsView', {
+    settings: async () => saved, connections: async () => catalog,
+    saveSettings: async (_id, change) => {
+      requests.push(change);
+      saved = { ...saved, revision: 'after', applied: true, roles: { 'team.root': { ...saved.roles['team.root'], ...change.edits['team.root'] } } };
+      return saved;
+    },
+  }, { projectId: 'project' });
+  const effort = () => ui.tree.root.findAllByType('select').find(node => node.props['aria-label'] === "This agent's effort");
+  assert.deepEqual(effort().findAllByType('option').map(node => node.props.value), ['', 'low', 'medium', 'high', 'max']);
+  assert.match(JSON.stringify(ui.tree.toJSON()), /Model support is not reported/);
+  if (!legacy) {
+    await ui.select('Agent model', 'shared/openai/model');
+    assert.equal(effort().props.value, 'high');
+    await ui.select('Agent model', 'shared/openai/other');
+    assert.equal(effort().props.value, 'high');
+  }
+  await ui.select("This agent's effort", 'max'); await ui.click('Save');
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].edits['team.root'].reasoning_effort, 'max');
+  await ui.click('Reload'); assert.equal(effort().props.value, 'max');
+});
+
+test('model-declared effort restrictions override Runtime choices and report a reset', async t => {
+  const catalog = structuredClone(connections);
+  catalog.capabilities.reasoning_efforts = { codex: ['low', 'high', 'max'] };
+  catalog.catalog.runtimes.shared.providers.openai.models.other = { id: 'unknown-capabilities', source: 'manual' };
+  const saved = { revision: 'before', roles: { 'team.root': { connection: 'shared/openai/other', reasoning_effort: 'max' } }, role_tree: { 'team.root': {} }, edges: [] };
+  const ui = await form(t, 'Settings.tsx', 'SettingsView', { settings: async () => saved, connections: async () => catalog }, { projectId: 'project' });
+  await ui.select('Agent model', 'shared/openai/model');
+  const effort = ui.tree.root.findAllByType('select').find(node => node.props['aria-label'] === "This agent's effort");
+  assert.deepEqual(effort.findAllByType('option').map(node => node.props.value), ['', 'low']);
+  assert.equal(effort.props.value, '');
+  assert.match(JSON.stringify(ui.tree.toJSON()), /previous effort is not available/);
+});

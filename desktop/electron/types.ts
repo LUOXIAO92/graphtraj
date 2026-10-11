@@ -31,7 +31,7 @@ export type CatalogRuntime = { runtime: 'codex' | 'pi' | 'dsh'; home?: string; p
 export type Catalog = { version: 1; runtimes: Record<string, CatalogRuntime> };
 export type ConnectionsRequest = { action: 'read' | 'discover' | 'preview' | 'save'; runtime?: string; catalog?: Catalog; expected_revision?: string };
 export type Connections = { revision: string; catalog: Catalog; applied?: boolean; account_access: string;
-  capabilities: { model_discovery: Record<string, string>; custom_api: Record<string, string[]> };
+  capabilities: { reasoning_efforts?: Record<string, string[]>; model_discovery: Record<string, string>; custom_api: Record<string, string[]> };
   discovery?: { runtime_entry: string; status: string; message?: string; account_access: string;
     provider_status?: Record<string, string>; models: (CatalogModel & { provider: string; supported_efforts?: string[] | null })[] };
 };

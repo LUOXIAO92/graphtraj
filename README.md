@@ -222,8 +222,10 @@ can be rebuilt with a new root. Both settings pages provide **Save** to persist
 changes once and **Cancel** to discard unsaved edits. Invalid input, write
 failures and external changes leave the saved configuration intact and show
 the reason; reload to resolve an external change. Agent-initiated configuration
-changes still require their existing native authorization. These settings apply
-to future dispatch; editing them does not stop running Agents.
+changes still require their existing native authorization. Effort choices use
+saved model capabilities when available; otherwise they show the native Runtime
+configuration values, with model support explicitly unreported. Reselecting a
+model retains its effort. These settings apply to future dispatch; editing them does not stop running Agents.
 
 To run it from a source checkout, install the matching Python GraphTraj version
 and make `graphtraj-tool` available on `PATH` (or set `GRAPHTRAJ_TOOL` to its

@@ -350,3 +350,36 @@ def test_new_team_uses_global_references_and_preserves_legacy_roles(
     conflict = call(project, request)[-1]
     assert conflict['failed'] and 'changed while editing' in conflict['error']
     assert snapshot(project) == after
+
+
+def test_effort_without_model_metadata_saves_and_reopens(project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Runtime-sourced effort options and custom connections share the direct writer."""
+    home = project / 'effort-user'
+    home.mkdir()
+    monkeypatch.setenv('HOME', str(home))
+    monkeypatch.setenv('USERPROFILE', str(home))
+    config_path = project / '.graphtraj/config.yml'
+    config = yaml.safe_load(config_path.read_text())
+    config['codex'] = {'approval': {'model': 'review', 'base_url': 'https://review.invalid/v1',
+                                  'api_key_env': 'REVIEW_KEY'}}
+    config_path.write_text(yaml.safe_dump(config))
+    state = call(project, {'scope': 'user', 'action': 'read'})[-1]['result']
+    options = state['capabilities']['reasoning_efforts']['codex']
+    assert 'high' in options and 'max' in options
+    catalog = {'version': 1, 'runtimes': {'codex': {'runtime': 'codex', 'providers': {
+        'deepseek': {'base_url': 'https://provider.invalid/v1', 'api_key_env': 'CUSTOM_KEY',
+                     'models': {'flash': {'id': 'deepseek-flash', 'source': 'manual'}}},
+    }}}}
+    assert call(project, {'scope': 'user', 'action': 'save', 'catalog': catalog,
+                          'expected_revision': state['revision']})[-1]['result']['applied']
+    for effort in ('high', 'max'):
+        request = draft(project, connection='codex/deepseek/flash', runtime=None,
+                        model=None, reasoning_effort=effort)
+        replies = call(project, request)
+        assert len(replies) == 1 and not replies[0]['failed'], replies
+        reopened = read(project)['roles']['analyst']
+        assert reopened['connection'] == 'codex/deepseek/flash'
+        assert reopened['reasoning_effort'] == effort
+    before = snapshot(project)
+    assert call(project, draft(project, reasoning_effort='invented-effort'))[-1]['failed']
+    assert snapshot(project) == before

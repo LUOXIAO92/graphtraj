@@ -49,6 +49,17 @@ def organize_child_roles(arguments: Mapping[str, Any], *, cwd: Path | None = Non
     an unavailable reviewer or a target that changed after review writes
     nothing.
     """
+    return _organize_child_roles(arguments, cwd=cwd, review=True)
+
+
+def _organize_child_roles(
+    arguments: Mapping[str, Any], *, cwd: Path | None, review: bool,
+) -> dict:
+    """Share validation and atomic saving with the identity-checked desktop entry.
+
+    ``review`` is selected by the Python entry point, never from request data.
+    Agent operations always select review; desktop Save is the user's action.
+    """
     root = discover_project_root(cwd or Path.cwd())
     path = roles_file(root)
     before_text = _read_text(path)
@@ -86,9 +97,10 @@ def organize_child_roles(arguments: Mapping[str, Any], *, cwd: Path | None = Non
         raise RunnerError("invalid-input", "The role tree contains a dangling role reference.")
     for reference in change.get("set_presets", {}):
         reviewed.preset(change.get("rename_presets", {}).get(reference, reference))
-    _approve({"request": dict(arguments), "before": before, "after": after}, root)
+    if review:
+        _approve({"request": dict(arguments), "before": before, "after": after}, root)
     # Serialize the compare/write interval without locking Windows file contents.
-    # Every approved writer rechecks the current path under the lock.
+    # Every writer rechecks the current path under the lock.
     # External editors need not use our lock, so compare their bytes as well.
     with file_lock.replacement_lock(path):
         if _read_text(path) != before_text:
@@ -96,7 +108,7 @@ def organize_child_roles(arguments: Mapping[str, Any], *, cwd: Path | None = Non
                 "applied":     False,
                 "status":      "stale",
                 "roles_file":  str(path),
-                "message":     "roles.yml changed after review; nothing was written.",
+                "message":     "roles.yml changed before saving; nothing was written.",
             }
         write_yaml_durably(path, after)
     after_text = yaml.safe_dump(after, sort_keys=False, allow_unicode=True)

@@ -63,7 +63,7 @@ test('team draft creates, reparents, renames and references a model while preser
   assert.equal(ui.tree.root.findAllByType('select').find(node => node.props['aria-label'] === 'Agent parent').props.value, 'research.root');
   await ui.click('Add child agent'); await ui.fill('New Agent name', 'leaf'); await ui.click('Add Agent');
   await ui.select('Agent parent', 'research.root');
-  await ui.input('Team name', 'final'); await ui.click('Review changes'); await ui.click('Save changes');
+  await ui.input('Team name', 'final'); await ui.click('Save');
   assert.deepEqual(submitted.edits['research.root'], { connection: 'shared/openai/model', reasoning_effort: 'low' });
   assert.deepEqual(JSON.parse(JSON.stringify(submitted.role_tree['research.root'])), { 'research.child': {}, 'research.leaf': {} });
   assert.equal(submitted.renames['research.leaf'], 'final.leaf');
@@ -72,7 +72,7 @@ test('team draft creates, reparents, renames and references a model while preser
   assert.deepEqual(submitted.edits['research.leaf'], { connection: 'shared/openai/model' });
   assert.deepEqual(submitted.remove_presets, []); assert.equal(submitted.decision, undefined);
   assert.match(JSON.stringify(ui.tree.toJSON()), /Controlled refusal/);
-  await ui.click('Keep editing'); await ui.click('Cancel changes'); assert.doesNotMatch(JSON.stringify(ui.tree.toJSON()), /research.root/);
+  await ui.click('Cancel'); assert.doesNotMatch(JSON.stringify(ui.tree.toJSON()), /research.root/);
 });
 
 test('native Runtime and Provider API selects keep explicit names as options change', async t => {
@@ -81,7 +81,7 @@ test('native Runtime and Provider API selects keep explicit names as options cha
     capabilities: { model_discovery: { pi: 'native' }, custom_api: { pi: ['openai-completions'] } } };
   const ui = await form(t, 'Connections.tsx', 'ConnectionsView', {
     connections: async (_id, request) => {
-      if (request.action === 'preview') preview = request.catalog;
+      if (request.action === 'save') preview = request.catalog;
       return { ...original, catalog: request.catalog ?? original.catalog };
     },
   }, {});
@@ -90,7 +90,7 @@ test('native Runtime and Provider API selects keep explicit names as options cha
   await ui.fill('Runtime entry name', 'pi'); await ui.click('Add runtime');
   await ui.click('Add provider'); await ui.fill('Provider name', 'custom'); await ui.click('Add provider');
   await ui.select('Provider API', 'openai-completions');
-  await ui.click('Review changes');
+  await ui.click('Save');
   assert.equal(preview.runtimes.pi.runtime, 'pi');
   assert.equal(preview.runtimes.pi.providers.custom.api, 'openai-completions');
 });
@@ -111,7 +111,7 @@ for (const name of ['ordinary', '__proto__']) test(`global form preserves ${name
   await ui.fill('API key environment variable', 'CUSTOM_KEY');
   await ui.click('Add model'); await ui.fill('Model entry name', name); await ui.fill('Model identifier', 'actual-model');
   await ui.fill('Model alias', 'Display name'); await ui.click('Add model');
-  await ui.click('Review changes'); await ui.click('Save connections');
+  await ui.click('Save');
   const { id, request } = calls.at(-1);
   assert.equal(id, null);
   assert.deepEqual(Object.keys(request).sort(), ['action', 'catalog', 'expected_revision']);
@@ -141,7 +141,7 @@ test('rename team then add child saves and reloads one renamed group', async t =
   }, { projectId: 'project' });
   await ui.input('Team name', 'b'); await ui.click('Add child agent');
   await ui.fill('New Agent name', 'worker'); await ui.select('New Agent Runtime', 'shared');
-  await ui.click('Add Agent'); await ui.click('Review changes'); await ui.click('Save changes');
+  await ui.click('Add Agent'); await ui.click('Save');
   assert.deepEqual(submitted, {
     revision: 'before', edits: { 'a.worker': { connection: 'shared/openai/model' } },
     renames: { 'a.root': 'b.root', 'a.worker': 'b.worker' },
@@ -162,7 +162,7 @@ for (const change of ['same destination', 'existing override', 'edit identifier'
     let preview;
     const ui = await form(t, 'Connections.tsx', 'ConnectionsView', {
       connections: async (_id, request) => {
-        if (request.action === 'preview') preview = request.catalog;
+        if (request.action === 'save') preview = request.catalog;
         return { ...connections, catalog: request.catalog ?? catalog, discovery: request.action === 'discover' ? {
           runtime_entry: 'shared', status: 'available', account_access: 'unknown', models: [
             { provider: 'openai', id: 'discovered', alias: 'Native label', source: 'native', supported_efforts: ['low'] },
@@ -172,7 +172,7 @@ for (const change of ['same destination', 'existing override', 'edit identifier'
     }, { projectId: 'project' });
     await ui.click('Refresh native models'); await ui.click('Use discovered');
     if (change === 'edit identifier') await ui.fill('Model identifier', 'manual-id');
-    await ui.click('Add model'); await ui.click('Review changes');
+    await ui.click('Add model'); await ui.click('Save');
     const model = preview.runtimes.shared.providers.openai.models.discovered;
     assert.equal(model.id, change === 'edit identifier' ? 'manual-id' : 'discovered');
     assert.equal(model.source, change === 'same destination' ? 'native' : 'manual');
@@ -208,7 +208,7 @@ test('D root deletion explicitly promotes one child and reconnects the others', 
   await ui.click('Delete selected agent configuration');
   await act(async () => ui.tree.root.findAllByType('input').find(node => node.props.name === 'delete-mode').props.onChange());
   await ui.select('New root', 'team.second');
-  await ui.click('Remove from draft'); await ui.click('Review changes'); await ui.click('Save changes');
+  await ui.click('Remove configuration'); await ui.click('Save');
   assert.deepEqual(submitted.remove_presets, ['team.root']);
   assert.deepEqual(JSON.parse(JSON.stringify(submitted.role_tree)), { 'team.second': { 'team.first': {} } });
 });
@@ -243,14 +243,13 @@ test('legacy role edits retain its model route until an explicit global selectio
   const effort = () => ui.tree.root.findAllByType('select').find(node => node.props['aria-label'] === "This agent's effort");
   assert.deepEqual(effort().findAllByType('option').map(node => node.props.value), ['', 'high']);
   await ui.fill('Agent name', 'lead');
-  await ui.click('Review changes'); await ui.click('Save changes');
+  await ui.click('Save');
   assert.deepEqual(JSON.parse(JSON.stringify(submitted.edits)), {});
   assert.deepEqual(submitted.renames, { 'team.root': 'team.lead' });
-  await ui.click('Keep editing');
   await ui.select('Agent Runtime', 'shared');
   assert.equal(effort().props.value, '');
   assert.deepEqual(effort().findAllByType('option').map(node => node.props.value), ['', 'low']);
-  await ui.click('Review changes'); await ui.click('Save changes');
+  await ui.click('Save');
   assert.deepEqual(submitted.edits['team.root'], {
     connection: 'shared/openai/model', runtime: null, model: null, base_url: null, api_key_env: null, reasoning_effort: null,
   });
@@ -275,7 +274,7 @@ test('independent roots and cross-team branches retain the actual nested organiz
   await ui.click('Add root agent'); await ui.fill('New Agent name', 'independent');
   await ui.select('New Agent Runtime', 'shared'); await ui.click('Add Agent');
   await ui.fill('Agent name', 'renamed');
-  await ui.click('Review changes'); await ui.click('Save changes');
+  await ui.click('Save');
   assert.deepEqual(JSON.parse(JSON.stringify(submitted.role_tree)), { ...role_tree, 'team.independent': {} });
   assert.deepEqual(submitted.renames, { 'team.independent': 'team.renamed' });
   assert.deepEqual(submitted.edits['team.independent'], { connection: 'shared/openai/model' });
@@ -289,7 +288,7 @@ test('missing connection and unknown capabilities are retained without choosing 
     saveSettings: async (_id, draft) => { submitted = draft; throw new Error('Controlled refusal'); },
   }, { projectId: 'project' });
   assert.equal(ui.tree.root.findAllByType('select').find(node => node.props['aria-label'] === 'Agent model').props.value, 'missing/provider/model');
-  await ui.fill('Instruction file reference', 'updated.txt'); await ui.click('Review changes'); await ui.click('Save changes');
+  await ui.fill('Instruction file reference', 'updated.txt'); await ui.click('Save');
   assert.deepEqual(submitted.edits['team.root'], { instructions: 'updated.txt' });
 });
 
@@ -309,7 +308,26 @@ test('creation selects the requested Runtime, provider and model without inline 
   await ui.click('Add first team'); await ui.fill('Team name for new team', 'selected'); await ui.fill('New Agent name', 'root');
   await ui.select('New Agent Runtime', 'alternative'); await ui.select('New Agent provider', 'chosen');
   await ui.select('New Agent model', 'alternative/chosen/final'); await ui.click('Add team with root');
-  await ui.select("This agent's effort", 'medium'); await ui.click('Review changes'); await ui.click('Save changes');
+  await ui.select("This agent's effort", 'medium'); await ui.click('Save');
   assert.deepEqual(submitted.edits['selected.root'], { connection: 'alternative/chosen/final', reasoning_effort: 'medium' });
   assert.deepEqual(JSON.parse(JSON.stringify(submitted.role_tree)), { 'selected.root': {} });
+});
+
+test('global Cancel never writes and failed Save retains edits on the page', async t => {
+  const requests = [];
+  const ui = await form(t, 'Connections.tsx', 'ConnectionsView', {
+    connections: async (_id, request) => {
+      requests.push(request);
+      if (request.action === 'save') throw new Error('Connections changed; reload before saving.');
+      return connections;
+    },
+  }, {});
+  await ui.fill('Runtime Home', '/cancelled'); await ui.click('Cancel');
+  assert.deepEqual(requests.map(request => request.action), ['read']);
+  await ui.fill('Runtime Home', '/retain-after-error'); await ui.click('Save');
+  assert.deepEqual(requests.map(request => request.action), ['read', 'save']);
+  assert.equal(requests.at(-1).expected_revision, connections.revision);
+  assert.match(JSON.stringify(ui.tree.toJSON()), /Connections changed/);
+  const home = ui.tree.root.findAllByType('field').find(node => node.findByType('label').children.join('') === 'Runtime Home');
+  assert.equal(home.props.value, '/retain-after-error');
 });

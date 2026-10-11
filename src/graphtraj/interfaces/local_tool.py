@@ -239,7 +239,7 @@ def main() -> None:
     boundary = parser.add_mutually_exclusive_group()
     boundary.add_argument(
         "--desktop-settings", action="store_true",
-        help="Serve one human desktop settings read/save with native host review over the owned pipe.",
+        help="Serve one human desktop settings read/save over the owned pipe.",
     )
     boundary.add_argument(
         "--allowed-features",

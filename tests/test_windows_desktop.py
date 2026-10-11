@@ -47,8 +47,8 @@ def test_public_setup_and_concurrent_registration(temporary_git_repository: Path
     assert all(ticket['dependencies'] == ['1'] for ticket in graph['tickets'] if ticket['ticket_id'] != '1')
 
 
-def test_public_settings_processes_keep_one_approved_winner(temporary_git_repository: Path) -> None:
-    """Two independent desktop pipes review one revision without losing a save."""
+def test_public_settings_processes_keep_one_winner(temporary_git_repository: Path) -> None:
+    """Two independent desktop pipes save one revision without losing a change."""
     root = temporary_git_repository
     operation(root, 'project_setup', {'source_repository': str(root), 'apply': True, 'create_dev': True})
     (root / '.graphtraj/roles.yml').write_text(
@@ -67,13 +67,6 @@ def test_public_settings_processes_keep_one_approved_winner(temporary_git_reposi
             processes.append(child)
             child.stdin.write(json.dumps({'action': 'save', 'revision': revision,
                                           'edits': {'reader': {'model': model}}}) + '\n')
-            child.stdin.flush()
-        for child in processes:
-            proposal = json.loads(child.stdout.readline())
-            assert 'review' in proposal, proposal
-        # Release both real native save pipes after both have reviewed the same revision.
-        for child in processes:
-            child.stdin.write('{"decision":"accept"}\n')
             child.stdin.flush()
         replies = [json.loads(child.communicate(timeout=15)[0]) for child in processes]
         assert sorted(reply['failed'] for reply in replies) == [False, True], replies

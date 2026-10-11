@@ -1,15 +1,15 @@
-name: Package corrected desktop 294
+name: Package direct-save desktop 295
 
 # A dedicated push works before this workflow exists on the default branch.
 on:
   push:
-    branches: [agent/294-desktop-repair-adoption]
+    branches: [agent/295-desktop-direct-settings-save]
 
 permissions:
   contents: read
 
 env:
-  PRODUCT_COMMIT: d410a06131e31fdca2420be184801063cdcc8ae5
+  PRODUCT_COMMIT: ${{ github.sha }}
   PIP_DISABLE_PIP_VERSION_CHECK: '1'
 
 jobs:
@@ -24,7 +24,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: d410a06131e31fdca2420be184801063cdcc8ae5
+          ref: ${{ github.sha }}
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
@@ -72,7 +72,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
-          ref: d410a06131e31fdca2420be184801063cdcc8ae5
+          ref: ${{ github.sha }}
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:

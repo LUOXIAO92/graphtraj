@@ -95,22 +95,20 @@ def test_catalog_preview_save_refusal_and_conflict(project: Path) -> None:
         path.write_bytes(before + b'\n')
         return {'decision': 'accept'}
 
-    with pytest.raises(Exception, match='changed during review'):
+    with pytest.raises(Exception, match='changed before saving'):
         operation(project, {**request, 'catalog': draft, 'expected_revision': saved['revision']}, concurrent_edit)
     assert path.read_bytes() == before + b'\n'
 
 
-def test_global_desktop_bridge_requires_the_native_review(project: Path) -> None:
+def test_global_desktop_bridge_saves_without_a_second_approval(project: Path) -> None:
     """The existing host pipe exposes the same safe catalog and save semantics."""
     from test_desktop_settings import call
 
     current = call(project, {'scope': 'user', 'action': 'read'})[-1]['result']
     request = {'scope': 'user', 'action': 'save', 'catalog': catalog(project),
                'expected_revision': current['revision']}
-    assert call(project, request, 'decline')[-1]['failed'] is True
-    assert not Path(current['path']).exists()
-    replies = call(project, request, 'accept')
-    assert replies[0]['review']['scope'] == 'user'
+    replies = call(project, request)
+    assert len(replies) == 1
     assert replies[-1]['result']['applied'] is True
     assert replies[-1]['result']['catalog'] == request['catalog']
 
@@ -744,3 +742,33 @@ def test_pi_key_only_legacy_links_survive_resume(
         assert (home / 'auth.json').stat() == auth_stat
         assert 'explicit-key-only' not in (directory / 'pi-process.json').read_text()
         assert 'custom.invalid' in json.loads((directory / 'pi-policy.json').read_text())['network']['allowedDomains']
+
+
+def test_desktop_global_identity_fields_and_write_failure(project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Desktop cannot accept Agent identity flags and failed saving leaves old bytes."""
+    from graphtraj.configuration import runtime_connections
+    from graphtraj.execution.runner_status import runtime_caller
+    from test_desktop_settings import call
+
+    state = call(project, {'scope': 'user', 'action': 'read'})[-1]['result']
+    request = {'scope': 'user', 'action': 'save', 'catalog': catalog(project),
+               'expected_revision': state['revision']}
+    for identity in ('managed-agent', None):
+        with runtime_caller(project / '.graphtraj/runner', identity):
+            assert call(project, request)[-1]['failed']
+    for key in ('human', 'approved', 'review'):
+        assert call(project, {**request, key: True})[-1]['failed']
+    saved = call(project, request)[-1]['result']
+    path = Path(saved['path'])
+    before = path.read_bytes()
+    changed = copy.deepcopy(saved['catalog'])
+    changed['runtimes']['shared']['providers']['first']['models']['model']['alias'] = 'Unsaved'
+
+    def fail(path: Path, document: dict) -> None:
+        """Simulate failure before durable replacement of the existing catalog."""
+        raise OSError('Controlled write failure')
+
+    monkeypatch.setattr(runtime_connections, 'write_yaml_durably', fail)
+    reply = call(project, {**request, 'catalog': changed, 'expected_revision': saved['revision']})[-1]
+    assert reply['failed'] and 'Controlled write failure' in reply['error']
+    assert path.read_bytes() == before

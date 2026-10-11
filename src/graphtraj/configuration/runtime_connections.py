@@ -172,6 +172,14 @@ def manage_connections(arguments: dict, *, cwd: Path) -> dict:
     replacement lock; the reviewed bytes are compared again under that lock.
     Existing Sessions keep the resolved configuration captured at dispatch.
     """
+    return _manage_connections(arguments, cwd=cwd, review=True)
+
+
+def _manage_connections(arguments: dict, *, cwd: Path, review: bool) -> dict:
+    """Share validation and atomic saving with the identity-checked desktop entry.
+
+    The entry point selects review; request fields cannot disable authorization.
+    """
     from graphtraj.execution.approved_recovery import review_proposal
     from graphtraj.execution.runner_status import caller_alias
 
@@ -208,15 +216,16 @@ def manage_connections(arguments: dict, *, cwd: Path) -> dict:
         raise RunnerError('configuration-conflict', 'Connections changed; reload before saving.')
     if before == after:
         return {**view, 'applied': False}
-    decision = review_proposal({'scope': 'user', 'path': str(path), 'before': before, 'after': after}, root, runner_directory)
-    if not isinstance(decision, dict) or decision.get('decision') != 'accept':
-        raise RunnerError('role-change-denied', 'The selected reviewer did not approve this configuration change; nothing was written.')
+    if review:
+        decision = review_proposal({'scope': 'user', 'path': str(path), 'before': before, 'after': after}, root, runner_directory)
+        if not isinstance(decision, dict) or decision.get('decision') != 'accept':
+            raise RunnerError('role-change-denied', 'The selected reviewer did not approve this configuration change; nothing was written.')
     path.parent.mkdir(parents=True, exist_ok=True)
     lock = path.with_suffix(".lock")
     lock.touch(exist_ok=True)
     with file_lock.replacement_lock(lock):
         if read_catalog()[1] != revision:
-            raise RunnerError('configuration-conflict', 'Connections changed during review; nothing was written.')
+            raise RunnerError('configuration-conflict', 'Connections changed before saving; nothing was written.')
         write_yaml_durably(path, after)
     saved, revision = read_catalog()
     return {**view, 'catalog': saved, 'revision': revision, 'applied': True}

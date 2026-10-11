@@ -3,7 +3,7 @@ import path from 'node:path';
 import { homedir } from 'node:os';
 import { pathToFileURL } from 'node:url';
 import { GraphReader, Projects } from './projects';
-import { SettingsClient, reviewText } from './settings';
+import { SettingsClient } from './settings';
 import type { ConnectionsRequest, SettingsDraft } from './types';
 
 app.setName('GraphTraj');
@@ -43,15 +43,7 @@ else {
       path.join(app.getPath('userData'), 'projects.json'));
     await projects.load();
     if (app.commandLine.hasSwitch('project')) await projects.add(app.commandLine.getSwitchValue('project'));
-    settings = new SettingsClient(async proposal => {
-      if (!window) return false;
-      const answer = await dialog.showMessageBox(window, {
-        type: 'question', title: 'Save configuration?', message: 'Approve these configuration changes?',
-        detail: reviewText(proposal), buttons: ['Cancel', 'Save settings'],
-        defaultId: 0, cancelId: 0, noLink: true,
-      });
-      return answer.response === 1;
-    });
+    settings = new SettingsClient();
     session.defaultSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
     session.defaultSession.setPermissionCheckHandler(() => false);
 

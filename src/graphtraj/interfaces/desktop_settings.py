@@ -1,8 +1,7 @@
-"""Restricted human desktop settings bridge using shared role authorization.
+"""Restricted human desktop settings bridge using the shared native writers.
 
-The Electron main process owns this pipe and answers review requests with the
-actual native dialog result. Renderer requests cannot supply a reviewer or an
-Agent identity. No execution or task-control operation is exposed here.
+Electron owns the pipe. Save is the user's action; no approval response or
+caller identity is accepted from the renderer. Agent operations remain reviewed.
 """
 
 from __future__ import annotations
@@ -10,14 +9,16 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from typing import Callable, TextIO
+from typing import TextIO
 from urllib.parse import urlsplit
 
 from graphtraj.configuration.role_definitions import resolve_child_role
-from graphtraj.execution.role_organization import _changed, _validated, organize_child_roles
+from graphtraj.execution.role_organization import (
+    _changed, _organize_child_roles, _validated, organize_child_roles,
+)
 from graphtraj.execution.runner_models import RunnerError
-from graphtraj.execution.runner_status import caller_alias
-from graphtraj.runtimes.runtime_adapter import recovery_review
+from graphtraj.execution.runner_status import caller_alias, runtime_caller_is_bound
+from graphtraj.runtimes.runtime_adapter import current_host_connection
 from graphtraj.workspace.runner_project import discover_project_root, discover_runner_directory
 
 
@@ -68,11 +69,11 @@ def _check_connection(settings: dict) -> None:
             )
 
 
-def settings_request(request: dict, cwd: Path, reviewer: Callable[[dict], dict]) -> dict:
-    """Read safe fields or save a role/tree draft through native review.
+def settings_request(request: dict, cwd: Path) -> dict:
+    """Read safe fields or save from the human desktop after checking identity.
 
-    The reviewer is trusted host context, never a field accepted in request.
-    Both reads and writes retain the actual process/callback caller boundary.
+    Verified Runtime callbacks (including Main), native host sources and managed
+    Agent processes cannot acquire desktop authority through request fields.
     """
     from graphtraj.configuration.runtime_connections import connection_context
 
@@ -80,21 +81,21 @@ def settings_request(request: dict, cwd: Path, reviewer: Callable[[dict], dict])
     root, runner_directory = connection_context(cwd) if user_scope else (
         discover_project_root(cwd), discover_runner_directory(cwd),
     )
-    if caller_alias(runner_directory) is not None:
+    if (runtime_caller_is_bound() or current_host_connection() is not None
+            or caller_alias(runner_directory) is not None):
         raise RunnerError(
             "authority-denied",
             "Desktop settings require the human project owner; "
             "Agent callers must use their authorized native operations.",
         )
     if isinstance(request, dict) and request.get("scope") == "user":
-        from graphtraj.configuration.runtime_connections import manage_connections
+        from graphtraj.configuration.runtime_connections import _manage_connections
         from graphtraj.interfaces.gateway import _validate
         from graphtraj.interfaces.tools import TOOLS
 
         arguments = {key: value for key, value in request.items() if key != "scope"}
         _validate(arguments, TOOLS['runtime_connections'].input_schema, 'arguments')
-        with recovery_review(reviewer):
-            return manage_connections(arguments, cwd=root)
+        return _manage_connections(arguments, cwd=root, review=False)
     if not isinstance(request, dict) or request.get("action") not in {"read", "preview", "save"}:
         raise ValueError("Choose read, preview or save settings.")
     allowed = {"action"} if request["action"] == "read" else {
@@ -211,50 +212,29 @@ def settings_request(request: dict, cwd: Path, reviewer: Callable[[dict], dict])
                 "Update incompatible native role settings first."
             )
 
-    def review(proposal: dict) -> dict:
-        """Show only edited safe fields, never the full native role document."""
-        return reviewer({
-            "project": str(root), "edits": edits, "renames": renames,
-            "before": {ref: {field: before.get(ref, {}).get(field) for field in fields}
-                       for ref, fields in edits.items()},
-            "add_edges": change["add_edges"], "remove_edges": change["remove_edges"],
-            "remove_presets": removed,
-            "tree_before": current["role_tree"], "tree_after": after["role_tree"],
-            "effect": EFFECT,
-        })
-
     if request["action"] == "preview":
         return {"revision": current["revision"], "roles": _entries({**after, "presets": roles.presets}),
                 "role_tree": after["role_tree"], "effect": EFFECT, "applied": False}
 
-    with recovery_review(review):
-        result = organize_child_roles(
-            {"change": change, "expected_revision": request["revision"]}, cwd=root,
-        )
+    result = _organize_child_roles(
+        {"change": change, "expected_revision": request["revision"]}, cwd=root, review=False,
+    )
     if result.get("status") == "stale":
-        raise ValueError("Configuration changed during approval. Reload settings; nothing was written.")
+        raise ValueError("Configuration changed before saving. Reload settings; nothing was written.")
     return {"revision": result["revision"], "roles": _entries(result), "edges": result["edges"],
             "role_tree": result["role_tree"], "effect": EFFECT, "applied": result["applied"]}
 
 
 def serve(input_stream: TextIO, output_stream: TextIO, cwd: Path) -> None:
-    """Serve one settings call and an optional native host approval exchange."""
+    """Serve one human desktop read or save without a second approval exchange."""
     def emit(value: dict) -> None:
         """Flush a bounded structured response to the owning desktop process."""
         output_stream.write(json.dumps(value) + "\n")
         output_stream.flush()
 
-    def review(proposal: dict) -> dict:
-        """Obtain the actual main-process dialog decision over the owned pipe."""
-        emit({"review": proposal})
-        reply = json.loads(input_stream.readline())
-        if reply not in ({"decision": "accept"}, {"decision": "decline"}):
-            raise ValueError("Native settings approval failed; nothing was written.")
-        return reply
-
     try:
         request = json.loads(input_stream.readline())
-        result = settings_request(request, cwd, review)
+        result = settings_request(request, cwd)
         emit({"result": result, "failed": False})
     except Exception as error:
         emit({"failed": True, "error": str(error)})

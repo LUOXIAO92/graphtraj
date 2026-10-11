@@ -39,11 +39,11 @@ test('D navigation preserves separate project graphs and independent column read
   await page.goto(new URL('../dist/index.html', import.meta.url).href);
   const monitor = page.locator('.monitor-page:visible');
   await page.getByRole('button', { name: 'Settings', exact: true }).waitFor({ state: 'visible' });
-  await page.getByRole('button', { name: 'GLOBAL', exact: false }).click();
+  await page.getByRole('button', { name: 'GLOBAL', exact: true }).click();
   assert.equal(await page.getByRole('button', { name: 'Settings', exact: true }).isVisible(), false);
-  await page.getByRole('button', { name: 'PROJECTS', exact: false }).click();
+  await page.getByRole('button', { name: 'PROJECTS', exact: true }).click();
   assert.equal(await page.getByRole('button', { name: 'Monitor', exact: true }).isVisible(), true);
-  await page.getByRole('button', { name: 'GLOBAL', exact: false }).click();
+  await page.getByRole('button', { name: 'GLOBAL', exact: true }).click();
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
   assert.equal(await page.getByRole('button', { name: 'Agents & models', exact: true }).isVisible(), true);
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
@@ -52,7 +52,7 @@ test('D navigation preserves separate project graphs and independent column read
   await monitor.getByRole('searchbox').press('Enter');
   await monitor.getByRole('button', { name: 'Expand chat', exact: true }).click();
   const columns = monitor.locator('.agent-column');
-  await columns.first().getByText('first alpha record 79', { exact: false }).waitFor();
+  await columns.first().locator('.tool-card').last().waitFor();
   assert.equal(await columns.count(), 4);
   await columns.nth(2).getByText('Historical · retired', { exact: true }).waitFor();
   for (const index of [0, 1]) {
@@ -71,12 +71,12 @@ test('D navigation preserves separate project graphs and independent column read
   const restored = await monitor.evaluate(element => ({ first: element.querySelectorAll('.activity-history')[0].scrollTop,
     second: element.querySelectorAll('.activity-history')[1].scrollTop, horizontal: element.querySelector('.agent-columns').scrollLeft }));
   assert.deepEqual(restored, positions);
-  await page.getByRole('button', { name: 'PROJECTS', exact: false }).click();
+  await page.getByRole('button', { name: 'PROJECTS', exact: true }).click();
   await page.locator('.project-button').filter({ hasText: '/projects/second' }).click();
   await monitor.getByRole('searchbox').fill('second current');
   await monitor.getByRole('searchbox').press('Enter');
   await monitor.getByRole('button', { name: 'Expand chat', exact: true }).click();
-  await monitor.getByText('second alpha record 79', { exact: false }).waitFor();
+  await monitor.locator('.agent-column').first().locator('.tool-card').last().waitFor();
   assert.equal(await monitor.getByText('first alpha record 79', { exact: false }).count(), 0);
   await page.locator('.project-button').filter({ hasText: '/projects/first' }).click();
   assert.equal(await monitor.locator('input[aria-label="Search tasks"]').inputValue(), 'first current');

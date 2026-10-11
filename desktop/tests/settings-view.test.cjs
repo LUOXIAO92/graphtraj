@@ -190,3 +190,22 @@ test('changing Runtime Home clears retained discovery before it can be reused', 
   await ui.fill('Runtime Home', '/another/home');
   assert.ok(!ui.tree.root.findAllByType('button').some(node => node.children.join('') === 'Use discovered'));
 });
+
+test('D root deletion explicitly promotes one child and reconnects the others', async t => {
+  const saved = { revision: 'root-revision', roles: {
+    'team.root': { runtime: 'codex', model: 'model' },
+    'team.first': { runtime: 'codex', model: 'model' },
+    'team.second': { runtime: 'codex', model: 'model' },
+  }, role_tree: { 'team.root': { 'team.first': {}, 'team.second': {} } }, edges: [], effect: 'Later dispatches only.' };
+  let submitted;
+  const ui = await form(t, 'Settings.tsx', 'SettingsView', {
+    settings: async () => saved, connections: async () => connections,
+    saveSettings: async (_id, draft) => { submitted = draft; return saved; },
+  }, { projectId: 'project' });
+  await ui.click('Delete selected agent configuration');
+  await act(async () => ui.tree.root.findAllByType('input').find(node => node.props.name === 'delete-mode').props.onChange());
+  await ui.select('New root', 'team.second');
+  await ui.click('Remove from draft'); await ui.click('Review changes'); await ui.click('Save changes');
+  assert.deepEqual(submitted.remove_presets, ['team.root']);
+  assert.deepEqual(JSON.parse(JSON.stringify(submitted.role_tree)), { 'team.second': { 'team.first': {} } });
+});

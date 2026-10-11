@@ -9,6 +9,11 @@
 .record-source { display: flex; justify-content: space-between; font-size: 9px; color: var(--muted); margin-top: 9px; }
 .record-source button { display: flex; align-items: center; gap: 5px; }
 .tool-details button { display: inline-flex; gap: 5px; margin-top: 8px; }
+.usage-supplement { margin: 0 0 18px; padding: 6px 10px; border-left: 2px solid var(--border-ui); color: var(--muted); font-size: 10px; overflow-wrap: anywhere; }
+.usage-supplement summary { cursor: pointer; line-height: 1.7; }
+.usage-observation { margin-top: 10px; }
+.usage-observation dd { margin: 4px 0 10px; }
+.usage-observation pre { white-space: pre-wrap; font-size: 10px; }
 .d-task-shelf .member-pills { max-height: 112px; overflow: auto; }
 .member-pills strong { max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .d-reading-index { overflow-x: auto; }

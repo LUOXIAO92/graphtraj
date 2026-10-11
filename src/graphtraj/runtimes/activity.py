@@ -55,7 +55,7 @@ def text_content(content: Any) -> str:
     for block in content:
         if not isinstance(block, dict):
             continue
-        if block.get('type') in {'text', 'input_text', 'output_text', 'thinking', 'summary_text', 'reasoning'}:
+        if block.get('type') in {'text', 'input_text', 'output_text', 'thinking', 'summary_text', 'reasoning', 'reasoning_text'}:
             parts.append(block.get('text', block.get('thinking', '')))
         elif block.get('type') not in {'toolCall', 'tool-call'}:
             parts.append('[Nontext content: ' + str(block.get('type', 'unknown')) + ']')
@@ -123,6 +123,10 @@ class TraceReader:
                 checkpoint = json.loads(base64.urlsafe_b64decode(data))
                 if (checkpoint['version'] != 1 or checkpoint['source'] != self.source
                         or type(checkpoint['offset']) is not int or checkpoint['offset'] < 0
+                        or not isinstance(checkpoint.get('tools', {}), dict)
+                        or any(not isinstance(call, str) or type(pos) is not int
+                               or not 0 <= pos < checkpoint['offset']
+                               for call, pos in checkpoint.get('tools', {}).items())
                         or not isinstance(checkpoint['context'], list)
                         or len(checkpoint['context']) > 64
                         or any(type(pos) is not int or not 0 <= pos < checkpoint['offset']
@@ -134,6 +138,7 @@ class TraceReader:
         context: dict = {}
         positions: dict = {}
         read_records = 0
+        tool_positions = dict(checkpoint.get('tools', {})) if checkpoint else {}
         try:
             with self.path.open('rb') as stream:
                 stat = os.fstat(stream.fileno())
@@ -159,7 +164,7 @@ class TraceReader:
                         normalize(self.runtime, record, context)
                         read_records += 1
                         for key in context:
-                            if key not in before or context[key] != before[key]:
+                            if key != 'tools' and (key not in before or context[key] != before[key]):
                                 positions[key] = position
                 stream.seek(offset)
                 events = []
@@ -173,10 +178,29 @@ class TraceReader:
                     record = None
                     try:
                         record = json.loads(line)
+                        # Resolve only the requested result's call. Rebuilding every
+                        # historical tool name on each page defeats incremental reads.
+                        payload = record.get('payload', {})
+                        call_id = payload.get('call_id')
+                        if (self.runtime == 'codex' and payload.get('type') in {
+                                'function_call_output', 'custom_tool_call_output', 'local_shell_call_output'}
+                                and call_id in tool_positions and call_id not in context.get('tools', {})):
+                            resume = stream.tell()
+                            stream.seek(tool_positions[call_id])
+                            call = json.loads(stream.readline())
+                            tool_context: dict = {}
+                            normalize(self.runtime, call, tool_context)
+                            context.setdefault('tools', {}).update(tool_context.get('tools', {}))
+                            read_records += 1
+                            stream.seek(resume)
                         before = dict(context)
                         projected = normalize(self.runtime, record, context)
                         for key in context:
-                            if key not in before or context[key] != before[key]:
+                            if key == 'tools':
+                                for tool, name in context[key].items():
+                                    if before.get(key, {}).get(tool) != name:
+                                        tool_positions[tool] = position
+                            elif key not in before or context[key] != before[key]:
                                 positions[key] = position
                     except (ValueError, TypeError, KeyError, AttributeError):
                         projected = [{'kind': 'notice', 'text': 'Native record is unreadable.'}]
@@ -194,6 +218,7 @@ class TraceReader:
                     'version': 1, 'source': self.source, 'offset': offset,
                     'file': current, 'guards': guards(offset),
                     'context': sorted(set(positions[key] for key in context if key in positions)),
+                    'tools': tool_positions,
                 }, separators=(',', ':')).encode()).decode()
                 token += '.' + hmac.new(self.key, token.encode(), 'sha256').hexdigest()
         except (OSError, UnicodeError, ValueError, KeyError, TypeError):

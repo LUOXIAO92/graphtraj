@@ -2,7 +2,7 @@ name: Linux installed desktop adoption
 
 on:
   push:
-    branches: [agent/267-desktop-linux-adoption, agent/288-desktop-d-integrated-adoption-linux, agent/290-desktop-d-direct-port-linux]
+    branches: [agent/267-desktop-linux-adoption, agent/288-desktop-d-integrated-adoption-linux, agent/290-desktop-d-direct-port-linux, agent/291-desktop-global-model-role-flow]
 
 permissions:
   contents: read
@@ -44,6 +44,7 @@ jobs:
           ldd /opt/graphtraj-desktop/graphtraj-desktop-bin > "$ADOPTION_ROOT/evidence/electron-libraries.txt"
           echo /opt/graphtraj-desktop/python/bin >> "$GITHUB_PATH"
       - name: Focused desktop development checks
+        if: github.ref_name != 'agent/291-desktop-global-model-role-flow'
         working-directory: desktop
         run: node --test tests/*.test.cjs
       - name: Configure only this disposable Ubuntu runner
@@ -53,15 +54,16 @@ jobs:
           sysctl -n kernel.apparmor_restrict_unprivileged_userns > "$ADOPTION_ROOT/evidence/original-userns-setting.txt"
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - name: Exercise installed D views and native changed paths
-        if: github.ref_name == 'agent/290-desktop-d-direct-port-linux'
+        if: github.ref_name == 'agent/290-desktop-d-direct-port-linux' || github.ref_name == 'agent/291-desktop-global-model-role-flow'
         working-directory: desktop
         env:
           D_ADOPTION_EVIDENCE: test-results/linux-adoption/evidence/d
+          D_ADOPTION_SCOPE: ${{ github.ref_name == 'agent/291-desktop-global-model-role-flow' && 'roles-291' || 'all' }}
         run: |
           set -o pipefail
           dbus-run-session -- xvfb-run -a -s '-screen 0 1600x1200x24' sh -c 'openbox > "$ADOPTION_ROOT/evidence/openbox.log" 2>&1 & node tests/d-adoption.mjs' 2>&1 | tee "$ADOPTION_ROOT/evidence/adoption.log"
       - name: Exercise the installed desktop under Xvfb
-        if: github.ref_name != 'agent/290-desktop-d-direct-port-linux'
+        if: github.ref_name != 'agent/290-desktop-d-direct-port-linux' && github.ref_name != 'agent/291-desktop-global-model-role-flow'
         working-directory: desktop
         run: |
           set -o pipefail

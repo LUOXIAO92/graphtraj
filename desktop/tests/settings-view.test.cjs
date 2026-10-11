@@ -53,11 +53,12 @@ test('team draft creates, reparents, renames and references a model while preser
     saveSettings: async (_id, value) => { submitted = value; throw new Error('Controlled refusal; retain draft.'); },
   }, { projectId: 'project' });
   await ui.click('Add team');
-  await ui.select('New Agent Runtime', 'codex');
+  await ui.select('New Agent Runtime', 'shared');
   await ui.fill('Team name for new team', 'research');
-  await ui.fill('New Agent name', 'root'); await ui.fill('New Agent model', 'draft-model');
-  await ui.click('Add team with root'); await ui.select('Agent Runtime', 'shared');
-  await ui.fill('Reasoning effort', 'low');
+  await ui.fill('New Agent name', 'root');
+  await ui.select('New Agent provider', 'openai'); await ui.select('New Agent model', 'shared/openai/model');
+  await ui.click('Add team with root');
+  await ui.select("This agent's effort", 'low');
   await ui.click('Add child agent'); await ui.fill('New Agent name', 'child'); await ui.click('Add Agent');
   assert.equal(ui.tree.root.findAllByType('select').find(node => node.props['aria-label'] === 'Agent parent').props.value, 'research.root');
   await ui.click('Add child agent'); await ui.fill('New Agent name', 'leaf'); await ui.click('Add Agent');
@@ -67,6 +68,8 @@ test('team draft creates, reparents, renames and references a model while preser
   assert.deepEqual(JSON.parse(JSON.stringify(submitted.role_tree['research.root'])), { 'research.child': {}, 'research.leaf': {} });
   assert.equal(submitted.renames['research.leaf'], 'final.leaf');
   assert.equal(submitted.edits['existing.root'], undefined);
+  assert.deepEqual(submitted.edits['research.child'], { connection: 'shared/openai/model' });
+  assert.deepEqual(submitted.edits['research.leaf'], { connection: 'shared/openai/model' });
   assert.deepEqual(submitted.remove_presets, []); assert.equal(submitted.decision, undefined);
   assert.match(JSON.stringify(ui.tree.toJSON()), /Controlled refusal/);
   await ui.click('Keep editing'); await ui.click('Cancel changes'); assert.doesNotMatch(JSON.stringify(ui.tree.toJSON()), /research.root/);
@@ -131,16 +134,16 @@ test('rename team then add child saves and reloads one renamed group', async t =
     saveSettings: async (_id, draft) => {
       submitted = JSON.parse(JSON.stringify(draft));
       saved = { ...saved, revision: 'after', roles: {
-        'b.root': saved.roles['a.root'], 'b.worker': { runtime: 'codex', model: 'worker-model' },
+        'b.root': saved.roles['a.root'], 'b.worker': { connection: 'shared/openai/model' },
       }, role_tree: { 'b.root': { 'b.worker': {} } }, edges: [['b.root', 'b.worker']] };
       return { ...saved, applied: true };
     },
   }, { projectId: 'project' });
   await ui.input('Team name', 'b'); await ui.click('Add child agent');
-  await ui.fill('New Agent name', 'worker'); await ui.fill('New Agent model', 'worker-model');
+  await ui.fill('New Agent name', 'worker'); await ui.select('New Agent Runtime', 'shared');
   await ui.click('Add Agent'); await ui.click('Review changes'); await ui.click('Save changes');
   assert.deepEqual(submitted, {
-    revision: 'before', edits: { 'a.worker': { runtime: 'codex', model: 'worker-model' } },
+    revision: 'before', edits: { 'a.worker': { connection: 'shared/openai/model' } },
     renames: { 'a.root': 'b.root', 'a.worker': 'b.worker' },
     add_edges: [], remove_edges: [], remove_presets: [], role_tree: { 'a.root': { 'a.worker': {} } },
   });
@@ -208,4 +211,105 @@ test('D root deletion explicitly promotes one child and reconnects the others', 
   await ui.click('Remove from draft'); await ui.click('Review changes'); await ui.click('Save changes');
   assert.deepEqual(submitted.remove_presets, ['team.root']);
   assert.deepEqual(JSON.parse(JSON.stringify(submitted.role_tree)), { 'team.second': { 'team.first': {} } });
+});
+
+for (const unavailable of [false, true]) test(`catalog ${unavailable ? 'unavailable' : 'empty'} blocks creation and opens global models`, async t => {
+  let navigated = false;
+  const saved = { revision: 'before', roles: {}, role_tree: {}, edges: [] };
+  const ui = await form(t, 'Settings.tsx', 'SettingsView', {
+    settings: async () => saved,
+    connections: async () => { if (unavailable) throw new Error('Native catalog disconnected'); return { ...connections, catalog: { version: 1, runtimes: {} } }; },
+  }, { projectId: 'project', onModels: () => { navigated = true; } });
+  await ui.click('Add first team');
+  const add = ui.tree.root.findAllByType('button').find(node => node.children.join('') === 'Add team with root');
+  assert.equal(add.props.isDisabled, true);
+  assert.match(JSON.stringify(ui.tree.toJSON()), unavailable ? /Native catalog disconnected/ : /No global models/);
+  assert.equal(ui.tree.root.findAllByType('select').find(node => node.props['aria-label'] === 'New Agent Runtime').props.value, '');
+  await ui.click('Agents & models');
+  assert.equal(navigated, true);
+});
+
+test('legacy role edits retain its model route until an explicit global selection', async t => {
+  const legacy = { runtime: 'codex', model: 'old-model', base_url: 'https://old.invalid/v1', api_key_env: 'OLD_KEY', reasoning_effort: 'high', instructions: 'role.txt' };
+  const saved = { revision: 'before', roles: { 'team.root': legacy }, role_tree: { 'team.root': {} }, edges: [] };
+  let submitted;
+  const ui = await form(t, 'Settings.tsx', 'SettingsView', {
+    settings: async () => saved, connections: async () => connections,
+    saveSettings: async (_id, draft) => { submitted = draft; throw new Error('Controlled refusal'); },
+  }, { projectId: 'project' });
+  const runtime = ui.tree.root.findAllByType('select').find(node => node.props['aria-label'] === 'Agent Runtime');
+  assert.equal(runtime.findAllByType('option')[0].children.join(''), 'Codex');
+  assert.equal(runtime.findAllByType('option')[1].children.join(''), 'Codex · shared');
+  const effort = () => ui.tree.root.findAllByType('select').find(node => node.props['aria-label'] === "This agent's effort");
+  assert.deepEqual(effort().findAllByType('option').map(node => node.props.value), ['', 'high']);
+  await ui.fill('Agent name', 'lead');
+  await ui.click('Review changes'); await ui.click('Save changes');
+  assert.deepEqual(JSON.parse(JSON.stringify(submitted.edits)), {});
+  assert.deepEqual(submitted.renames, { 'team.root': 'team.lead' });
+  await ui.click('Keep editing');
+  await ui.select('Agent Runtime', 'shared');
+  assert.equal(effort().props.value, '');
+  assert.deepEqual(effort().findAllByType('option').map(node => node.props.value), ['', 'low']);
+  await ui.click('Review changes'); await ui.click('Save changes');
+  assert.deepEqual(submitted.edits['team.root'], {
+    connection: 'shared/openai/model', runtime: null, model: null, base_url: null, api_key_env: null, reasoning_effort: null,
+  });
+  assert.deepEqual(saved.roles['team.root'], legacy);
+});
+
+test('independent roots and cross-team branches retain the actual nested organization', async t => {
+  const roles = Object.fromEntries(['team.merge_resolver', 'team.team_leader', 'team.worker', 'other.lead', 'other.worker'].map(ref => [ref, { connection: 'shared/openai/model' }]));
+  const role_tree = { 'team.merge_resolver': {}, 'team.team_leader': { 'team.worker': {} }, 'other.lead': { 'team.worker': { 'other.worker': {} } } };
+  const saved = { revision: 'before', roles, role_tree, edges: [] };
+  let submitted;
+  const ui = await form(t, 'Settings.tsx', 'SettingsView', {
+    settings: async () => saved, connections: async () => connections,
+    saveSettings: async (_id, draft) => { submitted = draft; throw new Error('Controlled refusal'); },
+  }, { projectId: 'project' });
+  const forest = ui.tree.root.find(node => node.props.className === 'd-org-tree');
+  const outer = forest.findAllByType('ul')[0];
+  assert.equal(outer.children.length, 3);
+  assert.deepEqual(outer.children.map(node => node.findAllByType('button').map(button => button.props['data-config-agent'])), [
+    ['team.merge_resolver'], ['team.team_leader', 'team.worker'], ['other.lead', 'team.worker', 'other.worker'],
+  ]);
+  await ui.click('Add root agent'); await ui.fill('New Agent name', 'independent');
+  await ui.select('New Agent Runtime', 'shared'); await ui.click('Add Agent');
+  await ui.fill('Agent name', 'renamed');
+  await ui.click('Review changes'); await ui.click('Save changes');
+  assert.deepEqual(JSON.parse(JSON.stringify(submitted.role_tree)), { ...role_tree, 'team.independent': {} });
+  assert.deepEqual(submitted.renames, { 'team.independent': 'team.renamed' });
+  assert.deepEqual(submitted.edits['team.independent'], { connection: 'shared/openai/model' });
+});
+
+test('missing connection and unknown capabilities are retained without choosing another model', async t => {
+  const saved = { revision: 'before', roles: { 'team.root': { connection: 'missing/provider/model', reasoning_effort: 'high' } }, role_tree: { 'team.root': {} }, edges: [] };
+  let submitted;
+  const ui = await form(t, 'Settings.tsx', 'SettingsView', {
+    settings: async () => saved, connections: async () => connections,
+    saveSettings: async (_id, draft) => { submitted = draft; throw new Error('Controlled refusal'); },
+  }, { projectId: 'project' });
+  assert.equal(ui.tree.root.findAllByType('select').find(node => node.props['aria-label'] === 'Agent model').props.value, 'missing/provider/model');
+  await ui.fill('Instruction file reference', 'updated.txt'); await ui.click('Review changes'); await ui.click('Save changes');
+  assert.deepEqual(submitted.edits['team.root'], { instructions: 'updated.txt' });
+});
+
+test('creation selects the requested Runtime, provider and model without inline fields', async t => {
+  const catalog = structuredClone(connections);
+  catalog.catalog.runtimes.alternative = { runtime: 'pi', providers: {
+    empty: { models: {} },
+    first: { models: { initial: { id: 'initial', source: 'manual' } } },
+    chosen: { models: { other: { id: 'other', source: 'manual' }, final: { id: 'chosen-model', source: 'native', supported_efforts: ['medium'] } } },
+  } };
+  let submitted;
+  const saved = { revision: 'before', roles: {}, role_tree: {}, edges: [] };
+  const ui = await form(t, 'Settings.tsx', 'SettingsView', {
+    settings: async () => saved, connections: async () => catalog,
+    saveSettings: async (_id, draft) => { submitted = draft; throw new Error('Controlled refusal'); },
+  }, { projectId: 'project' });
+  await ui.click('Add first team'); await ui.fill('Team name for new team', 'selected'); await ui.fill('New Agent name', 'root');
+  await ui.select('New Agent Runtime', 'alternative'); await ui.select('New Agent provider', 'chosen');
+  await ui.select('New Agent model', 'alternative/chosen/final'); await ui.click('Add team with root');
+  await ui.select("This agent's effort", 'medium'); await ui.click('Review changes'); await ui.click('Save changes');
+  assert.deepEqual(submitted.edits['selected.root'], { connection: 'alternative/chosen/final', reasoning_effort: 'medium' });
+  assert.deepEqual(JSON.parse(JSON.stringify(submitted.role_tree)), { 'selected.root': {} });
 });

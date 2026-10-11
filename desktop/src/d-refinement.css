@@ -87,11 +87,11 @@
 .d-org-tree > ul { padding-top: 0; }
 .d-org-tree li { display: flex; flex-direction: column; align-items: center; position: relative; padding: 24px 11px 0; list-style: none; }
 .d-org-tree > ul > li { padding-top: 0; }
-.d-org-tree li::before, .d-org-tree li::after { content: ''; position: absolute; top: 0; right: 50%; width: 50%; height: 24px; border-top: 1px solid #aebed3; }
-.d-org-tree li::after { right: auto; left: 50%; border-left: 1px solid #aebed3; }
-.d-org-tree li:first-child::before, .d-org-tree li:last-child::after { border: 0; }
-.d-org-tree li:last-child::before { border-right: 1px solid #aebed3; }
-.d-org-tree li:only-child::before, .d-org-tree li:only-child::after { display: none; }
+.d-org-tree ul ul > li::before, .d-org-tree ul ul > li::after { content: ''; position: absolute; top: 0; right: 50%; width: 50%; height: 24px; border-top: 1px solid #aebed3; }
+.d-org-tree ul ul > li::after { right: auto; left: 50%; border-left: 1px solid #aebed3; }
+.d-org-tree ul ul > li:first-child::before, .d-org-tree ul ul > li:last-child::after { border: 0; }
+.d-org-tree ul ul > li:last-child::before { border-right: 1px solid #aebed3; }
+.d-org-tree ul ul > li:only-child::before, .d-org-tree ul ul > li:only-child::after { display: none; }
 .d-org-tree li:only-child { padding-top: 0; }
 .d-org-tree ul ul::before { content: ''; position: absolute; top: 0; left: 50%; height: 31px; width: 1px; background: #aebed3; }
 .d-org-node { width: 169px; min-height: 126px; background: var(--surface); border: 1px solid #d4dde8; border-radius: 8px; box-shadow: 0 2px 5px #26334105; display: flex; align-items: flex-start; flex-direction: column; padding: 13px 14px 11px; text-align: left; }
@@ -180,6 +180,6 @@
   .d-org-tree > ul { padding-top: 0; }
   .d-org-tree li { padding-top: 17px; }
   .d-org-tree > ul > li, .d-org-tree li:only-child { padding-top: 0; }
-  .d-org-tree li::before, .d-org-tree li::after { height: 17px; }
+  .d-org-tree ul ul > li::before, .d-org-tree ul ul > li::after { height: 17px; }
   .d-org-tree ul ul::before { height: 21px; }
 }

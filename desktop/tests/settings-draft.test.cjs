@@ -38,3 +38,12 @@ test('tree editing moves complete branches and explicitly reconnects or deletes 
   });
   assert.deepEqual(tree['team.root']['team.middle'], { 'team.leaf': {} });
 });
+
+test('team forest preserves individual native occurrences, cross-team edges and unattached roles', async () => {
+  const { teamForest } = await import('../src/settings-draft.ts');
+  const tree = { 'a.root': { 'a.worker': {} }, 'a.independent': {}, 'b.root': { 'a.worker': { 'b.child': {} } }, 'c.root': {} };
+  assert.deepEqual(teamForest(tree, ['a.root', 'a.worker', 'a.independent', 'a.unattached']), {
+    'a.root': { 'a.worker': {} }, 'a.independent': {}, 'b.root': { 'a.worker': { 'b.child': {} } }, 'a.unattached': {},
+  });
+  assert.deepEqual(teamForest(tree, ['c.root']), { 'c.root': {} });
+});

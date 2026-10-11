@@ -36,8 +36,10 @@
 
 .summary-node { height: 100%; border: 1px solid var(--border-ui); border-radius: 8px; background: var(--surface); }
 .summary-node.expanded { background: color-mix(in srgb, var(--surface-alt) 70%, transparent); }
-.summary-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 12px 16px; }
-.summary-heading strong { flex: 1; font-size: 14px; }
+.summary-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 12px 16px; max-width: 600px; }
+.summary-heading strong { flex: 1; font-size: 16px; }
+.summary-navigation { display: flex; gap: 4px; overflow-x: auto; padding: 4px 12px; flex-shrink: 0; }
+.summary-navigation > button { flex-shrink: 0; }
 .summary-heading > span, .node-membership { color: var(--muted); font-size: 11px; }
 .d-canvas-title select { pointer-events: auto; margin-top: 8px; padding: 5px 9px; background: var(--surface); border: 1px solid var(--border-ui); border-radius: 5px; max-width: min(480px, 60vw); }
 .graph-filter-empty { position: absolute; top: 12px; left: 20px; z-index: 4; background: var(--surface); border: 1px solid var(--border-ui); border-radius: 6px; padding: 8px 12px; }

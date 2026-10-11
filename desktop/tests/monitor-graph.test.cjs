@@ -28,7 +28,8 @@ test('summary expansion keeps shared/unassigned tickets and original crossing de
     const result = monitorGraph(graph, new Set(expanded));
     const ids = new Set(result.nodes.map(node => node.id));
     assert.equal(ids.size, result.nodes.length, 'shared tickets must not duplicate');
-    for (const id of ['80', '186', '187', '188', '189']) assert.ok(ids.has(id));
+    assert.ok(ids.has('summary:view:shared'));
+    assert.ok(ids.has('summary:view:ungrouped'));
     assert.equal(ids.has('1'), expanded.includes('a'));
     assert.equal(ids.has('81'), expanded.includes('b'));
     for (const edge of result.edges) {
@@ -54,5 +55,34 @@ test('interleaved summary dependencies remain visible even when contraction crea
   const result = monitorGraph(graph, new Set());
   assert.equal(result.nodes.length, 2);
   assert.equal(result.edges.length, 2);
-  assert.notEqual(result.nodes[0].position.y, result.nodes[1].position.y);
+  assert.notEqual(JSON.stringify(result.nodes[0].position), JSON.stringify(result.nodes[1].position));
+});
+
+test('public real project projection has a compact overview and lossless reachable tasks', {
+  skip: !process.env.GRAPHTRAJ_MONITOR_GRAPH,
+}, () => {
+  const projection = JSON.parse(require('node:fs').readFileSync(process.env.GRAPHTRAJ_MONITOR_GRAPH, 'utf8'));
+  assert.equal(projection.failed, false);
+  const graph = projection.result;
+  const original = JSON.stringify(graph);
+  const overview = monitorGraph(graph, new Set());
+  assert.equal(graph.tickets.length, 191);
+  assert.equal(graph.groups.length, 14);
+  assert.equal(overview.nodes.length, 15);
+  assert.equal(overview.nodes.find(node => node.data.group.id === 'view:ungrouped').data.group.ticket_ids.length, 44);
+  const right = Math.max(...overview.nodes.map(node => node.position.x + node.style.width));
+  const bottom = Math.max(...overview.nodes.map(node => node.position.y + node.style.height));
+  assert.ok(right <= 1280 && bottom <= 400, `${right} x ${bottom}`);
+  const expanded = monitorGraph(graph, new Set(overview.nodes.map(node => node.data.group.id)));
+  assert.equal(expanded.nodes.filter(node => node.data.ticket).length, graph.tickets.length);
+  const ticketIds = new Set(graph.tickets.map(ticket => ticket.ticket_id));
+  const expected = graph.tickets.flatMap(ticket => ticket.dependencies.filter(id => ticketIds.has(id)).map(id => `${id}-${ticket.ticket_id}`)).sort();
+  assert.deepEqual(Array.from(expanded.edges.map(edge => edge.id)).sort(), expected);
+  const reached = new Set();
+  for (const node of overview.nodes) {
+    const opened = monitorGraph(graph, new Set([node.data.group.id]));
+    opened.nodes.filter(item => item.data.ticket).forEach(item => reached.add(item.id));
+  }
+  assert.equal(reached.size, 191);
+  assert.equal(JSON.stringify(graph), original);
 });

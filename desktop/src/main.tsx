@@ -5,7 +5,7 @@ import { ReactFlow, ReactFlowProvider, Background, Controls, Handle, Position, M
   useNodesState, useNodesInitialized, useReactFlow, type NodeProps } from '@xyflow/react';
 import type { DesktopAPI, Observation, Preferences, Project, Ticket } from '../electron/types';
 import type { Activity } from '../electron/activity';
-import { monitorGraph, type MonitorNode } from './monitor-graph';
+import { monitorGraph, displayGroups, sharedCollection, ungroupedCollection, type MonitorNode } from './monitor-graph';
 import { ActivityView, MemberPills } from './Activity';
 import { SettingsView } from './Settings';
 import { ConnectionsView } from './Connections';
@@ -81,6 +81,18 @@ function GraphView({ project, active, sidebarButton }: { project: Project; activ
   }, [projectId, retry, active]);
   const tickets = observation?.graph.tickets;
   const graph = useMemo(() => monitorGraph(observation?.graph ?? { tickets: [] }, openGroups), [observation?.graph, openGroups]);
+  const groups = displayGroups(observation?.graph ?? { tickets: [] });
+  function fitGraph(): void {
+    const group = flow.getNode(`summary:${selectedSummary}`);
+    if (group && openGroups.has(selectedSummary) && canvas.current) {
+      // Start at the group's heading and first ranks. Keep long internal DAGs
+      // scrollable instead of shrinking every historical card to a few pixels.
+      void flow.fitBounds({ ...group.position,
+        width: Math.min(Number(group.style?.width), canvas.current.clientWidth / .8),
+        height: Math.min(Number(group.style?.height), canvas.current.clientHeight / .8),
+      }, { padding: .05 });
+    } else void flow.fitView({ padding: .08, minZoom: .5, maxZoom: 1 });
+  }
   const topology = JSON.stringify(graph.nodes.map(node => [node.id, node.position, node.style]));
   useEffect(() => {
     if (!tickets) return;
@@ -99,8 +111,8 @@ function GraphView({ project, active, sidebarButton }: { project: Project; activ
       const visible = flow.getIntersectingNodes({ x: -x / zoom, y: -y / zoom,
         width: element.clientWidth / zoom, height: element.clientHeight / zoom });
       if (locating || fitted.current !== topology || !visible.length) {
-        const focus = locating ?? (selectedSummary && openGroups.has(selectedSummary) ? `summary:${selectedSummary}` : undefined);
-        void flow.fitView({ ...(focus ? { nodes: [{ id: focus }] } : {}), padding: .15, maxZoom: 1, minZoom: .001 });
+        if (locating && !locating.startsWith('summary:')) void flow.fitView({ nodes: [{ id: locating }], padding: .15, maxZoom: 1, minZoom: .65 });
+        else fitGraph();
         fitted.current = topology;
         if (locating) setLocating(null);
       }
@@ -130,7 +142,8 @@ function GraphView({ project, active, sidebarButton }: { project: Project; activ
   }
   function locate(ticket: Ticket): void {
     const groups = observation?.graph.groups?.filter(group => group.ticket_ids.includes(ticket.ticket_id)) ?? [];
-    if (groups.length === 1) { setSelectedSummary(groups[0].id); setOpenGroups(previous => new Set([...previous, groups[0].id])); }
+    const id = groups.length === 1 ? groups[0].id : groups.length ? sharedCollection : ungroupedCollection;
+    setSelectedSummary(id); setOpenGroups(previous => new Set([...previous, id]));
     select(ticket.ticket_id); setLocating(ticket.ticket_id);
   }
   function read(alias?: string): void { setFocusAgent(alias ?? null); setExpanded(true); }
@@ -144,11 +157,12 @@ function GraphView({ project, active, sidebarButton }: { project: Project; activ
         <section className={`d-map-workspace ${detail ? 'has-shelf' : ''}`}>
           <div className="d-floating-tools"><div className="new-graph-controls"><label><Icon name="search" size={15}/><input type="search" aria-label="Search tasks" placeholder="Find task or number" value={query} onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && matches[0]) locate(matches[0]); }}/></label>
             <select aria-label="Task status" value={status} onChange={event => setStatus(event.target.value)}><option value="all">All statuses</option><option value="inactive">Replaced / inactive</option>{[...new Set(tickets?.map(ticket => ticket.status))].sort().map(value => <option key={value}>{value}</option>)}</select></div>
-            <span className="canvas-readonly"><Button variant="ghost" onPress={() => { setNodes(graph.nodes); void flow.fitView({ padding: .12, maxZoom: 1, minZoom: .001 }); }}><Icon name="fit" size={14}/>Fit graph</Button><Icon name="eye" size={14}/>Read-only graph</span></div>
+            <span className="canvas-readonly"><Button variant="ghost" onPress={() => chooseSummary('')}>Overview</Button><Button variant="ghost" onPress={fitGraph}><Icon name="fit" size={14}/>Fit graph</Button><Icon name="eye" size={14}/>Read-only graph</span></div>
           <div className="d-canvas-title"><h1>Task summaries and dependencies</h1><p>{tickets?.length ?? 0} tasks · {observation?.graph.groups?.length ?? 0} summaries · {matches.length} matching tasks</p>
-            {!!observation?.graph.groups?.length && <select aria-label="Selected summary" value={selectedSummary} onChange={event => chooseSummary(event.target.value)}><option value="">Choose a summary to read its tasks</option>{observation.graph.groups.map(group => <option key={group.id} value={group.id}>{group.title} · {group.ticket_ids.length} tasks</option>)}</select>}</div>
+            {!!groups.length && <select aria-label="Selected summary" value={selectedSummary} onChange={event => chooseSummary(event.target.value)}><option value="">Overview · choose a summary or task collection</option>{groups.map(group => <option key={group.id} value={group.id}>{group.title} · {group.ticket_ids.length} tasks</option>)}</select>}</div>
+          {!!openGroups.size && <nav className="summary-navigation" aria-label="Summary overview">{groups.map(group => <Button key={group.id} variant={selectedSummary === group.id ? 'secondary' : 'ghost'} onPress={() => chooseSummary(group.id)}>{group.title} · {group.ticket_ids.length}{openGroups.has(group.id) ? ' · expanded' : ''}</Button>)}</nav>}
           <div className="d-map-surface"><div className="map-canvas" ref={canvas} aria-label="Task dependency graph">
-            <ReactFlow nodes={nodes.map(node => ({ ...node, data: { ...node.data, ...(node.data.group ? { toggle: () => toggleSummary(node.data.group!.id) } : {}) }, selected: selected === node.id || node.data.group?.id === selectedSummary, style: { ...node.style, opacity: node.data.group ? node.data.group.ticket_ids.some(id => matchIds.has(id)) ? 1 : .35 : matchIds.has(node.id) ? 1 : .16 } }))} edges={edges} nodeTypes={nodeTypes} onNodesChange={onNodesChange} onNodeClick={(event, node) => { if ((event.target as HTMLElement).closest('button')) return; if (node.data.group) chooseSummary(node.data.group.id); else select(node.id); }} nodesDraggable={false} nodesConnectable={false} edgesReconnectable={false} deleteKeyCode={null} panActivationKeyCode={graphActive ? 'Space' : null} minZoom={.001} maxZoom={2} colorMode="light" proOptions={{ hideAttribution: true }}><Background color="#d7ddd9" gap={20} size={1}/><Controls showInteractive={false}/></ReactFlow>
+            <ReactFlow nodes={nodes.map(node => ({ ...node, data: { ...node.data, ...(node.data.group ? { toggle: () => toggleSummary(node.data.group!.id) } : {}) }, selected: selected === node.id || node.data.group?.id === selectedSummary, style: { ...node.style, opacity: node.data.group ? node.data.group.ticket_ids.some(id => matchIds.has(id)) ? 1 : .35 : matchIds.has(node.id) ? 1 : .16 } }))} edges={edges} nodeTypes={nodeTypes} onNodesChange={onNodesChange} onNodeClick={(event, node) => { if ((event.target as HTMLElement).closest('button')) return; if (node.data.group) chooseSummary(node.data.group.id); else select(node.id); }} nodesDraggable={false} nodesConnectable={false} edgesReconnectable={false} deleteKeyCode={null} panActivationKeyCode={graphActive ? 'Space' : null} minZoom={.001} maxZoom={2} colorMode="light" proOptions={{ hideAttribution: true }}><Background color="#d7ddd9" gap={20} size={1}/><Controls showInteractive={false} showFitView={false}/></ReactFlow>
             <div className="map-caption"><span className="map-caption-line"/>Dependency direction <Icon name="arrow" size={14}/></div>
             {query && <div className="map-search-results" aria-label="Search results"><strong>{matches.length} matching tasks</strong>{matches.map(ticket => <button key={ticket.ticket_id} onClick={() => locate(ticket)}>#{ticket.ticket_id} {ticket.title}</button>)}</div>}
             {!tickets?.length && <div className="d-empty-configuration"><Icon name="graph" size={30}/><h2>{!observation ? loading ? 'Loading task graph…' : 'Graph unavailable' : 'No tickets registered'}</h2></div>}

@@ -128,10 +128,8 @@ test('desktop Save, Cancel, reopen and conflicts in both settings pages', async 
     await field('Agent model').selectOption('shared/custom/model');
     assert.equal(await field("This agent's effort").inputValue(), 'high');
     await field("This agent's effort").selectOption('max');
-    await page.getByText('Codex approval route', { exact: true }).click();
-    await field('Codex approval model').fill('review-model');
-    await field('Codex approval Base URL').fill('https://review.invalid/v1');
-    await field('Codex approval api_key_env name').fill('REVIEW_TEST_KEY');
+    await page.getByText('Codex approval model', { exact: true }).click();
+    await field('Codex approval model').selectOption('shared/custom/model');
     await button('Save').click(); await page.getByRole('status').filter({ hasText: 'Settings saved.' }).waitFor();
     assert.equal((await readRoles()).roles['custom_group.observer'].reasoning_effort, 'max');
     await shot('effort-saved'); facts.steps.push('Inline high effort retained on switching to a manual connection and reselecting it; max saved once.');

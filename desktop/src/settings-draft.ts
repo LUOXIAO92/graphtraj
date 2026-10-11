@@ -1,10 +1,10 @@
 import type { RoleFields, RoleTree, SettingsDraft } from '../electron/types';
 
 export const fieldLabels: Record<keyof RoleFields, string> = {
-  approval_model: 'Codex approval model', approval_base_url: 'Codex approval Base URL', approval_api_key_env: 'Codex approval api_key_env name',
+  approval_connection: 'Codex approval connection', approval_model: 'Codex approval model', approval_base_url: 'Codex approval Base URL', approval_api_key_env: 'Codex approval api_key_env name',
   connection: 'Global connection', runtime: 'Runtime', model: 'Model', base_url: 'Base URL', api_key_env: 'Credential environment variable (api_key_env)',
   reasoning_effort: 'Reasoning effort', instructions: 'Instruction file reference',
-  system_prompt: 'Responsibility / system instructions', developer_prompt: 'Developer prompt',
+  system_prompt: 'System prompt', developer_prompt: 'Developer prompt',
 };
 
 /** Read only a declared role key, including names shared with Object.prototype. */
@@ -111,4 +111,37 @@ export function moveNode(tree: RoleTree, reference: string, parent: string): Rol
     if (!attached) next[parent] = { [reference]: children };
   }
   return next;
+}
+
+/** Move one displayed occurrence inside its team; retain all other native branches. */
+export function connectTeamNode(tree: RoleTree, childPath: string[], parentPath: string[] | null): RoleTree {
+  const child = childPath.at(-1)!;
+  const parent = parentPath?.at(-1);
+  const team = (ref: string) => ref.includes('.') ? ref.split('.')[0] : '';
+  if (parent && team(parent) !== team(child)) throw new Error('Connect agents within the current team.');
+  if (childPath.length > 1 && team(childPath.at(-2)!) !== team(child)) throw new Error('This occurrence has a historical cross-team parent. That relationship is preserved.');
+  if (parent && branchRoles(tree, child).has(parent)) throw new Error('An agent cannot report to itself or its descendants.');
+  const next = structuredClone(tree);
+  function branch(path: string[]): RoleTree {
+    let nodes = next;
+    for (const ref of path) {
+      if (!Object.hasOwn(nodes, ref)) throw new Error('The organization changed. Select the connection again.');
+      nodes = nodes[ref];
+    }
+    return nodes;
+  }
+  const owner = branch(childPath.slice(0, -1));
+  const children = ownRole(owner, child) ?? {};
+  delete owner[child];
+  if (parentPath?.length === 1 && !Object.hasOwn(next, parentPath[0])) Object.defineProperty(next, parentPath[0], { value: {}, enumerable: true, writable: true, configurable: true });
+  const target = parentPath ? branch(parentPath) : next;
+  if (Object.hasOwn(target, child)) throw new Error('That parent already has this agent. Existing branches are preserved.');
+  Object.defineProperty(target, child, { value: children, enumerable: true, writable: true, configurable: true });
+  return next;
+}
+
+/** One consistent display name, with a catalog name only when it distinguishes an entry. */
+export function runtimeLabel(runtime: string, entry?: string): string {
+  const label = ({ codex: 'Codex', pi: 'Pi', dsh: 'DSH' } as Record<string, string>)[runtime] || runtime;
+  return entry && entry.toLowerCase() !== runtime.toLowerCase() ? `${label} · ${entry}` : label;
 }

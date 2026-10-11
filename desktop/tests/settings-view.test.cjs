@@ -14,6 +14,18 @@ async function form(t, file, component, api, props) {
   await build({ entryPoints: [path.join(__dirname, '../src', file)], outfile: output,
     bundle: true, platform: 'node', format: 'cjs', external: ['react'], loader: { '.css': 'empty' },
     plugins: [{ name: 'ui-shell', setup(builder) {
+      builder.onResolve({ filter: /^@xyflow\/react$/ }, () => ({ path: 'flow', namespace: 'flow-shell' }));
+      builder.onLoad({ filter: /.*/, namespace: 'flow-shell' }, () => ({ contents: `
+        import React from 'react';
+        export const Position = { Top: 'top', Bottom: 'bottom' };
+        export const Handle = () => null;
+        export const Background = () => null;
+        export const Controls = () => null;
+        export const Panel = props => React.createElement('div', props);
+        export const ReactFlow = props => React.createElement('flow', props,
+          props.nodes.map(node => React.createElement('button', {key:node.id, 'aria-label':node.ariaLabel,
+            onClick: () => props.onNodeClick(null,node)}, node.data.name)), props.children);
+      `, resolveDir: path.join(__dirname, '..') }));
       builder.onResolve({ filter: /^@heroui\/react$/ }, () => ({ path: 'shell', namespace: 'ui-shell' }));
       builder.onLoad({ filter: /.*/, namespace: 'ui-shell' }, () => ({ contents: `
         import React from 'react';
@@ -60,9 +72,9 @@ test('team draft creates, reparents, renames and references a model while preser
   await ui.click('Add team with root');
   await ui.select("This agent's effort", 'low');
   await ui.click('Add child agent'); await ui.fill('New Agent name', 'child'); await ui.click('Add Agent');
-  assert.equal(ui.tree.root.findAllByType('select').find(node => node.props['aria-label'] === 'Agent parent').props.value, 'research.root');
+  assert.equal(ui.tree.root.findByType('flow').props.edges.length, 1);
   await ui.click('Add child agent'); await ui.fill('New Agent name', 'leaf'); await ui.click('Add Agent');
-  await ui.select('Agent parent', 'research.root');
+  await act(async () => ui.tree.root.findByType('flow').props.onReconnect(null, { source: JSON.stringify(['research.root']), target: JSON.stringify(['research.root', 'research.child', 'research.leaf']) }));
   await ui.input('Team name', 'final'); await ui.click('Save');
   assert.deepEqual(submitted.edits['research.root'], { connection: 'shared/openai/model', reasoning_effort: 'low' });
   assert.deepEqual(JSON.parse(JSON.stringify(submitted.role_tree['research.root'])), { 'research.child': {}, 'research.leaf': {} });
@@ -265,12 +277,13 @@ test('independent roots and cross-team branches retain the actual nested organiz
     settings: async () => saved, connections: async () => connections,
     saveSettings: async (_id, draft) => { submitted = draft; throw new Error('Controlled refusal'); },
   }, { projectId: 'project' });
-  const forest = ui.tree.root.find(node => node.props.className === 'd-org-tree');
-  const outer = forest.findAllByType('ul')[0];
-  assert.equal(outer.children.length, 3);
-  assert.deepEqual(outer.children.map(node => node.findAllByType('button').map(button => button.props['data-config-agent'])), [
-    ['team.merge_resolver'], ['team.team_leader', 'team.worker'], ['other.lead', 'team.worker', 'other.worker'],
+  const graph = ui.tree.root.findByType('flow').props;
+  assert.equal(graph.nodes.length, 4);
+  assert.equal(graph.edges.length, 1);
+  assert.deepEqual(graph.nodes.map(node => JSON.parse(node.id).at(-1)), [
+    'team.merge_resolver', 'team.team_leader', 'team.worker', 'team.worker',
   ]);
+  assert.match(JSON.stringify(ui.tree.toJSON()), /Historical cross-team relationships/);
   await ui.click('Add root agent'); await ui.fill('New Agent name', 'independent');
   await ui.select('New Agent Runtime', 'shared'); await ui.click('Add Agent');
   await ui.fill('Agent name', 'renamed');
@@ -288,7 +301,7 @@ test('missing connection and unknown capabilities are retained without choosing 
     saveSettings: async (_id, draft) => { submitted = draft; throw new Error('Controlled refusal'); },
   }, { projectId: 'project' });
   assert.equal(ui.tree.root.findAllByType('select').find(node => node.props['aria-label'] === 'Agent model').props.value, 'missing/provider/model');
-  await ui.fill('Instruction file reference', 'updated.txt'); await ui.click('Save');
+  await ui.fill('System prompt file', 'updated.txt'); await ui.click('Save');
   assert.deepEqual(submitted.edits['team.root'], { instructions: 'updated.txt' });
 });
 
@@ -375,4 +388,53 @@ test('model-declared effort restrictions override Runtime choices and report a r
   assert.deepEqual(effort.findAllByType('option').map(node => node.props.value), ['', 'low']);
   assert.equal(effort.props.value, '');
   assert.match(JSON.stringify(ui.tree.toJSON()), /previous effort is not available/);
+});
+
+test('manual efforts are editable, saved and preserved after native discovery', async t => {
+  let state = structuredClone(connections);
+  state.capabilities.reasoning_efforts = { codex: ['low', 'medium', 'high'] };
+  state.catalog.runtimes.shared.providers.openai.models.model = { id: 'manual-model', source: 'manual' };
+  const ui = await form(t, 'Connections.tsx', 'ConnectionsView', {
+    connections: async (_id, request) => {
+      if (request.action === 'save') state = { ...state, catalog: structuredClone(request.catalog), revision: 'saved', applied: true };
+      return { ...state, discovery: request.action === 'discover' ? { status: 'available', models: [] } : undefined };
+    },
+  }, {});
+  await act(async () => ui.tree.root.findAllByType('button').find(node => node.findAllByType('strong').some(text => text.children.join('') === 'manual-model')).props.onClick());
+  await act(async () => ui.tree.root.findAllByType('input').find(node => node.props.type === 'checkbox').props.onChange({ target: { checked: true } }));
+  await act(async () => ui.tree.root.findByProps({ 'aria-label': 'Supports high' }).props.onChange({ target: { checked: true } }));
+  await ui.click('Save');
+  assert.deepEqual(state.catalog.runtimes.shared.providers.openai.models.model.supported_efforts, ['high']);
+  await ui.click('Refresh native models'); await act(async () => ui.tree.root.findAllByType('button').find(node => node.findAllByType('strong').some(text => text.children.join('') === 'manual-model')).props.onClick());
+  assert.equal(ui.tree.root.findByProps({ 'aria-label': 'Supports high' }).props.checked, true);
+  assert.equal(ui.tree.root.findByProps({ 'aria-label': 'Supports low' }).props.checked, false);
+  await act(async () => ui.tree.root.findByProps({ 'aria-label': 'Supports low' }).props.onChange({ target: { checked: true } }));
+  await ui.click('Cancel'); await act(async () => ui.tree.root.findAllByType('button').find(node => node.findAllByType('strong').some(text => text.children.join('') === 'manual-model')).props.onClick());
+  assert.equal(ui.tree.root.findByProps({ 'aria-label': 'Supports low' }).props.checked, false);
+});
+
+test('leaf deletion omits descendant choices and a new operation clears its error', async t => {
+  const saved = { revision: 'before', roles: { 'team.root': { runtime: 'pi', model: 'provider/model' } }, role_tree: { 'team.root': {} }, edges: [] };
+  const ui = await form(t, 'Settings.tsx', 'SettingsView', {
+    settings: async () => saved, connections: async () => connections,
+  }, { projectId: 'project' });
+  await ui.click('Add child agent'); await ui.fill('New Agent name', 'INVALID'); await ui.select('New Agent Runtime', 'shared'); await ui.click('Add Agent');
+  assert.match(JSON.stringify(ui.tree.toJSON()), /lowercase Agent name/);
+  await ui.click('Keep editing');
+  await ui.click('Delete selected agent configuration');
+  assert.equal(ui.tree.root.findAllByType('input').filter(node => node.props.name === 'delete-mode').length, 0);
+  assert.doesNotMatch(JSON.stringify(ui.tree.toJSON()), /lowercase Agent name/);
+});
+
+test('approval chooses a global route and keeps it separate from the work model', async t => {
+  const catalog = structuredClone(connections);
+  catalog.catalog.runtimes.shared.providers.review = { base_url: 'https://review.invalid/v1', api_key_env: 'REVIEW_KEY', models: { reviewer: { id: 'review-model', source: 'manual' } } };
+  const saved = { revision: 'before', roles: { 'team.root': { runtime: 'codex', model: 'work-model', approval_model: 'old-review', approval_base_url: 'https://old.invalid/v1', approval_api_key_env: 'OLD_KEY' } }, role_tree: { 'team.root': {} }, edges: [] };
+  let submitted;
+  const ui = await form(t, 'Settings.tsx', 'SettingsView', {
+    settings: async () => saved, connections: async () => catalog,
+    saveSettings: async (_id, value) => { submitted = value; return saved; },
+  }, { projectId: 'project' });
+  await ui.select('Codex approval model', 'shared/review/reviewer'); await ui.click('Save');
+  assert.deepEqual(submitted.edits['team.root'], { approval_connection: 'shared/review/reviewer', approval_model: null, approval_base_url: null, approval_api_key_env: null });
 });

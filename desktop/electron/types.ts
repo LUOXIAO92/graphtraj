@@ -15,7 +15,7 @@ export type Project = { id: string; root: string; unavailable?: string };
 export type Preferences = { projects: Project[]; selected: string | null; importedLegacy?: string[] };
 export type Observation = { projectId: string; graph: Graph; updatedAt: string };
 export type RoleFields = Partial<Record<'runtime' | 'model' | 'base_url' | 'api_key_env' |
-  'reasoning_effort' | 'instructions' | 'system_prompt' | 'developer_prompt' | 'connection' | 'approval_model' | 'approval_base_url' | 'approval_api_key_env', string | null>>;
+  'reasoning_effort' | 'instructions' | 'system_prompt' | 'developer_prompt' | 'connection' | 'approval_connection' | 'approval_model' | 'approval_base_url' | 'approval_api_key_env', string | null>>;
 export type RoleTree = { [reference: string]: RoleTree };
 export type Settings = {
   revision: string; roles: Record<string, RoleFields>; edges: [string, string][]; role_tree: RoleTree; effect: string; applied?: boolean;

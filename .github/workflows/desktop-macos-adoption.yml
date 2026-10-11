@@ -7,8 +7,14 @@ name: desktop-macos-adoption
 # workflow_dispatch stays available for later re-runs.
 on:
   push:
-    branches: [agent/265-desktop-mac-adoption, agent/285-desktop-d-monitor-projects, agent/286-desktop-usage-history-range, agent/287-desktop-agents-models-teams, agent/288-desktop-d-integrated-adoption-macos, agent/290-desktop-d-direct-port-macos]
+    branches: [agent/265-desktop-mac-adoption, agent/285-desktop-d-monitor-projects, agent/286-desktop-usage-history-range, agent/287-desktop-agents-models-teams, agent/288-desktop-d-integrated-adoption-macos, agent/290-desktop-d-direct-port-macos, agent/292-desktop-readable-runtime-events]
   workflow_dispatch:
+    inputs:
+      mode:
+        description: Adoption scope (activity is the focused Ticket 292 scenario)
+        type: choice
+        options: [standard, activity]
+        default: standard
 
 permissions:
   contents: read
@@ -18,6 +24,8 @@ jobs:
     name: Installed macOS artifact and adoption
     runs-on: macos-latest
     timeout-minutes: 30
+    env:
+      ACTIVITY_ADOPTION: ${{ inputs.mode == 'activity' || github.ref_name == 'agent/292-desktop-readable-runtime-events' }}
     defaults:
       run:
         working-directory: desktop
@@ -45,6 +53,7 @@ jobs:
         run: npm run build
 
       - name: Desktop unit checks
+        if: env.ACTIVITY_ADOPTION != 'true'
         run: |
           if [ "${{ github.ref_name }}" = "agent/287-desktop-agents-models-teams" ]; then
             node --test tests/settings*.test.cjs
@@ -53,7 +62,7 @@ jobs:
           fi
 
       - name: D renderer navigation and long-output checks
-        if: github.ref_name == 'agent/290-desktop-d-direct-port-macos'
+        if: env.ACTIVITY_ADOPTION != 'true' && github.ref_name == 'agent/290-desktop-d-direct-port-macos'
         run: |
           npx playwright install chromium
           node --test tests/monitor-ui.test.mjs
@@ -85,7 +94,7 @@ jobs:
       # and project switching, node detail, dashboard, settings save/deny/error,
       # persistence, credential non-leakage and GUI-less native operation.
       - name: Set a display large enough for the accepted D reference sizes
-        if: github.ref_name == 'agent/290-desktop-d-direct-port-macos'
+        if: env.ACTIVITY_ADOPTION != 'true' && github.ref_name == 'agent/290-desktop-d-direct-port-macos'
         run: |
           brew install displayplacer
           displayplacer list | tee dist-package/adoption-evidence/display-before.txt
@@ -104,13 +113,13 @@ jobs:
           displayplacer list > dist-package/adoption-evidence/display-after.txt
 
       - name: Installed D views and native changed paths
-        if: github.ref_name == 'agent/290-desktop-d-direct-port-macos'
+        if: env.ACTIVITY_ADOPTION != 'true' && github.ref_name == 'agent/290-desktop-d-direct-port-macos'
         env:
           D_ADOPTION_EVIDENCE: dist-package/adoption-evidence/d
         run: node tests/d-adoption.mjs
 
       - name: Installed app adoption, optionality and security
-        if: github.ref_name != 'agent/290-desktop-d-direct-port-macos'
+        if: env.ACTIVITY_ADOPTION != 'true' && github.ref_name != 'agent/290-desktop-d-direct-port-macos'
         env:
           GRAPHTRAJ_APP: /Applications/GraphTraj.app
           GRAPHTRAJ_ADOPTION_SETTINGS_ONLY: ${{ github.ref_name == 'agent/287-desktop-agents-models-teams' && '1' || '0' }}
@@ -118,13 +127,19 @@ jobs:
         run: node --preserve-symlinks --preserve-symlinks-main tests/adoption.mjs
 
       - name: Integrated candidate dated usage and history
-        if: github.ref_name == 'agent/288-desktop-d-integrated-adoption-macos'
+        if: env.ACTIVITY_ADOPTION != 'true' && github.ref_name == 'agent/288-desktop-d-integrated-adoption-macos'
         env:
           GRAPHTRAJ_APP: /Applications/GraphTraj.app
           GRAPHTRAJ_ADOPTION_USAGE_ONLY: '1'
           GRAPHTRAJ_WORK: dist-package/usage-work
           GRAPHTRAJ_EVIDENCE: dist-package/adoption-evidence/usage
         run: node --preserve-symlinks --preserve-symlinks-main tests/adoption.mjs
+
+      - name: Installed focused activity adoption
+        if: env.ACTIVITY_ADOPTION == 'true'
+        env:
+          GRAPHTRAJ_ACTIVITY_EVIDENCE: dist-package/adoption-evidence/activity
+        run: node tests/activity-adoption.mjs
 
       - name: Upload adoption evidence
         if: always()

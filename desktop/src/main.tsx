@@ -119,7 +119,8 @@ function GraphView({ project, active, sidebarButton }: { project: Project; activ
   function select(id: string): void { if (id !== selected) setActivity(null); setSelected(id); setFocusAgent(null); }
   function chooseSummary(id: string): void {
     setSelectedSummary(id);
-    if (id) { setOpenGroups(previous => new Set([...previous, id])); setLocating(`summary:${id}`); }
+    setOpenGroups(new Set(id ? [id] : []));
+    if (id) setLocating(`summary:${id}`);
   }
   function toggleSummary(id: string): void {
     setSelectedSummary(id);
@@ -133,7 +134,7 @@ function GraphView({ project, active, sidebarButton }: { project: Project; activ
   function read(alias?: string): void { setFocusAgent(alias ?? null); setExpanded(true); }
   const members = activity?.agents ?? [];
   return <>
-    <header className="d-monitor-caption"><div>{sidebarButton}<span className="project-avatar">{projectName(project).slice(0, 2)}</span><strong title={project.root}>{projectName(project)}</strong><span>{expanded ? 'Agent conversations' : 'Task graph'}</span></div>
+    <header className="d-monitor-caption"><div>{sidebarButton}<span className="project-avatar">{projectName(project).slice(0, 2)}</span><strong title={project.root}>{projectName(project)}</strong><span>{mainExpanded ? 'Main conversations' : expanded ? 'Agent conversations' : 'Task graph'}</span></div>
       <Button variant="ghost" aria-pressed={mainExpanded} onPress={() => setMainExpanded(true)}>Main sessions</Button><span role="status">{error ? 'Offline / query error' : loading ? 'Refreshing…' : 'Connected'} · {observation ? new Date(observation.updatedAt).toLocaleTimeString() : 'No graph received'}</span></header>
     {error && <div className="native-notice error" role="alert">{error}<p>{observation ? 'Showing the last successful graph. Retrying automatically.' : 'Check the directory and native GraphTraj installation.'}</p><Button variant="ghost" onPress={() => setRetry(value => value + 1)}>Refresh now</Button></div>}
     <div className="d-monitor-content"><div className="d-monitor-views">

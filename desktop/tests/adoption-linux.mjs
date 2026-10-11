@@ -155,7 +155,12 @@ try {
   await screenshot('two-projects');
   facts.steps.push('Installed executable, actual directory picker, two project graphs and deduplication');
   await page.locator('.monitor-page:visible .react-flow__node[data-id="1"]').click();
-  await parallelChat({ page, members: fixtures.operate(second, 'desktop_activity', { ticket_id: '1' }).agents, shot: screenshot });
+  facts.stage = 'parallel Chat through installed desktop bridge';
+  const roster = await page.evaluate(async () => {
+    const { selected } = await window.graphtraj.projects();
+    return window.graphtraj.activity(selected, { ticket_id: '1' });
+  });
+  await parallelChat({ page, members: roster.agents, shot: screenshot });
   await page.getByRole('button', { name: 'Teams & roles', exact: true }).click();
   await page.getByLabel('Model', { exact: true }).waitFor();
   await save('denied-model', false, 'denied');
@@ -244,7 +249,10 @@ try {
   facts.stage = 'controlled Dashboard';
   await page.getByRole('button', { name: 'Project usage', exact: true }).click();
   await page.locator('.usage-dashboard').waitFor();
-  const activity = fixtures.operate(first, 'desktop_activity', { ticket_id: ticketId, alias: process.env.ADOPTION_AGENT_ALIAS });
+  const activity = await page.evaluate(async ({ ticketId, alias }) => {
+    const { selected } = await window.graphtraj.projects();
+    return window.graphtraj.activity(selected, { ticket_id: ticketId, alias });
+  }, { ticketId, alias: process.env.ADOPTION_AGENT_ALIAS });
   const usageDate = localDate(new Date(activity.events.find(event => event.kind === 'usage').time));
   await page.getByLabel('Start date').fill(usageDate);
   await page.getByLabel('End date').fill(usageDate);

@@ -69,6 +69,35 @@ def _non_coding_ticket(
     }
 
 
+def test_graph_projects_explicit_summary_membership_without_dependency_inference(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+) -> None:
+    """Accepted Parent declarations survive graph reads without changing edges."""
+    project = temporary_git_repository
+    _configure(project)
+    bodies = [
+        "## Parent\n\nhttps://github.com/example/project/issues/90\n\n## Scope\nSee #91.",
+        "Parent: #91。Prior work #90 is a dependency, not membership.",
+        "属于 #90、#91。Shared work.",
+        "See #90; depends on #91.\n```\nParent: #92\n```",
+    ]
+    for index, body in enumerate(bodies, 1):
+        _register(installed_commands, project, {
+            **_ticket(str(index), f"task-{index}", dependencies=[str(index - 1)] if index > 1 else []),
+            "body": body,
+        })
+    result = _run(installed_commands, project, "graph")
+    assert result.returncode == 0, result.stderr
+    graph = yaml.safe_load(result.stdout)
+    assert {group["id"]: group["ticket_ids"] for group in graph["groups"]} == {
+        "https://github.com/example/project/issues/90": ["1", "3"],
+        "https://github.com/example/project/issues/91": ["2", "3"],
+    }
+    assert [ticket["dependencies"] for ticket in graph["tickets"]] == [[], ["1"], ["2"], ["3"]]
+    assert all(ticket["status"] == "pending" for ticket in graph["tickets"])
+
+
 def _run(
     commands: InstalledCommands, project: Path, *arguments: str
 ):

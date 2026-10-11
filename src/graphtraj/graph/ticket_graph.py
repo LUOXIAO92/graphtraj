@@ -433,6 +433,7 @@ def read_graph(state: Path) -> dict[str, Any]:
         records = {ticket_id: record for ticket_id, (_, record) in states.items()}
         _validate_graph(records)
         rendered = []
+        groups: dict[str, dict[str, Any]] = {}
         for ticket_id in sorted(records, key=int):
             record = records[ticket_id]
             directory, _ = states[ticket_id]
@@ -464,9 +465,56 @@ def read_graph(state: Path) -> dict[str, Any]:
                     "replaced_by": record["replaced_by"],
                 }
             )
+            # Membership comes only from explicit declarations in the accepted
+            # definition, never from dependencies or incidental Issue mentions.
+            source = _snapshot_source(directory / record["current_definition"])
+            for reference in _summary_references(snapshot, source):
+                group = groups.setdefault(reference, {
+                    "id": reference,
+                    "title": "Summary #" + reference.rsplit("/", 1)[-1],
+                    "ticket_ids": [],
+                })
+                group["ticket_ids"].append(ticket_id)
+        if groups:
+            return {"tickets": rendered, "groups": list(groups.values())}
         return {"tickets": rendered}
     finally:
         _unlock(lock)
+
+
+def _summary_references(snapshot: str, source: str) -> list[str]:
+    """Read authored Parent/属于 declarations, retaining multiple memberships.
+
+    Bare Issue numbers belong to the Ticket's source repository. Ordinary
+    references, dependency sections and prose about prior work are not ownership.
+    A Parent heading may contain a list of shared summary references.
+    """
+    repository = source.rsplit("/issues/", 1)[0]
+    references: list[str] = []
+    in_parent = False
+    fenced = False
+    for line in snapshot.splitlines():
+        stripped = line.strip()
+        if stripped.startswith(("```", "~~~")):
+            fenced = not fenced
+        if fenced:
+            continue
+        if stripped.startswith("#") and re.match(r"^#{1,6}\s", stripped):
+            in_parent = bool(re.fullmatch(r"#{1,6}\s+Parents?\s*", stripped, re.I))
+            continue
+        declaration = re.match(r"^(?:Parents?\s*[:：]|属于\s*[:：]?)\s*(.*)", stripped, re.I)
+        if not declaration and not in_parent:
+            continue
+        value = declaration.group(1) if declaration else stripped
+        # Stop at the end of the ownership sentence, before unrelated prose.
+        value = re.split(r"[。；;]", value, maxsplit=1)[0]
+        for match in re.finditer(r"https://github\.com/[^/\s]+/[^/\s]+/issues/[1-9]\d*|(?<![\w/])#[1-9]\d*", value):
+            reference = match.group()
+            if reference.startswith("#"):
+                reference = repository + "/issues/" + reference[1:]
+            if reference != source and reference not in references:
+                references.append(reference)
+    return references
 
 
 def update_ticket_state(

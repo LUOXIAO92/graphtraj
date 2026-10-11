@@ -74,7 +74,7 @@ test('team draft creates, reparents, renames and references a model while preser
   await ui.click('Add child agent'); await ui.fill('New Agent name', 'child'); await ui.click('Add Agent');
   assert.equal(ui.tree.root.findByType('flow').props.edges.length, 1);
   await ui.click('Add child agent'); await ui.fill('New Agent name', 'leaf'); await ui.click('Add Agent');
-  await act(async () => ui.tree.root.findByType('flow').props.onReconnect(null, { source: JSON.stringify(['research.root']), target: JSON.stringify(['research.root', 'research.child', 'research.leaf']) }));
+  await act(async () => ui.tree.root.findByType('flow').props.onReconnect(null, { source: encodeURIComponent(JSON.stringify(['research.root'])), target: encodeURIComponent(JSON.stringify(['research.root', 'research.child', 'research.leaf'])) }));
   await ui.input('Team name', 'final'); await ui.click('Save');
   assert.deepEqual(submitted.edits['research.root'], { connection: 'shared/openai/model', reasoning_effort: 'low' });
   assert.deepEqual(JSON.parse(JSON.stringify(submitted.role_tree['research.root'])), { 'research.child': {}, 'research.leaf': {} });
@@ -280,7 +280,7 @@ test('independent roots and cross-team branches retain the actual nested organiz
   const graph = ui.tree.root.findByType('flow').props;
   assert.equal(graph.nodes.length, 4);
   assert.equal(graph.edges.length, 1);
-  assert.deepEqual(graph.nodes.map(node => JSON.parse(node.id).at(-1)), [
+  assert.deepEqual(graph.nodes.map(node => JSON.parse(decodeURIComponent(node.id)).at(-1)), [
     'team.merge_resolver', 'team.team_leader', 'team.worker', 'team.worker',
   ]);
   assert.match(JSON.stringify(ui.tree.toJSON()), /Historical cross-team relationships/);

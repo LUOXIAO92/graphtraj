@@ -86,6 +86,11 @@ try {
     const layout = page.getByRole('button',{name:'Auto layout',exact:true}); if(await layout.isVisible()) { await layout.click(); await page.waitForTimeout(250); }
   }
   async function shot(name) {
+    if (name.startsWith('expanded-chat') || name.startsWith('chat-sidebar-hidden')) {
+      const paintedNodes = await page.locator('.react-flow__node').evaluateAll(nodes =>
+        nodes.filter(node => node.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })).map(node => node.textContent));
+      assert.deepEqual(paintedNodes, [], 'Expanded chat must not paint graph cards from any mounted project');
+    }
     const dimensions = await page.evaluate(() => ({ width: innerWidth, height: innerHeight, devicePixelRatio }));
     const file = `${name}-${dimensions.width}.png`;
     const bytes = await page.screenshot({ path: path.join(evidence,file), scale: 'css' });

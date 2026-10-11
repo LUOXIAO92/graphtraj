@@ -38,6 +38,9 @@ test('D navigation preserves separate project graphs and independent column read
   });
   await page.goto(new URL('../dist/index.html', import.meta.url).href);
   const monitor = page.locator('.monitor-page:visible');
+  const visibleGraphTitles = () => page.locator('.react-flow__node').evaluateAll(nodes =>
+    nodes.filter(node => node.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true }))
+      .map(node => node.querySelector('.node-title')?.textContent));
   await page.getByRole('button', { name: 'Settings', exact: true }).waitFor({ state: 'visible' });
   await page.getByRole('button', { name: 'GLOBAL', exact: true }).click();
   assert.equal(await page.getByRole('button', { name: 'Settings', exact: true }).isVisible(), false);
@@ -53,6 +56,7 @@ test('D navigation preserves separate project graphs and independent column read
   await monitor.getByRole('button', { name: 'Expand chat', exact: true }).click();
   const columns = monitor.locator('.agent-column');
   await columns.first().locator('.tool-card').last().waitFor();
+  assert.deepEqual(await visibleGraphTitles(), [], 'Expanded chat hides its mounted graph');
   assert.equal(await columns.count(), 4);
   await columns.nth(2).getByText('Historical · retired', { exact: true }).waitFor();
   for (const index of [0, 1]) {
@@ -75,12 +79,16 @@ test('D navigation preserves separate project graphs and independent column read
   await page.getByRole('button', { name: 'PROJECTS', exact: true }).click();
   await page.locator('.project-button').filter({ hasText: '/projects/second' }).click();
   await monitor.getByRole('searchbox').fill('second current');
+  await monitor.locator('.react-flow__node[data-id="1"] .node-title').waitFor();
+  assert.deepEqual(await visibleGraphTitles(), ['second current', 'second previous'], 'Only the selected project paints graph cards');
   await monitor.getByRole('searchbox').press('Enter');
   await monitor.getByRole('button', { name: 'Expand chat', exact: true }).click();
   await monitor.locator('.agent-column').first().locator('.tool-card').last().waitFor();
+  assert.deepEqual(await visibleGraphTitles(), [], 'Neither mounted project may paint over expanded chat');
   assert.equal(await monitor.getByText('first alpha record 79', { exact: false }).count(), 0);
   await page.locator('.project-button').filter({ hasText: '/projects/first' }).click();
   assert.equal(await monitor.locator('input[aria-label="Search tasks"]').inputValue(), 'first current');
+  assert.deepEqual(await visibleGraphTitles(), [], 'Returning to preserved chat keeps other project graphs invisible');
   const again = await monitor.evaluate(element => ({ first: element.querySelectorAll('.activity-history')[0].scrollTop,
     second: element.querySelectorAll('.activity-history')[1].scrollTop, horizontal: element.querySelector('.agent-columns').scrollLeft }));
   assert.deepEqual(again, positions);

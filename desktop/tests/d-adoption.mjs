@@ -189,25 +189,26 @@ try {
   await button('Cancel changes').click();
   await button('Teams & roles').click(); await page.locator('.d-org-node').nth(3).waitFor();
   await page.getByRole('button',{name:'Configure agent delivery.engineer',exact:true}).click();
-  await field('Agent Runtime').selectOption('shared'); await field('Reasoning effort').fill('high');
+  await field('Agent Runtime').selectOption('shared');
+  assert.deepEqual(await field("This agent's effort").locator('option').evaluateAll(options => options.map(option => option.value)), ['']);
   await page.locator('summary').filter({hasText:'Prompt layers'}).click();
-  await field('System prompt').fill('Report recorded evidence to the parent.');
+  await field('Responsibility / system instructions').fill('Report recorded evidence to the parent.');
   for (const [width,height] of [[1440,1000],[1024,820]]) { await size(width,height); await shot('teams-edit'); }
   await size(1440,1000); await page.locator('summary').filter({hasText:'Codex approval route'}).click();
   await field('Codex approval model').fill('approval-model'); await field('Codex approval Base URL').fill('https://review.invalid/v1'); await field('Codex approval api_key_env name').fill('D_ADOPTION_APPROVAL_KEY');
   await decide(1); await reviewSave('Save changes'); await page.getByRole('status').filter({hasText:'Settings saved.'}).waitFor();
   const savedRoles = await page.evaluate(id=>window.graphtraj.settings(id),firstId);
   assert.equal(savedRoles.roles['delivery.engineer'].connection,'shared/custom/model');
-  assert.equal(savedRoles.roles['delivery.engineer'].reasoning_effort,'high');
+  assert.equal(savedRoles.roles['delivery.engineer'].reasoning_effort ?? null, null);
   assert.match(await fs.readFile(rolesFile,'utf8'),/report.md/);
   const secondRoles = await page.evaluate(id=>window.graphtraj.settings(id),secondId);
   assert.ok(!secondRoles.roles['delivery.engineer']);
   // A real concurrent native save must invalidate the UI revision without discarding the draft.
-  await field('Reasoning effort').fill('low');
-  await page.evaluate(async id => { const current=await window.graphtraj.settings(id); await window.graphtraj.saveSettings(id,{revision:current.revision,edits:{'delivery.engineer':{reasoning_effort:'medium'}},renames:{},add_edges:[],remove_edges:[]}); },firstId);
+  await field('Responsibility / system instructions').fill('Retain this draft after a conflict.');
+  await page.evaluate(async id => { const current=await window.graphtraj.settings(id); await window.graphtraj.saveSettings(id,{revision:current.revision,edits:{'delivery.engineer':{system_prompt:'Concurrent native instruction edit.'}},renames:{},add_edges:[],remove_edges:[]}); },firstId);
   await reviewSave('Save changes'); await page.getByRole('dialog').getByRole('alert').waitFor();
-  assert.equal((await page.evaluate(id=>window.graphtraj.settings(id),firstId)).roles['delivery.engineer'].reasoning_effort,'medium');
-  await dialogButton('Keep editing').click(); assert.equal(await field('Reasoning effort').inputValue(),'low'); await button('Reload').click();
+  assert.equal((await page.evaluate(id=>window.graphtraj.settings(id),firstId)).roles['delivery.engineer'].system_prompt,'Concurrent native instruction edit.');
+  await dialogButton('Keep editing').click(); assert.equal(await field('Responsibility / system instructions').inputValue(),'Retain this draft after a conflict.'); await button('Reload').click();
   step('Installed global and team D editing reaches native preview/save; denial retains the draft, approval saves and revision conflict refuses overwrite.');
   await button('Add or manage projects').click();
   for (const [width,height] of [[1440,1000],[1024,820]]) { await size(width,height); await shot('project-index'); }

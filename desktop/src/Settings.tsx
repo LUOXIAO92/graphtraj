@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Button, Description, Input, Label, TextField } from '@heroui/react';
 import type { Connections, RoleFields, RoleTree, Settings } from '../electron/types';
-import { branchRoles, treeEdges, moveNode, removeNodes, fieldLabels as labels, ownRole, roleChanges, roleName } from './settings-draft';
+import { branchRoles, treeEdges, teamForest, moveNode, removeNodes, fieldLabels as labels, ownRole, roleChanges, roleName } from './settings-draft';
 import { Dialog, Field, Icon } from './ui';
 
 /** Edit a project-local draft; only the native save entry can persist it. */
-export function SettingsView({ projectId, active = true }: { projectId: string; active?: boolean }) {
+export function SettingsView({ projectId, active = true, onModels }: { projectId: string; active?: boolean; onModels?: () => void }) {
   const [review, setReview] = useState(false);
   const [adding, setAdding] = useState<'team' | 'child' | 'root' | null>(null);
   const [deleting, setDeleting] = useState<'team' | 'agent' | null>(null);
@@ -21,8 +21,8 @@ export function SettingsView({ projectId, active = true }: { projectId: string; 
   const [teamName, setTeamName] = useState('');
   const [teamRenames, setTeamRenames] = useState<Record<string, string>>({});
   const [nodeName, setNodeName] = useState('');
-  const [newModel, setNewModel] = useState('');
-  const [newRuntime, setNewRuntime] = useState('codex');
+  const [newConnection, setNewConnection] = useState('');
+  const [catalogError, setCatalogError] = useState('');
   const [connections, setConnections] = useState<Connections>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -46,7 +46,10 @@ export function SettingsView({ projectId, active = true }: { projectId: string; 
   useEffect(() => {
     if (!active) return;
     let alive = true;
-    window.graphtraj.connections(projectId, { action: 'read' }).then(value => { if (alive) setConnections(value); }).catch(() => { /* Inline roles remain editable if the catalog is unavailable. */ });
+    setConnections(undefined); setCatalogError('');
+    window.graphtraj.connections(projectId, { action: 'read' })
+      .then(value => { if (alive) setConnections(value); })
+      .catch(error => { if (alive) setCatalogError(String(error)); });
     return () => { alive = false; };
   }, [projectId, active]);
 
@@ -67,8 +70,7 @@ export function SettingsView({ projectId, active = true }: { projectId: string; 
   const teamRoles = Object.keys(roles).filter(ref => group(ref) === team);
   function group(ref: string): string { return ref.includes('.') ? ref.split('.')[0] : ''; }
   function isTeamRoot(ref: string): boolean {
-    const occurs = Object.hasOwn(tree, ref) || edges.some(edge => edge[1] === ref);
-    return occurs && !edges.some(([parent, child]) => child === ref && group(parent) === group(ref));
+    return !edges.some(([, child]) => child === ref);
   }
   function attempt(action: () => void): void {
     try { action(); setError(''); setMessage(''); } catch (error) { setError(String(error)); }
@@ -76,11 +78,11 @@ export function SettingsView({ projectId, active = true }: { projectId: string; 
   function addNode(newTeam: boolean, child: boolean): void {
     const targetTeam = newTeam ? teamName : team;
     if (newTeam && (!/^[a-z0-9]+(?:[_-][a-z0-9]+)*$/.test(targetTeam) || teams.some(name => name === targetTeam || ownRole(teamRenames, name) === targetTeam))) throw new Error('Choose a new lowercase team name.');
-    if (!/^[a-z0-9]+(?:[_-][a-z0-9]+)*$/.test(nodeName) || !newModel.trim()) throw new Error('Enter a lowercase Agent name and a model.');
-    if (!newTeam && !child && teamRoles.some(ref => isTeamRoot(ref))) throw new Error('This team already has a root. Add a child or adjust the parent.');
+    if (!/^[a-z0-9]+(?:[_-][a-z0-9]+)*$/.test(nodeName)) throw new Error('Enter a lowercase Agent name.');
+    if (!availableConnections.some(item => item.reference === newConnection)) throw new Error('Choose an available global model.');
     const reference = targetTeam ? `${targetTeam}.${nodeName}` : nodeName;
     if (Object.hasOwn(roles, reference)) throw new Error('Agent name already exists.');
-    setRoles(current => ({ ...current, [reference]: { runtime: newRuntime, model: newModel } }));
+    setRoles(current => ({ ...current, [reference]: { connection: newConnection } }));
     if (newTeam) setTeamRenames(current => Object.fromEntries(Object.entries(current).filter(([name]) => name !== targetTeam)));
     else if (ownRole(teamRenames, team)) setRenames(current => ({ ...current, [reference]: `${teamRenames[team]}.${nodeName}` }));
     setTree(moveNode(tree, reference, child ? selected : '')); setSelected(reference); setTeam(targetTeam); setNodeName('');
@@ -126,25 +128,62 @@ export function SettingsView({ projectId, active = true }: { projectId: string; 
     </TextField>;
   }
   const selectedRole = ownRole(roles, selected);
-  const route = (selectedRole?.connection ?? '').split('/');
   const runtimeEntries = connections?.catalog.runtimes ?? {};
-  const routeRuntime = runtimeEntries[route[0]];
-  const routeProvider = routeRuntime?.providers[route[1]];
+  const catalogNotice = catalogError ? `Global model catalog unavailable: ${catalogError}`
+    : !connections ? 'Loading global model catalog…'
+    : !availableConnections.length ? 'No global models configured.' : '';
   function chooseConnection(connection: string): void {
-    setRoles(current => ({ ...current, [selected]: { ...ownRole(current, selected), connection: connection || null,
-      runtime: connection ? null : 'codex', model: connection ? null : '', base_url: null, api_key_env: null } }));
+    const model = availableConnections.find(item => item.reference === connection)?.metadata;
+    if (!model) return;
+    setRoles(current => ({ ...current, [selected]: { ...ownRole(current, selected), connection,
+      runtime: null, model: null, base_url: null, api_key_env: null,
+      reasoning_effort: model.supported_efforts?.includes(ownRole(current, selected)?.reasoning_effort ?? '')
+        ? ownRole(current, selected)?.reasoning_effort : null,
+    } }));
   }
-  function drawNode(ref: string, ancestors = new Set<string>()): ReactNode {
-    if (ancestors.has(ref)) return null;
-    const nextAncestors = new Set([...ancestors, ref]);
-    const children = [...new Set(edges.filter(edge => edge[0] === ref && group(edge[1]) === team).map(edge => edge[1]))];
+  function modelFields(reference: string, choose: (connection: string) => void, prefix: string, legacy?: RoleFields) {
+    const [runtime, provider] = reference.split('/');
+    const entry = ownRole(runtimeEntries, runtime);
+    const models = ownRole(entry?.providers, provider)?.models ?? {};
+    const metadata = availableConnections.find(item => item.reference === reference)?.metadata;
+    return <>
+      {catalogNotice && <p role="status">{catalogNotice}</p>}
+      <div className="d-agent-route-row">
+        <label className="native-field"><span>Runtime</span><select aria-label={`${prefix} Runtime`} value={runtime || ''} disabled={!availableConnections.length} onChange={event => {
+          const next = availableConnections.find(item => item.reference.startsWith(event.target.value + '/'));
+          if (next) choose(next.reference);
+        }}>
+          {!reference && <option value="" disabled>{legacy ? runtimeLabel(legacy.runtime || 'Runtime not recorded') : 'Choose Runtime'}</option>}
+          {reference && !entry && <option value={runtime}>{runtime} · unavailable</option>}
+          {Object.entries(runtimeEntries).map(([id, value]) => <option key={id} value={id} disabled={!Object.values(value.providers).some(item => Object.keys(item.models).length)}>{runtimeLabel(value.runtime)} · {id}</option>)}
+        </select></label>
+        <label className="native-field"><span>Provider</span><select aria-label={`${prefix} provider`} value={provider || ''} disabled={!entry || !availableConnections.length} onChange={event => {
+          const next = availableConnections.find(item => item.reference.startsWith(`${runtime}/${event.target.value}/`));
+          if (next) choose(next.reference);
+        }}>
+          {!reference && <option value="">{legacy ? 'Saved project configuration' : 'Choose provider'}</option>}
+          {reference && !ownRole(entry?.providers, provider) && <option value={provider}>{provider} · unavailable</option>}
+          {Object.entries(entry?.providers ?? {}).map(([id, value]) => <option key={id} value={id} disabled={!Object.keys(value.models).length}>{id}</option>)}
+        </select></label>
+      </div>
+      <label className="native-field"><span>Model</span><select aria-label={`${prefix} model`} value={reference} disabled={!entry || !availableConnections.length} onChange={event => choose(event.target.value)}>
+        {!reference && <option value="">{legacy?.model || 'Choose model'}</option>}
+        {reference && !metadata && <option value={reference}>{reference} · unavailable</option>}
+        {Object.entries(models).map(([id, value]) => <option key={id} value={`${runtime}/${provider}/${id}`}>{value.alias || value.id}</option>)}
+      </select><small>{metadata ? `${metadata.source} · Supported efforts: ${metadata.supported_efforts?.join(' · ') || 'Unknown'}` : legacy ? 'Source: saved project role. Retained until you select a global model.' : reference ? 'Saved connection unavailable. Retained; choose a replacement explicitly.' : 'Select a global Runtime, provider and model.'}</small></label>
+      <Button variant="ghost" onPress={() => { setAdding(null); onModels?.(); }}>Agents &amp; models</Button>
+    </>;
+  }
+  function drawNode(ref: string, descendants: RoleTree): ReactNode {
+    const children = Object.entries(descendants);
     const value = ownRole(roles, ref);
     const binding = availableConnections.find(item => item.reference === value?.connection);
-    return <li key={ref}><button data-config-agent={ref} className={`d-org-node ${selected === ref ? 'selected' : ''}`} aria-label={`Configure agent ${roleName(renames, ref)}`} aria-pressed={selected === ref} onClick={() => setSelected(ref)}><span className="d-org-role"><Icon name={isTeamRoot(ref) ? 'branch' : 'terminal'} size={15}/>{isTeamRoot(ref) ? 'Team root' : 'Agent'}</span><strong>{roleName(renames, ref).split('.').at(-1)}</strong><small title={value?.connection ?? undefined}>{value?.connection ? `${routeFor(value.connection)} · ${binding?.metadata.alias || binding?.metadata.id || 'Missing model'}` : `${value?.runtime || 'Runtime default'} · ${value?.model || 'Model not recorded'}`}</small><span className="d-org-child-count">{value?.reasoning_effort || 'Default'} effort · {children.length} children</span></button>{children.length > 0 && <ul>{children.map(child => drawNode(child, nextAncestors))}</ul>}</li>;
+    return <li key={ref}><button data-config-agent={ref} className={`d-org-node ${selected === ref ? 'selected' : ''}`} aria-label={`Configure agent ${roleName(renames, ref)}`} aria-pressed={selected === ref} onClick={() => { setSelected(ref); setTeam(group(ref)); }}><span className="d-org-role"><Icon name={isTeamRoot(ref) ? 'branch' : 'terminal'} size={15}/>{group(ref) !== team ? `Team: ${group(ref) || 'Ungrouped'}` : isTeamRoot(ref) ? 'Team root' : 'Agent'}</span><strong>{roleName(renames, ref).split('.').at(-1)}</strong><small title={value?.connection ?? undefined}>{value?.connection ? `${routeFor(value.connection)} · ${binding?.metadata.alias || binding?.metadata.id || 'Missing model'}` : `${runtimeLabel(value?.runtime || 'Runtime default')} · ${value?.model || 'Model not recorded'}`}</small><span className="d-org-child-count">{value?.reasoning_effort || 'Default'} effort · {children.length} children</span></button>{children.length > 0 && <ul>{children.map(([child, nodes]) => drawNode(child, nodes))}</ul>}</li>;
   }
-  function routeFor(connection: string): string { return connection.split('/')[0]; }
+  function routeFor(connection: string): string { return runtimeLabel(ownRole(runtimeEntries, connection.split('/')[0])?.runtime || 'Runtime unavailable'); }
   useEffect(() => { const node = [...(canvas.current?.querySelectorAll<HTMLElement>('[data-config-agent]') ?? [])].find(item => item.dataset.configAgent === selected); node?.scrollIntoView?.({ block: 'nearest', inline: 'center' }); }, [selected, team]);
-  const roots = teamRoles.filter(ref => !edges.some(([parent, child]) => child === ref && group(parent) === team));
+  const forest = teamForest(tree, teamRoles);
+  const parents = [...new Set(edges.filter(([, child]) => child === selected).map(([parent]) => parent))];
   function removeConfiguration(): void {
     if (deleting === 'team') {
       const affected = new Set(teamRoles);
@@ -172,19 +211,30 @@ export function SettingsView({ projectId, active = true }: { projectId: string; 
     {!teams.length ? <div className="d-empty-configuration"><Icon name="branch" size={30}/><h2>{busy ? 'Loading teams…' : 'No teams configured'}</h2><p>Add a team and start with one root agent. Build its organization one child at a time.</p><Button variant="primary" isDisabled={busy || !saved} onPress={() => setAdding('team')}>Add first team</Button></div> : <div className="d-team-editor-body"><div className="d-org-workspace"><header><div><label>Team name<input aria-label="Team name" disabled={busy || !team} value={ownRole(teamRenames, team) ?? (team || 'Ungrouped roles')} onChange={event => {
       const value = event.target.value; setTeamRenames(current => ({ ...current, [team]: value }));
       setRenames(current => ({ ...current, ...Object.fromEntries(teamRoles.map(ref => [ref, `${value}.${roleName(renames, ref).split('.').pop()}`])) }));
-    }}/></label></div><Button variant="secondary" isDisabled={busy} onPress={() => setAdding(selectedRole ? 'child' : 'root')}><Icon name="plus" size={15}/>{selectedRole ? 'Add child agent' : 'Add root agent'}</Button></header><div ref={canvas} className="d-org-canvas" role="region" aria-label="Team organization tree" tabIndex={0}><div className="d-org-tree"><ul>{roots.map(ref => drawNode(ref))}</ul></div></div><footer><Icon name="info" size={15}/><span>Select a parent to add a child. Reconnect an existing agent using its parent field.</span></footer></div>
-      {selectedRole ? <aside className="d-agent-properties"><header><div><h2>{roleName(renames, selected).split('.').at(-1)}</h2><span>{isTeamRoot(selected) ? 'Root agent configuration' : 'Child agent configuration'}</span></div><Button isIconOnly variant="ghost" aria-label="Delete selected agent configuration" isDisabled={busy} onPress={() => { setDeleting('agent'); setDeleteMode('branch'); setPromoted(edges.find(([parent]) => parent === selected)?.[1] ?? ''); }}><Icon name="trash" size={16}/></Button></header><fieldset disabled={busy} className="config-property-scroll"><div className="new-config-fields"><TextField className="settings-field" value={roleName(renames, selected)} onChange={name => setRenames(current => ({ ...current, [selected]: name }))}><Label>Role reference</Label><Input/><Description>Name or group.name. Renaming updates dispatch references.</Description></TextField>
-        <fieldset className="d-agent-model-fields"><legend>Model for this agent</legend><div className="d-agent-route-row"><label className="native-field"><span>Runtime</span><select aria-label="Agent Runtime" value={selectedRole.connection ? route[0] : ''} onChange={event => { const next = availableConnections.find(item => item.reference.startsWith(event.target.value + '/')); chooseConnection(event.target.value && next ? next.reference : ''); }}><option value="">Inline Runtime</option>{Object.entries(runtimeEntries).map(([id, value]) => <option key={id} value={id} disabled={!Object.values(value.providers).some(provider => Object.keys(provider.models).length)}>{id}</option>)}</select></label><label className="native-field"><span>Provider</span><select aria-label="Agent provider" value={route[1] ?? ''} disabled={!selectedRole.connection} onChange={event => { const next = availableConnections.find(item => item.reference.startsWith(`${route[0]}/${event.target.value}/`)); if (next) chooseConnection(next.reference); }}><option value="">Runtime default</option>{Object.entries(routeRuntime?.providers ?? {}).map(([id, value]) => <option key={id} value={id} disabled={!Object.keys(value.models).length}>{id}</option>)}</select></label></div>
-          {selectedRole.connection ? <label className="native-field"><span>Model</span><select aria-label="Global connection" value={selectedRole.connection} onChange={event => chooseConnection(event.target.value)}>{Object.entries(routeProvider?.models ?? {}).map(([id, value]) => <option key={id} value={`${route[0]}/${route[1]}/${id}`}>{value.alias || value.id}</option>)}{!selectedModel && <option value={selectedRole.connection}>{selectedRole.connection} · unavailable</option>}</select><small>{selectedModel?.source || 'Unknown source'} · Supported efforts: {selectedModel?.supported_efforts?.join(' · ') || 'Unknown'}</small></label> : <>{field('runtime')}{field('model')}<details className="d-prompt-layers"><summary>Inline provider route</summary>{field('base_url')}{field('api_key_env')}</details></>}
-          {field('reasoning_effort')}
-        </fieldset><label className="native-field"><span>Parent agent</span><select aria-label="Agent parent" value={edges.find(edge => edge[1] === selected)?.[0] ?? ''} onChange={event => attempt(() => {
-          const parent = event.target.value; if (!parent && teamRoles.some(ref => ref !== selected && isTeamRoot(ref))) throw new Error('A team must have one clear root. Move this Agent below the existing root.'); setTree(moveNode(tree, selected, parent));
-        })}><option value="">Root</option>{[...new Set([...Object.keys(roles), ...edges.map(edge => edge[0])])].filter(ref => !branchRoles(tree, selected).has(ref)).map(ref => <option key={ref} value={ref}>{roleName(renames, ref)}</option>)}</select><small>Self and descendants are excluded. Existing native parents are retained.</small></label>{field('instructions')}<details className="d-prompt-layers"><summary>Prompt layers</summary>{field('system_prompt', true)}{field('developer_prompt', true)}</details><details className="d-prompt-layers"><summary>Codex approval route</summary><p>Blank fields retain project defaults. These configure native review, not execution approval.</p>{field('approval_model')}{field('approval_base_url')}{field('approval_api_key_env')}</details>
+    }}/></label></div><Button variant="secondary" isDisabled={busy} onPress={() => setAdding(selectedRole ? 'child' : 'root')}><Icon name="plus" size={15}/>{selectedRole ? 'Add child agent' : 'Add root agent'}</Button>{selectedRole && <Button variant="ghost" isDisabled={busy} onPress={() => setAdding('root')}>Add root agent</Button>}</header><div ref={canvas} className="d-org-canvas" role="region" aria-label="Team organization tree" tabIndex={0}><div className="d-org-tree"><ul>{Object.entries(forest).map(([ref, children]) => drawNode(ref, children))}</ul></div></div><footer><Icon name="info" size={15}/><span>Select a parent to add a child. Reconnect an existing agent using its parent field.</span></footer></div>
+      {selectedRole ? <aside className="d-agent-properties"><header><div><h2>{roleName(renames, selected).split('.').at(-1)}</h2><span>{isTeamRoot(selected) ? 'Root agent configuration' : 'Child agent configuration'}</span></div><Button isIconOnly variant="ghost" aria-label="Delete selected agent configuration" isDisabled={busy} onPress={() => { setDeleting('agent'); setDeleteMode('branch'); setPromoted(edges.find(([parent]) => parent === selected)?.[1] ?? ''); }}><Icon name="trash" size={16}/></Button></header><fieldset disabled={busy} className="config-property-scroll"><div className="new-config-fields"><TextField className="settings-field" value={roleName(renames, selected).split('.').at(-1)} onChange={name => setRenames(current => ({ ...current, [selected]: group(roleName(renames, selected)) ? `${group(roleName(renames, selected))}.${name}` : name }))}><Label>Agent name</Label><Input/><Description>Renaming updates this team’s dispatch references.</Description></TextField>
+        {field('system_prompt', true)}
+        <fieldset className="d-agent-model-fields"><legend>Model for this agent</legend>
+          {modelFields(selectedRole.connection ?? '', chooseConnection, 'Agent', selectedRole.connection ? undefined : selectedRole)}
+          {!selectedRole.connection && <details className="d-prompt-layers"><summary>Saved project model settings</summary><p>These existing settings are preserved. Selecting a global model replaces this role’s Runtime, model and provider settings after review and save.</p>{field('runtime')}{field('model')}{field('base_url')}{field('api_key_env')}</details>}
+          <label className="native-field"><span>This agent’s effort</span><select aria-label="This agent's effort" value={selectedRole.reasoning_effort || ''} onChange={event => setRoles(current => ({ ...current, [selected]: { ...ownRole(current, selected), reasoning_effort: event.target.value || null } }))}>
+            <option value="">Runtime default</option>
+            {selectedRole.reasoning_effort && !selectedModel?.supported_efforts?.includes(selectedRole.reasoning_effort) && <option value={selectedRole.reasoning_effort} disabled>{selectedRole.reasoning_effort} · saved; support unconfirmed</option>}
+            {selectedModel?.supported_efforts?.map(effort => <option key={effort} value={effort}>{effort}</option>)}
+          </select><small>{selectedModel?.supported_efforts?.length ? 'Changing models keeps this effort only when supported; otherwise uses Runtime default.' : 'Supported efforts unknown. Saved effort is retained; no additional levels are offered.'}</small></label>
+        </fieldset><label className="native-field"><span>Parent agent</span><select aria-label="Agent parent" value={parents.length > 1 ? '__multiple__' : parents[0] ?? ''} onChange={event => attempt(() => {
+          setTree(moveNode(tree, selected, event.target.value));
+        })}>{parents.length > 1 && <option value="__multiple__" disabled>Multiple parents (preserved)</option>}<option value="">Root</option>{[...new Set([...Object.keys(roles), ...edges.map(edge => edge[0])])].filter(ref => !branchRoles(tree, selected).has(ref)).map(ref => <option key={ref} value={ref}>{roleName(renames, ref)}</option>)}</select><small>{parents.length > 1 ? `Existing parents: ${parents.map(ref => roleName(renames, ref)).join(', ')}. Choosing a parent moves all occurrences.` : 'Self and descendants are excluded. Cross-team parents are shown in the tree.'}</small></label>{field('instructions')}<details className="d-prompt-layers"><summary>Prompt layers</summary>{field('developer_prompt', true)}</details><details className="d-prompt-layers"><summary>Codex approval route</summary><p>Blank fields retain project defaults. These configure native review, not execution approval.</p>{field('approval_model')}{field('approval_base_url')}{field('approval_api_key_env')}</details>
       </div></fieldset></aside> : <aside className="d-agent-properties d-empty-properties"><Icon name="terminal" size={26}/><p>Select an agent to edit its role and model.</p></aside>}
     </div>}
     <footer className="new-draft-footer"><div><span className={`draft-dot ${changes.length ? 'dirty' : ''}`}/><strong>{changes.length ? `${changes.length} unsaved changes` : 'Draft matches saved configuration'}</strong><span>Running agents are unchanged</span></div><div><Button variant="ghost" isDisabled={busy} onPress={() => void reload()}>Reload</Button><Button variant="ghost" isDisabled={busy || !changes.length} onPress={() => { if (saved) reset(saved); setError(''); }}>Cancel changes</Button><Button variant="primary" isDisabled={busy || !changes.length} onPress={() => setReview(true)}>Review changes<Icon name="right" size={14}/></Button></div></footer>
-    {adding && <Dialog title={adding === 'team' ? 'Add team' : 'Add Agent'} onClose={() => setAdding(null)}><div className="new-config-fields">{adding === 'team' && <Field label="Team name for new team" value={teamName} onChange={setTeamName}/>}<Field label="New Agent name" value={nodeName} onChange={setNodeName}/><label className="native-field"><span>New Agent Runtime</span><select aria-label="New Agent Runtime" value={newRuntime} onChange={event => setNewRuntime(event.target.value)}><option>codex</option><option>pi</option><option>dsh</option></select></label><Field label="New Agent model" value={newModel} onChange={setNewModel}/><p>Choose the initial Runtime and model. The properties panel can then reference a global connection.</p>{error && <p role="alert">{error}</p>}</div><div className="dialog-footer"><Button variant="secondary" onPress={() => setAdding(null)}>Keep editing</Button><Button variant="primary" onPress={() => attempt(() => { addNode(adding === 'team', adding === 'child'); setAdding(null); })}>{adding === 'team' ? 'Add team with root' : 'Add Agent'}</Button></div></Dialog>}
+    {adding && <Dialog title={adding === 'team' ? 'Add team' : 'Add Agent'} onClose={() => setAdding(null)}><div className="new-config-fields">{adding === 'team' && <Field label="Team name for new team" value={teamName} onChange={setTeamName}/>}<Field label="New Agent name" value={nodeName} onChange={setNodeName}/>{modelFields(newConnection, setNewConnection, 'New Agent')}{error && <p role="alert">{error}</p>}</div><div className="dialog-footer"><Button variant="secondary" onPress={() => setAdding(null)}>Keep editing</Button><Button variant="primary" isDisabled={busy || !availableConnections.some(item => item.reference === newConnection)} onPress={() => attempt(() => { addNode(adding === 'team', adding === 'child'); setAdding(null); })}>{adding === 'team' ? 'Add team with root' : 'Add Agent'}</Button></div></Dialog>}
     {deleting && <Dialog title={deleting === 'team' ? `Delete ${team || 'ungrouped roles'}?` : `Remove ${roleName(renames,selected)}?`} onClose={() => setDeleting(null)}><p>This changes the configuration draft only. It does not stop, retire or remove a running Agent.</p>{deleting === 'agent' && <fieldset className="d-delete-options"><legend>What should happen to the children?</legend><label><input type="radio" name="delete-mode" checked={deleteMode === 'keep'} onChange={() => setDeleteMode('keep')}/><span><strong>Keep descendants</strong><small>Reconnect direct children to the parent, or promote a child for a root.</small></span></label><label><input type="radio" name="delete-mode" checked={deleteMode === 'branch'} onChange={() => setDeleteMode('branch')}/><span><strong>Delete the entire branch</strong><small>Remove this Agent and all configured descendants.</small></span></label>{deleteMode === 'keep' && isTeamRoot(selected) && <label className="native-field"><span>New root</span><select aria-label="New root" value={promoted} onChange={event => setPromoted(event.target.value)}>{edges.filter(([parent]) => parent === selected).map(([,child]) => <option key={child}>{child}</option>)}</select></label>}</fieldset>}<div className="d-delete-scope"><strong>Configuration nodes to remove</strong><p>{(deleting === 'team' ? teamRoles : deleteMode === 'branch' ? [...branchRoles(tree,selected)] : [selected]).join(' · ')}</p></div>{error && <p role="alert">{error}</p>}<div className="dialog-footer"><Button variant="secondary" onPress={() => setDeleting(null)}>Keep configuration</Button><Button className="destructive-button" onPress={() => attempt(removeConfiguration)}>Remove from draft</Button></div></Dialog>}
     {review && <Dialog title="Review configuration draft" onClose={() => setReview(false)}><p>Saving requests native authorization and checks the saved revision. Existing Sessions retain their configuration.</p><div className="change-list">{changes.map((change,index) => <div className="change-item" key={index}><h3>{change.label}</h3><div><span className="diff-before"><small>BEFORE</small>{change.before || '(empty)'}</span><span className="diff-after"><small>AFTER</small>{change.after || '(empty)'}</span></div></div>)}</div>{error && <p role="alert">{error}</p>}<div className="dialog-footer"><Button variant="secondary" isDisabled={busy} onPress={() => setReview(false)}>Keep editing</Button><Button variant="primary" isDisabled={busy} onPress={() => void save()}>Save changes</Button></div></Dialog>}
   </section>;
+}
+
+/** Display the actual Runtime independently of the catalog entry’s name. */
+function runtimeLabel(runtime: string): string {
+  return ({ codex: 'Codex', pi: 'Pi', dsh: 'DSH' } as Record<string, string>)[runtime] || runtime;
 }

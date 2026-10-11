@@ -71,7 +71,7 @@ test('D navigation preserves separate project graphs and independent column read
   });
   assert.ok(positions.first > 0 && positions.second > positions.first && positions.horizontal > 0);
   await page.getByRole('button', { name: 'Teams & roles', exact: true }).click();
-  await page.getByLabel('Role reference', {exact:true}).fill('delivery.edited');
+  await page.getByLabel('Agent name', {exact:true}).fill('edited');
   await page.getByRole('button', { name: 'Monitor', exact: true }).click();
   const restored = await monitor.evaluate(element => ({ first: element.querySelectorAll('.activity-history')[0].scrollTop,
     second: element.querySelectorAll('.activity-history')[1].scrollTop, horizontal: element.querySelector('.agent-columns').scrollLeft }));
@@ -110,6 +110,6 @@ test('D navigation preserves separate project graphs and independent column read
   assert.equal(await page.getByRole('button', { name: 'Monitor', exact: true }).isVisible(), true);
   assert.equal(await page.getByRole('textbox').count(), 0, 'monitor has no message input');
   await page.getByRole('button', {name:'Teams & roles',exact:true}).click();
-  assert.equal(await page.getByLabel('Role reference',{exact:true}).inputValue(),'delivery.edited');
+  assert.equal(await page.getByLabel('Agent name',{exact:true}).inputValue(),'edited');
 
 });

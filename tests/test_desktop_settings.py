@@ -300,3 +300,61 @@ def test_staged_team_rename_and_new_child_round_trip(project: Path) -> None:
     assert yaml.safe_load(path.read_text())['roles'] == {
         'b': {'root': original, 'worker': {'runtime': 'codex', 'model': 'worker-model'}},
     }
+
+
+def test_new_team_uses_global_references_and_preserves_legacy_roles(
+    project: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """New root/child references survive review and reopen without migrating old roles."""
+    from graphtraj.configuration.project_roles import load_project_roles
+
+    home = project / 'isolated-user'
+    home.mkdir()
+    monkeypatch.setenv('HOME', str(home))
+    monkeypatch.setenv('USERPROFILE', str(home))
+    monkeypatch.setenv('CUSTOM_KEY', 'controlled-secret-must-not-be-copied')
+    initial = call(project, {'scope': 'user', 'action': 'read'})[-1]['result']
+    catalog = {'version': 1, 'runtimes': {'shared': {'runtime': 'codex', 'providers': {
+        'custom': {'base_url': 'https://provider.invalid/v1', 'api_key_env': 'CUSTOM_KEY',
+                   'models': {'model': {'id': 'chosen-model', 'source': 'manual',
+                                        'supported_efforts': ['low']}}},
+    }}}}
+    saved_catalog = call(project, {'scope': 'user', 'action': 'save',
+                                  'expected_revision': initial['revision'], 'catalog': catalog}, 'accept')[-1]
+    assert not saved_catalog['failed'], saved_catalog
+    original = yaml.safe_load(roles_path(project).read_text())
+    state = read(project)
+    request = {
+        'action': 'save', 'revision': state['revision'],
+        'edits': {'research.root': {'connection': 'shared/custom/model'},
+                  'research.worker': {'connection': 'shared/custom/model', 'reasoning_effort': 'low'},
+                  'research.independent': {'connection': 'shared/custom/model'}},
+        'renames': {}, 'add_edges': [], 'remove_edges': [], 'remove_presets': [],
+        'role_tree': {**state['role_tree'], 'research.root': {'research.worker': {}},
+                      'research.independent': {}},
+    }
+    before = snapshot(project)
+    denied = call(project, request)[-1]
+    assert denied['failed'] and 'did not approve' in denied['error']
+    assert snapshot(project) == before
+    replies = call(project, request, 'accept')
+    assert not replies[-1]['failed'], replies
+    reopened = read(project)
+    assert reopened['role_tree'] == request['role_tree']
+    document = yaml.safe_load(roles_path(project).read_text())
+    assert {key: value for key, value in document['roles'].items() if key != 'research'} == original['roles']
+    assert document['roles']['research'] == {
+        'root': {'connection': 'shared/custom/model'},
+        'worker': {'connection': 'shared/custom/model', 'reasoning_effort': 'low'},
+        'independent': {'connection': 'shared/custom/model'},
+    }
+    resolved = load_project_roles(project).dispatch_preset('research.root', 'research.worker')
+    assert (resolved.runtime, resolved.model, resolved.api_key_env, resolved.reasoning_effort) == (
+        'codex', 'chosen-model', 'CUSTOM_KEY', 'low',
+    )
+    assert 'controlled-secret-must-not-be-copied' not in json.dumps(replies)
+    assert 'controlled-secret-must-not-be-copied' not in roles_path(project).read_text()
+    after = snapshot(project)
+    conflict = call(project, request, 'accept')[-1]
+    assert conflict['failed'] and 'changed while editing' in conflict['error']
+    assert snapshot(project) == after

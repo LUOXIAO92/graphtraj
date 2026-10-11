@@ -4,7 +4,7 @@ export const fieldLabels: Record<keyof RoleFields, string> = {
   approval_model: 'Codex approval model', approval_base_url: 'Codex approval Base URL', approval_api_key_env: 'Codex approval api_key_env name',
   connection: 'Global connection', runtime: 'Runtime', model: 'Model', base_url: 'Base URL', api_key_env: 'Credential environment variable (api_key_env)',
   reasoning_effort: 'Reasoning effort', instructions: 'Instruction file reference',
-  system_prompt: 'System prompt', developer_prompt: 'Developer prompt',
+  system_prompt: 'Responsibility / system instructions', developer_prompt: 'Developer prompt',
 };
 
 /** Read only a declared role key, including names shared with Object.prototype. */
@@ -39,6 +39,18 @@ export function treeEdges(tree: RoleTree): [string, string][] {
   return Object.entries(tree).flatMap(([parent, children]) => [
     ...Object.keys(children).map(child => [parent, child] as [string, string]), ...treeEdges(children),
   ]);
+}
+
+/** Show complete native branches involving a team, plus its unattached presets. */
+export function teamForest(tree: RoleTree, references: string[]): RoleTree {
+  const members = new Set(references);
+  function includesMember(nodes: RoleTree): boolean {
+    return Object.entries(nodes).some(([ref, children]) => members.has(ref) || includesMember(children));
+  }
+  const forest = Object.fromEntries(Object.entries(tree).filter(([ref, children]) => includesMember({ [ref]: children })));
+  const present = new Set([...Object.keys(forest), ...treeEdges(forest).flat()]);
+  for (const ref of references) if (!present.has(ref)) forest[ref] = {};
+  return forest;
 }
 
 /** Return all configured descendants, including repeated native role occurrences. */

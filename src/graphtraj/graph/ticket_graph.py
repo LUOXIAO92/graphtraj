@@ -506,14 +506,23 @@ def _summary_references(snapshot: str, source: str) -> list[str]:
         if not declaration and not in_parent:
             continue
         value = declaration.group(1) if declaration else stripped
-        # Stop at the end of the ownership sentence, before unrelated prose.
-        value = re.split(r"[。；;]", value, maxsplit=1)[0]
-        for match in re.finditer(r"https://github\.com/[^/\s]+/[^/\s]+/issues/[1-9]\d*|(?<![\w/])#[1-9]\d*", value):
+        value = re.sub(r"^[-*]\s+", "", value)
+        # Consume only a leading reference list, not Issue mentions in prose
+        # following the declaration (including within a Parent section).
+        while match := re.match(
+            r"(?:https://github\.com/[^/\s]+/[^/\s]+/issues/[1-9]\d*|#[1-9]\d*)",
+            value,
+        ):
             reference = match.group()
             if reference.startswith("#"):
                 reference = repository + "/issues/" + reference[1:]
             if reference != source and reference not in references:
                 references.append(reference)
+            remainder = value[match.end():]
+            separator = re.match(r"\s*(?:[,、&]|and\b)\s*", remainder)
+            if separator is None:
+                break
+            value = remainder[separator.end():]
     return references
 
 

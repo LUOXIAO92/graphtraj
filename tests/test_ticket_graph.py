@@ -78,7 +78,7 @@ def test_graph_projects_explicit_summary_membership_without_dependency_inference
     _configure(project)
     bodies = [
         "## Parent\n\nhttps://github.com/example/project/issues/90\n\n## Scope\nSee #91.",
-        "Parent: #91。Prior work #90 is a dependency, not membership.",
+        "Parent: #91. Prior work #90 is a dependency, not membership.",
         "属于 #90、#91。Shared work.",
         "See #90; depends on #91.\n```\nParent: #92\n```",
     ]

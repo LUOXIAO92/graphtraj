@@ -1,0 +1,118 @@
+name: Package corrected desktop 294
+
+# A dedicated push works before this workflow exists on the default branch.
+on:
+  push:
+    branches: [agent/294-desktop-repair-adoption]
+
+permissions:
+  contents: read
+
+env:
+  PRODUCT_COMMIT: d410a06131e31fdca2420be184801063cdcc8ae5
+  PIP_DISABLE_PIP_VERSION_CHECK: '1'
+
+jobs:
+  windows-package:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: d410a06131e31fdca2420be184801063cdcc8ae5
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22.18.0'
+          architecture: x64
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13.7'
+          architecture: x64
+      - name: Record source and build environment
+        run: |
+          $source = git rev-parse HEAD
+          if ($source -ne $env:PRODUCT_COMMIT) { throw 'Unexpected product source' }
+          New-Item -ItemType Directory -Force desktop/test-results/package-win | Out-Null
+          @{ source=$source; workflow=$env:GITHUB_SHA; run=$env:GITHUB_RUN_ID; image=$env:ImageVersion; os=[Environment]::OSVersion.VersionString; node=(node --version); npm=(npm --version); python=(python --version) } | ConvertTo-Json | Set-Content desktop/test-results/package-win/environment.json
+      - name: Install pinned build dependencies
+        run: |
+          python -m pip install --no-deps pip==25.3 setuptools==80.9.0 wheel==0.45.1 packaging==25.0
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm --prefix desktop ci
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Build and package without launching the application
+        run: |
+          npm --prefix desktop run build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $env:GRAPHTRAJ_BUILD_PYTHON = (Get-Command python).Source
+          node desktop/scripts/package-win.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Retain package and provenance
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: GraphTraj-windows-x64-${{ env.PRODUCT_COMMIT }}
+          path: |
+            desktop/test-results/package-win/GraphTraj-windows-x64.zip
+            desktop/test-results/package-win/GraphTraj-windows-x64.zip.sha256
+            desktop/test-results/package-win/GraphTraj/build-manifest.json
+            desktop/test-results/package-win/wheels/*.whl
+            desktop/test-results/package-win/environment.json
+          if-no-files-found: error
+          retention-days: 3
+
+  linux-package:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: d410a06131e31fdca2420be184801063cdcc8ae5
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22.18.0'
+      - name: Record source and build environment
+        run: |
+          test "$(git rev-parse HEAD)" = "$PRODUCT_COMMIT"
+          mkdir -p desktop/test-results/linux-package
+          python3 - <<'PY'
+          import json, os, platform, subprocess
+          from pathlib import Path
+          facts = {
+              'source': subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(),
+              'workflow': os.environ['GITHUB_SHA'], 'run': os.environ['GITHUB_RUN_ID'],
+              'image': os.environ.get('ImageVersion'), 'os': platform.platform(),
+              'python': platform.python_version(),
+              'node': subprocess.check_output(['node', '--version'], text=True).strip(),
+              'npm': subprocess.check_output(['npm', '--version'], text=True).strip(),
+          }
+          Path('desktop/test-results/linux-package/environment.json').write_text(json.dumps(facts, indent=2) + '\n')
+          PY
+      - name: Install build prerequisite
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-venv
+      - name: Build and package without installing the application
+        run: |
+          npm --prefix desktop ci
+          node desktop/scripts/package-linux.mjs desktop/test-results/linux-package
+          cd desktop/test-results/linux-package
+          sha256sum -c SHA256SUMS
+      - name: Retain package and provenance
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: GraphTraj-linux-amd64-${{ env.PRODUCT_COMMIT }}
+          path: |
+            desktop/test-results/linux-package/*.deb
+            desktop/test-results/linux-package/SHA256SUMS
+            desktop/test-results/linux-package/source.json
+            desktop/test-results/linux-package/environment.json
+            desktop/test-results/linux-package/stage/opt/graphtraj-desktop/wheels/*.whl
+          if-no-files-found: error
+          retention-days: 3

@@ -1,9 +1,12 @@
 import { nativeCommand } from './native.ts';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { createInterface } from 'node:readline';
+import { randomBytes } from 'node:crypto';
+import { link, mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 
 export type Agent = {
-  alias: string; parent?: string | null; runtime?: string; model?: string | null;
+  alias: string; kind?: 'main' | 'member'; ticket_id?: string | null; session?: string; source?: string; parent?: string | null; runtime?: string; model?: string | null;
   historical: boolean; state: string; last_outcome?: string; reason?: string;
 };
 export type ActivityEvent = {
@@ -15,31 +18,54 @@ export type ActivityEvent = {
     phase: string; attributable: boolean; [key: string]: unknown };
 };
 export type Activity = {
-  ticket_id: string; scope?: 'self' | 'human'; agents: Agent[]; updated_at: string; events?: ActivityEvent[];
+  ticket_id: string | null; notices?: string[]; read_records?: number; scope?: 'self' | 'human'; agents: Agent[]; updated_at: string; events?: ActivityEvent[];
   cursor?: string | null; has_more?: boolean; waiting_for_record?: boolean;
   availability?: string; reason?: string;
 };
-export type ActivityRequest = { ticket_id: string; alias?: string; cursor?: string };
+export type ActivityRequest = { ticket_id?: string; alias?: string; cursor?: string };
 
-/** One optional observer process retains only volatile byte cursors, never Traces. */
+/** Optional project observers read authenticated, restartable source checkpoints. */
 export class ActivityReader {
   private processes = new Map<string, {
     child: ChildProcessWithoutNullStreams;
     queue: { resolve: (value: Activity) => void; reject: (error: Error) => void }[];
   }>();
   private executable: string | undefined;
-  constructor(executable?: string) { this.executable = executable; }
+  private cursorKey?: Promise<string>;
+  private cursorDirectory?: string;
+  constructor(executable?: string, cursorDirectory?: string) {
+    this.executable = executable;
+    this.cursorDirectory = cursorDirectory;
+  }
 
-  read(root: string, request: ActivityRequest): Promise<Activity> {
-    let process = this.processes.get(root);
-    if (!process) {
+  /** Authenticate restartable cursors without granting any source selection authority. */
+  private async key(directory?: string): Promise<string> {
+    const fresh = randomBytes(32).toString('hex');
+    if (!directory) return fresh;
+    await mkdir(directory, { recursive: true, mode: 0o700 });
+    const file = path.join(directory, 'native-cursor-key');
+    const temporary = file + '.' + fresh.slice(0, 16) + '.tmp';
+    await writeFile(temporary, fresh, { mode: 0o600, flush: true });
+    try { await link(temporary, file); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error; }
+    finally { await unlink(temporary); }
+    const saved = await readFile(file, 'utf8');
+    if (!/^[a-f0-9]{64}$/.test(saved)) throw new Error('Native cursor key is unreadable; saved history was preserved.');
+    return saved;
+  }
+
+  async read(root: string, request: ActivityRequest): Promise<Activity> {
+    const key = await (this.cursorKey ??= this.key(this.cursorDirectory));
+    let observer = this.processes.get(root);
+    if (!observer) {
       const command = nativeCommand(this.executable);
       const child = spawn(command.executable, [...command.args, '--desktop-observer', '--allowed-features', 'desktop_activity'], {
         cwd: root, windowsHide: true, stdio: 'pipe',
+        env: { ...process.env, GRAPHTRAJ_DESKTOP_CURSOR_KEY: key },
       });
-      process = { child, queue: [] };
-      this.processes.set(root, process);
-      const connection = process;
+      observer = { child, queue: [] };
+      this.processes.set(root, observer);
+      const connection = observer;
       const fail = () => {
         if (this.processes.get(root) === connection) this.processes.delete(root);
         for (const pending of connection.queue.splice(0)) pending.reject(new Error('Native activity observer disconnected.'));
@@ -57,7 +83,7 @@ export class ActivityReader {
         } catch { pending.reject(new Error('Native activity query refused or unavailable.')); }
       });
     }
-    const connection = process;
+    const connection = observer;
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         connection.child.kill();

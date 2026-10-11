@@ -624,18 +624,19 @@ def read_desktop_activity(arguments: Mapping[str, Any], *, cwd: Path | None = No
     """Expose the native human monitor without widening Agent report access."""
     from graphtraj.execution.desktop_activity import observe
 
-    return ToolResult(observe(cwd or Path.cwd(), arguments['ticket_id'],
+    return ToolResult(observe(cwd or Path.cwd(), arguments.get('ticket_id'),
                               arguments.get('alias'), arguments.get('cursor')))
 
 
 register_tool(
     "desktop_activity",
-    "Read actual Ticket members and bounded native Chat/usage records for the human desktop. "
+    "Read associated Main Sessions, actual project members and bounded native Chat/usage records. "
+    "Omit ticket_id to list project sources in the human desktop. "
     "Verified registered Agents may read only their own Session and mapped Ticket; no messaging or control is provided.",
     {"type": "object", "properties": {
         "ticket_id": {"type": "string"}, "alias": {"type": "string"},
         "cursor": {"type": "string"},
-    }, "required": ["ticket_id"], "additionalProperties": False},
+    }, "additionalProperties": False},
     read_desktop_activity,
     manual_ref="manuals/task-delivery/guide.md",
     examples=({"ticket_id": "1"},),

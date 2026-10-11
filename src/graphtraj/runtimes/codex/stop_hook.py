@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 
 import click
+import yaml
 
 from graphtraj.execution.main_finalize import bind_session, check_main_finalize, session_binding
 from graphtraj.runtimes.codex.session_entry import (
@@ -19,12 +20,12 @@ from graphtraj.runtimes.codex.session_entry import (
 def native_event(event: dict) -> dict:
     """Associate native start/resume and handle Stop without Main relay calls."""
     from graphtraj.execution.runner_status import process_caller_alias
-    from graphtraj.workspace.runner_project import discover_runner_directory
+    from graphtraj.workspace.runner_project import discover_runner_directory, discover_project_root
 
     name = event.get('hook_event_name')
     if name not in {'SessionStart', 'Stop'}:
         return {}
-    root = Path(event['cwd'])
+    root = discover_project_root(Path(event['cwd']))
     runner = discover_runner_directory(root)
 
     def skipped(reason: str) -> dict:
@@ -62,18 +63,28 @@ def native_event(event: dict) -> dict:
         return skipped(f'Session {session} is a recorded completion checker.')
     binding = session_binding(root, 'codex', session)
     if name == 'SessionStart':
-        bind_session(connection, root)
+        bind_session(connection, root, activity_source=event.get('transcript_path'))
         return {'systemMessage': 'GraphTraj Main Session associated.'}
     if not binding.is_file():
         if not owns_native_root(runner, connection):
             raise ValueError('Main Session association is unavailable; no established native root ownership.')
         # A hook can be adopted after this host's startup event was consumed.
         # Use the real Stop context and existing owner proof, not a fake start.
-        bind_session(connection, root)
+        bind_session(connection, root, activity_source=event.get('transcript_path'))
     result = check_main_finalize(binding, event)
     if not result:
         return skipped('the bound native Session/turn did not match, or its owning turn stopped. '
                        'No task completion result is available.')
+    # Only a matching Stop may update an older readable-source association.
+    # Optional monitoring failures must not change the checker's decision.
+    try:
+        saved = yaml.safe_load(binding.read_text())
+        source = str(Path(event['transcript_path']).resolve())
+        if saved.get('activity', {}).get('trace_file') != source:
+            bind_session(connection, root, activity_source=source)
+    except Exception:
+        field = next((key for key in ('systemMessage', 'reason', 'stopReason') if key in result), 'systemMessage')
+        result[field] = result.get(field, '') + '\nMain activity source could not be retained.'
     return result
 
 

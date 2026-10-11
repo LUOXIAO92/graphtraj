@@ -4,7 +4,8 @@ export type Tokens = Partial<Record<'input' | 'input_uncached' | 'output' | 'cac
 export type Call = {
   key: string; project: string; ticket: string; agent: string; session: string;
   model: string; time: string | null; tokens: Tokens; phase: string; offset: number;
-  counter: boolean; cumulative?: Tokens; attributable: boolean;
+  counter: boolean; cumulative?: Tokens; baseline?: Tokens | null; attributable: boolean;
+  source?: ActivityEvent['source'];
 };
 export type Filters = { ticket?: string; agent?: string; model?: string; from?: string; to?: string };
 export const metrics = ['input', 'output', 'cache_read', 'cache_write'] as const;
@@ -32,7 +33,8 @@ function boundary(value: string, end: boolean): number {
 }
 
 /** Retain only native usage, keyed by actual ownership rather than its display parent. */
-export function collect(calls: Map<string, Call>, project: string, events: ActivityEvent[]): void {
+export function collect(calls: Map<string, Call>, project: string, events: ActivityEvent[]): Call[] {
+  const changed: Call[] = [];
   for (const event of events) {
     const usage = event.usage;
     if (event.kind !== 'usage' || !usage) continue;
@@ -40,46 +42,59 @@ export function collect(calls: Map<string, Call>, project: string, events: Activ
     const identity = usage.identity;
     const key = JSON.stringify([project, identity || event.id]);
     const old = calls.get(key);
-    if (old && (old.phase === 'final' && usage.phase !== 'final' || old.offset > event.source.offset)) continue;
-    if (old?.counter) continue; // Preserve the original time/model of replayed counters.
+    if (old?.phase === 'final' && usage.phase !== 'final') continue;
+    if (old && !old.counter && old.offset > event.source.offset && usage.phase !== 'final') continue;
+    if (old?.counter && (old.baseline !== undefined || usage.previous_cumulative === undefined
+        || event.source.offset > old.offset)) continue;
     const tokens = Object.fromEntries(Object.entries(usage.tokens).filter(([, value]) =>
       Number.isFinite(value) && value >= 0)) as Tokens;
-    const raw = usage.cumulative as Record<string, number> | undefined;
-    const cumulative = raw ? Object.fromEntries(Object.entries({ input: raw.input_tokens,
-      output: raw.output_tokens, cache_read: raw.cached_input_tokens,
+    const convert = (raw: Record<string, number>): Tokens => Object.fromEntries(Object.entries({
+      input: raw.input_tokens, output: raw.output_tokens, cache_read: raw.cached_input_tokens,
       cache_write: raw.cache_write_input_tokens, reasoning: raw.reasoning_output_tokens,
-    }).filter(([, value]) => Number.isFinite(value) && value >= 0)) as Tokens : undefined;
-    calls.set(key, { key, project, session, ticket: String(usage.ticket_id ?? ''),
+    }).filter(([, value]) => Number.isFinite(value) && value >= 0)) as Tokens;
+    const cumulative = usage.cumulative ? convert(usage.cumulative as Record<string, number>) : undefined;
+    const baseline = usage.previous_cumulative === undefined ? undefined : usage.previous_cumulative === null
+      ? null : convert(usage.previous_cumulative as Record<string, number>);
+    const call: Call = { key, project, session, ticket: String(usage.ticket_id ?? ''),
       agent: String(usage.agent ?? ''), model: event.model || 'Unknown model',
-      time: event.time == null || !Number.isFinite(new Date(event.time).getTime()) ? null : new Date(event.time).toISOString(),
-      tokens: { ...old?.tokens, ...tokens }, phase: usage.phase, offset: event.source.offset, counter: Boolean(cumulative), cumulative,
+      time: old?.counter ? old.time : event.time == null || !Number.isFinite(new Date(event.time).getTime()) ? null : new Date(event.time).toISOString(),
+      tokens: { ...old?.tokens, ...tokens }, phase: usage.phase, offset: event.source.offset, counter: Boolean(cumulative), cumulative, baseline, source: event.source,
       attributable: usage.attributable && Boolean(identity) && Boolean(session),
-    });
+    };
+    if (JSON.stringify(old) !== JSON.stringify(call)) {
+      calls.set(key, call); changed.push(call);
+    }
   }
+  return changed;
 }
 
 /** Difference Codex counters before filtering, so stream snapshots cannot inflate totals. */
 export function records(calls: Map<string, Call>, filters: Filters = {}): Call[] {
   const previous = new Map<string, { totals: Tokens; row: Call }>();
   const result: Call[] = [];
-  for (const call of [...calls.values()].sort((a, b) => a.offset - b.offset)) {
+  for (const call of [...calls.values()].sort((a, b) =>
+    a.time && b.time && a.time !== b.time ? a.time.localeCompare(b.time) :
+      a.cumulative && b.cumulative && a.session === b.session
+        ? (a.cumulative.input ?? 0) + (a.cumulative.output ?? 0) - (b.cumulative.input ?? 0) - (b.cumulative.output ?? 0)
+        : a.offset - b.offset)) {
     if (!call.cumulative) { result.push(call); continue; }
     const key = JSON.stringify([call.project, call.session]);
     const before = previous.get(key);
     // First retained totals may include inherited history; use only reported last usage.
-    if (!before) {
+    if (!before && !call.baseline) {
       const row = { ...call, tokens: { ...call.tokens } };
       result.push(row); previous.set(key, { totals: call.cumulative, row }); continue;
     }
     const tokens: Tokens = {};
     for (const metric of [...metrics, 'reasoning'] as const) {
       const total = call.cumulative[metric];
-      const prior = before.totals[metric];
+      const prior = (call.baseline === undefined ? before?.totals : call.baseline)?.[metric];
       if (total !== undefined && prior !== undefined && total >= prior) tokens[metric] = total - prior;
     }
     // An unchanged input counter with more output is an update to the same call.
     // Keep its input context for long-context pricing and its original timestamp.
-    if (tokens.input === 0 && call.model === before.row.model) {
+    if (before && tokens.input === 0 && call.model === before.row.model
+        && (call.baseline === undefined || JSON.stringify(call.baseline) === JSON.stringify(before.totals))) {
       for (const metric of [...metrics, 'reasoning'] as const) {
         if (tokens[metric] !== undefined && before.row.tokens[metric] !== undefined) {
           before.row.tokens[metric]! += tokens[metric]!;

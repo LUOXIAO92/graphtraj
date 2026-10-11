@@ -25,12 +25,12 @@ export function EventCard({ event }: { event: ActivityEvent }) {
 
 /** Show only members returned by the native activity projection. */
 export function MemberPills({ agents, onRead, focus }: { agents: Agent[]; onRead: (alias: string) => void; focus?: string | null }) {
-  return <div className="member-pills">{agents.map(agent => <button key={agent.alias} title={agent.alias} className={`${agent.historical ? 'history' : ''} ${focus === agent.alias ? 'selected' : ''}`} onClick={() => onRead(agent.alias)}><Avatar name={agent.alias} small/><span><strong>{agent.alias}</strong><small>{agent.historical ? 'Historical' : 'Current'} · {agent.runtime || 'Runtime unknown'}</small></span><Icon name="right" size={13}/></button>)}</div>;
+  return <div className="member-pills">{agents.map(agent => <button key={agent.alias} title={agent.alias} className={`${agent.historical ? 'history' : ''} ${focus === agent.alias ? 'selected' : ''}`} onClick={() => onRead(agent.alias)}><Avatar name={agent.alias} small/><span><strong>{agent.alias}</strong><small>{agent.kind === 'main' ? 'Associated Main' : agent.historical ? 'Historical' : 'Current'} · {agent.runtime || 'Runtime unknown'}</small></span><Icon name="right" size={13}/></button>)}</div>;
 }
 
 /** Keep each actual member in its own independently scrolling column. */
 export function ActivityView({ projectId, ticketId, active = true, expanded = true, focusAgent, onActivity }: {
-  projectId: string; ticketId: string; active?: boolean; expanded?: boolean; focusAgent?: string | null; onActivity?: (activity: Activity) => void;
+  projectId: string; ticketId?: string; active?: boolean; expanded?: boolean; focusAgent?: string | null; onActivity?: (activity: Activity) => void;
 }) {
   const [activity, setActivity] = useState<Activity | null>(null);
   const [error, setError] = useState('');
@@ -45,7 +45,8 @@ export function ActivityView({ projectId, ticketId, active = true, expanded = tr
     let timer: ReturnType<typeof setTimeout>;
     async function refresh() {
       try {
-        const next = await window.graphtraj.activity(projectId, { ticket_id: ticketId });
+        const next = await window.graphtraj.activity(projectId, ticketId ? { ticket_id: ticketId } : {});
+        if (!ticketId) next.agents = next.agents.filter(agent => agent.kind === 'main');
         if (alive) { setActivity(next); setError(next.reason || ''); onActivity?.(next); }
       } catch { if (alive) setError('Member status disconnected; retained content remains readable.'); }
       finally { if (alive) timer = setTimeout(refresh, 3000); }
@@ -69,6 +70,7 @@ export function ActivityView({ projectId, ticketId, active = true, expanded = tr
   return <section className="activity" aria-label="Agent activity">
     {activity?.scope === 'self' && <p className="native-notice">This Agent connection shows only its own Session.</p>}
     {error && <p className="native-notice error" role="alert">{error}</p>}
+    {activity?.notices?.map(notice => <p className="native-notice" key={notice}>{notice}</p>)}
     {!activity?.agents.length && <p className="native-notice">{activity ? 'No participating Agents recorded.' : 'Loading members…'}</p>}
     <div className="agent-columns" ref={columns} tabIndex={0} aria-label="Agent columns" role="region"
       onKeyDown={event => { if (event.target !== event.currentTarget) return; if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); move(event.key === 'ArrowLeft' ? -1 : 1); } }}
@@ -81,7 +83,7 @@ export function ActivityView({ projectId, ticketId, active = true, expanded = tr
 }
 
 function AgentColumn({ projectId, ticketId, agent, active }: {
-  projectId: string; ticketId: string; agent: Agent; active: boolean;
+  projectId: string; ticketId?: string; agent: Agent; active: boolean;
 }) {
   const [activity, setActivity] = useState<Activity | null>(null);
   const [error, setError] = useState('');
@@ -107,7 +109,7 @@ function AgentColumn({ projectId, ticketId, agent, active }: {
     async function refresh() {
       try {
         const next = await window.graphtraj.activity(projectId, {
-          ticket_id: ticketId, alias: agent.alias, ...(cursor.current ? { cursor: cursor.current } : {}),
+          ...(ticketId ? { ticket_id: ticketId } : {}), alias: agent.alias, ...(cursor.current ? { cursor: cursor.current } : {}),
         });
         if (!alive) return;
         if (next.availability === 'cursor-expired' || next.availability === 'trace-changed') {
@@ -148,8 +150,8 @@ function AgentColumn({ projectId, ticketId, agent, active }: {
   }
 
   return <article className={`agent-chat-column agent-column ${agent.historical ? 'historical-column' : ''}`} data-agent-id={agent.alias} aria-label={agent.alias}>
-    <header className="agent-column-heading"><Avatar name={agent.alias}/><div><h2 title={agent.alias}>{agent.alias}</h2><span>{agent.historical ? 'Historical' : 'Current'} · {agent.state}</span></div><Status value={agent.state}/></header>
-    <div className="agent-column-parent"><Icon name="branch" size={13}/><span title={agent.parent ?? undefined}>Parent: {agent.parent ?? 'Not recorded / root'}</span></div>
+    <header className="agent-column-heading"><Avatar name={agent.alias}/><div><h2 title={agent.alias}>{agent.kind === 'main' ? 'Main' : agent.alias}</h2><span>{agent.kind === 'main' ? 'Associated Main' : agent.historical ? 'Historical' : 'Current'} · {agent.state}</span></div><Status value={agent.state}/></header>
+    <div className="agent-column-parent"><Icon name="branch" size={13}/><span title={agent.parent ?? undefined}>{agent.kind === 'main' ? `Session: ${agent.session}` : `Parent: ${agent.parent ?? 'Not recorded / root'}`}</span></div>
     <div className="conversation-panel"><div className="agent-metadata"><span><Icon name="terminal" size={14}/>{agent.runtime || 'Runtime unknown'}</span><span>{agent.model || 'Model not recorded'}</span></div>
       {error && <p className="native-notice error" role="alert">{error}</p>}
       {agent.reason && <p className="native-notice">{agent.reason}</p>}

@@ -55,7 +55,6 @@ test('Dashboard filters persisted usage by local dates and keeps global comparis
   const text = () => JSON.stringify(tree.toJSON());
   assert.ok(tree.root.findByProps({ role: 'status' }).children.join('').trim());
   assert.match(text(), /\$2.205000/);
-  assert.match(text(), /Main calls are not covered/);
   assert.match(text(), /unknown-model/);
   assert.match(text(), /No verified model price/);
   const modelButton = label => tree.root.findAllByType('button').find(node => node.findAllByType('span').some(child => child.children.join('') === label));

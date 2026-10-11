@@ -15,7 +15,7 @@ from graphtraj.execution.runner_io import write_yaml_durably
 from graphtraj.execution.runner_models import RunnerError
 from graphtraj.execution.runner_status import caller_alias
 from graphtraj.runtimes.runtime_adapter import current_host_connection, select_runtime_adapter
-from graphtraj.workspace.runner_project import discover_runner_directory
+from graphtraj.workspace.runner_project import discover_runner_directory, discover_project_root
 
 
 def bind_main_finalize(summary_issue: str, cwd: Path) -> dict[str, Any]:
@@ -35,12 +35,18 @@ def bind_main_finalize(summary_issue: str, cwd: Path) -> dict[str, Any]:
     return bind_session(connection, cwd, summary_issue)
 
 
-def bind_session(connection: dict, cwd: Path, summary_issue: str = '') -> dict[str, Any]:
+def bind_session(
+    connection: dict,
+    cwd: Path,
+    summary_issue: str = '',
+    activity_source: str | None = None,
+) -> dict[str, Any]:
     """Associate an Adapter-observed external Session using existing Main storage.
 
     Callers of this internal boundary obtain connection facts from their Runtime,
     never from model operation arguments. A task hint does not define identity.
     """
+    cwd = discover_project_root(cwd)
     runner = discover_runner_directory(cwd)
     adapter = select_runtime_adapter(connection['runtime'])
     session = adapter.verify_finalize_main(connection)
@@ -74,6 +80,17 @@ def bind_session(connection: dict, cwd: Path, summary_issue: str = '') -> dict[s
         if any(previous.get(key) != binding[key]
                for key in ('runtime', 'session', 'cwd')):
             raise RunnerError('authority-denied', 'This Main already has a different Session binding.')
+    else:
+        previous = {}
+    if not summary_issue:
+        binding['summary_issue'] = previous.get('summary_issue', '')
+    # Retain the source supplied by native entry without changing caller identity.
+    source = activity_source or connection.get('session_file')
+    activity = dict(previous.get('activity', {}))
+    if source:
+        activity['trace_file'] = str(Path(source).resolve())
+    if activity:
+        binding['activity'] = activity
     write_yaml_durably(path, binding)
     return {'binding': str(path), 'session': session,
             'hook': adapter.finalize_hook(path, binding)}

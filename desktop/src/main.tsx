@@ -43,6 +43,7 @@ function GraphView({ project, active, sidebarButton }: { project: Project; activ
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('all');
   const [expanded, setExpanded] = useState(false);
+  const [mainExpanded, setMainExpanded] = useState(false);
   const [focusAgent, setFocusAgent] = useState<string | null>(null);
   const [activity, setActivity] = useState<Activity | null>(null);
   const [nodes, setNodes, onNodesChange] = useNodesState<TicketNode>([]);
@@ -83,10 +84,10 @@ function GraphView({ project, active, sidebarButton }: { project: Project; activ
   const members = activity?.agents ?? [];
   return <>
     <header className="d-monitor-caption"><div>{sidebarButton}<span className="project-avatar">{projectName(project).slice(0, 2)}</span><strong title={project.root}>{projectName(project)}</strong><span>{expanded ? 'Agent conversations' : 'Task graph'}</span></div>
-      <span role="status">{error ? 'Offline / query error' : loading ? 'Refreshing…' : 'Connected'} · {observation ? new Date(observation.updatedAt).toLocaleTimeString() : 'No graph received'}</span></header>
+      <Button variant="ghost" onPress={() => { setMainExpanded(true); setExpanded(false); }}>Main sessions</Button><span role="status">{error ? 'Offline / query error' : loading ? 'Refreshing…' : 'Connected'} · {observation ? new Date(observation.updatedAt).toLocaleTimeString() : 'No graph received'}</span></header>
     {error && <div className="native-notice error" role="alert">{error}<p>{observation ? 'Showing the last successful graph. Retrying automatically.' : 'Check the directory and native GraphTraj installation.'}</p><Button variant="ghost" onPress={() => setRetry(value => value + 1)}>Refresh now</Button></div>}
     <div className="d-monitor-content"><div className="d-monitor-views">
-      <div className={`d-monitor-view ${expanded && detail ? 'concealed' : ''}`} aria-hidden={expanded && !!detail} inert={expanded && !!detail}>
+      <div className={`d-monitor-view ${mainExpanded || expanded && detail ? 'concealed' : ''}`} aria-hidden={mainExpanded || expanded && !!detail} inert={mainExpanded || expanded && !!detail}>
         <section className={`d-map-workspace ${detail ? 'has-shelf' : ''}`}>
           <div className="d-floating-tools"><div className="new-graph-controls"><label><Icon name="search" size={15}/><input type="search" aria-label="Search tasks" placeholder="Find task or number" value={query} onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && matches[0]) locate(matches[0]); }}/></label>
             <select aria-label="Task status" value={status} onChange={event => setStatus(event.target.value)}><option value="all">All statuses</option><option value="inactive">Replaced / inactive</option>{[...new Set(tickets?.map(ticket => ticket.status))].sort().map(value => <option key={value}>{value}</option>)}</select></div>
@@ -103,14 +104,15 @@ function GraphView({ project, active, sidebarButton }: { project: Project; activ
             : <div className="d-canvas-hint"><Icon name="graph"/><div><strong>Select a task in the map</strong><span>Inspect its team, then open a full reading workspace.</span></div></div>}
         </section>
       </div>
-      {detail && <div className={`d-monitor-view ${expanded ? '' : 'concealed'}`} aria-hidden={!expanded} inert={!expanded}><section className="new-reader d-reader" aria-label="Expanded agent conversations"><header className="d-reading-head"><Button variant="ghost" aria-label="Collapse chat" onPress={() => setExpanded(false)}><Icon name="left" size={16}/>Back to task graph</Button><span>#{detail.ticket_id}</span><h1>{detail.title}</h1><Status value={detail.status}/></header><div className="d-reading-index"><span>JUMP TO AGENT</span><MemberPills agents={members} onRead={setFocusAgent} focus={focusAgent}/></div><ActivityView key={`${projectId}:${detail.ticket_id}`} projectId={projectId} ticketId={detail.ticket_id} active={active} expanded={expanded} focusAgent={focusAgent} onActivity={setActivity}/></section></div>}
+      {detail && <div className={`d-monitor-view ${expanded ? '' : 'concealed'}`} aria-hidden={!expanded} inert={!expanded}><section className="new-reader d-reader" aria-label="Expanded agent conversations"><header className="d-reading-head"><Button variant="ghost" aria-label="Collapse chat" onPress={() => setExpanded(false)}><Icon name="left" size={16}/>Back to task graph</Button><span>#{detail.ticket_id}</span><h1>{detail.title}</h1><Status value={detail.status}/></header><div className="d-reading-index"><span>JUMP TO AGENT</span><MemberPills agents={members} onRead={setFocusAgent} focus={focusAgent}/></div><ActivityView key={`${projectId}:${detail.ticket_id}`} projectId={projectId} ticketId={detail.ticket_id} active={active && !mainExpanded} expanded={expanded} focusAgent={focusAgent} onActivity={setActivity}/></section></div>}
+      <div className={`d-monitor-view ${mainExpanded ? '' : 'concealed'}`} aria-hidden={!mainExpanded} inert={!mainExpanded}><section className="new-reader d-reader" aria-label="Main conversations"><header className="d-reading-head"><Button variant="ghost" aria-label="Collapse Main chat" onPress={() => setMainExpanded(false)}><Icon name="left" size={16}/>Back to task graph</Button><h1>Main sessions</h1></header><ActivityView projectId={projectId} active={active && mainExpanded}/></section></div>
     </div></div>
   </>;
 }
 
 function ProjectIndexEditor({ preferences, busy, change, onOpen }: { preferences: Preferences; busy: boolean; change: (operation: () => Promise<Preferences>) => Promise<void>; onOpen: (id: string) => void }) {
   const [removing, setRemoving] = useState<Project | null>(null);
-  return <section className="d-project-index"><header className="d-config-heading"><div><h1>Projects</h1><p>Index paths for monitoring. Removing an entry never deletes project files.</p></div><span className="memory-badge">{preferences.projects.length} indexed</span></header><div className="d-project-index-scroll"><div className="d-project-add-form"><div className="d-index-form-heading"><Icon name="folder" size={20}/><h2>Add a project</h2></div><p>Select an existing GraphTraj directory using the system folder picker.</p><Button variant="primary" isDisabled={busy} onPress={() => void change(() => window.graphtraj.addProject())}><Icon name="plus" size={15}/>Add project</Button><Button variant="ghost" isDisabled={busy} onPress={() => void change(() => window.graphtraj.projects())}>Check paths</Button></div>
+  return <section className="d-project-index"><header className="d-config-heading"><div><h1>Projects</h1><p>Index paths for monitoring. Removing an entry never deletes project files.</p></div><span className="memory-badge">{preferences.projects.length} indexed</span></header><div className="d-project-index-scroll"><div className="d-project-add-form"><div className="d-index-form-heading"><Icon name="folder" size={20}/><h2>Add a project</h2></div><p>Select an existing GraphTraj directory using the system folder picker.</p><Button variant="primary" isDisabled={busy} onPress={() => void change(() => window.graphtraj.addProject())}><Icon name="plus" size={15}/>Add project</Button><Button variant="ghost" isDisabled={busy} onPress={() => void change(() => window.graphtraj.projects(true))}>Check paths</Button></div>
     <div className="d-project-index-table"><table><thead><tr><th>Project / indexed path</th><th>Availability</th><th>Actions</th></tr></thead><tbody>{preferences.projects.map(project => <tr key={project.id}><td><strong>{projectName(project)}</strong><code>{project.root}</code></td><td><span className={`index-status ${project.unavailable ? 'unavailable' : ''}`} title={project.unavailable}>{project.unavailable ? 'Path unavailable' : 'Available'}</span></td><td><div><Button variant="ghost" isDisabled={busy} onPress={() => onOpen(project.id)}>Open</Button><Button variant="ghost" isDisabled={busy} aria-label={`Relocate ${project.root}`} onPress={() => void change(() => window.graphtraj.relocateProject(project.id))}>Relocate</Button><Button isIconOnly variant="ghost" isDisabled={busy} aria-label={`Remove ${project.root}`} onPress={() => setRemoving(project)}><Icon name="trash" size={16}/></Button></div></td></tr>)}</tbody></table>{!preferences.projects.length && <div className="d-inline-empty"><Icon name="folder" size={28}/><h3>Your project list is empty</h3><p>Add a directory above. Models remain available globally.</p></div>}</div><details className="d-index-explanation"><summary>About this project index</summary><p>Paths are stored in HOME/.graphtraj. Removing a path does not modify project files or stop running Agents.</p></details></div>
     {removing && <Dialog title={`Remove ${projectName(removing)} from the index?`} onClose={() => setRemoving(null)}><p>Only this list entry is removed. Project files, team configuration and running Agents are unchanged.</p><div className="d-delete-scope"><strong>{projectName(removing)}</strong><code>{removing.root}</code></div><div className="dialog-footer"><Button variant="secondary" onPress={() => setRemoving(null)}>Keep project</Button><Button className="destructive-button" isDisabled={busy} onPress={() => { void change(() => window.graphtraj.removeProject(removing.id)); setRemoving(null); }}>Remove index entry</Button></div></Dialog>}</section>;
 }
@@ -134,7 +136,15 @@ function FocusedDWorkbench() {
     try { const next = await operation(); setPreferences(next); setError(''); if (next.selected) setVisited(previous => [...new Set([...previous, next.selected!])]); }
     catch (error) { setError(String(error)); } finally { setBusy(false); }
   }
-  useEffect(() => { void change(() => window.graphtraj.projects()); }, []);
+  useEffect(() => {
+    let alive = true;
+    void change(() => window.graphtraj.projects()).then(() => {
+      if (alive) void window.graphtraj.projects(true).then(next => {
+        if (alive) setPreferences(next);
+      }).catch(error => { if (alive) setError(String(error)); });
+    });
+    return () => { alive = false; };
+  }, []);
   const project = preferences.projects.find(item => item.id === preferences.selected);
   const open = (id: string) => { void change(() => window.graphtraj.selectProject(id)); setDestination('monitor'); };
   const sidebarButton = <Button isIconOnly={!sidebarHidden} variant="ghost" aria-expanded={!sidebarHidden} aria-controls="d-project-sidebar" aria-label={sidebarHidden ? 'Show sidebar' : 'Hide sidebar'} onPress={() => setSidebarHidden(value => !value)}><Icon name="sidebar" size={19}/>{sidebarHidden && <span>Show sidebar</span>}</Button>;

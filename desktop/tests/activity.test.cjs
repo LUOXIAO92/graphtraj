@@ -173,3 +173,22 @@ test('parallel current/history columns retain independent pause and cursor state
   assert.deepEqual(requests.filter(request => request.alias).slice(-2).map(request => request.cursor), ['3', '3']);
   assert.ok(requests.every(request => request.projectId === 'one'));
 });
+
+test('Main conversations use project associations without inventing Ticket membership', async t => {
+  const { ActivityView } = await components(t);
+  const requests = [];
+  const main = { alias: 'Main:codex:main-session', kind: 'main', runtime: 'codex', session: 'main-session', historical: false, state: 'associated' };
+  globalThis.window = { graphtraj: { activity: async (projectId, request) => {
+    requests.push({ projectId, ...request });
+    return { ticket_id: null, updated_at: '2026-10-11T00:00:00Z',
+      agents: [main, { alias: 'ticket-member', kind: 'member', historical: false, state: 'running' }],
+      availability: 'available', events: request.alias ? [event(1, { text: 'Owned Main output' })] : [] };
+  } } };
+  let tree;
+  await act(async () => { tree = create(React.createElement(ActivityView, { projectId: 'one' })); });
+  t.after(async () => { await act(async () => tree.unmount()); });
+  assert.equal(tree.root.findAll(node => node.type === 'article' && node.props['data-agent-id'] === main.alias).length, 1);
+  assert.equal(tree.root.findAll(node => node.type === 'article' && node.props['data-agent-id'] === 'ticket-member').length, 0);
+  assert.match(text(tree), /Owned Main output/);
+  assert.ok(requests.every(request => request.projectId === 'one' && !('ticket_id' in request)));
+});

@@ -4,13 +4,19 @@ from graphtraj.runtimes.activity import text_content, usage_fact
 
 def project(record: dict, context: dict) -> list[dict]:
     """Project Pi's persisted messages; keep native message IDs as usage identity."""
+    if record.get('type') == 'session':
+        from graphtraj.runtimes.pi.session_entry import session_source
+
+        context.update(cwd=record.get('cwd'), native_session=record.get('id'),
+                       source_kind=session_source(record, [], {}))
     if record.get('type') in {'compaction', 'branch_summary'}:
         return [{'kind': 'work', 'text': record.get('summary', 'Summary content is unavailable.')} ]
     if record.get('type') != 'message':
         return []
     message = record.get('message', {})
     role = message.get('role')
-    base = {'model': message.get('model'), 'provider': message.get('provider'), 'phase': 'final'}
+    base = {'cwd': context.get('cwd'), 'native_session': context.get('native_session'),
+            'source_kind': context.get('source_kind'), 'model': message.get('model'), 'provider': message.get('provider'), 'phase': 'final'}
     if role == 'toolResult':
         return [{**base, 'kind': 'tool', 'phase': 'result', 'call_id': message.get('toolCallId'),
                  'name': message.get('toolName'), 'result': text_content(message.get('content')),

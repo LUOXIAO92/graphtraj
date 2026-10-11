@@ -76,3 +76,23 @@ test('first migration preserves selection and malformed legacy/global files are 
   assert.equal(await fs.readFile(legacy, 'utf8'), '{broken legacy');
   await assert.rejects(fs.access(file), /ENOENT/);
 });
+
+test('reopening a saved index does not wait for an offline native availability check', async t => {
+  const { Projects } = await import('../electron/projects.ts');
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'graphtraj-saved-index-'));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const file = path.join(root, 'projects.json');
+  await fs.writeFile(file, JSON.stringify({ projects: [{ id: 'saved', root }], selected: 'saved' }));
+  let release, entered;
+  const started = new Promise(resolve => { entered = resolve; });
+  const reader = { read: () => new Promise(resolve => { release = resolve; entered(); }) };
+  const index = new Projects(file, reader);
+  t.after(() => index.close());
+  await index.load();
+  assert.equal(index.list().selected, 'saved');
+  await started;
+  assert.ok(release, 'native availability is still running after saved index returns');
+  const finishing = index.refreshAvailability();
+  release({ tickets: [] });
+  assert.equal((await finishing).projects[0].unavailable, undefined);
+});

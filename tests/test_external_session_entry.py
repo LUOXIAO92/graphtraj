@@ -173,7 +173,8 @@ def test_pi_adapter_owns_checker_result_without_main_tool_calls(
     assert native('pi', pi_session(project, monkeypatch, 'main', [])) == {'source': 'main'}
     assert native('pi', {'event': 'check_context'})['prompt']
     assert native('pi', {'event': 'checker_created', 'session': 'checker'}) == {'session': 'checker'}
-    result = {'status': 'waiting', 'reason': 'Native approval pending.', 'nodes': ['276']}
+    result = {'status': 'waiting', 'conclusion': 'Wait for native approval.',
+              'reason': 'Native approval pending.', 'nodes': ['276']}
     assert native('pi', {'event': 'check_result', 'session': 'checker', 'output': json.dumps(result)}) == result
     assert 'error' in native('pi', {'event': 'check_result', 'session': 'unowned', 'output': json.dumps(result)})
 

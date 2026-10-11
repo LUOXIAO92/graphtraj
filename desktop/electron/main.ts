@@ -60,7 +60,7 @@ else {
         if (typeof text !== 'string') throw new Error('Copy requires text.');
         clipboard.writeText(text);
       },
-      'projects:list': () => projects.refreshAvailability(),
+      'projects:list': refresh => refresh === true ? projects.refreshAvailability() : projects.list(),
       'projects:relocate': async id => {
         const result = await dialog.showOpenDialog(window!, {
           title: 'Relocate GraphTraj project', properties: ['openDirectory'],
@@ -99,7 +99,7 @@ else {
             event.senderFrame.url !== pathToFileURL(page).href) {
           throw new Error('Desktop request from an untrusted frame.');
         }
-        if (channel === 'activity:copy' || channel === 'projects:activity' || channel === 'projects:graph' || channel === 'projects:usage') return handler(id);
+        if (channel === 'projects:list' || channel === 'activity:copy' || channel === 'projects:activity' || channel === 'projects:graph' || channel === 'projects:usage') return handler(id);
         // Serialize preference changes, including the native folder dialog.
         const next = writes.then(() => handler(id, draft));
         writes = next.catch(() => undefined);

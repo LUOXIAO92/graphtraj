@@ -242,8 +242,9 @@ def test_installed_observer_streams_updates_and_reconnects(
         assert.equal(next.events.length, 1);
         assert.equal(next.events[0].text, 'native update');
         reader.close(root);
-        const expired = await reader.read(root, { ...request, cursor: next.cursor });
-        assert.equal(expired.availability, 'cursor-expired');
+        const resumed = await reader.read(root, { ...request, cursor: next.cursor });
+        assert.equal(resumed.availability, 'available');
+        assert.deepEqual(resumed.events, []);
         const replay = await reader.read(root, request);
         assert.deepEqual(replay.events.map(event => event.id), [first.events[0].id, next.events[0].id]);
       } finally { reader.close(); }

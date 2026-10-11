@@ -1,5 +1,6 @@
 """Project-limited Main activity and restartable native counters through public entries."""
 import json
+import subprocess
 from pathlib import Path
 import time
 
@@ -43,6 +44,26 @@ def write_records(path: Path, rows: list[dict], mode: str = 'w') -> None:
     with path.open(mode) as stream:
         for row in rows:
             stream.write(json.dumps(row) + '\n')
+
+
+
+def dashboard_totals(pages: dict[str, list[dict]]) -> dict:
+    """Feed public native pages into the exact Dashboard collector and arithmetic."""
+    usage = (Path(__file__).parents[1] / 'desktop/src/usage.ts').as_uri()
+    script = (
+        'import fs from "node:fs"; '
+        f'import {{collect,records,summarize}} from {json.dumps(usage)}; '
+        'const pages=JSON.parse(fs.readFileSync(0,"utf8")); const totals={}; '
+        'for (const [project,events] of Object.entries(pages)) {'
+        ' const calls=new Map(); collect(calls,project,events); collect(calls,project,events);'
+        ' totals[project]=summarize(records(calls)); }'
+        'console.log(JSON.stringify(totals));'
+    )
+    checked = subprocess.run(
+        ['node', '--preserve-symlinks', '--preserve-symlinks-main', '--input-type=module', '-e', script],
+        input=json.dumps(pages), text=True, capture_output=True, timeout=15, check=True,
+    )
+    return json.loads(checked.stdout)
 
 
 def test_native_main_two_projects_reopen_and_attribution(
@@ -92,6 +113,12 @@ def test_native_main_two_projects_reopen_and_attribution(
     assert [(f['cumulative']['input_tokens'], f['previous_cumulative']['input_tokens']) for f in facts] == [(1100, 1000), (2550, 2450)]
     assert all(f['ticket_id'] is None and f['agent'] == alias for f in facts)
     assert source.as_posix() in json.dumps(one)
+    totals = dashboard_totals({'one': one['events'], 'two': two['events']})
+    assert totals['one']['tokens']['input']['value'] == 200
+    assert totals['two']['tokens']['input']['value'] == 400
+    assert totals['one']['tokens']['output']['value'] == 20
+    assert totals['one']['tokens']['cache_read']['value'] == 100
+    assert totals['one']['tokens']['cache_write']['known'] == 0
     # Clear only observer-process caches to model reconnection; durable source and cursor stay intact.
     from graphtraj.execution.desktop_activity import _READERS
     _READERS.clear()
@@ -102,6 +129,9 @@ def test_native_main_two_projects_reopen_and_attribution(
     assert [e['text'] for e in appended['events'] if e['kind'] == 'message'] == ['first append']
     assert next(e['usage'] for e in appended['events'] if e['kind'] == 'usage')['previous_cumulative']['input_tokens'] == 2800
     assert project_query(root, alias=alias, cursor=appended['cursor'])['events'] == []
+    totals = dashboard_totals({'one': one['events'] + appended['events']})
+    assert totals['one']['tokens']['input']['value'] == 300
+    assert totals['one']['tokens']['output']['value'] == 30
     # No associated Main source can be selected via an arbitrary native Session ID/path.
     with pytest.raises(ValueError):
         project_query(root, alias='Main:codex:unrelated')

@@ -23,7 +23,7 @@ test('desktop Save, Cancel, reopen and conflicts in both settings pages', async 
   const executablePath = process.env.GRAPHTRAJ_APP;
   const require = createRequire(import.meta.url);
   const loader = path.join(path.dirname(require.resolve('playwright-core/package.json')), 'lib/server/electron/loader.js');
-  const facts = { executablePath, steps: [], passed: false, nativeDialogs: 0 };
+  const facts = { executablePath, source: process.env.GITHUB_SHA, steps: [], passed: false, nativeDialogs: 0 };
   let app, page, projectId;
   t.after(async () => {
     if (app) await app.close();
@@ -42,6 +42,12 @@ test('desktop Save, Cancel, reopen and conflicts in both settings pages', async 
         `--user-data-dir=${path.join(root, 'preferences')}`, `--project=${project}` ],
       env: { ...process.env, HOME: home, USERPROFILE: home }, timeout: 30000 });
     page = await app.firstWindow(); page.setDefaultTimeout(15000);
+    facts.installed = await app.evaluate(({ app, BrowserWindow }) => ({
+      packaged: app.isPackaged, appPath: app.getAppPath(),
+      sandbox: BrowserWindow.getAllWindows()[0].webContents.getLastWebPreferences().sandbox,
+    }));
+    if (executablePath) assert.equal(facts.installed.packaged, true);
+    assert.equal(facts.installed.sandbox, true);
     // A second approval fails the save rather than silently accepting a dialog.
     await app.evaluate(({ dialog }) => {
       globalThis.settingsDialogs = 0;

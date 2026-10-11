@@ -7,13 +7,13 @@ name: desktop-macos-adoption
 # workflow_dispatch stays available for later re-runs.
 on:
   push:
-    branches: [agent/265-desktop-mac-adoption, agent/285-desktop-d-monitor-projects, agent/286-desktop-usage-history-range, agent/287-desktop-agents-models-teams, agent/288-desktop-d-integrated-adoption-macos, agent/290-desktop-d-direct-port-macos, agent/292-desktop-readable-runtime-events]
+    branches: [agent/265-desktop-mac-adoption, agent/285-desktop-d-monitor-projects, agent/286-desktop-usage-history-range, agent/287-desktop-agents-models-teams, agent/288-desktop-d-integrated-adoption-macos, agent/290-desktop-d-direct-port-macos, agent/292-desktop-readable-runtime-events, agent/295-desktop-direct-settings-save-macos]
   workflow_dispatch:
     inputs:
       mode:
-        description: Adoption scope (usage exercises focused Ticket 293 persistence and Usage UI)
+        description: Adoption scope (settings exercises direct Save/Cancel and reasoning effort)
         type: choice
-        options: [standard, activity, usage]
+        options: [standard, activity, usage, settings]
         default: standard
 
 permissions:
@@ -25,6 +25,7 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 30
     env:
+      SETTINGS_ADOPTION: ${{ inputs.mode == 'settings' || github.ref_name == 'agent/295-desktop-direct-settings-save-macos' }}
       ACTIVITY_ADOPTION: ${{ inputs.mode == 'usage' || inputs.mode == 'activity' || github.ref_name == 'agent/292-desktop-readable-runtime-events' }}
     defaults:
       run:
@@ -53,7 +54,7 @@ jobs:
         run: npm run build
 
       - name: Desktop unit checks
-        if: env.ACTIVITY_ADOPTION != 'true'
+        if: env.ACTIVITY_ADOPTION != 'true' && env.SETTINGS_ADOPTION != 'true'
         run: |
           if [ "${{ github.ref_name }}" = "agent/287-desktop-agents-models-teams" ]; then
             node --test tests/settings*.test.cjs
@@ -134,12 +135,22 @@ jobs:
         run: node tests/d-adoption.mjs
 
       - name: Installed app adoption, optionality and security
-        if: env.ACTIVITY_ADOPTION != 'true' && github.ref_name != 'agent/290-desktop-d-direct-port-macos'
+        if: env.ACTIVITY_ADOPTION != 'true' && env.SETTINGS_ADOPTION != 'true' && github.ref_name != 'agent/290-desktop-d-direct-port-macos'
         env:
           GRAPHTRAJ_APP: /Applications/GraphTraj.app
           GRAPHTRAJ_ADOPTION_SETTINGS_ONLY: ${{ github.ref_name == 'agent/287-desktop-agents-models-teams' && '1' || '0' }}
           GRAPHTRAJ_ADOPTION_USAGE_ONLY: ${{ github.ref_name == 'agent/286-desktop-usage-history-range' && '1' || '0' }}
         run: node --preserve-symlinks --preserve-symlinks-main tests/adoption.mjs
+
+      - name: Installed direct Save and reasoning effort adoption
+        if: env.SETTINGS_ADOPTION == 'true'
+        env:
+          GRAPHTRAJ_APP: /Applications/GraphTraj.app/Contents/MacOS/GraphTraj
+          GRAPHTRAJ_SETTINGS_EVIDENCE: dist-package/adoption-evidence/settings
+          DEBUG: pw:browser
+        run: |
+          set -o pipefail
+          node --test --test-concurrency=1 tests/settings-window.test.mjs 2>&1 | tee dist-package/adoption-evidence/settings-test.log
 
       - name: Integrated candidate dated usage and history
         if: env.ACTIVITY_ADOPTION != 'true' && github.ref_name == 'agent/288-desktop-d-integrated-adoption-macos'

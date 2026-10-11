@@ -36,7 +36,7 @@ def test_pi_argv_appends_the_authored_system_prompt_and_not_the_task(
     with ExitStack() as stack:
         turn, _, _ = execution(
             tmp_path, pi_environment, 'research@x1', TASK_TEXT, stack,
-            system_prompt=SYSTEM_TEXT,
+            system_prompt=SYSTEM_TEXT, developer_prompt=DEVELOPER_TEXT,
         )
         assert turn.run()['outcome'] == 'completed'
 
@@ -47,6 +47,7 @@ def test_pi_argv_appends_the_authored_system_prompt_and_not_the_task(
     index = argv.index('--append-system-prompt')
     appended = Path(argv[index + 1]).read_text(encoding='utf-8')
     assert SYSTEM_TEXT in appended
+    assert DEVELOPER_TEXT in appended
     assert TASK_TEXT not in appended
 
 
@@ -54,7 +55,11 @@ def test_dsh_persona_suffix_carries_the_authored_system_prompt_and_not_the_task(
     tmp_path: Path, peer: list,
 ) -> None:
     """DSH's system-prompt suffix carries authored text; session/prompt keeps the task."""
-    turn, thread, outcome = run_turn(tmp_path, instructions=SYSTEM_TEXT)
+    role = resolve_child_role(
+        'author', RolePreset('dsh', 'deepseek-flash', None, None,
+                             system_prompt=SYSTEM_TEXT, developer_prompt=DEVELOPER_TEXT), tmp_path,
+    )
+    turn, thread, outcome = run_turn(tmp_path, instructions=role.instructions)
     config = yaml.safe_load(
         (tmp_path / 'dsh-home/profiles/web/cordis.patch.yml').read_text(encoding='utf-8')
     )
@@ -62,6 +67,7 @@ def test_dsh_persona_suffix_carries_the_authored_system_prompt_and_not_the_task(
         row['config']['personaSuffix'] for row in config if row.get('id') == 'system-prompt'
     )
     assert SYSTEM_TEXT in persona
+    assert DEVELOPER_TEXT in persona
     assert TASK_TEXT not in persona
 
     prompts = [body for method, body in peer[0].calls if method == 'session/prompt']

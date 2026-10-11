@@ -9,19 +9,9 @@ from graphtraj.configuration.project_roles import RolePreset, resolve_preset
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 
 
-# Each Runtime exposes only the native prompt layers it actually provides:
-# Pi appends to its system prompt, DSH sets its system prompt, and Codex keeps
-# base (system) and developer instructions in separate native parameters. There
-# is no shared hierarchy beyond this mapping and no Runtime may be handed content
-# for a layer it does not expose.
-_RUNTIME_PROMPT_LAYERS = {
-    "pi":    frozenset({"system"}),
-    "dsh":   frozenset({"system"}),
-    "codex": frozenset({"system", "developer"}),
-}
 # The layer each Runtime's existing instructions file and role boilerplate use.
 # Codex delivers them as developer instructions; Pi and DSH have one system
-# prompt channel and no developer channel.
+# prompt channel and merge authored developer text into that channel.
 _RUNTIME_INSTRUCTION_LAYER = {
     "pi":    "system",
     "dsh":   "system",
@@ -59,9 +49,9 @@ def resolve_child_role(
 
     File reads use the caller's existing permissions. Text is passed through,
     never interpreted as a template or a list of required Skills. Authored
-    system/developer content is added only for the layer the selected Runtime
-    exposes; a declared layer that Runtime does not expose is refused before
-    any dispatch and is never folded into another layer.
+    system/developer content uses Codex's separate native layers. Pi and DSH
+    append both to their single system channel; developer text is labeled but
+    does not gain a separate native priority level.
     """
     settings = resolve_preset(settings)
     instructions = ""
@@ -75,7 +65,7 @@ def resolve_child_role(
                 f"Cannot read UTF-8 role instructions at {path}: {error}",
             ) from error
 
-    system_instructions, authored = _authored_prompt(name, settings)
+    system_instructions, authored = _authored_prompt(settings)
     instructions += authored
     instructions += (
         "\nNative helpers are permitted only for temporary read-only investigation. "
@@ -94,40 +84,32 @@ def resolve_child_role(
     )
 
 
-def _authored_prompt(name: str, settings: RolePreset) -> tuple[str, str]:
+def _authored_prompt(settings: RolePreset) -> tuple[str, str]:
     """Return (system text kept apart, text for the instruction channel).
 
-    A declared layer the selected Runtime does not expose raises
-    ``ROLE_CONFIG_UNSUPPORTED`` naming both the field and the layers that
-    Runtime does expose. Codex keeps base (system) and developer instructions in
+    Codex keeps base (system) and developer instructions in
     separate native parameters, so its ``system_prompt`` is returned separately;
-    Pi and DSH have one system-prompt channel, so their system text joins
+    Pi and DSH have one system-prompt channel, so both authored layers join
     ``instructions``. An unknown Runtime keeps its existing unsupported Runtime
     result from Adapter selection and contributes no text.
     """
-    layers = _RUNTIME_PROMPT_LAYERS.get(settings.runtime)
-    if layers is None:
+    primary = _RUNTIME_INSTRUCTION_LAYER.get(settings.runtime)
+    if primary is None:
         return "", ""
 
-    primary = _RUNTIME_INSTRUCTION_LAYER[settings.runtime]
     separate = ""
     joined: list[str] = []
     for field, layer in _PROMPT_FIELDS:
         value = getattr(settings, field)
         if value is None:
             continue
-        if layer not in layers:
-            raise RuntimeAdapterError(
-                "ROLE_CONFIG_UNSUPPORTED",
-                "Role {0} declares {1}, but the selected {2} Runtime exposes only "
-                "these native prompt layers: {3}.".format(
-                    name, field, settings.runtime, ", ".join(sorted(layers))
-                ),
-            )
         if layer == "system" and primary != "system":
             # This Runtime carries system text in its own native parameter.
             separate = value.rstrip("\n")
         else:
-            joined.append(value.rstrip("\n"))
+            text = value.rstrip("\n")
+            if layer == "developer" and primary == "system":
+                text = "Developer prompt (merged into the Runtime system prompt):\n" + text
+            joined.append(text)
 
     return separate, "".join("\n{0}\n".format(part) for part in joined)

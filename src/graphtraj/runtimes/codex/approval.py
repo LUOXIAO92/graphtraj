@@ -30,6 +30,23 @@ def approval_route(
     if 'approval' not in (selected or {}) and not custom:
         return None
     route = (selected or {}).get('approval')
+    if isinstance(route, dict) and 'connection' in route:
+        from graphtraj.configuration.runtime_connections import read_catalog
+
+        if set(route) != {'connection'} or not isinstance(route['connection'], str):
+            raise RuntimeAdapterError('ROLE_CONFIG_INVALID', 'codex.approval requires one connection reference.')
+        try:
+            runtime_id, provider_id, model_id = route['connection'].split('/')
+            catalog, _ = read_catalog()
+            runtime = catalog['runtimes'][runtime_id]
+            provider = runtime['providers'][provider_id]
+            model = provider['models'][model_id]
+        except (ValueError, KeyError):
+            raise RuntimeAdapterError('ROLE_CONFIG_INVALID', 'codex.approval connection is unavailable.') from None
+        if runtime['runtime'] == 'dsh' or provider.get('api') not in {None, 'openai-completions'}:
+            raise RuntimeAdapterError('ROLE_CONFIG_INVALID', 'Codex approval requires a Chat Completions provider.')
+        route = {'model': model['id'], 'base_url': provider.get('base_url'),
+                 'api_key_env': provider.get('api_key_env')}
     for field in ('model', 'base_url', 'api_key_env'):
         if not isinstance(route, dict) or not isinstance(route.get(field), str) or not route[field].strip():
             raise RuntimeAdapterError('ROLE_CONFIG_INVALID', f'codex.approval.{field} is required for an approval route.')

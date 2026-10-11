@@ -70,6 +70,7 @@ def test_write_failure_keeps_original(project: Path, monkeypatch: pytest.MonkeyP
     before = snapshot(project)
     result = call(project, draft(project, model="unsaved"))[-1]
     assert result["failed"] and "read-only" in result["error"]
+    assert result["error_kind"] == "write"
     assert snapshot(project) == before
 
 
@@ -81,13 +82,13 @@ def test_revision_conflict_before_save(project: Path) -> None:
     replies = call(project, stale)
     assert len(replies) == 1 and replies[0]["failed"]
     assert "changed while editing" in replies[0]["error"]
+    assert replies[0]["error_kind"] == "conflict"
     assert snapshot(project) == before
 
 
 @pytest.mark.parametrize("fields", [
     {"runtime": "pi", "model": "provider/"},
     {"runtime": "pi", "model": "/model"},
-    {"runtime": "pi", "model": "provider/model", "developer_prompt": "unsupported"},
     {"api_key_env": "sk-plaintext-secret"},
     {"approval_api_key_env": "sk-plaintext-secret"},
     {"approval_base_url": "https://user:secret@example.invalid/v1"},
@@ -383,3 +384,110 @@ def test_effort_without_model_metadata_saves_and_reopens(project: Path, monkeypa
     before = snapshot(project)
     assert call(project, draft(project, reasoning_effort='invented-effort'))[-1]['failed']
     assert snapshot(project) == before
+
+
+def test_unrelated_custom_role_save_does_not_require_launch_approval(project: Path) -> None:
+    """Editing a prompt preserves missing launch configuration rather than inventing a reviewer."""
+    path = roles_path(project)
+    document = yaml.safe_load(path.read_text())
+    document['roles']['analyst']['base_url'] = 'https://work.invalid/v1'
+    path.write_text(yaml.safe_dump(document))
+    result = call(project, draft(project, system_prompt='Updated role instructions.'))[-1]
+    assert not result['failed'], result
+    saved = yaml.safe_load(path.read_text())['roles']['analyst']
+    assert saved == {**document['roles']['analyst'], 'system_prompt': 'Updated role instructions.'}
+
+
+def test_approval_connection_save_reopen_and_native_resolution(
+    project: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    """An existing global connection supplies the unchanged native review transport."""
+    from graphtraj.configuration.project_roles import load_project_roles
+    from graphtraj.configuration.role_definitions import resolve_child_role
+    from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
+    from test_codex_app_server import context
+
+    home = project / 'user'
+    home.mkdir()
+    monkeypatch.setenv('HOME', str(home))
+    monkeypatch.setenv('USERPROFILE', str(home))
+    initial = call(project, {'scope': 'user', 'action': 'read'})[-1]['result']
+    catalog = {'version': 1, 'runtimes': {'shared': {'runtime': 'pi', 'providers': {
+        'review': {'base_url': 'https://review.invalid/v1', 'api_key_env': 'REVIEW_KEY',
+                   'api': 'openai-completions', 'models': {
+                       'selected': {'id': 'review-model', 'source': 'manual'},
+                   }},
+    }}}}
+    assert not call(project, {'scope': 'user', 'action': 'save', 'catalog': catalog,
+                             'expected_revision': initial['revision']})[-1]['failed']
+    assert not call(project, draft(project, approval_connection='shared/review/selected',
+                                   base_url='https://work.invalid/v1'))[-1]['failed']
+    assert read(project)['roles']['analyst']['approval_connection'] == 'shared/review/selected'
+    saved = yaml.safe_load(roles_path(project).read_text())['roles']['analyst']
+    assert saved['codex']['approval'] == {'connection': 'shared/review/selected'}
+    role = resolve_child_role('analyst', load_project_roles(project).preset('analyst'), project)
+    # The public Adapter preparation seam does not invoke inference or read keys.
+    executable = tmp_path / 'codex-help'
+    executable.write_text('#!/bin/sh\necho --sandbox\n')
+    executable.chmod(0o755)
+    request = context(tmp_path / 'prepared', executable, role).launch_document()['adapter_request']
+    assert request['approval'] == {'model': 'review-model', 'base_url': 'https://review.invalid/v1',
+                                   'api_key_env': 'REVIEW_KEY'}
+    before = snapshot(project)
+    failure = call(project, draft(project, approval_connection='shared/review/missing'))[-1]
+    assert failure['failed'] and failure['error_kind'] == 'validation'
+    assert snapshot(project) == before
+    assert not call(project, draft(project, approval_connection=None))[-1]['failed']
+    role = resolve_child_role('analyst', load_project_roles(project).preset('analyst'), project)
+    with pytest.raises(RuntimeAdapterError, match='codex.approval.model'):
+        context(tmp_path / 'missing-review', executable, role)
+
+
+@pytest.mark.parametrize(('runtime', 'model'), [('pi', 'provider/model'), ('dsh', 'deepseek-flash')])
+def test_single_channel_prompt_save_and_resolution(project: Path, runtime: str, model: str) -> None:
+    """Save/reopen preserves authored layers while resolution uses the real single channel."""
+    from graphtraj.configuration.project_roles import load_project_roles
+    from graphtraj.configuration.role_definitions import resolve_child_role
+
+    result = call(project, draft(project, runtime=runtime, model=model,
+                                 system_prompt='System text', developer_prompt='Developer text'))[-1]
+    assert not result['failed'], result
+    reopened = read(project)['roles']['analyst']
+    assert reopened['system_prompt'] == 'System text'
+    assert reopened['developer_prompt'] == 'Developer text'
+    role = resolve_child_role('analyst', load_project_roles(project).preset('analyst'), project)
+    assert 'System text' in role.instructions and 'Developer text' in role.instructions
+    assert role.system_instructions == ''
+
+
+def test_manual_efforts_survive_native_refresh_and_role_save(
+    project: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Discovery is read-only; manually declared capabilities survive and govern role effort."""
+    from graphtraj.configuration.project_roles import load_project_roles
+    from graphtraj.runtimes import model_discovery
+
+    home = project / 'manual-user'
+    home.mkdir()
+    monkeypatch.setenv('HOME', str(home))
+    monkeypatch.setenv('USERPROFILE', str(home))
+    initial = call(project, {'scope': 'user', 'action': 'read'})[-1]['result']
+    catalog = {'version': 1, 'runtimes': {'local': {'runtime': 'codex', 'providers': {
+        'openai': {'models': {'model': {'id': 'my-model', 'source': 'manual',
+                                      'supported_efforts': ['low', 'high']}}},
+    }}}}
+    assert not call(project, {'scope': 'user', 'action': 'save', 'catalog': catalog,
+                             'expected_revision': initial['revision']})[-1]['failed']
+    monkeypatch.setattr(model_discovery, 'discover_models', lambda runtime: {
+        'status': 'available', 'account_access': 'unknown',
+        'models': [{'provider': 'openai', 'id': 'my-model', 'supported_efforts': ['medium']}],
+    })
+    discovered = call(project, {'scope': 'user', 'action': 'discover', 'runtime': 'local'})[-1]
+    assert not discovered['failed']
+    reopened = call(project, {'scope': 'user', 'action': 'read'})[-1]['result']
+    assert reopened['catalog'] == catalog
+    assert not call(project, draft(project, connection='local/openai/model',
+                                   runtime=None, model=None, reasoning_effort='high'))[-1]['failed']
+    assert read(project)['roles']['analyst']['reasoning_effort'] == 'high'
+    assert load_project_roles(project).preset('analyst').reasoning_effort == 'high'
+    assert call(project, draft(project, reasoning_effort='medium'))[-1]['failed']

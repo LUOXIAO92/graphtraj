@@ -1,11 +1,11 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Button } from '@heroui/react';
 import { ReactFlow, ReactFlowProvider, Background, Controls, Handle, Position, MarkerType,
-  useNodesState, useReactFlow, type NodeProps, type Node } from '@xyflow/react';
+  useNodesState, useNodesInitialized, useReactFlow, type NodeProps } from '@xyflow/react';
 import type { DesktopAPI, Observation, Preferences, Project, Ticket } from '../electron/types';
 import type { Activity } from '../electron/activity';
-import { layout } from './layout';
+import { monitorGraph, type MonitorNode } from './monitor-graph';
 import { ActivityView, MemberPills } from './Activity';
 import { SettingsView } from './Settings';
 import { ConnectionsView } from './Connections';
@@ -19,18 +19,26 @@ import './d-polish.css';
 import './native.css';
 
 declare global { interface Window { graphtraj: DesktopAPI } }
-type TicketNode = Node<{ ticket: Ticket }>;
 const projectName = (project?: Project) => project?.root.split(/[\\/]/).filter(Boolean).at(-1) || 'No project selected';
 
-function TicketCard({ data, selected }: NodeProps<TicketNode>) {
-  const ticket = data.ticket;
+function TicketCard({ data, selected }: NodeProps<MonitorNode>) {
+  const ticket = data.ticket!;
   return <div className={`task-node ${selected ? 'selected' : ''} ${!ticket.active ? 'replaced' : ticket.status}`}>
     <Handle type="target" position={Position.Left}/><div className="node-top"><span className="ticket-id">#{ticket.ticket_id}</span><Status value={ticket.status}/></div>
     <strong className="node-title">{ticket.title}</strong><p className="node-subtitle">{ticket.ticket_name}</p>
+    {data.memberships && <p className="node-membership">Shared · {data.memberships.join(', ')}</p>}
     <div className="node-bottom"><span><Icon name="branch" size={13}/>{ticket.dependencies.length} dependencies</span><span>{!ticket.active ? 'Replaced / inactive' : ticket.ready ? 'Ready' : 'Not ready'}</span></div>
     <Handle type="source" position={Position.Right}/></div>;
 }
-const nodeTypes = { ticket: TicketCard };
+function SummaryCard({ data }: NodeProps<MonitorNode>) {
+  return <div className={`summary-node ${data.expanded ? 'expanded' : ''}`}>
+    <Handle type="target" position={Position.Left}/>
+    <div className="summary-heading"><strong>{data.group!.title}</strong><span>{data.group!.ticket_ids.length} tasks</span>
+      <Button className="nodrag nopan" variant="ghost" aria-label={`${data.expanded ? 'Collapse' : 'Expand'} ${data.group!.title}`} aria-expanded={data.expanded} onPress={data.toggle}>{data.expanded ? 'Collapse' : 'Expand'}</Button></div>
+    <Handle type="source" position={Position.Right}/>
+  </div>;
+}
+const nodeTypes = { ticket: TicketCard, summary: SummaryCard };
 
 /** Keep each visited project's graph and reading workspace mounted independently. */
 function GraphView({ project, active, sidebarButton }: { project: Project; active: boolean; sidebarButton: React.ReactNode }) {
@@ -46,8 +54,14 @@ function GraphView({ project, active, sidebarButton }: { project: Project; activ
   const [mainExpanded, setMainExpanded] = useState(false);
   const [focusAgent, setFocusAgent] = useState<string | null>(null);
   const [activity, setActivity] = useState<Activity | null>(null);
-  const [nodes, setNodes, onNodesChange] = useNodesState<TicketNode>([]);
-  const flow = useReactFlow<TicketNode>();
+  const [selectedSummary, setSelectedSummary] = useState('');
+  const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
+  const [nodes, setNodes, onNodesChange] = useNodesState<MonitorNode>([]);
+  const flow = useReactFlow<MonitorNode>();
+  const initialized = useNodesInitialized();
+  const canvas = useRef<HTMLDivElement>(null);
+  const fitted = useRef('');
+  const [locating, setLocating] = useState<string | null>(null);
   useEffect(() => {
     if (!active) return;
     let alive = true;
@@ -64,48 +78,86 @@ function GraphView({ project, active, sidebarButton }: { project: Project; activ
     return () => { alive = false; clearTimeout(timer); };
   }, [projectId, retry, active]);
   const tickets = observation?.graph.tickets;
-  const positions = useMemo(() => layout(tickets ?? []), [tickets]);
+  const graph = useMemo(() => monitorGraph(observation?.graph ?? { tickets: [] }, openGroups), [observation?.graph, openGroups]);
+  const topology = JSON.stringify(graph.nodes.map(node => [node.id, node.position, node.style]));
   useEffect(() => {
     if (!tickets) return;
-    setNodes(previous => tickets.map(ticket => ({ id: ticket.ticket_id, type: 'ticket', data: { ticket },
-      position: previous.find(node => node.id === ticket.ticket_id)?.position ?? positions[ticket.ticket_id] })));
-  }, [tickets, positions, setNodes]);
+    setNodes(graph.nodes);
+  }, [graph, tickets, setNodes]);
+  const graphActive = active && !mainExpanded && !(expanded && selected);
+  useEffect(() => {
+    if (!graphActive || !initialized || !nodes.length) return;
+    // Fit after measured nodes arrive, never while a hidden view has zero size.
+    // On return/resize preserve the viewport unless all nodes are offscreen.
+    const ensureVisible = () => {
+      const element = canvas.current;
+      if (!element?.clientWidth || !element.clientHeight) return;
+      if (locating && !flow.getNode(locating)?.measured?.width) return;
+      const { x, y, zoom } = flow.getViewport();
+      const visible = flow.getIntersectingNodes({ x: -x / zoom, y: -y / zoom,
+        width: element.clientWidth / zoom, height: element.clientHeight / zoom });
+      if (locating || fitted.current !== topology || !visible.length) {
+        const focus = locating ?? (selectedSummary && openGroups.has(selectedSummary) ? `summary:${selectedSummary}` : undefined);
+        void flow.fitView({ ...(focus ? { nodes: [{ id: focus }] } : {}), padding: .15, maxZoom: 1, minZoom: .001 });
+        fitted.current = topology;
+        if (locating) setLocating(null);
+      }
+    };
+    const frame = requestAnimationFrame(ensureVisible);
+    const observer = new ResizeObserver(ensureVisible);
+    if (canvas.current) observer.observe(canvas.current);
+    return () => { cancelAnimationFrame(frame); observer.disconnect(); };
+  }, [graphActive, initialized, topology, locating, selectedSummary, openGroups, flow, nodes.length]);
   const visible = new Set((tickets ?? []).filter(ticket => status === 'all' || (status === 'inactive' ? !ticket.active : ticket.status === status)).map(ticket => ticket.ticket_id));
   const matches = (tickets ?? []).filter(ticket => visible.has(ticket.ticket_id) && `${ticket.ticket_id} ${ticket.title} ${ticket.ticket_name}`.toLowerCase().includes(query.toLowerCase()));
   const matchIds = new Set(matches.map(ticket => ticket.ticket_id));
-  const edges = (tickets ?? []).flatMap(ticket => ticket.dependencies.map(dependency => ({
-    id: `${dependency}-${ticket.ticket_id}`, source: dependency, target: ticket.ticket_id, type: 'smoothstep',
-    style: { opacity: matchIds.has(dependency) && matchIds.has(ticket.ticket_id) ? 1 : .14 }, markerEnd: { type: MarkerType.ArrowClosed, width: 15, height: 15 },
-  })));
+  const edges = graph.edges.map(edge => ({ ...edge,
+    style: { opacity: matchIds.has(String(edge.data?.dependency)) && matchIds.has(String(edge.data?.ticket)) ? 1 : .14 },
+    markerEnd: { type: MarkerType.ArrowClosed, width: 15, height: 15 },
+  }));
   const detail = tickets?.find(ticket => ticket.ticket_id === selected);
   function select(id: string): void { if (id !== selected) setActivity(null); setSelected(id); setFocusAgent(null); }
-  function locate(ticket: Ticket): void { select(ticket.ticket_id); void flow.fitView({ nodes: [{ id: ticket.ticket_id }], duration: 200, maxZoom: 1.1 }); }
+  function chooseSummary(id: string): void {
+    setSelectedSummary(id);
+    if (id) { setOpenGroups(previous => new Set([...previous, id])); setLocating(`summary:${id}`); }
+  }
+  function toggleSummary(id: string): void {
+    setSelectedSummary(id);
+    setOpenGroups(previous => { const next = new Set(previous); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+  }
+  function locate(ticket: Ticket): void {
+    const groups = observation?.graph.groups?.filter(group => group.ticket_ids.includes(ticket.ticket_id)) ?? [];
+    if (groups.length === 1) { setSelectedSummary(groups[0].id); setOpenGroups(previous => new Set([...previous, groups[0].id])); }
+    select(ticket.ticket_id); setLocating(ticket.ticket_id);
+  }
   function read(alias?: string): void { setFocusAgent(alias ?? null); setExpanded(true); }
   const members = activity?.agents ?? [];
   return <>
     <header className="d-monitor-caption"><div>{sidebarButton}<span className="project-avatar">{projectName(project).slice(0, 2)}</span><strong title={project.root}>{projectName(project)}</strong><span>{expanded ? 'Agent conversations' : 'Task graph'}</span></div>
-      <Button variant="ghost" onPress={() => { setMainExpanded(true); setExpanded(false); }}>Main sessions</Button><span role="status">{error ? 'Offline / query error' : loading ? 'Refreshing…' : 'Connected'} · {observation ? new Date(observation.updatedAt).toLocaleTimeString() : 'No graph received'}</span></header>
+      <Button variant="ghost" aria-pressed={mainExpanded} onPress={() => setMainExpanded(true)}>Main sessions</Button><span role="status">{error ? 'Offline / query error' : loading ? 'Refreshing…' : 'Connected'} · {observation ? new Date(observation.updatedAt).toLocaleTimeString() : 'No graph received'}</span></header>
     {error && <div className="native-notice error" role="alert">{error}<p>{observation ? 'Showing the last successful graph. Retrying automatically.' : 'Check the directory and native GraphTraj installation.'}</p><Button variant="ghost" onPress={() => setRetry(value => value + 1)}>Refresh now</Button></div>}
     <div className="d-monitor-content"><div className="d-monitor-views">
       <div className={`d-monitor-view ${mainExpanded || expanded && detail ? 'concealed' : ''}`} aria-hidden={mainExpanded || expanded && !!detail} inert={mainExpanded || expanded && !!detail}>
         <section className={`d-map-workspace ${detail ? 'has-shelf' : ''}`}>
           <div className="d-floating-tools"><div className="new-graph-controls"><label><Icon name="search" size={15}/><input type="search" aria-label="Search tasks" placeholder="Find task or number" value={query} onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && matches[0]) locate(matches[0]); }}/></label>
             <select aria-label="Task status" value={status} onChange={event => setStatus(event.target.value)}><option value="all">All statuses</option><option value="inactive">Replaced / inactive</option>{[...new Set(tickets?.map(ticket => ticket.status))].sort().map(value => <option key={value}>{value}</option>)}</select></div>
-            <span className="canvas-readonly"><Button variant="ghost" onPress={() => { setNodes(previous => previous.map(node => ({ ...node, position: positions[node.id] }))); requestAnimationFrame(() => { void flow.fitView({ duration: 200, padding: .12, maxZoom: 1 }); }); }}><Icon name="fit" size={14}/>Auto layout</Button><Icon name="eye" size={14}/>Read-only graph</span></div>
-          <div className="d-canvas-title"><h1>Follow the dependencies.</h1><p>{tickets?.length ?? 0} tasks · {tickets?.filter(ticket => ['implementing', 'reviewing', 'reworking', 'integrating', 'resolving-integration'].includes(ticket.status)).length ?? 0} in progress · {tickets?.filter(ticket => ticket.status === 'integrated').length ?? 0} integrated</p></div>
-          <div className="d-map-surface"><div className="map-canvas" aria-label="Task dependency graph">
-            <ReactFlow nodes={nodes.map(node => ({ ...node, selected: selected === node.id, style: { opacity: matchIds.has(node.id) ? 1 : .16 } }))} edges={edges} nodeTypes={nodeTypes} onNodesChange={onNodesChange} onNodeClick={(_, node) => select(node.id)} nodesDraggable={false} nodesConnectable={false} edgesReconnectable={false} deleteKeyCode={null} panActivationKeyCode={active && !expanded ? 'Space' : null} fitView fitViewOptions={{ padding: .12, maxZoom: 1 }} minZoom={.05} maxZoom={2} colorMode="light" proOptions={{ hideAttribution: true }}><Background color="#d7ddd9" gap={20} size={1}/><Controls showInteractive={false}/></ReactFlow>
+            <span className="canvas-readonly"><Button variant="ghost" onPress={() => { setNodes(graph.nodes); void flow.fitView({ padding: .12, maxZoom: 1, minZoom: .001 }); }}><Icon name="fit" size={14}/>Fit graph</Button><Icon name="eye" size={14}/>Read-only graph</span></div>
+          <div className="d-canvas-title"><h1>Task summaries and dependencies</h1><p>{tickets?.length ?? 0} tasks · {observation?.graph.groups?.length ?? 0} summaries · {matches.length} matching tasks</p>
+            {!!observation?.graph.groups?.length && <select aria-label="Selected summary" value={selectedSummary} onChange={event => chooseSummary(event.target.value)}><option value="">Choose a summary to read its tasks</option>{observation.graph.groups.map(group => <option key={group.id} value={group.id}>{group.title} · {group.ticket_ids.length} tasks</option>)}</select>}</div>
+          <div className="d-map-surface"><div className="map-canvas" ref={canvas} aria-label="Task dependency graph">
+            <ReactFlow nodes={nodes.map(node => ({ ...node, data: { ...node.data, ...(node.data.group ? { toggle: () => toggleSummary(node.data.group!.id) } : {}) }, selected: selected === node.id || node.data.group?.id === selectedSummary, style: { ...node.style, opacity: node.data.group ? node.data.group.ticket_ids.some(id => matchIds.has(id)) ? 1 : .35 : matchIds.has(node.id) ? 1 : .16 } }))} edges={edges} nodeTypes={nodeTypes} onNodesChange={onNodesChange} onNodeClick={(event, node) => { if ((event.target as HTMLElement).closest('button')) return; if (node.data.group) chooseSummary(node.data.group.id); else select(node.id); }} nodesDraggable={false} nodesConnectable={false} edgesReconnectable={false} deleteKeyCode={null} panActivationKeyCode={graphActive ? 'Space' : null} minZoom={.001} maxZoom={2} colorMode="light" proOptions={{ hideAttribution: true }}><Background color="#d7ddd9" gap={20} size={1}/><Controls showInteractive={false}/></ReactFlow>
             <div className="map-caption"><span className="map-caption-line"/>Dependency direction <Icon name="arrow" size={14}/></div>
             {query && <div className="map-search-results" aria-label="Search results"><strong>{matches.length} matching tasks</strong>{matches.map(ticket => <button key={ticket.ticket_id} onClick={() => locate(ticket)}>#{ticket.ticket_id} {ticket.title}</button>)}</div>}
             {!tickets?.length && <div className="d-empty-configuration"><Icon name="graph" size={30}/><h2>{!observation ? loading ? 'Loading task graph…' : 'Graph unavailable' : 'No tickets registered'}</h2></div>}
+            {!!tickets?.length && !matches.length && <div className="graph-filter-empty" role="status">No tasks match these filters. <Button variant="ghost" onPress={() => { setQuery(''); setStatus('all'); }}>Clear filters</Button></div>}
           </div></div>
           {detail ? <aside className="d-task-shelf" aria-label="Ticket details"><div><h2><span className="shelf-task-id">#{detail.ticket_id}</span>{detail.title}</h2><p>{detail.ticket_name}</p><Status value={detail.status}/><span className="shelf-deps">Depends on {detail.dependencies.map(id => `#${id}`).join(', ') || 'no tasks'}</span><details className="native-ticket-facts"><summary>Ticket facts</summary><p>{detail.active ? 'Active' : 'Replaced / inactive'} · {detail.ready ? 'Ready' : 'Not ready'}<br/>Replaced by: {detail.replaced_by.join(', ') || 'None'}. Execution finishing is not acceptance.</p></details></div>
             <div><div className="shelf-team-heading"><span className="section-label">TEAM &amp; RETAINED HISTORY</span><Button variant="primary" onPress={() => read()}><Icon name="expand" size={14}/>Expand chat</Button><Button isIconOnly variant="ghost" aria-label="Close details" onPress={() => setSelected(null)}><Icon name="close" size={14}/></Button></div><MemberPills agents={members} onRead={read}/>{!members.length && <p>{activity ? activity.reason || 'No participating Agents recorded.' : 'Loading members…'}</p>}</div></aside>
             : <div className="d-canvas-hint"><Icon name="graph"/><div><strong>Select a task in the map</strong><span>Inspect its team, then open a full reading workspace.</span></div></div>}
         </section>
       </div>
-      {detail && <div className={`d-monitor-view ${expanded ? '' : 'concealed'}`} aria-hidden={!expanded} inert={!expanded}><section className="new-reader d-reader" aria-label="Expanded agent conversations"><header className="d-reading-head"><Button variant="ghost" aria-label="Collapse chat" onPress={() => setExpanded(false)}><Icon name="left" size={16}/>Back to task graph</Button><span>#{detail.ticket_id}</span><h1>{detail.title}</h1><Status value={detail.status}/></header><div className="d-reading-index"><span>JUMP TO AGENT</span><MemberPills agents={members} onRead={setFocusAgent} focus={focusAgent}/></div><ActivityView key={`${projectId}:${detail.ticket_id}`} projectId={projectId} ticketId={detail.ticket_id} active={active && !mainExpanded} expanded={expanded} focusAgent={focusAgent} onActivity={setActivity}/></section></div>}
-      <div className={`d-monitor-view ${mainExpanded ? '' : 'concealed'}`} aria-hidden={!mainExpanded} inert={!mainExpanded}><section className="new-reader d-reader" aria-label="Main conversations"><header className="d-reading-head"><Button variant="ghost" aria-label="Collapse Main chat" onPress={() => setMainExpanded(false)}><Icon name="left" size={16}/>Back to task graph</Button><h1>Main sessions</h1></header><ActivityView projectId={projectId} active={active && mainExpanded}/></section></div>
+      {detail && <div className={`d-monitor-view ${expanded && !mainExpanded ? '' : 'concealed'}`} aria-hidden={!expanded || mainExpanded} inert={!expanded || mainExpanded}><section className="new-reader d-reader" aria-label="Expanded agent conversations"><header className="d-reading-head"><Button variant="ghost" aria-label="Collapse chat" onPress={() => setExpanded(false)}><Icon name="left" size={16}/>Back to task graph</Button><span>#{detail.ticket_id}</span><h1>{detail.title}</h1><Status value={detail.status}/></header><div className="d-reading-index"><span>JUMP TO AGENT</span><MemberPills agents={members} onRead={setFocusAgent} focus={focusAgent}/></div><ActivityView key={`${projectId}:${detail.ticket_id}`} projectId={projectId} ticketId={detail.ticket_id} active={active && !mainExpanded} expanded={expanded} focusAgent={focusAgent} onActivity={setActivity}/></section></div>}
+      <div className={`d-monitor-view ${mainExpanded ? '' : 'concealed'}`} aria-hidden={!mainExpanded} inert={!mainExpanded}><section className="new-reader d-reader" aria-label="Main conversations"><header className="d-reading-head"><Button variant="ghost" aria-label="Collapse Main chat" onPress={() => setMainExpanded(false)}><Icon name="left" size={16}/>{expanded && detail ? 'Back to agent conversations' : 'Back to task graph'}</Button><h1>Main sessions</h1></header><ActivityView projectId={projectId} active={active && mainExpanded}/></section></div>
     </div></div>
   </>;
 }

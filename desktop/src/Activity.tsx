@@ -91,6 +91,8 @@ export function ActivityView({ projectId, ticketId, active = true, expanded = tr
 }) {
   const [activity, setActivity] = useState<Activity | null>(null);
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [retry, setRetry] = useState(0);
   const columns = useRef<HTMLDivElement>(null);
   const horizontal = useRef(0);
   useLayoutEffect(() => {
@@ -101,16 +103,17 @@ export function ActivityView({ projectId, ticketId, active = true, expanded = tr
     let alive = true;
     let timer: ReturnType<typeof setTimeout>;
     async function refresh() {
+      setLoading(true);
       try {
         const next = await window.graphtraj.activity(projectId, ticketId ? { ticket_id: ticketId } : {});
         if (!ticketId) next.agents = next.agents.filter(agent => agent.kind === 'main');
         if (alive) { setActivity(next); setError(next.reason || ''); onActivity?.(next); }
-      } catch { if (alive) setError('Member status disconnected; retained content remains readable.'); }
-      finally { if (alive) timer = setTimeout(refresh, 3000); }
+      } catch { if (alive) setError(ticketId ? 'Could not load this task’s Agent sessions. Retrying automatically.' : 'Could not load Main sessions for this project. Retrying automatically.'); }
+      finally { if (alive) { setLoading(false); timer = setTimeout(refresh, 3000); } }
     }
     void refresh();
     return () => { alive = false; clearTimeout(timer); };
-  }, [projectId, ticketId, active]);
+  }, [projectId, ticketId, active, retry]);
   const [scroll, setScroll] = useState({ left: 0, max: 0, thumb: 0 });
   function updateEdges() {
     const element = columns.current;
@@ -126,9 +129,9 @@ export function ActivityView({ projectId, ticketId, active = true, expanded = tr
   const move = (direction: number) => columns.current?.scrollBy({ left: direction * 440, behavior: 'instant' });
   return <section className="activity" aria-label="Agent activity">
     {activity?.scope === 'self' && <p className="native-notice">This Agent connection shows only its own Session.</p>}
-    {error && <p className="native-notice error" role="alert">{error}</p>}
+    {error && <div className="native-notice error" role="alert">{error} <Button variant="ghost" onPress={() => setRetry(value => value + 1)}>Retry now</Button></div>}
     {activity?.notices?.map(notice => <p className="native-notice" key={notice}>{notice}</p>)}
-    {!activity?.agents.length && <p className="native-notice">{activity ? 'No participating Agents recorded.' : 'Loading members…'}</p>}
+    {!activity?.agents.length && !error && <p className="native-notice" role="status">{activity ? ticketId ? 'No participating Agents recorded.' : 'No associated Main sessions recorded for this project.' : loading ? ticketId ? 'Loading Agent sessions…' : 'Loading Main sessions…' : 'Session list unavailable.'}</p>}
     <div className="agent-columns" ref={columns} tabIndex={0} aria-label="Agent columns" role="region"
       onKeyDown={event => { if (event.target !== event.currentTarget) return; if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); move(event.key === 'ArrowLeft' ? -1 : 1); } }}
       onScroll={event => { if (active && expanded) horizontal.current = event.currentTarget.scrollLeft; updateEdges(); }}>
@@ -150,6 +153,9 @@ function AgentColumn({ projectId, ticketId, agent, active }: {
   const [pending, setPending] = useState(0);
   const followingRef = useRef(true);
   const history = useRef<HTMLDivElement>(null);
+  const content = useRef<HTMLDivElement>(null);
+  const pointerReading = useRef(false);
+  const touchY = useRef<number | null>(null);
   const vertical = useRef(0);
   useLayoutEffect(() => {
     if (active && history.current && !followingRef.current) history.current.scrollTop = vertical.current;
@@ -185,7 +191,9 @@ function AgentColumn({ projectId, ticketId, agent, active }: {
           }
         }
       } catch {
-        if (alive) setError('Activity disconnected or access refused. Retrying; retained messages remain readable.');
+        if (alive) setError(seen.current.size
+          ? 'Activity disconnected or access refused. Retrying; retained messages remain readable.'
+          : 'Could not load this Session’s messages. Access may be unavailable. Retrying automatically.');
       } finally { if (alive) timer = setTimeout(tick, more.current && followingRef.current ? 0 : 3000); }
     }
     function tick() {
@@ -197,9 +205,19 @@ function AgentColumn({ projectId, ticketId, agent, active }: {
     return () => { alive = false; clearTimeout(timer); };
   }, [projectId, ticketId, agent.alias, active]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (active && following && history.current) history.current.scrollTop = history.current.scrollHeight;
-  }, [events, following, active]);
+  }, [events, pageStart, following, active]);
+
+  useLayoutEffect(() => {
+    if (!active) return;
+    const observer = new ResizeObserver(() => {
+      if (followingRef.current && history.current) history.current.scrollTop = history.current.scrollHeight;
+    });
+    if (content.current) observer.observe(content.current);
+    if (history.current) observer.observe(history.current);
+    return () => observer.disconnect();
+  }, [active]);
 
   function follow(value: boolean) {
     followingRef.current = value; setFollowing(value);
@@ -212,14 +230,26 @@ function AgentColumn({ projectId, ticketId, agent, active }: {
     <div className="conversation-panel"><div className="agent-metadata"><span><Icon name="terminal" size={14}/>{agent.runtime || 'Runtime unknown'}</span><span>{agent.model || 'Model not recorded'}</span></div>
       {error && <p className="native-notice error" role="alert">{error}</p>}
       {agent.reason && <p className="native-notice">{agent.reason}</p>}
-      <div className="transcript activity-history" ref={history} tabIndex={0} aria-label={`${agent.alias} messages`} role="region" onScroll={event => {
-        const element = event.currentTarget; if (active) vertical.current = element.scrollTop;
-        if (active && followingRef.current && element.scrollHeight - element.clientHeight - element.scrollTop > 32) follow(false);
-      }}><div className="day-divider"><span>Recorded Runtime output</span></div>
+      <div className="transcript activity-history" ref={history} tabIndex={0} aria-label={`${agent.alias} messages`} role="region" style={{ overflowAnchor: following ? 'none' : 'auto' }}
+        onWheel={event => { if (active && event.deltaY < 0) follow(false); }}
+        onKeyDown={event => { if (active && event.target === event.currentTarget && (['ArrowUp', 'PageUp', 'Home'].includes(event.key) || event.key === ' ' && event.shiftKey)) follow(false); }}
+        onPointerDown={() => { pointerReading.current = true; }}
+        onPointerUp={() => { pointerReading.current = false; }}
+        onPointerCancel={() => { pointerReading.current = false; }}
+        onPointerLeave={() => { pointerReading.current = false; }}
+        onTouchStart={event => { touchY.current = event.touches[0]?.clientY ?? null; }}
+        onTouchMove={event => { const y = event.touches[0]?.clientY; if (active && y != null && touchY.current != null && y > touchY.current) follow(false); touchY.current = y ?? null; }}
+        onScroll={event => {
+          const element = event.currentTarget;
+          // Scroll events also come from anchoring, resizing and our own follow.
+          // Only an upward input/scrollbar gesture changes the reading mode.
+          if (active && pointerReading.current && element.scrollTop < vertical.current && element.scrollHeight - element.clientHeight - element.scrollTop > 32) follow(false);
+          if (active) vertical.current = element.scrollTop;
+        }}><div ref={content}><div className="day-divider"><span>Recorded Runtime output</span></div>
         <ActivityRecords events={events} pageStart={pageStart} agent={agent.alias}/>
-        {!events.length && <p>{activity?.availability === 'available' ? 'No readable activity recorded yet.' : 'Activity is unavailable or loading.'}</p>}
+        {!events.length && !error && <p>{!activity ? 'Loading Session messages…' : activity.availability === 'available' ? 'No readable activity recorded yet.' : activity.reason || 'Session messages unavailable.'}</p>}
         <div className="transcript-end">{events.length} events loaded · Missing usage stays unknown.</div>
-      </div>
+      </div></div>
       <div className="reading-toolbar"><button className={following ? 'following' : ''} onClick={() => follow(!following)}><Icon name={following ? 'pause' : 'play'} size={14}/>{following ? 'Pause following' : `Follow new messages${pending ? ` (${pending})` : ''}`}</button><button disabled={pageStart === 0} onClick={() => { follow(false); setPageStart(value => Math.max(0, value - 100)); }}>Earlier</button><button disabled={pageStart + 100 >= events.length} onClick={() => { follow(false); setPageStart(value => value + 100); }}>Later</button>{activity?.has_more && !activity.waiting_for_record && <button onClick={() => { loadRequested.current = true; }}>Load next recorded page</button>}</div>
     </div></article>;
 }

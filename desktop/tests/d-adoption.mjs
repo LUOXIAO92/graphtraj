@@ -39,9 +39,9 @@ const records = name => [
   { timestamp: time, type: 'response_item', payload: { type: 'function_call_output', call_id: `${name}-read`, output: 'Controlled retained tool output\n' + 'line of recorded output\n'.repeat(50) } },
   { timestamp: time, type: 'event_msg', payload: { type: 'token_count', info: { last_token_usage: tokens, total_token_usage: tokens } } },
 ];
-await fixtures.recordActivity(first, { ticketId: '1', ticketName: 'connect-provider', alias: 'previous@engineer', records: records('previous'),
-  additionalMembers: ['lead','engineer','reviewer'].map(name => ({ alias: `current@${name}`, records: records(name), historical: false })) });
-await fixtures.recordActivity(second, { ticketId: '1', ticketName: 'documentation', alias: 'docs@writer', records: records('docs') });
+await fixtures.recordActivity(first, { ticketId: '1', ticketName: 'connect-provider', alias: 'previous-handover0-engineer@engineer', records: records('previous'),
+  additionalMembers: ['lead','engineer','reviewer'].map(name => ({ alias: `current-handover0-${name}@${name}`, records: records(name), historical: false })) });
+await fixtures.recordActivity(second, { ticketId: '1', ticketName: 'documentation', alias: 'docs-handover0-writer@writer', records: records('docs') });
 const rolesFile = path.join(first, '.graphtraj', 'roles.yml');
 await fs.writeFile(rolesFile, `roles:
   delivery:
@@ -106,6 +106,14 @@ try {
   await monitor.locator('.d-task-shelf .member-pills button').nth(3).waitFor();
   const members = await page.evaluate(id => window.graphtraj.activity(id,{ticket_id:'1'}),firstId);
   assert.equal(members.agents.length,4);
+  assert.equal(members.agents.filter(agent => agent.historical).length,1);
+  for (const agent of members.agents) {
+    assert.equal(agent.runtime,'codex'); assert.equal(agent.model,'recorded-model');
+    assert.notEqual(agent.state,'unavailable');
+    const activity = await page.evaluate(({id,alias}) => window.graphtraj.activity(id,{ticket_id:'1',alias}),{id:firstId,alias:agent.alias});
+    assert.ok(activity.events.some(event => event.kind === 'message'), `${agent.alias} must expose its recorded messages`);
+  }
+  facts.members=members.agents;
   for (const [width,height] of [[1440,1000],[1024,820]]) { await size(width,height); await shot('monitor-details'); }
   await size(1440,1000); await button('Expand chat').click();
   const columns = monitor.locator('.agent-column');
@@ -142,7 +150,7 @@ try {
   await button('All project usage').click();
   await page.locator('.d-project-usage-table tbody tr').nth(1).waitFor();
   assert.equal(await page.locator('.usage-filters select').count(),0);
-  assert.ok(!(await page.locator('.usage-dashboard').innerText()).includes('current@engineer'));
+  assert.ok(!(await page.locator('.usage-dashboard').innerText()).includes('current-handover0-engineer@engineer'));
   for (const [width,height] of [[1440,1000],[1024,820]]) { await size(width,height); await shot('global-usage'); }
   step('Installed dated project/global history, invalid dates, missing-field and project-only global scope passed.');
   await size(1440,1000); await button('Settings').click(); await button('Agents & models').click();

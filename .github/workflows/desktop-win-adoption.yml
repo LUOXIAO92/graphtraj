@@ -1,7 +1,7 @@
 name: Windows desktop adoption 266
 on:
   push:
-    branches: [agent/266-desktop-win-adoption, agent/288-desktop-d-integrated-adoption-win]
+    branches: [agent/266-desktop-win-adoption, agent/288-desktop-d-integrated-adoption-win, agent/290-desktop-d-direct-port-win]
 permissions:
   contents: read
 jobs:
@@ -38,6 +38,7 @@ jobs:
         run: |
           python -m pip install --no-deps pip==25.3 setuptools==80.9.0 wheel==0.45.1 packaging==25.0 pytest==8.3.5 iniconfig==2.1.0 pluggy==1.6.0 colorama==0.4.6 click==8.1.8 PyYAML==6.0.2 websockets==15.0.1
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ($env:GITHUB_REF_NAME -eq 'agent/290-desktop-d-direct-port-win') { python -m pip install --no-deps . }
           npm --prefix desktop ci
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python -m pip freeze | Set-Content desktop/test-results/windows/build-packages.txt
@@ -68,7 +69,10 @@ jobs:
         working-directory: desktop
         run: |
           $env:GRAPHTRAJ_WIN_TEST_ROOT = Join-Path $env:RUNNER_TEMP 'graphtraj controlled 项目'
-          node tests/adoption-win.mjs
+          if ($env:GITHUB_REF_NAME -eq 'agent/290-desktop-d-direct-port-win') {
+            $env:D_ADOPTION_EVIDENCE = 'test-results/windows/d'
+            node tests/d-adoption.mjs
+          } else { node tests/adoption-win.mjs }
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Retain installation artifact
         if: always()

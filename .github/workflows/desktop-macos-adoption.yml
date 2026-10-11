@@ -7,7 +7,7 @@ name: desktop-macos-adoption
 # workflow_dispatch stays available for later re-runs.
 on:
   push:
-    branches: [agent/265-desktop-mac-adoption, agent/285-desktop-d-monitor-projects, agent/286-desktop-usage-history-range, agent/287-desktop-agents-models-teams, agent/288-desktop-d-integrated-adoption-macos]
+    branches: [agent/265-desktop-mac-adoption, agent/285-desktop-d-monitor-projects, agent/286-desktop-usage-history-range, agent/287-desktop-agents-models-teams, agent/288-desktop-d-integrated-adoption-macos, agent/290-desktop-d-direct-port-macos]
   workflow_dispatch:
 
 permissions:
@@ -78,7 +78,14 @@ jobs:
       # Starts the installed bundle and exercises the real picker entry, graph
       # and project switching, node detail, dashboard, settings save/deny/error,
       # persistence, credential non-leakage and GUI-less native operation.
+      - name: Installed D views and native changed paths
+        if: github.ref_name == 'agent/290-desktop-d-direct-port-macos'
+        env:
+          D_ADOPTION_EVIDENCE: dist-package/adoption-evidence/d
+        run: node tests/d-adoption.mjs
+
       - name: Installed app adoption, optionality and security
+        if: github.ref_name != 'agent/290-desktop-d-direct-port-macos'
         env:
           GRAPHTRAJ_APP: /Applications/GraphTraj.app
           GRAPHTRAJ_ADOPTION_SETTINGS_ONLY: ${{ github.ref_name == 'agent/287-desktop-agents-models-teams' && '1' || '0' }}

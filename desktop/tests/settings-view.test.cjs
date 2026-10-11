@@ -415,8 +415,10 @@ test('manual efforts are editable, saved and preserved after native discovery', 
 
 test('leaf deletion omits descendant choices and a new operation clears its error', async t => {
   const saved = { revision: 'before', roles: { 'team.root': { runtime: 'pi', model: 'provider/model' } }, role_tree: { 'team.root': {} }, edges: [] };
+  let submitted;
   const ui = await form(t, 'Settings.tsx', 'SettingsView', {
     settings: async () => saved, connections: async () => connections,
+    saveSettings: async (_id, value) => { submitted = value; return saved; },
   }, { projectId: 'project' });
   await ui.click('Add child agent'); await ui.fill('New Agent name', 'INVALID'); await ui.select('New Agent Runtime', 'shared'); await ui.click('Add Agent');
   assert.match(JSON.stringify(ui.tree.toJSON()), /lowercase Agent name/);
@@ -424,6 +426,9 @@ test('leaf deletion omits descendant choices and a new operation clears its erro
   await ui.click('Delete selected agent configuration');
   assert.equal(ui.tree.root.findAllByType('input').filter(node => node.props.name === 'delete-mode').length, 0);
   assert.doesNotMatch(JSON.stringify(ui.tree.toJSON()), /lowercase Agent name/);
+  await ui.click('Remove configuration'); await ui.click('Save');
+  assert.deepEqual(submitted.remove_presets, ['team.root']);
+  assert.deepEqual(JSON.parse(JSON.stringify(submitted.role_tree)), {});
 });
 
 test('approval chooses a global route and keeps it separate from the work model', async t => {

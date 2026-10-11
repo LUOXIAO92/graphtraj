@@ -422,7 +422,12 @@ def revise_tickets(
 
 
 def read_graph(state: Path) -> dict[str, Any]:
-    """Return current Tickets and dependency readiness; reject invalid state."""
+    """Return current Tickets, readiness and explicitly recorded summary groups.
+
+    Group IDs are source Issue URLs; ticket_ids may occur in multiple groups.
+    Tickets without a declaration remain in tickets and belong to no group.
+    Reading does not change delivery state or dependency edges.
+    """
 
     tickets = state / "tickets"
     if not tickets.is_dir():

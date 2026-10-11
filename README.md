@@ -218,10 +218,12 @@ guidance rather than entering credentials into GraphTraj.
 Open **Teams & roles** for the selected project to add or rename teams, connect
 Agent nodes, select shared models and edit instructions. When deleting a node,
 choose whether to remove its branch or reconnect its children; an empty team
-can be rebuilt with a new root. Preview changes before approving a save, cancel
-to keep the original, and reload if another editor changed the configuration.
-These settings apply to future dispatch; editing them does not stop running
-Agents.
+can be rebuilt with a new root. Both settings pages provide **Save** to persist
+changes once and **Cancel** to discard unsaved edits. Invalid input, write
+failures and external changes leave the saved configuration intact and show
+the reason; reload to resolve an external change. Agent-initiated configuration
+changes still require their existing native authorization. These settings apply
+to future dispatch; editing them does not stop running Agents.
 
 To run it from a source checkout, install the matching Python GraphTraj version
 and make `graphtraj-tool` available on `PATH` (or set `GRAPHTRAJ_TOOL` to its

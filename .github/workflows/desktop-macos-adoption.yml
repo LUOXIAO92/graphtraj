@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: Adoption scope (usage adds focused Ticket 293 storage checks to activity)
+        description: Adoption scope (usage exercises focused Ticket 293 persistence and Usage UI)
         type: choice
         options: [standard, activity, usage]
         default: standard
@@ -71,8 +71,8 @@ jobs:
           import fs from 'node:fs';
           fs.writeFileSync('dist-package/adoption-evidence/usage/scope.json', JSON.stringify({
             source: process.env.GITHUB_SHA,
-            scope: 'Controlled usage persistence checks plus installed activity UI; not live Main adoption',
-            pending: ['Genuine Main source adoption', 'Real usage GUI reopen and saved-first observation'],
+            scope: 'Controlled usage persistence and installed Usage UI; not live Main adoption',
+            pending: ['Genuine Main source adoption'],
           }, null, 2) + '\n');
           JS
 
@@ -150,8 +150,12 @@ jobs:
           GRAPHTRAJ_EVIDENCE: dist-package/adoption-evidence/usage
         run: node --preserve-symlinks --preserve-symlinks-main tests/adoption.mjs
 
+      - name: Installed focused Usage adoption
+        if: inputs.mode == 'usage'
+        run: node tests/usage-adoption.mjs
+
       - name: Installed focused activity adoption
-        if: env.ACTIVITY_ADOPTION == 'true'
+        if: env.ACTIVITY_ADOPTION == 'true' && inputs.mode != 'usage'
         env:
           GRAPHTRAJ_ACTIVITY_EVIDENCE: dist-package/adoption-evidence/activity
         run: node tests/activity-adoption.mjs

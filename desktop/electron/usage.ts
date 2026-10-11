@@ -5,7 +5,7 @@ export type Call = {
   key: string; project: string; ticket: string; agent: string; session: string;
   model: string; time: string | null; tokens: Tokens; phase: string; offset: number;
   counter: boolean; cumulative?: Tokens; baseline?: Tokens | null; attributable: boolean;
-  source?: ActivityEvent['source'];
+  source?: ActivityEvent['source'] & { event_id?: string };
 };
 export type Filters = { ticket?: string; agent?: string; model?: string; from?: string; to?: string };
 export const metrics = ['input', 'output', 'cache_read', 'cache_write'] as const;
@@ -58,7 +58,7 @@ export function collect(calls: Map<string, Call>, project: string, events: Activ
     const call: Call = { key, project, session, ticket: String(usage.ticket_id ?? ''),
       agent: String(usage.agent ?? ''), model: event.model || 'Unknown model',
       time: old?.counter ? old.time : event.time == null || !Number.isFinite(new Date(event.time).getTime()) ? null : new Date(event.time).toISOString(),
-      tokens: { ...old?.tokens, ...tokens }, phase: usage.phase, offset: event.source.offset, counter: Boolean(cumulative), cumulative, baseline, source: event.source,
+      tokens: { ...old?.tokens, ...tokens }, phase: usage.phase, offset: event.source.offset, counter: Boolean(cumulative), cumulative, baseline, source: { ...event.source, event_id: event.id },
       attributable: usage.attributable && Boolean(identity) && Boolean(session),
     };
     if (JSON.stringify(old) !== JSON.stringify(call)) {

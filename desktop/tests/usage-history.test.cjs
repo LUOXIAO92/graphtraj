@@ -101,6 +101,7 @@ test('legacy facts reconcile from native baselines while original history and so
   const a = event('1', 100, 10, { cumulative: { input_tokens: 100, output_tokens: 10 } });
   const b = event('2', 100, 10, { cumulative: { input_tokens: 1000, output_tokens: 100 } });
   collect(original, project, [a, b]);
+  for (const call of original.values()) delete call.source; // Version one did not retain source locators.
   const file = path.join(root, createHash('sha256').update(project).digest('hex') + '.json');
   const bytes = JSON.stringify({ version: 1, calls: [...original.values()] });
   await fs.writeFile(file, bytes);
@@ -118,6 +119,7 @@ test('legacy facts reconcile from native baselines while original history and so
   const recovered = await new UsageHistory(root).receive(project);
   assert.deepEqual(recovered, calls);
   assert.equal(calls[1].source.trace, '/native/owned-session.jsonl');
+  assert.equal(calls[1].source.event_id, b.id);
 });
 
 test('same representative dataset cold/hot/reopen avoids history pages and multi-reference charging', async t => {

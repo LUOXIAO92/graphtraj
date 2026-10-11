@@ -954,10 +954,12 @@ register_tool(
     'reviewed document; refusal, an unavailable reviewer or a target changed after '
     'review leaves roles.yml untouched. A preset keeps its existing `instructions` '
     'UTF-8 file reference and may add inline `system_prompt` and `developer_prompt` '
-    'text. Pi and DSH deliver only the system prompt layer; Codex delivers '
-    '`system_prompt` as base instructions and `developer_prompt` as developer '
-    'instructions. Content for a layer the selected Runtime does not expose is '
-    'refused at launch instead of being passed as task text. Equivalent to '
+    'text. Codex keeps system_prompt and developer_prompt in separate native '
+    'instruction layers. Pi and DSH merge authored developer content, with an '
+    'explanatory label, into their system instruction channel; this does not '
+    'create a separate native developer priority. The existing instructions '
+    "file uses the selected Runtime's instruction channel. Authored role prompts "
+    'are not passed as task text. Equivalent to '
     '`graphtraj roles organize`.',
     _ROLE_ORGANIZATION_SCHEMA,
     organize_roles, manual_ref='manuals/task-delivery/guide.md',

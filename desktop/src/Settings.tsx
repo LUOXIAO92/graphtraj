@@ -1,12 +1,17 @@
-import { useEffect, useState } from 'react';
-import { Button, Card, Description, Form, Input, Label, TextArea, TextField } from '@heroui/react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Button, Description, Input, Label, TextArea, TextField } from '@heroui/react';
 import type { Connections, RoleFields, RoleTree, Settings } from '../electron/types';
 import { branchRoles, treeEdges, moveNode, removeNodes, fieldLabels as labels, ownRole, roleChanges, roleName } from './settings-draft';
-import './settings.css';
-import { PriceInformation } from './UsageDashboard';
+import { Dialog, Field, Icon } from './ui';
 
 /** Edit a project-local draft; only the native save entry can persist it. */
 export function SettingsView({ projectId }: { projectId: string }) {
+  const [review, setReview] = useState(false);
+  const [adding, setAdding] = useState<'team' | 'child' | 'root' | null>(null);
+  const [deleting, setDeleting] = useState<'team' | 'agent' | null>(null);
+  const [deleteMode, setDeleteMode] = useState<'branch' | 'keep'>('branch');
+  const [promoted, setPromoted] = useState('');
+  const canvas = useRef<HTMLDivElement>(null);
   const [saved, setSaved] = useState<Settings | null>(null);
   const [roles, setRoles] = useState<Record<string, RoleFields>>({});
   const [renames, setRenames] = useState<Record<string, string>>({});
@@ -80,15 +85,6 @@ export function SettingsView({ projectId }: { projectId: string }) {
     setRoles(current => Object.fromEntries(Object.entries(current).filter(([ref]) => !affected.has(ref))));
     setRenames(current => Object.fromEntries(Object.entries(current).filter(([ref]) => !affected.has(ref)))); setSelected('');
   }
-  function renderTree(nodes: RoleTree) {
-    return Object.entries(nodes).map(([ref, children]) => <li key={ref}>
-      {Object.keys(children).length ? <details><summary>{roleName(renames, ref)}</summary>
-        {Object.hasOwn(roles, ref) && <Button size="sm" isDisabled={busy} aria-pressed={selected === ref} variant={selected === ref ? 'primary' : 'secondary'} onPress={() => { setSelected(ref); setTeam(group(ref)); }}>Select {roleName(renames, ref)}</Button>}
-        <ul>{renderTree(children)}</ul>
-      </details> : Object.hasOwn(roles, ref) ? <Button size="sm" isDisabled={busy} aria-pressed={selected === ref} variant={selected === ref ? 'primary' : 'secondary'} onPress={() => { setSelected(ref); setTeam(group(ref)); }}>{roleName(renames, ref)}</Button> : <span>{ref} · inline dispatch role</span>}
-    </li>);
-  }
-
   async function reload(): Promise<void> {
     setBusy(true); setError('');
     try { reset(await window.graphtraj.settings(projectId)); setMessage('Loaded current configuration. Draft discarded.'); }
@@ -103,13 +99,13 @@ export function SettingsView({ projectId }: { projectId: string }) {
         revision: saved.revision, edits, renames: names,
         add_edges: [], remove_edges: [], remove_presets: removed, role_tree: tree,
       });
-      reset(next); setMessage(next.applied ? 'Settings saved.' : 'No changes to save.');
+      reset(next); setReview(false); setMessage(next.applied ? 'Settings saved.' : 'No changes to save.');
     } catch (error) { setError(String(error)); }
     finally { setBusy(false); }
   }
   function field(name: keyof RoleFields, multiline = false) {
     const value = ownRole(roles, selected)?.[name] ?? '';
-    return <TextField key={name} value={value} isDisabled={busy}
+    return <TextField className="settings-field" key={name} value={value} isDisabled={busy}
       onChange={value => { setMessage(''); setRoles(current => ({ ...current, [selected]: { ...ownRole(current, selected), [name]: value } })); }}>
       <Label>{labels[name]}</Label>
       {multiline ? <TextArea rows={4} /> : <Input autoComplete="off" spellCheck={false} />}
@@ -121,94 +117,66 @@ export function SettingsView({ projectId }: { projectId: string }) {
       {name === 'developer_prompt' && <Description>Supported by Codex. Clear this layer for Pi or DSH.</Description>}
     </TextField>;
   }
-  return <Form className="settings" aria-label="Project settings" onSubmit={event => { event.preventDefault(); if (!busy && changes.length) void save(); }}>
-    <header><h1>Teams &amp; roles</h1><p>{saved?.effect ?? 'Edit project teams and roles through native authorization.'}</p></header>
-    <PriceInformation />
-    {error && <div className="error" role="alert">{error}<p>Your draft is retained. Reload to resolve an external change.</p></div>}
-    <div role="status">{busy ? 'Waiting for native settings / approval…' : message}</div>
-    <div className="settings-actions">
-      <Button type="submit" isDisabled={busy || !changes.length}>Save changes</Button>
-      <Button variant="secondary" isDisabled={busy || !saved || !changes.length}
-        onPress={() => { if (saved) reset(saved); setError(''); setMessage('Draft cancelled. Nothing saved.'); }}>Cancel draft</Button>
-      <Button variant="tertiary" isDisabled={busy} onPress={() => { void reload(); }}>Reload and discard draft</Button>
-    </div>
-    {saved && <div className="settings-columns">
-      <nav aria-label="Configured roles">
-        <label>Team<select aria-label="Team" value={team} disabled={busy} onChange={event => { const value = event.target.value; setTeam(value); setSelected(Object.keys(roles).find(ref => group(ref) === value) ?? ''); }}>{teams.map(name => <option key={name} value={name}>{ownRole(teamRenames, name) ?? (name || 'Ungrouped roles')}</option>)}</select></label>
-        {teamRoles.map(reference => <Button key={reference} aria-pressed={selected === reference} variant={selected === reference ? 'primary' : 'secondary'} isDisabled={busy} onPress={() => setSelected(reference)}>{roleName(renames, reference)}</Button>)}
-        {!teamRoles.length && <p>No configured Agents. Add a team and root below.</p>}
-        {team && <><TextField value={teamName} onChange={setTeamName} isDisabled={busy}><Label>New team name</Label><Input /></TextField>
-          <Button isDisabled={busy} onPress={() => attempt(() => {
-            if (!/^[a-z0-9]+(?:[_-][a-z0-9]+)*$/.test(teamName) || teams.some(name => name === teamName || ownRole(teamRenames, name) === teamName)) throw new Error('Choose a new lowercase team name.');
-            setTeamRenames(current => ({ ...current, [team]: teamName }));
-            setRenames(current => ({ ...current, ...Object.fromEntries(teamRoles.map(ref => [ref, `${teamName}.${roleName(renames, ref).split('.').pop()}`])) }));
-          })}>Rename team</Button>
-          <Button variant="danger" isDisabled={busy} onPress={() => attempt(() => {
-            const affected = new Set(teamRoles);
-            setTree(removeNodes(tree, affected, true));
-            setRoles(current => Object.fromEntries(Object.entries(current).filter(([ref]) => !affected.has(ref))));
-            setRenames(current => Object.fromEntries(Object.entries(current).filter(([ref]) => !affected.has(ref)))); setSelected('');
-          })}>Delete team</Button><p>Deletes this team's presets. Other teams' descendants reconnect to the nearest surviving parent. Review the resulting tree before saving.</p></>}
-      </nav>
-      {selected && Object.hasOwn(roles, selected) && <div className="settings-fields">
-        <Card><Card.Header><Card.Title>Connections and model</Card.Title></Card.Header><Card.Content>
-          <label>Global connection<select aria-label="Global connection" value={ownRole(roles, selected)?.connection ?? ''} disabled={busy} onChange={event => {
-            const connection = event.target.value;
-            setRoles(current => ({ ...current, [selected]: { ...ownRole(current, selected), connection: connection || null,
-              runtime: connection ? null : 'codex', model: connection ? null : '', base_url: null, api_key_env: null } }));
-          }}><option value="">Inline Runtime and model</option>
-            {availableConnections.map(({ reference, metadata }) => <option key={reference} value={reference}>{reference} · {metadata.alias || metadata.id} · {metadata.source}</option>)}
-            {selectedConnection && !selectedModel && <option value={selectedConnection}>{selectedConnection} · unavailable</option>}
-          </select></label>
-          {!ownRole(roles, selected)?.connection && <>{field('runtime')}{field('model')}{field('base_url')}{field('api_key_env')}</>}
-
-          <details><summary>Runtime parameters</summary>{field('reasoning_effort')}
-            {selectedConnection && <p>Model-supported efforts: {selectedModel?.supported_efforts?.join(', ') || 'unknown'}.</p>}
-            <p>Supported model efforts describe capabilities; this role's effort is selected for later dispatches. Existing Sessions retain their choice.</p>
-            <details><summary>Codex approval route</summary><p>Custom Codex providers require a role or project approval route. Blank role fields retain project defaults. These fields configure the existing native review mechanism; they do not approve execution.</p>
-              {field('approval_model')}{field('approval_base_url')}{field('approval_api_key_env')}
-              <p>HTTPS endpoint and environment variable NAME only. No credential values.</p>
-            </details>
-          </details>
-        </Card.Content></Card>
-        <Card><Card.Header><Card.Title>Role</Card.Title></Card.Header><Card.Content>
-          <TextField value={roleName(renames, selected)} isDisabled={busy}
-            onChange={name => setRenames(current => ({ ...current, [selected]: name }))}>
-            <Label>Role reference</Label><Input /><Description>Existing name or group.name. Renaming updates its dispatch references.</Description>
-          </TextField>
-          {field('instructions')}{field('system_prompt', true)}{field('developer_prompt', true)}
-        </Card.Content></Card>
-      </div>}
+  const selectedRole = ownRole(roles, selected);
+  const route = (selectedRole?.connection ?? '').split('/');
+  const runtimeEntries = connections?.catalog.runtimes ?? {};
+  const routeRuntime = runtimeEntries[route[0]];
+  const routeProvider = routeRuntime?.providers[route[1]];
+  function chooseConnection(connection: string): void {
+    setRoles(current => ({ ...current, [selected]: { ...ownRole(current, selected), connection: connection || null,
+      runtime: connection ? null : 'codex', model: connection ? null : '', base_url: null, api_key_env: null } }));
+  }
+  function drawNode(ref: string, ancestors = new Set<string>()): ReactNode {
+    if (ancestors.has(ref)) return null;
+    const nextAncestors = new Set([...ancestors, ref]);
+    const children = [...new Set(edges.filter(edge => edge[0] === ref && group(edge[1]) === team).map(edge => edge[1]))];
+    const value = ownRole(roles, ref);
+    const binding = availableConnections.find(item => item.reference === value?.connection);
+    return <li key={ref}><button data-config-agent={ref} className={`d-org-node ${selected === ref ? 'selected' : ''}`} aria-label={`Configure agent ${roleName(renames, ref)}`} aria-pressed={selected === ref} onClick={() => setSelected(ref)}><span className="d-org-role"><Icon name={isTeamRoot(ref) ? 'branch' : 'terminal'} size={15}/>{isTeamRoot(ref) ? 'Team root' : 'Agent'}</span><strong>{roleName(renames, ref).split('.').at(-1)}</strong><small title={value?.connection ?? undefined}>{value?.connection ? `${routeFor(value.connection)} · ${binding?.metadata.alias || binding?.metadata.id || 'Missing model'}` : `${value?.runtime || 'Runtime default'} · ${value?.model || 'Model not recorded'}`}</small><span className="d-org-child-count">{value?.reasoning_effort || 'Default'} effort · {children.length} children</span></button>{children.length > 0 && <ul>{children.map(child => drawNode(child, nextAncestors))}</ul>}</li>;
+  }
+  function routeFor(connection: string): string { return connection.split('/')[0]; }
+  useEffect(() => { const node = [...(canvas.current?.querySelectorAll<HTMLElement>('[data-config-agent]') ?? [])].find(item => item.dataset.configAgent === selected); node?.scrollIntoView?.({ block: 'nearest', inline: 'center' }); }, [selected, team]);
+  const roots = teamRoles.filter(ref => !edges.some(([parent, child]) => child === ref && group(parent) === team));
+  function removeConfiguration(): void {
+    if (deleting === 'team') {
+      const affected = new Set(teamRoles);
+      setTree(removeNodes(tree, affected, true));
+      setRoles(current => Object.fromEntries(Object.entries(current).filter(([ref]) => !affected.has(ref))));
+      setRenames(current => Object.fromEntries(Object.entries(current).filter(([ref]) => !affected.has(ref)))); setSelected('');
+      setTeam(teams.find(name => name !== team) ?? '');
+    } else if (deleteMode === 'keep' && isTeamRoot(selected)) {
+      const children = [...new Set(edges.filter(([parent]) => parent === selected).map(([, child]) => child))];
+      if (children.length > 1) {
+        if (!children.includes(promoted)) throw new Error('Choose a direct child to become the new root.');
+        let next = tree;
+        for (const child of children.filter(ref => ref !== promoted)) next = moveNode(next, child, promoted);
+        setTree(removeNodes(next, new Set([selected]), true));
+        setRoles(current => Object.fromEntries(Object.entries(current).filter(([ref]) => ref !== selected)));
+        setRenames(current => Object.fromEntries(Object.entries(current).filter(([ref]) => ref !== selected))); setSelected(promoted);
+      } else deleteNode(true);
+    } else deleteNode(deleteMode === 'keep');
+    setDeleting(null);
+  }
+  return <section className="d-team-editor" aria-label="Project settings"><header className="d-config-heading"><div><h1>Teams &amp; roles</h1><p>Configure this project’s organization. Running agents are unchanged.</p></div><span className="memory-badge"><Icon name="shield" size={15}/>Configuration draft</span></header>
+    {error && <div className="native-notice error" role="alert">{error}<p>Your draft is retained. Reload to resolve an external change.</p></div>}
+    {(busy || message) && <p className="native-notice" role="status">{busy ? 'Waiting for native settings / approval…' : message}</p>}
+    <nav className="d-team-tabs" aria-label="Project teams">{teams.map(name => <button key={name} aria-current={team === name ? 'true' : undefined} onClick={() => { setTeam(name); setSelected(Object.keys(roles).find(ref => group(ref) === name) ?? ''); }}><Icon name="branch" size={15}/><span>{ownRole(teamRenames, name) ?? (name || 'Ungrouped roles')}</span><small>{Object.keys(roles).filter(ref => group(ref) === name).length}</small></button>)}<Button variant="ghost" isDisabled={busy || !saved} onPress={() => { setAdding('team'); setTeamName(''); }}><Icon name="plus" size={15}/>Add team</Button>{teamRoles.length > 0 && <Button variant="ghost" className="d-delete-team" isDisabled={busy} onPress={() => setDeleting('team')}><Icon name="trash" size={15}/>Delete team</Button>}</nav>
+    {!teams.length ? <div className="d-empty-configuration"><Icon name="branch" size={30}/><h2>{busy ? 'Loading teams…' : 'No teams configured'}</h2><p>Add a team and start with one root agent. Build its organization one child at a time.</p><Button variant="primary" isDisabled={busy || !saved} onPress={() => setAdding('team')}>Add first team</Button></div> : <div className="d-team-editor-body"><div className="d-org-workspace"><header><div><label>Team name<input aria-label="Team name" disabled={busy || !team} value={ownRole(teamRenames, team) ?? (team || 'Ungrouped roles')} onChange={event => {
+      const value = event.target.value; setTeamRenames(current => ({ ...current, [team]: value }));
+      setRenames(current => ({ ...current, ...Object.fromEntries(teamRoles.map(ref => [ref, `${value}.${roleName(renames, ref).split('.').pop()}`])) }));
+    }}/></label></div><Button variant="secondary" isDisabled={busy} onPress={() => setAdding(selectedRole ? 'child' : 'root')}><Icon name="plus" size={15}/>{selectedRole ? 'Add child agent' : 'Add root agent'}</Button></header><div ref={canvas} className="d-org-canvas" role="region" aria-label="Team organization tree" tabIndex={0}><div className="d-org-tree"><ul>{roots.map(ref => drawNode(ref))}</ul></div></div><footer><Icon name="info" size={15}/><span>Select a parent to add a child. Reconnect an existing agent using its parent field.</span></footer></div>
+      {selectedRole ? <aside className="d-agent-properties"><header><div><h2>{roleName(renames, selected).split('.').at(-1)}</h2><span>{isTeamRoot(selected) ? 'Root agent configuration' : 'Child agent configuration'}</span></div><Button isIconOnly variant="ghost" aria-label="Delete selected agent configuration" isDisabled={busy} onPress={() => { setDeleting('agent'); setDeleteMode('branch'); setPromoted(edges.find(([parent]) => parent === selected)?.[1] ?? ''); }}><Icon name="trash" size={16}/></Button></header><fieldset disabled={busy} className="config-property-scroll"><div className="new-config-fields"><TextField className="settings-field" value={roleName(renames, selected)} onChange={name => setRenames(current => ({ ...current, [selected]: name }))}><Label>Role reference</Label><Input/><Description>Name or group.name. Renaming updates dispatch references.</Description></TextField>
+        <fieldset className="d-agent-model-fields"><legend>Model for this agent</legend><div className="d-agent-route-row"><label className="native-field"><span>Runtime</span><select aria-label="Agent Runtime" value={selectedRole.connection ? route[0] : ''} onChange={event => { const next = availableConnections.find(item => item.reference.startsWith(event.target.value + '/')); chooseConnection(event.target.value && next ? next.reference : ''); }}><option value="">Inline Runtime</option>{Object.entries(runtimeEntries).map(([id, value]) => <option key={id} value={id} disabled={!Object.values(value.providers).some(provider => Object.keys(provider.models).length)}>{id}</option>)}</select></label><label className="native-field"><span>Provider</span><select aria-label="Agent provider" value={route[1] ?? ''} disabled={!selectedRole.connection} onChange={event => { const next = availableConnections.find(item => item.reference.startsWith(`${route[0]}/${event.target.value}/`)); if (next) chooseConnection(next.reference); }}><option value="">Runtime default</option>{Object.entries(routeRuntime?.providers ?? {}).map(([id, value]) => <option key={id} value={id} disabled={!Object.keys(value.models).length}>{id}</option>)}</select></label></div>
+          {selectedRole.connection ? <label className="native-field"><span>Model</span><select aria-label="Global connection" value={selectedRole.connection} onChange={event => chooseConnection(event.target.value)}>{Object.entries(routeProvider?.models ?? {}).map(([id, value]) => <option key={id} value={`${route[0]}/${route[1]}/${id}`}>{value.alias || value.id}</option>)}{!selectedModel && <option value={selectedRole.connection}>{selectedRole.connection} · unavailable</option>}</select><small>{selectedModel?.source || 'Unknown source'} · Supported efforts: {selectedModel?.supported_efforts?.join(' · ') || 'Unknown'}</small></label> : <>{field('runtime')}{field('model')}<details className="d-prompt-layers"><summary>Inline provider route</summary>{field('base_url')}{field('api_key_env')}</details></>}
+          {field('reasoning_effort')}
+        </fieldset><label className="native-field"><span>Parent agent</span><select aria-label="Agent parent" value={edges.find(edge => edge[1] === selected)?.[0] ?? ''} onChange={event => attempt(() => {
+          const parent = event.target.value; if (!parent && teamRoles.some(ref => ref !== selected && isTeamRoot(ref))) throw new Error('A team must have one clear root. Move this Agent below the existing root.'); setTree(moveNode(tree, selected, parent));
+        })}><option value="">Root</option>{[...new Set([...Object.keys(roles), ...edges.map(edge => edge[0])])].filter(ref => !branchRoles(tree, selected).has(ref)).map(ref => <option key={ref} value={ref}>{roleName(renames, ref)}</option>)}</select><small>Self and descendants are excluded. Existing native parents are retained.</small></label>{field('instructions')}<details className="d-prompt-layers"><summary>Prompt layers</summary>{field('system_prompt', true)}{field('developer_prompt', true)}</details><details className="d-prompt-layers"><summary>Codex approval route</summary><p>Blank fields retain project defaults. These configure native review, not execution approval.</p>{field('approval_model')}{field('approval_base_url')}{field('approval_api_key_env')}</details>
+      </div></fieldset></aside> : <aside className="d-agent-properties d-empty-properties"><Icon name="terminal" size={26}/><p>Select an agent to edit its role and model.</p></aside>}
     </div>}
-    {saved && <Card><Card.Header><Card.Title>Team organization</Card.Title></Card.Header><Card.Content>
-      <p>Configuration only. Deleting teams or Agents never stops a running Session. Expand an arrow independently from selecting its Agent.</p>
-      <ul aria-label="Organization tree">{renderTree(tree)}</ul>
-      {!Object.keys(tree).length && <p>Empty organization. Add a root Agent to recover.</p>}
-      <fieldset disabled={busy}><legend>Add team or Agent</legend>
-        <TextField value={teamName} onChange={setTeamName}><Label>Team name for new team</Label><Input /></TextField>
-        <TextField value={nodeName} onChange={setNodeName}><Label>New Agent name</Label><Input /></TextField>
-        <label>New Agent Runtime<select aria-label="New Agent Runtime" value={newRuntime} onChange={event => setNewRuntime(event.target.value)}><option>codex</option><option>pi</option><option>dsh</option></select></label>
-        <TextField value={newModel} onChange={setNewModel}><Label>New Agent model</Label><Input /></TextField>
-        <div className="settings-actions"><Button onPress={() => attempt(() => addNode(true, false))}>Add team with root</Button>
-          <Button onPress={() => attempt(() => addNode(false, false))}>Add root Agent</Button>
-          <Button isDisabled={!selected || busy} onPress={() => attempt(() => addNode(false, true))}>Add child Agent</Button></div>
-      </fieldset>
-      {selected && Object.hasOwn(roles, selected) && <fieldset disabled={busy}><legend>Selected Agent: {roleName(renames, selected)}</legend>
-        <label>Agent parent<select aria-label="Agent parent" value={edges.find(edge => edge[1] === selected)?.[0] ?? ''} onChange={event => attempt(() => {
-          const parent = event.target.value;
-          if (!parent && teamRoles.some(ref => ref !== selected && isTeamRoot(ref))) throw new Error('A team must have one clear root. Move this Agent below the existing root.');
-          const next = moveNode(tree, selected, parent); setTree(next);
-        })}><option value="">Root</option>{[...new Set([...Object.keys(roles), ...edges.map(edge => edge[0])])].filter(ref => !branchRoles(tree, selected).has(ref)).map(ref => <option key={ref} value={ref}>{roleName(renames, ref)}</option>)}</select></label>
-        {new Set(edges.filter(edge => edge[1] === selected).map(edge => edge[0])).size > 1 && <p>This native role has several parents. Choosing a parent moves all occurrences and retains their children.</p>}
-        <p>Delete branch removes this Agent and all descendants: {[...branchRoles(tree, selected)].join(', ')}. Reconnect removes only this Agent and keeps its children under its parent; a root needs at most one child.</p>
-        <div className="settings-actions"><Button variant="danger" onPress={() => attempt(() => deleteNode(false))}>Delete Agent and branch</Button>
-          <Button variant="secondary" onPress={() => attempt(() => deleteNode(true))}>Delete Agent, reconnect children</Button></div>
-      </fieldset>}
-    </Card.Content></Card>}
-    <Card><Card.Header><Card.Title>Changes to review</Card.Title></Card.Header><Card.Content>
-      {changes.length ? <table><thead><tr><th>Setting</th><th>Before</th><th>After</th></tr></thead>
-        <tbody>{changes.map((change, index) => <tr key={index}><th>{change.label}</th><td>{change.before}</td><td>{change.after}</td></tr>)}</tbody>
-      </table> : <p>No staged changes.</p>}
-    </Card.Content></Card>
-  </Form>;
+    <footer className="new-draft-footer"><div><span className={`draft-dot ${changes.length ? 'dirty' : ''}`}/><strong>{changes.length ? `${changes.length} unsaved changes` : 'Draft matches saved configuration'}</strong><span>Running agents are unchanged</span></div><div><Button variant="ghost" isDisabled={busy} onPress={() => void reload()}>Reload</Button><Button variant="ghost" isDisabled={busy || !changes.length} onPress={() => { if (saved) reset(saved); setError(''); }}>Cancel changes</Button><Button variant="primary" isDisabled={busy || !changes.length} onPress={() => setReview(true)}>Review changes<Icon name="right" size={14}/></Button></div></footer>
+    {adding && <Dialog title={adding === 'team' ? 'Add team' : 'Add Agent'} onClose={() => setAdding(null)}><div className="new-config-fields">{adding === 'team' && <Field label="Team name for new team" value={teamName} onChange={setTeamName}/>}<Field label="New Agent name" value={nodeName} onChange={setNodeName}/><label className="native-field"><span>New Agent Runtime</span><select aria-label="New Agent Runtime" value={newRuntime} onChange={event => setNewRuntime(event.target.value)}><option>codex</option><option>pi</option><option>dsh</option></select></label><Field label="New Agent model" value={newModel} onChange={setNewModel}/><p>Choose the initial Runtime and model. The properties panel can then reference a global connection.</p>{error && <p role="alert">{error}</p>}</div><div className="dialog-footer"><Button variant="secondary" onPress={() => setAdding(null)}>Keep editing</Button><Button variant="primary" onPress={() => attempt(() => { addNode(adding === 'team', adding === 'child'); setAdding(null); })}>{adding === 'team' ? 'Add team with root' : 'Add Agent'}</Button></div></Dialog>}
+    {deleting && <Dialog title={deleting === 'team' ? `Delete ${team || 'ungrouped roles'}?` : `Remove ${roleName(renames,selected)}?`} onClose={() => setDeleting(null)}><p>This changes the configuration draft only. It does not stop, retire or remove a running Agent.</p>{deleting === 'agent' && <fieldset className="d-delete-options"><legend>What should happen to the children?</legend><label><input type="radio" name="delete-mode" checked={deleteMode === 'keep'} onChange={() => setDeleteMode('keep')}/><span><strong>Keep descendants</strong><small>Reconnect direct children to the parent, or promote a child for a root.</small></span></label><label><input type="radio" name="delete-mode" checked={deleteMode === 'branch'} onChange={() => setDeleteMode('branch')}/><span><strong>Delete the entire branch</strong><small>Remove this Agent and all configured descendants.</small></span></label>{deleteMode === 'keep' && isTeamRoot(selected) && <label className="native-field"><span>New root</span><select aria-label="New root" value={promoted} onChange={event => setPromoted(event.target.value)}>{edges.filter(([parent]) => parent === selected).map(([,child]) => <option key={child}>{child}</option>)}</select></label>}</fieldset>}<div className="d-delete-scope"><strong>Configuration nodes to remove</strong><p>{(deleting === 'team' ? teamRoles : deleteMode === 'branch' ? [...branchRoles(tree,selected)] : [selected]).join(' · ')}</p></div>{error && <p role="alert">{error}</p>}<div className="dialog-footer"><Button variant="secondary" onPress={() => setDeleting(null)}>Keep configuration</Button><Button className="destructive-button" onPress={() => attempt(removeConfiguration)}>Remove from draft</Button></div></Dialog>}
+    {review && <Dialog title="Review configuration draft" onClose={() => setReview(false)}><p>Saving requests native authorization and checks the saved revision. Existing Sessions retain their configuration.</p><div className="change-list">{changes.map((change,index) => <div className="change-item" key={index}><h3>{change.label}</h3><div><span className="diff-before"><small>BEFORE</small>{change.before || '(empty)'}</span><span className="diff-after"><small>AFTER</small>{change.after || '(empty)'}</span></div></div>)}</div>{error && <p role="alert">{error}</p>}<div className="dialog-footer"><Button variant="secondary" isDisabled={busy} onPress={() => setReview(false)}>Keep editing</Button><Button variant="primary" isDisabled={busy} onPress={() => void save()}>Save changes</Button></div></Dialog>}
+  </section>;
 }

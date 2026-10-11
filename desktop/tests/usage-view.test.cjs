@@ -17,6 +17,10 @@ test('Dashboard filters persisted usage by local dates and keeps global comparis
       builder.onLoad({ filter: /.*/, namespace: 'ui-shell' }, () => ({ contents: `
         import React from 'react';
         export const Button = ({ onPress, children, ...props }) => React.createElement('button', { ...props, onClick: onPress }, children);
+        export const TextField = props => React.createElement('field', props);
+        export const Input = props => React.createElement('input', props);
+        export const Label = props => React.createElement('label', props);
+        export const Description = props => React.createElement('span', props);
         export const Card = ({ children, ...props }) => React.createElement('article', props, children);
         for (const name of ['Header','Title','Description','Content']) Card[name] = ({children, ...props}) => React.createElement('div', props, children);
       `, resolveDir: path.join(__dirname, '..') }));
@@ -54,22 +58,16 @@ test('Dashboard filters persisted usage by local dates and keeps global comparis
   assert.match(text(), /Main calls are not covered/);
   assert.match(text(), /unknown-model/);
   assert.match(text(), /No verified model price/);
-  const selects = tree.root.findAllByType('select');
-  await act(async () => { selects[2].props.onChange({ target: { value: 'unknown-model' } }); });
-  assert.doesNotMatch(text(), /\$2.205000/);
-  await act(async () => { selects[2].props.onChange({ target: { value: '' } }); });
-  const dataRows = caption => tree.root.findAllByType('table')
-    .find(table => table.findAllByType('caption').some(node => node.children.join('') === caption))
-    .findByType('tbody').findAllByType('tr');
+  const modelButton = label => tree.root.findAllByType('button').find(node => node.findAllByType('span').some(child => child.children.join('') === label));
+  await act(async () => { modelButton('unknown-model').props.onClick(); });
+  assert.equal(tree.root.findByProps({ 'data-usage-cost': true }).children.join(''), 'Unknown');
+  await act(async () => { modelButton('All models').props.onClick(); });
   const invalidAlert = () => {
     const alert = tree.root.findByProps({ role: 'alert' });
     assert.notEqual(alert.props.hidden, true);
     assert.ok(alert.children.join('').trim());
   };
-  const emptyProjectRows = () => {
-    assert.equal(dataRows('Model breakdown').length, 0);
-    assert.equal(dataRows('Daily trend (local dates)').length, 0);
-  };
+  const emptyProjectRows = () => { assert.equal(tree.root.findAll(node => node.props.className === 'd-dated-records').length, 0); };
   const inputs = tree.root.findAllByType('input');
   assert.equal(inputs[0].props.type, 'date');
   assert.equal(inputs[0].props.value, defaultDates().from);
@@ -100,9 +98,7 @@ test('Dashboard filters persisted usage by local dates and keeps global comparis
     globalInputs[0].props.onChange({ target: { value: '2099-01-01' } });
     globalInputs[1].props.onChange({ target: { value: '2099-01-01' } });
   });
-  assert.equal(dataRows('Daily trend (local dates)').length, 0);
-  const comparison = dataRows('Project comparison');
-  assert.equal(comparison.length, 2);
-  for (const row of comparison) assert.equal(row.findAllByType('td')[1].children[0], 'Unknown');
+  assert.equal(tree.root.findAllByType('table').filter(node => node.props['aria-label'] === 'Project comparison').length, 0);
+  assert.match(text(), /No dated usage/);
   assert.doesNotMatch(text(), /\$2.205000/);
 });

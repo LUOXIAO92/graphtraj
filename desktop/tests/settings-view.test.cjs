@@ -36,9 +36,9 @@ async function form(t, file, component, api, props) {
   t.after(async () => { await act(async () => tree.unmount()); globalThis.window = previous; });
   return { tree,
     fill: async (label, value) => act(async () => tree.root.findAllByType('field').find(node => node.findByType('label').children.join('') === label).props.onChange(value)),
-    click: async label => act(async () => tree.root.findAllByType('button').find(node => node.children.join('') === label).props.onClick()),
+    click: async label => act(async () => tree.root.findAllByType('button').findLast(node => node.children.filter(child => typeof child === 'string').join('') === label || node.props['aria-label'] === label).props.onClick()),
     select: async (label, value) => act(async () => tree.root.findAllByType('select').find(node => node.props['aria-label'] === label).props.onChange({ target: { value } })),
-    submit: async () => act(async () => tree.root.findByType('form').props.onSubmit({ preventDefault() {} })),
+    input: async (label, value) => act(async () => tree.root.findAllByType('input').find(node => node.props['aria-label'] === label).props.onChange({target:{value}})),
   };
 }
 const connections = { revision: 'catalog-revision', catalog: { version: 1, runtimes: {
@@ -52,24 +52,24 @@ test('team draft creates, reparents, renames and references a model while preser
     settings: async () => saved, connections: async () => connections,
     saveSettings: async (_id, value) => { submitted = value; throw new Error('Controlled refusal; retain draft.'); },
   }, { projectId: 'project' });
-  await ui.select('Team', 'existing');
+  await ui.click('Add team');
   await ui.select('New Agent Runtime', 'codex');
   await ui.fill('Team name for new team', 'research');
   await ui.fill('New Agent name', 'root'); await ui.fill('New Agent model', 'draft-model');
-  await ui.click('Add team with root'); await ui.select('Global connection', 'shared/openai/model');
+  await ui.click('Add team with root'); await ui.select('Agent Runtime', 'shared');
   await ui.fill('Reasoning effort', 'low');
-  await ui.fill('New Agent name', 'child'); await ui.click('Add child Agent');
-  assert.equal(ui.tree.root.findAllByType('select').find(node => node.parent.children[0] === 'Agent parent').props.value, 'research.root');
-  await ui.fill('New Agent name', 'leaf'); await ui.click('Add child Agent');
+  await ui.click('Add child agent'); await ui.fill('New Agent name', 'child'); await ui.click('Add Agent');
+  assert.equal(ui.tree.root.findAllByType('select').find(node => node.props['aria-label'] === 'Agent parent').props.value, 'research.root');
+  await ui.click('Add child agent'); await ui.fill('New Agent name', 'leaf'); await ui.click('Add Agent');
   await ui.select('Agent parent', 'research.root');
-  await ui.fill('New team name', 'final'); await ui.click('Rename team'); await ui.submit();
+  await ui.input('Team name', 'final'); await ui.click('Review changes'); await ui.click('Save changes');
   assert.deepEqual(submitted.edits['research.root'], { connection: 'shared/openai/model', reasoning_effort: 'low' });
   assert.deepEqual(JSON.parse(JSON.stringify(submitted.role_tree['research.root'])), { 'research.child': {}, 'research.leaf': {} });
   assert.equal(submitted.renames['research.leaf'], 'final.leaf');
   assert.equal(submitted.edits['existing.root'], undefined);
   assert.deepEqual(submitted.remove_presets, []); assert.equal(submitted.decision, undefined);
   assert.match(JSON.stringify(ui.tree.toJSON()), /Controlled refusal/);
-  await ui.click('Cancel draft'); assert.doesNotMatch(JSON.stringify(ui.tree.toJSON()), /research.root/);
+  await ui.click('Keep editing'); await ui.click('Cancel changes'); assert.doesNotMatch(JSON.stringify(ui.tree.toJSON()), /research.root/);
 });
 
 test('native Runtime and Provider API selects keep explicit names as options change', async t => {
@@ -82,11 +82,12 @@ test('native Runtime and Provider API selects keep explicit names as options cha
       return { ...original, catalog: request.catalog ?? original.catalog };
     },
   }, {});
+  await ui.click('Add Runtime');
   await ui.select('Runtime type', 'pi');
-  await ui.fill('Runtime entry name', 'pi'); await ui.click('Add Runtime');
-  await ui.fill('Provider name', 'custom'); await ui.click('Add Provider');
+  await ui.fill('Runtime entry name', 'pi'); await ui.click('Add runtime');
+  await ui.click('Add provider'); await ui.fill('Provider name', 'custom'); await ui.click('Add provider');
   await ui.select('Provider API', 'openai-completions');
-  await ui.click('Preview connections');
+  await ui.click('Review changes');
   assert.equal(preview.runtimes.pi.runtime, 'pi');
   assert.equal(preview.runtimes.pi.providers.custom.api, 'openai-completions');
 });
@@ -100,14 +101,14 @@ for (const name of ['ordinary', '__proto__']) test(`global form preserves ${name
       return request.action === 'read' ? original : { ...original, catalog: request.catalog, applied: request.action === 'save' };
     },
   }, {});
-  await ui.fill('Runtime entry name', name); await ui.click('Add Runtime');
-  await ui.fill('Shared Runtime Home', '/isolated/native');
-  await ui.fill('Provider name', name); await ui.click('Add Provider');
-  await ui.fill('Provider Base URL', 'https://provider.invalid/v1');
-  await ui.fill('Provider api_key_env name', 'CUSTOM_KEY');
-  await ui.fill('Model entry name', name); await ui.fill('Model identifier', 'actual-model');
-  await ui.fill('Model alias', 'Display name'); await ui.click('Add Model');
-  await ui.click('Preview connections'); await ui.click('Save connections');
+  await ui.click('Add Runtime'); await ui.fill('Runtime entry name', name); await ui.click('Add runtime');
+  await ui.fill('Runtime Home', '/isolated/native');
+  await ui.click('Add provider'); await ui.fill('Provider name', name); await ui.click('Add provider');
+  await ui.fill('Base URL', 'https://provider.invalid/v1');
+  await ui.fill('API key environment variable', 'CUSTOM_KEY');
+  await ui.click('Add model'); await ui.fill('Model entry name', name); await ui.fill('Model identifier', 'actual-model');
+  await ui.fill('Model alias', 'Display name'); await ui.click('Add model');
+  await ui.click('Review changes'); await ui.click('Save connections');
   const { id, request } = calls.at(-1);
   assert.equal(id, null);
   assert.deepEqual(Object.keys(request).sort(), ['action', 'catalog', 'expected_revision']);
@@ -135,31 +136,26 @@ test('rename team then add child saves and reloads one renamed group', async t =
       return { ...saved, applied: true };
     },
   }, { projectId: 'project' });
-  await ui.fill('New team name', 'b'); await ui.click('Rename team');
+  await ui.input('Team name', 'b'); await ui.click('Add child agent');
   await ui.fill('New Agent name', 'worker'); await ui.fill('New Agent model', 'worker-model');
-  await ui.click('Add child Agent'); await ui.submit();
+  await ui.click('Add Agent'); await ui.click('Review changes'); await ui.click('Save changes');
   assert.deepEqual(submitted, {
     revision: 'before', edits: { 'a.worker': { runtime: 'codex', model: 'worker-model' } },
     renames: { 'a.root': 'b.root', 'a.worker': 'b.worker' },
     add_edges: [], remove_edges: [], remove_presets: [], role_tree: { 'a.root': { 'a.worker': {} } },
   });
-  await ui.click('Reload and discard draft');
-  const team = ui.tree.root.findAllByType('select').find(node => node.props['aria-label'] === 'Team');
-  assert.equal(team.props.value, 'b');
-  assert.deepEqual(team.findAllByType('option').map(node => node.props.value), ['b']);
-  const labels = ui.tree.root.findAllByType('button').map(node => node.children.join(''));
-  assert.ok(labels.includes('b.worker')); assert.ok(!labels.includes('a.worker'));
+  await ui.click('Reload');
+  const value = ui.tree.root.findAllByType('input').find(node => node.props['aria-label'] === 'Team name');
+  assert.equal(value.props.value, 'b');
+  const labels = ui.tree.root.findAllByType('button').map(node => node.props['aria-label']);
+  assert.ok(labels.includes('Configure agent b.worker')); assert.ok(!labels.includes('Configure agent a.worker'));
 });
 
-for (const change of ['same destination', 'select provider', 'create provider', 'select runtime', 'create runtime', 'home', 'base URL', 'reuse after home change', 'existing override']) {
-  test(`discovered model metadata follows its destination: ${change}`, async t => {
-    const catalog = { version: 1, runtimes: {
-      shared: { runtime: 'codex', home: '/original/home', providers: {
-        openai: { models: {}, ...(change === 'existing override' ? { base_url: 'https://override.invalid/v1' } : {}) },
-        custom: { base_url: 'https://custom.invalid/v1', models: {} },
-      } },
-      second: { runtime: 'codex', home: '/second/home', providers: { alternate: { models: {} } } },
-    } };
+for (const change of ['same destination', 'existing override', 'edit identifier']) {
+  test(`native model provenance in the D add dialog: ${change}`, async t => {
+    const catalog = { version: 1, runtimes: { shared: { runtime: 'codex', home: '/original/home', providers: {
+      openai: { models: {}, ...(change === 'existing override' ? { base_url: 'https://override.invalid/v1' } : {}) },
+    } } } };
     let preview;
     const ui = await form(t, 'Connections.tsx', 'ConnectionsView', {
       connections: async (_id, request) => {
@@ -172,26 +168,25 @@ for (const change of ['same destination', 'select provider', 'create provider', 
       },
     }, { projectId: 'project' });
     await ui.click('Refresh native models'); await ui.click('Use discovered');
-    let targetRuntime = 'shared'; let targetProvider = 'openai';
-    if (change === 'select provider') { await ui.click('Select Provider custom'); targetProvider = 'custom'; }
-    if (change === 'create provider') {
-      await ui.fill('Provider name', 'created'); await ui.click('Add Provider'); targetProvider = 'created';
-    }
-    if (change === 'select runtime') {
-      await ui.click('Select Runtime second'); await ui.click('Select Provider alternate');
-      targetRuntime = 'second'; targetProvider = 'alternate';
-    }
-    if (change === 'create runtime') {
-      await ui.fill('Runtime entry name', 'created'); await ui.click('Add Runtime');
-      await ui.fill('Provider name', 'openai'); await ui.click('Add Provider'); targetRuntime = 'created';
-    }
-    if (change === 'home' || change === 'reuse after home change') await ui.fill('Shared Runtime Home', '/changed/home');
-    if (change === 'reuse after home change') await ui.click('Use discovered');
-    if (change === 'base URL') await ui.fill('Provider Base URL', 'https://changed.invalid/v1');
-    await ui.click('Add Model'); await ui.click('Preview connections');
-    const model = preview.runtimes[targetRuntime].providers[targetProvider].models.discovered;
-    assert.equal(model.id, 'discovered'); assert.equal(model.alias, 'Native label');
+    if (change === 'edit identifier') await ui.fill('Model identifier', 'manual-id');
+    await ui.click('Add model'); await ui.click('Review changes');
+    const model = preview.runtimes.shared.providers.openai.models.discovered;
+    assert.equal(model.id, change === 'edit identifier' ? 'manual-id' : 'discovered');
     assert.equal(model.source, change === 'same destination' ? 'native' : 'manual');
     assert.deepEqual(model.supported_efforts, change === 'same destination' ? ['low'] : undefined);
   });
 }
+
+test('changing Runtime Home clears retained discovery before it can be reused', async t => {
+  const ui = await form(t, 'Connections.tsx', 'ConnectionsView', {
+    connections: async (_id, request) => ({ ...connections, discovery: request.action === 'discover' ? {
+      runtime_entry: 'shared', status: 'available', account_access: 'unknown', models: [
+        { provider: 'openai', id: 'discovered', source: 'native', supported_efforts: ['low'] },
+      ],
+    } : undefined }),
+  }, {});
+  await ui.click('Refresh native models');
+  assert.ok(ui.tree.root.findAllByType('button').some(node => node.children.join('') === 'Use discovered'));
+  await ui.fill('Runtime Home', '/another/home');
+  assert.ok(!ui.tree.root.findAllByType('button').some(node => node.children.join('') === 'Use discovered'));
+});

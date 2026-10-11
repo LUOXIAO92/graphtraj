@@ -1,0 +1,30 @@
+/* Actual native states and unbounded identifiers in the transplanted D views. */
+.native-notice { padding: 9px 22px; font-size: 11px; color: var(--muted); overflow-wrap: anywhere; flex-shrink: 0; }
+.native-notice.error { background: #fcf1ef; color: #9b4237; }
+.d-focused-stage > .native-notice.error { position: absolute; inset: 48px 0 auto; z-index: 20; }
+.native-ticket-facts { font-size: 10px; color: var(--muted); margin-top: 8px; }
+.native-ticket-facts p { margin-top: 7px; }
+.activity { display: flex; flex: 1; flex-direction: column; min-height: 0; min-width: 0; }
+.d-library-content, .config-property-scroll { border: 0; margin: 0; }
+.record-source { display: flex; justify-content: space-between; font-size: 9px; color: var(--muted); margin-top: 9px; }
+.record-source button { display: flex; align-items: center; gap: 5px; }
+.tool-details button { display: inline-flex; gap: 5px; margin-top: 8px; }
+.d-task-shelf .member-pills { max-height: 112px; overflow: auto; }
+.member-pills strong { max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.d-reading-index { overflow-x: auto; }
+.d-reading-index .member-pills { flex-wrap: nowrap; }
+.d-reading-index .member-pills > button { flex-shrink: 0; }
+.agent-column-heading h2, .agent-column-parent > span, .d-current-project-nav .section-label, .d-monitor-caption strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.d-monitor-caption strong { max-width: 350px; }
+.new-project-list strong, .new-project-list small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.d-agent-properties h2, .d-task-shelf h2, .node-title, .node-subtitle, .d-dated-records strong { overflow-wrap: anywhere; }
+.change-list pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; }
+.d-usage-history-note { max-height: 32%; overflow: auto; }
+.d-usage-history-note .price-information { margin-top: 14px; }
+.d-project-add-form > p { color: var(--muted); margin-bottom: 18px; font-size: 12px; }
+.d-project-add-form > .button { margin-right: 8px; }
+.map-canvas > .d-empty-configuration { position: absolute; inset: 0; pointer-events: none; }
+.status-implementing, .status-running { color: var(--accent-ink); }
+.status-integrated { color: var(--green); }
+.status-implementing .status-dot, .status-running .status-dot { background: var(--accent-ui); }
+.status-integrated .status-dot { background: var(--green); }

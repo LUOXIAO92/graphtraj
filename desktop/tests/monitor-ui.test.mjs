@@ -31,7 +31,7 @@ test('D navigation preserves separate project graphs and independent column read
           })),
         };
       },
-      settings: async () => ({ revision: '1', roles: {}, edges: [], effect: 'No changes' }),
+      settings: async () => ({ revision: '1', roles: {}, edges: [], role_tree: {}, effect: 'No changes' }),
       copyText: async () => {},
     };
   });
@@ -78,7 +78,7 @@ test('D navigation preserves separate project graphs and independent column read
   await monitor.getByText('second alpha record 79', { exact: false }).waitFor();
   assert.equal(await monitor.getByText('first alpha record 79', { exact: false }).count(), 0);
   await page.locator('.project-button').filter({ hasText: '/projects/first' }).click();
-  assert.equal(await monitor.getByRole('searchbox').inputValue(), 'first current');
+  assert.equal(await monitor.locator('input[aria-label="Search tasks"]').inputValue(), 'first current');
   const again = await monitor.evaluate(element => ({ first: element.querySelectorAll('.activity-history')[0].scrollTop,
     second: element.querySelectorAll('.activity-history')[1].scrollTop, horizontal: element.querySelector('.agent-columns').scrollLeft }));
   assert.deepEqual(again, positions);
@@ -95,8 +95,9 @@ test('D navigation preserves separate project graphs and independent column read
   await page.getByRole('button', { name: 'Monitor', exact: true }).click();
   assert.equal(await monitor.locator('.react-flow__viewport').getAttribute('style'), viewport);
   await page.getByRole('button', { name: 'Hide sidebar', exact: true }).click();
-  assert.equal(await page.getByRole('navigation', { name: 'Projects', exact: true }).count(), 0);
+  assert.equal(await page.locator('#d-project-sidebar').isVisible(), false);
   await page.getByRole('button', { name: 'Show sidebar', exact: true }).click();
   assert.equal(await page.getByRole('button', { name: 'Monitor', exact: true }).isVisible(), true);
   assert.equal(await page.getByRole('textbox').count(), 0, 'monitor has no message input');
+  await page.screenshot({path: '/private/tmp/290-monitor-renderer.png'});
 });

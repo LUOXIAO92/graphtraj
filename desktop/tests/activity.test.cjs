@@ -19,12 +19,19 @@ async function components(t) {
       builder.onLoad({ filter: /.*/, namespace: 'ui-shell' }, () => ({ contents: `
         import React from 'react';
         export const Button = ({ onPress, children, ...props }) => React.createElement('button', { ...props, onClick: onPress }, children);
+        export const TextField = props => React.createElement('field', props);
+        export const Input = props => React.createElement('input', props);
+        export const Label = props => React.createElement('label', props);
+        export const Description = props => React.createElement('span', props);
         export const Card = ({ children, ...props }) => React.createElement('article', props, children);
         for (const name of ['Header','Title','Description','Content']) Card[name] = ({children, ...props}) => React.createElement('div', props, children);
       `, resolveDir: path.join(__dirname, '..') }));
     }}],
   });
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  const oldObserver = globalThis.ResizeObserver;
+  globalThis.ResizeObserver = class { observe() {} disconnect() {} };
+  t.after(() => { globalThis.ResizeObserver = oldObserver; });
   const oldWindow = globalThis.window;
   t.after(() => { globalThis.window = oldWindow; });
   return require(output);
@@ -33,8 +40,8 @@ async function components(t) {
 const event = (id, extra = {}) => ({ id: String(id), kind: 'message', role: 'assistant', text: `record ${id}`,
   time: null, source: { runtime: 'codex', offset: id }, ...extra });
 const text = tree => JSON.stringify(tree.toJSON());
-const button = (tree, label) => tree.root.findAllByType('button').find(node =>
-  typeof node.props.children === 'string' && node.props.children.startsWith(label));
+const button = (tree, label) => (tree.root ?? tree).findAllByType('button').find(node =>
+  node.children.filter(child => typeof child === 'string').join('').startsWith(label));
 
 for (const runtime of ['codex', 'dsh']) {
   test(`${runtime} work diagnostics are visible and copied with their label`, async t => {
@@ -77,9 +84,9 @@ test('Follow drains long pages and reconnect replay; pause preserves the older v
   // Layout/programmatic scroll while a page is replaced must not pause fetching.
   const historyNode = { scrollHeight: 1000, scrollTop: 0, clientHeight: 300 };
   await act(async () => { tree = create(React.createElement(ActivityView, { projectId: 'p', ticketId: '1' }), {
-    createNodeMock: element => element.props.className === 'activity-history' ? historyNode : {
+    createNodeMock: element => element.props.className?.includes('activity-history') ? historyNode : {
       scrollIntoView() {
-        const history = tree.root.findAll(node => node.props.className === 'activity-history')[0];
+        const history = tree.root.findAll(node => node.props.className?.includes('activity-history'))[0];
         history?.props.onScroll?.({ currentTarget: historyNode });
       },
     },
@@ -108,7 +115,7 @@ test('Follow drains long pages and reconnect replay; pause preserves the older v
   records.push(event(406));
   await advance(3000); await advance(3000); await advance(); await advance();
   assert.match(text(tree), /record 406/);
-  assert.equal(tree.root.findAll(node => node.props.className === 'activity-event').filter(node => node.type === 'article').length, 100);
+  assert.equal(tree.root.findAll(node => node.props.className?.includes('activity-event')).filter(node => node.type === 'article').length, 100);
   assert.match(text(tree), /407/);
 });
 
@@ -125,9 +132,7 @@ test('result selection requires the real expansion control, not quoted phase tex
       text: undefined, result: `${marker} diagnostic` }) }),
   )); });
   t.after(async () => { await act(async () => tree.unmount()); });
-  const cards = tree.root.findAllByType('article');
-  const candidates = cards.filter(card => card.findAllByType('summary')
-    .some(summary => summary.props.children === 'Result / details'));
+  const candidates = tree.root.findAllByType('details').filter(card => card.findAllByType('span').some(node => node.props.className === 'tool-result' && node.children.includes('result')));
   assert.equal(candidates.length, 1);
   assert.equal(candidates[0].findByType('pre').props.children, `${marker} diagnostic`);
 });
@@ -150,10 +155,10 @@ test('parallel current/history columns retain independent pause and cursor state
   let tree;
   await act(async () => { tree = create(React.createElement(ActivityView, { projectId: 'one', ticketId: '1' })); });
   t.after(async () => { await act(async () => tree.unmount()); });
-  const columns = tree.root.findAll(node => node.type === 'article' && node.props.className === 'agent-column');
+  const columns = tree.root.findAll(node => node.type === 'article' && node.props.className?.split(' ').includes('agent-column'));
   assert.equal(columns.length, 2);
   assert.match(text(tree), /Historical/);
-  await act(async () => { columns[0].findAllByType('button')[0].props.onClick(); });
+  await act(async () => { button(columns[0], 'Pause following').props.onClick(); });
   count = 3;
   await act(async () => t.mock.timers.tick(3000));
   assert.match(text(tree), /current message 2/);

@@ -1,20 +1,21 @@
 import { useEffect, useState } from 'react';
-import { Button, Input, Label, TextField } from '@heroui/react';
+import { Button } from '@heroui/react';
 import type { Catalog, CatalogModel, CatalogRuntime, Connections } from '../electron/types';
-import './settings.css';
+import { Dialog, Field, Icon } from './ui';
 
-/** Edit the shared native catalog; authentication stays in the Runtime client. */
+/** D's Runtime/provider/model editor, using the existing native preview and save protocol. */
 export function ConnectionsView({ projectId }: { projectId?: string }) {
   const [saved, setSaved] = useState<Connections>();
   const [catalog, setCatalog] = useState<Catalog>({ version: 1, runtimes: {} });
   const [runtimeId, setRuntimeId] = useState('');
   const [providerId, setProviderId] = useState('');
-  const [runtimeName, setRuntimeName] = useState('');
+  const [modelId, setModelId] = useState('');
+  const [expandedRuntimes, setExpandedRuntimes] = useState<Record<string, boolean>>({});
+  const [expandedProviders, setExpandedProviders] = useState<Record<string, boolean>>({});
+  const [adding, setAdding] = useState<'runtime' | 'provider' | 'model' | null>(null);
+  const [name, setName] = useState('');
   const [kind, setKind] = useState<CatalogRuntime['runtime']>('codex');
-  const [providerName, setProviderName] = useState('');
-  const [modelName, setModelName] = useState('');
-  const [model, setModel] = useState<CatalogModel>({ id: '', source: 'manual' });
-  const [modelOrigin, setModelOrigin] = useState<string>();
+  const [newModel, setNewModel] = useState<CatalogModel>({ id: '', source: 'manual' });
   const [discovery, setDiscovery] = useState<Connections['discovery']>();
   const [preview, setPreview] = useState<Catalog>();
   const [busy, setBusy] = useState(false);
@@ -22,125 +23,64 @@ export function ConnectionsView({ projectId }: { projectId?: string }) {
   const [message, setMessage] = useState('');
   const runtime = catalog.runtimes[runtimeId];
   const provider = runtime?.providers[providerId];
-  const destination = JSON.stringify([runtimeId, runtime?.runtime, runtime?.home ?? null, providerId,
-    provider?.base_url ?? null, provider?.api ?? null, provider?.api_key_env ?? null]);
-  // Native metadata belongs only to the queried Home/provider, without manual route overrides.
-  const draftModel: CatalogModel = model.source === 'native' && modelOrigin !== destination
-    ? { id: model.id, alias: model.alias, source: 'manual' } : model;
-  const dirty = JSON.stringify(catalog) !== JSON.stringify(saved?.catalog);
-
+  const model = provider?.models[modelId];
+  const dirty = saved !== undefined && JSON.stringify(catalog) !== JSON.stringify(saved.catalog);
   function reset(value: Connections): void {
-    setSaved(value); setCatalog(structuredClone(value.catalog)); setPreview(undefined);
-    setRuntimeId(current => Object.hasOwn(value.catalog.runtimes, current) ? current : Object.keys(value.catalog.runtimes)[0] ?? '');
-    setProviderId(''); setDiscovery(undefined);
+    setSaved(value); setCatalog(structuredClone(value.catalog)); setPreview(undefined); setDiscovery(undefined);
+    const first = Object.keys(value.catalog.runtimes)[0] ?? '';
+    setRuntimeId(current => Object.hasOwn(value.catalog.runtimes, current) ? current : first);
+    setExpandedRuntimes(current => ({ [first]: true, ...current }));
+    setProviderId(''); setModelId('');
   }
   async function run(action: () => Promise<void>): Promise<void> {
     setBusy(true); setError(''); setMessage('');
-    try { await action(); } catch (error) { setError(String(error)); }
-    finally { setBusy(false); }
+    try { await action(); } catch (error) { setError(String(error)); } finally { setBusy(false); }
   }
   useEffect(() => {
-    let alive = true;
-    {
-      setBusy(true);
-      window.graphtraj.connections(projectId ?? null, { action: 'read' }).then(value => { if (alive) reset(value); })
-        .catch(error => { if (alive) setError(String(error)); }).finally(() => { if (alive) setBusy(false); });
-    }
+    let alive = true; setBusy(true);
+    window.graphtraj.connections(projectId ?? null, { action: 'read' }).then(value => { if (alive) reset(value); })
+      .catch(error => { if (alive) setError(String(error)); }).finally(() => { if (alive) setBusy(false); });
     return () => { alive = false; };
   }, [projectId]);
-  function edit(update: (draft: Catalog) => void): void {
-    const next = structuredClone(catalog); update(next); setCatalog(next); setPreview(undefined); setMessage('');
+  function edit(update: (draft: Catalog) => void): void { const next = structuredClone(catalog); update(next); setCatalog(next); setPreview(undefined); setMessage(''); }
+  function choose(r: string, p = '', m = ''): void { setRuntimeId(r); setProviderId(p); setModelId(m); if (r !== runtimeId) setDiscovery(undefined); }
+  function startAdd(value: 'runtime' | 'provider' | 'model'): void { setAdding(value); setName(''); setNewModel({ id: '', source: 'manual' }); }
+  function add(): void {
+    if (!/^[A-Za-z0-9_-]+$/.test(name)) { setError('Use letters, digits, underscores or hyphens for catalog names.'); return; }
+    const entries = adding === 'runtime' ? catalog.runtimes : adding === 'provider' ? runtime.providers : provider.models;
+    if (Object.hasOwn(entries, name)) { setError('Entry already exists.'); return; }
+    if (adding === 'model' && !newModel.id.trim()) { setError('Enter a model identifier.'); return; }
+    edit(draft => {
+      if (adding === 'runtime') draft.runtimes = { ...draft.runtimes, [name]: { runtime: kind, providers: {} } };
+      if (adding === 'provider') draft.runtimes[runtimeId].providers = { ...draft.runtimes[runtimeId].providers, [name]: { models: {} } };
+      if (adding === 'model') draft.runtimes[runtimeId].providers[providerId].models = { ...draft.runtimes[runtimeId].providers[providerId].models, [name]: newModel };
+    });
+    if (adding === 'runtime') { choose(name); setExpandedRuntimes(value => ({ ...value, [name]: true })); }
+    if (adding === 'provider') { choose(runtimeId, name); setExpandedRuntimes(value => ({ ...value, [runtimeId]: true })); }
+    if (adding === 'model') { choose(runtimeId, providerId, name); setExpandedProviders(value => ({ ...value, [`${runtimeId}/${providerId}`]: true })); }
+    setAdding(null); setError('');
   }
-  function text(label: string, value: string, change: (value: string) => void) {
-    return <TextField value={value} onChange={change} isDisabled={busy}><Label>{label}</Label><Input autoComplete="off" spellCheck={false} /></TextField>;
-  }
-  function validName(name: string): boolean {
-    if (/^[A-Za-z0-9_-]+$/.test(name)) return true;
-    setError('Use letters, digits, underscores or hyphens for catalog names.'); return false;
-  }
-  return <section className="settings" aria-label="Agents and models">
-    <header><h1>Agents &amp; models</h1><p>Global Runtime → Provider → Model connections. Providers share their Runtime Home. Saving affects later dispatches; existing Agents keep their captured settings.</p></header>
-    <p>Log in using the original Runtime client, then refresh discovery. This app does not log in or read credentials. Catalog metadata does not verify account access.</p>
-    {error && <div role="alert" className="error">{error}<p>Draft retained. Reload to resolve an external change.</p></div>}
-    <div role="status">{busy ? 'Waiting for native configuration / approval…' : message}</div>
-    {saved && <>
-      <div className="settings-actions">
-        <Button isDisabled={busy || !dirty} onPress={() => void run(async () => {
-          const result = await window.graphtraj.connections(projectId ?? null, { action: 'preview', catalog }); setPreview(result.catalog);
-        })}>Preview connections</Button>
-        <Button isDisabled={busy || !preview} onPress={() => void run(async () => {
-          const result = await window.graphtraj.connections(projectId ?? null, { action: 'save', catalog: preview, expected_revision: saved.revision });
-          reset(result); setMessage(result.applied ? 'Connections saved.' : 'No changes to save.');
-        })}>Save connections</Button>
-        <Button variant="secondary" isDisabled={busy || !dirty} onPress={() => { reset(saved); setError(''); setMessage('Draft cancelled. Nothing saved.'); }}>Cancel connections draft</Button>
-        <Button variant="tertiary" isDisabled={busy} onPress={() => void run(async () => { reset(await window.graphtraj.connections(projectId ?? null, { action: 'read' })); setMessage('Connections reloaded.'); })}>Reload connections</Button>
-      </div>
-      <div className="settings-columns">
-        <nav aria-label="Runtime provider model catalog">
-          {Object.entries(catalog.runtimes).map(([name, entry]) => <details key={name}>
-            <summary>{name} · {entry.runtime}</summary>
-            <Button size="sm" isDisabled={busy} aria-pressed={runtimeId === name && !providerId} variant={runtimeId === name && !providerId ? 'primary' : 'secondary'} onPress={() => { setRuntimeId(name); setProviderId(''); setDiscovery(undefined); }}>Select Runtime {name}</Button>
-            {Object.entries(entry.providers).map(([providerName, value]) => <details key={providerName}>
-              <summary>{providerName}</summary>
-              <Button size="sm" isDisabled={busy} aria-pressed={runtimeId === name && providerId === providerName} variant={runtimeId === name && providerId === providerName ? 'primary' : 'secondary'} onPress={() => { setRuntimeId(name); setProviderId(providerName); setDiscovery(undefined); }}>Select Provider {providerName}</Button>
-              <ul>{Object.entries(value.models).map(([key, model]) => <li key={key}>{model.alias ? `${model.alias} · ${model.id}` : model.id} · {model.source}<br /><code>{name}/{providerName}/{key}</code><br />Efforts: {model.supported_efforts?.join(', ') || 'unknown'}</li>)}</ul>
-            </details>)}
-          </details>)}
-          {!Object.keys(catalog.runtimes).length && <p>No saved Runtime connections.</p>}
-        </nav>
-        <div className="settings-fields">
-          <fieldset disabled={busy}><legend>Add Runtime</legend>
-            {text('Runtime entry name', runtimeName, setRuntimeName)}
-            <label>Runtime type<select aria-label="Runtime type" value={kind} onChange={event => setKind(event.target.value as CatalogRuntime['runtime'])}><option>codex</option><option>pi</option><option>dsh</option></select></label>
-            <Button onPress={() => {
-              if (!validName(runtimeName)) return;
-              if (Object.hasOwn(catalog.runtimes, runtimeName)) { setError('Runtime entry already exists.'); return; }
-              edit(draft => { draft.runtimes = { ...draft.runtimes, [runtimeName]: { runtime: kind, providers: {} } }; }); setRuntimeId(runtimeName); setProviderId(''); setRuntimeName('');
-            }}>Add Runtime</Button>
-          </fieldset>
-          {runtime && <fieldset disabled={busy}><legend>Runtime: {runtimeId}</legend>
-            {text('Shared Runtime Home', runtime.home ?? '', value => edit(draft => { if (value) draft.runtimes[runtimeId].home = value; else delete draft.runtimes[runtimeId].home; }))}
-            <p>Absolute directory, or blank for the Runtime default. No copied login files. Discovery: {saved.capabilities.model_discovery[runtime.runtime]}. Provider APIs: {saved.capabilities.custom_api[runtime.runtime].join(', ')}.</p>
-            <Button isDisabled={busy || dirty} onPress={() => void run(async () => {
-              const result = await window.graphtraj.connections(projectId ?? null, { action: 'discover', runtime: runtimeId }); setDiscovery(result.discovery);
-            })}>Refresh native models</Button>
-            {dirty && <p>Save the Runtime Home before discovery.</p>}
-            {discovery && <div><p>{discovery.status} · account access: {discovery.account_access}. {discovery.message}</p>
-              {Object.entries(discovery.provider_status ?? {}).map(([name, status]) => <p key={name}>{name}: {status}</p>)}
-              <ul>{discovery.models.map((value, index) => <li key={index}>{value.provider} / {value.alias || value.id} · native · efforts: {value.supported_efforts?.join(', ') || 'unknown'} <Button size="sm" onPress={() => {
-                const { provider: name, supported_efforts, ...fields } = value;
-                if (!Object.hasOwn(runtime.providers, name)) edit(draft => { draft.runtimes[runtimeId].providers = { ...draft.runtimes[runtimeId].providers, [name]: { models: {} } }; });
-                const discoveredRuntime = saved.catalog.runtimes[discovery.runtime_entry];
-                setModelOrigin(JSON.stringify([discovery.runtime_entry, discoveredRuntime.runtime,
-                  discoveredRuntime.home ?? null, name, null, null, null]));
-                setProviderId(name); setModel({ ...fields, ...(supported_efforts ? { supported_efforts } : {}) }); setModelName(value.id.replace(/[^A-Za-z0-9_-]/g, '_'));
-              }}>Use {value.id}</Button></li>)}</ul>
-            </div>}
-            {text('Provider name', providerName, setProviderName)}
-            <Button onPress={() => {
-              if (!validName(providerName)) return;
-              if (Object.hasOwn(runtime.providers, providerName)) { setError('Provider already exists.'); return; }
-              edit(draft => { draft.runtimes[runtimeId].providers = { ...draft.runtimes[runtimeId].providers, [providerName]: { models: {} } }; }); setProviderId(providerName); setProviderName('');
-            }}>Add Provider</Button>
-          </fieldset>}
-          {provider && <fieldset disabled={busy}><legend>Provider: {providerId}</legend>
-            {text('Provider Base URL', provider.base_url ?? '', value => edit(draft => { if (value) draft.runtimes[runtimeId].providers[providerId].base_url = value; else delete draft.runtimes[runtimeId].providers[providerId].base_url; for (const model of Object.values(draft.runtimes[runtimeId].providers[providerId].models)) { model.source = 'manual'; delete model.supported_efforts; } }))}
-            {text('Provider api_key_env name', provider.api_key_env ?? '', value => edit(draft => { if (value) draft.runtimes[runtimeId].providers[providerId].api_key_env = value; else delete draft.runtimes[runtimeId].providers[providerId].api_key_env; }))}
-            <p>Environment variable NAME only, for example OPENROUTER_API_KEY. Set its value outside this app in the Runtime launch environment. Third-party endpoints require their own authentication; no official login fallback.</p>
-            {runtime.runtime === 'pi' && <label>Provider API<select aria-label="Provider API" value={provider.api ?? ''} onChange={event => edit(draft => { if (event.target.value) draft.runtimes[runtimeId].providers[providerId].api = event.target.value; else delete draft.runtimes[runtimeId].providers[providerId].api; })}><option value="">Native default</option>{saved.capabilities.custom_api.pi.map(api => <option key={api}>{api}</option>)}</select></label>}
-            {text('Model entry name', modelName, setModelName)}
-            {text('Model identifier', model.id, id => setModel({ ...model, id, source: 'manual', supported_efforts: undefined }))}
-            {text('Model alias', model.alias ?? '', alias => setModel({ ...model, alias: alias || undefined }))}
-            <p>Source: {draftModel.source}. Supported efforts: {draftModel.supported_efforts?.join(', ') || 'unknown; choose a Runtime-supported effort on the role'}.</p>
-            <Button onPress={() => {
-              if (!validName(modelName) || !model.id.trim()) { setError('Model needs a name and identifier.'); return; }
-              if (Object.hasOwn(provider.models, modelName)) { setError('Model entry already exists.'); return; }
-              edit(draft => { draft.runtimes[runtimeId].providers[providerId].models = { ...draft.runtimes[runtimeId].providers[providerId].models, [modelName]: draftModel }; }); setModelName(''); setModel({ id: '', source: 'manual' });
-            }}>Add Model</Button>
-          </fieldset>}
-        </div>
-      </div>
-      {preview && <details open><summary>Connection changes to approve</summary><h3>Before</h3><pre>{JSON.stringify(saved.catalog, null, 2)}</pre><h3>After</h3><pre>{JSON.stringify(preview, null, 2)}</pre></details>}
-    </>}
+  const models = Object.entries(runtime?.providers ?? {}).flatMap(([p, owner]) => Object.entries(owner.models).map(([key, value]) => ({ p, key, value }))).filter(item => !provider || item.p === providerId);
+  const table = <div className="d-catalog-table"><table><thead><tr><th>Model</th><th>Source</th><th>Supported effort</th></tr></thead><tbody>{models.map(({ p, key, value }) => <tr key={`${p}/${key}`}><td><button onClick={() => { choose(runtimeId, p, key); setExpandedProviders(previous => ({ ...previous, [`${runtimeId}/${p}`]: true })); }}><strong>{value.alias || value.id}</strong><small>{p} · {value.id}</small></button></td><td><span className={`catalog-source ${value.source}`}>{value.source === 'native' ? 'Runtime' : 'Manual'}</span><small>{runtime.providers[p].base_url ? 'Custom endpoint' : 'Runtime route'}</small></td><td>{value.supported_efforts?.join(' / ') || 'Unknown'}<small>Tools / images: not reported</small></td></tr>)}</tbody></table>{!models.length && <div className="d-inline-empty"><Icon name="layers" size={24}/><h3>No models configured</h3><p>{provider ? 'Add the identifier expected by this provider.' : 'Refresh native discovery or add a provider.'}</p>{provider && <Button variant="secondary" onPress={() => startAdd('model')}>Add model</Button>}</div>}</div>;
+  return <section className="d-library-editor" aria-label="Agents and models"><header className="d-config-heading"><div><h1>Agents &amp; models</h1><p>Choose a Runtime, provider, then model. Teams reference these saved connections.</p></div><span className="memory-badge"><Icon name="shield" size={15}/>Global configuration</span></header>
+    {error && <div className="native-notice error" role="alert">{error}<p>Draft retained. Reload to resolve an external change.</p></div>}
+    {(busy || message) && <p className="native-notice" role="status">{busy ? 'Waiting for native configuration / approval…' : message}</p>}
+    {saved && <div className="d-library-body"><nav className="d-library-tree" aria-label="Runtime provider model hierarchy">{Object.entries(catalog.runtimes).map(([r, entry]) => <div className="library-runtime" key={r}><div className="library-runtime-row"><button className="library-toggle" aria-label={`${expandedRuntimes[r] ? 'Collapse' : 'Expand'} ${r} Runtime`} aria-expanded={!!expandedRuntimes[r]} onClick={() => setExpandedRuntimes(value => ({ ...value, [r]: !value[r] }))}><Icon name={expandedRuntimes[r] ? 'down' : 'right'} size={12}/></button><button className="library-select" aria-current={runtimeId === r && !provider ? 'page' : undefined} onClick={() => choose(r)}><Icon name="terminal" size={17}/><strong>{r}</strong></button></div><div className="library-providers" hidden={!expandedRuntimes[r]}>{Object.entries(entry.providers).map(([p, owner]) => <div key={p}><div className="library-provider-row"><button className="library-toggle" aria-label={`${expandedProviders[`${r}/${p}`] ? 'Collapse' : 'Expand'} ${r} / ${p} provider`} aria-expanded={!!expandedProviders[`${r}/${p}`]} onClick={() => setExpandedProviders(value => ({ ...value, [`${r}/${p}`]: !value[`${r}/${p}`] }))}><Icon name={expandedProviders[`${r}/${p}`] ? 'down' : 'right'} size={12}/></button><button className="library-select" aria-current={r === runtimeId && p === providerId && !model ? 'page' : undefined} onClick={() => choose(r, p)}><span>{p}<small>{owner.base_url ? 'Custom endpoint' : 'Runtime route'}</small></span></button></div><div className="library-models" hidden={!expandedProviders[`${r}/${p}`]}>{Object.entries(owner.models).map(([m, value]) => <button key={m} aria-current={runtimeId === r && providerId === p && modelId === m ? 'page' : undefined} onClick={() => choose(r,p,m)}><Icon name="layers" size={13}/><span>{value.alias || value.id}</span></button>)}</div></div>)}<button className="library-add" onClick={() => { choose(r); startAdd('provider'); }}><Icon name="plus" size={14}/>Add provider</button></div></div>)}<button className="library-add" onClick={() => startAdd('runtime')}><Icon name="plus" size={14}/>Add Runtime</button><p>Use arrows to expand or collapse. Select a title to edit its configuration.</p></nav>
+      <fieldset disabled={busy} className="d-library-content">{runtime ? <><div className="d-library-breadcrumb"><button onClick={() => choose(runtimeId)}>{runtimeId}</button>{provider && <><Icon name="right" size={12}/><button onClick={() => choose(runtimeId, providerId)}>{providerId}</button></>}{model && <><Icon name="right" size={12}/><span>{model.alias || model.id}</span></>}</div>
+        <header className="d-library-detail-heading"><div><h2>{model ? model.alias || model.id : provider ? providerId : runtimeId}</h2><p>{model ? `${model.source === 'native' ? 'Runtime metadata' : 'Manually configured model'}` : provider ? `Shares ${runtimeId} Home` : `${Object.keys(runtime.providers).length} providers share one Runtime Home.`}</p></div>{!model && <Button variant="secondary" onPress={() => startAdd(provider ? 'model' : 'provider')}><Icon name="plus" size={15}/>{provider ? 'Add model' : 'Add provider'}</Button>}</header>
+        {!provider ? <><div className="d-runtime-settings"><Field label="Runtime Home" value={runtime.home ?? ''} onChange={value => { setDiscovery(undefined); edit(draft => { if (value) draft.runtimes[runtimeId].home = value; else delete draft.runtimes[runtimeId].home; }); }} hint="Absolute directory, or blank for Runtime default. No login files are copied."/><label className="native-field"><span>Model discovery</span><select aria-label="Model discovery" disabled value={saved.capabilities.model_discovery[runtime.runtime] ?? 'Unknown'}><option>{saved.capabilities.model_discovery[runtime.runtime] ?? 'Unknown'}</option></select><small>Account access: {discovery?.account_access ?? saved.account_access}</small></label></div>
+          <div className="d-discovery-state" role="status"><Icon name="info" size={18}/><div><strong>{discovery?.status || 'Runtime discovery'}</strong><p>{discovery?.message || 'Log in using the original Runtime client, then refresh here. GraphTraj does not read or store login credentials.'}{dirty && ' Save the Runtime Home before discovery.'}</p>{discovery && Object.entries(discovery.provider_status ?? {}).map(([name, status]) => <p key={name}>{name}: {status}</p>)}</div><Button variant="secondary" isDisabled={busy || dirty} onPress={() => void run(async () => { const result = await window.graphtraj.connections(projectId ?? null, { action: 'discover', runtime: runtimeId }); setDiscovery(result.discovery); })}><Icon name="refresh" size={15}/>Refresh native models</Button></div>
+          {discovery && <div className="d-catalog-table"><table><tbody>{discovery.models.map((value,index) => <tr key={index}><td><strong>{value.alias || value.id}</strong><small>{value.provider} · native · {value.supported_efforts?.join(', ') || 'Efforts unknown'}</small></td><td><Button variant="secondary" isDisabled={busy || dirty} onPress={() => {
+            // Metadata remains native only for the discovered Home's unmodified route.
+            const custom = runtime.providers[value.provider]?.base_url || runtime.providers[value.provider]?.api || runtime.providers[value.provider]?.api_key_env;
+            setNewModel({ id: value.id, alias: value.alias, source: custom ? 'manual' : 'native', ...(!custom && value.supported_efforts ? { supported_efforts: value.supported_efforts } : {}) });
+            if (!Object.hasOwn(runtime.providers, value.provider)) edit(draft => { draft.runtimes[runtimeId].providers = { ...draft.runtimes[runtimeId].providers, [value.provider]: { models: {} } }; });
+            choose(runtimeId, value.provider); setName(value.id.replace(/[^A-Za-z0-9_-]/g, '_')); setAdding('model');
+          }}>Use {value.id}</Button></td></tr>)}</tbody></table></div>}
+          <div className="d-catalog-heading"><h3>Configured models</h3><span>{models.length} entries</span></div>{table}</> : model ? <div className="d-model-detail-fields"><Field label="Model identifier" value={model.id} onChange={id => edit(draft => { draft.runtimes[runtimeId].providers[providerId].models[modelId] = { ...model, id, source: 'manual', supported_efforts: undefined }; })}/><Field label="Model alias" value={model.alias ?? ''} onChange={alias => edit(draft => { draft.runtimes[runtimeId].providers[providerId].models[modelId].alias = alias || undefined; })} hint="Optional display name; the identifier is sent to the Runtime."/><fieldset className="d-capability-fields"><legend>Supported capabilities</legend><p>Only metadata supplied by the native catalog is shown.</p><span className="native-label">Available effort levels</span><p>{model.supported_efforts?.join(' · ') || 'Unknown'}</p><p>Tools, images, maximum output tokens and temperature: not reported by this catalog.</p><small>The team node chooses its effort for later dispatches.</small></fieldset></div> : <><div className="d-provider-fields"><div className="readonly-model-id"><span>Provider name</span><code>{providerId}</code></div><Field label="Base URL" value={provider.base_url ?? ''} onChange={value => edit(draft => { const target = draft.runtimes[runtimeId].providers[providerId]; if (value) target.base_url = value; else delete target.base_url; for (const item of Object.values(target.models)) { item.source = 'manual'; delete item.supported_efforts; } })} hint="Blank retains the Runtime route."/><Field label="API key environment variable" value={provider.api_key_env ?? ''} onChange={value => edit(draft => { const target = draft.runtimes[runtimeId].providers[providerId]; if (value) target.api_key_env = value; else delete target.api_key_env; })} hint="api_key_env · name only. No secret value is read or stored."/>{runtime.runtime === 'pi' && <label className="native-field"><span>Provider API</span><select aria-label="Provider API" value={provider.api ?? ''} onChange={event => edit(draft => { draft.runtimes[runtimeId].providers[providerId].api = event.target.value || undefined; })}><option value="">Native default</option>{saved.capabilities.custom_api.pi.map(api => <option key={api}>{api}</option>)}</select></label>}<p className="d-provider-scope">Custom endpoints use their own environment variable references. They do not overwrite the Runtime's original configuration or reuse official login credentials.</p></div><div className="d-catalog-heading"><h3>Provider models</h3><span>{models.length} entries</span></div>{table}</>}
+      </> : <div className="d-inline-empty"><Icon name="terminal" size={28}/><h3>No saved Runtime connections</h3><p>Add a Runtime to configure providers and models.</p><Button variant="primary" onPress={() => startAdd('runtime')}>Add first Runtime</Button></div>}</fieldset></div>}
+    <footer className="new-draft-footer"><div><span className={`draft-dot ${dirty ? 'dirty' : ''}`}/><strong>{dirty ? 'Unsaved changes' : 'Draft matches saved configuration'}</strong><span>Applies to later dispatches</span></div><div><Button variant="ghost" isDisabled={busy} onPress={() => void run(async () => { reset(await window.graphtraj.connections(projectId ?? null, { action: 'read' })); })}>Reload</Button><Button variant="ghost" isDisabled={busy || !dirty} onPress={() => { if (saved) reset(saved); setError(''); }}>Cancel changes</Button><Button variant="primary" isDisabled={busy || !dirty} onPress={() => void run(async () => { const result = await window.graphtraj.connections(projectId ?? null, { action: 'preview', catalog }); setPreview(result.catalog); })}>Review changes<Icon name="right" size={14}/></Button></div></footer>
+    {adding && <Dialog title={`Add ${adding}`} onClose={() => setAdding(null)}><div className="new-config-fields"><Field label={adding === 'runtime' ? 'Runtime entry name' : adding === 'provider' ? 'Provider name' : 'Model entry name'} value={name} onChange={setName}/>{adding === 'runtime' && <label className="native-field"><span>Runtime type</span><select aria-label="Runtime type" value={kind} onChange={event => setKind(event.target.value as CatalogRuntime['runtime'])}><option>codex</option><option>pi</option><option>dsh</option></select></label>}{adding === 'model' && <><Field label="Model identifier" value={newModel.id} onChange={id => setNewModel({ ...newModel, id, source: 'manual', supported_efforts: undefined })}/><Field label="Model alias" value={newModel.alias ?? ''} onChange={alias => setNewModel({ ...newModel, alias })}/><p>Source: {newModel.source}. Supported efforts: {newModel.supported_efforts?.join(', ') || 'unknown'}.</p></>}{error && <p role="alert">{error}</p>}</div><div className="dialog-footer"><Button variant="secondary" onPress={() => setAdding(null)}>Keep editing</Button><Button variant="primary" onPress={add}>Add {adding}</Button></div></Dialog>}
+    {preview && saved && <Dialog title="Review configuration draft" onClose={() => setPreview(undefined)}><p>Native validation passed. Saving requests approval and checks the saved revision.</p><div className="change-list"><div className="change-item"><h3>Global connections</h3><div><span className="diff-before"><small>BEFORE</small><pre>{JSON.stringify(saved.catalog,null,2)}</pre></span><span className="diff-after"><small>AFTER</small><pre>{JSON.stringify(preview,null,2)}</pre></span></div></div></div>{error && <p role="alert">{error}</p>}<div className="dialog-footer"><Button variant="secondary" isDisabled={busy} onPress={() => setPreview(undefined)}>Keep editing</Button><Button variant="primary" isDisabled={busy} onPress={() => void run(async () => { const result = await window.graphtraj.connections(projectId ?? null, { action: 'save', catalog: preview, expected_revision: saved.revision }); reset(result); setMessage(result.applied ? 'Connections saved.' : 'No changes to save.'); })}>Save connections</Button></div></Dialog>}
   </section>;
 }

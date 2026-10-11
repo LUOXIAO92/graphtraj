@@ -54,6 +54,8 @@ function GraphView({ project, active, sidebarButton }: { project: Project; activ
   const [mainExpanded, setMainExpanded] = useState(false);
   const [focusAgent, setFocusAgent] = useState<string | null>(null);
   const [activity, setActivity] = useState<Activity | null>(null);
+  const [activityError, setActivityError] = useState('');
+  const [activityRetry, setActivityRetry] = useState(0);
   const [selectedSummary, setSelectedSummary] = useState('');
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
   const [nodes, setNodes, onNodesChange] = useNodesState<MonitorNode>([]);
@@ -116,7 +118,7 @@ function GraphView({ project, active, sidebarButton }: { project: Project; activ
     markerEnd: { type: MarkerType.ArrowClosed, width: 15, height: 15 },
   }));
   const detail = tickets?.find(ticket => ticket.ticket_id === selected);
-  function select(id: string): void { if (id !== selected) setActivity(null); setSelected(id); setFocusAgent(null); }
+  function select(id: string): void { if (id !== selected) { setActivity(null); setActivityError(''); } setSelected(id); setFocusAgent(null); }
   function chooseSummary(id: string): void {
     setSelectedSummary(id);
     setOpenGroups(new Set(id ? [id] : []));
@@ -153,11 +155,11 @@ function GraphView({ project, active, sidebarButton }: { project: Project; activ
             {!!tickets?.length && !matches.length && <div className="graph-filter-empty" role="status">No tasks match these filters. <Button variant="ghost" onPress={() => { setQuery(''); setStatus('all'); }}>Clear filters</Button></div>}
           </div></div>
           {detail ? <aside className="d-task-shelf" aria-label="Ticket details"><div><h2><span className="shelf-task-id">#{detail.ticket_id}</span>{detail.title}</h2><p>{detail.ticket_name}</p><Status value={detail.status}/><span className="shelf-deps">Depends on {detail.dependencies.map(id => `#${id}`).join(', ') || 'no tasks'}</span><details className="native-ticket-facts"><summary>Ticket facts</summary><p>{detail.active ? 'Active' : 'Replaced / inactive'} · {detail.ready ? 'Ready' : 'Not ready'}<br/>Replaced by: {detail.replaced_by.join(', ') || 'None'}. Execution finishing is not acceptance.</p></details></div>
-            <div><div className="shelf-team-heading"><span className="section-label">TEAM &amp; RETAINED HISTORY</span><Button variant="primary" onPress={() => read()}><Icon name="expand" size={14}/>Expand chat</Button><Button isIconOnly variant="ghost" aria-label="Close details" onPress={() => setSelected(null)}><Icon name="close" size={14}/></Button></div><MemberPills agents={members} onRead={read}/>{!members.length && <p>{activity ? activity.reason || 'No participating Agents recorded.' : 'Loading members…'}</p>}</div></aside>
+            <div><div className="shelf-team-heading"><span className="section-label">TEAM &amp; RETAINED HISTORY</span><Button variant="primary" onPress={() => read()}><Icon name="expand" size={14}/>Expand chat</Button><Button isIconOnly variant="ghost" aria-label="Close details" onPress={() => setSelected(null)}><Icon name="close" size={14}/></Button></div><MemberPills agents={members} onRead={read}/>{activityError ? <div role="alert">{activityError} <Button variant="ghost" onPress={() => setActivityRetry(value => value + 1)}>Retry now</Button></div> : !members.length && <p>{activity ? activity.reason || 'No participating Agents recorded.' : 'Loading members…'}</p>}</div></aside>
             : <div className="d-canvas-hint"><Icon name="graph"/><div><strong>Select a task in the map</strong><span>Inspect its team, then open a full reading workspace.</span></div></div>}
         </section>
       </div>
-      {detail && <div className={`d-monitor-view ${expanded && !mainExpanded ? '' : 'concealed'}`} aria-hidden={!expanded || mainExpanded} inert={!expanded || mainExpanded}><section className="new-reader d-reader" aria-label="Expanded agent conversations"><header className="d-reading-head"><Button variant="ghost" aria-label="Collapse chat" onPress={() => setExpanded(false)}><Icon name="left" size={16}/>Back to task graph</Button><span>#{detail.ticket_id}</span><h1>{detail.title}</h1><Status value={detail.status}/></header><div className="d-reading-index"><span>JUMP TO AGENT</span><MemberPills agents={members} onRead={setFocusAgent} focus={focusAgent}/></div><ActivityView key={`${projectId}:${detail.ticket_id}`} projectId={projectId} ticketId={detail.ticket_id} active={active && !mainExpanded} expanded={expanded} focusAgent={focusAgent} onActivity={setActivity}/></section></div>}
+      {detail && <div className={`d-monitor-view ${expanded && !mainExpanded ? '' : 'concealed'}`} aria-hidden={!expanded || mainExpanded} inert={!expanded || mainExpanded}><section className="new-reader d-reader" aria-label="Expanded agent conversations"><header className="d-reading-head"><Button variant="ghost" aria-label="Collapse chat" onPress={() => setExpanded(false)}><Icon name="left" size={16}/>Back to task graph</Button><span>#{detail.ticket_id}</span><h1>{detail.title}</h1><Status value={detail.status}/></header><div className="d-reading-index"><span>JUMP TO AGENT</span><MemberPills agents={members} onRead={setFocusAgent} focus={focusAgent}/></div><ActivityView key={`${projectId}:${detail.ticket_id}`} projectId={projectId} ticketId={detail.ticket_id} active={active && !mainExpanded} expanded={expanded} focusAgent={focusAgent} onActivity={setActivity} onError={setActivityError} refreshKey={activityRetry}/></section></div>}
       <div className={`d-monitor-view ${mainExpanded ? '' : 'concealed'}`} aria-hidden={!mainExpanded} inert={!mainExpanded}><section className="new-reader d-reader" aria-label="Main conversations"><header className="d-reading-head"><Button variant="ghost" aria-label="Collapse Main chat" onPress={() => setMainExpanded(false)}><Icon name="left" size={16}/>{expanded && detail ? 'Back to agent conversations' : 'Back to task graph'}</Button><h1>Main sessions</h1></header><ActivityView projectId={projectId} active={active && mainExpanded}/></section></div>
     </div></div>
   </>;

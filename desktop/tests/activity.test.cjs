@@ -193,6 +193,56 @@ test('Main conversations use project associations without inventing Ticket membe
   assert.ok(requests.every(request => request.projectId === 'one' && !('ticket_id' in request)));
 });
 
+for (const ticketId of [undefined, '1']) {
+  test(`${ticketId ? 'Agent' : 'Main'} first failure, disconnect, retry and genuine empty results stay distinct`, async t => {
+    const { ActivityView } = await components(t);
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    let mode = 'list-error', version = 1;
+    const errors = [];
+    globalThis.window = { graphtraj: { activity: async (_project, request) => {
+      if (!request.alias && mode === 'list-error' || request.alias && mode === 'message-error') throw new Error('Controlled outage');
+      return { ticket_id: ticketId ?? null, updated_at: '2026-10-12T00:00:00Z', availability: 'available', cursor: String(version),
+        agents: mode === 'empty' ? [] : [{ alias: 'reader', kind: ticketId ? 'member' : 'main', state: 'running' }],
+        events: request.alias && mode !== 'no-messages' ? [event(version, { text: `Retained content ${version}` })] : [] };
+    } } };
+    let tree;
+    await act(async () => { tree = create(React.createElement(ActivityView, { projectId: 'project', ticketId, onError: value => errors.push(value) })); });
+    t.after(async () => { await act(async () => tree.unmount()); });
+    assert.match(text(tree), ticketId ? /Could not load this task/ : /Could not load Main/);
+    assert.doesNotMatch(text(tree), /Loading|No participating|No associated|remain readable/);
+    assert.ok(errors.at(-1));
+    mode = 'message-error';
+    await act(async () => button(tree, 'Retry now').props.onClick());
+    assert.match(text(tree), /Could not load this Session/);
+    assert.doesNotMatch(text(tree), /Loading|No readable activity|remain readable/);
+    assert.equal(errors.at(-1), '');
+    mode = 'no-messages';
+    await act(async () => button(tree, 'Retry now').props.onClick());
+    assert.match(text(tree), /No readable activity recorded yet/);
+    assert.doesNotMatch(text(tree), /Could not load/);
+    mode = 'okay';
+    await act(async () => t.mock.timers.tick(3000));
+    assert.match(text(tree), /Retained content 1/);
+    mode = 'message-error';
+    await act(async () => t.mock.timers.tick(3000));
+    assert.match(text(tree), /retained messages remain readable/);
+    assert.match(text(tree), /Retained content 1/);
+    mode = 'okay'; version++;
+    await act(async () => button(tree, 'Retry now').props.onClick());
+    assert.match(text(tree), /Retained content 2/);
+    assert.doesNotMatch(text(tree), /disconnected/);
+    mode = 'list-error';
+    await act(async () => t.mock.timers.tick(3000));
+    assert.match(text(tree), /Retained content 1/);
+    assert.match(text(tree), /Retained content 2/);
+    assert.doesNotMatch(text(tree), /Loading|No participating|No associated/);
+    mode = 'empty';
+    await act(async () => button(tree, 'Retry now').props.onClick());
+    assert.match(text(tree), ticketId ? /No participating Agents recorded/ : /No associated Main sessions recorded/);
+    assert.doesNotMatch(text(tree), /Could not load|Loading/);
+  });
+}
+
 test('tool names resolve across pages and result-first records without guessing or changing output', async t => {
   const { ActivityRecords } = await components(t);
   const result = event(0, { kind: 'tool', role: undefined, text: undefined, phase: 'result', call_id: 'private-call-id', result: 'Formatted test: hook decision allow' });

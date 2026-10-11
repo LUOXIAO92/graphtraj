@@ -86,8 +86,9 @@ export function MemberPills({ agents, onRead, focus }: { agents: Agent[]; onRead
 }
 
 /** Keep each actual member in its own independently scrolling column. */
-export function ActivityView({ projectId, ticketId, active = true, expanded = true, focusAgent, onActivity }: {
+export function ActivityView({ projectId, ticketId, active = true, expanded = true, focusAgent, onActivity, onError, refreshKey = 0 }: {
   projectId: string; ticketId?: string; active?: boolean; expanded?: boolean; focusAgent?: string | null; onActivity?: (activity: Activity) => void;
+  onError?: (message: string) => void; refreshKey?: number;
 }) {
   const [activity, setActivity] = useState<Activity | null>(null);
   const [error, setError] = useState('');
@@ -107,13 +108,18 @@ export function ActivityView({ projectId, ticketId, active = true, expanded = tr
       try {
         const next = await window.graphtraj.activity(projectId, ticketId ? { ticket_id: ticketId } : {});
         if (!ticketId) next.agents = next.agents.filter(agent => agent.kind === 'main');
-        if (alive) { setActivity(next); setError(next.reason || ''); onActivity?.(next); }
-      } catch { if (alive) setError(ticketId ? 'Could not load this task’s Agent sessions. Retrying automatically.' : 'Could not load Main sessions for this project. Retrying automatically.'); }
+        if (alive) { setActivity(next); setError(next.reason || ''); onError?.(next.reason || ''); onActivity?.(next); }
+      } catch {
+        if (alive) {
+          const message = ticketId ? 'Could not load this task’s Agent sessions. Retrying automatically.' : 'Could not load Main sessions for this project. Retrying automatically.';
+          setError(message); onError?.(message);
+        }
+      }
       finally { if (alive) { setLoading(false); timer = setTimeout(refresh, 3000); } }
     }
     void refresh();
     return () => { alive = false; clearTimeout(timer); };
-  }, [projectId, ticketId, active, retry]);
+  }, [projectId, ticketId, active, retry, refreshKey]);
   const [scroll, setScroll] = useState({ left: 0, max: 0, thumb: 0 });
   function updateEdges() {
     const element = columns.current;
@@ -138,7 +144,7 @@ export function ActivityView({ projectId, ticketId, active = true, expanded = tr
       {activity?.agents.map(agent => <AgentColumn key={agent.alias} projectId={projectId} ticketId={ticketId} agent={agent} active={active && expanded}/>)}
     </div>
     <input className="agent-horizontal-scrollbar" type="range" min={0} max={Math.max(1, scroll.max)} step={1} value={Math.min(scroll.left, Math.max(1, scroll.max))} disabled={scroll.max < 1} aria-label="Agent columns horizontal scrollbar" style={{ '--scroll-thumb-width': `${scroll.thumb}px` } as React.CSSProperties} onChange={event => { if (columns.current) columns.current.scrollLeft = Number(event.target.value); updateEdges(); }}/>
-    <footer className="columns-footer"><span><Icon name="left" size={13}/><Icon name="right" size={13}/>Drag the bottom scrollbar to see all {activity?.agents.length ?? 0} agents · {activity ? new Date(activity.updated_at).toLocaleTimeString() : 'Loading'}</span><div><Button isIconOnly variant="ghost" aria-label="Previous agent columns" isDisabled={scroll.left < 2} onPress={() => move(-1)}><Icon name="left" size={16}/></Button><Button isIconOnly variant="ghost" aria-label="Next agent columns" isDisabled={scroll.left >= scroll.max - 2} onPress={() => move(1)}><Icon name="right" size={16}/></Button></div></footer>
+    <footer className="columns-footer"><span><Icon name="left" size={13}/><Icon name="right" size={13}/>{activity ? `Drag the bottom scrollbar to see all ${activity.agents.length} agents · ${new Date(activity.updated_at).toLocaleTimeString()}` : error ? 'Session list unavailable' : 'Loading Session list…'}</span><div><Button isIconOnly variant="ghost" aria-label="Previous agent columns" isDisabled={scroll.left < 2} onPress={() => move(-1)}><Icon name="left" size={16}/></Button><Button isIconOnly variant="ghost" aria-label="Next agent columns" isDisabled={scroll.left >= scroll.max - 2} onPress={() => move(1)}><Icon name="right" size={16}/></Button></div></footer>
   </section>;
 }
 
@@ -147,6 +153,7 @@ function AgentColumn({ projectId, ticketId, agent, active }: {
 }) {
   const [activity, setActivity] = useState<Activity | null>(null);
   const [error, setError] = useState('');
+  const [retry, setRetry] = useState(0);
   const [events, setEvents] = useState<ActivityEvent[]>([]);
   const [following, setFollowing] = useState(true);
   const [pageStart, setPageStart] = useState(0);
@@ -179,7 +186,7 @@ function AgentColumn({ projectId, ticketId, agent, active }: {
           cursor.current = undefined; more.current = false;
           setError('Observer reconnected or Trace changed. Replaying recorded events; existing content is retained.');
         } else {
-          setActivity(next); setError(next.reason || '');
+          setActivity(next); setError(next.reason || (next.availability === 'unavailable' ? 'This Session’s recorded messages are unavailable. Retry after its source is restored.' : ''));
           cursor.current = next.cursor ?? undefined;
           more.current = Boolean(next.has_more && !next.waiting_for_record);
           const added = (next.events ?? []).filter(event => !seen.current.has(event.id));
@@ -203,7 +210,7 @@ function AgentColumn({ projectId, ticketId, agent, active }: {
     }
     void refresh();
     return () => { alive = false; clearTimeout(timer); };
-  }, [projectId, ticketId, agent.alias, active]);
+  }, [projectId, ticketId, agent.alias, active, retry]);
 
   useLayoutEffect(() => {
     if (active && following && history.current) history.current.scrollTop = history.current.scrollHeight;
@@ -228,7 +235,7 @@ function AgentColumn({ projectId, ticketId, agent, active }: {
     <header className="agent-column-heading"><Avatar name={agent.alias}/><div><h2 title={agent.alias}>{agent.kind === 'main' ? 'Main' : agent.alias}</h2><span>{agent.kind === 'main' ? 'Associated Main' : agent.historical ? 'Historical' : 'Current'} · {agent.state}</span></div><Status value={agent.state}/></header>
     <div className="agent-column-parent"><Icon name="branch" size={13}/><span title={agent.parent ?? undefined}>{agent.kind === 'main' ? `Session: ${agent.session}` : `Parent: ${agent.parent ?? 'Not recorded / root'}`}</span></div>
     <div className="conversation-panel"><div className="agent-metadata"><span><Icon name="terminal" size={14}/>{agent.runtime || 'Runtime unknown'}</span><span>{agent.model || 'Model not recorded'}</span></div>
-      {error && <p className="native-notice error" role="alert">{error}</p>}
+      {error && <div className="native-notice error" role="alert">{error} <Button variant="ghost" onPress={() => setRetry(value => value + 1)}>Retry now</Button></div>}
       {agent.reason && <p className="native-notice">{agent.reason}</p>}
       <div className="transcript activity-history" ref={history} tabIndex={0} aria-label={`${agent.alias} messages`} role="region" style={{ overflowAnchor: following ? 'none' : 'auto' }}
         onWheel={event => { if (active && event.deltaY < 0) follow(false); }}

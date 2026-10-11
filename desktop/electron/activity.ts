@@ -25,6 +25,30 @@ export type Activity = {
 };
 export type ActivityRequest = { ticket_id?: string; alias?: string; cursor?: string };
 
+/** Keep only failure code/reason, applying native credential and diagnostic redaction. */
+function activityFailure(reply: { error?: unknown; result?: { error?: unknown } }): Error {
+  const error = reply.error ?? reply.result?.error;
+  const fields = error && typeof error === 'object' ? error as Record<string, unknown> : {};
+  const safe = (value: unknown, reason = true): string => {
+    if (typeof value !== 'string') return '';
+    let text = value;
+    for (const [name, secret] of Object.entries(process.env)) {
+      if (/api[_-]?key|authorization|password|secret|credential|access[_-]?token|refresh[_-]?token|cookie|token/i.test(name) && secret && secret.length >= 6) text = text.split(secret).join('[redacted]');
+    }
+    text = text
+      .replace(/\bBearer\s+[^\s"'<>]+/gi, 'Bearer [redacted]')
+      .replace(/\bsk-[A-Za-z0-9_-]{8,}/g, '[redacted]')
+      .replace(/(https?:\/\/)[^/\s:@]+:[^/\s@]+@/g, '$1[redacted]@')
+      .replace(/((?:["']?[\w-]*(?:api[_-]?key|secret|password|access[_-]?token|refresh[_-]?token|credential|token)["']?|authorization|cookie)\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,{};]+)/gi, '$1"[redacted]"')
+      .replace(/[\r\n\t]/g, ' ').slice(0, 400);
+    return reason ? text.replace(/[A-Za-z0-9_+\/-]{20,}/g, '[identifier]').replace(/(?:\/[^\s'"<>]+)+/g, '[path]') : text;
+  };
+  const code = typeof fields.code === 'string' && /^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/.test(fields.code)
+    ? safe(fields.code, false) : 'unknown';
+  const reason = safe(typeof error === 'string' ? error : fields.message ?? fields.reason) || 'Reason unavailable.';
+  return new Error(`Native activity query failed [${code}]: ${reason}`);
+}
+
 /** Optional project observers read authenticated, restartable source checkpoints. */
 export class ActivityReader {
   private processes = new Map<string, {
@@ -79,9 +103,9 @@ export class ActivityReader {
         if (!pending) return;
         try {
           const reply = JSON.parse(line);
-          if (reply.failed) throw new Error('Native activity query refused or unavailable.');
-          pending.resolve(reply.result);
-        } catch { pending.reject(new Error('Native activity query refused or unavailable.')); }
+          if (reply.failed) pending.reject(activityFailure(reply));
+          else pending.resolve(reply.result);
+        } catch { pending.reject(new Error('Native activity query failed [unknown]: Invalid response.')); }
       });
     }
     const connection = observer;

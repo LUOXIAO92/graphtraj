@@ -11,9 +11,9 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: Adoption scope (activity is the focused Ticket 292 scenario)
+        description: Adoption scope (usage adds focused Ticket 293 storage checks to activity)
         type: choice
-        options: [standard, activity]
+        options: [standard, activity, usage]
         default: standard
 
 permissions:
@@ -25,7 +25,7 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 30
     env:
-      ACTIVITY_ADOPTION: ${{ inputs.mode == 'activity' || github.ref_name == 'agent/292-desktop-readable-runtime-events' }}
+      ACTIVITY_ADOPTION: ${{ inputs.mode == 'usage' || inputs.mode == 'activity' || github.ref_name == 'agent/292-desktop-readable-runtime-events' }}
     defaults:
       run:
         working-directory: desktop
@@ -60,6 +60,21 @@ jobs:
           else
             node --test tests/*.test.cjs
           fi
+
+      # Controlled accounting/storage checks, not evidence of genuine Main adoption.
+      - name: Focused incremental usage and persistence checks
+        if: inputs.mode == 'usage'
+        run: |
+          mkdir -p dist-package/adoption-evidence/usage
+          node --preserve-symlinks --preserve-symlinks-main --test tests/activity.test.cjs tests/project-index.test.cjs tests/usage.test.cjs tests/usage-history.test.cjs tests/usage-view.test.cjs 2>&1 | tee dist-package/adoption-evidence/usage/focused-checks.log
+          node --input-type=module - <<'JS'
+          import fs from 'node:fs';
+          fs.writeFileSync('dist-package/adoption-evidence/usage/scope.json', JSON.stringify({
+            source: process.env.GITHUB_SHA,
+            scope: 'Controlled usage persistence checks plus installed activity UI; not live Main adoption',
+            pending: ['Genuine Main source adoption', 'Real usage GUI reopen and saved-first observation'],
+          }, null, 2) + '\n');
+          JS
 
       - name: D renderer navigation and long-output checks
         if: env.ACTIVITY_ADOPTION != 'true' && github.ref_name == 'agent/290-desktop-d-direct-port-macos'

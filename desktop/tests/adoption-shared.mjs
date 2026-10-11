@@ -3,6 +3,8 @@ import { defaultDates } from '../src/usage.ts';
 
 /** Check D navigation and parallel readers against supplied native memberships. */
 export async function parallelChat({ page, members, shot }) {
+  assert.ok(members.some(member => member.historical) && members.some(member => !member.historical),
+    'Parallel adoption needs both historical and current native memberships');
   const button = name => page.getByRole('button', { name, exact: true });
   await button('Expand chat').click();
   const monitor = page.locator('.monitor-page:visible');
@@ -53,9 +55,9 @@ export async function datedUsage({ page, first, second, agent, date, input = 100
   await dates(date, date);
   await model.waitFor();
   const filters = page.locator('.usage-filters');
-  await filters.getByLabel('Ticket', { exact: true }).selectOption('1');
-  await filters.getByLabel('Agent', { exact: true }).selectOption(agent);
-  await filters.getByLabel('Model', { exact: true }).selectOption('gpt-5.3-codex');
+  await filters.getByLabel('Ticket', { exact: false }).selectOption('1');
+  await filters.getByLabel('Agent', { exact: false }).selectOption(agent);
+  await filters.getByLabel('Model', { exact: false }).selectOption('gpt-5.3-codex');
   assert.equal(await model.locator('td').nth(1).evaluate(cell => cell.firstChild.textContent.replaceAll(',', '')), String(input));
   await dates('2099-01-01', '2099-01-01');
   assert.equal(await table('Model breakdown').locator('tbody tr').count(), 0);

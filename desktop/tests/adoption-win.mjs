@@ -69,6 +69,11 @@ async function makeProject(name, retained = false) {
   }
   if (retained) {
     await retainedRecords(project, ticketDirectory, true);
+    for (const [status, ordinal] of [['ready', null], ['implementing', 1]]) {
+      operate(project, 'ticket_update', { ticket_id: '1', status,
+        active_team_ordinal: ordinal, worktree: null, branch: null, current_candidate: null,
+        caused_by_event_ids: [], evidence_refs: ['seed.txt'] });
+    }
     facts.steps.push('Seeded retained controlled records only in the newly created test project; no Agent execution or caller identity was created');
   }
   return project;

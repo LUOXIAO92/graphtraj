@@ -401,7 +401,10 @@ def test_usage_pages_progress_across_65_readable_agents(tmp_path: Path) -> None:
     assert len(usage) == 65
 
 
-def test_windows_adoption_fixture_projects_retired_content_and_usage(temporary_git_repository: Path) -> None:
+@pytest.mark.parametrize('parallel', [False, True])
+def test_windows_adoption_fixture_projects_retired_content_and_usage(
+    temporary_git_repository: Path, parallel: bool,
+) -> None:
     """The exact desktop fixture must survive native validation and Dashboard arithmetic."""
     import subprocess
 
@@ -423,18 +426,28 @@ def test_windows_adoption_fixture_projects_retired_content_and_usage(temporary_g
     generated = subprocess.run(
         ['node', '--preserve-symlinks', '--preserve-symlinks-main', '--input-type=module', '-e',
          f'import {{retainedRecords}} from {json.dumps(fixture)}; '
-         'console.log(await retainedRecords(process.argv[1], process.argv[2]));',
+         f'console.log(await retainedRecords(process.argv[1], process.argv[2], {json.dumps(parallel)}));',
          str(root), registered['ticket_directory']],
         text=True, capture_output=True, timeout=15, check=False,
     )
     assert generated.returncode == 0, generated.stderr
+    if parallel:
+        for status, ordinal in [('ready', None), ('implementing', 1)]:
+            operation(root, 'ticket_update', {
+                'ticket_id': '1', 'status': status, 'active_team_ordinal': ordinal,
+                'worktree': None, 'branch': None, 'current_candidate': None,
+                'caused_by_event_ids': [], 'evidence_refs': ['seed.txt'],
+            })
     alias = generated.stdout.strip()
     observer = bind(root, desktop_observer=True)
     arguments = {'ticket_id': '1', 'alias': alias}
     response = observer({'action': 'execute', 'feature': 'desktop_activity', 'arguments': arguments})
     assert not response.failed, response.document
     observed = response.document
-    assert len(observed['agents']) == 1
+    assert len(observed['agents']) == (2 if parallel else 1)
+    if parallel:
+        current = next(agent for agent in observed['agents'] if agent['alias'] == 'current@x2')
+        assert not current['historical'] and current['state'] == 'idle', current
     agent = observed['agents'][0]
     assert agent['alias'] == alias and agent['historical'] and agent['state'] == 'retired', agent
     assert agent['model'] == 'gpt-5.3-codex'

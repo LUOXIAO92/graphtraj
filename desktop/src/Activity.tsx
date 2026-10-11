@@ -25,7 +25,7 @@ export function EventCard({ event }: { event: ActivityEvent }) {
 
 /** Show only members returned by the native activity projection. */
 export function MemberPills({ agents, onRead, focus }: { agents: Agent[]; onRead: (alias: string) => void; focus?: string | null }) {
-  return <div className="member-pills">{agents.map(agent => <button key={agent.alias} title={agent.alias} className={`${agent.historical ? 'history' : ''} ${focus === agent.alias ? 'selected' : ''}`} onClick={() => onRead(agent.alias)}><Avatar name={agent.alias.split('@').at(-1) || agent.alias} small/><span><strong>{agent.alias.split('@').at(-1) || agent.alias}</strong><small>{agent.historical ? 'Historical' : 'Current'} · {agent.runtime || 'Runtime unknown'}</small></span><Icon name="right" size={13}/></button>)}</div>;
+  return <div className="member-pills">{agents.map(agent => <button key={agent.alias} title={agent.alias} className={`${agent.historical ? 'history' : ''} ${focus === agent.alias ? 'selected' : ''}`} onClick={() => onRead(agent.alias)}><Avatar name={agent.alias} small/><span><strong>{agent.alias}</strong><small>{agent.historical ? 'Historical' : 'Current'} · {agent.runtime || 'Runtime unknown'}</small></span><Icon name="right" size={13}/></button>)}</div>;
 }
 
 /** Keep each actual member in its own independently scrolling column. */
@@ -148,7 +148,7 @@ function AgentColumn({ projectId, ticketId, agent, active }: {
   }
 
   return <article className={`agent-chat-column agent-column ${agent.historical ? 'historical-column' : ''}`} data-agent-id={agent.alias} aria-label={agent.alias}>
-    <header className="agent-column-heading"><Avatar name={agent.alias.split('@').at(-1) || agent.alias}/><div><h2 title={agent.alias}>{agent.alias.split('@').at(-1) || agent.alias}</h2><span>{agent.historical ? 'Historical' : 'Current'} · {agent.state}</span></div><Status value={agent.state}/></header>
+    <header className="agent-column-heading"><Avatar name={agent.alias}/><div><h2 title={agent.alias}>{agent.alias}</h2><span>{agent.historical ? 'Historical' : 'Current'} · {agent.state}</span></div><Status value={agent.state}/></header>
     <div className="agent-column-parent"><Icon name="branch" size={13}/><span title={agent.parent ?? undefined}>Parent: {agent.parent ?? 'Not recorded / root'}</span></div>
     <div className="conversation-panel"><div className="agent-metadata"><span><Icon name="terminal" size={14}/>{agent.runtime || 'Runtime unknown'}</span><span>{agent.model || 'Model not recorded'}</span></div>
       {error && <p className="native-notice error" role="alert">{error}</p>}

@@ -23,8 +23,8 @@ const facts = { source: process.env.GITHUB_SHA, platform: process.platform, arch
   pageErrors: [] };
 await fs.mkdir(evidence, { recursive: true });
 const step = message => { facts.steps.push(message); console.log(message); };
-const first = await fixtures.makeProject(path.join(work, 'delivery-project'), 'connect-provider');
-const second = await fixtures.makeProject(path.join(work, 'documentation-project'), 'documentation');
+const first = await fs.realpath(await fixtures.makeProject(path.join(work, 'delivery-project'), 'connect-provider'));
+const second = await fs.realpath(await fixtures.makeProject(path.join(work, 'documentation-project'), 'documentation'));
 for (const [id, name, dependencies] of [['3','usage-accounting',['1']], ['4','agent-timeline',['1']], ['5','desktop-integration',['2','3','4']], ['6','retained-experiment',[]]]) {
   fixtures.operate(first, 'ticket_register', fixtures.ticket(id, name, dependencies));
 }
@@ -70,19 +70,19 @@ try {
   facts.installed = await app.evaluate(({ app, BrowserWindow }) => ({ packaged: app.isPackaged, appPath: app.getAppPath(), sandbox: BrowserWindow.getAllWindows()[0].webContents.getLastWebPreferences().sandbox }));
   assert.equal(facts.installed.packaged, true); assert.equal(facts.installed.sandbox, true);
   const button = name => page.getByRole('button', { name, exact: true });
-  const field = name => page.getByLabel(name, { exact: true });
+  const field = name => page.getByLabel(name, { exact: true }).filter({visible:true});
   const dialogButton = name => page.getByRole('dialog').getByRole('button', { name, exact: true });
   const monitor = page.locator('.monitor-page:visible');
   const selectProject = name => page.locator('.project-button').filter({ hasText: name }).click();
   async function size(width, height) {
     await app.evaluate(({ BrowserWindow }, dimensions) => { const window=BrowserWindow.getAllWindows()[0]; window.setPosition(0,0); window.setContentSize(...dimensions); }, [width,height]);
     await page.waitForFunction(({ width,height }) => innerWidth === width && innerHeight === height, {width,height});
-    const layout = page.getByRole('button',{name:'Auto layout',exact:true}); if(await layout.isVisible()) await layout.click();
+    const layout = page.getByRole('button',{name:'Auto layout',exact:true}); if(await layout.isVisible()) { await layout.click(); await page.waitForTimeout(250); }
   }
   async function shot(name) {
-    const dimensions = await page.evaluate(() => ({ width: innerWidth, height: innerHeight }));
+    const dimensions = await page.evaluate(() => ({ width: innerWidth, height: innerHeight, devicePixelRatio }));
     const file = `${name}-${dimensions.width}.png`;
-    const bytes = await page.screenshot({ path: path.join(evidence,file) });
+    const bytes = await page.screenshot({ path: path.join(evidence,file), scale: 'css' });
     assert.equal(bytes.readUInt32BE(16), dimensions.width);
     assert.equal(bytes.readUInt32BE(20), dimensions.height);
     facts.screenshots.push({file,...dimensions,sha256:createHash('sha256').update(bytes).digest('hex')});

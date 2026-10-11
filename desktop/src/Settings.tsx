@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Button, Description, Input, Label, TextArea, TextField } from '@heroui/react';
+import { Button, Description, Input, Label, TextField } from '@heroui/react';
 import type { Connections, RoleFields, RoleTree, Settings } from '../electron/types';
 import { branchRoles, treeEdges, moveNode, removeNodes, fieldLabels as labels, ownRole, roleChanges, roleName } from './settings-draft';
 import { Dialog, Field, Icon } from './ui';
 
 /** Edit a project-local draft; only the native save entry can persist it. */
-export function SettingsView({ projectId }: { projectId: string }) {
+export function SettingsView({ projectId, active = true }: { projectId: string; active?: boolean }) {
   const [review, setReview] = useState(false);
   const [adding, setAdding] = useState<'team' | 'child' | 'root' | null>(null);
   const [deleting, setDeleting] = useState<'team' | 'agent' | null>(null);
@@ -27,6 +27,7 @@ export function SettingsView({ projectId }: { projectId: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  useEffect(() => { if (!message) return; const timer = setTimeout(() => setMessage(''), 4500); return () => clearTimeout(timer); }, [message]);
 
   function reset(value: Settings): void {
     setSaved(value); setRoles(structuredClone(value.roles)); setTree(value.role_tree); setRenames({}); setTeamRenames({});
@@ -36,12 +37,18 @@ export function SettingsView({ projectId }: { projectId: string }) {
   useEffect(() => {
     let alive = true;
     setBusy(true);
-    window.graphtraj.connections(projectId, { action: 'read' }).then(value => { if (alive) setConnections(value); }).catch(() => { /* Inline roles remain editable if the catalog is unavailable. */ });
     window.graphtraj.settings(projectId).then(value => { if (alive) reset(value); })
       .catch(error => { if (alive) setError(String(error)); })
       .finally(() => { if (alive) setBusy(false); });
     return () => { alive = false; };
   }, [projectId]);
+
+  useEffect(() => {
+    if (!active) return;
+    let alive = true;
+    window.graphtraj.connections(projectId, { action: 'read' }).then(value => { if (alive) setConnections(value); }).catch(() => { /* Inline roles remain editable if the catalog is unavailable. */ });
+    return () => { alive = false; };
+  }, [projectId, active]);
 
   const { edits, changes } = roleChanges(roles, saved?.roles);
   const names = Object.fromEntries(Object.entries(renames).filter(([old, name]) => old !== name));
@@ -105,10 +112,11 @@ export function SettingsView({ projectId }: { projectId: string }) {
   }
   function field(name: keyof RoleFields, multiline = false) {
     const value = ownRole(roles, selected)?.[name] ?? '';
+    if (multiline) return <label className="native-field" key={name}><span>{labels[name]}</span><textarea aria-label={labels[name]} rows={4} value={value} disabled={busy} onChange={event => { const text = event.target.value; setMessage(''); setRoles(current => ({ ...current, [selected]: { ...ownRole(current, selected), [name]: text } })); }}/>{name === 'developer_prompt' && <small>Supported by Codex. Clear this layer for Pi or DSH.</small>}</label>;
     return <TextField className="settings-field" key={name} value={value} isDisabled={busy}
       onChange={value => { setMessage(''); setRoles(current => ({ ...current, [selected]: { ...ownRole(current, selected), [name]: value } })); }}>
       <Label>{labels[name]}</Label>
-      {multiline ? <TextArea rows={4} /> : <Input autoComplete="off" spellCheck={false} />}
+      <Input autoComplete="off" spellCheck={false} />
       {name === 'api_key_env' && <Description>Environment variable NAME only, for example OPENAI_API_KEY. Set the secret in the environment used to launch your Runtime; this form never reads or saves its value.</Description>}
       {name === 'base_url' && <Description>Optional HTTP(S) endpoint. Leave blank for Runtime defaults. Pi uses its native provider configuration.</Description>}
       {name === 'runtime' && <Description>codex, pi or dsh. Pi models use provider/model-id.</Description>}
@@ -159,7 +167,7 @@ export function SettingsView({ projectId }: { projectId: string }) {
   }
   return <section className="d-team-editor" aria-label="Project settings"><header className="d-config-heading"><div><h1>Teams &amp; roles</h1><p>Configure this project’s organization. Running agents are unchanged.</p></div><span className="memory-badge"><Icon name="shield" size={15}/>Configuration draft</span></header>
     {error && <div className="native-notice error" role="alert">{error}<p>Your draft is retained. Reload to resolve an external change.</p></div>}
-    {(busy || message) && <p className="native-notice" role="status">{busy ? 'Waiting for native settings / approval…' : message}</p>}
+    {busy && <p className="native-notice" role="status">Waiting for native settings / approval…</p>}{message && <div className="toast" role="status"><Icon name="check"/>{message}</div>}
     <nav className="d-team-tabs" aria-label="Project teams">{teams.map(name => <button key={name} aria-current={team === name ? 'true' : undefined} onClick={() => { setTeam(name); setSelected(Object.keys(roles).find(ref => group(ref) === name) ?? ''); }}><Icon name="branch" size={15}/><span>{ownRole(teamRenames, name) ?? (name || 'Ungrouped roles')}</span><small>{Object.keys(roles).filter(ref => group(ref) === name).length}</small></button>)}<Button variant="ghost" isDisabled={busy || !saved} onPress={() => { setAdding('team'); setTeamName(''); }}><Icon name="plus" size={15}/>Add team</Button>{teamRoles.length > 0 && <Button variant="ghost" className="d-delete-team" isDisabled={busy} onPress={() => setDeleting('team')}><Icon name="trash" size={15}/>Delete team</Button>}</nav>
     {!teams.length ? <div className="d-empty-configuration"><Icon name="branch" size={30}/><h2>{busy ? 'Loading teams…' : 'No teams configured'}</h2><p>Add a team and start with one root agent. Build its organization one child at a time.</p><Button variant="primary" isDisabled={busy || !saved} onPress={() => setAdding('team')}>Add first team</Button></div> : <div className="d-team-editor-body"><div className="d-org-workspace"><header><div><label>Team name<input aria-label="Team name" disabled={busy || !team} value={ownRole(teamRenames, team) ?? (team || 'Ungrouped roles')} onChange={event => {
       const value = event.target.value; setTeamRenames(current => ({ ...current, [team]: value }));

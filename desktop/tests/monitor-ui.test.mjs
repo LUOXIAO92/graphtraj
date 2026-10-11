@@ -31,7 +31,7 @@ test('D navigation preserves separate project graphs and independent column read
           })),
         };
       },
-      settings: async () => ({ revision: '1', roles: {}, edges: [], role_tree: {}, effect: 'No changes' }),
+      settings: async () => ({ revision: '1', roles: {'delivery.root':{runtime:'codex',model:'recorded-model'}}, edges: [], role_tree: {'delivery.root':{}}, effect: 'No changes' }),
       connections: async () => ({revision:'1',catalog:{version:1,runtimes:{}},capabilities:{model_discovery:{},custom_api:{}},account_access:'unknown'}),
       copyText: async () => {},
     };
@@ -67,6 +67,7 @@ test('D navigation preserves separate project graphs and independent column read
   });
   assert.ok(positions.first > 0 && positions.second > positions.first && positions.horizontal > 0);
   await page.getByRole('button', { name: 'Teams & roles', exact: true }).click();
+  await page.getByLabel('Role reference', {exact:true}).fill('delivery.edited');
   await page.getByRole('button', { name: 'Monitor', exact: true }).click();
   const restored = await monitor.evaluate(element => ({ first: element.querySelectorAll('.activity-history')[0].scrollTop,
     second: element.querySelectorAll('.activity-history')[1].scrollTop, horizontal: element.querySelector('.agent-columns').scrollLeft }));
@@ -100,5 +101,7 @@ test('D navigation preserves separate project graphs and independent column read
   await page.getByRole('button', { name: 'Show sidebar', exact: true }).click();
   assert.equal(await page.getByRole('button', { name: 'Monitor', exact: true }).isVisible(), true);
   assert.equal(await page.getByRole('textbox').count(), 0, 'monitor has no message input');
+  await page.getByRole('button', {name:'Teams & roles',exact:true}).click();
+  assert.equal(await page.getByLabel('Role reference',{exact:true}).inputValue(),'delivery.edited');
 
 });

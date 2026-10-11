@@ -74,7 +74,7 @@ function GraphView({ project, active, sidebarButton }: { project: Project; activ
   const matchIds = new Set(matches.map(ticket => ticket.ticket_id));
   const edges = (tickets ?? []).flatMap(ticket => ticket.dependencies.map(dependency => ({
     id: `${dependency}-${ticket.ticket_id}`, source: dependency, target: ticket.ticket_id, type: 'smoothstep',
-    hidden: !visible.has(dependency) || !visible.has(ticket.ticket_id), markerEnd: { type: MarkerType.ArrowClosed, width: 15, height: 15 },
+    style: { opacity: matchIds.has(dependency) && matchIds.has(ticket.ticket_id) ? 1 : .14 }, markerEnd: { type: MarkerType.ArrowClosed, width: 15, height: 15 },
   })));
   const detail = tickets?.find(ticket => ticket.ticket_id === selected);
   function select(id: string): void { if (id !== selected) setActivity(null); setSelected(id); setFocusAgent(null); }
@@ -90,10 +90,10 @@ function GraphView({ project, active, sidebarButton }: { project: Project; activ
         <section className={`d-map-workspace ${detail ? 'has-shelf' : ''}`}>
           <div className="d-floating-tools"><div className="new-graph-controls"><label><Icon name="search" size={15}/><input type="search" aria-label="Search tasks" placeholder="Find task or number" value={query} onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && matches[0]) locate(matches[0]); }}/></label>
             <select aria-label="Task status" value={status} onChange={event => setStatus(event.target.value)}><option value="all">All statuses</option><option value="inactive">Replaced / inactive</option>{[...new Set(tickets?.map(ticket => ticket.status))].sort().map(value => <option key={value}>{value}</option>)}</select></div>
-            <span className="canvas-readonly"><Button variant="ghost" onPress={() => { setNodes(previous => previous.map(node => ({ ...node, position: positions[node.id] }))); requestAnimationFrame(() => { void flow.fitView({ duration: 200 }); }); }}><Icon name="fit" size={14}/>Auto layout</Button><Icon name="eye" size={14}/>Read-only graph</span></div>
+            <span className="canvas-readonly"><Button variant="ghost" onPress={() => { setNodes(previous => previous.map(node => ({ ...node, position: positions[node.id] }))); requestAnimationFrame(() => { void flow.fitView({ duration: 200, padding: .12, maxZoom: 1 }); }); }}><Icon name="fit" size={14}/>Auto layout</Button><Icon name="eye" size={14}/>Read-only graph</span></div>
           <div className="d-canvas-title"><h1>Follow the dependencies.</h1><p>{tickets?.length ?? 0} tasks · {tickets?.filter(ticket => ['implementing', 'reviewing', 'reworking', 'integrating', 'resolving-integration'].includes(ticket.status)).length ?? 0} in progress · {tickets?.filter(ticket => ticket.status === 'integrated').length ?? 0} integrated</p></div>
           <div className="d-map-surface"><div className="map-canvas" aria-label="Task dependency graph">
-            <ReactFlow nodes={nodes.map(node => ({ ...node, hidden: !visible.has(node.id), selected: selected === node.id, style: { opacity: matchIds.has(node.id) ? 1 : .16 } }))} edges={edges} nodeTypes={nodeTypes} onNodesChange={onNodesChange} onNodeClick={(_, node) => select(node.id)} nodesConnectable={false} edgesReconnectable={false} deleteKeyCode={null} panActivationKeyCode={active && !expanded ? 'Space' : null} fitView fitViewOptions={{ padding: .12, maxZoom: 1 }} minZoom={.05} maxZoom={2} colorMode="light"><Background color="#d7ddd9" gap={20} size={1}/><Controls showInteractive={false}/></ReactFlow>
+            <ReactFlow nodes={nodes.map(node => ({ ...node, selected: selected === node.id, style: { opacity: matchIds.has(node.id) ? 1 : .16 } }))} edges={edges} nodeTypes={nodeTypes} onNodesChange={onNodesChange} onNodeClick={(_, node) => select(node.id)} nodesDraggable={false} nodesConnectable={false} edgesReconnectable={false} deleteKeyCode={null} panActivationKeyCode={active && !expanded ? 'Space' : null} fitView fitViewOptions={{ padding: .12, maxZoom: 1 }} minZoom={.05} maxZoom={2} colorMode="light" proOptions={{ hideAttribution: true }}><Background color="#d7ddd9" gap={20} size={1}/><Controls showInteractive={false}/></ReactFlow>
             <div className="map-caption"><span className="map-caption-line"/>Dependency direction <Icon name="arrow" size={14}/></div>
             {query && <div className="map-search-results" aria-label="Search results"><strong>{matches.length} matching tasks</strong>{matches.map(ticket => <button key={ticket.ticket_id} onClick={() => locate(ticket)}>#{ticket.ticket_id} {ticket.title}</button>)}</div>}
             {!tickets?.length && <div className="d-empty-configuration"><Icon name="graph" size={30}/><h2>{!observation ? loading ? 'Loading task graph…' : 'Graph unavailable' : 'No tickets registered'}</h2></div>}
@@ -124,6 +124,8 @@ function FocusedDWorkbench() {
   const [settingsExpanded, setSettingsExpanded] = useState(false);
   const [search, setSearch] = useState('');
   const [visited, setVisited] = useState<string[]>([]);
+  const [modelsVisited, setModelsVisited] = useState(false);
+  const [teamsVisited, setTeamsVisited] = useState<string[]>([]);
   const [preferences, setPreferences] = useState<Preferences>({ projects: [], selected: null });
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -136,7 +138,12 @@ function FocusedDWorkbench() {
   const project = preferences.projects.find(item => item.id === preferences.selected);
   const open = (id: string) => { void change(() => window.graphtraj.selectProject(id)); setDestination('monitor'); };
   const sidebarButton = <Button isIconOnly={!sidebarHidden} variant="ghost" aria-expanded={!sidebarHidden} aria-controls="d-project-sidebar" aria-label={sidebarHidden ? 'Show sidebar' : 'Hide sidebar'} onPress={() => setSidebarHidden(value => !value)}><Icon name="sidebar" size={19}/>{sidebarHidden && <span>Show sidebar</span>}</Button>;
+  useEffect(() => {
+    if (destination === 'models') setModelsVisited(true);
+    if (destination === 'teams' && project) setTeamsVisited(previous => [...new Set([...previous, project.id])]);
+  }, [destination, project?.id]);
   const monitor = destination === 'monitor';
+  const returnHeader = (context: string) => <header className="d-return-header">{sidebarButton}<Button variant="ghost" onPress={() => setDestination('monitor')}><Icon name="left" size={16}/>Back to task graph</Button><span>{context}</span></header>;
   return <div className="desktop-d"><a href="#main-content" className="skip-link">Skip to workspace</a><div className={`new-workbench d-focused-layout ${sidebarHidden ? 'sidebar-hidden' : ''}`}>
     <aside id="d-project-sidebar" className="d-focused-sidebar" aria-label="Projects" aria-hidden={sidebarHidden} inert={sidebarHidden}><header><Logo/><strong>GraphTraj</strong></header>
       <div className="d-global-navigation"><button className="d-sidebar-group-toggle" aria-expanded={globalExpanded} aria-controls="d-global-items" onClick={() => setGlobalExpanded(value => !value)}><span>GLOBAL</span><Icon name={globalExpanded ? 'down' : 'right'} size={13}/></button><div id="d-global-items" className="d-global-items" hidden={!globalExpanded}><button aria-current={destination === 'global-usage' ? 'page' : undefined} onClick={() => setDestination('global-usage')}><Icon name="usage" size={17}/><span>All project usage</span><small>{preferences.projects.length}</small></button><button className={destination === 'models' ? 'has-active-page' : ''} aria-expanded={settingsExpanded} aria-controls="d-settings-items" onClick={() => setSettingsExpanded(value => !value)}><Icon name="settings" size={17}/><span>Settings</span><Icon name={settingsExpanded ? 'down' : 'right'} size={13}/></button><div id="d-settings-items" className="d-settings-items" hidden={!settingsExpanded}><button aria-current={destination === 'models' ? 'page' : undefined} onClick={() => setDestination('models')}><Icon name="layers" size={15}/><span>Agents &amp; models</span></button></div></div></div>
@@ -146,8 +153,10 @@ function FocusedDWorkbench() {
     <main id="main-content" className="d-focused-stage">{error && <div className="native-notice error" role="alert">{error}</div>}
       {preferences.projects.filter(item => visited.includes(item.id)).map(item => <div className={`d-preserved-monitor monitor-page ${monitor && project?.id === item.id ? '' : 'concealed'}`} key={`${item.id}:${item.root}`} aria-hidden={!monitor || project?.id !== item.id} inert={!monitor || project?.id !== item.id}><ReactFlowProvider><GraphView project={item} active={monitor && project?.id === item.id} sidebarButton={sidebarButton}/></ReactFlowProvider></div>)}
       {monitor && !project && <div className="d-preserved-monitor"><header className="d-monitor-caption"><div>{sidebarButton}<strong>GraphTraj</strong></div></header><div className="d-empty-configuration"><Icon name="folder" size={30}/><h2>Add a project to start monitoring</h2><p>Choose an existing GraphTraj directory. Native tasks continue independently of this window.</p><Button variant="primary" onPress={() => setDestination('projects')}>Manage projects</Button></div></div>}
-      {!monitor && <div className="d-auxiliary-page"><header className="d-return-header">{sidebarButton}<Button variant="ghost" onPress={() => setDestination('monitor')}><Icon name="left" size={16}/>Back to task graph</Button><span>{['models','projects','global-usage'].includes(destination) ? 'Global' : projectName(project)}</span></header>
-        {destination === 'projects' ? <ProjectIndexEditor preferences={preferences} busy={busy} change={change} onOpen={open}/> : destination === 'models' ? <ConnectionsView projectId={project?.unavailable ? undefined : project?.id}/> : destination === 'global-usage' ? <UsageView projects={preferences.projects}/> : project && destination === 'project-usage' ? <UsageView key={project.id} projectId={project.id}/> : project && <SettingsView key={project.id} projectId={project.id}/>}
+      {modelsVisited && <div className={`d-auxiliary-page ${destination === 'models' ? '' : 'concealed'}`} aria-hidden={destination !== 'models'} inert={destination !== 'models'}>{returnHeader('Global')}<ConnectionsView/></div>}
+      {preferences.projects.filter(item => teamsVisited.includes(item.id)).map(item => <div key={`${item.id}:${item.root}`} className={`d-auxiliary-page ${destination === 'teams' && project?.id === item.id ? '' : 'concealed'}`} aria-hidden={destination !== 'teams' || project?.id !== item.id} inert={destination !== 'teams' || project?.id !== item.id}>{returnHeader(projectName(item))}<SettingsView projectId={item.id} active={destination === 'teams' && project?.id === item.id}/></div>)}
+      {!monitor && destination !== 'models' && destination !== 'teams' && <div className="d-auxiliary-page">{returnHeader(destination === 'project-usage' ? projectName(project) : 'Global')}
+        {destination === 'projects' ? <ProjectIndexEditor preferences={preferences} busy={busy} change={change} onOpen={open}/> : destination === 'global-usage' ? <UsageView projects={preferences.projects}/> : project && <UsageView key={project.id} projectId={project.id}/>}
       </div>}
     </main></div></div>;
 }

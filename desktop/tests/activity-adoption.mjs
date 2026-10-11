@@ -14,7 +14,8 @@ const require = createRequire(import.meta.url);
 const evidence = path.resolve(process.env.GRAPHTRAJ_ACTIVITY_EVIDENCE || 'dist-package/adoption-evidence/activity');
 const work = await fs.mkdtemp(path.join(os.tmpdir(), 'graphtraj-292-activity-'));
 const executablePath = '/Applications/GraphTraj.app/Contents/MacOS/GraphTraj';
-const alias = 'sanitized-292@engineer';
+const alias = 'sanitized292-handover0-engineer@engineer';
+const otherAlias = 'sanitizedother-handover0-engineer@engineer';
 const time = new Date().toISOString();
 const facts = { source: process.env.GITHUB_SHA, platform: process.platform, node: process.version,
   data: 'Handwritten sanitized native-shape records, not original #282 records; no model execution.',
@@ -50,8 +51,50 @@ try {
   const project = await fs.realpath(await fixtures.makeProject(path.join(work, 'sanitized-292'), 'activity-adoption'));
   // Reuse the existing disposable fixture seam; never edit an actual Session.
   const trace = await fixtures.recordActivity(project, { ticketId: '1', ticketName: 'activity-adoption', alias, records,
-    additionalMembers: [{ alias: 'sanitized-other@engineer', historical: false,
+    additionalMembers: [{ alias: otherAlias, historical: false,
       records: [message('Sanitized other Agent; usage must not be attached here.')] }] });
+  // Exercise the exact desktop bridge/public observer before opening a window.
+  // A bad fixture must report its native projection, not a downstream UI timeout.
+  const { ActivityReader } = require('../dist-electron/activity.js');
+  const reader = new ActivityReader();
+  facts.preflight = { agents: [], pages: [] };
+  try {
+    const members = await reader.read(project, { ticket_id: '1' });
+    facts.preflight.agents = members.agents;
+    assert.deepEqual(members.agents.map(agent => agent.alias).sort(), [alias, otherAlias].sort());
+    for (const agent of members.agents) {
+      assert.equal(agent.runtime, 'codex', `Native fixture member ${agent.alias}: ${JSON.stringify(agent)}`);
+      assert.equal(agent.model, 'recorded-model');
+      assert.equal(agent.historical, agent.alias === alias);
+      assert.notEqual(agent.state, 'unavailable', `Native fixture member ${agent.alias}: ${JSON.stringify(agent)}`);
+    }
+    const otherPage = await reader.read(project, { ticket_id: '1', alias: otherAlias });
+    facts.preflight.other = { availability: otherPage.availability, count: otherPage.events?.length };
+    assert.equal(otherPage.availability, 'available');
+    assert.ok(otherPage.events.some(event => event.kind === 'message' && event.agent === otherAlias));
+    const events = [];
+    let cursor;
+    let more;
+    do {
+      const page = await reader.read(project, { ticket_id: '1', alias, ...(cursor ? { cursor } : {}) });
+      facts.preflight.pages.push({ availability: page.availability, count: page.events?.length,
+        has_more: page.has_more, reason: page.reason });
+      assert.equal(page.availability, 'available', JSON.stringify(facts.preflight));
+      assert.equal(page.waiting_for_record, false, 'Fixture must contain complete native records');
+      events.push(...page.events);
+      cursor = page.cursor;
+      more = page.has_more;
+    } while (more);
+    assert.equal(facts.preflight.pages.length, 2, 'Fixture must cross the native page boundary');
+    assert.ok(events.some(event => event.kind === 'tool' && event.phase === 'result' && event.name === 'exec_command'));
+    assert.ok(events.some(event => event.role === 'reasoning' && event.text === 'Sanitized plaintext reasoning with an empty summary.'));
+    const observations = events.filter(event => event.kind === 'usage');
+    assert.equal(observations.length, 3);
+    assert.equal(new Set(observations.map(event => event.usage.identity)).size, 2);
+    step('Public native preflight resolves both fixture members and projects cross-page tools, plaintext and usage before launch.');
+  } finally {
+    reader.close();
+  }
   const loader = path.join(path.dirname(require.resolve('playwright-core/package.json')), 'lib/server/electron/loader.js');
   facts.launches += 1;
   app = await electron.launch({ executablePath,
@@ -67,7 +110,7 @@ try {
   await monitor.locator('.react-flow__node[data-id="1"]').click();
   await monitor.getByRole('button', { name: 'Expand chat', exact: true }).click();
   const column = monitor.locator(`[data-agent-id="${alias}"]`);
-  const other = monitor.locator('[data-agent-id="sanitized-other@engineer"]');
+  const other = monitor.locator(`[data-agent-id="${otherAlias}"]`);
   const result = column.locator('.tool-card').filter({ has: page.locator('.tool-result', { hasText: /^result/ }) });
   const execResult = result.filter({ has: page.locator('summary strong', { hasText: 'Tool · exec_command' }) });
   await execResult.waitFor();

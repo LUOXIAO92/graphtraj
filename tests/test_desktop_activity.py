@@ -547,3 +547,42 @@ def test_codex_cross_page_tool_names_and_usage_observations(tmp_path: Path) -> N
     assert [fact['cumulative']['input_tokens'] for fact in facts] == [10, 20, 20]
     assert all(fact['tokens'] == {'input': 10, 'output': 2} for fact in facts)
     assert all(event['turn_id'] == 'one-turn' for event in events)
+
+
+@pytest.mark.parametrize(('alias', 'available'), [
+    ('sanitized-292@engineer', False),
+    ('sanitized-other@engineer', False),
+    ('sanitized292-handover0-engineer@engineer', True),
+    ('sanitizedother-handover0-engineer@engineer', True),
+])
+def test_activity_adoption_member_aliases(tmp_path: Path, alias: str, available: bool) -> None:
+    """The CI fixture must use supported aliases before any native Trace is readable."""
+    _, directory, trace = prepare(tmp_path, 'codex', [message('Sanitized adoption response')])
+    mapping_path = directory / 'mapping.yml'
+    mapping = yaml.safe_load(mapping_path.read_text())
+    mapping['alias'] = alias
+    historical = alias in {'sanitized-292@engineer', 'sanitized292-handover0-engineer@engineer'}
+    if historical:
+        mapping_path.unlink()
+        (directory / 'session.yml').write_text(yaml.safe_dump({'retirement': {'mapping': mapping}}))
+    else:
+        mapping_path.write_text(yaml.safe_dump(mapping))
+    directory.rename(directory.with_name(alias))
+    team_path = trace.parents[2] / 'team.yml'
+    team = yaml.safe_load(team_path.read_text())
+    for member in team['members'].values():
+        if member['session_ref'] == 'research@x1':
+            member['session_ref'] = alias
+    team_path.write_text(yaml.safe_dump(team))
+
+    result = query(tmp_path, alias=alias)
+    member = next(agent for agent in result['agents'] if agent['alias'] == alias)
+    if available:
+        assert member['runtime'] == 'codex'
+        assert member['state'] == ('retired' if historical else 'idle')
+        assert member['historical'] == historical
+        assert result['availability'] == 'available'
+        assert result['events'][0]['text'] == 'Sanitized adoption response'
+    else:
+        assert member['state'] == 'unavailable'
+        assert result['availability'] == 'unavailable' and result['events'] == []

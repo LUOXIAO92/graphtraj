@@ -6,7 +6,7 @@ export const controlledInput = { message: 'GraphTraj GUI controlled message', to
   model: 'gpt-5.3-codex', input: 1000, cacheRead: 600, output: 80, reasoning: 20 };
 
 /** Only seed the new disposable test project; these are retained controlled records, not live identities. */
-export async function retainedRecords(project, ticketDirectory) {
+export async function retainedRecords(project, ticketDirectory, parallel = false) {
   assert.equal(await fs.readFile(path.join(project, 'seed.txt'), 'utf8'),
     'Controlled Windows adoption project; no model execution.\n');
   const alias = 'controlled@x1';
@@ -21,7 +21,8 @@ export async function retainedRecords(project, ticketDirectory) {
   // JSON is valid YAML. Shapes match the existing retained desktop_activity fixture.
   const write = (filename, value) => fs.writeFile(filename, JSON.stringify(value, null, 2), { flag: 'wx' });
   await write(path.join(team, 'team.yml'), { team_ordinal: 1, status: 'active', current_round: 1,
-    started_at: time, members: { controlled: { role: 'controlled', session_ref: alias } } });
+    started_at: time, members: { controlled: { role: 'controlled', session_ref: alias },
+      ...(parallel ? { current: { role: 'controlled', session_ref: 'current@x2' } } : {}) } });
   await write(path.join(record, 'session.yml'), { retirement: { mapping: {
     alias, runtime: 'codex', session, ticket_id: '1', team_generation: 1,
     role: 'controlled', parent: null, retained_batch_file: 'controlled-test-input',
@@ -38,6 +39,22 @@ export async function retainedRecords(project, ticketDirectory) {
     { type: 'event_msg', payload: { type: 'token_count', info: { last_token_usage: tokens, total_token_usage: tokens } } },
   ];
   await fs.writeFile(trace, records.map(value => JSON.stringify({ timestamp: time, ...value })).join('\n') + '\n', { flag: 'wx' });
+  if (parallel) {
+    const current = path.join(project, '.graphtraj/runner/sessions/current@x2');
+    await fs.mkdir(current, { recursive: true });
+    const currentTrace = path.join(team, 'current.jsonl');
+    await write(path.join(current, 'mapping.yml'), {
+      alias: 'current@x2', runtime: 'codex', session: 'controlled-completed-session',
+      ticket_id: '1', team_generation: 1, role: 'controlled', parent: null,
+      retained_batch_file: 'controlled-test-input', worktree_path: project,
+      trace_file: currentTrace, worker_pid: 2147483647, runtime_pid: 2147483647,
+    });
+    await write(path.join(current, 'execution.yml'), { outcome: 'completed' });
+    await write(path.join(current, 'launch.yml'), { context_evidence: { model: 'controlled-model' } });
+    await fs.writeFile(currentTrace, JSON.stringify({ timestamp: time, type: 'response_item',
+      payload: { type: 'message', role: 'assistant', content: [{ type: 'output_text',
+        text: 'Controlled current member, already completed; no live model execution.' }] } }) + '\n', { flag: 'wx' });
+  }
   return alias;
 }
 

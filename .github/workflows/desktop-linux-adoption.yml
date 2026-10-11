@@ -2,7 +2,7 @@ name: Linux installed desktop adoption
 
 on:
   push:
-    branches: [agent/267-desktop-linux-adoption]
+    branches: [agent/267-desktop-linux-adoption, agent/288-desktop-d-integrated-adoption-linux]
 
 permissions:
   contents: read

@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 
 /** Exercise Settings through the installed window and its real native bridge. */
-export async function settingsAdoption({ page, decide, firstId, secondId, runtimeHome, shot, step }) {
+export async function settingsAdoption({ page, decide, firstId, secondId, runtimeHome, shot, step,
+  review = action => action(), legacyRole = 'custom_group.observer' }) {
   const button = name => page.getByRole('button', { name, exact: true });
   const input = name => page.getByLabel(name, { exact: true });
   async function expectDisclosure(summary, open) {
@@ -17,11 +18,11 @@ export async function settingsAdoption({ page, decide, firstId, secondId, runtim
   }
   async function saveConnections() {
     await button('Preview connections').click();
-    await button('Save connections').click();
+    await review(() => button('Save connections').click());
     await page.getByRole('status').getByText('Connections saved.', { exact: true }).waitFor();
   }
   async function saveRoles() {
-    await button('Save changes').click();
+    await review(() => button('Save changes').click());
     await page.getByRole('status').getByText('Settings saved.', { exact: true }).waitFor();
   }
   const originalSecond = await page.evaluate(id => window.graphtraj.settings(id), secondId);
@@ -81,11 +82,11 @@ export async function settingsAdoption({ page, decide, firstId, secondId, runtim
   const before = await page.evaluate(id => window.graphtraj.connections(id, { action: 'read' }), firstId);
   await decide(0);
   await button('Preview connections').click();
-  await button('Save connections').click();
+  await review(() => button('Save connections').click());
   await page.getByRole('alert').filter({ hasText: 'did not approve' }).waitFor();
   assert.deepEqual((await page.evaluate(id => window.graphtraj.connections(id, { action: 'read' }), firstId)).catalog, before.catalog);
   await decide(1);
-  await button('Save connections').click();
+  await review(() => button('Save connections').click());
   await page.getByRole('status').getByText('Connections saved.', { exact: true }).waitFor();
   const saved = await page.evaluate(id => window.graphtraj.connections(id, { action: 'read' }), firstId);
   assert.equal(saved.catalog.runtimes.shared.providers.custom.models.model.alias, 'Manual model');
@@ -109,11 +110,11 @@ export async function settingsAdoption({ page, decide, firstId, secondId, runtim
   await button('Add Provider').click();
   await button('Preview connections').click();
   // Concurrent change goes through the same public native save, never file writes.
-  await page.evaluate(async id => {
+  await review(() => page.evaluate(async id => {
     const current = await window.graphtraj.connections(id, { action: 'read' });
     current.catalog.runtimes.shared.providers.custom.models.model.alias = 'Externally updated';
     await window.graphtraj.connections(id, { action: 'save', catalog: current.catalog, expected_revision: current.revision });
-  }, firstId);
+  }, firstId));
   await button('Save connections').click();
   await page.getByRole('alert').filter({ hasText: 'Connections changed' }).waitFor();
   await button('Reload connections').click();
@@ -149,7 +150,7 @@ export async function settingsAdoption({ page, decide, firstId, secondId, runtim
   assert.equal(created.roles['delivery.root'].instructions, 'seed.txt');
   assert.equal(created.roles['delivery.root'].system_prompt, 'Keep the selected role instructions.');
   assert.deepEqual(created.role_tree['delivery.root'], { 'delivery.middle': { 'delivery.leaf': {} } });
-  assert.deepEqual(created.roles['custom_group.observer'], originalFirst.roles['custom_group.observer']);
+  assert.deepEqual(created.roles[legacyRole], originalFirst.roles[legacyRole]);
   await input('Team').selectOption('delivery');
   const roles = page.getByRole('navigation', { name: 'Configured roles' });
   await roles.getByRole('button', { name: 'delivery.root', exact: true }).click();
@@ -183,7 +184,7 @@ export async function settingsAdoption({ page, decide, firstId, secondId, runtim
   await roles.getByRole('button', { name: 'delivery.root', exact: true }).click();
   await button('Delete Agent and branch').click();
   await decide(0);
-  await button('Save changes').click();
+  await review(() => button('Save changes').click());
   await page.getByRole('alert').filter({ hasText: 'did not approve' }).waitFor();
   assert.ok((await page.evaluate(id => window.graphtraj.settings(id), firstId)).roles['delivery.root']);
   await decide(1);
@@ -213,10 +214,10 @@ export async function settingsAdoption({ page, decide, firstId, secondId, runtim
   await saveRoles();
   await input('Team').selectOption('final');
   await input('System prompt').fill('stale UI draft');
-  await page.evaluate(async id => {
+  await review(() => page.evaluate(async id => {
     const current = await window.graphtraj.settings(id);
     await window.graphtraj.saveSettings(id, { revision: current.revision, edits: { 'final.root': { reasoning_effort: 'low' } }, renames: {}, add_edges: [], remove_edges: [] });
-  }, firstId);
+  }, firstId));
   await button('Save changes').click();
   await page.getByRole('alert').filter({ hasText: 'changed while editing' }).waitFor();
   await button('Reload and discard draft').click();

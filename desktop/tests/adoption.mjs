@@ -305,6 +305,34 @@ async function nativeDialogAttempt(first) {
       ok: !cancelled.includes('model: native-cancelled-model'),
       command: `read ${path.relative(work, rolesFile)}`,
       output: cancelled.split('\n').filter(line => line.includes('model:')).join('; ') });
+
+    // Cover the new global write boundary in this same real OS window too.
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await page.getByRole('button', { name: 'Agents & models', exact: true }).click();
+    await page.getByRole('button', { name: 'Reload connections', exact: true }).waitFor();
+    const { selected } = await page.evaluate(() => window.graphtraj.projects());
+    for (const [provider, answer] of [['native-approved', 'Save settings'], ['native-declined', 'Cancel']]) {
+      const before = await page.evaluate(id => window.graphtraj.connections(id, { action: 'read' }), selected);
+      await page.getByLabel('Provider name', { exact: true }).fill(provider);
+      await page.getByRole('button', { name: 'Add Provider', exact: true }).click();
+      await page.getByRole('button', { name: 'Preview connections', exact: true }).click();
+      await page.getByRole('button', { name: 'Save connections', exact: true }).click();
+      await page.waitForTimeout(2500);
+      assert.ok(attempt(`global approval sheet: ${answer}`, [
+        'tell application "System Events"', 'tell process "GraphTraj"',
+        `click button "${answer}" of sheet 1 of window 1`, 'end tell', 'end tell',
+      ]), 'The real global approval sheet must be operable');
+      if (answer === 'Save settings') {
+        await page.getByRole('status').getByText('Connections saved.', { exact: true }).waitFor();
+        const saved = await page.evaluate(id => window.graphtraj.connections(id, { action: 'read' }), selected);
+        assert.ok(Object.hasOwn(saved.catalog.runtimes.shared.providers, provider));
+      } else {
+        await page.getByRole('alert').filter({ hasText: 'did not approve' }).waitFor();
+        assert.equal((await page.evaluate(id => window.graphtraj.connections(id, { action: 'read' }), selected)).revision, before.revision);
+      }
+      attempts.push({ name: `global native ${answer}: readback verified`, required: true, ok: true });
+    }
+    facts.screenshots.push(await shot(page, '12-native-global-refusal.png'));
   } catch (error) {
     attempts.push({ name: 'native dialog attempt', required: true, ok: false, command: 'tests/adoption.mjs',
       output: String((error && error.message) || error) });
@@ -1054,7 +1082,7 @@ async function main() {
     facts.nativeDialogs = native;
     const required = native.filter(entry => entry.required);
     const failedNative = required.filter(entry => !entry.ok);
-    facts.requiredNativeOk = required.length === 3 && failedNative.length === 0;
+    facts.requiredNativeOk = required.length === 5 && failedNative.length === 0;
     facts.blockedReason = facts.requiredNativeOk ? null
       : 'required native operations did not complete: '
         + (failedNative.map(entry => `${entry.name} (${entry.output})`).join('; ')

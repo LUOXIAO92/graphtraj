@@ -173,3 +173,89 @@ test('parallel current/history columns retain independent pause and cursor state
   assert.deepEqual(requests.filter(request => request.alias).slice(-2).map(request => request.cursor), ['3', '3']);
   assert.ok(requests.every(request => request.projectId === 'one'));
 });
+
+
+test('tool names resolve across pages and result-first records without guessing or changing output', async t => {
+  const { ActivityRecords } = await components(t);
+  const result = event(0, { kind: 'tool', role: undefined, text: undefined, phase: 'result', call_id: 'private-call-id', result: 'Formatted test: hook decision allow' });
+  const records = [result, ...Array.from({ length: 100 }, (_, i) => event(i + 1)),
+    event(101, { kind: 'tool', text: undefined, name: 'exec_command', phase: 'call', call_id: 'private-call-id' }),
+    event(102, { kind: 'tool', text: undefined, phase: 'result', call_id: 'unknown-id', result: 'untouched' })];
+  let tree;
+  await act(async () => { tree = create(React.createElement(ActivityRecords, { events: records.slice(0, 100), pageStart: 0, agent: 'worker' })); });
+  t.after(async () => { await act(async () => tree.unmount()); });
+  const summaries = () => tree.root.findAllByType('summary').map(node => node.findAllByType('strong').map(child => child.children.join('')).join('')).join('\n');
+  assert.match(summaries(), /Tool · Name not recorded/);
+  assert.doesNotMatch(summaries(), /private-call-id/);
+  await act(async () => { tree.update(React.createElement(ActivityRecords, { events: records, pageStart: 0, agent: 'worker' })); });
+  assert.match(summaries(), /Tool · exec_command/);
+  assert.equal(tree.root.findByType('pre').props.children, 'Formatted test: hook decision allow');
+  assert.match(text(tree), /private-call-id/);
+  await act(async () => { tree.update(React.createElement(ActivityRecords, { events: records, pageStart: 100, agent: 'worker' })); });
+  assert.match(summaries(), /Tool · Name not recorded/);
+  assert.doesNotMatch(summaries(), /unknown-id/);
+});
+
+
+test('usage supplements the actual turn, keeps observation scopes, and never attaches unknown usage to a reply', async t => {
+  const { ActivityRecords } = await components(t);
+  const usage = (id, turn, count) => event(id, { kind: 'usage', text: undefined, turn_id: turn,
+    usage: { identity: `counter:${count}`, phase: 'snapshot', attributable: true, scope: 'latest-response',
+      tokens: { input: 10, output: 2 }, provider_usage: { input_tokens: 10, output_tokens: 2 },
+      cumulative: { input_tokens: count, output_tokens: count / 5 } } });
+  const records = [event(1, { turn_id: 'turn-a', text: 'Working response' }), usage(2, 'turn-a', 10),
+    usage(3, 'turn-a', 20), usage(4, 'turn-a', 20),
+    event(5, { turn_id: 'turn-b', text: 'Another turn' }), usage(6, undefined, 30)];
+  let tree;
+  await act(async () => { tree = create(React.createElement(ActivityRecords, { events: records, pageStart: 0, agent: 'actual-worker' })); });
+  t.after(async () => { await act(async () => tree.unmount()); });
+  assert.equal(tree.root.findAllByType('article').length, 2, 'usage is never a chat message');
+  const supplements = tree.root.findAllByType('footer');
+  assert.equal(supplements.length, 2);
+  assert.ok(supplements.every(node => node.props['aria-label'] === 'Usage for actual-worker'));
+  assert.equal(supplements[0].findAll(node => node.props.className === 'usage-observation').length, 2, 'same counter replay is not a second observation');
+  assert.match(text(tree), /Latest response observation/);
+  assert.match(text(tree), /Cumulative native Session counter/);
+  assert.match(text(tree), /Response \/ turn association unavailable/);
+  assert.equal(tree.root.findAll(node => node.props.className === 'tool-card ').length, 0);
+  const rendered = tree.toJSON();
+  assert.equal(rendered[0].type, 'article');
+  assert.equal(rendered[1].type, 'footer');
+  assert.equal(rendered[2].type, 'article');
+  assert.equal(rendered[3].type, 'footer');
+});
+
+
+test('reasoning and lifecycle events use different human labels', async t => {
+  const { EventCard } = await components(t);
+  let tree;
+  await act(async () => { tree = create(React.createElement(React.Fragment, null,
+    React.createElement(EventCard, { event: event(1, { role: 'reasoning', text: 'Recorded plaintext' }) }),
+    React.createElement(EventCard, { event: event(2, { kind: 'work', role: undefined, text: 'task_started', details: { type: 'task_started' } }) }),
+  )); });
+  t.after(async () => { await act(async () => tree.unmount()); });
+  const titles = tree.root.findAllByType('strong').map(node => node.children.join(''));
+  assert.deepEqual(titles, ['Reasoning', 'Execution event']);
+  assert.match(text(tree), /Recorded plaintext/);
+});
+
+
+test('per-response usage uses the native source record; a usage-only page retains its known turn', async t => {
+  const { ActivityRecords } = await components(t);
+  const source = { runtime: 'pi', trace: 'sanitized', offset: 50 };
+  const usage = { phase: 'final', attributable: true, identity: 'pi:message-1', tokens: {}, provider_usage: {} };
+  let tree;
+  await act(async () => { tree = create(React.createElement(ActivityRecords, { agent: 'pi-worker', pageStart: 0,
+    events: [event(1, { source, text: 'Recorded response' }), event(2, { source, kind: 'usage', text: undefined, usage })],
+  })); });
+  t.after(async () => { await act(async () => tree.unmount()); });
+  assert.match(text(tree), /Recorded response/);
+  assert.doesNotMatch(text(tree), /association unavailable/);
+  assert.equal(tree.root.findAllByType('footer').length, 1);
+  assert.match(text(tree), /Unknown/);
+  await act(async () => { tree.update(React.createElement(ActivityRecords, { agent: 'pi-worker', pageStart: 0,
+    events: [event(3, { kind: 'usage', text: undefined, turn_id: 0, usage })],
+  })); });
+  assert.match(text(tree), /Recorded turn \(content outside this page\)/);
+  assert.doesNotMatch(text(tree), /association unavailable/);
+});

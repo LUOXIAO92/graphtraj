@@ -480,3 +480,70 @@ def test_windows_adoption_fixture_projects_retired_content_and_usage(
     assert total['tokens']['cache_read']['value'] == 600
     assert total['tokens']['cache_write']['known'] == 0
     assert total['cacheRate'] == 0.6 and total['amount'] == pytest.approx(0.001925)
+
+
+def test_codex_readable_reasoning_and_execution_events(tmp_path: Path) -> None:
+    """Empty summaries do not hide plaintext; absent and encrypted text stay distinct."""
+    records = [
+        {'type': 'response_item', 'payload': {'type': 'reasoning', 'summary': [],
+         'content': [{'type': 'reasoning_text', 'text': 'Check the recorded result.'}]}},
+        {'type': 'response_item', 'payload': {'type': 'reasoning',
+         'summary': [{'type': 'summary_text', 'text': 'Recorded summary'}],
+         'content': [{'type': 'reasoning_text', 'text': 'Recorded detail'}]}},
+        {'type': 'response_item', 'payload': {'type': 'reasoning', 'summary': []}},
+        {'type': 'response_item', 'payload': {'type': 'reasoning', 'summary': [],
+                                             'encrypted_content': 'opaque-private-content'}},
+        *({'type': 'event_msg', 'payload': {'type': kind, 'turn_id': 'turn-1'}}
+          for kind in ('task_started', 'task_complete', 'turn_aborted', 'error')),
+    ]
+    prepare(tmp_path, 'codex', records)
+    events = query(tmp_path, alias='research@x1')['events']
+    assert events[0]['text'] == 'Check the recorded result.'
+    assert events[1]['text'] == 'Recorded summary\n\nRecorded detail'
+    assert [event['availability'] for event in events[:4]] == ['available', 'available', 'missing', 'unavailable']
+    assert all(event['role'] == 'reasoning' for event in events[:4])
+    assert all(event['kind'] == 'work' and event.get('role') != 'reasoning' for event in events[4:])
+    assert 'opaque-private-content' not in json.dumps(events)
+
+
+def test_codex_cross_page_tool_names_and_usage_observations(tmp_path: Path) -> None:
+    """Real IDs retain names across pages; counter replay preserves accounting identity."""
+    def item(kind: str, **payload: object) -> dict:
+        """Create a minimal sanitized native response item."""
+        return {'type': 'response_item', 'payload': {'type': kind, **payload}}
+
+    def usage(total: int) -> dict:
+        """Record equal latest response usage with distinct native cumulative counters."""
+        return {'type': 'event_msg', 'payload': {'type': 'token_count', 'info': {
+            'last_token_usage': {'input_tokens': 10, 'output_tokens': 2},
+            'total_token_usage': {'input_tokens': total, 'output_tokens': total // 5},
+        }}}
+
+    records = [
+        {'type': 'turn_context', 'payload': {'turn_id': 'one-turn'}},
+        item('function_call', call_id='call-1', name='exec_command', arguments='{"cmd":"pwd"}'),
+        *[message('padding') for _ in range(198)],
+        item('function_call_output', call_id='call-1', output='Formatted test: hook decision allow'),
+        item('function_call_output', call_id='result-first', output='early result'),
+        item('function_call', call_id='result-first', name='read_file', arguments='{}'),
+        item('function_call_output', call_id='missing-name', output='name unavailable'),
+        item('function_call', call_id='missing-name', arguments='{}'),
+        usage(10), usage(20), usage(20),
+    ]
+    prepare(tmp_path, 'codex', records)
+    first = query(tmp_path, alias='research@x1')
+    second = query(tmp_path, alias='research@x1', cursor=first['cursor'])
+    replay = query(tmp_path, alias='research@x1', cursor=first['cursor'])
+    events = second['events']
+    assert events[0]['name'] == 'exec_command'
+    assert events[0]['result'] == 'Formatted test: hook decision allow'
+    assert events[1]['name'] is None and events[2]['name'] == 'read_file'
+    assert events[3]['name'] is None and events[4]['name'] is None
+    assert replay['events'][1]['name'] is None  # A later page must not mutate its checkpoint.
+    assert [event['id'] for event in events] == [event['id'] for event in replay['events']]
+    facts = [event['usage'] for event in events if event['kind'] == 'usage']
+    assert facts[0]['identity'] != facts[1]['identity'] == facts[2]['identity']
+    assert all(fact['scope'] == 'latest-response' for fact in facts)
+    assert [fact['cumulative']['input_tokens'] for fact in facts] == [10, 20, 20]
+    assert all(fact['tokens'] == {'input': 10, 'output': 2} for fact in facts)
+    assert all(event['turn_id'] == 'one-turn' for event in events)

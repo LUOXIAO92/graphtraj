@@ -12,15 +12,72 @@ export function EventCard({ event }: { event: ActivityEvent }) {
   const details = event.details === undefined ? '' : readable(event.details);
   const error = event.error ? readable(event.error) : '';
   const copyContent = [content, details, error].filter(Boolean).join('\n\n');
-  const title = event.kind === 'tool' ? event.name || event.call_id || 'Tool' : event.role || event.kind;
+  const title = event.kind === 'tool' ? `Tool · ${event.name || 'Name not recorded'}`
+    : event.role === 'reasoning' ? 'Reasoning' : event.kind === 'work' ? 'Execution event' : event.role || event.kind;
   const time = event.time === null ? 'Time not recorded' : new Date(event.time).toLocaleString();
   const copy = <button aria-label="Copy record" onClick={() => {
     void window.graphtraj.copyText(copyContent).then(() => setCopied('Copied'), () => setCopied('Copy unavailable'));
   }}><Icon name={copied === 'Copied' ? 'check' : 'copy'} size={14}/>{copied || 'Copy'}</button>;
-  if (event.kind === 'tool' || event.kind === 'usage' || event.details) return <div className="tool-message activity-event"><time>{time}</time>
+  if (event.kind === 'usage') return null;
+  if (event.kind === 'tool' || event.details) return <div className="tool-message activity-event"><time>{time}</time>
     <details className={`tool-card ${event.error ? 'tool-error' : ''}`}><summary><span className="tool-icon"><Icon name="terminal" size={16}/></span><span><strong>{title}</strong><small>{event.phase || event.kind} · {event.source.runtime}</small></span><span className="tool-result">{event.error ? 'Error' : event.phase || 'Recorded'}<Icon name={event.error ? 'info' : 'check'} size={13}/></span><Icon name="down" size={14}/></summary>
-      <div className="tool-details"><dl><dt>Source</dt><dd title={event.source.trace}>{event.source.runtime} · byte {event.source.offset}</dd></dl><pre>{content}</pre>{details && <pre>{details}</pre>}{error && <pre>{error}</pre>}{copy}</div></details></div>;
+      <div className="tool-details"><dl><dt>Source</dt><dd title={event.source.trace}>{event.source.runtime} · byte {event.source.offset}</dd>{event.call_id && <><dt>Call ID</dt><dd>{event.call_id}</dd></>}{event.tool_type && <><dt>Record type</dt><dd>{event.tool_type}</dd></>}</dl><pre>{content}</pre>{details && <pre>{details}</pre>}{error && <pre>{error}</pre>}{copy}</div></details></div>;
   return <article className="message activity-event"><div className="message-heading"><Avatar name={title}/><strong>{title}</strong><time>{time}</time></div><div className="message-body"><Markdown skipHtml components={{ a: ({ children }) => <span>{children}</span>, img: () => <span>[External image omitted]</span> }}>{content || 'No readable text in this record.'}</Markdown></div><div className="record-source">{copy}<span title={event.source.trace}>{event.source.runtime} · byte {event.source.offset}</span></div></article>;
+}
+
+/** Use recorded turn identity, or the exact native record for per-message usage. */
+function scopeKey(event: ActivityEvent) {
+  return JSON.stringify([event.agent, event.session, event.source.runtime, event.source.trace,
+    event.turn_id == null ? ['record', event.source.offset] : ['turn', event.turn_id]]);
+}
+
+/** Supplement a recorded turn/response without summing native observations. */
+function UsageSupplement({ events, agent, attached }: { events: ActivityEvent[]; agent: string; attached: boolean }) {
+  const latest = events.at(-1)!;
+  const tokens = latest.usage?.tokens;
+  const scope = latest.turn_id != null ? `Recorded turn${attached ? '' : ' (content outside this page)'}`
+    : attached ? 'Recorded response' : 'Response / turn association unavailable';
+  return <footer className="usage-supplement" aria-label={`Usage for ${agent}`}>
+    <details><summary>Usage · {agent} · {scope} · {latest.source.runtime} · {latest.usage?.scope === 'latest-response' ? 'Latest response observation' : 'Native usage observation'} · Input {tokens?.input ?? 'Unknown'} · Output {tokens?.output ?? 'Unknown'}</summary>
+      {events.map(event => <div key={event.id} className="usage-observation">
+        <p>{event.time == null ? 'Time not recorded' : new Date(event.time).toLocaleString()} · {event.source.runtime} · {event.usage?.phase} · {event.turn_id == null ? 'Turn ID not recorded' : `Turn ${event.turn_id}`}</p>
+        <dl><dt>{event.usage?.scope === 'latest-response' ? 'Latest response (last_token_usage)' : 'Native reported usage'}</dt><dd><pre>{readable(event.usage?.provider_usage)}</pre></dd>
+          <dt>Normalized tokens (missing fields remain unknown)</dt><dd><pre>{readable(event.usage?.tokens)}</pre></dd>
+          {event.usage?.cumulative != null && <><dt>Cumulative native Session counter (total_token_usage; not this turn)</dt><dd><pre>{readable(event.usage.cumulative)}</pre></dd></>}
+        </dl><p>{typeof event.usage?.coverage === 'string' ? event.usage.coverage : 'Recorded native fields; no model request count is inferred.'}</p>
+        <small title={event.source.trace}>Source byte {event.source.offset}</small>
+      </div>)}
+    </details>
+  </footer>;
+}
+
+/** Resolve tools over all loaded pages; keep usage below its recorded scope. */
+export function ActivityRecords({ events, pageStart, agent }: { events: ActivityEvent[]; pageStart: number; agent: string }) {
+  const names = new Map<string, string>();
+  const toolKey = (event: ActivityEvent) => JSON.stringify([event.agent, event.session, event.source.runtime, event.source.trace, event.call_id]);
+  const usage = new Map<string, Map<string, ActivityEvent>>();
+  for (const event of events) {
+    if (event.kind === 'tool' && event.call_id && event.name) names.set(toolKey(event), event.name);
+    if (event.kind === 'usage') {
+      const key = scopeKey(event);
+      if (!usage.has(key)) usage.set(key, new Map());
+      // Replayed observations keep one entry; distinct counters remain distinct.
+      usage.get(key)!.set(`${event.usage?.identity || event.id}:${event.usage?.phase}`, event);
+    }
+  }
+  const visible = events.slice(pageStart, pageStart + 100);
+  const last = new Map<string, string>();
+  for (const event of visible) if (event.kind !== 'usage') last.set(scopeKey(event), event.id);
+  const unattached = new Set(visible.filter(event => event.kind === 'usage').map(scopeKey));
+  for (const key of last.keys()) unattached.delete(key);
+  return <>{visible.filter(event => event.kind !== 'usage').map(event => {
+    const key = scopeKey(event);
+    const facts = usage.get(key);
+    const resolved = event.kind === 'tool' && event.call_id && !event.name ? { ...event, name: names.get(toolKey(event)) } : event;
+    return <React.Fragment key={event.id}><EventCard event={resolved}/>
+      {last.get(key) === event.id && facts && <UsageSupplement events={[...facts.values()]} agent={agent} attached/>}
+    </React.Fragment>;
+  })}{[...unattached].map(key => <UsageSupplement key={key} events={[...usage.get(key)!.values()]} agent={agent} attached={false}/>)}</>;
 }
 
 /** Show only members returned by the native activity projection. */
@@ -157,7 +214,7 @@ function AgentColumn({ projectId, ticketId, agent, active }: {
         const element = event.currentTarget; if (active) vertical.current = element.scrollTop;
         if (active && followingRef.current && element.scrollHeight - element.clientHeight - element.scrollTop > 32) follow(false);
       }}><div className="day-divider"><span>Recorded Runtime output</span></div>
-        {events.slice(pageStart, pageStart + 100).map(event => <EventCard key={event.id} event={event}/>)}
+        <ActivityRecords events={events} pageStart={pageStart} agent={agent.alias}/>
         {!events.length && <p>{activity?.availability === 'available' ? 'No readable activity recorded yet.' : 'Activity is unavailable or loading.'}</p>}
         <div className="transcript-end">{events.length} events loaded · Missing usage stays unknown.</div>
       </div>

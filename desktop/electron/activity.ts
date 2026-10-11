@@ -9,7 +9,8 @@ export type Agent = {
 export type ActivityEvent = {
   id: string; kind: string; time: string | number | null;
   source: { runtime: string; trace?: string; offset: number }; role?: string; text?: string;
-  name?: string; phase?: string; call_id?: string; arguments?: unknown;
+  name?: string; phase?: string; call_id?: string; arguments?: unknown; tool_type?: string;
+  turn_id?: string | number | null; agent?: string; session?: string;
   result?: unknown; error?: unknown; details?: unknown; model?: string;
   usage?: { tokens: Record<string, number>; provider_usage: unknown; identity?: string;
     phase: string; attributable: boolean; [key: string]: unknown };

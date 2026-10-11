@@ -54,7 +54,7 @@ def text_content(content: Any) -> str:
     for block in content:
         if not isinstance(block, dict):
             continue
-        if block.get('type') in {'text', 'input_text', 'output_text', 'thinking', 'summary_text', 'reasoning'}:
+        if block.get('type') in {'text', 'input_text', 'output_text', 'thinking', 'summary_text', 'reasoning', 'reasoning_text'}:
             parts.append(block.get('text', block.get('thinking', '')))
         elif block.get('type') not in {'toolCall', 'tool-call'}:
             parts.append('[Nontext content: ' + str(block.get('type', 'unknown')) + ']')

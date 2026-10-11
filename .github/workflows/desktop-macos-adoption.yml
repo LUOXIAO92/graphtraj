@@ -52,6 +52,12 @@ jobs:
             node --test tests/*.test.cjs
           fi
 
+      - name: D renderer navigation and long-output checks
+        if: github.ref_name == 'agent/290-desktop-d-direct-port-macos'
+        run: |
+          npx playwright install chromium
+          node --test tests/monitor-ui.test.mjs
+
       - name: Package the macOS artifact
         run: npm run package:mac
 
@@ -78,6 +84,25 @@ jobs:
       # Starts the installed bundle and exercises the real picker entry, graph
       # and project switching, node detail, dashboard, settings save/deny/error,
       # persistence, credential non-leakage and GUI-less native operation.
+      - name: Set a display large enough for the accepted D reference sizes
+        if: github.ref_name == 'agent/290-desktop-d-direct-port-macos'
+        run: |
+          brew install displayplacer
+          displayplacer list | tee dist-package/adoption-evidence/display-before.txt
+          python - <<'PYDISPLAY'
+          import re
+          import subprocess
+          output = subprocess.check_output(['displayplacer', 'list'], text=True)
+          display = re.search(r'Persistent screen id: (\S+)', output).group(1)
+          modes = [(int(w), int(h)) for w, h in re.findall(r'res:(\d+)x(\d+)', output)]
+          usable = sorted(set((w, h) for w, h in modes if w >= 1500 and h >= 1100), key=lambda size: size[0] * size[1])
+          if not usable:
+              raise SystemExit('No native display mode fits the 1440x1000 reference window; preserve display evidence')
+          width, height = usable[0]
+          subprocess.run(['displayplacer', f'id:{display} res:{width}x{height}'], check=True)
+          PYDISPLAY
+          displayplacer list > dist-package/adoption-evidence/display-after.txt
+
       - name: Installed D views and native changed paths
         if: github.ref_name == 'agent/290-desktop-d-direct-port-macos'
         env:

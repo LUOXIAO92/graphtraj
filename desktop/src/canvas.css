@@ -113,7 +113,7 @@
 .new-config-fields .settings-field .input, .new-config-fields .native-field select, .new-config-fields .native-field textarea { font-size: 11px; border-radius: 5px; background: var(--surface); }
 .new-config-fields .native-field textarea { resize: vertical; min-height: 82px; line-height: 1.7; }
 .new-config-fields .settings-field .label, .new-config-fields .native-field > span { font-size: 10px; }
-.new-config-fields .native-field > small { font-size: 9px; }
+.new-config-fields .settings-field .description, .new-config-fields .native-field > small { font-size: 9px; }
 .config-property-scroll { overflow: auto; min-height: 0; padding: 23px; flex: 1; }
 .new-draft-footer { display: flex; align-items: center; justify-content: space-between; gap: 18px; flex-shrink: 0; height: 70px; padding: 0 26px; background: var(--surface); border-top: 1px solid var(--border-ui); }
 .new-draft-footer > div { display: flex; align-items: center; gap: 10px; }

@@ -75,8 +75,9 @@ try {
   const monitor = page.locator('.monitor-page:visible');
   const selectProject = name => page.locator('.project-button').filter({ hasText: name }).click();
   async function size(width, height) {
-    await app.evaluate(({ BrowserWindow }, dimensions) => BrowserWindow.getAllWindows()[0].setContentSize(...dimensions), [width,height]);
+    await app.evaluate(({ BrowserWindow }, dimensions) => { const window=BrowserWindow.getAllWindows()[0]; window.setPosition(0,0); window.setContentSize(...dimensions); }, [width,height]);
     await page.waitForFunction(({ width,height }) => innerWidth === width && innerHeight === height, {width,height});
+    const layout = page.getByRole('button',{name:'Auto layout',exact:true}); if(await layout.isVisible()) await layout.click();
   }
   async function shot(name) {
     const dimensions = await page.evaluate(() => ({ width: innerWidth, height: innerHeight }));

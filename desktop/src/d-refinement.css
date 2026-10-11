@@ -6,7 +6,7 @@
 .d-focused-sidebar > header { display: flex; align-items: center; gap: 9px; padding: 20px 19px; height: 70px; flex-shrink: 0; }
 .d-focused-sidebar > header .logo-mark { width: 27px; height: 32px; }
 .d-focused-sidebar > header > strong { font-size: 18px; letter-spacing: -.6px; }
-.d-focused-sidebar > header > span { margin-left: auto; color: var(--muted); border: 1px solid var(--border-ui); font-size: 8px; padding: 1px 5px; border-radius: 4px; }
+.d-focused-sidebar > header > span { color: var(--muted); border: 1px solid var(--border-ui); font-size: 8px; padding: 1px 5px; border-radius: 4px; }
 .d-global-navigation { padding: 9px 12px 18px; border-bottom: 1px solid var(--border-ui); flex-shrink: 0; }
 .d-focused-sidebar .section-label { font-size: 8px; letter-spacing: 1.2px; padding: 0 10px 10px; }
 .d-global-items > button, .d-settings-items > button, .d-current-project-nav > button { display: flex; align-items: center; gap: 10px; padding: 10px 11px; min-height: 39px; width: 100%; text-align: left; border-radius: 6px; color: var(--muted); font-size: 11px; }

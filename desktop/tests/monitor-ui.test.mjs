@@ -32,6 +32,7 @@ test('D navigation preserves separate project graphs and independent column read
         };
       },
       settings: async () => ({ revision: '1', roles: {}, edges: [], role_tree: {}, effect: 'No changes' }),
+      connections: async () => ({revision:'1',catalog:{version:1,runtimes:{}},capabilities:{model_discovery:{},custom_api:{}},account_access:'unknown'}),
       copyText: async () => {},
     };
   });
@@ -99,5 +100,5 @@ test('D navigation preserves separate project graphs and independent column read
   await page.getByRole('button', { name: 'Show sidebar', exact: true }).click();
   assert.equal(await page.getByRole('button', { name: 'Monitor', exact: true }).isVisible(), true);
   assert.equal(await page.getByRole('textbox').count(), 0, 'monitor has no message input');
-  await page.screenshot({path: '/private/tmp/290-monitor-renderer.png'});
+
 });

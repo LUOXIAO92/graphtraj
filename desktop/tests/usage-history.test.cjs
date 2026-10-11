@@ -179,3 +179,28 @@ test('same representative dataset cold/hot/reopen avoids history pages and multi
   await appended.remove(second);
   await assert.rejects(appended.usage(second), /added project/);
 });
+
+test('removing an indexed project stops the remainder of its active native read batch', async t => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'usage-removal-'));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  let entered, release;
+  const started = new Promise(resolve => { entered = resolve; });
+  const requests = [];
+  t.mock.method(ActivityReader.prototype, 'read', async (folder, request) => {
+    if (!request.alias) return { agents: [{ alias: 'first' }, { alias: 'second' }] };
+    requests.push(request.alias);
+    if (request.alias === 'first') await new Promise(resolve => { release = resolve; entered(); });
+    return { agents: [], events: [event('1', 100, 10)], availability: 'available' };
+  });
+  const projects = new Projects(path.join(root, '.graphtraj/projects.json'), { read: async () => ({ tickets: [] }) });
+  t.after(() => projects.close());
+  await projects.load();
+  const id = (await projects.add(root)).selected;
+  await projects.usage(id);
+  await started;
+  await projects.remove(id);
+  release();
+  await new Promise(resolve => setTimeout(resolve, 20));
+  assert.deepEqual(requests, ['first']);
+  await assert.rejects(projects.usage(id), /added project/);
+});

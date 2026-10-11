@@ -180,12 +180,13 @@ export class Projects {
     const root = await this.validate(folder);
     const existing = this.preferences.projects.find(p => p.id !== id && p.root === root);
     if (existing) delete existing.unavailable;
-    this.activityReader.close(previous.root);
     this.usageState.delete(previous.id);
     const projects = this.preferences.projects.flatMap(project => project.id !== id ? [project]
       : existing ? [] : [{ id: previous.id, root }]);
-    return this.save({ ...this.preferences, projects,
+    const saved = await this.save({ ...this.preferences, projects,
       selected: this.preferences.selected === id ? existing?.id ?? previous.id : this.preferences.selected });
+    this.activityReader.close(previous.root);
+    return saved;
   }
 
   async select(id: unknown): Promise<Preferences> {
@@ -195,11 +196,12 @@ export class Projects {
 
   async remove(id: unknown): Promise<Preferences> {
     const project = this.project(id);
-    this.activityReader.close(project.root);
     this.usageState.delete(project.id);
     const projects = this.preferences.projects.filter(p => p.id !== project.id);
-    return this.save({ ...this.preferences, projects, selected: this.preferences.selected === id
+    const saved = await this.save({ ...this.preferences, projects, selected: this.preferences.selected === id
       ? projects[0]?.id ?? null : this.preferences.selected });
+    this.activityReader.close(project.root);
+    return saved;
   }
 
   close(): void { this.closed = true; this.activityReader.close(); }
@@ -257,7 +259,7 @@ export class Projects {
         const progress: Record<string, string | null> = {};
         const remaining: typeof active = [];
         for (const [key, agent] of active) {
-          if (this.closed) break;
+          if (this.closed || !this.preferences.projects.some(item => item.id === project.id && item.root === project.root)) break;
           try {
             const page = await this.activityReader.read(project.root, { alias: agent.alias,
               ...(cursors[key] ? { cursor: cursors[key]! } : {}) });

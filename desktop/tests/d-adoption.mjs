@@ -73,7 +73,13 @@ try {
   const field = name => page.getByLabel(name, { exact: true }).filter({visible:true});
   const dialogButton = name => page.getByRole('dialog').getByRole('button', { name, exact: true });
   const monitor = page.locator('.monitor-page:visible');
-  const selectProject = name => page.locator('.project-button').filter({ hasText: name }).click();
+  async function selectProject(name) {
+    const project = page.locator('.project-button').filter({ hasText: name });
+    await project.click();
+    // Native index selection is asynchronous; observe its committed UI state
+    // before reading the preserved monitor or issuing another selection.
+    await project.and(page.locator('[aria-current="true"]:enabled')).waitFor();
+  }
   async function size(width, height) {
     await app.evaluate(({ BrowserWindow }, dimensions) => { const window=BrowserWindow.getAllWindows()[0]; window.setPosition(0,0); window.setContentSize(...dimensions); }, [width,height]);
     await page.waitForFunction(({ width,height }) => innerWidth === width && innerHeight === height, {width,height});

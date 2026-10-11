@@ -147,7 +147,7 @@ try {
   await field('Start date').fill('2099-01-02'); await field('End date').fill('2099-01-01');
   await page.locator('.d-usage-date-note[role="alert"]').waitFor();
   assert.equal(await page.locator('[data-usage-cost]').innerText(),'—');
-  await button('All project usage').click();
+  await page.getByRole('button',{name:/^All project usage\b/}).click();
   await page.locator('.d-project-usage-table tbody tr').nth(1).waitFor();
   assert.equal(await page.locator('.usage-filters select').count(),0);
   assert.ok(!(await page.locator('.usage-dashboard').innerText()).includes('current-handover0-engineer@engineer'));

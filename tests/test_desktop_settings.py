@@ -313,6 +313,13 @@ def test_new_team_uses_global_references_and_preserves_legacy_roles(
     monkeypatch.setenv('HOME', str(home))
     monkeypatch.setenv('USERPROFILE', str(home))
     monkeypatch.setenv('CUSTOM_KEY', 'controlled-secret-must-not-be-copied')
+    # Custom Codex providers retain the existing explicit approval-route rule.
+    config_path = project / '.graphtraj/config.yml'
+    config = yaml.safe_load(config_path.read_text())
+    config['codex'] = {'approval': {'model': 'review-model',
+                                  'base_url': 'https://review.invalid/v1',
+                                  'api_key_env': 'REVIEW_KEY'}}
+    config_path.write_text(yaml.safe_dump(config))
     initial = call(project, {'scope': 'user', 'action': 'read'})[-1]['result']
     catalog = {'version': 1, 'runtimes': {'shared': {'runtime': 'codex', 'providers': {
         'custom': {'base_url': 'https://provider.invalid/v1', 'api_key_env': 'CUSTOM_KEY',

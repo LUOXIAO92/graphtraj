@@ -81,6 +81,7 @@ def test_graph_projects_explicit_summary_membership_without_dependency_inference
         "Parent: #91. Prior work #90 is a dependency, not membership.",
         "属于 #90、#91。Shared work.",
         "See #90; depends on #91.\n```\nParent: #92\n```",
+        "Part of #91。Source task node. Prior result #90 stays a dependency.",
     ]
     for index, body in enumerate(bodies, 1):
         _register(installed_commands, project, {
@@ -92,9 +93,9 @@ def test_graph_projects_explicit_summary_membership_without_dependency_inference
     graph = yaml.safe_load(result.stdout)
     assert {group["id"]: group["ticket_ids"] for group in graph["groups"]} == {
         "https://github.com/example/project/issues/90": ["1", "3"],
-        "https://github.com/example/project/issues/91": ["2", "3"],
+        "https://github.com/example/project/issues/91": ["2", "3", "5"],
     }
-    assert [ticket["dependencies"] for ticket in graph["tickets"]] == [[], ["1"], ["2"], ["3"]]
+    assert [ticket["dependencies"] for ticket in graph["tickets"]] == [[], ["1"], ["2"], ["3"], ["4"]]
     assert all(ticket["status"] == "pending" for ticket in graph["tickets"])
 
 

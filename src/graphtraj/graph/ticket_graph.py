@@ -488,7 +488,7 @@ def read_graph(state: Path) -> dict[str, Any]:
 
 
 def _summary_references(snapshot: str, source: str) -> list[str]:
-    """Read authored Parent/属于 declarations, retaining multiple memberships.
+    """Read authored Parent/Part of/属于 declarations, retaining memberships.
 
     Bare Issue numbers belong to the Ticket's source repository. Ordinary
     references, dependency sections and prose about prior work are not ownership.
@@ -507,7 +507,11 @@ def _summary_references(snapshot: str, source: str) -> list[str]:
         if stripped.startswith("#") and re.match(r"^#{1,6}\s", stripped):
             in_parent = bool(re.fullmatch(r"#{1,6}\s+Parents?\s*", stripped, re.I))
             continue
-        declaration = re.match(r"^(?:Parents?\s*[:：]|属于\s*[:：]?)\s*(.*)", stripped, re.I)
+        declaration = re.match(
+            r"^(?:Parents?\s*[:：]|Part of\s+|属于\s*[:：]?)\s*(.*)",
+            stripped,
+            re.I,
+        )
         if not declaration and not in_parent:
             continue
         value = declaration.group(1) if declaration else stripped

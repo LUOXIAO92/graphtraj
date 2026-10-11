@@ -62,6 +62,122 @@ def text_content(content: Any) -> str:
     return '\n'.join(parts)
 
 
+_TEXT_BLOCK_TYPES = frozenset({
+    'text', 'input_text', 'output_text', 'summary_text', 'reasoning_text', 'content',
+})
+_IMAGE_BLOCK_TYPES = frozenset({'image', 'input_image', 'output_image', 'image_url'})
+_UNSET = object()
+
+
+def tool_content(value: Any) -> list[dict]:
+    """Project a native tool result into ordered, readable content parts.
+
+    Each part is one of:
+
+    - ``{'type': 'text', 'text': str}`` for text blocks and plain strings,
+    - ``{'type': 'image', 'mime': str | None, 'data': str | None, ...}`` keeping
+      the native media type and base64 payload (or a non-data ``url``),
+    - ``{'type': 'unknown', 'label': str}`` for shapes this adapter cannot read.
+
+    Native order and text/image association are preserved. A JSON-encoded block
+    list (Codex ``custom_tool_call_output``) is decoded, a structured object
+    payload is shown as readable JSON, and an unreadable shape becomes an
+    explicit fallback note. The whole protocol object is never returned as one
+    opaque blob, and image bytes never appear inside a text part.
+    """
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return _string_content(value)
+    if isinstance(value, list):
+        return _block_content(value)
+    if isinstance(value, dict):
+        return _block_content([value])
+    return [{'type': 'text', 'text': str(value)}]
+
+
+def _string_content(value: str) -> list[dict]:
+    """Read a tool output that may be a JSON-encoded native content-block list."""
+    stripped = value.strip()
+    if stripped[:1] in ('[', '{'):
+        try:
+            parsed = json.loads(stripped)
+        except ValueError:
+            parsed = _UNSET
+        if parsed is not _UNSET and isinstance(parsed, list) and all(_is_block(item) for item in parsed):
+            return _block_content(parsed)
+        if _is_block(parsed):
+            return _block_content([parsed])
+        if parsed is not _UNSET:
+            # A structured object payload reads as pretty JSON, never a protocol dump.
+            return [{'type': 'text', 'text': json.dumps(parsed, indent=2, ensure_ascii=False)}]
+    return [{'type': 'text', 'text': value}]
+
+
+def _block_content(blocks: list) -> list[dict]:
+    """Project native content blocks in their recorded order."""
+    parts: list[dict] = []
+    for block in blocks:
+        if isinstance(block, str):
+            parts.append({'type': 'text', 'text': block})
+        elif isinstance(block, dict):
+            parts.extend(_block_parts(block))
+        else:
+            parts.append({'type': 'text', 'text': json.dumps(block, ensure_ascii=False)})
+    return parts
+
+
+def _block_parts(block: dict) -> list[dict]:
+    """Project one content block, descending into wrapper blocks to keep order."""
+    kind = block.get('type')
+    if kind in _IMAGE_BLOCK_TYPES:
+        image = _image_part(block)
+        if image is not None:
+            return [image]
+    if kind in _TEXT_BLOCK_TYPES:
+        text = block.get('text', block.get('content'))
+        if isinstance(text, str):
+            return [{'type': 'text', 'text': text}]
+        return [{'type': 'unknown', 'label': str(kind)}]
+    # Wrapper blocks (for example a nested tool-result) keep their inner content.
+    nested = block.get('content')
+    if isinstance(nested, (str, list, dict)):
+        return _block_content(nested if isinstance(nested, list) else [nested])
+    text = block.get('text')
+    if isinstance(text, str) and text:
+        return [{'type': 'text', 'text': text}]
+    return [{'type': 'unknown', 'label': str(kind or 'object')}]
+
+
+def _is_block(value: Any) -> bool:
+    """Report whether a parsed JSON value is a typed native content block."""
+    return isinstance(value, dict) and isinstance(value.get('type'), str)
+
+
+def _image_part(block: dict) -> dict | None:
+    """Keep a native image block as a previewable mime/data (or url) part."""
+    source = block.get('source') if isinstance(block.get('source'), dict) else {}
+    mime = (block.get('mimeType') or block.get('mime_type') or block.get('media_type')
+            or block.get('mime') or source.get('media_type') or source.get('mime_type'))
+    data = block.get('data') if isinstance(block.get('data'), str) else source.get('data')
+    url = block.get('image_url', block.get('imageUrl', block.get('url')))
+    if isinstance(url, dict):
+        url = url.get('url')
+    if isinstance(url, str) and url.startswith('data:'):
+        # Split a data URL so the renderer never has to parse the encoding itself.
+        header, _, payload = url.partition(',')
+        mime = mime or header[5:].split(';')[0]
+        data = data or payload
+        url = None
+    part: dict = {'type': 'image', 'mime': mime if isinstance(mime, str) else None,
+                  'data': data if isinstance(data, str) else None}
+    if isinstance(url, str):
+        part['url'] = url
+    if part['data'] is None and 'url' not in part:
+        return None
+    return part
+
+
 def usage_fact(raw: dict, runtime: str, call_id: str | None, phase: str) -> dict:
     """Keep reported fields and semantic token names; never fill missing metrics."""
     names = {

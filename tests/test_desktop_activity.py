@@ -186,7 +186,48 @@ def test_pi_per_call_usage_and_errors(tmp_path: Path) -> None:
     usage = next(e['usage'] for e in result if e['kind'] == 'usage')
     assert usage['call_id'] == 'msg-1' and usage['tokens']['input'] == 33
     assert usage['provider_usage']['cacheRead'] == 20
-    assert result[-1]['result'] == 'denied' and result[-1]['error'] is True
+    assert result[-1]['error'] is True
+    assert result[-1]['content'] == [{'type': 'text', 'text': 'denied'}]
+    assert result[-1]['result'] == [{'type': 'text', 'text': 'denied'}]
+
+
+def test_tool_results_project_readable_parts_without_dumping_encodings(tmp_path: Path) -> None:
+    """Long text, structured objects, images and unknown blocks stay readable."""
+    long_text   = 'A long recorded explanation of the tool output. ' * 20
+    image_bytes = 'iVBORw0KGgoAAAANSUhEUg' * 6  # Self-made stand-in, never a copied image.
+    blocks = [
+        {'type': 'input_text', 'text': long_text},
+        {'type': 'input_image', 'image_url': 'data:image/png;base64,' + image_bytes},
+        {'type': 'input_text', 'text': 'Rendered after the image.'},
+    ]
+    records = [
+        {'type': 'response_item', 'payload': {'type': 'custom_tool_call', 'call_id': 'img-1',
+                                             'name': 'view_image', 'input': '{}'}},
+        {'type': 'response_item', 'payload': {'type': 'custom_tool_call_output', 'call_id': 'img-1',
+                                             'output': json.dumps(blocks)}},
+        {'type': 'response_item', 'payload': {'type': 'function_call_output', 'call_id': 'obj-1',
+                                             'output': json.dumps({'status': 'ok', 'items': [1, 2]})}},
+        {'type': 'response_item', 'payload': {'type': 'function_call_output', 'call_id': 'unknown-1',
+                                             'output': '[{"type":"future_block","payload":"x"}]'}},
+    ]
+    prepare(tmp_path, 'codex', records)
+    events = query(tmp_path, alias='research@x1')['events']
+    results = [event for event in events if event['kind'] == 'tool' and event['phase'] == 'result']
+
+    mixed = results[0]
+    assert [part['type'] for part in mixed['content']] == ['text', 'image', 'text']
+    assert mixed['content'][0]['text'] == long_text
+    assert mixed['content'][1] == {'type': 'image', 'mime': 'image/png', 'data': image_bytes}
+    assert mixed['content'][2]['text'] == 'Rendered after the image.'
+    # Image bytes never leak into a text part; the raw record is still retained.
+    assert all(image_bytes not in part.get('text', '') for part in mixed['content'])
+    assert mixed['result'] == json.dumps(blocks)
+
+    structured = results[1]
+    assert structured['content'] == [{'type': 'text', 'text': json.dumps(
+        {'status': 'ok', 'items': [1, 2]}, indent=2, ensure_ascii=False)}]
+
+    assert results[2]['content'] == [{'type': 'unknown', 'label': 'future_block'}]
 
 
 def test_dsh_stream_final_coordinates_and_model_source(tmp_path: Path) -> None:

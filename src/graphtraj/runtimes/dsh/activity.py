@@ -1,5 +1,5 @@
 """Readable DSH v4 Session records; embedded stream usage is never added twice."""
-from graphtraj.runtimes.activity import text_content, usage_fact
+from graphtraj.runtimes.activity import text_content, tool_content, usage_fact
 
 
 def project(record: dict, context: dict) -> list[dict]:
@@ -39,14 +39,17 @@ def project(record: dict, context: dict) -> list[dict]:
                  'name': data.get('name'), 'arguments': data.get('arguments')}]
     if kind == 'tool/result':
         message = data.get('message', {})
+        content = message.get('content', data.get('content'))
         return [{**base, 'kind': 'tool', 'phase': 'result',
                  'call_id': message.get('source', {}).get('callId', data.get('callId')),
-                 'result': message.get('content', data.get('content')), 'error': data.get('error', data.get('isError')) or any(
+                 'result': content, 'content': tool_content(content),
+                 'error': data.get('error', data.get('isError')) or any(
                      block.get('isError') for block in message.get('content', []) if isinstance(block, dict))}]
     if kind in {'tool/code-dispatch', 'tool/code-dispatch-start'}:
+        content = data.get('content')
         return [{**base, 'kind': 'tool', 'phase': 'result' if kind == 'tool/code-dispatch' else 'call',
                  'call_id': data.get('subCallId'), 'name': data.get('name'),
-                 'result': data.get('content'), 'error': data.get('isError'),
+                 'result': content, 'content': tool_content(content), 'error': data.get('isError'),
                  'details': {key: data[key] for key in ('rootCallId', 'parentCallId') if key in data}}]
     if kind in {'turn/start', 'turn/end', 'llm/retry', 'llm/retry-started', 'command/done'}:
         return [{**base, 'kind': 'work', 'text': kind, 'details': data}]

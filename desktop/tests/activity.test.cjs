@@ -277,3 +277,29 @@ test('per-response usage uses the native source record; a usage-only page retain
   assert.match(text(tree), /Recorded turn \(content outside this page\)/);
   assert.doesNotMatch(text(tree), /association unavailable/);
 });
+
+
+test('tool results render readable text, image previews and fallback notes without dumping encodings', async t => {
+  const { EventCard } = await components(t);
+  const image = 'iVBORw0KGgoAAAANSUhEUg';
+  let tree;
+  await act(async () => { tree = create(React.createElement(EventCard, { event: {
+    id: '1', kind: 'tool', role: undefined, phase: 'result', name: 'view_image', time: null,
+    call_id: 'call-1', tool_type: 'custom_tool_call_output', source: { runtime: 'codex', trace: 'sanitized', offset: 5 },
+    result: `[{"type":"input_image","image_url":"data:image/png;base64,${image}"}]`,
+    content: [ { type: 'text', text: 'Rendered **tool** text.' },
+               { type: 'image', mime: 'image/png', data: image },
+               { type: 'unknown', label: 'future_block' } ] } })); });
+  t.after(async () => { await act(async () => tree.unmount()); });
+
+  // Text is normal Markdown, an image becomes a bounded preview plus an attachment link.
+  assert.ok(tree.root.findAllByType('strong').some(node => node.children.join('') === 'tool'));
+  assert.equal(tree.root.findByType('img').props.src, `data:image/png;base64,${image}`);
+  assert.ok(tree.root.findAllByType('a').some(node => String(node.props.download).startsWith('tool-image')));
+  assert.match(text(tree), /Unsupported tool content \(/);
+  assert.match(text(tree), /future_block/);
+  // Raw protocol fields stay in the disclosure; the encoded result is never dumped as text.
+  const card = tree.root.findByType('details');
+  assert.ok(card.findAll(node => node.children.includes('call-1')).length >= 1);
+  assert.equal(tree.root.findAllByType('pre').length, 0);
+});

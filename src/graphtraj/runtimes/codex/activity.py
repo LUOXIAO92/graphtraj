@@ -1,5 +1,5 @@
 """Readable Codex rollout messages, calls, results and token-count observations."""
-from graphtraj.runtimes.activity import fingerprint, text_content, usage_fact
+from graphtraj.runtimes.activity import fingerprint, text_content, tool_content, usage_fact
 
 
 def project(record: dict, context: dict) -> list[dict]:
@@ -35,9 +35,10 @@ def project(record: dict, context: dict) -> list[dict]:
                      'name': name, 'tool_type': kind, 'phase': 'call',
                      'arguments': payload.get('arguments', payload.get('input', payload.get('action')))}]
         if kind in {'function_call_output', 'custom_tool_call_output', 'local_shell_call_output'}:
+            output = payload.get('output')
             return [{**base, 'kind': 'tool', 'call_id': payload.get('call_id'),
                      'name': context.get('tools', {}).get(payload.get('call_id')),
-                     'phase': 'result', 'result': payload.get('output')}]
+                     'phase': 'result', 'result': output, 'content': tool_content(output)}]
         if kind == 'reasoning':
             summary = text_content(payload.get('summary'))
             blocks = payload.get('content') or []

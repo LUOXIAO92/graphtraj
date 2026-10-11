@@ -70,7 +70,10 @@ def test_native_main_two_projects_reopen_and_attribution(
     other_config.parent.mkdir()
     other_config.write_text(default_configuration_content(unrelated, unrelated))
     rows += [turn(unrelated, 'other'), message('unrelated private output'), count(2400, 900)]
-    rows += [turn(root, 'back'), message('project one again'), count(2500)]
+    rows += [{'type': 'event_msg', 'payload': {'type': 'token_count', 'info': {
+        'total_token_usage': {'input_tokens': 2450, 'cached_input_tokens': 1225, 'output_tokens': 245},
+    }}}]
+    rows += [turn(root, 'back'), message('project one again'), count(2550)]
     write_records(source, rows)
     nested = root / 'source-subdirectory'
     nested.mkdir()
@@ -86,14 +89,14 @@ def test_native_main_two_projects_reopen_and_attribution(
     assert [e['text'] for e in two['events'] if e['kind'] == 'message'] == ['project two Main output']
     assert 'unrelated private output' not in json.dumps([one, two])
     facts = [e['usage'] for e in one['events'] if e['kind'] == 'usage']
-    assert [(f['cumulative']['input_tokens'], f['previous_cumulative']['input_tokens']) for f in facts] == [(1100, 1000), (2500, 2400)]
+    assert [(f['cumulative']['input_tokens'], f['previous_cumulative']['input_tokens']) for f in facts] == [(1100, 1000), (2550, 2450)]
     assert all(f['ticket_id'] is None and f['agent'] == alias for f in facts)
     assert source.as_posix() in json.dumps(one)
     # Clear only observer-process caches to model reconnection; durable source and cursor stay intact.
     from graphtraj.execution.desktop_activity import _READERS
     _READERS.clear()
     assert project_query(root, alias=alias, cursor=one['cursor'])['events'] == []
-    write_records(source, [turn(second, 'new-other'), message('second append'), count(2800, 300),
+    write_records(source, [turn(second, 'new-other'), message('second append'), count(2800, 250),
                            turn(root, 'new-first'), message('first append'), count(2900)], 'a')
     appended = project_query(root, alias=alias, cursor=one['cursor'])
     assert [e['text'] for e in appended['events'] if e['kind'] == 'message'] == ['first append']

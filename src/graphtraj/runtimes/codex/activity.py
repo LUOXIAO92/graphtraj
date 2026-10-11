@@ -38,20 +38,22 @@ def project(record: dict, context: dict) -> list[dict]:
                      'text': summary or 'Reasoning content is not readable in this record.'}]
     if record.get('type') == 'event_msg' and kind == 'token_count':
         info = payload.get('info') or {}
+        total = info.get('total_token_usage')
+        previous = context.get('total')
+        if isinstance(total, dict):
+            # Even an incomplete observation is the native baseline for later records.
+            context['total'] = total
         raw = info.get('last_token_usage')
         if not isinstance(raw, dict):
             return []
         # Codex exposes a cumulative counter rather than a provider request ID.
         # A changed counter identifies a usage observation; identical replayed
         # counters must never be charged twice. Do not invent a provider ID.
-        total = info.get('total_token_usage')
         observation = fingerprint(total) if total else None
         usage = usage_fact(raw, 'codex', f'counter:{observation}' if observation else None, 'snapshot')
-        usage.update(cumulative=total, previous_cumulative=context.get('total'), observation_id=observation,
+        usage.update(cumulative=total, previous_cumulative=previous, observation_id=observation,
                      identity_basis='native-cumulative-counter',
                      coverage='Call identity uses the native cumulative counter; provider request ID is not recorded.')
-        if isinstance(total, dict):
-            context['total'] = total
         return [{**base, 'kind': 'usage', 'usage': usage}]
     if record.get('type') == 'event_msg' and kind in {'task_started', 'task_complete', 'turn_aborted', 'error'}:
         return [{**base, 'kind': 'work', 'text': kind, 'details': payload}]

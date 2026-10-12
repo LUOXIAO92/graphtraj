@@ -441,10 +441,25 @@ def _deliver_ticket(
         ):
             raise RunnerError("TICKET_NOT_READY", "The Ticket needs active disposition and completed dependencies.")
         generation = state.get("active_team_ordinal")
-        if parent_alias is None and generation is None:
-            if state["status"] != "ready":
+        team = None
+        if generation is not None:
+            team = yaml.safe_load((evidence / "teams" / str(generation) / "team.yml").read_text())
+        # Cleanup retires members, not their Team or result history. An explicit
+        # reopening may prepare resources for fresh members of that same Team.
+        reopened = False
+        if (parent_alias is None and team is not None and team["status"] == "active"
+                and state["status"] == "reworking"
+                and all(member["session_ref"] is None for member in team["members"].values())):
+            from graphtraj.graph.delivery_state import current_result_rework_cause
+
+            cause = current_result_rework_cause(
+                read_worldline(project.state_directory, project.harness_root), state, team,
+            )
+            reopened = cause is not None and cause["event"] == "ticket-graph-revised"
+        if parent_alias is None and (generation is None or reopened):
+            if not reopened and state["status"] != "ready":
                 raise RunnerError("TICKET_ALREADY_ACTIVE", "The selected Ticket is not ready.")
-            generation = 1
+            generation = generation or 1
             worktree = project.worktree_root / (task.ticket_id + "-" + task.ticket_name)
             branch = "agent/" + task.ticket_id + "-" + task.ticket_name
             if os.path.lexists(worktree):
@@ -462,8 +477,6 @@ def _deliver_ticket(
             if run_git(worktree, "status", "--porcelain", "--untracked-files=all"):
                 raise RunnerError("WORKTREE_CONFLICT", "The unregistered Ticket Worktree is not clean.")
         else:
-            team_file = evidence / "teams" / str(generation) / "team.yml"
-            team = yaml.safe_load(team_file.read_text())
             if team["status"] != "active":
                 raise RunnerError("team-not-active", "The task Team has stopped starting work.")
             worktree = project.harness_root / state["worktree"]
@@ -472,6 +485,8 @@ def _deliver_ticket(
                 _require_dispatch_roles(project, Batch((task,), b""), parent)
                 if parent["ticket_id"] != task.ticket_id or parent["team_generation"] != generation:
                     raise RunnerError("authority-denied", "Child must retain its parent's active task.")
+        if not worktree.is_dir():
+            raise RunnerError("WORKTREE_CONFLICT", "The task Worktree is unavailable.")
     if state["status"] == "resolving-integration":
         from graphtraj.teams.merge_resolution import integration_assignment
 

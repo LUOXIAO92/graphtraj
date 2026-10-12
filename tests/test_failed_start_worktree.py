@@ -183,3 +183,99 @@ def test_foreign_canonical_worktree_is_not_retried_or_cleaned(
     refused = _cleanup(installed_commands, root, env)
     assert yaml.safe_load(refused.stdout)['error']['code'] == 'cleanup-ownership-mismatch'
     assert worktree.is_dir()
+
+
+@pytest.mark.parametrize('transport', ['cli', 'tool'])
+def test_cleaned_task_reopens_with_fresh_member_and_preserved_history(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+    transport: str,
+) -> None:
+    """Public cleanup/revise/swarm restores resources without reviving an identity."""
+    import json
+    import subprocess
+
+    root, worktree, batch, env = _prepare(
+        installed_commands, temporary_git_repository, fake_codex, tmp_path,
+    )
+    env.update(FAKE_CODEX_LIFECYCLE_ACTION='complete-team-round',
+               GRAPHTRAJ_AGENT_RUNNER=str(installed_commands.runner))
+    launched = _launch(installed_commands, root, batch, env)
+    assert launched.returncode == 0, launched.stdout + launched.stderr
+    old_alias = yaml.safe_load(launched.stdout)['tasks'][0]['alias']
+    sessions = root / '.graphtraj/runner/sessions'
+    wait_for_file(sessions / old_alias / 'execution.yml')
+    reports = run_process([str(installed_commands.runner), 'reports', old_alias], cwd=root, env=env)
+    submission = yaml.safe_load(reports.stdout)['submissions'][-1]
+    accepted = run_process([
+        str(installed_commands.runner), 'decide-result', '--submission-id', submission['event_id'],
+        '--commit', submission['candidate'], '--decision', 'accepted', '--reason', 'Fixture delivered',
+        '--evidence-ref', submission['evidence_refs'][0],
+    ], cwd=root, env=env)
+    assert accepted.returncode == 0, accepted.stdout + accepted.stderr
+    integrated = run_process([
+        str(installed_commands.product), 'ticket', 'integrate', '--ticket-id', '268',
+        '--', sys.executable, '-c', 'pass',
+    ], cwd=root, env=env, timeout=30)
+    assert integrated.returncode == 0, integrated.stdout + integrated.stderr
+    cleaned = _cleanup(installed_commands, root, env)
+    assert cleaned.returncode == 0, cleaned.stdout + cleaned.stderr
+    assert not worktree.exists()
+    evidence = root / '.graphtraj/state/tickets/268-failed-start'
+    retained = {path: path.read_bytes() for path in (evidence / 'teams/1').rglob('*') if path.is_file()}
+    original_batch = batch.read_bytes()
+    graph = run_process([str(installed_commands.product), 'ticket', 'graph'], cwd=root, env=env)
+    previous = yaml.safe_load(graph.stdout)['tickets'][0]
+    definition = {**_ticket('268', 'failed-start'), 'schema_version': 2, 'parent_id': None,
+                  'disposition': 'active', 'replaced_by': [], 'retirement_reason': None,
+                  'current_definition': previous['current_definition']}
+    revision = root / 'reopen.yml'
+    revision.write_text(yaml.safe_dump({
+        'product_preserving': True, 'caused_by_event_ids': [], 'evidence_refs': ['swarm.yml'],
+        'tickets': [definition], 'reopen_ticket_ids': ['268'],
+    }))
+    revised = run_process([str(installed_commands.product), 'ticket', 'revise',
+                           '--revision-file', str(revision)], cwd=root, env=env)
+    assert revised.returncode == 0, revised.stdout + revised.stderr
+    env.pop('FAKE_CODEX_LIFECYCLE_ACTION')
+
+    # A foreign leftover must fail before allocating any apparent member, even
+    # on repeated requests. Removing only this fixture directory permits retry.
+    worktree.mkdir()
+    for _ in range(2):
+        failed = _launch(installed_commands, root, batch, env)
+        assert failed.returncode == 1
+        assert yaml.safe_load(failed.stdout)['tasks'][0]['error']['code'] == 'worktree-conflict'
+        assert not list(sessions.iterdir())
+    worktree.rmdir()
+    if transport == 'cli':
+        retried = _launch(installed_commands, root, batch, env)
+        assert retried.returncode == 0, retried.stdout + retried.stderr
+        result = yaml.safe_load(retried.stdout)
+    else:
+        retried = subprocess.run(
+            [str(installed_commands.product.with_name('graphtraj-tool'))],
+            input=json.dumps({'action': 'execute', 'feature': 'swarm',
+                              'arguments': yaml.safe_load(original_batch)}) + '\n',
+            cwd=root, env=env, text=True, capture_output=True, timeout=30,
+        )
+        assert retried.returncode == 0, retried.stdout + retried.stderr
+        response = json.loads(retried.stdout)
+        assert not response.get('failed', False), response
+        result = response['result']
+    member = result['tasks'][0]
+    assert member['launch_status'] == 'launched', result
+    assert member['alias'] != old_alias
+    wait_for_file(sessions / member['alias'] / 'execution.yml')
+    assert Path(member['worktree_path']) == worktree and (worktree / '.git').is_file()
+    mapping = yaml.safe_load((sessions / member['alias'] / 'mapping.yml').read_text())
+    assert mapping['parent'] is None and mapping['team_generation'] == 1
+    team = yaml.safe_load((evidence / 'teams/1/team.yml').read_text())
+    assert team['members']['engineer']['session_ref'] == member['alias']
+    assert not (sessions / old_alias).exists()
+    assert batch.read_bytes() == original_batch
+    for path, content in retained.items():
+        if path.name != 'team.yml':
+            assert path.read_bytes() == content, path

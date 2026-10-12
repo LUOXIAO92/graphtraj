@@ -84,3 +84,19 @@ test('dependency ranks retain inactive historical tasks', () => {
   assert.ok(positions['3'].x > positions['1'].x);
   assert.ok(positions['4'].x > positions['3'].x);
 });
+
+test('parallel collapsed dependencies retain every native edge with finite routes', () => {
+  const graph = { tickets: [task('126', null), task('127', null), task('147', null),
+    task('133', '127'), task('143', '127'), task('139', '127'),
+    task('148', '147', ['133', '143']), task('150', '147', ['139'])] };
+  const original = JSON.stringify(graph);
+  for (const expanded of [[], ['127'], ['127', '147']]) {
+    const view = monitorGraph(graph, new Set(expanded));
+    assert.equal(view.edges.length, 3);
+    assert.equal(new Set(view.edges.map(edge => edge.id)).size, 3);
+    assert.ok(view.nodes.every(node => Number.isFinite(node.x) && Number.isFinite(node.y)));
+    assert.ok(view.edges.every(edge => edge.vertices.every(point => Number.isFinite(point.x) && Number.isFinite(point.y))));
+    for (const edge of view.edges) assert.ok(graph.tickets.find(ticket => ticket.ticket_id === edge.ticket).dependencies.includes(edge.dependency));
+  }
+  assert.equal(JSON.stringify(graph), original);
+});

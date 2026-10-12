@@ -48,7 +48,7 @@ export function monitorGraph(graph: Graph, expanded: ReadonlySet<string>, sizes:
       const node: MonitorNode = { id, ticket, ...size, x: 0, y: 0, children: descendants, expanded: open, frame };
       return { node, inner, size: frame ?? size };
     });
-    const layout = new dagre.graphlib.Graph({ multigraph: true }).setGraph({ rankdir: 'LR', ranksep: 120, nodesep: 64, edgesep: 28, marginx: 0, marginy: 0 });
+    const layout = new dagre.graphlib.Graph().setGraph({ rankdir: 'LR', ranksep: 120, nodesep: 64, edgesep: 28, marginx: 0, marginy: 0 });
     for (const branch of branches) layout.setNode(branch.node.id, branch.size);
     // Map each real endpoint to its branch at this hierarchy level solely for layout.
     const owners = new Map<string, string>();
@@ -57,13 +57,19 @@ export function monitorGraph(graph: Graph, expanded: ReadonlySet<string>, sizes:
       for (const child of children.get(id) ?? []) own(child, root);
     }
     ids.forEach(id => own(id, id));
+    // Parallel projected dependencies share one weighted ordering constraint.
+    // Dagre can produce NaN routes for parallel edges; native edges and ports
+    // remain separate below and in the canvas.
     for (const edge of nativeEdges) {
       const from = owners.get(edge.dependency), to = owners.get(edge.ticket);
-      if (from && to && from !== to) layout.setEdge(from, to, {}, edge.id);
+      if (from && to && from !== to) layout.setEdge(from, to, { weight: (layout.edge(from, to)?.weight ?? 0) + 1 });
     }
     dagre.layout(layout);
     const routes = new Map<string, { x: number; y: number }[]>();
-    for (const edge of layout.edges()) routes.set(edge.name!, layout.edge(edge).points.slice(1, -1));
+    for (const edge of nativeEdges) {
+      const from = owners.get(edge.dependency), to = owners.get(edge.ticket);
+      if (from && to && from !== to) routes.set(edge.id, layout.edge(from, to).points.slice(1, -1));
+    }
     const result: MonitorNode[] = [];
     for (const branch of branches) {
       const pos = layout.node(branch.node.id);

@@ -66,6 +66,7 @@ export const TaskCanvas = forwardRef<TaskCanvasHandle, Props>(function TaskCanva
   const first = useRef(true);
   const pendingLocate = useRef<string | null>(null);
   const pendingToggle = useRef<string | null>(null);
+  const pathLabel = useRef<HTMLOutputElement>(null);
   // Polling unchanged native facts must not rebuild cells or move the viewport.
   const topology = JSON.stringify([props.graph.tickets, [...props.expanded].sort()]);
 
@@ -99,6 +100,13 @@ export const TaskCanvas = forwardRef<TaskCanvasHandle, Props>(function TaskCanva
     });
     engine.current = graph;
     graph.on('blank:click', () => current.current.select(null));
+    // A single readable label avoids collisions inside dense routing channels.
+    graph.on('edge:mouseenter', ({ edge }) => {
+      const data = edge.getData();
+      const title = (id: string) => current.current.graph.tickets.find(ticket => ticket.ticket_id === id)?.title ?? '';
+      if (pathLabel.current) pathLabel.current.textContent = `#${data.dependency} ${title(data.dependency)} → #${data.ticket} ${title(data.ticket)}`;
+    });
+    graph.on('edge:mouseleave', () => { if (pathLabel.current) pathLabel.current.textContent = ''; });
     return () => { graph.dispose(); engine.current = null; };
   }, []);
 
@@ -112,6 +120,7 @@ export const TaskCanvas = forwardRef<TaskCanvasHandle, Props>(function TaskCanva
     measure.className = 'native-task-measure';
     container.current!.append(measure);
     cards.current.clear();
+    if (pathLabel.current) pathLabel.current.textContent = '';
     for (const ticket of data.graph.tickets) {
       const element = card(ticket, children.get(ticket.ticket_id)!.map(id => tickets.get(id)!), data.expanded.has(ticket.ticket_id),
         () => current.current.select(ticket.ticket_id), () => {
@@ -193,11 +202,6 @@ export const TaskCanvas = forwardRef<TaskCanvasHandle, Props>(function TaskCanva
       edge.attr('line/stroke', props.selected && related ? '#365f9c' : '#8192a6');
       edge.attr('line/strokeWidth', props.selected && related ? 3 : 1.6);
       edge.attr('line/opacity', visible ? 1 : .15);
-      edge.setLabels(data.projected && props.selected && related ? [{
-        attrs: { label: { text: `#${data.dependency} → #${data.ticket}`, fill: '#365f9c', fontSize: 11 },
-          body: { fill: '#fff', stroke: '#dce2e8', rx: 3, ry: 3 } },
-        position: { distance: .5, options: { ensureLegibility: true } },
-      }] : []);
     }
   }, [topology, props.selected, props.matches]);
 
@@ -206,6 +210,7 @@ export const TaskCanvas = forwardRef<TaskCanvasHandle, Props>(function TaskCanva
   }, [props.active]);
 
   return <><div className="native-task-canvas" ref={container} aria-label="Native task canvas"/>
+    <output ref={pathLabel} className="native-path-label" aria-live="polite"/>
     <div className="native-task-zoom"><button aria-label="Zoom in" onClick={() => engine.current?.zoom(.15)}>+</button>
       <button aria-label="Zoom out" onClick={() => engine.current?.zoom(-.15)}>−</button>
       <span>Drag to pan · Ctrl/⌘ + scroll to zoom</span></div></>;

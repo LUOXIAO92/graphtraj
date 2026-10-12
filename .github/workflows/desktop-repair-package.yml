@@ -3,7 +3,7 @@ name: Package direct-save desktop 295
 # A dedicated push works before this workflow exists on the default branch.
 on:
   push:
-    branches: [agent/295-desktop-direct-settings-save]
+    branches: [agent/295-desktop-direct-settings-save, agent/300-desktop-ux-platform-packages]
 
 permissions:
   contents: read

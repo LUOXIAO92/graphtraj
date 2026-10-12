@@ -293,7 +293,10 @@ def revise_tickets(
         if not meaningful:
             raise ValueError("Ticket revision does not introduce a new durable fact")
         _validate_graph(proposed)
-        _require_reopened_ancestors(proposed, {key: record for key, (_, record) in current.items()})
+        before = {key: record for key, (_, record) in current.items()}
+        corrections = revision.get("completed_input_corrections", {})
+        _validate_completed_input_corrections(proposed, before, revised, corrections)
+        _require_reopened_ancestors(proposed, before, set(corrections))
         if revision.get("dry_run", False):
             from graphtraj.graph.delivery_worldline import _validate_evidence, _validate_causes, read_worldline
 
@@ -311,6 +314,7 @@ def revise_tickets(
             "affected_ticket_ids": list(revised),
             "product_preserving": True,
             "reopened_ticket_ids": reopened,
+            "completed_input_corrections": corrections,
             "reopened_results": {
                 key: {"team_ordinal": current[key][1]["active_team_ordinal"],
                       "candidate": current[key][1]["current_candidate"]}
@@ -386,6 +390,7 @@ def read_graph(state: Path) -> dict[str, Any]:
         states = _load_states(tickets)
         records = {key: record for key, (_, record) in states.items()}
         _validate_graph(records)
+        delivery = _delivery_facts(state, records)
         rendered = []
         for ticket_id in sorted(records, key=int):
             record = dict(records[ticket_id])
@@ -395,6 +400,7 @@ def read_graph(state: Path) -> dict[str, Any]:
                 parent_known=record.get("schema_version") == 2,
                 children=children,
                 progress={"total": len(children), "completed": completed},
+                delivery=delivery[ticket_id],
                 ready=record["active"] and record["status"] in {"pending", "ready"}
                 and all(_result_complete(records, item) for item in record["dependencies"]),
             )
@@ -402,6 +408,38 @@ def read_graph(state: Path) -> dict[str, Any]:
         return {"schema_version": 2, "tickets": rendered}
     finally:
         _unlock(lock)
+
+
+def _delivery_facts(state: Path, records: dict[str, dict[str, Any]]) -> dict[str, list[dict]]:
+    """Project actual integration and summary acceptance from retained events.
+
+    Membership alone does not establish receipt. Summary completion records
+    identify the exact checked results; reopened or withdrawn tasks cannot
+    inherit a current completion claim from their old events.
+    """
+    from graphtraj.graph.delivery_worldline import read_worldline
+
+    latest: dict[str, dict] = {}
+    for event in read_worldline(state):
+        if event["event"] in {"ticket-integrated", "ticket-integration-conflict-resolved", "ticket-completed"}:
+            latest[event["ticket_id"]] = event
+    result: dict[str, list[dict]] = {key: [] for key in records}
+    for key, event in latest.items():
+        record = records.get(key)
+        if not record or not record["active"] or record["status"] != "integrated":
+            continue
+        if event.get("candidate") != record["current_candidate"]:
+            continue
+        fact = {field: event.get(field) for field in (
+            "event_id", "event", "ticket_id", "candidate", "dev_commit", "reason", "evidence_refs",
+        )}
+        result[key].append({**fact, "accepted_definition": event.get("current_definition")})
+        if event["event"] == "ticket-completed":
+            for child, definition in event.get("checked_definitions", {}).items():
+                child_record = records.get(child)
+                if child_record and child_record["active"] and child_record["status"] == "integrated":
+                    result[child].append({**fact, "accepted_definition": definition})
+    return result
 
 
 def update_ticket_state(
@@ -747,8 +785,41 @@ def _result_complete(records: dict[str, dict[str, Any]], ticket_id: str) -> bool
     return not unfinished and not cancelled
 
 
+def _validate_completed_input_corrections(
+    records: dict[str, dict[str, Any]],
+    before: dict[str, dict[str, Any]],
+    revised: dict[str, dict[str, Any]],
+    corrections: dict[str, str],
+) -> None:
+    """Check the narrow historical-input correction declared by the task owner.
+
+    The existing revision authority, evidence and immutable definitions retain
+    the semantic decision. Only additive, already-completed inputs qualify;
+    this declaration cannot change lifecycle, ownership or execution budgets.
+    """
+    for key, reason in corrections.items():
+        if key not in revised or key not in before or not reason.strip():
+            raise ValueError("A completed input correction needs an existing revised task and its reason")
+        old, record = before[key], records[key]
+        added = set(record["dependencies"]) - set(old["dependencies"])
+        if (
+            old.get("schema_version") != 2
+            or old["status"] != "integrated" or record["status"] != "integrated"
+            or not old["active"] or not record["active"]
+            or not added or not set(old["dependencies"]) <= set(record["dependencies"])
+            or any(old.get(field) != record.get(field)
+                   for field in protocol.TASK_PROPERTIES if field not in {"body", "dependencies"})
+            or read_execution_budget(old["body"]) != read_execution_budget(record["body"])
+            or any(dependency not in before or not _result_complete(before, dependency)
+                   or not _result_complete(records, dependency) for dependency in added)
+        ):
+            raise ValueError("Completed input correction may only add already-completed inputs to unchanged accepted scope")
+
+
 def _require_reopened_ancestors(
-    records: dict[str, dict[str, Any]], before: dict[str, dict[str, Any]]
+    records: dict[str, dict[str, Any]],
+    before: dict[str, dict[str, Any]],
+    completed_input_corrections: set[str] | frozenset[str] = frozenset(),
 ) -> None:
     """Require explicit reopening when necessary scope or its results change."""
     for child, record in records.items():
@@ -757,7 +828,8 @@ def _require_reopened_ancestors(
             old.get(field) != record.get(field)
             for field in ("body", "dependencies", "disposition", "replaced_by", "retirement_reason")
         )
-        if record["status"] == "integrated" and record["active"] and changed_scope:
+        if (record["status"] == "integrated" and record["active"] and changed_scope
+                and child not in completed_input_corrections):
             raise ValueError(f"Explicitly reopen completed task {child} when revising its required scope")
         # ponytail: scan replacement chains per revision; index reverse edges if project size warrants it.
         unfinished, cancelled, _ = _required_results(records, [child])

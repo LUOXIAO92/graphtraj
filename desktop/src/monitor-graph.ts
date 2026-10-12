@@ -4,8 +4,18 @@ import type { Graph, Ticket } from '../electron/types';
 export type Size = { width: number; height: number };
 export type MonitorNode = Size & { id: string; ticket: Ticket; x: number; y: number;
   children: string[]; expanded: boolean; frame?: Size };
-export type MonitorEdge = { id: string; source: string; target: string;
-  dependencies: { dependency: string; ticket: string }[]; projected: boolean; vertices: { x: number; y: number }[] };
+export type TaskRelation = { source: string; target: string; kind: 'dependency' | 'replacement' };
+export type MonitorEdge = TaskRelation & { id: string;
+  relations: TaskRelation[]; projected: boolean; vertices: { x: number; y: number }[] };
+
+/** Preserve direct native relationships, including each step of replacement chains. */
+export function taskRelations(graph: Graph): TaskRelation[] {
+  const ids = new Set(graph.tickets.map(ticket => ticket.ticket_id));
+  return graph.tickets.flatMap(ticket => [
+    ...ticket.dependencies.filter(id => ids.has(id)).map(source => ({ source, target: ticket.ticket_id, kind: 'dependency' as const })),
+    ...ticket.replaced_by.filter(id => ids.has(id)).map(target => ({ source: ticket.ticket_id, target, kind: 'replacement' as const })),
+  ]);
+}
 
 /** Read only explicit native parents; legacy unknown parents remain unknown. */
 export function taskChildren(graph: Graph): Map<string, string[]> {
@@ -28,8 +38,7 @@ export function monitorGraph(graph: Graph, expanded: ReadonlySet<string>, sizes:
   const roots = graph.tickets.filter(ticket => !ticket.parent_id || !tickets.has(ticket.parent_id)).map(ticket => ticket.ticket_id);
   const endpoints = new Map<string, string>();
   const nodes: MonitorNode[] = [];
-  const nativeEdges = graph.tickets.flatMap(ticket => ticket.dependencies.filter(id => tickets.has(id))
-    .map(dependency => ({ id: JSON.stringify([dependency, ticket.ticket_id]), dependency, ticket: ticket.ticket_id })));
+  const nativeEdges = taskRelations(graph).map(edge => ({ ...edge, id: JSON.stringify([edge.kind, edge.source, edge.target]) }));
 
   function project(id: string, visible: string): void {
     endpoints.set(id, visible);
@@ -61,13 +70,13 @@ export function monitorGraph(graph: Graph, expanded: ReadonlySet<string>, sizes:
     // Dagre can produce NaN routes for parallel edges. The display projection
     // below retains all native dependencies within each visible directed pair.
     for (const edge of nativeEdges) {
-      const from = owners.get(edge.dependency), to = owners.get(edge.ticket);
+      const from = owners.get(edge.source), to = owners.get(edge.target);
       if (from && to && from !== to) layout.setEdge(from, to, { weight: (layout.edge(from, to)?.weight ?? 0) + 1 });
     }
     dagre.layout(layout);
     const routes = new Map<string, { x: number; y: number }[]>();
     for (const edge of nativeEdges) {
-      const from = owners.get(edge.dependency), to = owners.get(edge.ticket);
+      const from = owners.get(edge.source), to = owners.get(edge.target);
       if (from && to && from !== to) routes.set(edge.id, layout.edge(from, to).points.slice(1, -1));
     }
     const result: MonitorNode[] = [];
@@ -87,29 +96,33 @@ export function monitorGraph(graph: Graph, expanded: ReadonlySet<string>, sizes:
   nodes.push(...placed.nodes);
   const pairs = new Map<string, MonitorEdge>();
   for (const edge of nativeEdges) {
-    const source = endpoints.get(edge.dependency)!, target = endpoints.get(edge.ticket)!;
-    const id = JSON.stringify([source, target]);
+    const source = endpoints.get(edge.source)!, target = endpoints.get(edge.target)!;
+    const id = JSON.stringify([edge.kind, source, target]);
     const existing = pairs.get(id);
-    if (existing) existing.dependencies.push({ dependency: edge.dependency, ticket: edge.ticket });
-    else pairs.set(id, { id, source, target,
-      dependencies: [{ dependency: edge.dependency, ticket: edge.ticket }],
+    const relation = { source: edge.source, target: edge.target, kind: edge.kind };
+    if (existing) existing.relations.push(relation);
+    else pairs.set(id, { id, source, target, kind: edge.kind,
+      relations: [relation],
       vertices: placed.routes.get(edge.id) ?? [],
-      projected: source !== edge.dependency || target !== edge.ticket });
+      projected: source !== edge.source || target !== edge.target });
   }
   const edges = [...pairs.values()];
   return { nodes, edges, endpoints };
 }
 
-/** Trace real upstream/downstream paths, including the selected summary's internals. */
-export function dependencyFocus(graph: Graph, selected: string | null): Set<string> {
+/** Trace native input and replacement paths, including selected summary internals. */
+export function taskFocus(graph: Graph, selected: string | null): Set<string> {
   if (!selected) return new Set(graph.tickets.map(ticket => ticket.ticket_id));
   const children = taskChildren(graph);
   const seeds = new Set<string>();
   function include(id: string): void { seeds.add(id); (children.get(id) ?? []).forEach(include); }
   include(selected);
-  const upstream = new Map(graph.tickets.map(ticket => [ticket.ticket_id, ticket.dependencies]));
+  const upstream = new Map(graph.tickets.map(ticket => [ticket.ticket_id, [] as string[]]));
   const downstream = new Map(graph.tickets.map(ticket => [ticket.ticket_id, [] as string[]]));
-  for (const ticket of graph.tickets) for (const dep of ticket.dependencies) downstream.get(dep)?.push(ticket.ticket_id);
+  for (const edge of taskRelations(graph)) {
+    upstream.get(edge.target)?.push(edge.source);
+    downstream.get(edge.source)?.push(edge.target);
+  }
   const focus = new Set(seeds);
   for (const direction of [upstream, downstream]) {
     const seen = new Set(seeds), queue = [...seeds];

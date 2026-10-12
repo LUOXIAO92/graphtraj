@@ -3,13 +3,13 @@ const assert = require('node:assert/strict');
 const path = require('node:path');
 const vm = require('node:vm');
 const { build } = require('esbuild');
-let monitorGraph, dependencyFocus, dependencyTerminals, taskStatus, projectBounds;
+let monitorGraph, taskFocus, dependencyTerminals, taskStatus, projectBounds;
 test.before(async () => {
   const result = await build({ entryPoints: [path.join(__dirname, '../src/monitor-graph.ts')],
     bundle: true, platform: 'node', format: 'cjs', write: false });
   const module = { exports: {} };
   vm.runInNewContext(result.outputFiles[0].text, { module, exports: module.exports, structuredClone });
-  ({ monitorGraph, dependencyFocus, dependencyTerminals, taskStatus, projectBounds } = module.exports);
+  ({ monitorGraph, taskFocus, dependencyTerminals, taskStatus, projectBounds } = module.exports);
 });
 const task = (id, parent_id, dependencies = []) => ({ ticket_id: id, title: `Real title ${id}`, parent_id,
   schema_version: 2, ticket_name: `task-${id}`, dependencies, active: true, status: 'pending', replaced_by: [] });
@@ -27,9 +27,9 @@ test('native hierarchy is lossless across nested expansion, contraction and proj
     assert.equal(result.edges.length, 3);
     for (const edge of result.edges) {
       assert.ok(ids.has(edge.source) && ids.has(edge.target));
-      assert.ok(graph.tickets.find(ticket => ticket.ticket_id === edge.dependencies[0].ticket).dependencies.includes(edge.dependencies[0].dependency));
+      assert.ok(graph.tickets.find(ticket => ticket.ticket_id === edge.relations[0].target).dependencies.includes(edge.relations[0].source));
     }
-    const first = result.edges.find(edge => edge.dependencies.some(item => item.dependency === '1'));
+    const first = result.edges.find(edge => edge.relations.some(item => item.source === '1'));
     assert.equal(first.source, open.includes('C') ? '1' : open.includes('A') ? 'C' : 'A');
     assert.equal(first.target, open.includes('B') ? '2' : 'B');
     assert.equal(JSON.stringify(graph), original);
@@ -59,9 +59,9 @@ test('measured long titles and nested frames have separate sibling space', () =>
 
 test('selection traces real dependencies and selected summary internals, excluding unrelated branches', () => {
   const graph = input();
-  assert.deepEqual([...dependencyFocus(graph, 'A')].sort(), ['1', '2', '3', '4', 'A', 'C']);
-  assert.deepEqual([...dependencyFocus(graph, '2')].sort(), ['1', '2', '3', '4']);
-  assert.equal(dependencyFocus(graph, null).size, graph.tickets.length);
+  assert.deepEqual([...taskFocus(graph, 'A')].sort(), ['1', '2', '3', '4', 'A', 'C']);
+  assert.deepEqual([...taskFocus(graph, '2')].sort(), ['1', '2', '3', '4']);
+  assert.equal(taskFocus(graph, null).size, graph.tickets.length);
 });
 
 test('legacy unknown parents remain standalone; old display groups cannot create parents', () => {
@@ -94,10 +94,10 @@ test('parallel collapsed dependencies retain every native edge with finite route
     const view = monitorGraph(graph, new Set(expanded));
     assert.equal(view.edges.length, expanded.length ? 3 : 1);
     assert.equal(new Set(view.edges.map(edge => edge.id)).size, view.edges.length);
-    assert.equal(view.edges.flatMap(edge => edge.dependencies).length, 3);
+    assert.equal(view.edges.flatMap(edge => edge.relations).length, 3);
     assert.ok(view.nodes.every(node => Number.isFinite(node.x) && Number.isFinite(node.y)));
     assert.ok(view.edges.every(edge => edge.vertices.every(point => Number.isFinite(point.x) && Number.isFinite(point.y))));
-    for (const edge of view.edges) assert.ok(graph.tickets.find(ticket => ticket.ticket_id === edge.dependencies[0].ticket).dependencies.includes(edge.dependencies[0].dependency));
+    for (const edge of view.edges) assert.ok(graph.tickets.find(ticket => ticket.ticket_id === edge.relations[0].target).dependencies.includes(edge.relations[0].source));
   }
   assert.equal(JSON.stringify(graph), original);
 });
@@ -111,14 +111,14 @@ test('collapsed visible pairs aggregate only matching directions and restore rea
   const original = JSON.stringify(graph);
   const collapsed = monitorGraph(graph, new Set());
   assert.equal(collapsed.edges.filter(e => e.source === '252' && e.target === '260').length, 1);
-  assert.equal(collapsed.edges.find(e => e.source === '252' && e.target === '260').dependencies.length, 2);
-  assert.equal(collapsed.edges.find(e => e.source === '260' && e.target === '275').dependencies.length, 2);
+  assert.equal(collapsed.edges.find(e => e.source === '252' && e.target === '260').relations.length, 2);
+  assert.equal(collapsed.edges.find(e => e.source === '260' && e.target === '275').relations.length, 2);
   assert.ok(collapsed.edges.some(e => e.source === '260' && e.target === '270'));
   assert.ok(collapsed.edges.some(e => e.source === '270' && e.target === '252'));
   const expanded = monitorGraph(graph, new Set(['252', '260', '275', '270']));
   assert.deepEqual(Array.from(expanded.edges.filter(e => e.target === '264'), e => e.source).sort(), ['261', '269']);
   for (const view of [collapsed, expanded]) {
-    const native = view.edges.flatMap(e => e.dependencies.map(d => `${d.dependency}->${d.ticket}`)).sort();
+    const native = view.edges.flatMap(e => e.relations.map(d => `${d.source}->${d.target}`)).sort();
     assert.deepEqual(Array.from(native), graph.tickets.flatMap(t => t.dependencies.map(d => `${d}->${t.ticket_id}`)).sort());
   }
   assert.equal(JSON.stringify(graph), original);
@@ -153,6 +153,31 @@ test('cancelled and superseded tasks never appear under their old execution stat
   }
 });
 
+test('replacement chains preserve direction, kinds and native endpoints across summaries', () => {
+  const graph = { tickets: [task('A', null), task('B', null),
+    { ...task('101', 'A'), active: false, replaced_by: ['102'] },
+    { ...task('102', 'B'), active: false, replaced_by: ['103'] }, task('103', 'B'),
+    { ...task('104', 'A'), active: false, replaced_by: ['103'] },
+    task('105', 'B', ['101']), task('106', 'A', ['103']), task('unrelated', null)] };
+  const original = JSON.stringify(graph);
+  const collapsed = monitorGraph(graph, new Set());
+  const forward = collapsed.edges.filter(edge => edge.source === 'A' && edge.target === 'B');
+  assert.equal(forward.length, 2, 'different meanings must not merge');
+  assert.equal(forward.find(edge => edge.kind === 'replacement').relations.length, 2);
+  assert.equal(forward.find(edge => edge.kind === 'dependency').relations.length, 1);
+  assert.ok(collapsed.edges.some(edge => edge.source === 'B' && edge.target === 'A' && edge.kind === 'dependency'));
+  const expanded = monitorGraph(graph, new Set(['A', 'B']));
+  assert.deepEqual(Array.from(expanded.edges.filter(edge => edge.kind === 'replacement'),
+    edge => `${edge.source}->${edge.target}`).sort(), ['101->102', '102->103', '104->103']);
+  for (const view of [collapsed, expanded]) {
+    assert.equal(view.edges.flatMap(edge => edge.relations).length, 5);
+    assert.ok(view.nodes.every(node => Number.isFinite(node.x) && Number.isFinite(node.y)));
+  }
+  assert.deepEqual(Array.from(taskFocus(graph, '101')).sort(), ['101', '102', '103', '105', '106']);
+  assert.ok(taskFocus(graph, '103').has('104'), 'selecting a replacement traces all actual replaced sources');
+  assert.equal(JSON.stringify(graph), original);
+});
+
 
 test('a common project boundary contains independent tasks and native nested summary frames', () => {
   const graph = input(), original = JSON.stringify(graph);
@@ -164,7 +189,7 @@ test('a common project boundary contains independent tasks and native nested sum
       assert.ok(bounds.x + bounds.width > node.x + (node.frame ?? node).width);
       assert.ok(bounds.y + bounds.height > node.y + (node.frame ?? node).height);
     }
-    assert.equal(view.edges.flatMap(edge => edge.dependencies).length, 3);
+    assert.equal(view.edges.flatMap(edge => edge.relations).length, 3);
   }
   assert.equal(JSON.stringify(graph), original);
 });

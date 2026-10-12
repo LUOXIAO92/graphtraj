@@ -129,6 +129,10 @@ def test_task_protocol_completion_and_atomic_reopen(public_project: PublicProjec
     assert all(node["parent_known"] and node["schema_version"] == 2 for node in graph.values())
     assert all(node["current_candidate"] is None and node["active_team_ordinal"] is None
                and node["worktree"] is None for node in graph.values())
+    receipt = next(fact for fact in graph["3"]["delivery"] if fact["ticket_id"] == "2")
+    assert receipt["event"] == "ticket-completed"
+    assert receipt["accepted_definition"] == graph["3"]["current_definition"]
+    assert receipt["reason"] and receipt["evidence_refs"] == ["evidence.md"]
     before = api.retained()
     api.call("ticket_register", task("4", "2"), success=False)
     api.call("ticket_revise", api.revision([task("4", "2")]), success=False)
@@ -142,6 +146,8 @@ def test_task_protocol_completion_and_atomic_reopen(public_project: PublicProjec
     api.call("ticket_revise", revision)
     assert api.graph()["1"]["status"] == api.graph()["2"]["status"] == "pending"
     assert api.graph()["3"]["status"] == "integrated"
+    assert api.graph()["1"]["delivery"] == api.graph()["2"]["delivery"] == []
+    assert all(fact["ticket_id"] == "3" for fact in api.graph()["3"]["delivery"])
     api.complete("4")
     api.complete("2")
     api.complete("1")
@@ -179,6 +185,58 @@ def test_relationship_failures_and_replacement_chain(public_project: PublicProje
     assert graph["2"]["replaced_by"] == ["3"] and graph["3"]["replaced_by"] == ["4"]
     assert graph["2"]["parent_id"] == "1" and graph["4"]["parent_id"] is None
     assert graph["1"]["progress"] == {"total": 1, "completed": 1}
+    assert any(fact["ticket_id"] == "1" for fact in graph["4"]["delivery"])
+    assert graph["2"]["delivery"] == []
+
+
+def test_completed_inputs_can_be_recorded_without_reopening_accepted_scope(
+    public_project: PublicProject,
+) -> None:
+    """An explicit evidenced correction preserves delivery and immutable history."""
+    api = public_project
+    for definition in [task("1"), task("2", "1"), task("3"), task("4")]:
+        api.call("ticket_register", definition)
+    for ticket_id in ["3", "2", "1"]:
+        api.complete(ticket_id)
+    before = api.retained()
+    original = api.graph()
+    corrected = task("2", "1", dependencies=["3"],
+                     body=task("2")["body"] + "The accepted outcome already consumed result 3.")
+    reason = {"2": "Owner verified the retained acceptance evidence: result 3 was already consumed."}
+    revision = api.revision([corrected], completed_input_corrections=reason)
+
+    # The ordinary product-preserving declaration is not a completion override.
+    api.call("ticket_revise", api.revision([corrected]), success=False)
+    for definitions, reasons in [
+        ([task("2", "1", dependencies=["4"])], reason),
+        ([task("2", "1", body="A new requirement")], reason),
+        ([task("2", dependencies=["3"])], reason),
+        ([corrected], {"2": " "}),
+        ([corrected], {"999": "Unrelated declaration"}),
+    ]:
+        api.call("ticket_revise", api.revision(definitions, completed_input_corrections=reasons), success=False)
+    assert api.retained() == before
+    preview = api.call("ticket_revise", {**revision, "dry_run": True})
+    assert preview["reopened_ticket_ids"] == [] and api.retained() == before
+    event = api.call("ticket_revise", revision)
+    assert event["completed_input_corrections"] == reason
+    graph = api.graph()
+    assert graph["2"]["dependencies"] == ["3"]
+    assert graph["2"]["current_definition"] != original["2"]["current_definition"]
+    for ticket_id in ["1", "2", "3"]:
+        assert graph[ticket_id]["status"] == "integrated"
+        assert graph[ticket_id]["current_candidate"] == original[ticket_id]["current_candidate"]
+    assert all(api.retained()[path] == contents for path, contents in before.items() if path.endswith(".md"))
+
+    retained = api.retained()
+    # Neither removing old inputs nor adding unfinished work qualifies.
+    api.call("ticket_revise", api.revision([task("2", "1", dependencies=["4"])],
+                                         completed_input_corrections=reason), success=False)
+    api.call("ticket_revise", api.revision([task("2", "1", dependencies=["3", "4"])],
+                                         completed_input_corrections=reason), success=False)
+    api.call("ticket_revise", api.revision([task("3")], reopen_ticket_ids=["3"],
+                                         completed_input_corrections={"3": "No inputs added"}), success=False)
+    assert api.retained() == retained
 
 
 def test_cancellation_and_legacy_write_boundary(public_project: PublicProject) -> None:

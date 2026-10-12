@@ -1,5 +1,10 @@
 import type { Call } from './usage';
 import type { Activity, ActivityRequest } from './activity';
+export type Delivery = {
+  event_id: string; event: string; ticket_id: string; candidate: string | null;
+  dev_commit: string | null; reason: string | null;
+  accepted_definition: string | null; evidence_refs: string[];
+};
 export type Ticket = {
   ticket_id: string;
   ticket_name: string;
@@ -14,6 +19,7 @@ export type Ticket = {
   ready: boolean;
   dependencies: string[];
   replaced_by: string[];
+  delivery?: Delivery[];
 };
 export type Graph = { tickets: Ticket[]; schema_version?: number };
 export type Project = { id: string; root: string; unavailable?: string };

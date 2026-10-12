@@ -104,7 +104,7 @@ def append_project_worldline_event(
 
 def read_worldline(
     state_directory: Path,
-    harness_root: Path,
+    harness_root: Path | None = None,
 ) -> list[dict[str, Any]]:
     """Return validated events in absolute chronological shard order."""
 

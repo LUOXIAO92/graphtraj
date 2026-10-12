@@ -592,7 +592,14 @@ def test_shared_integration_enforces_task_authority_and_returns_retained_outcome
     assert event["validation_command"] == list(command)
     assert result["evidence"] in event["evidence_refs"]
     assert (root / result["evidence"]).is_file()
-    assert read_graph(state)["tickets"][0]["status"] == result["status"]
+    node = read_graph(state)["tickets"][0]
+    assert node["status"] == result["status"]
+    if validation_exit == 0:
+        assert node["delivery"][0]["event_id"] == result["event_id"]
+        assert node["delivery"][0]["dev_commit"] == event["dev_commit"]
+        assert node["delivery"][0]["candidate"] == candidate
+    else:
+        assert node["delivery"] == []
 
 
 @pytest.fixture

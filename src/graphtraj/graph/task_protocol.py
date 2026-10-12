@@ -71,6 +71,10 @@ REVISION_SCHEMA = object_schema({
     "tickets": {"type": "array", "minItems": 1, "items": definition_schema(revision=True)},
     "dry_run": {"type": "boolean", "default": False},
     "reopen_ticket_ids": {"type": "array", "items": {"type": "string"}},
+    "completed_input_corrections": {
+        "type": "object", "additionalProperties": {"type": "string"},
+        "description": "Completed task IDs mapped to the owner's evidence-backed reason for recording already-consumed completed inputs without changing the accepted scope.",
+    },
 }, {"product_preserving", "caused_by_event_ids", "evidence_refs", "tickets"})
 COMPLETE_SCHEMA = object_schema({
     "ticket_id": {"type": "string"},
@@ -124,6 +128,16 @@ TASK_SCHEMA = object_schema({
     "ready": {"type": "boolean"},
     "children": {"type": "array", "items": {"type": "string"}},
     "progress": object_schema({"total": {"type": "integer"}, "completed": {"type": "integer"}}),
+    "delivery": {"type": "array", "items": object_schema({
+        "event_id": {"type": "string"},
+        "event": {"type": "string"},
+        "ticket_id": {"type": "string"},
+        "candidate": {"type": ["string", "null"]},
+        "dev_commit": {"type": ["string", "null"]},
+        "reason": {"type": ["string", "null"]},
+        "accepted_definition": {"type": ["string", "null"]},
+        "evidence_refs": {"type": "array", "items": {"type": "string"}},
+    })},
 })
 # A missing legacy parent is unknown; null is reserved for a confirmed v2 root.
 TASK_SCHEMA["required"].remove("parent_id")

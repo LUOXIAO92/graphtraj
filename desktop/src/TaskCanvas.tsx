@@ -1,7 +1,7 @@
 import React, { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import { Graph as X6, Shape, type Cell } from '@antv/x6';
 import type { Graph, Ticket } from '../electron/types';
-import { dependencyFocus, monitorGraph, taskChildren, taskStatus, dependencyTerminals, projectBounds, type Size, type MonitorEdge } from './monitor-graph';
+import { taskFocus, monitorGraph, taskChildren, taskStatus, dependencyTerminals, projectBounds, type Size, type MonitorEdge } from './monitor-graph';
 import './task-canvas.css';
 
 export type TaskCanvasHandle = { fit: () => void; locate: (id: string) => void };
@@ -29,6 +29,15 @@ function card(ticket: Ticket, children: Ticket[], open: boolean, select: () => v
   meta.className = 'native-task-meta';
   meta.textContent = `#${ticket.ticket_id} · ${taskStatus(ticket)}${ticket.replaced_by.length ? ` · → ${ticket.replaced_by.map(id => `#${id}`).join(', ')}` : ''}`;
   element.append(meta);
+  const delivery = document.createElement('div');
+  delivery.className = 'native-task-meta';
+  const receipts = (ticket.delivery ?? []).filter(fact => fact.ticket_id !== ticket.ticket_id);
+  const own = ticket.delivery?.find(fact => fact.ticket_id === ticket.ticket_id);
+  delivery.textContent = receipts.length ? `Accepted in ${receipts.map(fact => `#${fact.ticket_id}`).join(', ')}`
+    : own?.dev_commit ? `Integrated · ${own.dev_commit.slice(0, 8)}`
+    : own ? 'Own acceptance recorded'
+    : taskStatus(ticket) === 'integrated' ? 'Delivery evidence unavailable' : '';
+  if (delivery.textContent) element.append(delivery);
   const footer = document.createElement('div');
   footer.className = 'native-task-footer';
   const facts = document.createElement('span');
@@ -104,7 +113,7 @@ export const TaskCanvas = forwardRef<TaskCanvasHandle, Props>(function TaskCanva
     graph.on('edge:mouseenter', ({ edge }) => {
       const data = edge.getData<MonitorEdge>();
       const title = (id: string) => current.current.graph.tickets.find(ticket => ticket.ticket_id === id)?.title ?? '';
-      if (pathLabel.current) pathLabel.current.textContent = data.dependencies.map(item => `#${item.dependency} ${title(item.dependency)} → #${item.ticket} ${title(item.ticket)}`).join(' · ');
+      if (pathLabel.current) pathLabel.current.textContent = data.relations.map(item => `#${item.source} ${title(item.source)} ${item.kind === 'replacement' ? 'replaced by' : '→'} #${item.target} ${title(item.target)}`).join(' · ');
     });
     graph.on('edge:mouseleave', () => { if (pathLabel.current) pathLabel.current.textContent = ''; });
     return () => { graph.dispose(); engine.current = null; };
@@ -174,7 +183,9 @@ export const TaskCanvas = forwardRef<TaskCanvasHandle, Props>(function TaskCanva
       cells.push(graph.createEdge({ id: edge.id,
       source: { cell: edge.source, port: `out:${edge.id}` }, target: { cell: edge.target, port: `in:${edge.id}` },
       zIndex: 1, data: edge, vertices: terminals.get(edge.id)!.vertices,
-      attrs: { line: { stroke: '#8192a6', strokeWidth: 1.6, targetMarker: { name: 'block', width: 10, height: 8 } } },
+      attrs: { line: { stroke: edge.kind === 'replacement' ? '#986528' : '#8192a6',
+        strokeDasharray: edge.kind === 'replacement' ? '8 5' : '', strokeWidth: 1.6,
+        targetMarker: { name: 'block', width: 10, height: 8 } } },
     }));
     }
     graph.once('render:done', () => {
@@ -200,7 +211,7 @@ export const TaskCanvas = forwardRef<TaskCanvasHandle, Props>(function TaskCanva
     const graph = engine.current;
     const result = projection.current;
     if (!graph || !result) return;
-    const focus = dependencyFocus(props.graph, props.selected);
+    const focus = taskFocus(props.graph, props.selected);
     const emphasized = new Set([...focus].map(id => result.endpoints.get(id)));
     const matches = new Set([...props.matches].map(id => result.endpoints.get(id)));
     for (const node of result.nodes) {
@@ -213,10 +224,10 @@ export const TaskCanvas = forwardRef<TaskCanvasHandle, Props>(function TaskCanva
     }
     for (const edge of graph.getEdges()) {
       const data = edge.getData<MonitorEdge>();
-      const related = data.dependencies.some(item => focus.has(item.dependency) && focus.has(item.ticket));
-      const visible = data.dependencies.some(item => focus.has(item.dependency) && focus.has(item.ticket)
-        && props.matches.has(item.dependency) && props.matches.has(item.ticket));
-      edge.attr('line/stroke', props.selected && related ? '#365f9c' : '#8192a6');
+      const related = data.relations.some(item => focus.has(item.source) && focus.has(item.target));
+      const visible = data.relations.some(item => focus.has(item.source) && focus.has(item.target)
+        && props.matches.has(item.source) && props.matches.has(item.target));
+      edge.attr('line/stroke', data.kind === 'replacement' ? '#986528' : props.selected && related ? '#365f9c' : '#8192a6');
       edge.attr('line/strokeWidth', props.selected && related ? 3 : 1.6);
       edge.attr('line/opacity', visible ? 1 : .15);
     }

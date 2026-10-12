@@ -85,7 +85,8 @@ def read_execution_budget(body: str) -> ExecutionBudget | None:
         value = yaml.safe_load(document)
     except yaml.YAMLError as error:
         raise ExecutionBudgetError("execution budget front matter is not YAML") from error
-    if isinstance(value, dict) and isinstance(value.get("task"), dict) and value["task"].get("schema_version") == 2:
+    if (isinstance(value, dict) and set(value) == {"task"}
+            and isinstance(value["task"], dict) and value["task"].get("schema_version") == 2):
         return read_execution_budget(front_matter[2])
     if not isinstance(value, dict) or "execution_budget" not in value:
         return None

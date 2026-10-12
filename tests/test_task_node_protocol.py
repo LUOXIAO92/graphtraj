@@ -211,6 +211,9 @@ def test_stale_versions_and_failed_completion_leave_state_unchanged(public_proje
     revision = api.revision([task("1", title="Revised outcome")])
     api.call("ticket_revise", revision)
     before = api.retained()
+    api.call("ticket_register", task("2", body=(
+        "---\ntask:\n  schema_version: 2\nexecution_budget: invalid\n---\nScope\n"
+    )), success=False)
     api.call("ticket_revise", revision, success=False)
     api.complete("1", success=False, current_definition="ticket.md")
     api.complete("1", success=False, reason=" ")

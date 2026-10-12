@@ -78,6 +78,10 @@ ALIAS = re.compile(
     r"|[A-Za-z0-9._%-]+@[ldmjserx][1-9][0-9]*)$"
 )
 TERMINAL_OUTCOMES = frozenset({"completed", "interrupted", "runtime-error"})
+# A withdrawn implementation registered hosted Main/checker Agents through a
+# mapping that never implemented the current execution schema. Only that exact
+# shape is recognized as a legacy record; every current record keeps its path.
+LEGACY_HOSTED_ALIAS = re.compile(r"^(?:main|checker)_[0-9a-f]{32}@m1$")
 SESSION_MAPPING_FIELDS = frozenset(
     {
         "alias",
@@ -647,6 +651,14 @@ def status_tree(
         )
     if caller is None:
         for alias, error in failures:
+            if read_retired_legacy_hosted_mapping(runner_directory, alias) is not None:
+                # A retired withdrawn hosted record is not a broken active
+                # Session, so it never adds an invalid-mapping error node.
+                nodes.append(
+                    {"alias": alias, "parent": None, "children": [],
+                     "activity": "idle", "retire_status": "retired"}
+                )
+                continue
             nodes.append(
                 {"alias": alias, "parent": None, "children": [],
                  "error": error.as_document()}
@@ -723,7 +735,15 @@ def _status_alias(
     baseline: str | None,
     candidate: str | None,
 ) -> Dict[str, Any]:
-    mapping, session_directory = read_alias_mapping(runner_directory, alias)
+    try:
+        mapping, session_directory = read_alias_mapping(runner_directory, alias)
+    except RunnerError:
+        retired = read_retired_legacy_hosted_mapping(runner_directory, alias)
+        if retired is None:
+            raise
+        # The withdrawn hosted record is retired, not an invalid active mapping.
+        return {"alias": alias, "activity": "idle", "retire_status": "retired",
+                "parent": retired.get("parent")}
     # A cross-level observation keeps only the coarse activity, for an Agent
     # caller and for a caller with no live Session owner alike.
     if caller != alias and not is_direct_owner(caller, mapping):
@@ -994,6 +1014,61 @@ def _read_alias_record(runner_directory: Path, alias: str) -> Tuple[Any, Path]:
 
 def is_session_mapping(mapping: Mapping[str, Any]) -> bool:
     return "run_id" not in mapping and SESSION_MAPPING_FIELDS.issubset(mapping)
+
+
+def is_legacy_hosted_mapping(mapping: object) -> bool:
+    """Whether a value is the withdrawn hosted Main/checker mapping shape.
+
+    The withdrawn implementation marked those records ``hosted`` with a
+    ``purpose`` and never wrote the complete current execution schema, so the
+    schema test distinguishes them from a current record without guessing.
+    """
+    return (
+        isinstance(mapping, dict)
+        and mapping.get("hosted") is True
+        and mapping.get("purpose") in {"main", "checker"}
+        and not is_session_mapping(mapping)
+    )
+
+
+def read_active_legacy_hosted_mapping(
+    runner_directory: Path, alias: str
+) -> Dict[str, Any] | None:
+    """Read a withdrawn hosted record's active mapping, or return ``None``.
+
+    Every other alias, including a record whose active mapping is already
+    removed, keeps the existing path unchanged.
+    """
+    if LEGACY_HOSTED_ALIAS.fullmatch(alias) is None:
+        return None
+    if not (session_record_directory(runner_directory, alias) / "mapping.yml").is_file():
+        return None
+    try:
+        mapping, _ = _read_alias_record(runner_directory, alias)
+    except RunnerError:
+        return None
+    return mapping if is_legacy_hosted_mapping(mapping) else None
+
+
+def read_retired_legacy_hosted_mapping(
+    runner_directory: Path, alias: str
+) -> Dict[str, Any] | None:
+    """Read a retired withdrawn hosted record's retained mapping, or ``None``.
+
+    Retirement keeps the original mapping as evidence, so an alias query
+    reports the record as retired instead of an invalid active mapping.
+    """
+    if LEGACY_HOSTED_ALIAS.fullmatch(alias) is None:
+        return None
+    session_directory = session_record_directory(runner_directory, alias)
+    if (session_directory / "mapping.yml").is_file():
+        return None
+    try:
+        record = yaml.safe_load((session_directory / "session.yml").read_text(encoding="utf-8"))
+        mapping = record["retirement"]["mapping"]
+    except (OSError, UnicodeError, KeyError, TypeError, yaml.YAMLError):
+        return None
+    return mapping if is_legacy_hosted_mapping(mapping) else None
 
 
 def _valid_mapping(mapping: object, alias: str) -> bool:

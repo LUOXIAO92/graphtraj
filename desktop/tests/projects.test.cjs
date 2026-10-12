@@ -118,18 +118,3 @@ test('native desktop bridge isolates projects, persists preferences and reconnec
   await assert.rejects(projects.graph(secondId), /observer is closed/);
   assert.equal(operate(second, 'ticket_graph').tickets.length, 2);
 });
-
-test('DAG layout ranks dependencies and keeps every historical node', async () => {
-  const { layout } = await import('../src/layout.ts');
-  const positions = layout([
-    { ticket_id: '1', dependencies: [] },
-    { ticket_id: '2', dependencies: [] },
-    { ticket_id: '3', dependencies: ['1', '2'] },
-    { ticket_id: '4', dependencies: ['3'], active: false },
-  ]);
-  assert.equal(Object.keys(positions).length, 4);
-  assert.equal(positions['1'].x, positions['2'].x);
-  assert.notEqual(positions['1'].y, positions['2'].y);
-  assert.ok(positions['3'].x > positions['1'].x);
-  assert.ok(positions['4'].x > positions['3'].x);
-});

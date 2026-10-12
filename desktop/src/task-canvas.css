@@ -1,0 +1,17 @@
+.native-task-canvas { position: absolute; inset: 0; }
+.native-task-measure { position: absolute; visibility: hidden; top: 0; left: 0; width: 320px; pointer-events: none; }
+.native-task-card { box-sizing: border-box; width: 320px; min-height: 136px; padding: 18px; border: 1px solid #c6d0dd; border-radius: 9px; background: #fff; color: #263341; box-shadow: 0 3px 9px #2633410a; display: flex; flex-direction: column; gap: 10px; font-family: inherit; cursor: pointer; }
+.native-task-card.selected { border: 2px solid #365f9c; padding: 17px; box-shadow: 0 0 0 3px #365f9c20; }
+.native-task-card.related:not(.selected) { border-color: #587bb9; }
+.native-task-title { text-align: left; font-size: 15px; font-weight: 600; line-height: 1.45; white-space: normal; overflow-wrap: anywhere; background: none; border: 0; padding: 0; cursor: pointer; color: inherit; }
+.native-task-meta { font-size: 11px; color: #697786; overflow-wrap: anywhere; }
+.native-task-footer { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: auto; font-size: 11px; color: #697786; }
+.native-task-footer button { padding: 5px 9px; border: 1px solid #c6d0dd; border-radius: 5px; color: #3d5d99; background: #f3f6fa; cursor: pointer; font-size: 11px; }
+.native-task-card button:focus-visible, .native-task-zoom button:focus-visible { outline: 3px solid #506dab; outline-offset: 3px; }
+.native-task-zoom { position: absolute; left: 20px; bottom: 16px; display: flex; align-items: center; gap: 6px; z-index: 3; background: #fffffff2; border: 1px solid #dce2e8; border-radius: 6px; padding: 4px; }
+.native-task-zoom button { width: 28px; height: 28px; font-size: 20px; cursor: pointer; }
+.native-task-zoom span { font-size: 10px; color: #697786; padding-inline: 6px; }
+.native-dependency-list { max-height: 100px; overflow: auto; font-size: 11px; color: #3d5d99; margin-top: 8px; }
+.native-dependency-list div { margin: 4px 0; overflow-wrap: anywhere; }
+.native-path-label { position: absolute; top: 16px; right: 20px; max-width: 380px; padding: 10px 14px; border: 1px solid #bdcbd9; border-radius: 6px; background: #fff; box-shadow: 0 3px 12px #26334112; color: #365f9c; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; pointer-events: none; z-index: 4; }
+.native-path-label:empty { display: none; }

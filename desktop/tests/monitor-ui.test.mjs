@@ -38,9 +38,9 @@ test('D navigation preserves separate project graphs and independent column read
   });
   await page.goto(new URL('../dist/index.html', import.meta.url).href);
   const monitor = page.locator('.monitor-page:visible');
-  const visibleGraphTitles = () => page.locator('.react-flow__node').evaluateAll(nodes =>
+  const visibleGraphTitles = () => page.locator('.native-task-card').evaluateAll(nodes =>
     nodes.filter(node => node.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true }))
-      .map(node => node.querySelector('.node-title')?.textContent));
+      .map(node => node.querySelector('.native-task-title')?.textContent));
   await page.getByRole('button', { name: 'Settings', exact: true }).waitFor({ state: 'visible' });
   await page.getByRole('button', { name: 'GLOBAL', exact: true }).click();
   assert.equal(await page.getByRole('button', { name: 'Settings', exact: true }).isVisible(), false);
@@ -79,7 +79,7 @@ test('D navigation preserves separate project graphs and independent column read
   await page.getByRole('button', { name: 'PROJECTS', exact: true }).click();
   await page.locator('.project-button').filter({ hasText: '/projects/second' }).click();
   await monitor.getByRole('searchbox').fill('second current');
-  await monitor.locator('.react-flow__node[data-id="1"] .node-title').waitFor();
+  await monitor.locator('.native-task-card[data-task-id="1"] .native-task-title').waitFor();
   assert.deepEqual(await visibleGraphTitles(), ['second current', 'second previous'], 'Only the selected project paints graph cards');
   await monitor.getByRole('searchbox').press('Enter');
   await monitor.getByRole('button', { name: 'Expand chat', exact: true }).click();
@@ -92,18 +92,18 @@ test('D navigation preserves separate project graphs and independent column read
   const again = await monitor.evaluate(element => ({ first: element.querySelectorAll('.activity-history')[0].scrollTop,
     second: element.querySelectorAll('.activity-history')[1].scrollTop, horizontal: element.querySelector('.agent-columns').scrollLeft }));
   assert.deepEqual(again, positions);
-  await monitor.locator('.agent-columns').evaluate(element => { element.scrollLeft = 0; });
+  await monitor.locator('.agent-columns:visible').evaluate(element => { element.scrollLeft = 0; });
   await columns.first().getByRole('button', { name: 'Follow new messages', exact: false }).click();
-  const tool = columns.first().locator('details').last();
+  const tool = columns.first().locator('details.tool-card').last();
   for (const open of [true, false, true, false]) {
-    await tool.locator('summary').click();
+    await tool.locator(':scope > summary').click();
     assert.equal(await tool.evaluate(element => element.open), open);
   }
   await monitor.getByRole('button', { name: 'Collapse chat', exact: true }).click();
-  const viewport = await monitor.locator('.react-flow__viewport').getAttribute('style');
+  const viewport = await monitor.locator('.x6-graph-svg-viewport').getAttribute('transform');
   await page.getByRole('button', { name: 'Teams & roles', exact: true }).click();
   await page.getByRole('button', { name: 'Monitor', exact: true }).click();
-  assert.equal(await monitor.locator('.react-flow__viewport').getAttribute('style'), viewport);
+  assert.equal(await monitor.locator('.x6-graph-svg-viewport').getAttribute('transform'), viewport);
   await page.getByRole('button', { name: 'Hide sidebar', exact: true }).click();
   assert.equal(await page.locator('#d-project-sidebar').isVisible(), false);
   await page.getByRole('button', { name: 'Show sidebar', exact: true }).click();
@@ -112,4 +112,53 @@ test('D navigation preserves separate project graphs and independent column read
   await page.getByRole('button', {name:'Teams & roles',exact:true}).click();
   assert.equal(await page.getByLabel('Agent name',{exact:true}).inputValue(),'edited');
 
+});
+
+// Renderer regression coverage; native App visual acceptance is recorded separately.
+test('native task selection preserves layout; only expansion reveals nested tasks', async t => {
+  const browser = await chromium.launch({ headless: true, args: ['--allow-file-access-from-files'],
+    ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE } : {}) });
+  t.after(() => browser.close());
+  const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  await page.addInitScript(() => {
+    const tickets = [
+      ['1', null, [], 'A summary with a long title that remains readable when wrapped across multiple lines'],
+      ['2', '1', [], 'Nested summary'], ['3', '2', [], 'First native result'],
+      ['4', null, ['3'], 'External consumer'], ['5', '2', ['4'], 'Return to a different internal result'],
+      ['6', null, [], 'Unrelated work'],
+    ].map(([ticket_id, parent_id, dependencies, title]) => ({ ticket_id, parent_id, dependencies, title,
+      schema_version: 2, ticket_name: `task-${ticket_id}`, status: 'pending', active: true, replaced_by: [] }));
+    window.graphtraj = {
+      projects: async () => ({ projects: [{ id: 'test', root: '/native-tasks' }], selected: 'test' }),
+      graph: async projectId => ({ projectId, graph: { tickets }, updatedAt: new Date().toISOString() }),
+      activity: async () => ({ agents: [], events: [], availability: 'available', has_more: false }),
+      connections: async () => ({ revision: '1', catalog: { version: 1, runtimes: {} }, capabilities: { model_discovery: {}, custom_api: {} }, account_access: 'unknown' }),
+    };
+  });
+  await page.goto(new URL('../dist/index.html', import.meta.url).href);
+  const cards = page.locator('.native-task-card');
+  await cards.first().waitFor();
+  const positions = () => page.locator('.x6-node[data-shape="native-task"]').evaluateAll(nodes => nodes.map(node => [node.getAttribute('data-cell-id'), node.getAttribute('transform')]));
+  const initial = await positions();
+  await page.getByRole('button', { name: /^A summary with/ }).click();
+  assert.equal(await cards.count(), 3);
+  assert.deepEqual(await positions(), initial, 'selection must never rebuild/reposition the graph');
+  assert.equal(await page.getByRole('button', { name: /^Expand A summary/ }).getAttribute('aria-expanded'), 'false');
+  assert.equal(await page.locator('.native-task-card[data-task-id="6"]').evaluate(node => node.style.opacity), '0.25');
+  await page.getByRole('button', { name: /^Expand A summary/ }).click();
+  await page.getByRole('button', { name: 'Expand Nested summary', exact: true }).click();
+  await page.getByRole('button', { name: 'First native result', exact: true }).waitFor();
+  assert.equal(await cards.count(), 6);
+  await page.getByRole('button', { name: 'Fit graph', exact: true }).click();
+  const beforeSelection = await positions();
+  await page.getByRole('button', { name: 'First native result', exact: true }).click();
+  assert.deepEqual(await positions(), beforeSelection);
+  assert.equal(await page.getByRole('button', { name: 'Collapse Nested summary', exact: true }).getAttribute('aria-expanded'), 'true');
+  await page.getByRole('button', { name: 'Collapse Nested summary', exact: true }).click();
+  await page.getByRole('button', { name: 'Expand Nested summary', exact: true }).waitFor();
+  assert.equal(await cards.count(), 4);
+  await page.getByRole('button', { name: 'Expand Nested summary', exact: true }).focus();
+  await page.keyboard.press('Enter');
+  await page.getByRole('button', { name: 'First native result', exact: true }).waitFor();
+  assert.equal(await cards.count(), 6);
 });

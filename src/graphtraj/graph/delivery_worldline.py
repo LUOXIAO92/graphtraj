@@ -84,12 +84,17 @@ def append_project_worldline_event(
                 stream.flush()
                 os.fsync(stream.fileno())
         except Exception:
-            if target_existed:
-                os.truncate(target, original_size)
-            elif target.exists():
-                target.unlink()
-            if rollback is not None:
-                rollback()
+            try:
+                if target_existed:
+                    # A refused append leaves the shard unchanged and may also
+                    # refuse truncate; it must not prevent Ticket restoration.
+                    if target.stat().st_size != original_size:
+                        os.truncate(target, original_size)
+                elif target.exists():
+                    target.unlink()
+            finally:
+                if rollback is not None:
+                    rollback()
             raise
         return recorded
     finally:

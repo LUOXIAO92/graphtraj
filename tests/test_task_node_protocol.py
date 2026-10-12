@@ -296,6 +296,56 @@ def test_reopening_replacement_and_cancelled_scope_requires_ancestor_acceptance(
     api.complete("1", cancelled_scope={"4": "Explicitly withdraw the newly recorded scope"})
 
 
+def test_migration_restores_tickets_when_worldline_append_is_refused(
+    public_project: PublicProject,
+) -> None:
+    """A failed append restores migrated and newly created Tickets on every entry."""
+    import os
+
+    from test_ticket_graph import _ticket
+
+    api = public_project
+    old = _ticket("1", "task-1")
+    api.call("ticket_register", old)
+    api.call("ticket_update", {
+        "ticket_id": "1", "status": "ready", "active_team_ordinal": None,
+        "worktree": "retained-work", "branch": "retained-branch",
+        "current_candidate": "a" * 40, "caused_by_event_ids": [],
+        "evidence_refs": ["evidence.md"],
+    })
+    before = api.retained()
+    original = api.graph()
+    revision = api.revision([
+        task("2"),
+        task("1", "2", source=old["source"], body=original["1"]["body"]),
+    ])
+    api.call("ticket_revise", {**revision, "dry_run": True})
+    assert api.retained() == before
+
+    shard = next((api.state / "worldline").glob("*.jsonl"))
+    mode = shard.stat().st_mode
+    shard.chmod(0o444)
+    try:
+        if os.access(shard, os.W_OK):
+            pytest.skip("This environment cannot deny writes with file permissions")
+        api.call("ticket_revise", revision, success=False)
+        assert api.retained() == before
+        assert api.graph() == original
+    finally:
+        shard.chmod(mode)
+
+    api.call("ticket_revise", revision)
+    migrated = api.graph()
+    assert migrated["1"]["parent_id"] == "2"
+    for field in ("status", "worktree", "branch", "current_candidate"):
+        assert migrated["1"][field] == original["1"][field]
+    retained = api.retained()
+    assert all(retained[path] == content for path, content in before.items()
+               if path.endswith(".md"))
+    api.call("ticket_revise", revision, success=False)
+    assert api.retained() == retained
+
+
 def test_cancelled_replacement_acceptance_survives_unrelated_revision(public_project: PublicProject) -> None:
     """A withdrawn replacement scope remains accepted until that scope changes."""
     api = public_project

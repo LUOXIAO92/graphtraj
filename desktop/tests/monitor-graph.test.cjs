@@ -3,13 +3,13 @@ const assert = require('node:assert/strict');
 const path = require('node:path');
 const vm = require('node:vm');
 const { build } = require('esbuild');
-let monitorGraph, dependencyFocus, dependencyTerminals, taskStatus;
+let monitorGraph, dependencyFocus, dependencyTerminals, taskStatus, projectBounds;
 test.before(async () => {
   const result = await build({ entryPoints: [path.join(__dirname, '../src/monitor-graph.ts')],
     bundle: true, platform: 'node', format: 'cjs', write: false });
   const module = { exports: {} };
   vm.runInNewContext(result.outputFiles[0].text, { module, exports: module.exports, structuredClone });
-  ({ monitorGraph, dependencyFocus, dependencyTerminals, taskStatus } = module.exports);
+  ({ monitorGraph, dependencyFocus, dependencyTerminals, taskStatus, projectBounds } = module.exports);
 });
 const task = (id, parent_id, dependencies = []) => ({ ticket_id: id, title: `Real title ${id}`, parent_id,
   schema_version: 2, ticket_name: `task-${id}`, dependencies, active: true, status: 'pending', replaced_by: [] });
@@ -151,4 +151,20 @@ test('cancelled and superseded tasks never appear under their old execution stat
     }
     assert.equal(taskStatus({ ...task('current', null), status, disposition: 'active' }), status);
   }
+});
+
+
+test('a common project boundary contains independent tasks and native nested summary frames', () => {
+  const graph = input(), original = JSON.stringify(graph);
+  for (const open of [[], ['A', 'B', 'C']]) {
+    const view = monitorGraph(graph, new Set(open)), bounds = projectBounds(view.nodes);
+    assert.ok(view.nodes.some(node => node.id === 'unrelated'));
+    for (const node of view.nodes) {
+      assert.ok(bounds.x < node.x && bounds.y + 60 < node.y);
+      assert.ok(bounds.x + bounds.width > node.x + (node.frame ?? node).width);
+      assert.ok(bounds.y + bounds.height > node.y + (node.frame ?? node).height);
+    }
+    assert.equal(view.edges.flatMap(edge => edge.dependencies).length, 3);
+  }
+  assert.equal(JSON.stringify(graph), original);
 });

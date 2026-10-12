@@ -1,11 +1,11 @@
 import React, { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import { Graph as X6, Shape, type Cell } from '@antv/x6';
 import type { Graph, Ticket } from '../electron/types';
-import { dependencyFocus, monitorGraph, taskChildren, taskStatus, dependencyTerminals, type Size, type MonitorEdge } from './monitor-graph';
+import { dependencyFocus, monitorGraph, taskChildren, taskStatus, dependencyTerminals, projectBounds, type Size, type MonitorEdge } from './monitor-graph';
 import './task-canvas.css';
 
 export type TaskCanvasHandle = { fit: () => void; locate: (id: string) => void };
-type Props = { graph: Graph; expanded: ReadonlySet<string>; selected: string | null;
+type Props = { graph: Graph; projectName: string; expanded: ReadonlySet<string>; selected: string | null;
   matches: ReadonlySet<string>; active: boolean; select: (id: string | null) => void; toggle: (id: string) => void };
 
 Shape.HTML.register({ shape: 'native-task', html: cell => cell.getData().element });
@@ -68,7 +68,7 @@ export const TaskCanvas = forwardRef<TaskCanvasHandle, Props>(function TaskCanva
   const pendingToggle = useRef<string | null>(null);
   const pathLabel = useRef<HTMLOutputElement>(null);
   // Polling unchanged native facts must not rebuild cells or move the viewport.
-  const topology = JSON.stringify([props.graph.tickets, [...props.expanded].sort()]);
+  const topology = JSON.stringify([props.projectName, props.graph.tickets, [...props.expanded].sort()]);
 
   function fit(minScale = .05): void {
     const graph = engine.current;
@@ -143,6 +143,17 @@ export const TaskCanvas = forwardRef<TaskCanvasHandle, Props>(function TaskCanva
     const visibleEdges = result.edges.filter(edge => edge.source !== edge.target);
     const terminals = dependencyTerminals(result.nodes, visibleEdges);
     const cells: Cell[] = [];
+    if (result.nodes.length) {
+      const bounds = projectBounds(result.nodes);
+      // View-only containment, never a Ticket or an execution dependency.
+      cells.push(graph.createNode({ id: 'project-frame', shape: 'task-frame', ...bounds, zIndex: -4,
+        attrs: { body: { fill: '#f8fafc', stroke: '#94a3b8', strokeWidth: 2, pointerEvents: 'none' } } }));
+      cells.push(graph.createNode({ id: 'project-heading', shape: 'task-frame',
+        x: bounds.x + 16, y: bounds.y + 12, width: Math.min(760, bounds.width - 32), height: 48, zIndex: -3,
+        attrs: { body: { fill: 'none', stroke: 'none', pointerEvents: 'none' },
+          label: { text: `Project · ${data.projectName}`, textAnchor: 'start', refX: 16,
+            fontSize: 16, fontWeight: 600, fill: '#334155', pointerEvents: 'none' } } }));
+    }
     for (const node of result.nodes) {
       if (node.frame) cells.push(graph.createNode({ id: `frame:${node.id}`, shape: 'task-frame',
         x: node.x - 12, y: node.y - 12, width: node.frame.width + 24, height: node.frame.height + 24, zIndex: -2 }));

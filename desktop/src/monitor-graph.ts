@@ -159,3 +159,13 @@ export function dependencyTerminals(nodes: MonitorNode[], edges: MonitorEdge[]):
   }
   return ends;
 }
+
+
+/** Enclose all visible native tasks and summary frames in their project view. */
+export function projectBounds(nodes: MonitorNode[]): { x: number; y: number; width: number; height: number } {
+  const left = Math.min(0, ...nodes.map(node => node.x)) - 36;
+  const top = Math.min(0, ...nodes.map(node => node.y)) - 96;
+  const right = Math.max(320, ...nodes.map(node => node.x + (node.frame ?? node).width)) + 36;
+  const bottom = Math.max(150, ...nodes.map(node => node.y + (node.frame ?? node).height)) + 36;
+  return { x: left, y: top, width: right - left, height: bottom - top };
+}

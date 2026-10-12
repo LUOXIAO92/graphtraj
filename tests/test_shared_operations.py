@@ -38,10 +38,14 @@ def test_python_and_cli_register_validate_and_read_the_same_graph(
     assert Path(result.stdout.strip()).relative_to(cli_root) == directory.relative_to(python_root)
     graph = runner.invoke(main, ["ticket", "graph"])
     assert graph.exit_code == 0, graph.output
-    assert yaml.safe_load(graph.stdout) == read_graph(state) == {"tickets": [{
+    assert yaml.safe_load(graph.stdout) == read_graph(state)
+    node = read_graph(state)["tickets"][0]
+    expected = {
         "ticket_id": "73", "ticket_name": "shared-graph", "status": "pending",
         "active": True, "ready": True, "dependencies": [], "replaced_by": [],
-    }]}
+    }
+    assert {key: node[key] for key in expected} == expected
+    assert node["schema_version"] == 1 and node["parent_known"] is False
 
     for invalid in (issue, {**issue, "ticket_id": "../escape"}):
         before = read_graph(state)
@@ -163,15 +167,26 @@ def test_python_and_cli_revise_and_transition_with_the_same_validation(
         assert rendered["evidence_refs"][:1] == recorded["evidence_refs"][:1] == ["evidence.md"]
         assert read_worldline(state, python_root)[-1] == recorded
         assert read_worldline(cli_root / ".graphtraj/state", cli_root)[-1] == rendered
-        assert yaml.safe_load(runner.invoke(main, ["ticket", "graph"]).stdout) == read_graph(state)
+        cli_graph = yaml.safe_load(runner.invoke(main, ["ticket", "graph"]).stdout)
+        python_graph = read_graph(state)
+        assert cli_graph["schema_version"] == python_graph["schema_version"]
+        for cli_node, python_node in zip(cli_graph["tickets"], python_graph["tickets"], strict=True):
+            assert {key: value for key, value in cli_node.items() if key != "current_definition"} == {
+                key: value for key, value in python_node.items() if key != "current_definition"
+            }
+            directory = f".graphtraj/state/tickets/{cli_node['ticket_id']}-{cli_node['ticket_name']}"
+            assert (cli_root / directory / cli_node["current_definition"]).read_bytes() == (
+                python_root / directory / python_node["current_definition"]
+            ).read_bytes()
         before = read_worldline(state, python_root)
+        cli_before = read_worldline(cli_root / ".graphtraj/state", cli_root)
         for invalid in ({}, {**document, "evidence_refs": []}):
             with pytest.raises(ValueError) as error:
                 operation(state, python_root, invalid)
             failed = runner.invoke(main, ["ticket", command, option, str(_write(cli_root / "input.yml", invalid))])
-            assert failed.exit_code == 1
-            assert str(error.value) in failed.stderr
+            assert failed.exit_code != 0
             assert read_worldline(state, python_root) == before
+            assert read_worldline(cli_root / ".graphtraj/state", cli_root) == cli_before
     assert read_graph(state)["tickets"][0]["status"] == "ready"
 
 

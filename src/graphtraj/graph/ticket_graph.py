@@ -665,7 +665,7 @@ def _load_states(tickets: Path) -> dict[str, tuple[Path, dict[str, Any]]]:
                 raise ValueError("Legacy Ticket definition is invalid")
             body = (front[0] if front is not None else "") + parts[6]
             # Unknown history is explicit; prose declarations never become facts.
-            record.update(schema_version=1, parent_id=None, parent_known=False,
+            record.update(schema_version=1, parent_known=False,
                           disposition="active" if record["active"] else "superseded" if record["replaced_by"] else None,
                           retirement_reason=None, title=heading.removeprefix(prefix),
                           source=_snapshot_source(definition_path), body=body)

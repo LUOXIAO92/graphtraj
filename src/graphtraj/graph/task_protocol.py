@@ -125,6 +125,12 @@ TASK_SCHEMA = object_schema({
     "children": {"type": "array", "items": {"type": "string"}},
     "progress": object_schema({"total": {"type": "integer"}, "completed": {"type": "integer"}}),
 })
+# A missing legacy parent is unknown; null is reserved for a confirmed v2 root.
+TASK_SCHEMA["required"].remove("parent_id")
+TASK_SCHEMA["anyOf"] = [
+    {"properties": {"schema_version": {"const": 1}}},
+    {"properties": {"schema_version": {"const": 2}}, "required": ["parent_id"]},
+]
 
 
 def validate_definition(issue: Any) -> None:

@@ -91,7 +91,7 @@ def test_graph_keeps_legacy_parentage_unknown_without_prose_inference(
     result = _run(installed_commands, project, "graph")
     assert result.returncode == 0, result.stderr
     graph = yaml.safe_load(result.stdout)
-    assert all(ticket["parent_known"] is False and ticket["parent_id"] is None
+    assert all(ticket["parent_known"] is False and "parent_id" not in ticket
                and ticket["schema_version"] == 1 for ticket in graph["tickets"])
     assert [ticket["dependencies"] for ticket in graph["tickets"]] == [[], ["1"], ["2"], ["3"], ["4"]]
     assert all(ticket["status"] == "pending" for ticket in graph["tickets"])

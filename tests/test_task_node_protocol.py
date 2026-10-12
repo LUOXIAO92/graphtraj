@@ -237,7 +237,7 @@ def test_legacy_projection_upgrade_and_schema(public_project: PublicProject) -> 
                               "tickets": [{**old, "active": False, "replaced_by": []}]})
     legacy = api.graph()["1"]
     assert legacy["schema_version"] == 1 and legacy["parent_known"] is False
-    assert legacy["disposition"] is None and legacy["parent_id"] is None
+    assert legacy["disposition"] is None and "parent_id" not in legacy
     retained = api.retained()
     modern = task("1", source=old["source"], body=old["body"], disposition="cancelled",
                   retirement_reason="The owner confirmed the old inactive record was cancelled")
@@ -255,7 +255,8 @@ def test_legacy_projection_upgrade_and_schema(public_project: PublicProject) -> 
                               "tickets": [{**old, "active": True, "replaced_by": []}]}, success=False)
     assert api.retained() == before
     schema = api.call("ticket_graph", {"schema": True})
-    assert set(upgraded) == set(schema["required"]) == set(schema["properties"])
+    assert set(upgraded) == set(schema["properties"])
+    assert set(schema["required"]) <= set(upgraded)
     for missing in ("parent_id", "disposition", "retirement_reason", "schema_version"):
         malformed = task("2")
         malformed.pop(missing)

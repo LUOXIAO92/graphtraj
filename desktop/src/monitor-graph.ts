@@ -166,8 +166,15 @@ export function dependencyTerminals(nodes: MonitorNode[], edges: MonitorEdge[]):
   for (const edge of visible) {
     const source = ports.get(`source:${edge.id}`)!, target = ports.get(`target:${edge.id}`)!;
     const from = positions.get(edge.source)!, to = positions.get(edge.target)!;
+    // An expanded summary's header is above its children. Keep independent
+    // exits at their port heights until they clear that frame; otherwise the
+    // shortest obstacle routes can collapse onto the same lane below the card.
+    const summaryExit = from.frame && to.x >= from.x + from.frame.width
+      ? [{ x: from.x + from.frame.width + source.clearance, y: from.y + source.y }]
+      : [];
     ends.set(edge.id, { source: { x: source.x, y: source.y }, target: { x: target.x, y: target.y },
       vertices: [{ x: from.x + source.x + source.clearance, y: from.y + source.y },
+        ...summaryExit,
         { x: to.x - target.clearance, y: to.y + target.y }] });
   }
   return ends;

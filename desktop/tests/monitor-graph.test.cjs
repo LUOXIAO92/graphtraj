@@ -153,6 +153,24 @@ test('cancelled and superseded tasks never appear under their old execution stat
   }
 });
 
+test('expanded summary exits stay separate across its own wide frame', () => {
+  const graph = { tickets: [task('226', null), task('227', '226'),
+    task('228', '226', ['227']), task('236', null, ['226']),
+    task('240', null, ['226', '236'])] };
+  const view = monitorGraph(graph, new Set(['226']));
+  const source = view.nodes.find(node => node.id === '226');
+  const routes = dependencyTerminals(view.nodes, view.edges);
+  const exits = view.edges.filter(edge => edge.source === '226').map(edge => routes.get(edge.id));
+  assert.equal(exits.length, 2);
+  assert.notEqual(exits[0].source.y, exits[1].source.y);
+  for (const route of exits) {
+    assert.equal(route.vertices.length, 3);
+    assert.equal(route.vertices[0].y, route.vertices[1].y);
+    assert.equal(route.vertices[1].y, source.y + route.source.y);
+    assert.ok(route.vertices[1].x > source.x + source.frame.width);
+  }
+});
+
 test('replacement chains preserve direction, kinds and native endpoints across summaries', () => {
   const graph = { tickets: [task('A', null), task('B', null),
     { ...task('101', 'A'), active: false, replaced_by: ['102'] },

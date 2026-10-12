@@ -34,7 +34,12 @@ export class SettingsClient {
         void (async () => {
           const reply = JSON.parse(line);
           if (reply.failed) {
-            fail(new Error(reply.error || 'Settings were not saved.'));
+            const guidance = reply.error_kind === 'conflict'
+              ? 'Configuration conflict: Reload the current configuration and reapply your changes.'
+              : reply.error_kind === 'write'
+                ? 'Write failed: Check that the destination is writable, then retry Save.'
+                : 'Validation failed: Correct the reported setting, then retry Save.';
+            fail(new Error(`${reply.error || 'Settings were not saved.'} ${guidance}`));
           } else if (reply.result && !finished) {
             finished = true;
             resolve(reply.result);

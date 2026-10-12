@@ -16,7 +16,6 @@ from graphtraj.execution.runner_models import RunnerError
 from graphtraj.execution.runner_status import runtime_caller
 from graphtraj.interfaces import local_tool
 from graphtraj.runtimes.codex.app_server import CodexAppServer, CodexServerRequest
-from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 from graphtraj.runtimes.codex.managed_session import (
     native_operation_features,
     run_native_operation,
@@ -468,18 +467,16 @@ def test_malformed_prompt_content_is_refused_without_writing(
     assert snapshot(project) == before
 
 
-def test_prompt_layer_the_runtime_does_not_expose_is_refused_before_dispatch(
-    project: Path,
-) -> None:
-    """A declared layer is refused for the Runtimes that lack it, never folded elsewhere."""
+def test_single_channel_runtimes_merge_authored_prompts(project: Path) -> None:
+    """Pi and DSH preserve both authored texts in their one native system channel."""
     for runtime in ("pi", "dsh"):
         declared = RolePreset(runtime, "deepseek-flash", None, None,
-                              developer_prompt=DEVELOPER_TEXT)
-        with pytest.raises(RuntimeAdapterError) as refused:
-            resolve_child_role("author", declared, project)
-        assert refused.value.code == "ROLE_CONFIG_UNSUPPORTED"
-        assert "developer_prompt" in refused.value.message
-        assert runtime in refused.value.message
+                              system_prompt=SYSTEM_TEXT, developer_prompt=DEVELOPER_TEXT)
+        resolved = resolve_child_role("author", declared, project)
+        assert SYSTEM_TEXT in resolved.instructions
+        assert DEVELOPER_TEXT in resolved.instructions
+        assert resolved.instructions.index(SYSTEM_TEXT) < resolved.instructions.index(DEVELOPER_TEXT)
+        assert resolved.system_instructions == ""
 
 
 def test_supported_prompt_layers_resolve_into_the_role_text(project: Path) -> None:

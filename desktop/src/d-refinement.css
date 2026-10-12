@@ -183,3 +183,19 @@
   .d-org-tree ul ul > li::before, .d-org-tree ul ul > li::after { height: 17px; }
   .d-org-tree ul ul::before { height: 21px; }
 }
+
+/* Team editing retains D's cards while native handles own the relationships. */
+.d-team-flow { flex: 1; min-height: 320px; width: 100%; }
+.d-team-flow .d-org-node { width: 205px; text-align: left; }
+.d-team-flow .react-flow__handle { width: 13px; height: 13px; background: var(--accent-ui); border: 2px solid var(--surface); }
+.d-team-flow .react-flow__edge-path { stroke-width: 2; }
+.d-team-flow .react-flow__edgeupdater { r: 12; }
+.d-cross-team { padding: 12px 18px; border-top: 1px solid var(--border-ui); font-size: 12px; max-height: 160px; overflow: auto; }
+.d-cross-team summary { cursor: pointer; }
+.d-agent-prompts { display: grid; gap: 12px; border: 0; padding: 0 0 20px; margin: 0; }
+.d-agent-prompts legend { font-weight: 600; padding-bottom: 12px; }
+.d-agent-prompts p, .d-agent-prompts small { color: var(--muted); font-size: 12px; line-height: 1.5; }
+.d-effort-options { display: flex; gap: 12px 20px; flex-wrap: wrap; margin: 14px 0; }
+.d-effort-options label, .d-capability-fields > label { display: flex; align-items: center; gap: 8px; }
+
+.d-disconnect { padding: 10px 14px; background: var(--surface); border: 1px solid var(--border-ui); border-radius: 8px; font-size: 12px; cursor: pointer; }

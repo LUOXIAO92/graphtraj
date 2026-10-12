@@ -47,3 +47,26 @@ test('team forest preserves individual native occurrences, cross-team edges and 
   });
   assert.deepEqual(teamForest(tree, ['c.root']), { 'c.root': {} });
 });
+
+test('connecting one occurrence preserves historical cross-team paths and refuses cycles', async () => {
+  const { connectTeamNode } = await import('../src/settings-draft.ts');
+  const tree = { 'a.root': { 'a.worker': { 'a.leaf': {} }, 'a.other': {} }, 'b.root': { 'a.worker': { 'b.child': {} } } };
+  const next = connectTeamNode(tree, ['a.root', 'a.worker'], ['a.root', 'a.other']);
+  assert.deepEqual(next, { 'a.root': { 'a.other': { 'a.worker': { 'a.leaf': {} } } }, 'b.root': tree['b.root'] });
+  assert.deepEqual(tree['a.root']['a.worker'], { 'a.leaf': {} });
+  assert.throws(() => connectTeamNode(tree, ['a.root','a.worker'], ['a.root','a.worker']), /itself/);
+  assert.throws(() => connectTeamNode(tree, ['a.root','a.worker'], ['a.root','a.worker','a.leaf']), /descendants/);
+  assert.throws(() => connectTeamNode(tree, ['a.root','a.worker'], ['b.root']), /current team/);
+  assert.throws(() => connectTeamNode(tree, ['b.root','a.worker'], ['a.root']), /historical cross-team/);
+  assert.deepEqual(connectTeamNode({}, ['a.worker'], ['a.root']), { 'a.root': { 'a.worker': {} } });
+  const detached = connectTeamNode(tree, ['a.root', 'a.worker'], null);
+  assert.deepEqual(detached['a.worker'], { 'a.leaf': {} });
+  assert.deepEqual(detached['b.root'], tree['b.root']);
+});
+
+test('graph connections preserve literal prototype-named roles', async () => {
+  const { connectTeamNode } = await import('../src/settings-draft.ts');
+  const result = connectTeamNode({}, ['constructor'], ['__proto__']);
+  assert.deepEqual(JSON.parse(JSON.stringify(result)), { ['__proto__']: { constructor: {} } });
+  assert.equal(Object.hasOwn(result, '__proto__'), true);
+});

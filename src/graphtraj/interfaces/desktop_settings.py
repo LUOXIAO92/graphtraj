@@ -26,7 +26,7 @@ from graphtraj.workspace.runner_project import discover_project_root, discover_r
 FIELDS = (
     "runtime", "model", "base_url", "api_key_env", "reasoning_effort",
     "instructions", "system_prompt", "developer_prompt", "connection",
-    "approval_model", "approval_base_url", "approval_api_key_env",
+    "approval_model", "approval_base_url", "approval_api_key_env", "approval_connection",
 )
 EFFECT = (
     "Saved presets apply when a later dispatch resolves these roles. Existing Sessions "
@@ -44,7 +44,7 @@ def _entries(document: dict) -> dict:
         approval = entry.get("codex", {}).get("approval", {})
         if isinstance(approval, dict):
             result[reference].update({f"approval_{key}": approval[key]
-                                      for key in ("model", "base_url", "api_key_env") if key in approval})
+                                      for key in ("model", "base_url", "api_key_env", "connection") if key in approval})
         _check_connection(result[reference])
     return result
 
@@ -110,7 +110,8 @@ def settings_request(request: dict, cwd: Path) -> dict:
         return {"revision": current["revision"], "roles": before,
                 "edges": current["edges"], "role_tree": current["role_tree"], "effect": EFFECT}
     if request.get("revision") != current["revision"]:
-        raise ValueError(
+        raise RunnerError(
+            "configuration-conflict",
             "Configuration changed while editing. Reload settings and reapply "
             "your changes; nothing was written."
         )
@@ -138,6 +139,10 @@ def settings_request(request: dict, cwd: Path) -> dict:
             codex = dict(entries.get(name, {}).get("codex", {}))
             approval = {**codex.get("approval", {}), **approval_edits}
             approval = {key: value for key, value in approval.items() if value is not None}
+            if approval_edits.get("connection"):
+                approval = {"connection": approval_edits["connection"]}
+            elif any(approval_edits.get(key) for key in ("model", "base_url", "api_key_env")):
+                approval.pop("connection", None)
             if approval:
                 codex["approval"] = approval
             else:
@@ -177,10 +182,14 @@ def settings_request(request: dict, cwd: Path) -> dict:
         # Reuse native prompt capability and instruction-file validation without
         # preparing a Runtime, reading credentials or launching any process.
         resolved = resolve_child_role(reference, preset, root)
-        if preset.runtime == "codex":
-            from graphtraj.runtimes.codex.codex_adapter import _resolve_codex_role
+        if preset.runtime == "codex" and any(
+            field.startswith("approval_") for field in edits.get(old, {})
+        ):
+            from graphtraj.runtimes.codex.approval import approval_route
 
-            _resolve_codex_role(resolved, root)
+            # Saving ordinary properties does not launch an Agent. Validate an
+            # explicitly edited route here; launch still enforces its requirement.
+            approval_route(resolved.settings.codex, custom=False)
         if preset.reasoning_effort is not None and preset.reasoning_effort not in EFFORTS[preset.runtime]:
             raise ValueError(
                 f"Unsupported reasoning effort for {preset.runtime}; "
@@ -216,7 +225,7 @@ def settings_request(request: dict, cwd: Path) -> dict:
         {"change": change, "expected_revision": request["revision"]}, cwd=root, review=False,
     )
     if result.get("status") == "stale":
-        raise ValueError("Configuration changed before saving. Reload settings; nothing was written.")
+        raise RunnerError("configuration-conflict", "Configuration changed before saving. Reload settings; nothing was written.")
     return {"revision": result["revision"], "roles": _entries(result), "edges": result["edges"],
             "role_tree": result["role_tree"], "effect": EFFECT, "applied": result["applied"]}
 
@@ -233,4 +242,7 @@ def serve(input_stream: TextIO, output_stream: TextIO, cwd: Path) -> None:
         result = settings_request(request, cwd)
         emit({"result": result, "failed": False})
     except Exception as error:
-        emit({"failed": True, "error": str(error)})
+        code = getattr(error, "code", None)
+        kind = ("conflict" if code == "configuration-conflict" else
+                "write" if isinstance(error, OSError) else "validation")
+        emit({"failed": True, "error": str(error), "error_kind": kind})

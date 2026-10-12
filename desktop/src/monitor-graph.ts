@@ -5,7 +5,7 @@ export type Size = { width: number; height: number };
 export type MonitorNode = Size & { id: string; ticket: Ticket; x: number; y: number;
   children: string[]; expanded: boolean; frame?: Size };
 export type MonitorEdge = { id: string; source: string; target: string;
-  dependency: string; ticket: string; projected: boolean; vertices: { x: number; y: number }[] };
+  dependencies: { dependency: string; ticket: string }[]; projected: boolean; vertices: { x: number; y: number }[] };
 
 /** Read only explicit native parents; legacy unknown parents remain unknown. */
 export function taskChildren(graph: Graph): Map<string, string[]> {
@@ -58,8 +58,8 @@ export function monitorGraph(graph: Graph, expanded: ReadonlySet<string>, sizes:
     }
     ids.forEach(id => own(id, id));
     // Parallel projected dependencies share one weighted ordering constraint.
-    // Dagre can produce NaN routes for parallel edges; native edges and ports
-    // remain separate below and in the canvas.
+    // Dagre can produce NaN routes for parallel edges. The display projection
+    // below retains all native dependencies within each visible directed pair.
     for (const edge of nativeEdges) {
       const from = owners.get(edge.dependency), to = owners.get(edge.ticket);
       if (from && to && from !== to) layout.setEdge(from, to, { weight: (layout.edge(from, to)?.weight ?? 0) + 1 });
@@ -85,9 +85,18 @@ export function monitorGraph(graph: Graph, expanded: ReadonlySet<string>, sizes:
   }
   const placed = place(roots);
   nodes.push(...placed.nodes);
-  const edges = nativeEdges.map(edge => ({ ...edge, source: endpoints.get(edge.dependency)!, target: endpoints.get(edge.ticket)!,
-    vertices: placed.routes.get(edge.id) ?? [],
-    projected: endpoints.get(edge.dependency) !== edge.dependency || endpoints.get(edge.ticket) !== edge.ticket }));
+  const pairs = new Map<string, MonitorEdge>();
+  for (const edge of nativeEdges) {
+    const source = endpoints.get(edge.dependency)!, target = endpoints.get(edge.ticket)!;
+    const id = JSON.stringify([source, target]);
+    const existing = pairs.get(id);
+    if (existing) existing.dependencies.push({ dependency: edge.dependency, ticket: edge.ticket });
+    else pairs.set(id, { id, source, target,
+      dependencies: [{ dependency: edge.dependency, ticket: edge.ticket }],
+      vertices: placed.routes.get(edge.id) ?? [],
+      projected: source !== edge.dependency || target !== edge.ticket });
+  }
+  const edges = [...pairs.values()];
   return { nodes, edges, endpoints };
 }
 

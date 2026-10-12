@@ -1,7 +1,7 @@
 import React, { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import { Graph as X6, Shape, type Cell } from '@antv/x6';
 import type { Graph, Ticket } from '../electron/types';
-import { dependencyFocus, monitorGraph, taskChildren, type Size } from './monitor-graph';
+import { dependencyFocus, monitorGraph, taskChildren, type Size, type MonitorEdge } from './monitor-graph';
 import './task-canvas.css';
 
 export type TaskCanvasHandle = { fit: () => void; locate: (id: string) => void };
@@ -102,9 +102,9 @@ export const TaskCanvas = forwardRef<TaskCanvasHandle, Props>(function TaskCanva
     graph.on('blank:click', () => current.current.select(null));
     // A single readable label avoids collisions inside dense routing channels.
     graph.on('edge:mouseenter', ({ edge }) => {
-      const data = edge.getData();
+      const data = edge.getData<MonitorEdge>();
       const title = (id: string) => current.current.graph.tickets.find(ticket => ticket.ticket_id === id)?.title ?? '';
-      if (pathLabel.current) pathLabel.current.textContent = `#${data.dependency} ${title(data.dependency)} → #${data.ticket} ${title(data.ticket)}`;
+      if (pathLabel.current) pathLabel.current.textContent = data.dependencies.map(item => `#${item.dependency} ${title(item.dependency)} → #${item.ticket} ${title(item.ticket)}`).join(' · ');
     });
     graph.on('edge:mouseleave', () => { if (pathLabel.current) pathLabel.current.textContent = ''; });
     return () => { graph.dispose(); engine.current = null; };
@@ -131,7 +131,7 @@ export const TaskCanvas = forwardRef<TaskCanvasHandle, Props>(function TaskCanva
       sizes[ticket.ticket_id] = { width: 320, height: Math.ceil(element.getBoundingClientRect().height) };
       cards.current.set(ticket.ticket_id, element);
     }
-    // Reserve a separate port per dependency even after many endpoints collapse.
+    // Reserve ports for visible directed pairs, not hidden internal endpoints.
     const preliminary = monitorGraph(data.graph, data.expanded, sizes);
     for (const node of preliminary.nodes) {
       const outgoing = preliminary.edges.filter(edge => edge.source === node.id && edge.source !== edge.target).length;
@@ -157,11 +157,22 @@ export const TaskCanvas = forwardRef<TaskCanvasHandle, Props>(function TaskCanva
           ]) },
       }));
     }
-    for (const edge of visibleEdges) cells.push(graph.createEdge({ id: edge.id,
+    for (const edge of visibleEdges) {
+      const outgoing = visibleEdges.filter(item => item.source === edge.source);
+      const incoming = visibleEdges.filter(item => item.target === edge.target);
+      // Separate the terminal channels. Shared Dagre waypoints force unrelated
+      // dependencies onto one trunk; X6 routes each visible pair around nodes.
+      cells.push(graph.createEdge({ id: edge.id,
       source: { cell: edge.source, port: `out:${edge.id}` }, target: { cell: edge.target, port: `in:${edge.id}` },
-      zIndex: 1, data: edge, vertices: edge.vertices,
+      zIndex: 1, data: edge,
+      router: { name: 'manhattan', args: {
+        padding: { top: 24, bottom: 24, left: 32 + incoming.indexOf(edge) * 16, right: 32 + outgoing.indexOf(edge) * 16 },
+        step: 8, snapToGrid: false, startDirections: ['right'], endDirections: ['left'],
+        excludeShapes: ['task-frame'], maxLoopCount: 25000,
+      } },
       attrs: { line: { stroke: '#8192a6', strokeWidth: 1.6, targetMarker: { name: 'block', width: 10, height: 8 } } },
     }));
+    }
     graph.once('render:done', () => {
       if (pendingLocate.current) locate(pendingLocate.current);
       else if (pendingToggle.current) {
@@ -197,9 +208,10 @@ export const TaskCanvas = forwardRef<TaskCanvasHandle, Props>(function TaskCanva
       element.style.opacity = matches.has(node.id) && emphasized.has(node.id) ? '1' : '.25';
     }
     for (const edge of graph.getEdges()) {
-      const data = edge.getData();
-      const related = focus.has(data.dependency) && focus.has(data.ticket);
-      const visible = related && props.matches.has(data.dependency) && props.matches.has(data.ticket);
+      const data = edge.getData<MonitorEdge>();
+      const related = data.dependencies.some(item => focus.has(item.dependency) && focus.has(item.ticket));
+      const visible = data.dependencies.some(item => focus.has(item.dependency) && focus.has(item.ticket)
+        && props.matches.has(item.dependency) && props.matches.has(item.ticket));
       edge.attr('line/stroke', props.selected && related ? '#365f9c' : '#8192a6');
       edge.attr('line/strokeWidth', props.selected && related ? 3 : 1.6);
       edge.attr('line/opacity', visible ? 1 : .15);

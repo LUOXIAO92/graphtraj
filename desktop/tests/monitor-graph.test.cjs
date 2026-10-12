@@ -27,9 +27,9 @@ test('native hierarchy is lossless across nested expansion, contraction and proj
     assert.equal(result.edges.length, 3);
     for (const edge of result.edges) {
       assert.ok(ids.has(edge.source) && ids.has(edge.target));
-      assert.ok(graph.tickets.find(ticket => ticket.ticket_id === edge.ticket).dependencies.includes(edge.dependency));
+      assert.ok(graph.tickets.find(ticket => ticket.ticket_id === edge.dependencies[0].ticket).dependencies.includes(edge.dependencies[0].dependency));
     }
-    const first = result.edges.find(edge => edge.dependency === '1');
+    const first = result.edges.find(edge => edge.dependencies.some(item => item.dependency === '1'));
     assert.equal(first.source, open.includes('C') ? '1' : open.includes('A') ? 'C' : 'A');
     assert.equal(first.target, open.includes('B') ? '2' : 'B');
     assert.equal(JSON.stringify(graph), original);
@@ -92,11 +92,34 @@ test('parallel collapsed dependencies retain every native edge with finite route
   const original = JSON.stringify(graph);
   for (const expanded of [[], ['127'], ['127', '147']]) {
     const view = monitorGraph(graph, new Set(expanded));
-    assert.equal(view.edges.length, 3);
-    assert.equal(new Set(view.edges.map(edge => edge.id)).size, 3);
+    assert.equal(view.edges.length, expanded.length ? 3 : 1);
+    assert.equal(new Set(view.edges.map(edge => edge.id)).size, view.edges.length);
+    assert.equal(view.edges.flatMap(edge => edge.dependencies).length, 3);
     assert.ok(view.nodes.every(node => Number.isFinite(node.x) && Number.isFinite(node.y)));
     assert.ok(view.edges.every(edge => edge.vertices.every(point => Number.isFinite(point.x) && Number.isFinite(point.y))));
-    for (const edge of view.edges) assert.ok(graph.tickets.find(ticket => ticket.ticket_id === edge.ticket).dependencies.includes(edge.dependency));
+    for (const edge of view.edges) assert.ok(graph.tickets.find(ticket => ticket.ticket_id === edge.dependencies[0].ticket).dependencies.includes(edge.dependencies[0].dependency));
+  }
+  assert.equal(JSON.stringify(graph), original);
+});
+
+
+test('collapsed visible pairs aggregate only matching directions and restore real endpoints on expansion', () => {
+  const graph = { tickets: [task('252', null), task('260', null), task('275', null), task('270', null),
+    task('a', '252'), task('b', '252'), task('261', '260', ['a']), task('269', '260', ['b']),
+    task('264', '260', ['261', '269']), task('p', '275', ['261', '264']),
+    task('q', '270', ['269']), task('r', '252', ['q'])] };
+  const original = JSON.stringify(graph);
+  const collapsed = monitorGraph(graph, new Set());
+  assert.equal(collapsed.edges.filter(e => e.source === '252' && e.target === '260').length, 1);
+  assert.equal(collapsed.edges.find(e => e.source === '252' && e.target === '260').dependencies.length, 2);
+  assert.equal(collapsed.edges.find(e => e.source === '260' && e.target === '275').dependencies.length, 2);
+  assert.ok(collapsed.edges.some(e => e.source === '260' && e.target === '270'));
+  assert.ok(collapsed.edges.some(e => e.source === '270' && e.target === '252'));
+  const expanded = monitorGraph(graph, new Set(['252', '260', '275', '270']));
+  assert.deepEqual(Array.from(expanded.edges.filter(e => e.target === '264'), e => e.source).sort(), ['261', '269']);
+  for (const view of [collapsed, expanded]) {
+    const native = view.edges.flatMap(e => e.dependencies.map(d => `${d.dependency}->${d.ticket}`)).sort();
+    assert.deepEqual(Array.from(native), graph.tickets.flatMap(t => t.dependencies.map(d => `${d}->${t.ticket_id}`)).sort());
   }
   assert.equal(JSON.stringify(graph), original);
 });

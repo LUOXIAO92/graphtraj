@@ -134,7 +134,8 @@ test('result selection requires the real expansion control, not quoted phase tex
   t.after(async () => { await act(async () => tree.unmount()); });
   const candidates = tree.root.findAllByType('details').filter(card => card.findAllByType('span').some(node => node.props.className === 'tool-result' && node.children.includes('result')));
   assert.equal(candidates.length, 1);
-  assert.equal(candidates[0].findByType('pre').props.children, `${marker} diagnostic`);
+  // The first pre is the readable result body; the raw field copy sits in Technical details.
+  assert.equal(candidates[0].findAllByType('pre')[0].props.children, `${marker} diagnostic`);
 });
 
 
@@ -207,7 +208,7 @@ test('tool names resolve across pages and result-first records without guessing 
   assert.doesNotMatch(summaries(), /private-call-id/);
   await act(async () => { tree.update(React.createElement(ActivityRecords, { events: records, pageStart: 0, agent: 'worker' })); });
   assert.match(summaries(), /Tool · exec_command/);
-  assert.equal(tree.root.findByType('pre').props.children, 'Formatted test: hook decision allow');
+  assert.equal(tree.root.findAllByType('pre')[0].props.children, 'Formatted test: hook decision allow');
   assert.match(text(tree), /private-call-id/);
   await act(async () => { tree.update(React.createElement(ActivityRecords, { events: records, pageStart: 100, agent: 'worker' })); });
   assert.match(summaries(), /Tool · Name not recorded/);
@@ -296,10 +297,33 @@ test('tool results render readable text, image previews and fallback notes witho
   assert.ok(tree.root.findAllByType('strong').some(node => node.children.join('') === 'tool'));
   assert.equal(tree.root.findByType('img').props.src, `data:image/png;base64,${image}`);
   assert.ok(tree.root.findAllByType('a').some(node => String(node.props.download).startsWith('tool-image')));
+  // The fallback points at the real on-demand disclosure, not a missing "record below".
   assert.match(text(tree), /Unsupported tool content \(/);
-  assert.match(text(tree), /future_block/);
-  // Raw protocol fields stay in the disclosure; the encoded result is never dumped as text.
-  const card = tree.root.findByType('details');
-  assert.ok(card.findAll(node => node.children.includes('call-1')).length >= 1);
-  assert.equal(tree.root.findAllByType('pre').length, 0);
+  assert.match(text(tree), /available under Technical details/);
+
+  // Readable body and technical fields are layered: raw fields live only in the sub-disclosure.
+  const strings = node => node.findAll(() => true).flatMap(child => child.children.filter(item => typeof item === 'string'));
+  const content = tree.root.find(node => node.props.className === 'tool-content');
+  assert.equal(content.findAllByType('pre').length, 0);
+  assert.ok(!strings(content).some(item => item.includes('input_image')));
+  const technical = tree.root.find(node => node.props.className === 'tool-technical');
+  assert.ok(strings(technical).some(item => item.includes('call-1')));
+  assert.ok(strings(technical).some(item => item.includes('input_image')));
+});
+
+
+test('plain tool text keeps its recorded newlines instead of collapsing into one paragraph', async t => {
+  const { EventCard } = await components(t);
+  let tree;
+  await act(async () => { tree = create(React.createElement(EventCard, { event: {
+    id: '2', kind: 'tool', phase: 'result', name: 'run_build', time: null, call_id: 'call-2',
+    tool_type: 'function_call_output', source: { runtime: 'codex', trace: 'sanitized', offset: 9 },
+    result: 'build 001: ok\nbuild 002: ok',
+    content: [{ type: 'text', text: 'build 001: ok\nbuild 002: ok' }] } })); });
+  t.after(async () => { await act(async () => tree.unmount()); });
+
+  // The recorded line break survives into the rendered text node (CSS keeps it visible).
+  const body = tree.root.find(node => node.props.className === 'tool-text');
+  const rendered = body.findAll(() => true).flatMap(child => child.children.filter(item => typeof item === 'string')).join('');
+  assert.match(rendered, /build 001: ok\nbuild 002: ok/);
 });

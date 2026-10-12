@@ -195,6 +195,7 @@ def test_tool_results_project_readable_parts_without_dumping_encodings(tmp_path:
     """Long text, structured objects, images and unknown blocks stay readable."""
     long_text   = 'A long recorded explanation of the tool output. ' * 20
     image_bytes = 'iVBORw0KGgoAAAANSUhEUg' * 6  # Self-made stand-in, never a copied image.
+    plain_log   = '\n'.join(f'build {index:03d}: compiled module ok' for index in range(1, 41))
     blocks = [
         {'type': 'input_text', 'text': long_text},
         {'type': 'input_image', 'image_url': 'data:image/png;base64,' + image_bytes},
@@ -206,9 +207,12 @@ def test_tool_results_project_readable_parts_without_dumping_encodings(tmp_path:
         {'type': 'response_item', 'payload': {'type': 'custom_tool_call_output', 'call_id': 'img-1',
                                              'output': json.dumps(blocks)}},
         {'type': 'response_item', 'payload': {'type': 'function_call_output', 'call_id': 'obj-1',
-                                             'output': json.dumps({'status': 'ok', 'items': [1, 2]})}},
+                                             'output': json.dumps({'status': 'ok', 'items': [1, 2],
+                                                                   'summary': 'All recorded checks passed'})}},
         {'type': 'response_item', 'payload': {'type': 'function_call_output', 'call_id': 'unknown-1',
                                              'output': '[{"type":"future_block","payload":"x"}]'}},
+        {'type': 'response_item', 'payload': {'type': 'function_call_output', 'call_id': 'plain-1',
+                                             'output': plain_log}},
     ]
     prepare(tmp_path, 'codex', records)
     events = query(tmp_path, alias='research@x1')['events']
@@ -224,10 +228,16 @@ def test_tool_results_project_readable_parts_without_dumping_encodings(tmp_path:
     assert mixed['result'] == json.dumps(blocks)
 
     structured = results[1]
-    assert structured['content'] == [{'type': 'text', 'text': json.dumps(
-        {'status': 'ok', 'items': [1, 2]}, indent=2, ensure_ascii=False)}]
+    # A structured payload reads as meaningful fields, not an inline JSON blob.
+    assert structured['content'] == [{'type': 'text', 'text':
+        'status: ok\nitems: 1, 2\nsummary: All recorded checks passed'}]
+    assert '{' not in structured['content'][0]['text']
+    assert structured['result'] == json.dumps({'status': 'ok', 'items': [1, 2],
+                                               'summary': 'All recorded checks passed'})
 
     assert results[2]['content'] == [{'type': 'unknown', 'label': 'future_block'}]
+    # Plain text keeps its recorded newlines instead of collapsing into one paragraph.
+    assert results[3]['content'] == [{'type': 'text', 'text': plain_log}]
 
 
 def test_dsh_stream_final_coordinates_and_model_source(tmp_path: Path) -> None:

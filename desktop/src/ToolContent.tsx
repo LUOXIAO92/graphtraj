@@ -29,7 +29,7 @@ export function ToolContent({ parts }: { parts: ToolPart[] }) {
     }
 
     if (part.type === 'unknown') {
-      return <p className="tool-unknown" key={index}>Unsupported tool content ({part.label || 'unknown'}). Raw details remain in the record below.</p>;
+      return <p className="tool-unknown" key={index}>Unsupported tool content ({part.label || 'unknown'}). The original record is available under Technical details.</p>;
     }
 
     if (!part.text.trim()) return null;

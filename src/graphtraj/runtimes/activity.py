@@ -81,7 +81,7 @@ def tool_content(value: Any) -> list[dict]:
 
     Native order and text/image association are preserved. A JSON-encoded block
     list (Codex ``custom_tool_call_output``) is decoded, a structured object
-    payload is shown as readable JSON, and an unreadable shape becomes an
+    payload is read by content meaning, and an unreadable shape becomes an
     explicit fallback note. The whole protocol object is never returned as one
     opaque blob, and image bytes never appear inside a text part.
     """
@@ -92,7 +92,9 @@ def tool_content(value: Any) -> list[dict]:
     if isinstance(value, list):
         return _block_content(value)
     if isinstance(value, dict):
-        return _block_content([value])
+        if _is_block(value):
+            return _block_content([value])
+        return [{'type': 'text', 'text': _object_text(value)}]
     return [{'type': 'text', 'text': str(value)}]
 
 
@@ -109,9 +111,36 @@ def _string_content(value: str) -> list[dict]:
         if _is_block(parsed):
             return _block_content([parsed])
         if parsed is not _UNSET:
-            # A structured object payload reads as pretty JSON, never a protocol dump.
-            return [{'type': 'text', 'text': json.dumps(parsed, indent=2, ensure_ascii=False)}]
+            if isinstance(parsed, dict):
+                # A structured payload reads by content meaning, not as a protocol dump.
+                return [{'type': 'text', 'text': _object_text(parsed)}]
+            return [{'type': 'text', 'text': json.dumps(parsed, ensure_ascii=False)}]
     return [{'type': 'text', 'text': value}]
+
+
+def _object_text(value: dict) -> str:
+    """Read a structured object payload as ``key: value`` lines.
+
+    Each top-level field becomes one readable line so meaningful fields such as
+    a status or a summary stay visible; the full object is kept in the raw
+    result for on-demand technical details. No tool name is special-cased.
+    """
+    return '\n'.join(f'{key}: {_field_text(item)}' for key, item in value.items())
+
+
+def _field_text(value: Any) -> str:
+    """Read one object field: scalars plainly, flat lists inline, else compact JSON."""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, bool):
+        return 'true' if value else 'false'
+    if value is None:
+        return 'null'
+    if isinstance(value, (int, float)):
+        return str(value)
+    if isinstance(value, list) and all(not isinstance(item, (dict, list)) for item in value):
+        return ', '.join(_field_text(item) for item in value)
+    return json.dumps(value, ensure_ascii=False)
 
 
 def _block_content(blocks: list) -> list[dict]:

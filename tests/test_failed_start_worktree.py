@@ -239,7 +239,13 @@ def test_cleaned_task_reopens_with_fresh_member_and_preserved_history(
     revised = run_process([str(installed_commands.product), 'ticket', 'revise',
                            '--revision-file', str(revision)], cwd=root, env=env)
     assert revised.returncode == 0, revised.stdout + revised.stderr
-    env.pop('FAKE_CODEX_LIFECYCLE_ACTION')
+    env.update(FAKE_CODEX_LIFECYCLE_ACTION='deliver-document',
+               FAKE_CODEX_RESULT_FILE='CORRECTION.txt')
+    # Each real thread/start returns a fresh native identity. The existing peer
+    # uses a fixed ID by default, so select another for this second lifecycle.
+    fake_codex.executable.write_text(
+        fake_codex.executable.read_text().replace("'fake-thread'", "'reopened-thread'"),
+    )
 
     # A foreign leftover must fail before allocating any apparent member, even
     # on repeated requests. Removing only this fixture directory permits retry.
@@ -268,12 +274,17 @@ def test_cleaned_task_reopens_with_fresh_member_and_preserved_history(
     member = result['tasks'][0]
     assert member['launch_status'] == 'launched', result
     assert member['alias'] != old_alias
+    assert member['session'] != yaml.safe_load(launched.stdout)['tasks'][0]['session']
     wait_for_file(sessions / member['alias'] / 'execution.yml')
     assert Path(member['worktree_path']) == worktree and (worktree / '.git').is_file()
     mapping = yaml.safe_load((sessions / member['alias'] / 'mapping.yml').read_text())
     assert mapping['parent'] is None and mapping['team_generation'] == 1
     team = yaml.safe_load((evidence / 'teams/1/team.yml').read_text())
     assert team['members']['engineer']['session_ref'] == member['alias']
+    reports = run_process([str(installed_commands.runner), 'reports', member['alias']], cwd=root, env=env)
+    correction = yaml.safe_load(reports.stdout)['submissions'][-1]
+    assert correction['round'] == 2 and correction['candidate'] != submission['candidate']
+    assert team['current_round'] == 2
     assert not (sessions / old_alias).exists()
     assert batch.read_bytes() == original_batch
     for path, content in retained.items():

@@ -25,7 +25,7 @@ def ticket() -> None:
     type=click.Path(path_type=Path, exists=True, dir_okay=False),
 )
 def register_command(ticket_file: Path) -> None:
-    """Register one accepted GitHub Issue from a YAML file."""
+    """Register one accepted Ticket definition from a YAML file."""
 
     try:
         issue = yaml.safe_load(ticket_file.read_text(encoding="utf-8"))

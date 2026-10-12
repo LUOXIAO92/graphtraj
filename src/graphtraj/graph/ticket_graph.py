@@ -781,6 +781,7 @@ def _require_reopened_ancestors(
 
 
 def _write_yaml(path: Path, value: dict[str, Any]) -> None:
+    """Write execution facts without duplicating a v2 immutable definition."""
     temporary = path.with_name(".{0}.tmp".format(path.name))
     stored = protocol.execution_record(value) if path.name == "ticket.yml" else value
     temporary.write_text(yaml.safe_dump(stored, sort_keys=False), encoding="utf-8")
@@ -805,11 +806,8 @@ def _rollback_revision(changed: list[tuple[Path, bytes | None, Path]]) -> None:
 
 
 def _snapshot_source(path: Path) -> str:
+    """Read the external source from a known legacy Markdown definition."""
     snapshot = path.read_text(encoding="utf-8")
-    front = split_execution_budget_front_matter(snapshot)
-    metadata = yaml.safe_load(front[1]) if front is not None else None
-    if isinstance(metadata, dict) and isinstance(metadata.get("task"), dict) and metadata["task"].get("schema_version") == 2:
-        return protocol.read_definition(snapshot)["source"]
     front_matter = split_execution_budget_front_matter(snapshot)
     if front_matter is not None:
         _, _, snapshot = front_matter

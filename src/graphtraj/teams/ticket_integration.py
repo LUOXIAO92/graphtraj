@@ -277,6 +277,7 @@ def _resolve(configuration: ProjectConfiguration, batch: Batch, log: TextIO) -> 
 
 
 def _record(configuration: ProjectConfiguration, directory: Path, record: dict, status: str, event: dict) -> dict:
+    """Recheck the current version and record one integration lifecycle event."""
     lock = _lock(configuration.state / "tickets", exclusive=True)
     try:
         current = _load_states(configuration.state / "tickets")

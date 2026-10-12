@@ -233,7 +233,10 @@ def test_legacy_projection_upgrade_and_schema(public_project: PublicProject) -> 
     from test_ticket_graph import _ticket
 
     old = _ticket("1", "task-1")
-    old["body"] = "Part of #90\nDeliver the existing task."
+    old["body"] = (
+        "---\ntask:\n  schema_version: 2\n---\n"
+        "Part of #90\nDeliver the existing task."
+    )
     api.call("ticket_register", old)
     api.call("ticket_revise", {"product_preserving": True, "caused_by_event_ids": [],
                               "evidence_refs": ["evidence.md"],

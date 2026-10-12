@@ -69,11 +69,11 @@ def _non_coding_ticket(
     }
 
 
-def test_graph_projects_explicit_summary_membership_without_dependency_inference(
+def test_graph_keeps_legacy_parentage_unknown_without_prose_inference(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
 ) -> None:
-    """Accepted Parent declarations survive graph reads without changing edges."""
+    """Legacy prose remains readable but cannot establish formal parentage."""
     project = temporary_git_repository
     _configure(project)
     bodies = [
@@ -91,10 +91,8 @@ def test_graph_projects_explicit_summary_membership_without_dependency_inference
     result = _run(installed_commands, project, "graph")
     assert result.returncode == 0, result.stderr
     graph = yaml.safe_load(result.stdout)
-    assert {group["id"]: group["ticket_ids"] for group in graph["groups"]} == {
-        "https://github.com/example/project/issues/90": ["1", "3"],
-        "https://github.com/example/project/issues/91": ["2", "3", "5"],
-    }
+    assert all(ticket["parent_known"] is False and ticket["parent_id"] is None
+               and ticket["schema_version"] == 1 for ticket in graph["tickets"])
     assert [ticket["dependencies"] for ticket in graph["tickets"]] == [[], ["1"], ["2"], ["3"], ["4"]]
     assert all(ticket["status"] == "pending" for ticket in graph["tickets"])
 
@@ -422,7 +420,8 @@ def test_installed_command_corrects_a_dependency_and_generates_current_readiness
     assert initial_snapshot.endswith("Deliver feature.\n")
     graph = _run(installed_commands, project, "graph")
     assert graph.returncode == 0, graph.stderr
-    assert yaml.safe_load(graph.stdout) == {
+    projection = yaml.safe_load(graph.stdout)
+    expected = {
         "tickets": [
             {
                 "ticket_id": "1",
@@ -446,6 +445,9 @@ def test_installed_command_corrects_a_dependency_and_generates_current_readiness
             },
         ]
     }
+    for actual, wanted in zip(projection["tickets"], expected["tickets"], strict=True):
+        assert {key: actual[key] for key in wanted} == wanted
+    assert all(node["parent_known"] is False for node in projection["tickets"])
     assert not (state / "dag.md").exists()
     assert not (state / "task-map.yml").exists()
 

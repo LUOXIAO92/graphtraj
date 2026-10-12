@@ -193,7 +193,7 @@ def test_delivered_guide_resolution_is_independent_of_the_process_directory(
         {"action": "execute", "feature": "ticket_graph", "arguments": {}},
         cwd=tmp_path,
     )
-    assert executed.document == {"tickets": []}
+    assert executed.document == {"schema_version": 2, "tickets": []}
 
 
 def test_method_only_rows_use_guide_names_and_frontmatter_descriptions(

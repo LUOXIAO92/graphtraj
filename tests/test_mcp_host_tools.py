@@ -259,7 +259,8 @@ def test_installed_mcp_server_discovers_tools_and_reads_the_same_graph_as_the_cl
         graph = _cli(installed_commands, project, "ticket", "graph")
         assert graph.returncode == 0, graph.stderr
         assert call["result"]["structuredContent"] == yaml.safe_load(graph.stdout)
-        assert call["result"]["structuredContent"]["tickets"] == [{
+        node = call["result"]["structuredContent"]["tickets"][0]
+        expected = {
             "ticket_id":    "73",
             "ticket_name":  "shared-graph",
             "status":       "pending",
@@ -267,7 +268,9 @@ def test_installed_mcp_server_discovers_tools_and_reads_the_same_graph_as_the_cl
             "ready":        True,
             "dependencies": [],
             "replaced_by":  [],
-        }]
+        }
+        assert {key: node[key] for key in expected} == expected
+        assert node["schema_version"] == 1 and node["parent_known"] is False
         # The rendered text is the CLI's own YAML for the same document.
         assert call["result"]["content"][0]["text"] == graph.stdout
 
@@ -360,7 +363,15 @@ def test_installed_mcp_server_submits_the_same_graph_operations_as_the_cli(
     assert _stable_event(updated["structuredContent"]) == _stable_event(
         yaml.safe_load(cli_updated.stdout)
     )
-    assert host_graph == yaml.safe_load(cli_graph.stdout)
+    cli_view = yaml.safe_load(cli_graph.stdout)
+    for host_node, cli_node in zip(host_graph["tickets"], cli_view["tickets"], strict=True):
+        assert {key: value for key, value in host_node.items() if key != "current_definition"} == {
+            key: value for key, value in cli_node.items() if key != "current_definition"
+        }
+        directory = f".graphtraj/state/tickets/{host_node['ticket_id']}-{host_node['ticket_name']}"
+        assert (host_project / directory / host_node["current_definition"]).read_bytes() == (
+            cli_project / directory / cli_node["current_definition"]
+        ).read_bytes()
     assert [ticket["status"] for ticket in host_graph["tickets"]] == [
         "pending", "ready",
     ]
@@ -449,7 +460,7 @@ def test_installed_mcp_server_survives_a_rejected_alias_status_call(
     assert rejected["isError"] is True
     assert rejected["content"][0]["text"] == (yaml.safe_load(cli.stdout).get("error") or yaml.safe_load(cli.stdout)["tasks"][0]["error"])["message"]
     assert after["isError"] is False
-    assert after["structuredContent"] == {"tickets": []}
+    assert after["structuredContent"] == {"schema_version": 2, "tickets": []}
 
 
 def test_installed_mcp_server_reports_a_missing_project_root_like_the_graph_tools(

@@ -143,7 +143,7 @@ def test_installed_wheel_initializes_both_layouts_and_serves_host_tools(
 
     assert {tool["name"] for tool in discovered} == TOOL_NAMES
     assert call["result"]["isError"] is False
-    assert call["result"]["structuredContent"] == {"tickets": []}
+    assert call["result"]["structuredContent"] == {"schema_version": 2, "tickets": []}
 
 
 def test_upgrading_the_installation_preserves_existing_project_records(
@@ -312,4 +312,4 @@ def test_installed_tool_reads_the_delivered_guide_from_another_directory(
     ).read_text(encoding="utf-8")
     assert Path(described["manual_ref"]).is_absolute()
     assert replies[2]["result"]["manual_ref"] == described["manual_ref"]
-    assert replies[3]["result"] == {"tickets": []}
+    assert replies[3]["result"] == {"schema_version": 2, "tickets": []}

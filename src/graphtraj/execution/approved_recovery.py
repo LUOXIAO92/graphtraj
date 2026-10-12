@@ -123,6 +123,10 @@ def _repair_snapshot(project: Any, before: dict, request: dict) -> dict:
         after['budget']['approved_minutes'] = after['budget'].get('approved_minutes', 0) + minutes
         return after
     if request.get('restore_active', False):
+        if before['ticket'].get('schema_version') == 2 and (
+            not before['ticket']['active'] or before['ticket']['status'] == 'integrated'
+        ):
+            raise RunnerError('invalid-input', 'Task disposition and completed ancestors require task-graph revision.')
         if before['ticket']['replaced_by']:
             raise RunnerError('invalid-input', 'A replaced Ticket requires task-graph revision.')
         after['ticket']['active'] = True
@@ -266,7 +270,12 @@ def _apply_recovery(proposal: dict, cwd: Path) -> dict:
                         try:
                             for key in original:
                                 if proposal['before'][key] != proposal['after'][key]:
-                                    write_yaml_durably(paths[key], proposal['after'][key])
+                                    value = proposal['after'][key]
+                                    if key == 'ticket':
+                                        from graphtraj.graph.task_protocol import execution_record
+
+                                        value = execution_record(value)
+                                    write_yaml_durably(paths[key], value)
                             if original_mode != proposal['after']['round_mode']:
                                 paths['round'].chmod(proposal['after']['round_mode'])
                         except Exception:

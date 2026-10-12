@@ -145,6 +145,8 @@ def test_file_content_uses_same_nested_schema_as_gateway(
     original = tools.TOOLS["ticket_register"]
     schema = deepcopy(original.input_schema)
     schema["properties"]["ticket_id"] = {"type": "integer", "enum": [210]}
+    for alternative in schema.get("anyOf", []):
+        alternative["properties"]["ticket_id"] = schema["properties"]["ticket_id"]
     monkeypatch.setitem(tools.TOOLS, "ticket_register", replace(original, input_schema=schema, handler=handler))
     document = {"ticket_id": 210, "ticket_name": "fixture", "source": "source", "title": "title",
                 "body": "body", "dependencies": []}

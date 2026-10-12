@@ -28,6 +28,12 @@ def accepted_ticket(
 
     definition = _ticket("83", "integration")
     definition["body"] = _budget_body(total=60)
+    if getattr(request, "param", None) == "v2":
+        from test_task_node_protocol import task
+
+        _register(installed_commands, root, task("82"))
+        definition.update(schema_version=2, parent_id="82", disposition="active",
+                          replaced_by=[], retirement_reason=None)
     _register(installed_commands, root, definition)
     for identifier, dependencies in (("84", ["83"]), ("85", ["83"]), ("86", ["83", "84"])):
         _register(installed_commands, root, _ticket(identifier, "dependent", dependencies=dependencies))
@@ -35,6 +41,8 @@ def accepted_ticket(
     batch = root / "batch.yml"
     batch.write_text(yaml.safe_dump({"tasks": [{"ticket_id": "83", "ticket_name": "integration", "role": "coding-team.team-leader"}]}))
     selected_axes = getattr(request, "param", None)
+    if selected_axes == "v2":
+        selected_axes = ""
     environment.update(
         FAKE_CODEX_LIFECYCLE_ACTION="complete-team-round",
         GRAPHTRAJ_AGENT_RUNNER=str(installed_commands.runner),
@@ -954,3 +962,33 @@ def test_unestablished_resolver_retry_does_not_restart_stopped_budget(
     integrated = run_process(command + ['--', *validation], cwd=root)
     assert integrated.returncode == 0, integrated.stdout + integrated.stderr
     assert yaml.safe_load(integrated.stdout)['status'] == 'integrated'
+
+
+@pytest.mark.parametrize("accepted_ticket", ["v2"], indirect=True)
+def test_v2_file_delivery_keeps_acceptance_and_enables_summary_completion(
+    installed_commands: InstalledCommands, accepted_ticket: tuple,
+) -> None:
+    """Real candidates still require acceptance/integration before parent completion."""
+    root, _, _, candidate = accepted_ticket
+    request = root / "complete.yml"
+    for ticket_id in ("83", "82"):
+        request.write_text(yaml.safe_dump({
+            "ticket_id": ticket_id, "current_definition": "ticket.md",
+            "reason": "Accept the defined result", "cancelled_scope": {},
+            "caused_by_event_ids": [], "evidence_refs": ["delivery-evidence.md"],
+        }))
+        result = run_process([str(installed_commands.product), "ticket", "complete",
+                              "--completion-file", str(request)], cwd=root)
+        assert result.returncode != 0
+    result = run_process([str(installed_commands.product), "ticket", "integrate",
+                          "--ticket-id", "83", "--", sys.executable, "-c", "pass"], cwd=root)
+    assert result.returncode == 0, result.stderr
+    result = run_process([str(installed_commands.product), "ticket", "complete",
+                          "--completion-file", str(request)], cwd=root)
+    assert result.returncode == 0, result.stderr
+    graph = run_process([str(installed_commands.product), "ticket", "graph"], cwd=root)
+    nodes = {node["ticket_id"]: node for node in yaml.safe_load(graph.stdout)["tickets"]}
+    assert nodes["82"]["status"] == nodes["83"]["status"] == "integrated"
+    assert nodes["82"]["current_candidate"] is None
+    assert nodes["83"]["current_candidate"] == candidate
+    assert nodes["83"]["schema_version"] == 2 and nodes["83"]["parent_id"] == "82"

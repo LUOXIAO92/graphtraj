@@ -47,11 +47,14 @@ def register_command(ticket_file: Path) -> None:
     required=True,
     type=click.Path(path_type=Path, exists=True, dir_okay=False),
 )
-def revise_command(revision_file: Path) -> None:
+@click.option("--dry-run", is_flag=True)
+def revise_command(revision_file: Path, dry_run: bool) -> None:
     """Apply one validated product-preserving Task Graph revision."""
 
     try:
         revision = yaml.safe_load(revision_file.read_text(encoding="utf-8"))
+        if dry_run and isinstance(revision, dict):
+            revision["dry_run"] = True
         recorded = invoke_tool("ticket_revise", revision).document
     except (
         OSError,
@@ -65,11 +68,12 @@ def revise_command(revision_file: Path) -> None:
 
 
 @ticket.command("graph", cls=OperationCommand, feature="ticket_graph")
-def graph_command() -> None:
+@click.option("--schema", is_flag=True)
+def graph_command(schema: bool) -> None:
     """Generate the current Ticket DAG and readiness view as YAML."""
 
     try:
-        view = invoke_tool("ticket_graph", {}).document
+        view = invoke_tool("ticket_graph", {"schema": schema}).document
     except (
         OSError,
         UnicodeError,
@@ -79,6 +83,19 @@ def graph_command() -> None:
     ) as error:
         raise click.ClickException(str(error)) from error
     click.echo(yaml.safe_dump(view, sort_keys=False), nl=False)
+
+
+@ticket.command("complete", cls=OperationCommand, feature="ticket_complete")
+@click.option("--completion-file", required=True,
+              type=click.Path(path_type=Path, exists=True, dir_okay=False))
+def complete_command(completion_file: Path) -> None:
+    """Accept a task's own non-file result after its necessary children finish."""
+    try:
+        request = yaml.safe_load(completion_file.read_text(encoding="utf-8"))
+        result = invoke_tool("ticket_complete", request).document
+    except (OSError, UnicodeError, ValueError, yaml.YAMLError, ProjectConfigurationError, RunnerError) as error:
+        raise click.ClickException(str(error)) from error
+    click.echo(yaml.safe_dump(result, sort_keys=False), nl=False)
 
 
 @ticket.command("update", cls=OperationCommand, feature="ticket_update")

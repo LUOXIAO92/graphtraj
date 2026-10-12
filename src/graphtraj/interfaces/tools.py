@@ -31,6 +31,7 @@ from graphtraj.graph.ticket_graph import (
     register_ticket,
     revise_tickets,
     update_ticket_state,
+    complete_ticket,
 )
 from graphtraj.teams.ticket_integration import integrate_ticket
 from graphtraj.workspace.git_repository import GitRepositoryError
@@ -41,65 +42,14 @@ from graphtraj.workspace.project_initialization import (
     require_source_repository,
 )
 
-_ISSUE_PROPERTIES = {
-    "ticket_id":         {"type": "string"},
-    "ticket_name":       {"type": "string"},
-    "source":            {"type": "string"},
-    "title":             {"type": "string"},
-    "body":              {"type": "string"},
-    "dependencies":      {"type": "array", "items": {"type": "string"}},
-}
-_ISSUE_SCHEMA = {
-    "type":                 "object",
-    "properties":           _ISSUE_PROPERTIES,
-    "required":             sorted(_ISSUE_PROPERTIES),
-    "additionalProperties": False,
-}
-_REVISED_TICKET_SCHEMA = {
-    "type": "object",
-    "properties": {
-        **_ISSUE_PROPERTIES,
-        "active":      {"type": "boolean"},
-        "replaced_by": {"type": "array", "items": {"type": "string"}},
-    },
-    "required":             sorted({*_ISSUE_PROPERTIES, "active", "replaced_by"}),
-    "additionalProperties": False,
-}
-_REVISION_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "product_preserving":  {"const": True},
-        "caused_by_event_ids": {"type": "array", "items": {"type": "string"}},
-        "evidence_refs":       {
-            "type": "array", "minItems": 1, "items": {"type": "string"},
-        },
-        "tickets":             {
-            "type": "array", "minItems": 1, "items": _REVISED_TICKET_SCHEMA,
-        },
-    },
-    "required":             [
-        "product_preserving", "caused_by_event_ids", "evidence_refs", "tickets",
-    ],
-    "additionalProperties": False,
-}
-_STATE_CHANGE_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "ticket_id":           {"type": "string"},
-        "status":              {"type": "string"},
-        "active_team_ordinal": {"type": ["integer", "null"]},
-        "worktree":            {"type": ["string", "null"]},
-        "branch":              {"type": ["string", "null"]},
-        "current_candidate":   {"type": ["string", "null"]},
-        "caused_by_event_ids": {"type": "array", "items": {"type": "string"}},
-        "evidence_refs":       {"type": "array", "items": {"type": "string"}},
-    },
-    "required": [
-        "ticket_id", "status", "active_team_ordinal", "worktree", "branch",
-        "current_candidate", "caused_by_event_ids", "evidence_refs",
-    ],
-    "additionalProperties": False,
-}
+from graphtraj.graph.task_protocol import (
+    REGISTER_SCHEMA as _ISSUE_SCHEMA,
+    REVISION_SCHEMA as _REVISION_SCHEMA,
+    COMPLETE_SCHEMA,
+    TASK_SCHEMA,
+    STATE_CHANGE_SCHEMA as _STATE_CHANGE_SCHEMA,
+)
+
 _EMPTY_SCHEMA = {"type": "object", "properties": {}, "additionalProperties": False}
 _ALIAS_SCHEMA = {
     "type": "object",
@@ -256,6 +206,8 @@ def register_tool(
 def read_current_graph(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> ToolResult:
     """Return the current Ticket DAG and readiness view for the project."""
 
+    if arguments.get("schema", False):
+        return ToolResult(TASK_SCHEMA)
     configuration = load_project_configuration(cwd or Path.cwd())
     return ToolResult(read_graph(configuration.state))
 
@@ -278,6 +230,12 @@ def revise_current_tickets(arguments: Mapping[str, Any]) -> ToolResult:
         configuration.state, configuration.harness_root, arguments
     )
     return ToolResult(recorded)
+
+
+def complete_current_ticket(arguments: Mapping[str, Any]) -> ToolResult:
+    """Record independent task acceptance without manufacturing file delivery."""
+    configuration = load_project_configuration(Path.cwd())
+    return ToolResult(complete_ticket(configuration.state, configuration.harness_root, arguments))
 
 
 def update_current_ticket_state(arguments: Mapping[str, Any]) -> ToolResult:
@@ -647,7 +605,7 @@ register_tool(
     "ticket_graph",
     "Read the current Ticket DAG, states and dependency readiness for the project "
     "in the server working directory. Equivalent to `graphtraj ticket graph`.",
-    _EMPTY_SCHEMA,
+    {"type": "object", "properties": {"schema": {"type": "boolean", "default": False}}, "additionalProperties": False},
     read_current_graph,
     manual_ref="manuals/task-breakdown/guide.md",
     examples=({},),
@@ -661,7 +619,12 @@ register_tool(
     manual_ref="manuals/task-breakdown/guide.md",
     examples=(
         {
-            "ticket_id":    "paper-1",
+            "schema_version": 2,
+            "ticket_id":    "1",
+            "parent_id": None,
+            "disposition": "active",
+            "replaced_by": [],
+            "retirement_reason": None,
             "ticket_name":  "paper-summary",
             "source":       "local:paper-1",
             "title":        "Summarize the first paper",
@@ -677,6 +640,13 @@ register_tool(
     _REVISION_SCHEMA,
     revise_current_tickets,
     manual_ref="manuals/task-breakdown/guide.md",
+)
+register_tool(
+    "ticket_complete",
+    "Complete a task with its own acceptance reason and existing evidence, without file delivery.",
+    COMPLETE_SCHEMA,
+    complete_current_ticket,
+    manual_ref="manuals/task-delivery/guide.md",
 )
 register_tool(
     "ticket_update",
@@ -1165,6 +1135,7 @@ _CLI = {
     "ticket_graph": (("graphtraj", "ticket", "graph"), {}),
     "ticket_register": (("graphtraj", "ticket", "register"), {"ticket_file": ("", "yaml")}),
     "ticket_revise": (("graphtraj", "ticket", "revise"), {"revision_file": ("", "yaml")}),
+    "ticket_complete": (("graphtraj", "ticket", "complete"), {"completion_file": ("", "yaml")}),
     "ticket_update": (("graphtraj", "ticket", "update"), {"state_file": ("", "yaml")}),
     "project_setup": (("graphtraj", "setup"), {}),
     "project_doctor": (("graphtraj", "doctor"), {}),

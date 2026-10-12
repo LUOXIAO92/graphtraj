@@ -58,10 +58,21 @@ def _validate(value: Any, schema: Mapping[str, Any], path: str) -> None:
     supported = {
         "type", "properties", "required", "additionalProperties", "items",
         "enum", "const", "minItems", "description", "title", "default",
-        "examples", "$schema", "$comment",
+        "examples", "$schema", "$comment", "anyOf",
     }
     if set(schema) - supported:
         raise ValueError(f"{path}: unsupported schema constraint")
+
+    if "anyOf" in schema:
+        errors = []
+        for alternative in schema["anyOf"]:
+            try:
+                _validate(value, alternative, path)
+                break
+            except ValueError as error:
+                errors.append(str(error))
+        else:
+            raise ValueError(f"{path}: incompatible definition; " + "; ".join(errors))
 
     checks = {
         "object": isinstance(value, dict),

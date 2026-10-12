@@ -14,7 +14,7 @@ from graphtraj.execution.runner_status import caller_alias, read_alias_mapping, 
 from graphtraj.graph.delivery_worldline import append_project_worldline_event, read_worldline
 from graphtraj.workspace.git_repository import GitRepositoryError, SourceRepository, _git
 from graphtraj.configuration.project_configuration import ProjectConfiguration
-from graphtraj.graph.ticket_graph import _load_states, _lock, _restore, _unlock, _write_yaml
+from graphtraj.graph.ticket_graph import _load_states, _lock, _restore, _unlock, _write_yaml, _result_complete
 
 
 def integrate_ticket(
@@ -250,7 +250,8 @@ def _integrate(
         for dependent_id, (dependent_directory, dependent) in current.items():
             if (dependent["active"] and dependent["status"] == "pending"
                 and ticket_id in dependent["dependencies"]
-                and all(current[blocker][1]["status"] == "integrated" for blocker in dependent["dependencies"])):
+                and all(_result_complete({key: value for key, (_, value) in current.items()}, blocker)
+                        for blocker in dependent["dependencies"])):
                 _record(configuration, dependent_directory, dependent, "ready", {
                     "event": "ticket-dependency-unlocked",
                     "caused_by_event_ids": [integrated["event_id"]],
@@ -278,6 +279,19 @@ def _resolve(configuration: ProjectConfiguration, batch: Batch, log: TextIO) -> 
 def _record(configuration: ProjectConfiguration, directory: Path, record: dict, status: str, event: dict) -> dict:
     lock = _lock(configuration.state / "tickets", exclusive=True)
     try:
+        current = _load_states(configuration.state / "tickets")
+        latest = current[record["ticket_id"]][1]
+        if (latest["current_definition"] != record["current_definition"]
+                or latest["current_candidate"] != record["current_candidate"]):
+            raise ValueError("The Ticket changed during integration; inspect its current definition and result")
+        if status == "integrated":
+            records = {key: value for key, (_, value) in current.items()}
+            required = list(latest["dependencies"]) + [
+                key for key, child in records.items()
+                if child.get("parent_id") == record["ticket_id"] and child.get("disposition") != "cancelled"
+            ]
+            if any(not _result_complete(records, key) for key in required):
+                raise ValueError("Integration completion requires the task's necessary child and dependency results")
         path = directory / "ticket.yml"
         previous = path.read_bytes()
         updated = {**record, "status": status}

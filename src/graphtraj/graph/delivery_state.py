@@ -21,22 +21,29 @@ from graphtraj.execution.runner_io import write_yaml_durably, _sync_directory
 from graphtraj.execution.runner_status import caller_alias, read_alias_mapping, require_task_authority
 from graphtraj.workspace.runner_project import discover_runner_directory, run_git
 from graphtraj.graph.ticket_graph import _TRANSITIONS, _load_states
+from graphtraj.graph.task_protocol import execution_record
 
 
 _COMMON = {"phase", "ticket_id", "caused_by_event_ids", "evidence_refs"}
 
 
-def current_result_rejection(
+def current_result_rework_cause(
     events: list[dict[str, Any]],
     ticket: Mapping[str, Any],
     team: Mapping[str, Any],
 ) -> dict[str, Any] | None:
-    """Return the current Round's rejection until further result work consumes it.
+    """Return a rejection or explicit reopening until result work consumes it.
 
     Member and unrelated facts do not change a decision. A later submission,
     decision or rework transition does; never search past one for an old rejection.
     """
     for event in reversed(events):
+        if event["event"] == "ticket-graph-revised" and ticket["ticket_id"] in event.get("reopened_ticket_ids", []):
+            reopened = event.get("reopened_results", {}).get(ticket["ticket_id"], {})
+            if (reopened.get("team_ordinal") == ticket["active_team_ordinal"]
+                    and reopened.get("candidate") == ticket["current_candidate"]):
+                return event
+            return None
         if (event.get("ticket_id") != ticket["ticket_id"]
                 or event.get("team_ordinal") != ticket["active_team_ordinal"]):
             continue
@@ -92,6 +99,10 @@ def apply_delivery_state_request(
     if not isinstance(ticket_id, str) or ticket_id not in current:
         raise ValueError("Delivery State request names an unknown Ticket")
     ticket_directory, ticket = current[ticket_id]
+    if phase in {"start", "final", "rework"} and not ticket["active"]:
+        raise ValueError("Delivery requires an active Ticket")
+    if phase == "start" and ticket.get("schema_version") == 2 and ticket["status"] == "integrated":
+        raise ValueError("Completed tasks must explicitly reopen through task-graph revision")
     ordinal = ticket["active_team_ordinal"] or 1
     replacing = False
     if phase == "start" and ticket["active_team_ordinal"] is not None:
@@ -211,7 +222,7 @@ def apply_delivery_state_request(
             team_update["members"].update(registered)
             kind = "team-member-started"
         elif phase == "rework":
-            previous = current_result_rejection(
+            previous = current_result_rework_cause(
                 read_worldline(state_directory, harness_root), ticket, team_update,
             )
             if (
@@ -219,7 +230,7 @@ def apply_delivery_state_request(
                 or previous is None
                 or request["caused_by_event_ids"] != [previous["event_id"]]
             ):
-                raise ValueError("Rework requires the confirmed result rejection")
+                raise ValueError("Rework requires a confirmed result rejection or explicit graph reopening")
             runner = discover_runner_directory(harness_root)
             author = caller_alias(runner)
             if author is None:
@@ -276,16 +287,16 @@ def apply_delivery_state_request(
         nonlocal team_update
         previous_modes: dict[Path, int] = {}
         retained: Path | None = None
-        if phase in {"final", "rework"}:
-            if ((ticket_directory / "ticket.yml").read_bytes() != original_ticket
-                    or team_file.read_bytes() != original_team):
-                raise ValueError("The task changed before acceptance; inspect it again")
+        current_team = team_file.read_bytes() if team_file.is_file() else None
+        if ((ticket_directory / "ticket.yml").read_bytes() != original_ticket
+                or current_team != original_team):
+            raise ValueError("The task changed before the delivery transition; inspect it again")
         if phase == "rework":
-            rejection = current_result_rejection(
+            rejection = current_result_rework_cause(
                 _read_shards(state_directory)[1], ticket, read_team(team_file),
             )
             if rejection is None or request["caused_by_event_ids"] != [rejection["event_id"]]:
-                raise ValueError("Rework requires the confirmed result rejection")
+                raise ValueError("Rework requires a confirmed result rejection or explicit graph reopening")
         if phase == "final":
             _validate_result_decision(
                 state_directory, harness_root, request, ticket, team_update,
@@ -323,7 +334,7 @@ def apply_delivery_state_request(
                     team_update["retired_at"] = recorded["captured_at"]
                 _validate_team(team_update)
                 write_yaml_durably(team_file, team_update)
-            write_yaml_durably(ticket_directory / "ticket.yml", ticket_update)
+            write_yaml_durably(ticket_directory / "ticket.yml", execution_record(ticket_update))
             _load_states(tickets)
             if open_round:
                 (team_directory / "rounds" / str(round_ordinal + 1)).mkdir(parents=True)

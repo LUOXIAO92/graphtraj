@@ -67,7 +67,7 @@ from graphtraj.execution.runner_status import (
 from graphtraj.execution.runner_transport import record_runtime_identity
 from graphtraj.runtimes import runtime_adapter
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
-from graphtraj.graph.ticket_graph import _load_states
+from graphtraj.graph.ticket_graph import _load_states, _result_complete
 
 
 _AGENT_EVIDENCE_ERROR = "AGENT_EVIDENCE_INVALID"
@@ -215,7 +215,7 @@ def continue_stopped_ticket(
         if caller_alias(project.runner_directory) is not None:
             raise RunnerError("authority-denied", "Only the root caller may continue this Ticket.")
         if state["status"] != "ready" or any(
-            states[dependency][1]["status"] != "integrated"
+            not _result_complete({key: value for key, (_, value) in states.items()}, dependency)
             for dependency in state["dependencies"]
         ):
             raise RunnerError("invalid-input", "Explicit continuation requires a ready Ticket.")
@@ -433,7 +433,13 @@ def _deliver_ticket(
     task = _registered_ticket_task(project, requested)
     evidence = project.state_directory / "tickets" / (task.ticket_id + "-" + task.ticket_name)
     with execution_start_lock(project.runner_directory):
-        state = yaml.safe_load((evidence / "ticket.yml").read_text())
+        states = _load_states(project.state_directory / "tickets")
+        state = states[task.ticket_id][1]
+        if not state["active"] or any(
+            not _result_complete({key: value for key, (_, value) in states.items()}, dependency)
+            for dependency in state["dependencies"]
+        ):
+            raise RunnerError("TICKET_NOT_READY", "The Ticket needs active disposition and completed dependencies.")
         generation = state.get("active_team_ordinal")
         if parent_alias is None and generation is None:
             if state["status"] != "ready":

@@ -15,7 +15,7 @@ from graphtraj.configuration.project_roles import configured_role_name
 from graphtraj.execution.runner_models import RunnerError
 from graphtraj.execution.runner_io import _sync_directory
 from graphtraj.execution.runner_status import caller_alias, read_alias_mapping, require_task_authority
-from graphtraj.graph.delivery_state import current_result_rejection, read_team
+from graphtraj.graph.delivery_state import current_result_rework_cause, read_team
 from graphtraj.graph.delivery_worldline import append_project_worldline_event, read_worldline
 from graphtraj.graph.ticket_graph import _load_states
 from graphtraj.workspace.runner_project import discover_project_root, discover_runner_directory, run_git
@@ -215,14 +215,14 @@ def start_result_correction(mapping: Mapping[str, Any], cwd: Path) -> None:
     if ticket['status'] not in {'implementing', 'reviewing', 'reworking', 'resolving-integration'}:
         raise ValueError('This task is not accepting result submissions.')
     team = read_team(directory / 'teams' / str(mapping['team_generation']) / 'team.yml')
-    rejection = current_result_rejection(read_worldline(configuration.state, cwd), ticket, team)
+    rejection = current_result_rework_cause(read_worldline(configuration.state, cwd), ticket, team)
     if ticket['status'] == 'reworking' or (
         ticket['status'] == 'resolving-integration' and rejection is not None
     ):
         from graphtraj.graph.delivery_state import apply_delivery_state_request
 
         if rejection is None:
-            raise ValueError('Rework requires the confirmed result rejection')
+            raise ValueError('Rework requires a confirmed result rejection or explicit graph reopening')
         request = {
             'phase': 'rework', 'ticket_id': mapping['ticket_id'],
             'caused_by_event_ids': [rejection['event_id']],

@@ -11,70 +11,25 @@ from typing import Any
 import yaml
 
 from graphtraj import file_lock
+from graphtraj.graph import task_protocol as protocol
+from graphtraj.graph.task_protocol import validate_definition as _validate_issue
 from graphtraj.graph.delivery_worldline import append_project_worldline_event
 from graphtraj.execution.execution_budget import (
-    ExecutionBudgetError,
     read_execution_budget,
     split_execution_budget_front_matter,
 )
 
 
-_TICKET_ID = re.compile(r"[1-9]\d*\Z")
-_TICKET_NAME = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*\Z")
-_ISSUE_SOURCE = re.compile(r"https://github\.com/[^/]+/[^/]+/issues/([1-9]\d*)\Z")
+_TICKET_ID = protocol.TICKET_ID
+_TICKET_NAME = protocol.TICKET_NAME
 _EVENT_DEFINITION = re.compile(
     r"\d{8}T\d{6}\.\d{6}[+-]\d{4}(?:-[1-9]\d*)?\.md\Z"
 )
 _COMMIT = re.compile(r"[0-9a-f]{40}\Z")
-_ISSUE_FIELDS = frozenset(
-    {"ticket_id", "ticket_name", "source", "title", "body", "dependencies"}
-)
-_REVISION_FIELDS = frozenset(
-    {"product_preserving", "caused_by_event_ids", "evidence_refs", "tickets"}
-)
-_REVISED_TICKET_FIELDS = _ISSUE_FIELDS | {"active", "replaced_by"}
-_STATE_FIELDS = frozenset(
-    {
-        "ticket_id",
-        "ticket_name",
-        "current_definition",
-        "active",
-        "replaced_by",
-        "dependencies",
-        "status",
-        "active_team_ordinal",
-        "worktree",
-        "branch",
-        "current_candidate",
-    }
-)
-_STATUSES = frozenset(
-    {
-        "pending",
-        "ready",
-        "implementing",
-        "reviewing",
-        "reworking",
-        "awaiting-integration",
-        "integrating",
-        "resolving-integration",
-        "integrated",
-        "blocked",
-        "escalated",
-    }
-)
-_STATE_CHANGE_FIELDS = frozenset(
-    {
-        "ticket_id",
-        "status",
-        "active_team_ordinal",
-        "worktree",
-        "branch",
-        "current_candidate",
-        "caused_by_event_ids",
-        "evidence_refs",
-    }
-)
+_ISSUE_FIELDS = frozenset(protocol.BASE_PROPERTIES)
+_STATE_FIELDS = protocol.EXECUTION_FIELDS | protocol.LEGACY_RELATIONS
+_STATUSES = frozenset(protocol.STATUSES)
+_STATE_CHANGE_FIELDS = frozenset(protocol.STATE_CHANGE_SCHEMA["properties"])
 _TRANSITIONS = {
     "pending": {"ready", "blocked", "escalated"},
     "ready": {"implementing", "blocked", "escalated"},
@@ -90,74 +45,24 @@ _TRANSITIONS = {
 }
 
 
-def _validate_issue(issue: Any) -> None:
-    if not isinstance(issue, dict) or set(issue) != _ISSUE_FIELDS:
-        raise ValueError("accepted Ticket definition is invalid")
-    ticket_id = issue["ticket_id"]
-    ticket_name = issue["ticket_name"]
-    source = issue["source"]
-    title = issue["title"]
-    body = issue["body"]
-    dependencies = issue["dependencies"]
-    source_match = _ISSUE_SOURCE.fullmatch(source) if isinstance(source, str) else None
-    if (
-        not isinstance(ticket_id, str)
-        or _TICKET_ID.fullmatch(ticket_id) is None
-        or not isinstance(ticket_name, str)
-        or _TICKET_NAME.fullmatch(ticket_name) is None
-        or source_match is None
-        or source_match.group(1) != ticket_id
-        or not isinstance(title, str)
-        or not title.strip()
-        or not isinstance(body, str)
-        or not isinstance(dependencies, list)
-        or any(
-            not isinstance(item, str) or _TICKET_ID.fullmatch(item) is None
-            for item in dependencies
-        )
-        or len(dependencies) != len(set(dependencies))
-        or ticket_id in dependencies
-    ):
-        raise ValueError("accepted Ticket definition is invalid")
-    try:
-        read_execution_budget(body)
-    except ExecutionBudgetError as error:
-        raise ValueError("accepted Ticket execution budget is invalid") from error
-
-
 def _validate_revision(revision: Any) -> None:
-    if (
-        not isinstance(revision, dict)
-        or set(revision) != _REVISION_FIELDS
-        or revision["product_preserving"] is not True
-        or not isinstance(revision["tickets"], list)
-        or not revision["tickets"]
-    ):
-        raise ValueError(
-            "Ticket revision is invalid or changes accepted product behavior"
-        )
+    """Validate the shared schema and definition semantics before any write."""
+    from graphtraj.interfaces.gateway import _validate
+
+    _validate(revision, protocol.REVISION_SCHEMA, "revision")
     _validate_string_list(revision, "caused_by_event_ids", allow_empty=True)
     _validate_string_list(revision, "evidence_refs", allow_empty=False)
-    identifiers: list[str] = []
+    if "reopen_ticket_ids" in revision:
+        _validate_string_list(revision, "reopen_ticket_ids", allow_empty=True)
+    identifiers = []
     for definition in revision["tickets"]:
-        if (
-            not isinstance(definition, dict)
-            or set(definition) != _REVISED_TICKET_FIELDS
-        ):
-            raise ValueError("Ticket revision contains an invalid definition")
-        _validate_issue({field: definition[field] for field in _ISSUE_FIELDS})
-        if (
-            not isinstance(definition["active"], bool)
-            or not isinstance(definition["replaced_by"], list)
-            or any(
-                not isinstance(item, str) or _TICKET_ID.fullmatch(item) is None
-                for item in definition["replaced_by"]
-            )
-            or len(definition["replaced_by"]) != len(set(definition["replaced_by"]))
-            or definition["ticket_id"] in definition["replaced_by"]
-            or (definition["active"] and definition["replaced_by"])
-        ):
-            raise ValueError("Ticket revision contains invalid replacements")
+        if definition.get("schema_version") == 2:
+            _validate_issue({key: definition[key] for key in protocol.TASK_PROPERTIES})
+        else:
+            _validate_issue({key: definition[key] for key in _ISSUE_FIELDS})
+            if (definition["active"] and definition["replaced_by"]
+                    or len(definition["replaced_by"]) != len(set(definition["replaced_by"]))):
+                raise ValueError("Ticket revision contains invalid replacements")
         identifiers.append(definition["ticket_id"])
     if len(identifiers) != len(set(identifiers)):
         raise ValueError("Ticket revision repeats a Ticket")
@@ -231,8 +136,10 @@ def register_ticket(state: Path, harness_root: Path, issue: dict[str, Any]) -> P
         "branch": None,
         "current_candidate": None,
     }
+    if issue.get("schema_version") == 2:
+        state_record.update(issue, active=issue["disposition"] == "active")
     snapshot = _render_definition(
-        {**issue, "active": True, "replaced_by": []}
+        {**issue, **({} if issue.get("schema_version") == 2 else {"active": True, "replaced_by": []})}
     )
     tickets.mkdir(parents=True, exist_ok=True)
     lock = _lock(tickets, exclusive=True)
@@ -245,6 +152,7 @@ def register_ticket(state: Path, harness_root: Path, issue: dict[str, Any]) -> P
         proposed = {ticket_id: record for ticket_id, (_, record) in current.items()}
         proposed[issue["ticket_id"]] = state_record
         _validate_graph(proposed)
+        _require_reopened_ancestors(proposed, {key: record for key, (_, record) in current.items()})
         snapshot_path = directory / "ticket.md"
 
         def mutation(_: dict[str, Any]):
@@ -296,11 +204,16 @@ def revise_tickets(
         for ticket_id, definition in revised.items():
             if ticket_id in current:
                 directory, old = current[ticket_id]
+                if old.get("schema_version") == 2 and definition.get("schema_version") != 2:
+                    raise ValueError("Legacy revision is incompatible with a v2 Ticket; supply all v2 fields")
                 if (
                     old["ticket_name"] != definition["ticket_name"]
-                    or _snapshot_source(directory / "ticket.md") != definition["source"]
+                    or (definition.get("schema_version") != 2
+                        and _snapshot_source(directory / "ticket.md") != definition["source"])
                 ):
                     raise ValueError("a stable Ticket identity cannot change")
+                if definition.get("schema_version") == 2 and definition["current_definition"] != old["current_definition"]:
+                    raise ValueError("Ticket current_definition changed; inspect the current definition")
                 previous_budget = read_execution_budget(
                     (directory / old["current_definition"]).read_text(
                         encoding="utf-8"
@@ -326,7 +239,7 @@ def revise_tickets(
                 )
                 record = dict(old)
                 record.update(
-                    active=definition["active"],
+                    active=definition.get("disposition", "active" if definition.get("active") else "cancelled") == "active",
                     replaced_by=definition["replaced_by"],
                     dependencies=definition["dependencies"],
                 )
@@ -341,7 +254,7 @@ def revise_tickets(
                     "ticket_id": ticket_id,
                     "ticket_name": definition["ticket_name"],
                     "current_definition": "ticket.md",
-                    "active": definition["active"],
+                    "active": definition.get("disposition", "active" if definition.get("active") else "cancelled") == "active",
                     "replaced_by": definition["replaced_by"],
                     "dependencies": definition["dependencies"],
                     "status": "pending",
@@ -350,10 +263,46 @@ def revise_tickets(
                     "branch": None,
                     "current_candidate": None,
                 }
+            if definition.get("schema_version") == 2:
+                if ticket_id not in current and definition["current_definition"] is not None:
+                    raise ValueError("A new Ticket requires current_definition: null")
+                record.update({key: definition[key] for key in protocol.TASK_PROPERTIES})
             proposed[ticket_id] = record
+        reopened = revision.get("reopen_ticket_ids", [])
+        for ticket_id in reopened:
+            if ticket_id not in revised or ticket_id not in current:
+                raise ValueError("Reopening requires an explicit revision of each existing Ticket")
+            record = proposed[ticket_id]
+            if record.get("schema_version") != 2 or record["status"] != "integrated":
+                raise ValueError("Only an integrated v2 Ticket can be reopened by graph revision")
+            if record["active_team_ordinal"] is not None:
+                from graphtraj.execution.runner_status import caller_alias, require_task_authority
+                from graphtraj.graph.delivery_worldline import read_worldline
+
+                runner = harness_root / ".graphtraj/runner"
+                if caller_alias(runner) is not None:
+                    submissions = [event for event in read_worldline(state, harness_root)
+                                   if event["event"] == "result-submitted"
+                                   and event.get("ticket_id") == ticket_id
+                                   and event.get("candidate") == record["current_candidate"]]
+                    if not submissions:
+                        raise ValueError("Reopening file delivery requires its actual accepting parent")
+                    require_task_authority(state, runner, ticket_id, submissions[-1]["alias"], "accept")
+            record["status"] = "reworking" if record["active_team_ordinal"] is not None else "pending"
+            meaningful = True
         if not meaningful:
             raise ValueError("Ticket revision does not introduce a new durable fact")
         _validate_graph(proposed)
+        _require_reopened_ancestors(proposed, {key: record for key, (_, record) in current.items()})
+        if revision.get("dry_run", False):
+            from graphtraj.graph.delivery_worldline import _validate_evidence, _validate_causes, read_worldline
+
+            _validate_evidence(harness_root, revision["evidence_refs"])
+            _validate_causes(revision, read_worldline(state, harness_root))
+            return {"dry_run": True, "affected_ticket_ids": list(revised),
+                    "reopened_ticket_ids": reopened,
+                    "current_definitions": {key: current[key][1]["current_definition"] if key in current else None
+                                            for key in revised}}
 
         event = {
             "event": "ticket-graph-revised",
@@ -361,6 +310,12 @@ def revise_tickets(
             "evidence_refs": revision["evidence_refs"],
             "affected_ticket_ids": list(revised),
             "product_preserving": True,
+            "reopened_ticket_ids": reopened,
+            "reopened_results": {
+                key: {"team_ordinal": current[key][1]["active_team_ordinal"],
+                      "candidate": current[key][1]["current_candidate"]}
+                for key in reopened
+            },
         }
 
         def mutation(recorded: dict[str, Any]):
@@ -422,117 +377,31 @@ def revise_tickets(
 
 
 def read_graph(state: Path) -> dict[str, Any]:
-    """Return current Tickets, readiness and explicitly recorded summary groups.
-
-    Group IDs are source Issue URLs; ticket_ids may occur in multiple groups.
-    Tickets without a declaration remain in tickets and belong to no group.
-    Reading does not change delivery state or dependency edges.
-    """
-
+    """Project definitions and execution state without inferring old parentage."""
     tickets = state / "tickets"
     if not tickets.is_dir():
-        return {"tickets": []}
+        return {"schema_version": 2, "tickets": []}
     lock = _lock(tickets, exclusive=False)
     try:
         states = _load_states(tickets)
-        records = {ticket_id: record for ticket_id, (_, record) in states.items()}
+        records = {key: record for key, (_, record) in states.items()}
         _validate_graph(records)
         rendered = []
-        groups: dict[str, dict[str, Any]] = {}
         for ticket_id in sorted(records, key=int):
-            record = records[ticket_id]
-            directory, _ = states[ticket_id]
-            snapshot = (directory / record["current_definition"]).read_text(encoding="utf-8")
-            front_matter = split_execution_budget_front_matter(snapshot)
-            if front_matter is not None:
-                _, _, snapshot = front_matter
-            heading = snapshot.lstrip("\r\n").splitlines()[0]
-            prefix = f"# Ticket {ticket_id}: "
-            if not heading.startswith(prefix):
-                raise ValueError("Ticket snapshot is invalid")
-            ready = (
-                record["active"]
-                and record["status"] in {"pending", "ready"}
-                and all(
-                    records[item]["status"] == "integrated"
-                    for item in record["dependencies"]
-                )
+            record = dict(records[ticket_id])
+            children = [key for key, other in records.items() if other.get("parent_id") == ticket_id]
+            completed = sum(_result_complete(records, child) for child in children)
+            record.update(
+                parent_known=record.get("schema_version") == 2,
+                children=children,
+                progress={"total": len(children), "completed": completed},
+                ready=record["active"] and record["status"] in {"pending", "ready"}
+                and all(_result_complete(records, item) for item in record["dependencies"]),
             )
-            rendered.append(
-                {
-                    "ticket_id": ticket_id,
-                    "ticket_name": record["ticket_name"],
-                    "title": heading.removeprefix(prefix),
-                    "status": record["status"],
-                    "active": record["active"],
-                    "ready": ready,
-                    "dependencies": record["dependencies"],
-                    "replaced_by": record["replaced_by"],
-                }
-            )
-            # Membership comes only from explicit declarations in the accepted
-            # definition, never from dependencies or incidental Issue mentions.
-            source = _snapshot_source(directory / record["current_definition"])
-            for reference in _summary_references(snapshot, source):
-                group = groups.setdefault(reference, {
-                    "id": reference,
-                    "title": "Summary #" + reference.rsplit("/", 1)[-1],
-                    "ticket_ids": [],
-                })
-                group["ticket_ids"].append(ticket_id)
-        if groups:
-            return {"tickets": rendered, "groups": list(groups.values())}
-        return {"tickets": rendered}
+            rendered.append(record)
+        return {"schema_version": 2, "tickets": rendered}
     finally:
         _unlock(lock)
-
-
-def _summary_references(snapshot: str, source: str) -> list[str]:
-    """Read authored Parent/Part of/属于 declarations, retaining memberships.
-
-    Bare Issue numbers belong to the Ticket's source repository. Ordinary
-    references, dependency sections and prose about prior work are not ownership.
-    A Parent heading may contain a list of shared summary references.
-    """
-    repository = source.rsplit("/issues/", 1)[0]
-    references: list[str] = []
-    in_parent = False
-    fenced = False
-    for line in snapshot.splitlines():
-        stripped = line.strip()
-        if stripped.startswith(("```", "~~~")):
-            fenced = not fenced
-        if fenced:
-            continue
-        if stripped.startswith("#") and re.match(r"^#{1,6}\s", stripped):
-            in_parent = bool(re.fullmatch(r"#{1,6}\s+Parents?\s*", stripped, re.I))
-            continue
-        declaration = re.match(
-            r"^(?:Parents?\s*[:：]|Part of\s+|属于\s*[:：]?)\s*(.*)",
-            stripped,
-            re.I,
-        )
-        if not declaration and not in_parent:
-            continue
-        value = declaration.group(1) if declaration else stripped
-        value = re.sub(r"^[-*]\s+", "", value)
-        # Consume only a leading reference list, not Issue mentions in prose
-        # following the declaration (including within a Parent section).
-        while match := re.match(
-            r"(?:https://github\.com/[^/\s]+/[^/\s]+/issues/[1-9]\d*|#[1-9]\d*)",
-            value,
-        ):
-            reference = match.group()
-            if reference.startswith("#"):
-                reference = repository + "/issues/" + reference[1:]
-            if reference != source and reference not in references:
-                references.append(reference)
-            remainder = value[match.end():]
-            separator = re.match(r"\s*(?:[,、&]|and\b)\s*", remainder)
-            if separator is None:
-                break
-            value = remainder[separator.end():]
-    return references
 
 
 def update_ticket_state(
@@ -567,6 +436,11 @@ def update_ticket_state(
                     old_status, change["status"]
                 )
             )
+        if record.get("schema_version") == 2 and any(
+            record[field] is not None and change[field] is None
+            for field in ("active_team_ordinal", "worktree", "branch", "current_candidate")
+        ):
+            raise ValueError("Execution associations cannot be cleared by a generic state update")
         updated = dict(record)
         for field in (
             "status",
@@ -606,7 +480,86 @@ def update_ticket_state(
         _unlock(lock)
 
 
+def complete_ticket(state: Path, harness_root: Path, request: dict[str, Any]) -> dict[str, Any]:
+    """Accept a task without file delivery, preserving its own completion evidence.
+
+    The existing top-level caller authority applies when there is no Team or
+    submitted result to delegate acceptance. Actual file results must use the
+    submission, acceptance and integration workflow.
+    """
+    from graphtraj.interfaces.gateway import _validate
+    from graphtraj.execution.runner_status import caller_alias
+
+    _validate(request, protocol.COMPLETE_SCHEMA, "completion")
+    _validate_string_list(request, "evidence_refs", allow_empty=False)
+    _validate_string_list(request, "caused_by_event_ids", allow_empty=True)
+    if not request["reason"].strip():
+        raise ValueError("Completion requires the task's own acceptance reason")
+    if caller_alias(harness_root / ".graphtraj/runner") is not None:
+        raise ValueError("Completion without a Team requires the owning top-level caller")
+    tickets = state / "tickets"
+    if not tickets.is_dir():
+        raise ValueError("no Tickets are registered")
+    lock = _lock(tickets, exclusive=True)
+    try:
+        current = _load_states(tickets)
+        records = {key: record for key, (_, record) in current.items()}
+        _validate_graph(records)
+        ticket_id = request["ticket_id"]
+        if ticket_id not in records:
+            raise ValueError("Completion names an unknown Ticket")
+        directory, record = current[ticket_id]
+        if record.get("schema_version") != 2 or not record["active"]:
+            raise ValueError("Completion requires an active v2 task")
+        if record["current_definition"] != request["current_definition"]:
+            raise ValueError("Completion current_definition is stale")
+        if record["status"] not in {"pending", "ready", "blocked", "escalated"}:
+            raise ValueError("Task is already completed or has delivery in progress")
+        if any(record[field] is not None for field in (
+            "active_team_ordinal", "worktree", "branch", "current_candidate",
+        )) or (directory / "teams").exists():
+            raise ValueError("File delivery requires result submission, acceptance and integration")
+        if any(not _result_complete(records, dependency) for dependency in record["dependencies"]):
+            raise ValueError("Completion requires all dependency results")
+        children = [key for key, child in records.items() if child.get("parent_id") == ticket_id]
+        unfinished, cancelled, checked = _required_results(records, children)
+        if unfinished:
+            raise ValueError(f"Required child results are not complete: {sorted(unfinished)}")
+        if set(request["cancelled_scope"]) != cancelled or any(
+            not reason.strip() for reason in request["cancelled_scope"].values()
+        ):
+            raise ValueError("Completion must explicitly confirm every cancelled child's withdrawn scope")
+        updated = {**record, "status": "integrated"}
+        event = {
+            "event": "ticket-completed", "ticket_id": ticket_id,
+            "from_status": record["status"], "to_status": "integrated",
+            "reason": request["reason"], "cancelled_scope": request["cancelled_scope"],
+            "current_definition": record["current_definition"],
+            "checked_definitions": {key: records[key]["current_definition"] for key in checked},
+            "caused_by_event_ids": request["caused_by_event_ids"],
+            "evidence_refs": request["evidence_refs"],
+        }
+        path = directory / "ticket.yml"
+        previous = path.read_bytes()
+
+        def mutation(_: dict[str, Any]):
+            """Commit completion with the existing Worldline rollback contract."""
+            try:
+                _write_yaml(path, updated)
+            except Exception:
+                _restore(path, previous)
+                raise
+            return lambda: _restore(path, previous)
+
+        return append_project_worldline_event(state, harness_root, event, mutation)
+    finally:
+        _unlock(lock)
+
+
 def _render_definition(definition: dict[str, Any]) -> str:
+    """Render the selected immutable definition format."""
+    if definition.get("schema_version") == 2:
+        return protocol.render_definition(definition)
     replacements = ", ".join(definition["replaced_by"]) or "none"
     dependencies = ", ".join(definition["dependencies"]) or "none"
     metadata = (
@@ -635,10 +588,13 @@ def _render_definition(definition: dict[str, Any]) -> str:
 
 
 def _load_states(tickets: Path) -> dict[str, tuple[Path, dict[str, Any]]]:
+    """Merge each execution record with its single current immutable definition."""
     states: dict[str, tuple[Path, dict[str, Any]]] = {}
     for path in tickets.glob("*/ticket.yml"):
         record = yaml.safe_load(path.read_text(encoding="utf-8"))
-        if not isinstance(record, dict) or set(record) != _STATE_FIELDS:
+        modern = isinstance(record, dict) and record.get("schema_version") == 2
+        expected = protocol.EXECUTION_FIELDS | {"schema_version"} if modern else _STATE_FIELDS
+        if not isinstance(record, dict) or set(record) != expected:
             raise ValueError("Ticket state is invalid")
         ticket_id = record["ticket_id"]
         definition = (
@@ -655,6 +611,12 @@ def _load_states(tickets: Path) -> dict[str, tuple[Path, dict[str, Any]]]:
             )
         )
         definition_path = path.parent / definition if definition is not None else path
+        if modern and valid_definition and definition_path.is_file() and not definition_path.is_symlink():
+            definition_record = protocol.read_definition(definition_path.read_text(encoding="utf-8"))
+            _validate_issue(definition_record)
+            if any(definition_record[key] != record[key] for key in ("ticket_id", "ticket_name", "schema_version")):
+                raise ValueError("Ticket definition identity differs from execution state")
+            record.update(definition_record, active=definition_record["disposition"] == "active")
         if (
             not isinstance(ticket_id, str)
             or _TICKET_ID.fullmatch(ticket_id) is None
@@ -690,6 +652,23 @@ def _load_states(tickets: Path) -> dict[str, tuple[Path, dict[str, Any]]]:
             )
         ):
             raise ValueError("Ticket state is invalid")
+        if not modern:
+            snapshot = definition_path.read_text(encoding="utf-8")
+            front = split_execution_budget_front_matter(snapshot)
+            text = front[2] if front is not None else snapshot
+            heading = text.lstrip("\r\n").splitlines()[0]
+            prefix = f"# Ticket {ticket_id}: "
+            if not heading.startswith(prefix):
+                raise ValueError("Ticket snapshot is invalid")
+            parts = text.lstrip("\r\n").split("\n\n", 6)
+            if len(parts) != 7:
+                raise ValueError("Legacy Ticket definition is invalid")
+            body = (front[0] if front is not None else "") + parts[6]
+            # Unknown history is explicit; prose declarations never become facts.
+            record.update(schema_version=1, parent_id=None, parent_known=False,
+                          disposition="active" if record["active"] else "superseded" if record["replaced_by"] else None,
+                          retirement_reason=None, title=heading.removeprefix(prefix),
+                          source=_snapshot_source(definition_path), body=body)
         states[ticket_id] = (path.parent, record)
     directories = {path for path in tickets.iterdir() if path.is_dir()}
     if directories != {directory for directory, _ in states.values()}:
@@ -698,45 +677,113 @@ def _load_states(tickets: Path) -> dict[str, tuple[Path, dict[str, Any]]]:
 
 
 def _validate_graph(records: dict[str, dict[str, Any]]) -> None:
-    for ticket_id, record in records.items():
-        dependencies = record["dependencies"]
-        replacements = record["replaced_by"]
-        if record["active"] and any(
-            item in records and not records[item]["active"] for item in dependencies
+    """Reject dangling edges and cycles, including combined result waits."""
+    parents = {key: [record["parent_id"]] if record.get("parent_id") is not None else []
+               for key, record in records.items()}
+    dependencies = {key: record["dependencies"] for key, record in records.items()}
+    replacements = {key: record["replaced_by"] for key, record in records.items()}
+    for edges in (parents, dependencies, replacements):
+        for key, targets in edges.items():
+            if len(targets) != len(set(targets)) or any(target not in records or target == key for target in targets):
+                raise ValueError("Ticket graph contains a dangling or self relationship")
+        _validate_dag(edges)
+    waits = {key: list(dependencies[key]) + list(replacements[key]) for key in records}
+    for child, parent_ids in parents.items():
+        for parent in parent_ids:
+            waits[parent].append(child)
+    _validate_dag(waits)
+    for record in records.values():
+        if record["active"] and record["replaced_by"]:
+            raise ValueError("An active Ticket cannot have replacements")
+        if record.get("schema_version", 1) == 1 and record["active"] and any(
+            not records[item]["active"] for item in record["dependencies"]
         ):
             raise ValueError("an active dependency cannot point to an inactive Ticket")
-        if (
-            any(item not in records or item == ticket_id for item in dependencies)
-            or len(dependencies) != len(set(dependencies))
-            or any(item not in records or item == ticket_id for item in replacements)
-            or len(replacements) != len(set(replacements))
-            or (record["active"] and replacements)
-            or any(not records[item]["active"] for item in replacements)
-        ):
-            raise ValueError(
-                "Ticket graph contains an invalid dependency or replacement"
+
+
+def _validate_dag(edges: dict[str, list[str]]) -> None:
+    """Check a directed graph using indegrees, without recursion depth limits."""
+    degrees = dict.fromkeys(edges, 0)
+    for targets in edges.values():
+        for target in targets:
+            degrees[target] += 1
+    ready = [key for key, degree in degrees.items() if not degree]
+    count = 0
+    while ready:
+        key = ready.pop()
+        count += 1
+        for target in edges[key]:
+            degrees[target] -= 1
+            if not degrees[target]:
+                ready.append(target)
+    if count != len(edges):
+        raise ValueError("Ticket relationships and combined waits must form a DAG")
+
+
+def _required_results(
+    records: dict[str, dict[str, Any]], ticket_ids: list[str]
+) -> tuple[set[str], set[str], set[str]]:
+    """Resolve replacement chains into unfinished, cancelled and checked tasks."""
+    pending = list(ticket_ids)
+    checked, unfinished, cancelled = set(), set(), set()
+    while pending:
+        key = pending.pop()
+        if key in checked:
+            continue
+        checked.add(key)
+        record = records[key]
+        if record["replaced_by"]:
+            pending.extend(record["replaced_by"])
+        elif record.get("disposition") == "cancelled":
+            cancelled.add(key)
+        elif not record["active"] or record["status"] != "integrated":
+            unfinished.add(key)
+    return unfinished, cancelled, checked
+
+
+def _result_complete(records: dict[str, dict[str, Any]], ticket_id: str) -> bool:
+    """Cancellation does not deliver a result, even at the end of a replacement."""
+    unfinished, cancelled, _ = _required_results(records, [ticket_id])
+    return not unfinished and not cancelled
+
+
+def _require_reopened_ancestors(
+    records: dict[str, dict[str, Any]], before: dict[str, dict[str, Any]]
+) -> None:
+    """Require explicit reopening when necessary scope or its results change."""
+    for child, record in records.items():
+        old = before.get(child, {})
+        changed_scope = old.get("schema_version") == 2 and any(
+            old.get(field) != record.get(field)
+            for field in ("body", "dependencies", "disposition", "replaced_by", "retirement_reason")
+        )
+        if record["status"] == "integrated" and record["active"] and changed_scope:
+            raise ValueError(f"Explicitly reopen completed task {child} when revising its required scope")
+        # ponytail: scan replacement chains per revision; index reverse edges if project size warrants it.
+        unfinished, cancelled, _ = _required_results(records, [child])
+        if not unfinished:
+            if not cancelled:
+                continue
+            previous_cancelled = _required_results(before, [child])[1] if old else set()
+            unchanged_withdrawal = (
+                cancelled == previous_cancelled and not changed_scope
+                and old.get("parent_id") == record.get("parent_id")
+                and all(all(records[key].get(field) == before[key].get(field)
+                            for field in ("body", "retirement_reason")) for key in cancelled)
             )
-    visiting: set[str] = set()
-    visited: set[str] = set()
-
-    def visit(ticket_id: str) -> None:
-        if ticket_id in visiting:
-            raise ValueError("Ticket dependencies must form a DAG")
-        if ticket_id in visited or not records[ticket_id]["active"]:
-            return
-        visiting.add(ticket_id)
-        for dependency in records[ticket_id]["dependencies"]:
-            visit(dependency)
-        visiting.remove(ticket_id)
-        visited.add(ticket_id)
-
-    for ticket_id in records:
-        visit(ticket_id)
+            if unchanged_withdrawal:
+                continue
+        parent = record.get("parent_id")
+        while parent is not None:
+            if records[parent]["status"] == "integrated":
+                raise ValueError(f"Explicitly reopen completed ancestor {parent} in the same revision")
+            parent = records[parent].get("parent_id")
 
 
 def _write_yaml(path: Path, value: dict[str, Any]) -> None:
     temporary = path.with_name(".{0}.tmp".format(path.name))
-    temporary.write_text(yaml.safe_dump(value, sort_keys=False), encoding="utf-8")
+    stored = protocol.execution_record(value) if path.name == "ticket.yml" else value
+    temporary.write_text(yaml.safe_dump(stored, sort_keys=False), encoding="utf-8")
     os.replace(temporary, path)
 
 
@@ -759,6 +806,10 @@ def _rollback_revision(changed: list[tuple[Path, bytes | None, Path]]) -> None:
 
 def _snapshot_source(path: Path) -> str:
     snapshot = path.read_text(encoding="utf-8")
+    front = split_execution_budget_front_matter(snapshot)
+    metadata = yaml.safe_load(front[1]) if front is not None else None
+    if isinstance(metadata, dict) and isinstance(metadata.get("task"), dict) and metadata["task"].get("schema_version") == 2:
+        return protocol.read_definition(snapshot)["source"]
     front_matter = split_execution_budget_front_matter(snapshot)
     if front_matter is not None:
         _, _, snapshot = front_matter

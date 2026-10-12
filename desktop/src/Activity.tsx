@@ -2,6 +2,7 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Button } from '@heroui/react';
 import Markdown from 'react-markdown';
 import type { Activity, ActivityEvent, Agent } from '../electron/activity';
+import { ToolContent } from './ToolContent';
 import { Avatar, Icon, Status } from './ui';
 
 const readable = (value: unknown) => typeof value === 'string' ? value : JSON.stringify(value, null, 2);
@@ -11,6 +12,8 @@ export function EventCard({ event }: { event: ActivityEvent }) {
   const content = event.text ?? readable(event.result ?? event.arguments ?? event.usage) ?? '';
   const details = event.details === undefined ? '' : readable(event.details);
   const error = event.error ? readable(event.error) : '';
+  const parts = event.kind === 'tool' ? event.content ?? [] : [];
+  const rawResult = event.kind === 'tool' && event.result !== undefined ? readable(event.result) : '';
   const copyContent = [content, details, error].filter(Boolean).join('\n\n');
   const title = event.kind === 'tool' ? `Tool · ${event.name || 'Name not recorded'}`
     : event.role === 'reasoning' ? 'Reasoning' : event.kind === 'work' ? 'Execution event' : event.role || event.kind;
@@ -21,7 +24,7 @@ export function EventCard({ event }: { event: ActivityEvent }) {
   if (event.kind === 'usage') return null;
   if (event.kind === 'tool' || event.details) return <div className="tool-message activity-event"><time>{time}</time>
     <details className={`tool-card ${event.error ? 'tool-error' : ''}`}><summary><span className="tool-icon"><Icon name="terminal" size={16}/></span><span><strong>{title}</strong><small>{event.phase || event.kind} · {event.source.runtime}</small></span><span className="tool-result">{event.error ? 'Error' : event.phase || 'Recorded'}<Icon name={event.error ? 'info' : 'check'} size={13}/></span><Icon name="down" size={14}/></summary>
-      <div className="tool-details"><dl><dt>Source</dt><dd title={event.source.trace}>{event.source.runtime} · byte {event.source.offset}</dd>{event.call_id && <><dt>Call ID</dt><dd>{event.call_id}</dd></>}{event.tool_type && <><dt>Record type</dt><dd>{event.tool_type}</dd></>}</dl><pre>{content}</pre>{details && <pre>{details}</pre>}{error && <pre>{error}</pre>}{copy}</div></details></div>;
+      <div className="tool-details">{parts.length ? <ToolContent parts={parts}/> : <pre>{content}</pre>}<details className="tool-technical"><summary>Technical details<Icon name="down" size={12}/></summary><dl><dt>Source</dt><dd title={event.source.trace}>{event.source.runtime} · byte {event.source.offset}</dd>{event.call_id && <><dt>Call ID</dt><dd>{event.call_id}</dd></>}{event.tool_type && <><dt>Record type</dt><dd>{event.tool_type}</dd></>}{rawResult && <><dt>Raw result</dt><dd><pre>{rawResult}</pre></dd></>}{details && <><dt>Record details</dt><dd><pre>{details}</pre></dd></>}{error && <><dt>Error flag</dt><dd><pre>{error}</pre></dd></>}</dl>{copy}</details></div></details></div>;
   return <article className="message activity-event"><div className="message-heading"><Avatar name={title}/><strong>{title}</strong><time>{time}</time></div><div className="message-body"><Markdown skipHtml components={{ a: ({ children }) => <span>{children}</span>, img: () => <span>[External image omitted]</span> }}>{content || 'No readable text in this record.'}</Markdown></div><div className="record-source">{copy}<span title={event.source.trace}>{event.source.runtime} · byte {event.source.offset}</span></div></article>;
 }
 

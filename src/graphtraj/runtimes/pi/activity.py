@@ -1,5 +1,5 @@
 """Readable Pi Session message entries and their native per-message usage."""
-from graphtraj.runtimes.activity import text_content, usage_fact
+from graphtraj.runtimes.activity import text_content, tool_content, usage_fact
 
 
 def project(record: dict, context: dict) -> list[dict]:
@@ -18,8 +18,9 @@ def project(record: dict, context: dict) -> list[dict]:
     base = {'cwd': context.get('cwd'), 'native_session': context.get('native_session'),
             'source_kind': context.get('source_kind'), 'model': message.get('model'), 'provider': message.get('provider'), 'phase': 'final'}
     if role == 'toolResult':
+        raw = message.get('content')
         return [{**base, 'kind': 'tool', 'phase': 'result', 'call_id': message.get('toolCallId'),
-                 'name': message.get('toolName'), 'result': text_content(message.get('content')),
+                 'name': message.get('toolName'), 'result': raw, 'content': tool_content(raw),
                  'error': message.get('isError'), 'details': message.get('details')}]
     events = []
     text = text_content(message.get('content'))

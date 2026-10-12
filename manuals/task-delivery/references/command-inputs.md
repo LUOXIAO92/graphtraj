@@ -9,12 +9,27 @@ Run `graphtraj ticket register --ticket-file <issue.yml>` with:
 
 - `ticket_id`: stable Ticket ID.
 - `ticket_name`: Ticket name.
-- `source`: accepted GitHub Issue URL.
+- `source`: accepted external task reference; v2 identity does not depend on its URL.
 - `title` and `body`: complete accepted Ticket, including acceptance criteria.
 - `dependencies`: prerequisite Ticket IDs, registered first.
+- `schema_version: 2`, `parent_id`, `disposition`, `replaced_by`, and
+  `retirement_reason`: explicit task relationships and retirement facts.
+  `parent_id: null` means a confirmed project root. Active tasks use
+  `disposition: active`, `replaced_by: []` and `retirement_reason: null`.
+  Superseded tasks name their direct replacements and reason; cancelled tasks
+  have a reason and no replacements. Both retain their parent.
 
-Existing Tickets use their `current_definition`; `ticket.md` is the immutable
-initial definition. Do not register an existing Ticket again.
+Read `graphtraj ticket graph --schema` for the common task projection schema.
+Children, progress and the compatibility `active` value are derived. Existing
+Tickets use their `current_definition`; `ticket.md` is the immutable initial
+definition. Do not register an existing Ticket again.
+
+Legacy definitions remain readable. Their unknown parent is not a confirmed
+root (`parent_known: false`); graph reads do not infer parentage from prose.
+Legacy writes retain their old contract, including the matching GitHub Issue
+source, and cannot overwrite a v2 task. Adopt a compatible native entry before
+an evidence-backed explicit migration; installing a CLI alone does not upgrade
+an already-running host.
 
 ## Record readiness
 
@@ -32,14 +47,32 @@ Run `graphtraj ticket revise --revision-file <revision.yml>` with:
 
 - `product_preserving: true`.
 - `caused_by_event_ids` and Harness-root-relative `evidence_refs`.
-- `tickets`: every affected full definition, each containing `ticket_id`,
-  `ticket_name`, `source`, `title`, `body`, `dependencies`, `active`, and
-  `replaced_by`.
+- `tickets`: every affected full definition. For v2, supply the registration
+  fields above plus the observed `current_definition` (`null` only for a new
+  task). Preserve stable IDs and direct replacement history.
+- `reopen_ticket_ids`: explicitly include completed tasks and affected ancestors
+  that must reopen when required work or relationships change.
+- Optional `dry_run: true` (or CLI `--dry-run`) validates without writing.
 
-Keep existing GitHub identities stable; new nodes refer to accepted GitHub
-Tickets. Include dependent definitions whose edges change. Deactivate removed
-or superseded Tickets and identify replacements where applicable. Preserve
-accepted behavior and acceptance coverage across the complete correction.
+Include definitions whose relationships change and evidence for parentage,
+retirement and scope changes. A stale definition fails instead of overwriting
+newer work. Legacy revisions still use their original `active`/`replaced_by`
+fields; they cannot clear v2 facts. Apply confirmed relations through the native
+revision, preserving original definitions and delivery history.
+
+## Complete a task without a file result
+
+Use `graphtraj ticket complete --completion-file <completion.yml>` (Tool/MCP
+`ticket_complete`) for an active v2 task with its own accepted outcome and no
+file-delivery history. Supply `ticket_id`, observed `current_definition`, a
+nonempty `reason`, `caused_by_event_ids`, existing `evidence_refs`, and
+`cancelled_scope`: a map of each required cancelled task ID to the reason that
+scope is no longer required, or `{}` when none applies.
+
+The operation checks required child and dependency results through replacement
+chains. Child completion alone does not accept the parent. Tasks with a Team,
+worktree, branch, candidate or file-delivery history continue through submission,
+acceptance and integration below; `complete` cannot replace those steps.
 
 ## Submit and decide a result
 

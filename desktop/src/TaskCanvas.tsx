@@ -94,7 +94,7 @@ export const TaskCanvas = forwardRef<TaskCanvasHandle, Props>(function TaskCanva
       interacting: false, panning: { enabled: true, eventTypes: ['leftMouseDown', 'mouseWheel'] },
       mousewheel: { enabled: true, modifiers: ['ctrl', 'meta'], minScale: .1, maxScale: 2 },
       connecting: { connectionPoint: 'anchor', router: { name: 'manhattan', args: {
-        padding: 24, step: 8, startDirections: ['right'], endDirections: ['left'],
+        padding: 24, step: 8, snapToGrid: false, startDirections: ['right'], endDirections: ['left'],
         excludeShapes: ['task-frame'], maxLoopCount: 25000,
       } }, connector: { name: 'jumpover', args: { type: 'arc', size: 6, radius: 0 } } },
     });
@@ -172,6 +172,7 @@ export const TaskCanvas = forwardRef<TaskCanvasHandle, Props>(function TaskCanva
           graph.positionCell(cell, 'top-left');
           const translation = graph.translate();
           graph.translate(translation.tx + 36, translation.ty + 36);
+          cards.current.get(pendingToggle.current)?.querySelector<HTMLButtonElement>('.native-task-footer button')?.focus({ preventScroll: true });
         }
         pendingToggle.current = null;
       } else if (first.current && result.nodes.length && current.current.active) { fit(.65); first.current = false; }

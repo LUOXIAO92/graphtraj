@@ -120,12 +120,14 @@ def retire_legacy_hosted_session(project: Project, alias: str, mapping: dict) ->
     if session is not None and _main_association_references(runner_directory, session):
         reasons.append('main-association-active')
 
-    # Another record that names this alias as its parent still depends on it.
+    # Another current record that names this alias as its parent still depends
+    # on it. A record that already retired keeps its historical parent without
+    # blocking, and an unreadable or unparented record cannot prove exclusion.
     descendant, unknown = _descendant_state(runner_directory, alias)
     if unknown:
         reasons.append('descendant-state-unknown')
-    elif descendant:
-        reasons.append('descendant-record-present')
+    elif descendant is not None:
+        reasons.append('descendant-record-present:' + descendant)
 
     if reasons:
         raise RunnerError(
@@ -181,16 +183,33 @@ def _main_association_references(runner_directory: Path, session: str) -> bool:
     return False
 
 
-def _descendant_state(runner_directory: Path, alias: str) -> tuple[bool, bool]:
-    """Return whether another record names this alias as parent, and uncertainty.
+def _record_is_retired(directory: Path) -> bool:
+    """Whether a record's active mapping is gone and its retirement is retained.
+
+    Retirement removes only the active mapping, so a record that still has a
+    mapping is current whatever directory it was read from; the retained
+    retirement marker proves the retired state instead of the location.
+    """
+    if (directory / 'mapping.yml').is_file():
+        return False
+    try:
+        record = yaml.safe_load((directory / 'session.yml').read_text(encoding='utf-8'))
+    except (OSError, UnicodeError, yaml.YAMLError):
+        return False
+    return bool(isinstance(record, dict) and record.get('retirement'))
+
+
+def _descendant_state(runner_directory: Path, alias: str) -> tuple[str | None, bool]:
+    """Return the first current record naming this alias as parent, and uncertainty.
 
     The scan mirrors the stopped-subtree check: an allocation that never
-    established an identity is skipped, while an unreadable or unparented
-    record cannot prove exclusion and is reported as unknown.
+    established an identity is skipped, a record that already retired keeps its
+    historical parent without blocking, and an unreadable or unparented record
+    cannot prove exclusion and is reported as unknown.
     """
     session_root = runner_directory / 'sessions'
     if session_root.is_symlink() or not session_root.is_dir():
-        return False, False
+        return None, False
     entries = list(session_root.iterdir()) + retained_session_directories(runner_directory)
     for path in entries:
         name = path.parent.name if path.name == 'runner' else path.name
@@ -202,14 +221,14 @@ def _descendant_state(runner_directory: Path, alias: str) -> tuple[bool, bool]:
                 or _unestablished_root_launch(path)):
             continue
         try:
-            record, _ = _read_alias_record(runner_directory, name)
+            record, directory = _read_alias_record(runner_directory, name)
         except RunnerError:
-            return False, True
+            return None, True
         if not isinstance(record, dict) or 'parent' not in record:
-            return False, True
-        if record['parent'] == alias:
-            return True, False
-    return False, False
+            return None, True
+        if record['parent'] == alias and not _record_is_retired(directory):
+            return name, False
+    return None, False
 
 
 def retire_stopped_session(project: Project, alias: str) -> dict:

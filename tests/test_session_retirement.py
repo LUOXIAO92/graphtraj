@@ -52,14 +52,27 @@ def _exited_pid() -> int:
     return process.pid
 
 
-def _current_mapping(alias: str, root: Path) -> dict:
+def _current_mapping(alias: str, root: Path, *, parent: str | None = None) -> dict:
     """Return one complete current execution mapping for an adjacent Session."""
     return {
         "alias": alias, "runtime": "codex", "session": "native-session",
-        "ticket_id": "154", "team_generation": 1, "role": "researcher", "parent": None,
+        "ticket_id": "154", "team_generation": 1, "role": "researcher", "parent": parent,
         "retained_batch_file": "batch.yml", "worktree_path": str(root),
         "trace_file": str(root / "trace"), "worker_pid": 111, "runtime_pid": 111,
     }
+
+
+def _retired_record(root: Path, alias: str, *, parent: str) -> Path:
+    """Write one retained record whose active mapping is already removed."""
+    directory = (root / ".graphtraj/state/tickets/154-recovery/teams/1/traces"
+                 / alias / "runner")
+    directory.mkdir(parents=True, exist_ok=True)
+    mapping = _withdrawn_mapping(
+        alias, root, worker_pid=_exited_pid(), runtime_pid=_exited_pid(), parent=parent)
+    (directory / "session.yml").write_text(yaml.safe_dump(
+        {"alias": alias, "purpose": mapping["purpose"],
+         "retirement": {"member": None, "mapping": mapping}}))
+    return directory
 
 
 def test_withdrawn_hosted_record_retires_and_reports_retired(
@@ -156,6 +169,83 @@ def test_withdrawn_hosted_record_refusals_keep_every_record(
     assert all((sessions / alias / "mapping.yml").read_bytes() == content
                for alias, content in retained.items())
     assert (child_directory / "mapping.yml").is_file()
+
+
+def test_retired_descendant_does_not_block_legacy_retirement(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    """A record that already retired keeps its historical parent without blocking."""
+    root, _, _, env = configure_harness(
+        installed_commands, temporary_git_repository, fake_codex, tmp_path)
+    alias = "main_" + "f" * 32 + "@m1"
+    mapping = _withdrawn_mapping(
+        alias, root, worker_pid=_exited_pid(), runtime_pid=_exited_pid())
+    directory = _withdrawn_record(root, alias, mapping)
+    retired_child = _retired_record(root, "checker_" + "1" * 32 + "@m1", parent=alias)
+    retired_record = (retired_child / "session.yml").read_bytes()
+    neighbor = root / ".graphtraj/runner/sessions/researcher@x1"
+    neighbor.mkdir(parents=True)
+    (neighbor / "mapping.yml").write_text(yaml.safe_dump(_current_mapping("researcher@x1", root)))
+    neighbor_mapping = (neighbor / "mapping.yml").read_bytes()
+
+    retired = command(installed_commands, root, env, "retire", alias)
+    assert retired.returncode == 0, retired.stdout + retired.stderr
+    assert "retired" in retired.stdout
+    assert not (directory / "mapping.yml").exists()
+    record = yaml.safe_load((directory / "session.yml").read_text())
+    assert record["retirement"]["mapping"] == mapping
+    assert (retired_child / "session.yml").read_bytes() == retired_record
+    assert (neighbor / "mapping.yml").read_bytes() == neighbor_mapping
+
+    status = command(installed_commands, root, env, "status", alias)
+    assert "invalid" not in status.stdout, status.stdout
+    assert "retire_status: retired" in status.stdout, status.stdout
+
+
+def test_current_or_unparented_descendant_still_blocks_legacy_retirement(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    """A current child names itself in the reason; an unknown record keeps refusing."""
+    root, _, _, env = configure_harness(
+        installed_commands, temporary_git_repository, fake_codex, tmp_path)
+
+    # A current, still-mapped child names the alias as its parent.
+    parented = "main_" + "c" * 32 + "@m1"
+    _withdrawn_record(root, parented, _withdrawn_mapping(
+        parented, root, worker_pid=_exited_pid(), runtime_pid=_exited_pid()))
+    child = "analyst@x1"
+    child_directory = root / ".graphtraj/runner/sessions" / child
+    child_directory.mkdir(parents=True)
+    (child_directory / "mapping.yml").write_text(
+        yaml.safe_dump(_current_mapping(child, root, parent=parented)))
+
+    retained = (child_directory / "mapping.yml").read_bytes()
+    refused = command(installed_commands, root, env, "retire", parented)
+    assert refused.returncode == 1, refused.stdout + refused.stderr
+    assert "descendant-record-present:" + child in refused.stdout, refused.stdout
+    assert (root / ".graphtraj/runner/sessions" / parented / "mapping.yml").is_file()
+    assert (child_directory / "mapping.yml").read_bytes() == retained
+
+    # A record without parentage cannot prove exclusion.
+    unknown = "main_" + "9" * 32 + "@m1"
+    _withdrawn_record(root, unknown, _withdrawn_mapping(
+        unknown, root, worker_pid=_exited_pid(), runtime_pid=_exited_pid()))
+    loose = "researcher@x1"
+    loose_directory = root / ".graphtraj/runner/sessions" / loose
+    loose_directory.mkdir(parents=True)
+    (loose_directory / "mapping.yml").write_text(yaml.safe_dump({"alias": loose}))
+
+    refused_unknown = command(installed_commands, root, env, "retire", unknown)
+    assert refused_unknown.returncode == 1, refused_unknown.stdout
+    assert "descendant-state-unknown" in refused_unknown.stdout, refused_unknown.stdout
+    assert (root / ".graphtraj/runner/sessions" / unknown / "mapping.yml").is_file()
+    assert (loose_directory / "mapping.yml").is_file()
 
 
 def test_retire_refuses_running_descendant_then_preserves_history(

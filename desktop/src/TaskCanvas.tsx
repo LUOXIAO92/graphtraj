@@ -1,7 +1,7 @@
 import React, { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import { Graph as X6, Shape, type Cell } from '@antv/x6';
 import type { Graph, Ticket } from '../electron/types';
-import { dependencyFocus, monitorGraph, taskChildren, type Size, type MonitorEdge } from './monitor-graph';
+import { dependencyFocus, monitorGraph, taskChildren, taskStatus, dependencyTerminals, type Size, type MonitorEdge } from './monitor-graph';
 import './task-canvas.css';
 
 export type TaskCanvasHandle = { fit: () => void; locate: (id: string) => void };
@@ -27,7 +27,7 @@ function card(ticket: Ticket, children: Ticket[], open: boolean, select: () => v
   element.append(title);
   const meta = document.createElement('div');
   meta.className = 'native-task-meta';
-  meta.textContent = `#${ticket.ticket_id} · ${ticket.disposition && ticket.disposition !== 'active' ? ticket.disposition : !ticket.active ? `Inactive · ${ticket.status}` : ticket.status}`;
+  meta.textContent = `#${ticket.ticket_id} · ${taskStatus(ticket)}${ticket.replaced_by.length ? ` · → ${ticket.replaced_by.map(id => `#${id}`).join(', ')}` : ''}`;
   element.append(meta);
   const footer = document.createElement('div');
   footer.className = 'native-task-footer';
@@ -141,6 +141,7 @@ export const TaskCanvas = forwardRef<TaskCanvasHandle, Props>(function TaskCanva
     const result = monitorGraph(data.graph, data.expanded, sizes);
     projection.current = result;
     const visibleEdges = result.edges.filter(edge => edge.source !== edge.target);
+    const terminals = dependencyTerminals(result.nodes, visibleEdges);
     const cells: Cell[] = [];
     for (const node of result.nodes) {
       if (node.frame) cells.push(graph.createNode({ id: `frame:${node.id}`, shape: 'task-frame',
@@ -150,26 +151,18 @@ export const TaskCanvas = forwardRef<TaskCanvasHandle, Props>(function TaskCanva
       const port = { attrs: { circle: { r: 3, magnet: false, fill: '#71849a', stroke: '#fff', strokeWidth: 1 } } };
       cells.push(graph.createNode({ id: node.id, shape: 'native-task', x: node.x, y: node.y,
         width: node.width, height: node.height, zIndex: 2, data: { element },
-        ports: { groups: { in: { position: 'left', ...port }, out: { position: 'right', ...port } },
+        ports: { groups: { in: { position: 'absolute', ...port }, out: { position: 'absolute', ...port } },
           items: visibleEdges.flatMap(edge => [
-            ...(edge.source === node.id ? [{ id: `out:${edge.id}`, group: 'out' }] : []),
-            ...(edge.target === node.id ? [{ id: `in:${edge.id}`, group: 'in' }] : []),
+            ...(edge.source === node.id ? [{ id: `out:${edge.id}`, group: 'out', args: terminals.get(edge.id)!.source }] : []),
+            ...(edge.target === node.id ? [{ id: `in:${edge.id}`, group: 'in', args: terminals.get(edge.id)!.target }] : []),
           ]) },
       }));
     }
     for (const edge of visibleEdges) {
-      const outgoing = visibleEdges.filter(item => item.source === edge.source);
-      const incoming = visibleEdges.filter(item => item.target === edge.target);
-      // Separate the terminal channels. Shared Dagre waypoints force unrelated
-      // dependencies onto one trunk; X6 routes each visible pair around nodes.
+      // Explicit normal terminal segments leave X6 free to avoid other cards.
       cells.push(graph.createEdge({ id: edge.id,
       source: { cell: edge.source, port: `out:${edge.id}` }, target: { cell: edge.target, port: `in:${edge.id}` },
-      zIndex: 1, data: edge,
-      router: { name: 'manhattan', args: {
-        padding: { top: 24, bottom: 24, left: 32 + incoming.indexOf(edge) * 16, right: 32 + outgoing.indexOf(edge) * 16 },
-        step: 8, snapToGrid: false, startDirections: ['right'], endDirections: ['left'],
-        excludeShapes: ['task-frame'], maxLoopCount: 25000,
-      } },
+      zIndex: 1, data: edge, vertices: terminals.get(edge.id)!.vertices,
       attrs: { line: { stroke: '#8192a6', strokeWidth: 1.6, targetMarker: { name: 'block', width: 10, height: 8 } } },
     }));
     }

@@ -3,13 +3,13 @@ const assert = require('node:assert/strict');
 const path = require('node:path');
 const vm = require('node:vm');
 const { build } = require('esbuild');
-let monitorGraph, dependencyFocus;
+let monitorGraph, dependencyFocus, dependencyTerminals, taskStatus;
 test.before(async () => {
   const result = await build({ entryPoints: [path.join(__dirname, '../src/monitor-graph.ts')],
     bundle: true, platform: 'node', format: 'cjs', write: false });
   const module = { exports: {} };
   vm.runInNewContext(result.outputFiles[0].text, { module, exports: module.exports, structuredClone });
-  ({ monitorGraph, dependencyFocus } = module.exports);
+  ({ monitorGraph, dependencyFocus, dependencyTerminals, taskStatus } = module.exports);
 });
 const task = (id, parent_id, dependencies = []) => ({ ticket_id: id, title: `Real title ${id}`, parent_id,
   schema_version: 2, ticket_name: `task-${id}`, dependencies, active: true, status: 'pending', replaced_by: [] });
@@ -122,4 +122,33 @@ test('collapsed visible pairs aggregate only matching directions and restore rea
     assert.deepEqual(Array.from(native), graph.tickets.flatMap(t => t.dependencies.map(d => `${d}->${t.ticket_id}`)).sort());
   }
   assert.equal(JSON.stringify(graph), original);
+});
+
+
+test('ports follow opposite card position and leave horizontal clear terminal segments', () => {
+  const graph = { tickets: [task('252', null), task('260', null, ['252']), task('283', null, ['252', '260'])] };
+  const view = monitorGraph(graph, new Set());
+  // Source insertion order deliberately opposes visual target order.
+  const upper = view.nodes.find(n => n.id === '283'), lower = view.nodes.find(n => n.id === '260');
+  upper.y = 0; lower.y = 500;
+  const ports = dependencyTerminals(view.nodes, view.edges);
+  const outgoing = view.edges.filter(e => e.source === '252');
+  assert.ok(ports.get(outgoing.find(e => e.target === '283').id).source.y < ports.get(outgoing.find(e => e.target === '260').id).source.y);
+  for (const edge of view.edges) {
+    const p = ports.get(edge.id), source = view.nodes.find(n => n.id === edge.source), target = view.nodes.find(n => n.id === edge.target);
+    assert.equal(p.source.x, source.width); assert.equal(p.target.x, 0);
+    assert.equal(p.vertices[0].y, source.y + p.source.y);
+    assert.equal(p.vertices[1].y, target.y + p.target.y);
+    assert.ok(p.vertices[0].x >= source.x + source.width + 40);
+    assert.ok(p.vertices[1].x <= target.x - 40);
+  }
+});
+
+test('cancelled and superseded tasks never appear under their old execution status', () => {
+  for (const status of ['pending', 'implementing', 'reworking', 'reviewing', 'integrated']) {
+    for (const disposition of ['cancelled', 'superseded']) {
+      assert.equal(taskStatus({ ...task('old', null), status, disposition, active: false }), disposition);
+    }
+    assert.equal(taskStatus({ ...task('current', null), status, disposition: 'active' }), status);
+  }
 });

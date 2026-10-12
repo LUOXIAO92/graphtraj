@@ -48,7 +48,7 @@ export function monitorGraph(graph: Graph, expanded: ReadonlySet<string>, sizes:
       const node: MonitorNode = { id, ticket, ...size, x: 0, y: 0, children: descendants, expanded: open, frame };
       return { node, inner, size: frame ?? size };
     });
-    const layout = new dagre.graphlib.Graph().setGraph({ rankdir: 'LR', ranksep: 120, nodesep: 64, edgesep: 28, marginx: 0, marginy: 0 });
+    const layout = new dagre.graphlib.Graph().setGraph({ rankdir: 'LR', ranksep: 200, nodesep: 64, edgesep: 28, marginx: 0, marginy: 0 });
     for (const branch of branches) layout.setNode(branch.node.id, branch.size);
     // Map each real endpoint to its branch at this hierarchy level solely for layout.
     const owners = new Map<string, string>();
@@ -118,4 +118,44 @@ export function dependencyFocus(graph: Graph, selected: string | null): Set<stri
     }
   }
   return focus;
+}
+
+/** Prefer disposition over a retained historical execution stage. */
+export function taskStatus(ticket: Ticket): string {
+  return ticket.disposition && ticket.disposition !== 'active' ? ticket.disposition
+    : !ticket.active ? 'inactive' : ticket.status;
+}
+
+/** Order card ports by their opposite card and reserve perpendicular end segments.
+ * X6 still owns obstacle routing between these two terminal waypoints.
+ */
+export function dependencyTerminals(nodes: MonitorNode[], edges: MonitorEdge[]): Map<string, {
+  source: { x: number; y: number }; target: { x: number; y: number };
+  vertices: { x: number; y: number }[];
+}> {
+  const positions = new Map(nodes.map(node => [node.id, node]));
+  const visible = edges.filter(edge => edge.source !== edge.target);
+  const ends = new Map<string, { source: { x: number; y: number }; target: { x: number; y: number }; vertices: { x: number; y: number }[] }>();
+  const ports = new Map<string, { x: number; y: number; clearance: number }>();
+  for (const node of nodes) for (const side of ['source', 'target'] as const) {
+    const opposite = side === 'source' ? 'target' : 'source';
+    const ordered = visible.filter(edge => edge[side] === node.id).sort((a, b) => {
+      const first = positions.get(a[opposite])!, second = positions.get(b[opposite])!;
+      return (first.y + first.height / 2) - (second.y + second.height / 2)
+        || first.x - second.x || a.id.localeCompare(b.id);
+    });
+    ordered.forEach((edge, index) => ports.set(`${side}:${edge.id}`, {
+      x: side === 'source' ? node.width : 0,
+      y: Math.round(node.height * (index + 1) / (ordered.length + 1)),
+      clearance: 40 + index * 12,
+    }));
+  }
+  for (const edge of visible) {
+    const source = ports.get(`source:${edge.id}`)!, target = ports.get(`target:${edge.id}`)!;
+    const from = positions.get(edge.source)!, to = positions.get(edge.target)!;
+    ends.set(edge.id, { source: { x: source.x, y: source.y }, target: { x: target.x, y: target.y },
+      vertices: [{ x: from.x + source.x + source.clearance, y: from.y + source.y },
+        { x: to.x - target.clearance, y: to.y + target.y }] });
+  }
+  return ends;
 }

@@ -58,7 +58,9 @@ function activityFailure(reply: { error?: unknown; result?: { error?: unknown } 
 export class ActivityReader {
   private processes = new Map<string, {
     child: ChildProcessWithoutNullStreams;
-    queue: { resolve: (value: Activity) => void; reject: (error: Error) => void }[];
+    queue: { request: ActivityRequest; resolve: (value: Activity) => void; reject: (error: Error) => void }[];
+    active: boolean;
+    timer?: ReturnType<typeof setTimeout>;
   }>();
   private executable: string | undefined;
   private cursorKey?: Promise<string>;
@@ -93,10 +95,11 @@ export class ActivityReader {
         cwd: root, windowsHide: true, stdio: 'pipe',
         env: { ...process.env, GRAPHTRAJ_DESKTOP_CURSOR_KEY: key },
       });
-      observer = { child, queue: [] };
+      observer = { child, queue: [], active: false };
       this.processes.set(root, observer);
       const connection = observer;
       const fail = () => {
+        clearTimeout(connection.timer);
         if (this.processes.get(root) === connection) this.processes.delete(root);
         for (const pending of connection.queue.splice(0)) pending.reject(new Error('Native activity observer disconnected.'));
       };
@@ -104,27 +107,39 @@ export class ActivityReader {
       // Never forward native stderr, which can contain credential-bearing diagnostics.
       child.stderr.resume();
       createInterface({ input: child.stdout }).on('line', line => {
+        if (this.processes.get(root) !== connection) return;
         const pending = connection.queue.shift();
         if (!pending) return;
+        clearTimeout(connection.timer);
+        connection.active = false;
         try {
           const reply = JSON.parse(line);
           if (reply.failed) pending.reject(activityFailure(reply));
           else pending.resolve(reply.result);
         } catch { pending.reject(new Error('Native activity query failed [unknown]: Invalid response.')); }
+        this.send(root);
       });
     }
     const connection = observer;
     return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        connection.child.kill();
-        reject(new Error('Native activity observer timed out. Reconnect to retry.'));
-      }, 15000);
-      connection.queue.push({
-        resolve: value => { clearTimeout(timeout); resolve(value); },
-        reject: error => { clearTimeout(timeout); reject(error); },
-      });
-      connection.child.stdin.write(JSON.stringify({ action: 'execute', feature: 'desktop_activity', arguments: request }) + '\n');
+      connection.queue.push({ request, resolve, reject });
+      this.send(root);
     });
+  }
+
+  /** Match the native serial protocol: only dispatched work spends its timeout. */
+  private send(root: string): void {
+    const connection = this.processes.get(root);
+    if (!connection || connection.active || !connection.queue.length) return;
+    connection.active = true;
+    connection.timer = setTimeout(() => {
+      if (this.processes.get(root) === connection) this.processes.delete(root);
+      connection.queue.shift()?.reject(new Error('Native activity observer timed out. Reconnect to retry.'));
+      for (const pending of connection.queue.splice(0)) pending.reject(new Error('Native activity observer disconnected.'));
+      connection.child.kill();
+    }, 15000);
+    connection.child.stdin.write(JSON.stringify({ action: 'execute', feature: 'desktop_activity',
+      arguments: connection.queue[0].request }) + '\n');
   }
 
   close(root?: string): void {

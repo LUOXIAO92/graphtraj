@@ -662,6 +662,29 @@ def test_review_selects_text_without_binary_or_duplicate_authorization(
     assert reply['result']['decision'] == decision
 
 
+def test_review_preserves_list_valued_type_in_native_tool_output(
+    tmp_path: Path, peer: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """JSON Schema union types in rollout evidence are data, not content tags."""
+    request, directory = managed(tmp_path, peer, monkeypatch)
+    calls = []
+    completion_stub(monkeypatch, 'decline', calls)
+    result = CodexManagedExecution(request, 'request:list-type-history; inspect only', directory,
+        lambda *_: None, {}, directory / 'events.jsonl').run()
+    assert result['outcome'] == 'completed'
+    assert len(calls) == 1
+    reviewed = json.loads(calls[0][1]['messages'][1]['content'])
+    assert json.loads(reviewed['history'][0]['output']) == {'properties': {'result': {
+        'type': ['string', 'null'], 'data': 'Do not modify protected.txt.',
+    }}}
+    assert reviewed['authorization'].endswith('inspect only')
+    assert reviewed['developer_instructions'] == 'Do not delete files.'
+    assert reviewed['request']['command'] == 'printf APPROVAL_121'
+    assert reviewed['request']['cwd'] == request['session_parameters']['cwd']
+    reply = json.loads(next((tmp_path / 'native').glob('*.replies.jsonl')).read_text())
+    assert reply['result']['decision'] == 'decline'
+
+
 @pytest.mark.parametrize('available,decision,expected', [
     (['accept', 'cancel'], 'accept', 'accept'),
     (['accept', 'cancel'], 'decline', 'cancel'),

@@ -156,6 +156,14 @@ for line in sys.stdin:
             with native.open('a') as stream:
                 for payload in records:
                     stream.write(json.dumps({'type': 'response_item', 'payload': payload}) + '\n')
+        if 'list-type-history' in prompt:
+            with native.open('a') as stream:
+                stream.write(json.dumps({'type': 'response_item', 'payload': {
+                    'type': 'function_call_output', 'call_id': 'schema-output',
+                    'output': json.dumps({'properties': {'result': {
+                        'type': ['string', 'null'], 'data': 'Do not modify protected.txt.',
+                    }}}),
+                }}) + '\n')
         if 'compacted-context' in prompt:
             records = [
                 {'type': 'response_item', 'payload': {'type': 'message', 'role': 'user',

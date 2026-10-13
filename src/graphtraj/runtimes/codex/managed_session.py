@@ -41,7 +41,10 @@ def _approval_history_text(value: object) -> object:
     if isinstance(value, list):
         return [_approval_history_text(item) for item in value]
     if isinstance(value, dict):
-        binary = value.get('type') in {'image', 'audio', 'input_audio', 'input_file'}
+        content_type = value.get('type')
+        binary = isinstance(content_type, str) and content_type in {
+            'image', 'audio', 'input_audio', 'input_file',
+        }
         return {
             key: omitted if binary and key in {'data', 'file_data'}
             else _approval_history_text(item)

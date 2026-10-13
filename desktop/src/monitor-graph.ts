@@ -1,6 +1,14 @@
 import dagre from '@dagrejs/dagre';
 import type { Graph, Ticket } from '../electron/types';
 
+/** Metro must turn through 90 degrees at the explicit normal terminal waypoints.
+ * Its 45-degree default otherwise loops around a waypoint before entering a card.
+ */
+export const taskRouterOptions = {
+  padding: 24, step: 8, snapToGrid: false, maxDirectionChange: 90,
+  excludeShapes: ['task-frame'], maxLoopCount: 25000,
+};
+
 export type Size = { width: number; height: number };
 export type MonitorNode = Size & { id: string; ticket: Ticket; x: number; y: number;
   children: string[]; expanded: boolean; frame?: Size };

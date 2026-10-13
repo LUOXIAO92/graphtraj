@@ -14,7 +14,7 @@ export type MonitorNode = Size & { id: string; ticket: Ticket; x: number; y: num
   children: string[]; expanded: boolean; frame?: Size };
 export type TaskRelation = { source: string; target: string; kind: 'dependency' | 'replacement' | 'acceptance'; event_id?: string };
 export type MonitorEdge = TaskRelation & { id: string;
-  relations: TaskRelation[]; projected: boolean; vertices: { x: number; y: number }[] };
+  relations: TaskRelation[]; kinds: TaskRelation['kind'][]; projected: boolean; vertices: { x: number; y: number }[] };
 
 /** Preserve direct native relationships, including each step of replacement chains. */
 export function taskRelations(graph: Graph): TaskRelation[] {
@@ -109,12 +109,18 @@ export function monitorGraph(graph: Graph, expanded: ReadonlySet<string>, sizes:
   const pairs = new Map<string, MonitorEdge>();
   for (const edge of nativeEdges) {
     const source = endpoints.get(edge.source)!, target = endpoints.get(edge.target)!;
-    const id = JSON.stringify([edge.kind, source, target]);
+    const id = JSON.stringify([source, target]);
     const existing = pairs.get(id);
     const relation: TaskRelation = { source: edge.source, target: edge.target, kind: edge.kind, ...(edge.event_id ? { event_id: edge.event_id } : {}) };
-    if (existing) existing.relations.push(relation);
+    if (existing) {
+      existing.relations.push(relation);
+      if (!existing.kinds.includes(edge.kind)) existing.kinds.push(edge.kind);
+      // A shared arrow has one pair of ports, but retains each meaning below.
+      if (edge.kind === 'dependency') existing.kind = 'dependency';
+      existing.projected ||= source !== edge.source || target !== edge.target;
+    }
     else pairs.set(id, { id, source, target, kind: edge.kind,
-      relations: [relation],
+      relations: [relation], kinds: [edge.kind],
       vertices: placed.routes.get(edge.id) ?? [],
       projected: source !== edge.source || target !== edge.target });
   }

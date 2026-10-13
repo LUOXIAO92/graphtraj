@@ -180,9 +180,10 @@ test('replacement chains preserve direction, kinds and native endpoints across s
   const original = JSON.stringify(graph);
   const collapsed = monitorGraph(graph, new Set());
   const forward = collapsed.edges.filter(edge => edge.source === 'A' && edge.target === 'B');
-  assert.equal(forward.length, 2, 'different meanings must not merge');
-  assert.equal(forward.find(edge => edge.kind === 'replacement').relations.length, 2);
-  assert.equal(forward.find(edge => edge.kind === 'dependency').relations.length, 1);
+  assert.equal(forward.length, 1, 'one visible directed pair uses one arrow');
+  assert.equal(forward[0].relations.filter(edge => edge.kind === 'replacement').length, 2);
+  assert.equal(forward[0].relations.filter(edge => edge.kind === 'dependency').length, 1);
+  assert.deepEqual(Array.from(forward[0].kinds).sort(), ['dependency', 'replacement']);
   assert.ok(collapsed.edges.some(edge => edge.source === 'B' && edge.target === 'A' && edge.kind === 'dependency'));
   const expanded = monitorGraph(graph, new Set(['A', 'B']));
   assert.deepEqual(Array.from(expanded.edges.filter(edge => edge.kind === 'replacement'),
@@ -238,4 +239,18 @@ test('accepted delivery is an evidenced relation, distinct from membership and e
   assert.ok(taskFocus(graph, 'result').has('next'));
   assert.ok(!taskFocus(graph, 'result').has('unaccepted'));
   assert.equal(JSON.stringify(graph), original);
+});
+
+
+test('a collapsed dependency and accepted receipt share an arrow while preserving both facts', () => {
+  const graph = { tickets: [task('226', null), task('236', null, ['226']),
+    { ...task('233', '226'), delivery: [{ event: 'ticket-completed', ticket_id: '236', event_id: 'accept-236' }] }] };
+  const collapsed = monitorGraph(graph, new Set());
+  assert.equal(collapsed.edges.length, 1);
+  assert.deepEqual(Array.from(collapsed.edges[0].kinds).sort(), ['acceptance', 'dependency']);
+  assert.equal(collapsed.edges[0].relations.find(r => r.kind === 'acceptance').event_id, 'accept-236');
+  const expanded = monitorGraph(graph, new Set(['226']));
+  assert.equal(expanded.edges.length, 2);
+  assert.ok(expanded.edges.some(e => e.source === '233' && e.target === '236' && e.kind === 'acceptance'));
+  assert.ok(expanded.edges.some(e => e.source === '226' && e.target === '236' && e.kind === 'dependency'));
 });

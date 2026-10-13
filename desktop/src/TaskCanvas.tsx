@@ -205,6 +205,10 @@ export const TaskCanvas = forwardRef<TaskCanvasHandle, Props>(function TaskCanva
       source: { cell: edge.source, port: `out:${edge.id}` }, target: { cell: edge.target, port: `in:${edge.id}` },
       ...(edge.kind === 'acceptance' ? { router: { name: 'metro', args: { ...taskRouterOptions, startDirections: ['right'], endDirections: ['right'] } } } : {}),
       zIndex: 1, data: edge, vertices: terminals.get(edge.id)!.vertices,
+      ...(edge.kinds.length > 1 ? { labels: [{ position: .5, attrs: {
+        label: { text: edge.kinds.map(kind => kind === 'dependency' ? 'Dependency' : kind === 'acceptance' ? 'Accepted delivery' : 'Replacement').join(' + '), fontSize: 11, fill: '#365f9c' },
+        body: { fill: '#fff', stroke: '#bdcbd9', rx: 3, ry: 3 },
+      } }] } : {}),
       attrs: { line: { stroke: edge.kind === 'replacement' ? '#986528' : edge.kind === 'acceptance' ? '#178271' : '#8192a6',
         strokeDasharray: edge.kind === 'replacement' ? '8 5' : edge.kind === 'acceptance' ? '3 3' : '', strokeWidth: 1.6,
         targetMarker: { name: 'block', width: 10, height: 8 } } },

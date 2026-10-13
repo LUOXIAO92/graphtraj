@@ -217,13 +217,13 @@ export const TaskCanvas = forwardRef<TaskCanvasHandle, Props>(function TaskCanva
     graph.once('render:done', () => {
       if (pendingLocate.current) locate(pendingLocate.current);
       else if (pendingToggle.current) {
-        // Explicit expansion reveals the heading and first children at reading scale.
+        // Keep the receiving summary at the right, with its inputs visible to the left.
         const cell = graph.getCellById(pendingToggle.current);
         if (cell) {
           graph.zoomTo(Math.max(.8, graph.zoom()));
-          graph.positionCell(cell, 'top-left');
+          graph.positionCell(cell, 'top-right');
           const translation = graph.translate();
-          graph.translate(translation.tx + 36, translation.ty + 36);
+          graph.translate(translation.tx - 36, translation.ty + 36);
           cards.current.get(pendingToggle.current)?.querySelector<HTMLButtonElement>('.native-task-footer button')?.focus({ preventScroll: true });
         }
         pendingToggle.current = null;

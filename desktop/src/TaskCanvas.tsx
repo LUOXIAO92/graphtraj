@@ -1,7 +1,7 @@
 import React, { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import { Graph as X6, Shape, NodeView, type Cell } from '@antv/x6';
 import type { Graph, Ticket } from '../electron/types';
-import { taskFocus, taskRouterOptions, monitorGraph, taskChildren, taskStatus, dependencyTerminals, projectBounds, type Size, type MonitorEdge } from './monitor-graph';
+import { taskFocus, taskRouterOptions, monitorGraph, taskChildren, taskStatus, taskPaths, projectBounds, type Size, type MonitorEdge } from './monitor-graph';
 import './task-canvas.css';
 import { TaskMiniMap } from './task-minimap';
 
@@ -172,7 +172,7 @@ export const TaskCanvas = forwardRef<TaskCanvasHandle, Props>(function TaskCanva
     const result = monitorGraph(data.graph, data.expanded, sizes);
     projection.current = result;
     const visibleEdges = result.edges.filter(edge => edge.source !== edge.target);
-    const terminals = dependencyTerminals(result.nodes, visibleEdges);
+    const drawing = taskPaths(result.nodes, visibleEdges);
     const cells: Cell[] = [];
     if (result.nodes.length) {
       const bounds = projectBounds(result.nodes);
@@ -194,24 +194,26 @@ export const TaskCanvas = forwardRef<TaskCanvasHandle, Props>(function TaskCanva
       cells.push(graph.createNode({ id: node.id, shape: 'native-task', x: node.x, y: node.y,
         width: node.width, height: node.height, zIndex: 2, data: { element },
         ports: { groups: { in: { position: 'absolute', ...port }, out: { position: 'absolute', ...port } },
-          items: visibleEdges.flatMap(edge => [
-            ...(edge.source === node.id ? [{ id: `out:${edge.id}`, group: 'out', args: terminals.get(edge.id)!.source }] : []),
-            ...(edge.target === node.id ? [{ id: `in:${edge.id}`, group: 'in', args: terminals.get(edge.id)!.target }] : []),
-          ]) },
+          items: drawing.ports.get(node.id)! },
       }));
     }
-    for (const edge of visibleEdges) {
-      // Explicit normal terminal segments leave X6 free to avoid other cards.
-      cells.push(graph.createEdge({ id: edge.id,
-      source: { cell: edge.source, port: `out:${edge.id}` }, target: { cell: edge.target, port: `in:${edge.id}` },
-      zIndex: 1, data: edge, vertices: terminals.get(edge.id)!.vertices,
-      ...(edge.kinds.length > 1 ? { labels: [{ position: .5, attrs: {
+    for (const path of drawing.paths) {
+      const edge = path.data;
+      // Shared receipt segments are drawn once; only the final entry has an arrow.
+      cells.push(graph.createEdge({ id: path.id,
+      source: path.source, target: path.target,
+      zIndex: 1, data: edge, vertices: path.vertices,
+      ...(path.direct ? { router: { name: 'normal' } } : !('cell' in path.target) ? {
+        router: { name: 'metro', args: { ...taskRouterOptions,
+          startDirections: ['right'], endDirections: ['left', 'right', 'top', 'bottom'] } },
+      } : {}),
+      ...(path.arrow && edge.kinds.length > 1 ? { labels: [{ position: .5, attrs: {
         label: { text: edge.kinds.map(kind => kind === 'dependency' ? 'Dependency' : kind === 'acceptance' ? 'Accepted delivery' : 'Replacement').join(' + '), fontSize: 11, fill: '#365f9c' },
         body: { fill: '#fff', stroke: '#bdcbd9', rx: 3, ry: 3 },
       } }] } : {}),
       attrs: { line: { stroke: edge.kind === 'replacement' ? '#986528' : edge.kind === 'acceptance' ? '#178271' : '#8192a6',
         strokeDasharray: edge.kind === 'replacement' ? '8 5' : edge.kind === 'acceptance' ? '3 3' : '', strokeWidth: 1.6,
-        targetMarker: { name: 'block', width: 10, height: 8 } } },
+        targetMarker: path.arrow ? { name: 'block', width: 10, height: 8 } : null } },
     }));
     }
     graph.once('render:done', () => {

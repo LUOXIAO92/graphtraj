@@ -6,8 +6,8 @@ const { build } = require('esbuild');
 let api;
 test.before(async () => {
   const result = await build({ stdin: { contents: `
-    export {routerPresets, Model, Shape, Point} from '@antv/x6';
-    export {taskRouterOptions, dependencyTerminals, monitorGraph} from './src/monitor-graph';`, resolveDir: path.join(__dirname, '..') },
+    export {routerPresets, Model, Shape, Point, Rectangle} from '@antv/x6';
+    export {taskRouterOptions, dependencyTerminals, monitorGraph, taskPaths} from './src/monitor-graph';`, resolveDir: path.join(__dirname, '..') },
     mainFields: ['module', 'main'], bundle: true, platform: 'node', format: 'cjs', write: false });
   const module = { exports: {} };
   vm.runInNewContext(result.outputFiles[0].text, { module, exports: module.exports, console, setTimeout, clearTimeout });
@@ -87,4 +87,39 @@ test('distinct sources retain separate routed passages before entering one targe
     }
   }
   assert.equal(JSON.stringify({nodes,edges}), before);
+});
+
+
+test('X6 routes converging source branches and the sole entry without extra terminal arrows', () => {
+  const {routerPresets,Model,Shape,Point,Rectangle,taskRouterOptions,taskPaths}=api;
+  const nodes=[{id:'a',x:0,y:0,width:320,height:150},{id:'b',x:0,y:300,width:320,height:150},
+    {id:'target',x:1200,y:100,width:320,height:300}];
+  const edges=['a','b'].map(source=>({id:source,source,target:'target',vertices:[],kind:'acceptance',kinds:['acceptance'],
+    relations:[{source,target:'target',kind:'acceptance'}],projected:false}));
+  const drawing=taskPaths(nodes,edges),model=new Model(),cards=new Map(nodes.map(n=>[n.id,new Shape.Rect(n)]));
+  model.addCells([...cards.values()]);
+  const resolve=terminal=>{
+    if(!('cell' in terminal))return {anchor:new Point(terminal.x,terminal.y),bbox:new Rectangle(terminal.x,terminal.y,0,0)};
+    const card=cards.get(terminal.cell),port=drawing.ports.get(terminal.cell).find(p=>p.id===terminal.port);
+    return {anchor:new Point(card.position().x+port.args.x,card.position().y+port.args.y),bbox:card.getBBox()};
+  };
+  const segments=[];
+  for(const p of drawing.paths){
+    const source=resolve(p.source),target=resolve(p.target),edge=new Shape.Edge({source:p.source,target:p.target});model.addCell(edge);
+    const view={cell:edge,graph:{model,grid:{getGridSize:()=>20}},sourceAnchor:source.anchor,targetAnchor:target.anchor,sourceBBox:source.bbox,targetBBox:target.bbox};
+    const route=routerPresets[p.direct?'normal':'metro'].call(view,p.vertices,{
+      ...taskRouterOptions,startDirections:['right'],endDirections:'cell' in p.target?['left']:['left','right','top','bottom'],
+    },view);
+    const points=[source.anchor,...route,target.anchor];
+    assert.ok(points.every(v=>Number.isFinite(v.x)&&Number.isFinite(v.y)));
+    if(p.arrow){assert.equal(route.at(-1).y,target.anchor.y);assert.ok(target.anchor.x-route.at(-1).x>=40);}
+    if('cell' in p.source){assert.equal(route[0].y,source.anchor.y);assert.ok(route[0].x-source.anchor.x>=40);}
+    for(let i=1;i<points.length;i++)if(Math.abs(points[i].x-points[i-1].x)<.1&&Math.abs(points[i].y-points[i-1].y)>1)
+      segments.push({id:p.id,x:points[i].x,top:Math.min(points[i].y,points[i-1].y),bottom:Math.max(points[i].y,points[i-1].y)});
+  }
+  for(let i=0;i<segments.length;i++)for(let j=i+1;j<segments.length;j++){
+    const a=segments[i],b=segments[j];
+    if(a.id!==b.id&&Math.abs(a.x-b.x)<.1)assert.ok(Math.min(a.bottom,b.bottom)-Math.max(a.top,b.top)<=.1,'shared receiving runs are drawn only once');
+  }
+  assert.equal(drawing.paths.filter(p=>p.arrow).length,1);
 });

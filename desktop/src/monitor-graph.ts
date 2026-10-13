@@ -219,6 +219,79 @@ export function dependencyTerminals(nodes: MonitorNode[], edges: MonitorEdge[]):
   return ends;
 }
 
+type Point = { x: number; y: number };
+type PathTerminal = Point | { cell: string; port: string };
+export type TaskPath = { id: string; source: PathTerminal; target: PathTerminal;
+  vertices: Point[]; arrow: boolean; direct: boolean; data: MonitorEdge };
+
+/** Render a common receipt once, retaining the real relations on every segment.
+ * Point terminals are drawing junctions only, never graph nodes or dependencies.
+ */
+export function taskPaths(nodes: MonitorNode[], edges: MonitorEdge[]): {
+  paths: TaskPath[];
+  ports: Map<string, { id: string; group: 'in' | 'out'; args: Point }[]>;
+} {
+  const visible = edges.filter(edge => edge.source !== edge.target);
+  const positions = new Map(nodes.map(node => [node.id, node]));
+  const terminals = dependencyTerminals(nodes, visible);
+  const ports = new Map(nodes.map(node => [node.id, [] as { id: string; group: 'in' | 'out'; args: Point }[]]));
+  const groups = new Map<string, MonitorEdge[]>();
+  const paths: TaskPath[] = [];
+  for (const edge of visible) {
+    const direction = Math.sign(positions.get(edge.target)!.x - positions.get(edge.source)!.x);
+    const key = JSON.stringify([edge.target, [...edge.kinds].sort(), direction]);
+    groups.set(key, [...(groups.get(key) ?? []), edge]);
+    ports.get(edge.source)!.push({ id: `out:${edge.id}`, group: 'out', args: terminals.get(edge.id)!.source });
+  }
+  const rails: { x: number; top: number; bottom: number }[] = [];
+  for (const [key, members] of [...groups].sort(([a], [b]) => a.localeCompare(b))) {
+    members.sort((a, b) => terminals.get(a.id)!.target.y - terminals.get(b.id)!.target.y || a.id.localeCompare(b.id));
+    const representative = members[Math.floor(members.length / 2)];
+    const to = positions.get(representative.target)!;
+    const end = terminals.get(representative.id)!;
+    const port = `in:${representative.id}`;
+    ports.get(to.id)!.push({ id: port, group: 'in', args: end.target });
+    if (members.length === 1) {
+      paths.push({ id: representative.id, source: { cell: representative.source, port: `out:${representative.id}` },
+        target: { cell: to.id, port }, vertices: end.vertices, arrow: true, direct: false, data: representative });
+      continue;
+    }
+    const rootY = to.y + end.target.y;
+    const joins = members.map(edge => ({ edge, y: terminals.get(edge.id)!.vertices[1].y }));
+    const levels = [...new Set([rootY, ...joins.map(join => join.y)])].sort((a, b) => a - b);
+    const top = levels[0], bottom = levels.at(-1)!;
+    // Find a free receiving column using existing card clearances. This reserves
+    // a shared straight segment; X6 still routes each incoming source branch.
+    const obstacles = nodes.filter(node => node.y - 24 < bottom && node.y + node.height + 24 > top);
+    const occupied = rails.filter(rail => rail.top <= bottom && rail.bottom >= top);
+    const candidates = [to.x - 48, ...obstacles.flatMap(node => [node.x - 32, node.x + node.width + 32]),
+      ...occupied.flatMap(rail => [rail.x - 16, rail.x + 16])];
+    const x = candidates.filter(value => value <= to.x - 40).sort((a, b) => b - a)
+      .find(value => obstacles.every(node => value < node.x - 24 || value > node.x + node.width + 24)
+        && occupied.every(rail => Math.abs(value - rail.x) >= 16))!;
+    rails.push({ x, top, bottom });
+    for (const { edge, y } of joins) {
+      const first = terminals.get(edge.id)!.vertices[0];
+      paths.push({ id: edge.id, source: { cell: edge.source, port: `out:${edge.id}` }, target: { x, y },
+        vertices: [first, { x: first.x, y }], arrow: false, direct: false, data: edge });
+    }
+    const evidence = (included: MonitorEdge[]): MonitorEdge => ({ ...representative,
+      relations: included.flatMap(edge => edge.relations), projected: included.some(edge => edge.projected) });
+    for (let index = 1; index < levels.length; index++) {
+      const low = levels[index - 1], high = levels[index];
+      const included = joins.filter(join => Math.min(join.y, rootY) <= low && Math.max(join.y, rootY) >= high)
+        .map(join => join.edge);
+      if (!included.length) continue;
+      const upwards = high <= rootY;
+      paths.push({ id: `receipt:${key}:${index}`, source: { x, y: upwards ? low : high },
+        target: { x, y: upwards ? high : low }, vertices: [], arrow: false, direct: true, data: evidence(included) });
+    }
+    paths.push({ id: `receipt:${key}:entry`, source: { x, y: rootY }, target: { cell: to.id, port },
+      vertices: [{ x: to.x - 40, y: rootY }], arrow: true, direct: false, data: evidence(members) });
+  }
+  return { paths, ports };
+}
+
 
 /** Enclose all visible native tasks and summary frames in their project view. */
 export function projectBounds(nodes: MonitorNode[]): { x: number; y: number; width: number; height: number } {

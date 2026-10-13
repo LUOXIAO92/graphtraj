@@ -6,6 +6,7 @@ import asyncio
 import json
 import os
 import re
+import unicodedata
 from pathlib import Path
 from typing import Any, Mapping
 from urllib.error import HTTPError
@@ -97,6 +98,85 @@ def default_approval_policy() -> str:
     )
 
 
+def _http_error_detail(error: HTTPError, key: str, context: dict) -> str:
+    """Read one bounded error object and expose only cleaned standard fields.
+
+    Request echoes and uncertain values are omitted, never copied as fallback.
+    This runs inside the existing HTTP worker and timeout, without another call.
+    """
+    omitted = '; error details omitted'
+    try:
+        with error:
+            raw = error.read(16 * 1024 + 1)
+        if len(raw) > 16 * 1024:
+            return omitted
+        document = json.loads(raw.decode('utf-8'))
+        if not isinstance(document, dict) or not isinstance(document.get('error'), dict):
+            return omitted
+
+        # Use only the request already in memory. Exact values include short
+        # proposals; longer fragments also identify partial request echoes.
+        pending = [context]
+        request_values = set()
+        while pending:
+            item = pending.pop()
+            if isinstance(item, dict):
+                pending.extend(item.values())
+            elif isinstance(item, list):
+                pending.extend(item)
+            elif isinstance(item, str):
+                plain = ''.join(char for char in item if not unicodedata.category(char).startswith('C'))
+                request_values.add(' '.join(plain.split()).casefold())
+        request_text = '\n'.join(request_values)
+        short_values = [value for value in request_values if 0 < len(value) < 16]
+        details = {}
+        for field in ('code', 'type', 'param', 'message'):
+            value = document['error'].get(field)
+            if field not in document['error']:
+                continue
+            if field != 'message' and value is None:
+                details[field] = value
+                continue
+            original = value
+            if field != 'message' and type(value) is int:
+                value = str(value)
+            if not isinstance(value, str):
+                continue
+
+            value = ''.join(char for char in value if not unicodedata.category(char).startswith('C'))
+            value = value.replace(key, '[REDACTED]')
+            # Reuse the native startup diagnostic patterns, on every field.
+            value = re.sub(r'(?i)(bearer\s+)[^\s"\']+', r'\1[REDACTED]', value)
+            value = re.sub(r'(https?://)[^\s/@]+:[^\s/@]+@', r'\1[REDACTED]@', value)
+            value = re.sub(r'(https?://[^\s?]+)\?[^\s]+', r'\1?[REDACTED]', value)
+            if ('\\' in value or re.search(
+                r'''(?i)["'](?:messages|request|authorization|developer_instructions|history|permissions)["']\s*:''', value,
+            ) or re.search(r'(?i)\b(?:authorization|api[_ -]?key|password|secret|token)\b\s*[:=]', value)):
+                continue
+            value = ' '.join(value.split())
+            folded = value.casefold()
+            if folded in request_values or any(
+                re.search(r'(?<!\w)' + re.escape(item) + r'(?!\w)', folded) for item in short_values
+            ) or any(
+                folded[index:index + 16] in request_text for index in range(len(folded) - 15)
+            ):
+                continue
+
+            # Omit overlong fields rather than risk publishing a partial echo.
+            if len(value) > (512 if field == 'message' else 128):
+                continue
+            if field != 'message' and not re.fullmatch(r'[A-Za-z0-9_.\[\]-]*', value):
+                continue
+            details[field] = original if type(original) is int and str(original) == value else value
+
+        encoded = '; error=' + json.dumps(details, ensure_ascii=False)
+        return encoded if details and len(encoded) <= 1024 else omitted
+    except Exception:
+        # Bad encoding, malformed content and failed reads cannot expose raw text
+        # or turn an unsuccessful review into a decision.
+        return omitted
+
+
 def _completion(route: dict, context: dict) -> dict:
     """Call the configured chat-completions endpoint once, without retries."""
     key = os.environ.get(route['api_key_env'])
@@ -137,8 +217,15 @@ def _completion(route: dict, context: dict) -> dict:
     request = Request(route['base_url'].rstrip('/') + '/chat/completions',
                       data=json.dumps(body).encode(),
                       headers={'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json'})
-    with build_opener(_NoRedirect()).open(request, timeout=30) as response:
-        result = json.loads(response.read(1024 * 1024))
+    try:
+        with build_opener(_NoRedirect()).open(request, timeout=30) as response:
+            result = json.loads(response.read(1024 * 1024))
+    except HTTPError as error:
+        detail = _http_error_detail(error, key, context)
+        raise RuntimeAdapterError(
+            'RUNTIME_REQUEST_FAILED', f'Approval call failed: HTTPError (HTTP {error.code})' + detail,
+            terminal_confirmed=False,
+        ) from error
     choice = result['choices'][0]
     if choice['finish_reason'] != 'stop':
         raise ValueError('Approval completion was not finished')
@@ -159,6 +246,9 @@ async def review_request(route: dict, context: dict) -> dict:
         if context.get('method') == 'graphtraj/recoveryApproval' and result['decision'] == 'decline':
             return {'decision': 'decline', 'rationale': result['rationale']}
         return {'decision': result['decision']}
+    except RuntimeAdapterError:
+        # The HTTP worker has already bounded and sanitized this diagnostic.
+        raise
     except Exception as error:
         # Do not expose credentials, endpoint response bodies or request contents in errors.
         status = f' (HTTP {error.code})' if isinstance(error, HTTPError) else ''

@@ -178,7 +178,7 @@ def test_http_error_status_reaches_native_reply_without_provider_contents(
             calls.append(request)
             raise HTTPError('https://private-provider.invalid/?key=private-key', status,
                             'private-reason', {'Authorization': 'private-header'},
-                            BytesIO(b'{"error":{"message":"private-response"}}'))
+                            BytesIO(b'{"error":{"message":"Bearer private-response"}}'))
 
     monkeypatch.setattr(approval, 'build_opener', lambda *args: Provider())
     worker = CodexManagedExecution(request, 'request: authorize printf APPROVAL_121 only',
@@ -192,6 +192,92 @@ def test_http_error_status_reaches_native_reply_without_provider_contents(
     published = json.dumps(reply) + json.dumps(result) + (directory / 'stderr.log').read_text()
     for secret in ['private-provider', 'private-key', 'private-reason', 'private-header', 'private-response']:
         assert secret not in published
+
+
+@pytest.mark.parametrize('case', [
+    'standard', 'secrets', 'echo', 'malformed', 'encoding', 'oversized',
+    'read-failure', 'field-limits', 'field-types', 'wrong-error-shape',
+    'short-echo', 'embedded-short-echo', 'numeric-secret',
+])
+def test_http_error_details_are_bounded_and_clean_at_native_reply(
+    tmp_path: Path,
+    peer: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    case: str,
+) -> None:
+    """Expose useful standard errors while omitting unsafe or unreadable response content."""
+    request, directory = managed(tmp_path, peer, monkeypatch)
+    if case == 'numeric-secret':
+        monkeypatch.setenv('DEEPSEEK_API_KEY', '123456789')
+    calls, reads, bodies = [], [], []
+    standard = {'code': 'context_length_exceeded', 'type': 'invalid_request_error',
+                'param': 'messages[1].content', 'message': '输入长度 exceeds the limit: 150000 > 131072 tokens.'}
+
+    class ErrorBody(BytesIO):
+        def read(self, size: int = -1) -> bytes:
+            """Record the single bounded read and simulate a failed error stream."""
+            reads.append(size)
+            if case == 'read-failure':
+                raise OSError('private-read-error')
+            return super().read(size)
+
+    class Provider:
+        def open(self, request: object, timeout: int) -> None:
+            """Return a synthetic HTTP failure through the existing transport seam."""
+            calls.append(request)
+            context = json.loads(json.loads(request.data)['messages'][1]['content'])
+            detail = dict(standard)
+            if case == 'secrets':
+                detail = {'code': 'test-key', 'type': 'Bearer private-type',
+                          'param': 'https://user:private-password@host/path?key=private-query',
+                          'message': 'test-key Bearer private-message https://user:private-password@host/?key=private-query'}
+            elif case == 'echo':
+                detail = {field: 'authorize printf APPROVAL_121' for field in standard}
+            elif case == 'short-echo':
+                detail = {field: context['authorization'] for field in standard}
+            elif case == 'embedded-short-echo':
+                detail = {field: 'Invalid input: ' + context['authorization'] for field in standard}
+            elif case == 'numeric-secret':
+                detail = {field: 123456789 for field in standard}
+            elif case == 'field-limits':
+                detail = {field: 'x' * (513 if field == 'message' else 129) + 'test-key' for field in standard}
+            elif case == 'field-types':
+                detail = {'code': {'authorization': 'private-nested'}, 'type': ['private-list'],
+                          'param': {'history': context['authorization']}, 'message': 42}
+            payload = json.dumps({'error': detail, 'ignored': 'private-extra'}, ensure_ascii=False).encode()
+            if case == 'malformed':
+                payload = b'<html>private-malformed test-key</html>'
+            elif case == 'encoding':
+                payload = b'{"error":{"message":"private-encoding\xff"}}'
+            elif case == 'oversized':
+                payload = b'{"error":{"message":"' + b'x' * (16 * 1024) + b'private-tail"}}'
+            elif case == 'wrong-error-shape':
+                payload = b'{"error":["private-shape"]}'
+            body = ErrorBody(payload)
+            bodies.append(body)
+            raise HTTPError('https://provider.invalid', 400, 'private-reason', {}, body)
+
+    monkeypatch.setattr(approval, 'build_opener', lambda *args: Provider())
+    prompt = 'request:x' if 'short-echo' in case else 'request: authorize printf APPROVAL_121 only'
+    worker = CodexManagedExecution(request, prompt,
+        directory, lambda *_: None, {}, directory / 'events.jsonl')
+    result = worker.run()
+    reply = json.loads(next((tmp_path / 'native').glob('*.replies.jsonl')).read_text())
+    assert result['outcome'] == 'runtime-error'
+    assert reply['error']['code'] == -32603
+    message = reply['error']['message']
+    assert 'HTTPError (HTTP 400)' in message
+    assert len(calls) == 1 and reads == [16 * 1024 + 1]
+    assert all(body.closed for body in bodies)
+    published = json.dumps(reply, ensure_ascii=False) + json.dumps(result) + (directory / 'stderr.log').read_text()
+    for secret in ['test-key', '123456789', 'private-', 'authorize printf APPROVAL_121']:
+        assert secret not in published
+    if case == 'standard':
+        assert json.loads(message.split('; error=', 1)[1]) == standard
+    elif case in {'secrets', 'numeric-secret'}:
+        assert '[REDACTED]' in message
+    else:
+        assert message.endswith('; error details omitted')
 
 
 def resume_settings(

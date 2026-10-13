@@ -1,5 +1,5 @@
 import React, { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
-import { Graph as X6, Shape, type Cell } from '@antv/x6';
+import { Graph as X6, Shape, MiniMap, NodeView, type Cell } from '@antv/x6';
 import type { Graph, Ticket } from '../electron/types';
 import { taskFocus, monitorGraph, taskChildren, taskStatus, dependencyTerminals, projectBounds, type Size, type MonitorEdge } from './monitor-graph';
 import './task-canvas.css';
@@ -7,6 +7,15 @@ import './task-canvas.css';
 export type TaskCanvasHandle = { fit: () => void; locate: (id: string) => void };
 type Props = { graph: Graph; projectName: string; expanded: ReadonlySet<string>; selected: string | null;
   matches: ReadonlySet<string>; active: boolean; select: (id: string | null) => void; toggle: (id: string) => void };
+
+// Reuse the shared model without moving the main canvas HTML into the minimap.
+class MapNodeView extends NodeView {
+  protected renderMarkup(): void {
+    this.renderJSONMarkup([{ tagName: 'rect', selector: 'body', attrs: {
+      width: this.cell.size().width, height: this.cell.size().height, fill: '#94a3b8', stroke: '#64748b',
+    } }]);
+  }
+}
 
 Shape.HTML.register({ shape: 'native-task', html: cell => cell.getData().element });
 X6.registerNode('task-frame', { inherit: 'rect', attrs: { body: {
@@ -68,6 +77,7 @@ function card(ticket: Ticket, children: Ticket[], open: boolean, select: () => v
 export const TaskCanvas = forwardRef<TaskCanvasHandle, Props>(function TaskCanvas(props, ref) {
   const container = useRef<HTMLDivElement>(null);
   const engine = useRef<X6 | null>(null);
+  const minimap = useRef<HTMLDivElement>(null);
   const current = useRef(props);
   current.current = props;
   const projection = useRef<ReturnType<typeof monitorGraph> | null>(null);
@@ -102,18 +112,20 @@ export const TaskCanvas = forwardRef<TaskCanvasHandle, Props>(function TaskCanva
       background: { color: '#f7f8fa' }, grid: { visible: true, size: 20 },
       interacting: false, panning: { enabled: true, eventTypes: ['leftMouseDown', 'mouseWheel'] },
       mousewheel: { enabled: true, modifiers: ['ctrl', 'meta'], minScale: .1, maxScale: 2 },
-      connecting: { connectionPoint: 'anchor', router: { name: 'manhattan', args: {
+      connecting: { connectionPoint: 'anchor', router: { name: 'metro', args: {
         padding: 24, step: 8, snapToGrid: false, startDirections: ['right'], endDirections: ['left'],
         excludeShapes: ['task-frame'], maxLoopCount: 25000,
-      } }, connector: { name: 'jumpover', args: { type: 'arc', size: 6, radius: 0 } } },
+      } }, connector: { name: 'jumpover', args: { type: 'gap', size: 6, radius: 8 } } },
     });
+    graph.use(new MiniMap({ container: minimap.current!, width: 220, height: 140,
+      graphOptions: { createCellView: cell => cell.isNode() ? MapNodeView : null } }));
     engine.current = graph;
     graph.on('blank:click', () => current.current.select(null));
     // A single readable label avoids collisions inside dense routing channels.
     graph.on('edge:mouseenter', ({ edge }) => {
       const data = edge.getData<MonitorEdge>();
       const title = (id: string) => current.current.graph.tickets.find(ticket => ticket.ticket_id === id)?.title ?? '';
-      if (pathLabel.current) pathLabel.current.textContent = data.relations.map(item => `#${item.source} ${title(item.source)} ${item.kind === 'replacement' ? 'replaced by' : '→'} #${item.target} ${title(item.target)}`).join(' · ');
+      if (pathLabel.current) pathLabel.current.textContent = data.relations.map(item => `#${item.source} ${title(item.source)} ${item.kind === 'replacement' ? 'replaced by' : item.kind === 'acceptance' ? 'accepted into' : '→'} #${item.target} ${title(item.target)}${item.event_id ? ` · ${item.event_id}` : ''}`).join(' · ');
     });
     graph.on('edge:mouseleave', () => { if (pathLabel.current) pathLabel.current.textContent = ''; });
     return () => { graph.dispose(); engine.current = null; };
@@ -143,7 +155,7 @@ export const TaskCanvas = forwardRef<TaskCanvasHandle, Props>(function TaskCanva
     // Reserve ports for visible directed pairs, not hidden internal endpoints.
     const preliminary = monitorGraph(data.graph, data.expanded, sizes);
     for (const node of preliminary.nodes) {
-      const outgoing = preliminary.edges.filter(edge => edge.source === node.id && edge.source !== edge.target).length;
+      const outgoing = preliminary.edges.filter(edge => edge.source !== edge.target && (edge.source === node.id || edge.kind === 'acceptance' && edge.target === node.id)).length;
       const incoming = preliminary.edges.filter(edge => edge.target === node.id && edge.source !== edge.target).length;
       sizes[node.id].height = Math.max(sizes[node.id].height, (Math.max(outgoing, incoming) + 1) * 18);
     }
@@ -182,9 +194,10 @@ export const TaskCanvas = forwardRef<TaskCanvasHandle, Props>(function TaskCanva
       // Explicit normal terminal segments leave X6 free to avoid other cards.
       cells.push(graph.createEdge({ id: edge.id,
       source: { cell: edge.source, port: `out:${edge.id}` }, target: { cell: edge.target, port: `in:${edge.id}` },
+      ...(edge.kind === 'acceptance' ? { router: { name: 'metro', args: { padding: 24, step: 8, snapToGrid: false, startDirections: ['right'], endDirections: ['right'], excludeShapes: ['task-frame'], maxLoopCount: 25000 } } } : {}),
       zIndex: 1, data: edge, vertices: terminals.get(edge.id)!.vertices,
-      attrs: { line: { stroke: edge.kind === 'replacement' ? '#986528' : '#8192a6',
-        strokeDasharray: edge.kind === 'replacement' ? '8 5' : '', strokeWidth: 1.6,
+      attrs: { line: { stroke: edge.kind === 'replacement' ? '#986528' : edge.kind === 'acceptance' ? '#178271' : '#8192a6',
+        strokeDasharray: edge.kind === 'replacement' ? '8 5' : edge.kind === 'acceptance' ? '3 3' : '', strokeWidth: 1.6,
         targetMarker: { name: 'block', width: 10, height: 8 } } },
     }));
     }
@@ -227,7 +240,7 @@ export const TaskCanvas = forwardRef<TaskCanvasHandle, Props>(function TaskCanva
       const related = data.relations.some(item => focus.has(item.source) && focus.has(item.target));
       const visible = data.relations.some(item => focus.has(item.source) && focus.has(item.target)
         && props.matches.has(item.source) && props.matches.has(item.target));
-      edge.attr('line/stroke', data.kind === 'replacement' ? '#986528' : props.selected && related ? '#365f9c' : '#8192a6');
+      edge.attr('line/stroke', data.kind === 'replacement' ? '#986528' : data.kind === 'acceptance' ? '#178271' : props.selected && related ? '#365f9c' : '#8192a6');
       edge.attr('line/strokeWidth', props.selected && related ? 3 : 1.6);
       edge.attr('line/opacity', visible ? 1 : .15);
     }
@@ -238,6 +251,8 @@ export const TaskCanvas = forwardRef<TaskCanvasHandle, Props>(function TaskCanva
   }, [props.active]);
 
   return <><div className="native-task-canvas" ref={container} aria-label="Native task canvas"/>
+    <div className="native-minimap" ref={minimap} aria-label="Task map navigator"/>
+    <div className="native-relation-legend"><span>→ Dependency</span><span>⇢ Replacement</span><span>⋯▶ Accepted delivery</span></div>
     <output ref={pathLabel} className="native-path-label" aria-live="polite"/>
     <div className="native-task-zoom"><button aria-label="Zoom in" onClick={() => engine.current?.zoom(.15)}>+</button>
       <button aria-label="Zoom out" onClick={() => engine.current?.zoom(-.15)}>−</button>

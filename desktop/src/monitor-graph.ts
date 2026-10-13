@@ -4,7 +4,7 @@ import type { Graph, Ticket } from '../electron/types';
 export type Size = { width: number; height: number };
 export type MonitorNode = Size & { id: string; ticket: Ticket; x: number; y: number;
   children: string[]; expanded: boolean; frame?: Size };
-export type TaskRelation = { source: string; target: string; kind: 'dependency' | 'replacement' };
+export type TaskRelation = { source: string; target: string; kind: 'dependency' | 'replacement' | 'acceptance'; event_id?: string };
 export type MonitorEdge = TaskRelation & { id: string;
   relations: TaskRelation[]; projected: boolean; vertices: { x: number; y: number }[] };
 
@@ -13,6 +13,8 @@ export function taskRelations(graph: Graph): TaskRelation[] {
   const ids = new Set(graph.tickets.map(ticket => ticket.ticket_id));
   return graph.tickets.flatMap(ticket => [
     ...ticket.dependencies.filter(id => ids.has(id)).map(source => ({ source, target: ticket.ticket_id, kind: 'dependency' as const })),
+    ...(ticket.delivery ?? []).filter(fact => fact.event === 'ticket-completed' && fact.ticket_id !== ticket.ticket_id && ids.has(fact.ticket_id))
+      .map(fact => ({ source: ticket.ticket_id, target: fact.ticket_id, kind: 'acceptance' as const, event_id: fact.event_id })),
     ...ticket.replaced_by.filter(id => ids.has(id)).map(target => ({ source: ticket.ticket_id, target, kind: 'replacement' as const })),
   ]);
 }
@@ -57,7 +59,7 @@ export function monitorGraph(graph: Graph, expanded: ReadonlySet<string>, sizes:
       const node: MonitorNode = { id, ticket, ...size, x: 0, y: 0, children: descendants, expanded: open, frame };
       return { node, inner, size: frame ?? size };
     });
-    const layout = new dagre.graphlib.Graph().setGraph({ rankdir: 'LR', ranksep: 200, nodesep: 64, edgesep: 28, marginx: 0, marginy: 0 });
+    const layout = new dagre.graphlib.Graph().setGraph({ rankdir: 'LR', ranksep: 140, nodesep: 64, edgesep: 28, marginx: 0, marginy: 0 });
     for (const branch of branches) layout.setNode(branch.node.id, branch.size);
     // Map each real endpoint to its branch at this hierarchy level solely for layout.
     const owners = new Map<string, string>();
@@ -70,12 +72,14 @@ export function monitorGraph(graph: Graph, expanded: ReadonlySet<string>, sizes:
     // Dagre can produce NaN routes for parallel edges. The display projection
     // below retains all native dependencies within each visible directed pair.
     for (const edge of nativeEdges) {
+      if (edge.kind === 'acceptance') continue; // Receipt is not an execution ordering constraint.
       const from = owners.get(edge.source), to = owners.get(edge.target);
       if (from && to && from !== to) layout.setEdge(from, to, { weight: (layout.edge(from, to)?.weight ?? 0) + 1 });
     }
     dagre.layout(layout);
     const routes = new Map<string, { x: number; y: number }[]>();
     for (const edge of nativeEdges) {
+      if (edge.kind === 'acceptance') continue; // Receipt is not an execution ordering constraint.
       const from = owners.get(edge.source), to = owners.get(edge.target);
       if (from && to && from !== to) routes.set(edge.id, layout.edge(from, to).points.slice(1, -1));
     }
@@ -99,7 +103,7 @@ export function monitorGraph(graph: Graph, expanded: ReadonlySet<string>, sizes:
     const source = endpoints.get(edge.source)!, target = endpoints.get(edge.target)!;
     const id = JSON.stringify([edge.kind, source, target]);
     const existing = pairs.get(id);
-    const relation = { source: edge.source, target: edge.target, kind: edge.kind };
+    const relation: TaskRelation = { source: edge.source, target: edge.target, kind: edge.kind, ...(edge.event_id ? { event_id: edge.event_id } : {}) };
     if (existing) existing.relations.push(relation);
     else pairs.set(id, { id, source, target, kind: edge.kind,
       relations: [relation],
@@ -150,15 +154,20 @@ export function dependencyTerminals(nodes: MonitorNode[], edges: MonitorEdge[]):
   const visible = edges.filter(edge => edge.source !== edge.target);
   const ends = new Map<string, { source: { x: number; y: number }; target: { x: number; y: number }; vertices: { x: number; y: number }[] }>();
   const ports = new Map<string, { x: number; y: number; clearance: number }>();
-  for (const node of nodes) for (const side of ['source', 'target'] as const) {
-    const opposite = side === 'source' ? 'target' : 'source';
-    const ordered = visible.filter(edge => edge[side] === node.id).sort((a, b) => {
-      const first = positions.get(a[opposite])!, second = positions.get(b[opposite])!;
+  for (const node of nodes) for (const side of ['left', 'right'] as const) {
+    // Incoming receipts and outgoing results share the physical right border;
+    // order them together so opposite directions never occupy the same port.
+    const ordered = visible.flatMap(edge => [
+      ...(side === 'right' && edge.source === node.id ? [{ edge, end: 'source' as const, other: edge.target }] : []),
+      ...(edge.target === node.id && (edge.kind === 'acceptance' ? 'right' : 'left') === side
+        ? [{ edge, end: 'target' as const, other: edge.source }] : []),
+    ]).sort((a, b) => {
+      const first = positions.get(a.other)!, second = positions.get(b.other)!;
       return (first.y + first.height / 2) - (second.y + second.height / 2)
-        || first.x - second.x || a.id.localeCompare(b.id);
+        || first.x - second.x || a.edge.id.localeCompare(b.edge.id);
     });
-    ordered.forEach((edge, index) => ports.set(`${side}:${edge.id}`, {
-      x: side === 'source' ? node.width : 0,
+    ordered.forEach(({ edge, end }, index) => ports.set(`${end}:${edge.id}`, {
+      x: side === 'right' ? node.width : 0,
       y: Math.round(node.height * (index + 1) / (ordered.length + 1)),
       clearance: 40 + index * 12,
     }));
@@ -175,7 +184,7 @@ export function dependencyTerminals(nodes: MonitorNode[], edges: MonitorEdge[]):
     ends.set(edge.id, { source: { x: source.x, y: source.y }, target: { x: target.x, y: target.y },
       vertices: [{ x: from.x + source.x + source.clearance, y: from.y + source.y },
         ...summaryExit,
-        { x: to.x - target.clearance, y: to.y + target.y }] });
+        { x: to.x + target.x + (edge.kind === 'acceptance' ? target.clearance : -target.clearance), y: to.y + target.y }] });
   }
   return ends;
 }

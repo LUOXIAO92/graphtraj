@@ -211,3 +211,31 @@ test('a common project boundary contains independent tasks and native nested sum
   }
   assert.equal(JSON.stringify(graph), original);
 });
+
+test('accepted delivery is an evidenced relation, distinct from membership and execution ordering', () => {
+  const graph = { tickets: [task('summary', null), task('next', null, ['summary']),
+    { ...task('result', 'summary'), delivery: [{ event: 'ticket-completed', ticket_id: 'summary', event_id: 'accepted-1' }] },
+    task('unaccepted', 'summary'),
+    { ...task('cross', null), delivery: [{ event: 'ticket-completed', ticket_id: 'summary', event_id: 'accepted-1' }] }] };
+  const original = JSON.stringify(graph);
+  for (const expanded of [[], ['summary']]) {
+    const view = monitorGraph(graph, new Set(expanded));
+    const receipts = view.edges.flatMap(e => e.relations).filter(r => r.kind === 'acceptance');
+    assert.deepEqual(Array.from(receipts, r => `${r.source}->${r.target}:${r.event_id}`).sort(),
+      ['cross->summary:accepted-1', 'result->summary:accepted-1']);
+    const edge = view.edges.find(e => e.relations.some(r => r.source === 'result'));
+    assert.equal(edge.source, expanded.length ? 'result' : 'summary');
+    assert.equal(edge.target, 'summary');
+    assert.ok(view.nodes.every(n => Number.isFinite(n.x) && Number.isFinite(n.y)));
+    const terminals = dependencyTerminals(view.nodes, view.edges);
+    for (const receipt of view.edges.filter(e => e.kind === 'acceptance' && e.source !== e.target)) {
+      const end = terminals.get(receipt.id), target = view.nodes.find(n => n.id === receipt.target);
+      assert.equal(end.target.x, target.width);
+      assert.ok(end.vertices.at(-1).x > target.x + target.width);
+      assert.equal(end.vertices.at(-1).y, target.y + end.target.y);
+    }
+  }
+  assert.ok(taskFocus(graph, 'result').has('next'));
+  assert.ok(!taskFocus(graph, 'result').has('unaccepted'));
+  assert.equal(JSON.stringify(graph), original);
+});

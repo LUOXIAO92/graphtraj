@@ -15,3 +15,8 @@
 .native-dependency-list div { margin: 4px 0; overflow-wrap: anywhere; }
 .native-path-label { position: absolute; top: 16px; right: 20px; max-width: 380px; padding: 10px 14px; border: 1px solid #bdcbd9; border-radius: 6px; background: #fff; box-shadow: 0 3px 12px #26334112; color: #365f9c; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; pointer-events: none; z-index: 4; }
 .native-path-label:empty { display: none; }
+
+.native-minimap { position: absolute; right: 16px; bottom: 16px; border: 1px solid #bdcbd9; border-radius: 6px; overflow: hidden; z-index: 3; }
+.native-relation-legend { position: absolute; left: 20px; top: 12px; display: flex; gap: 14px; font-size: 11px; background: #fffffff2; padding: 6px 10px; border-radius: 6px; pointer-events: none; }
+.native-relation-legend span:nth-child(2) { color: #986528; }
+.native-relation-legend span:nth-child(3) { color: #178271; }

@@ -277,3 +277,18 @@ test('nested and cross-summary accepted results flow toward their real delivery 
   }
   assert.equal(JSON.stringify(graph), original);
 });
+
+test('dense delivery terminals remain in the gap before their summary', () => {
+  const graph = { tickets: [task('summary', null), ...Array.from({ length: 24 }, (_, index) => ({
+    ...task(String(index), 'summary', index ? [String(index - 1)] : []),
+    delivery: [{ event: 'ticket-completed', ticket_id: 'summary', event_id: 'accepted-summary' }],
+  }))] };
+  const view = monitorGraph(graph, new Set(['summary']), { summary: { width: 320, height: 500 } });
+  const last = view.nodes.find(node => node.id === '23'), summary = view.nodes.find(node => node.id === 'summary');
+  const terminals = dependencyTerminals(view.nodes, view.edges);
+  for (const edge of view.edges.filter(edge => edge.target === 'summary')) {
+    const terminal = terminals.get(edge.id).vertices.at(-1);
+    assert.ok(terminal.x > last.x + last.width, 'receipt waypoint must not enter the final result card');
+    assert.ok(terminal.x <= summary.x - 40, 'leave a straight visible arrow segment');
+  }
+});

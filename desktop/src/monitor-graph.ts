@@ -188,7 +188,9 @@ export function dependencyTerminals(nodes: MonitorNode[], edges: MonitorEdge[]):
     ordered.forEach(({ edge, end }, index) => ports.set(`${end}:${edge.id}`, {
       x: side === 'right' ? node.width : 0,
       y: Math.round(node.height * (index + 1) / (ordered.length + 1)),
-      clearance: 40 + index * 12,
+      // Both terminals must fit inside the existing 140px rank gap even at
+      // high fan-in; unbounded offsets can put a waypoint inside another card.
+      clearance: 40 + index * Math.min(12, 24 / Math.max(1, ordered.length - 1)),
     }));
   }
   for (const edge of visible) {

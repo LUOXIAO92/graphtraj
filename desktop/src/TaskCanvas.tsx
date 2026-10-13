@@ -1,8 +1,9 @@
 import React, { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
-import { Graph as X6, Shape, MiniMap, NodeView, type Cell } from '@antv/x6';
+import { Graph as X6, Shape, NodeView, type Cell } from '@antv/x6';
 import type { Graph, Ticket } from '../electron/types';
 import { taskFocus, taskRouterOptions, monitorGraph, taskChildren, taskStatus, dependencyTerminals, projectBounds, type Size, type MonitorEdge } from './monitor-graph';
 import './task-canvas.css';
+import { TaskMiniMap } from './task-minimap';
 
 export type TaskCanvasHandle = { fit: () => void; locate: (id: string) => void };
 type Props = { graph: Graph; projectName: string; expanded: ReadonlySet<string>; selected: string | null;
@@ -126,7 +127,7 @@ export const TaskCanvas = forwardRef<TaskCanvasHandle, Props>(function TaskCanva
         ...taskRouterOptions, startDirections: ['right'], endDirections: ['left'],
       } }, connector: { name: 'jumpover', args: { type: 'gap', size: 6, radius: 8 } } },
     });
-    graph.use(new MiniMap({ container: minimap.current!, width: 220, height: 140,
+    graph.use(new TaskMiniMap({ container: minimap.current!, width: 220, height: 140,
       graphOptions: { createCellView: cell => cell.isNode() ? MapNodeView : null } }));
     engine.current = graph;
     graph.on('blank:click', () => current.current.select(null));

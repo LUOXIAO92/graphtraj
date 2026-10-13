@@ -508,7 +508,7 @@ def test_installed_cleanup_removes_historical_preflight_allocation_after_integra
     assert yaml.safe_load(repeated.stdout)["cleanup_status"] == "already-cleaned"
 
 
-@pytest.mark.parametrize("failure_case", ("confirmed", "uncertain", "foreign"))
+@pytest.mark.parametrize("failure_case", ("confirmed", "uncertain", "foreign", "missing"))
 def test_installed_cleanup_retains_a_terminal_unmapped_startup_failure_after_integration(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
@@ -566,6 +566,11 @@ def test_installed_cleanup_retains_a_terminal_unmapped_startup_failure_after_int
     elif failure_case == "foreign":
         launch["mapping"]["ticket_id"] = "another-ticket"
         (failed_session / "launch.yml").write_text(yaml.safe_dump(launch))
+    elif failure_case == "missing":
+        # Retained launches can predate any Worker ownership or failure record.
+        # Their launch binding remains inspectable, but cannot certify a stop.
+        (failed_session / "launch-error.yml").unlink()
+        (failed_session / "heartbeat.yml").unlink()
     durable_before = _durable_contents(ticket)
     allocation_before = {path.name: path.read_bytes() for path in failed_session.iterdir()
                          if path.is_file() and not path.is_symlink()}
@@ -582,7 +587,7 @@ def test_installed_cleanup_retains_a_terminal_unmapped_startup_failure_after_int
         )} == {
             "trace_valid": True,
             "launch_matches_ticket": failure_case != "foreign",
-            "terminal_confirmed": failure_case != "uncertain",
+            "terminal_confirmed": None if failure_case == "missing" else failure_case != "uncertain",
         }
         if failure_case == "uncertain":
             artifacts = proof["artifacts"]
@@ -601,6 +606,12 @@ def test_installed_cleanup_retains_a_terminal_unmapped_startup_failure_after_int
             assert process_info["other_field_count"] == 0
             assert process_info["argv_strings"] is True
             assert process_info["requested_session_matches_trace"] is True
+        elif failure_case == "missing":
+            artifacts = proof["artifacts"]
+            relative = failed_session.relative_to(ticket.root).as_posix()
+            for name in ("mapping.yml", "session.yml", "heartbeat.yml", "launch-error.yml"):
+                assert artifacts[relative + "/" + name] == {"status": "absent"}
+            assert artifacts[relative + "/launch.yml"]["status"] == "file"
         else:
             assert "artifacts" not in proof
         assert "fixture-secret" not in cleaned.stdout

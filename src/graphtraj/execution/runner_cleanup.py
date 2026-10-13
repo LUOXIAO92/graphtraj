@@ -418,15 +418,9 @@ def _unstarted_session_directory(
         if not os.path.lexists(str(launch_file)):
             return trace_valid and events.stat().st_size == 0 and trace.stat().st_size == 0
         error_file = directory / "launch-error.yml"
-        if (
-            launch_file.is_symlink()
-            or not launch_file.is_file()
-            or error_file.is_symlink()
-            or not error_file.is_file()
-        ):
+        if launch_file.is_symlink() or not launch_file.is_file():
             return False
         launch = yaml.safe_load(launch_file.read_text(encoding="utf-8"))
-        failure = yaml.safe_load(error_file.read_text(encoding="utf-8"))
         mapping = launch.get("mapping") if isinstance(launch, dict) else None
         launch_matches = (
             isinstance(launch, dict)
@@ -439,13 +433,19 @@ def _unstarted_session_directory(
             and bool(mapping["retained_batch_file"])
         )
         evidence["launch_matches_ticket"] = launch_matches
+        # Attribution remains useful when a Worker failed before publishing its
+        # error. Missing or unreadable terminal evidence never proves stopping.
+        evidence["terminal_confirmed"] = None
+        if launch_matches:
+            evidence["artifacts"] = _allocation_artifacts(target, directory, trace, mapping)
+        if error_file.is_symlink() or not error_file.is_file():
+            return False
+        failure = yaml.safe_load(error_file.read_text(encoding="utf-8"))
         evidence["terminal_confirmed"] = (
             failure.get("terminal_confirmed")
             if isinstance(failure, dict) and isinstance(failure.get("terminal_confirmed"), bool)
             else None
         )
-        if launch_matches:
-            evidence["artifacts"] = _allocation_artifacts(target, directory, trace, mapping)
         # Never publish failure messages or diagnostics: they can contain
         # credentials or task output retained by the Runtime.
         return trace_valid and launch_matches and valid_terminal_launch_failure(failure)

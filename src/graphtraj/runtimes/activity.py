@@ -21,8 +21,9 @@ _SECRET = re.compile(
     r'refresh[_-]?token|(?:^|[_-])token$|cookie)'
 )
 _ASSIGNMENT = re.compile(
-    r'''(?ix)((?:["']?[\w-]*(?:api[_-]?key|secret|password|access[_-]?token|
-    refresh[_-]?token|credential|token)["']?|authorization|cookie)\s*[:=]\s*)
+    # Start once per key, not at every character of long text/image payloads.
+    r'''(?ix)(?<![\w-])(["']?[\w-]*(?:api[_-]?key|secret|password|access[_-]?token|
+    refresh[_-]?token|credential|token|authorization|cookie)["']?\s*[:=]\s*)
     (?:"[^"]*"|'[^']*'|[^\s,{};]+)'''
 )
 

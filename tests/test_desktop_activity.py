@@ -1,6 +1,7 @@
 """Human activity projection through the same public operation the desktop uses."""
 import json
 from pathlib import Path
+from time import monotonic
 
 import pytest
 import yaml
@@ -154,7 +155,9 @@ def test_codex_tools_usage_and_redaction(tmp_path: Path, monkeypatch: pytest.Mon
         {'type': 'response_item', 'payload': {'type': 'function_call', 'call_id': 'c1', 'name': 'exec',
                                              'arguments': '{"cmd":"pwd", "api_key":"hidden-key"}'}},
         {'type': 'response_item', 'payload': {'type': 'function_call_output', 'call_id': 'c1',
-                                             'output': 'failed: secret-from-environment Bearer raw-secret password="long private phrase"'}},
+                                             'output': 'failed: secret-from-environment Bearer raw-secret password="long private phrase" '
+                                                       'service_cookie=private-cookie service_authorization=private-auth '
+                                                       '"部署_api_key":"private-unicode"'}},
         {'type': 'event_msg', 'payload': {'type': 'token_count', 'info': usage}},
         {'type': 'event_msg', 'payload': {'type': 'token_count', 'info': usage}},
     ]
@@ -164,7 +167,10 @@ def test_codex_tools_usage_and_redaction(tmp_path: Path, monkeypatch: pytest.Mon
     assert calls[0]['call_id'] == calls[1]['call_id'] == 'c1'
     assert 'pwd' in calls[0]['arguments'] and 'failed:' in calls[1]['result']
     serialized = json.dumps(result)
-    assert all(secret not in serialized for secret in ('hidden-key', 'secret-from-environment', 'raw-secret', 'long private phrase'))
+    assert all(secret not in serialized for secret in (
+        'hidden-key', 'secret-from-environment', 'raw-secret', 'long private phrase',
+        'private-cookie', 'private-auth', 'private-unicode',
+    ))
     facts = [e['usage'] for e in result['events'] if e['kind'] == 'usage']
     assert facts[0]['tokens'] == {'input': 100, 'cache_read': 60, 'output': 5}
     assert facts[0]['identity'] == facts[1]['identity']
@@ -194,7 +200,7 @@ def test_pi_per_call_usage_and_errors(tmp_path: Path) -> None:
 def test_tool_results_project_readable_parts_without_dumping_encodings(tmp_path: Path) -> None:
     """Long text, structured objects, images and unknown blocks stay readable."""
     long_text   = 'A long recorded explanation of the tool output. ' * 20
-    image_bytes = 'iVBORw0KGgoAAAANSUhEUg' * 6  # Self-made stand-in, never a copied image.
+    image_bytes = 'iVBORw0KGgoAAAANSUhEUg' * 800  # Self-made stand-in, never a copied image.
     plain_log   = '\n'.join(f'build {index:03d}: compiled module ok' for index in range(1, 41))
     blocks = [
         {'type': 'input_text', 'text': long_text},
@@ -215,7 +221,10 @@ def test_tool_results_project_readable_parts_without_dumping_encodings(tmp_path:
                                              'output': plain_log}},
     ]
     prepare(tmp_path, 'codex', records)
+    started = monotonic()
     events = query(tmp_path, alias='research@x1')['events']
+    # A modest image must not consume the desktop's 15-second active timeout.
+    assert monotonic() - started < 5
     results = [event for event in events if event['kind'] == 'tool' and event['phase'] == 'result']
 
     mixed = results[0]

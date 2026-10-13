@@ -164,8 +164,8 @@ export function taskStatus(ticket: Ticket): string {
     : !ticket.active ? 'inactive' : ticket.status;
 }
 
-/** Order card ports by their opposite card and reserve perpendicular end segments.
- * X6 still owns obstacle routing between these two terminal waypoints.
+/** Order ports and reserve separate horizontal passages between terminal points.
+ * X6 still owns obstacle routing into and out of these intermediate waypoints.
  */
 export function dependencyTerminals(nodes: MonitorNode[], edges: MonitorEdge[]): Map<string, {
   source: { x: number; y: number }; target: { x: number; y: number };
@@ -193,12 +193,28 @@ export function dependencyTerminals(nodes: MonitorNode[], edges: MonitorEdge[]):
       clearance: 40 + index * Math.min(12, 24 / Math.max(1, ordered.length - 1)),
     }));
   }
-  for (const edge of visible) {
+  const passages: { left: number; right: number; y: number }[] = [];
+  // Stable ordering keeps lanes unchanged when native relationship order changes.
+  for (const edge of [...visible].sort((a, b) => a.id.localeCompare(b.id))) {
     const source = ports.get(`source:${edge.id}`)!, target = ports.get(`target:${edge.id}`)!;
     const from = positions.get(edge.source)!, to = positions.get(edge.target)!;
+    const first = { x: from.x + source.x + source.clearance, y: from.y + source.y };
+    const last = { x: to.x + target.x - target.clearance, y: to.y + target.y };
+    const left = Math.min(first.x, last.x), right = Math.max(first.x, last.x);
+    // Dagre points guide the preferred passage, including translated nested
+    // layouts. Distinct visible pairs must not inherit one shared branch route.
+    const preferred = edge.vertices[0]?.y ?? first.y;
+    const obstacles = nodes.filter(node => node.x - 24 < right && node.x + node.width + 24 > left);
+    const occupied = passages.filter(p => p.left < right && p.right > left);
+    const candidates = [preferred,
+      ...obstacles.flatMap(node => [node.y - 32, node.y + node.height + 32]),
+      ...occupied.flatMap(p => [p.y - 16, p.y + 16])];
+    const y = candidates.sort((a, b) => Math.abs(a - preferred) - Math.abs(b - preferred) || a - b)
+      .find(candidate => obstacles.every(node => candidate < node.y - 24 || candidate > node.y + node.height + 24)
+        && occupied.every(p => Math.abs(p.y - candidate) >= 16))!;
+    passages.push({ left, right, y });
     ends.set(edge.id, { source: { x: source.x, y: source.y }, target: { x: target.x, y: target.y },
-      vertices: [{ x: from.x + source.x + source.clearance, y: from.y + source.y },
-        { x: to.x + target.x - target.clearance, y: to.y + target.y }] });
+      vertices: [first, { x: first.x, y }, { x: last.x, y }, last] });
   }
   return ends;
 }

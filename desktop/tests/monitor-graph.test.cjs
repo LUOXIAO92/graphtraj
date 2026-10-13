@@ -139,9 +139,9 @@ test('ports follow opposite card position and leave horizontal clear terminal se
     const p = ports.get(edge.id), source = view.nodes.find(n => n.id === edge.source), target = view.nodes.find(n => n.id === edge.target);
     assert.equal(p.source.x, source.width); assert.equal(p.target.x, 0);
     assert.equal(p.vertices[0].y, source.y + p.source.y);
-    assert.equal(p.vertices[1].y, target.y + p.target.y);
+    assert.equal(p.vertices.at(-1).y, target.y + p.target.y);
     assert.ok(p.vertices[0].x >= source.x + source.width + 40);
-    assert.ok(p.vertices[1].x <= target.x - 40);
+    assert.ok(p.vertices.at(-1).x <= target.x - 40);
   }
 });
 
@@ -165,7 +165,7 @@ test('expanded summary exits leave from the delivery side of its frame', () => {
   assert.equal(exits.length, 2);
   assert.notEqual(exits[0].source.y, exits[1].source.y);
   for (const route of exits) {
-    assert.equal(route.vertices.length, 2);
+    assert.ok(route.vertices.length >= 2);
     assert.equal(route.vertices[0].y, source.y + route.source.y);
     assert.ok(route.vertices[0].x > source.frame.x + source.frame.width);
   }

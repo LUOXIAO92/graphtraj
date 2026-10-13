@@ -187,8 +187,10 @@ def answer(
     try:
         from graphtraj.interfaces.hosted_cli import forward_request
 
+        from graphtraj.interfaces.desktop_host import owns_project
+
         result = None
-        if request.get('action') == 'execute' and (
+        if not (desktop_observer and owns_project(cwd or Path.cwd())) and request.get('action') == 'execute' and (
             allowed_features is None or request.get('feature') in allowed_features
         ):
             result = forward_request(request, cwd or Path.cwd())
@@ -257,10 +259,15 @@ def main() -> None:
         return
     allowed = tuple(name for name in (options.allowed_features or "").split(",") if name)
 
-    serve(
-        sys.stdin,
-        sys.stdout,
-        cwd=Path.cwd(),
-        allowed_features=allowed or None,
-        desktop_observer=options.desktop_observer,
-    )
+    from contextlib import nullcontext
+    from graphtraj.interfaces.desktop_host import window_pipe
+
+    boundary = window_pipe(Path.cwd(), sys.stdin, sys.stdout) if options.desktop_observer else nullcontext()
+    with boundary:
+        serve(
+            sys.stdin,
+            sys.stdout,
+            cwd=Path.cwd(),
+            allowed_features=allowed or None,
+            desktop_observer=options.desktop_observer,
+        )

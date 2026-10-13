@@ -39,7 +39,10 @@ def observe(
     or caller identity. Existing OS/native identity checks precede any Trace read.
     """
     runner = discover_runner_directory(cwd)
-    caller = caller_alias(runner)
+    from graphtraj.interfaces.desktop_host import owns_project
+
+    window = human_observer.get() and owns_project(cwd)
+    caller = None if window else caller_alias(runner)
     own = None
     if caller is not None and not isinstance(caller, NativeCaller):
         try:
@@ -50,7 +53,7 @@ def observe(
             raise RunnerError('authority-denied', 'Agent activity access is limited to its own Session and Ticket.')
     else:
         # A bound Main/unknown native caller is never an unbound human observer.
-        if (not human_observer.get() or runtime_caller_is_bound()
+        if not window and (not human_observer.get() or runtime_caller_is_bound()
                 or current_parent_connection() is not None or caller_runtime() is not None
                 or caller is not None):
             raise RunnerError('authority-denied', 'Activity requires the human desktop host binding; human observation is unavailable to native Main/unknown callers.')

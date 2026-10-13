@@ -9,3 +9,6 @@ build/
 dist/
 .venv/
 uv.lock
+
+# Per-platform GUI provenance generated only while packaging its backend wheel.
+src/graphtraj/interfaces/desktop-host.json

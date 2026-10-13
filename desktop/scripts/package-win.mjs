@@ -1,3 +1,4 @@
+import { desktopHostManifest } from './desktop-host-manifest.mjs';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -50,6 +51,7 @@ await fs.cp(pythonRoot, runtime, {
   filter: filename => !['site-packages', 'Scripts', '__pycache__'].includes(path.basename(filename)),
 });
 const wheels = path.join(output, 'wheels');
+await desktopHostManifest(path.join(bundle, 'GraphTraj.exe'), app, source);
 run(python, ['-m', 'pip', 'wheel', '--no-deps', '--no-build-isolation', '--wheel-dir', wheels, source]);
 const wheel = (await fs.readdir(wheels)).find(name => name.startsWith('graphtraj-') && name.endsWith('.whl'));
 assert.ok(wheel);

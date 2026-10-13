@@ -1,3 +1,4 @@
+import { desktopHostManifest } from './desktop-host-manifest.mjs';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -37,6 +38,7 @@ await fs.mkdir(path.join(install, 'wheels'));
 const buildPython = path.join(output, 'build-python/bin/python');
 run(python, ['-m', 'venv', path.join(output, 'build-python')]);
 run(buildPython, ['-m', 'pip', 'install', 'setuptools==75.8.0', 'wheel==0.45.1']);
+await desktopHostManifest(path.join(install, 'graphtraj-desktop-bin'), app, source);
 run(buildPython, ['-m', 'pip', 'wheel', '--no-build-isolation', '--no-deps',
   '--wheel-dir', path.join(install, 'wheels'), source]);
 run(buildPython, ['-m', 'pip', 'download', '--only-binary=:all:', '--no-deps',

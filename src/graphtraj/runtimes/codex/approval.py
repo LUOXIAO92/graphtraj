@@ -8,6 +8,7 @@ import os
 import re
 from pathlib import Path
 from typing import Any, Mapping
+from urllib.error import HTTPError
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
@@ -160,8 +161,9 @@ async def review_request(route: dict, context: dict) -> dict:
         return {'decision': result['decision']}
     except Exception as error:
         # Do not expose credentials, endpoint response bodies or request contents in errors.
+        status = f' (HTTP {error.code})' if isinstance(error, HTTPError) else ''
         raise RuntimeAdapterError(
-            'RUNTIME_REQUEST_FAILED', 'Approval call failed: ' + type(error).__name__,
+            'RUNTIME_REQUEST_FAILED', 'Approval call failed: ' + type(error).__name__ + status,
             terminal_confirmed=False,
         ) from error
 

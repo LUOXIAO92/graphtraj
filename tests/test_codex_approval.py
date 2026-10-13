@@ -9,6 +9,7 @@ import sys
 from dataclasses import replace
 from io import BytesIO
 from pathlib import Path
+from urllib.error import HTTPError
 
 import pytest
 import yaml
@@ -158,6 +159,39 @@ def test_model_decision_reaches_only_native_request(
         assert config.get('model_provider', 'openai') == 'openai'
     assert request['session_parameters']['config']['approvals_reviewer'] == 'user'
     assert 'test-key' not in json.dumps(reply)
+
+
+@pytest.mark.parametrize('status', [400, 401, 429, 503])
+def test_http_error_status_reaches_native_reply_without_provider_contents(
+    tmp_path: Path,
+    peer: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    status: int,
+) -> None:
+    """Keep a failed review closed while exposing its status, never the provider payload."""
+    request, directory = managed(tmp_path, peer, monkeypatch)
+    calls = []
+
+    class Provider:
+        def open(self, request: object, timeout: int) -> None:
+            """Fail the controlled HTTP transport without any external request."""
+            calls.append(request)
+            raise HTTPError('https://private-provider.invalid/?key=private-key', status,
+                            'private-reason', {'Authorization': 'private-header'},
+                            BytesIO(b'{"error":{"message":"private-response"}}'))
+
+    monkeypatch.setattr(approval, 'build_opener', lambda *args: Provider())
+    worker = CodexManagedExecution(request, 'request: authorize printf APPROVAL_121 only',
+        directory, lambda *_: None, {}, directory / 'events.jsonl')
+    result = worker.run()
+    reply = json.loads(next((tmp_path / 'native').glob('*.replies.jsonl')).read_text())
+    assert result['outcome'] == 'runtime-error'
+    assert reply['error']['code'] == -32603
+    assert f'Approval call failed: HTTPError (HTTP {status})' in reply['error']['message']
+    assert len(calls) == 1
+    published = json.dumps(reply) + json.dumps(result) + (directory / 'stderr.log').read_text()
+    for secret in ['private-provider', 'private-key', 'private-reason', 'private-header', 'private-response']:
+        assert secret not in published
 
 
 def resume_settings(

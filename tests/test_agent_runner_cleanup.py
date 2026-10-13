@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 import sys
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -15,6 +16,96 @@ from runner_fixtures import configure_harness
 from test_ticket_graph import _change_status, _register, _ticket
 from test_task_recovery import installed_commands
 from test_pi_runtime import pi_environment
+
+
+@pytest.mark.parametrize('worker_case', ['absent', 'waiting', 'foreign-group', 'runtime-artifact'])
+def test_native_interrupt_confirms_only_pre_runtime_allocations(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+    worker_case: str,
+) -> None:
+    """Exact native process identity and the startup barrier precede cleanup."""
+    ticket = _deliver_ticket(installed_commands, temporary_git_repository, fake_codex,
+                             tmp_path, integrate=True, terminal_failed_start=True)
+    sessions = ticket.root / '.graphtraj/runner/sessions'
+    original = sessions / ticket.failed_start_aliases[0]
+    launch = yaml.safe_load((original / 'launch.yml').read_text())
+    alias = '85-cleanup_integrated_ticket-handover0-failed_start@before_start'
+    directory = sessions / alias
+    directory.mkdir()
+    trace = ticket.ticket_directory / 'teams/1/traces' / alias / 'events.jsonl'
+    trace.parent.mkdir()
+    trace.touch()
+    launch['mapping'].update(alias=alias, trace_file=str(trace))
+    (directory / 'launch.yml').write_text(yaml.safe_dump(launch))
+    (directory / 'events.jsonl').write_text(
+        '{"type":"runtime","runtime":"codex"}\n{"type":"runner-execution-start"}\n')
+    (directory / 'worker-stderr.log').touch()
+    if worker_case == 'runtime-artifact':
+        (directory / 'owner-123.lock').touch()
+    before = {path.name: path.read_bytes() for path in directory.iterdir()}
+    worker = None
+    waiter = None
+    try:
+        if worker_case in {'waiting', 'foreign-group'}:
+            worker = subprocess.Popen(
+                [str(installed_commands.runner.with_name('python')), '-I', '-m',
+                 'graphtraj.execution.runner_worker', str(directory / 'launch.yml')],
+                stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                env=ticket.environment, start_new_session=worker_case == 'waiting',
+            )
+            # The spawning parent reaps its own child while the public Runner
+            # confirms the recorded process group's exit.
+            waiter = threading.Thread(target=worker.wait)
+            waiter.start()
+        result = run_process([str(installed_commands.runner), 'interrupt', alias],
+                             cwd=ticket.root, env=ticket.environment, timeout=20)
+        if worker_case in {'foreign-group', 'runtime-artifact'}:
+            assert result.returncode == 1, result.stdout + result.stderr
+            assert {path.name: path.read_bytes() for path in directory.iterdir()} == before
+            if worker is not None:
+                assert worker.poll() is None
+            return
+        assert result.returncode == 0, result.stdout + result.stderr
+        result_document = yaml.safe_load(result.stdout)
+        assert result_document['interrupt_status'] == 'stopped'
+        assert result_document['evidence']['worker_pids'] == ([] if worker is None else [worker.pid])
+        if worker is not None:
+            assert worker.poll() is not None
+        failure = yaml.safe_load((directory / 'launch-error.yml').read_text())
+        assert failure['terminal_confirmed'] is True
+        assert json.loads(failure['diagnostic']) == result_document['evidence']
+        assert all((directory / name).read_bytes() == content for name, content in before.items())
+        if worker_case == 'absent':
+            # A parent that was about to spawn at the observation cannot start
+            # native work after the stop barrier has been published.
+            late = subprocess.run(
+                [str(installed_commands.runner.with_name('python')), '-I', '-m',
+                 'graphtraj.execution.runner_worker', str(directory / 'launch.yml')],
+                input='A late launch must not run.', text=True, capture_output=True,
+                env=ticket.environment, timeout=10,
+            )
+            assert late.returncode != 0
+            assert not (directory / 'mapping.yml').exists()
+            assert trace.read_bytes() == b''
+            failure = yaml.safe_load((directory / 'launch-error.yml').read_text())
+            assert failure['code'] == 'subtree-stopped'
+            assert failure['terminal_confirmed'] is True
+        cleaned = _cleanup(ticket)
+        assert cleaned.returncode == 0, cleaned.stdout + cleaned.stderr
+        retained = trace.parent / 'runner'
+        assert all((retained / name).read_bytes() == content for name, content in before.items())
+    finally:
+        if worker is not None:
+            if worker.poll() is None:
+                worker.terminate()
+            worker.wait(timeout=5)
+            assert worker.stdin is not None
+            worker.stdin.close()
+        if waiter is not None:
+            waiter.join(timeout=5)
 
 
 @dataclass(frozen=True)

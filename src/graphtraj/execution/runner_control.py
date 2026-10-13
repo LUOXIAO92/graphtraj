@@ -28,10 +28,11 @@ from graphtraj.execution.runner_io import confirm_alias_mapping_durable, write_y
 from graphtraj.execution.runner_capacity import capacity_positions
 from graphtraj.execution.runner_models import RunnerError
 from graphtraj.execution.runner_heartbeat import execution_start_lock, read_heartbeat, ownership_is_held
-from graphtraj.execution.runner_transport import valid_terminal_launch_failure
+from graphtraj.execution.runner_transport import runtime_launch_failure, valid_terminal_launch_failure
 from graphtraj.execution.runner_process import (
     OPERATION_TIMEOUT_SECONDS,
     stop_worker,
+    unstarted_worker_processes,
 )
 from graphtraj.workspace.runner_project import discover_project, discover_project_root, discover_runner_directory
 from graphtraj.execution.runner_status import (
@@ -694,7 +695,9 @@ def _interrupt_allocation(runner: Path, alias: str) -> dict:
         if any(os.path.lexists(directory / name) for name in ("mapping.yml", "session.yml", "native-session.yml")):
             raise RunnerError("operation-failed", "Session creation completed; retry interruption by alias.")
         heartbeat = read_heartbeat(directory)
-        if heartbeat is None or heartbeat.get("alias") != alias:
+        if heartbeat is None:
+            return _stop_before_runtime(directory, mapping)
+        if heartbeat.get("alias") != alias:
             raise _invalid_mapping()
         if not ownership_is_held(directory, heartbeat["worker_pid"]):
             failure = directory / "launch-error.yml"
@@ -709,6 +712,54 @@ def _interrupt_allocation(runner: Path, alias: str) -> dict:
         write_yaml_durably(directory / "stop.yml", {"alias": alias})
     session_operation({**heartbeat, "session": None}, "interrupt")
     return {"alias": alias, "interrupt_status": "interrupted"}
+
+
+def _stop_before_runtime(directory: Path, mapping: dict) -> dict:
+    """Stop a verified pre-Runtime allocation under the held startup lock.
+
+    Worker writes its owner lock before creating a Runtime. The exact retained
+    pre-start inventory therefore excludes an already-created Runtime; the
+    native process observation addresses a Worker still waiting before that
+    boundary. The stop barrier also prevents a late spawn from crossing it.
+    """
+    allowed = {'launch.yml', 'events.jsonl', 'worker-stderr.log', 'stop.yml'}
+    try:
+        entries = list(directory.iterdir())
+        if (mapping.get('runtime') != 'codex'
+                or {path.name for path in entries} - allowed
+                or any(path.is_symlink() or not path.is_file() for path in entries)
+                or (directory / 'worker-stderr.log').stat().st_size != 0):
+            raise ValueError('Allocation is not before Runtime ownership')
+        records = [json.loads(line) for line in (directory / 'events.jsonl').read_text().splitlines()]
+        if records != [{'type': 'runtime', 'runtime': 'codex'}, {'type': 'runner-execution-start'}]:
+            raise ValueError('Allocation contains other execution evidence')
+        trace = Path(mapping['trace_file'])
+        if trace.is_symlink() or not trace.is_file() or trace.stat().st_size:
+            raise ValueError('Trace is not an unstarted allocation')
+        workers = unstarted_worker_processes(directory / 'launch.yml')
+        write_yaml_durably(directory / 'stop.yml', {'alias': mapping['alias']})
+        for pid in workers:
+            # Repeat identity validation immediately before the existing stop
+            # primitive; do not signal a process whose binding has changed.
+            if pid in unstarted_worker_processes(directory / 'launch.yml') and not stop_worker(pid):
+                raise OSError('Worker stopping was not confirmed')
+        if unstarted_worker_processes(directory / 'launch.yml'):
+            raise OSError('A Worker still references this launch')
+        if ({path.name for path in directory.iterdir()} - allowed
+                or (directory / 'worker-stderr.log').stat().st_size != 0):
+            raise OSError('Allocation evidence changed during stopping')
+        evidence = {'runtime_started': False, 'worker_pids': workers, 'startup_barrier': True}
+        write_yaml_durably(directory / 'launch-error.yml', runtime_launch_failure(
+            'RUNTIME_EXECUTION_INTERRUPTED',
+            'Native pre-Runtime stop confirmed under the execution startup lock.',
+            json.dumps(evidence, sort_keys=True),
+            terminal_confirmed=True,
+        ))
+    except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:
+        raise RunnerError('operation-failed',
+                          'Pre-Runtime allocation stop could not be confirmed: ' + str(error)) from error
+    return {'alias': mapping['alias'], 'interrupt_status': 'stopped',
+            'evidence': evidence}
 
 
 def _interrupt_session(

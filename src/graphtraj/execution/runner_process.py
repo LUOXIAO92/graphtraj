@@ -5,6 +5,7 @@ from __future__ import annotations
 import ctypes
 import os
 import signal
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -172,3 +173,89 @@ def process_executable(pid: int) -> Path | None:
             if library.proc_pidpath(pid, buffer, len(buffer)) > 0:
                 return Path(os.fsdecode(buffer.value))
     return None
+
+
+def unstarted_worker_processes(job_file: Path) -> list[int]:
+    """Find exact current Workers for a launch, refusing ambiguous ownership.
+
+    This is an observation, not terminal proof. The caller must hold the
+    startup lock and verify pre-Runtime artifacts before stopping a Worker.
+    """
+    processes = _current_user_processes()
+    expected = ['-I', '-m', 'graphtraj.execution.runner_worker', str(job_file)]
+    matches = []
+    for pid, parent, group in processes:
+        try:
+            arguments = _process_arguments(pid)
+        except OSError:
+            if process_is_alive(pid):
+                raise
+            continue
+        if str(job_file) not in arguments:
+            continue
+        if (arguments[1:] != expected
+                or process_executable(pid) != Path(sys.executable).resolve()
+                or group != pid or any(ppid == pid for _, ppid, _ in processes)):
+            raise OSError('Launch process identity or pre-Runtime state is ambiguous')
+        matches.append(pid)
+    if len(matches) > 1:
+        raise OSError('Multiple Workers reference the same launch')
+    return matches
+
+
+def _current_user_processes() -> list[tuple[int, int, int]]:
+    """Read current-user PID, parent and group identities from the platform."""
+    if sys.platform != 'darwin':
+        rows = subprocess.check_output(
+            ['/bin/ps', '-U', str(os.getuid()), '-o', 'pid=,ppid=,pgid='], text=True,
+        )
+        return [tuple(map(int, row.split())) for row in rows.splitlines()]
+    library = _libproc()
+    if library is None:
+        raise OSError('Native process enumeration is unavailable')
+    # PROC_UID_ONLY and proc_bsdshortinfo are the same libproc interface used
+    # for ancestry above. No helper executable or formatted argv is needed.
+    size = library.proc_listpids(4, os.getuid(), None, 0)
+    if size <= 0:
+        raise OSError('Native process enumeration failed')
+    pids = (ctypes.c_int * (size // 4 + 128))()
+    written = library.proc_listpids(4, os.getuid(), pids, ctypes.sizeof(pids))
+    if written <= 0 or written >= ctypes.sizeof(pids):
+        raise OSError('Native process enumeration is incomplete')
+    result = []
+    for pid in pids[:written // 4]:
+        record = ctypes.create_string_buffer(_SHORTBSDINFO_BUFFER_SIZE)
+        count = library.proc_pidinfo(pid, _PROC_PIDT_SHORTBSDINFO, 0, record, len(record))
+        if count != len(record):
+            if process_is_alive(pid):
+                raise OSError('Native process identity is unavailable')
+            continue
+        values = [int.from_bytes(record.raw[offset:offset + 4], sys.byteorder)
+                  for offset in (0, 4, 8, 12)]
+        if values[3] != 5:  # SZOMB has exited and cannot execute.
+            result.append(tuple(values[:3]))
+    return result
+
+
+def _process_arguments(pid: int) -> list[str]:
+    """Read kernel argument boundaries rather than splitting formatted ps text."""
+    if sys.platform.startswith('linux'):
+        return [os.fsdecode(arg) for arg in Path(f'/proc/{pid}/cmdline').read_bytes().split(b'\0') if arg]
+    if sys.platform != 'darwin':
+        raise OSError('Exact process arguments are unavailable on this platform')
+    # Darwin KERN_PROCARGS2 contains argc, executable path, padding, then argv.
+    library = ctypes.CDLL(None, use_errno=True)
+    query = (ctypes.c_int * 3)(1, 49, pid)
+    buffer = ctypes.create_string_buffer(os.sysconf('SC_ARG_MAX'))
+    size = ctypes.c_size_t(len(buffer))
+    if library.sysctl(query, 3, buffer, ctypes.byref(size), None, 0) != 0:
+        raise OSError(ctypes.get_errno(), 'Process arguments are unavailable')
+    raw = buffer.raw[:size.value]
+    count = int.from_bytes(raw[:4], sys.byteorder)
+    start = raw.index(b'\0', 4) + 1
+    while start < len(raw) and raw[start] == 0:
+        start += 1
+    arguments = raw[start:].split(b'\0')[:count]
+    if len(arguments) != count or count < 1:
+        raise OSError('Process argument record is incomplete')
+    return [os.fsdecode(arg) for arg in arguments]

@@ -45,15 +45,16 @@ test('measured long titles and nested frames have separate sibling space', () =>
   for (const node of result.nodes) for (const other of result.nodes) {
     if (node.id === other.id || node.ticket.parent_id !== other.ticket.parent_id) continue;
     const a = node.frame ?? node, b = other.frame ?? other;
-    assert.ok(node.x + a.width + 60 <= other.x || other.x + b.width + 60 <= node.x ||
-      node.y + a.height + 60 <= other.y || other.y + b.height + 60 <= node.y);
+    assert.ok(a.x + a.width + 60 <= b.x || b.x + b.width + 60 <= a.x ||
+      a.y + a.height + 60 <= b.y || b.y + b.height + 60 <= a.y);
   }
   for (const node of result.nodes.filter(node => node.ticket.parent_id)) {
     const parent = result.nodes.find(other => other.id === node.ticket.parent_id);
     assert.ok(parent.frame);
-    assert.ok(node.x >= parent.x && node.y >= parent.y + parent.height);
-    assert.ok(node.x + (node.frame ?? node).width <= parent.x + parent.frame.width);
-    assert.ok(node.y + (node.frame ?? node).height <= parent.y + parent.frame.height);
+    const bounds = node.frame ?? node;
+    assert.ok(bounds.x >= parent.frame.x && bounds.y >= parent.frame.y);
+    assert.ok(bounds.x + bounds.width < parent.x, "the summary receives results at the delivery side");
+    assert.ok(bounds.y + bounds.height <= parent.frame.y + parent.frame.height);
   }
 });
 
@@ -153,7 +154,7 @@ test('cancelled and superseded tasks never appear under their old execution stat
   }
 });
 
-test('expanded summary exits stay separate across its own wide frame', () => {
+test('expanded summary exits leave from the delivery side of its frame', () => {
   const graph = { tickets: [task('226', null), task('227', '226'),
     task('228', '226', ['227']), task('236', null, ['226']),
     task('240', null, ['226', '236'])] };
@@ -164,10 +165,9 @@ test('expanded summary exits stay separate across its own wide frame', () => {
   assert.equal(exits.length, 2);
   assert.notEqual(exits[0].source.y, exits[1].source.y);
   for (const route of exits) {
-    assert.equal(route.vertices.length, 3);
-    assert.equal(route.vertices[0].y, route.vertices[1].y);
-    assert.equal(route.vertices[1].y, source.y + route.source.y);
-    assert.ok(route.vertices[1].x > source.x + source.frame.width);
+    assert.equal(route.vertices.length, 2);
+    assert.equal(route.vertices[0].y, source.y + route.source.y);
+    assert.ok(route.vertices[0].x > source.frame.x + source.frame.width);
   }
 });
 
@@ -204,9 +204,10 @@ test('a common project boundary contains independent tasks and native nested sum
     const view = monitorGraph(graph, new Set(open)), bounds = projectBounds(view.nodes);
     assert.ok(view.nodes.some(node => node.id === 'unrelated'));
     for (const node of view.nodes) {
-      assert.ok(bounds.x < node.x && bounds.y + 60 < node.y);
-      assert.ok(bounds.x + bounds.width > node.x + (node.frame ?? node).width);
-      assert.ok(bounds.y + bounds.height > node.y + (node.frame ?? node).height);
+      const area = node.frame ?? node;
+      assert.ok(bounds.x < area.x && bounds.y + 60 < area.y);
+      assert.ok(bounds.x + bounds.width > area.x + area.width);
+      assert.ok(bounds.y + bounds.height > area.y + area.height);
     }
     assert.equal(view.edges.flatMap(edge => edge.relations).length, 3);
   }
@@ -231,8 +232,8 @@ test('accepted delivery is an evidenced relation, distinct from membership and e
     const terminals = dependencyTerminals(view.nodes, view.edges);
     for (const receipt of view.edges.filter(e => e.kind === 'acceptance' && e.source !== e.target)) {
       const end = terminals.get(receipt.id), target = view.nodes.find(n => n.id === receipt.target);
-      assert.equal(end.target.x, target.width);
-      assert.ok(end.vertices.at(-1).x > target.x + target.width);
+      assert.equal(end.target.x, 0);
+      assert.ok(end.vertices.at(-1).x < target.x);
       assert.equal(end.vertices.at(-1).y, target.y + end.target.y);
     }
   }
@@ -253,4 +254,26 @@ test('a collapsed dependency and accepted receipt share an arrow while preservin
   assert.equal(expanded.edges.length, 2);
   assert.ok(expanded.edges.some(e => e.source === '233' && e.target === '236' && e.kind === 'acceptance'));
   assert.ok(expanded.edges.some(e => e.source === '226' && e.target === '236' && e.kind === 'dependency'));
+});
+
+test('nested and cross-summary accepted results flow toward their real delivery cards', () => {
+  const receipt = target => [{ event: 'ticket-completed', ticket_id: target, event_id: `accepted-${target}` }];
+  const graph = { tickets: [task('outer', null),
+    { ...task('inner', 'outer'), delivery: receipt('outer') },
+    { ...task('first', 'inner'), delivery: receipt('inner') },
+    { ...task('last', 'inner', ['first']), delivery: receipt('inner') },
+    { ...task('sibling', 'outer'), delivery: receipt('outer') },
+    { ...task('external', null), delivery: receipt('outer') },
+    task('consumer', null, ['outer'])] };
+  const original = JSON.stringify(graph);
+  for (const open of [[], ['outer'], ['outer', 'inner']]) {
+    const view = monitorGraph(graph, new Set(open));
+    const nodes = new Map(view.nodes.map(node => [node.id, node]));
+    for (const edge of view.edges.filter(edge => edge.source !== edge.target)) {
+      const source = nodes.get(edge.source), target = nodes.get(edge.target);
+      assert.ok(source.x + source.width < target.x, `${edge.source} must precede ${edge.target}`);
+    }
+    assert.equal(view.edges.flatMap(edge => edge.relations).length, 7);
+  }
+  assert.equal(JSON.stringify(graph), original);
 });

@@ -10,8 +10,9 @@ export const taskRouterOptions = {
 };
 
 export type Size = { width: number; height: number };
+export type Bounds = Size & { x: number; y: number };
 export type MonitorNode = Size & { id: string; ticket: Ticket; x: number; y: number;
-  children: string[]; expanded: boolean; frame?: Size };
+  children: string[]; expanded: boolean; frame?: Bounds };
 export type TaskRelation = { source: string; target: string; kind: 'dependency' | 'replacement' | 'acceptance'; event_id?: string };
 export type MonitorEdge = TaskRelation & { id: string;
   relations: TaskRelation[]; kinds: TaskRelation['kind'][]; projected: boolean; vertices: { x: number; y: number }[] };
@@ -63,7 +64,10 @@ export function monitorGraph(graph: Graph, expanded: ReadonlySet<string>, sizes:
       const open = expanded.has(id) && descendants.length > 0;
       const size = sizes[id] ?? { width: 320, height: 150 };
       const inner = open ? place(descendants) : null;
-      const frame = inner ? { width: Math.max(size.width + 48, inner.width + 48), height: size.height + inner.height + 88 } : undefined;
+      // Membership encloses the work; the real summary card receives its result
+      // at the delivery side, rather than sending receipt arrows back over it.
+      const frame = inner ? { x: 0, y: 0, width: inner.width + 140 + size.width + 48,
+        height: Math.max(size.height, inner.height) + 48 } : undefined;
       const node: MonitorNode = { id, ticket, ...size, x: 0, y: 0, children: descendants, expanded: open, frame };
       return { node, inner, size: frame ?? size };
     });
@@ -80,14 +84,13 @@ export function monitorGraph(graph: Graph, expanded: ReadonlySet<string>, sizes:
     // Dagre can produce NaN routes for parallel edges. The display projection
     // below retains all native dependencies within each visible directed pair.
     for (const edge of nativeEdges) {
-      if (edge.kind === 'acceptance') continue; // Receipt is not an execution ordering constraint.
+      // All real result flows guide display order, without becoming execution dependencies.
       const from = owners.get(edge.source), to = owners.get(edge.target);
       if (from && to && from !== to) layout.setEdge(from, to, { weight: (layout.edge(from, to)?.weight ?? 0) + 1 });
     }
     dagre.layout(layout);
     const routes = new Map<string, { x: number; y: number }[]>();
     for (const edge of nativeEdges) {
-      if (edge.kind === 'acceptance') continue; // Receipt is not an execution ordering constraint.
       const from = owners.get(edge.source), to = owners.get(edge.target);
       if (from && to && from !== to) routes.set(edge.id, layout.edge(from, to).points.slice(1, -1));
     }
@@ -95,10 +98,14 @@ export function monitorGraph(graph: Graph, expanded: ReadonlySet<string>, sizes:
     for (const branch of branches) {
       const pos = layout.node(branch.node.id);
       const x = pos.x - branch.size.width / 2, y = pos.y - branch.size.height / 2;
-      result.push({ ...branch.node, x, y });
+      result.push({ ...branch.node,
+        x: branch.inner ? x + branch.inner.width + 164 : x,
+        y: branch.inner ? y + (branch.size.height - branch.node.height) / 2 : y,
+        ...(branch.node.frame ? { frame: { ...branch.node.frame, x, y } } : {}) });
       if (branch.inner) {
-        const offsetX = x + 24, offsetY = y + branch.node.height + 64;
-        result.push(...branch.inner.nodes.map(node => ({ ...node, x: node.x + offsetX, y: node.y + offsetY })));
+        const offsetX = x + 24, offsetY = y + 24;
+        result.push(...branch.inner.nodes.map(node => ({ ...node, x: node.x + offsetX, y: node.y + offsetY,
+          ...(node.frame ? { frame: { ...node.frame, x: node.frame.x + offsetX, y: node.frame.y + offsetY } } : {}) })));
         for (const [id, points] of branch.inner.routes) routes.set(id, points.map(point => ({ x: point.x + offsetX, y: point.y + offsetY })));
       }
     }
@@ -169,11 +176,9 @@ export function dependencyTerminals(nodes: MonitorNode[], edges: MonitorEdge[]):
   const ends = new Map<string, { source: { x: number; y: number }; target: { x: number; y: number }; vertices: { x: number; y: number }[] }>();
   const ports = new Map<string, { x: number; y: number; clearance: number }>();
   for (const node of nodes) for (const side of ['left', 'right'] as const) {
-    // Incoming receipts and outgoing results share the physical right border;
-    // order them together so opposite directions never occupy the same port.
     const ordered = visible.flatMap(edge => [
       ...(side === 'right' && edge.source === node.id ? [{ edge, end: 'source' as const, other: edge.target }] : []),
-      ...(edge.target === node.id && (edge.kind === 'acceptance' ? 'right' : 'left') === side
+      ...(edge.target === node.id && side === 'left'
         ? [{ edge, end: 'target' as const, other: edge.source }] : []),
     ]).sort((a, b) => {
       const first = positions.get(a.other)!, second = positions.get(b.other)!;
@@ -189,16 +194,9 @@ export function dependencyTerminals(nodes: MonitorNode[], edges: MonitorEdge[]):
   for (const edge of visible) {
     const source = ports.get(`source:${edge.id}`)!, target = ports.get(`target:${edge.id}`)!;
     const from = positions.get(edge.source)!, to = positions.get(edge.target)!;
-    // An expanded summary's header is above its children. Keep independent
-    // exits at their port heights until they clear that frame; otherwise the
-    // shortest obstacle routes can collapse onto the same lane below the card.
-    const summaryExit = from.frame && to.x >= from.x + from.frame.width
-      ? [{ x: from.x + from.frame.width + source.clearance, y: from.y + source.y }]
-      : [];
     ends.set(edge.id, { source: { x: source.x, y: source.y }, target: { x: target.x, y: target.y },
       vertices: [{ x: from.x + source.x + source.clearance, y: from.y + source.y },
-        ...summaryExit,
-        { x: to.x + target.x + (edge.kind === 'acceptance' ? target.clearance : -target.clearance), y: to.y + target.y }] });
+        { x: to.x + target.x - target.clearance, y: to.y + target.y }] });
   }
   return ends;
 }
@@ -206,9 +204,10 @@ export function dependencyTerminals(nodes: MonitorNode[], edges: MonitorEdge[]):
 
 /** Enclose all visible native tasks and summary frames in their project view. */
 export function projectBounds(nodes: MonitorNode[]): { x: number; y: number; width: number; height: number } {
-  const left = Math.min(0, ...nodes.map(node => node.x)) - 36;
-  const top = Math.min(0, ...nodes.map(node => node.y)) - 96;
-  const right = Math.max(320, ...nodes.map(node => node.x + (node.frame ?? node).width)) + 36;
-  const bottom = Math.max(150, ...nodes.map(node => node.y + (node.frame ?? node).height)) + 36;
+  const bounds = nodes.map(node => node.frame ?? node);
+  const left = Math.min(0, ...bounds.map(node => node.x)) - 36;
+  const top = Math.min(0, ...bounds.map(node => node.y)) - 96;
+  const right = Math.max(320, ...bounds.map(node => node.x + node.width)) + 36;
+  const bottom = Math.max(150, ...bounds.map(node => node.y + node.height)) + 36;
   return { x: left, y: top, width: right - left, height: bottom - top };
 }

@@ -165,7 +165,7 @@ export const TaskCanvas = forwardRef<TaskCanvasHandle, Props>(function TaskCanva
     // Reserve ports for visible directed pairs, not hidden internal endpoints.
     const preliminary = monitorGraph(data.graph, data.expanded, sizes);
     for (const node of preliminary.nodes) {
-      const outgoing = preliminary.edges.filter(edge => edge.source !== edge.target && (edge.source === node.id || edge.kind === 'acceptance' && edge.target === node.id)).length;
+      const outgoing = preliminary.edges.filter(edge => edge.source !== edge.target && edge.source === node.id).length;
       const incoming = preliminary.edges.filter(edge => edge.target === node.id && edge.source !== edge.target).length;
       sizes[node.id].height = Math.max(sizes[node.id].height, (Math.max(outgoing, incoming) + 1) * 18);
     }
@@ -187,7 +187,7 @@ export const TaskCanvas = forwardRef<TaskCanvasHandle, Props>(function TaskCanva
     }
     for (const node of result.nodes) {
       if (node.frame) cells.push(graph.createNode({ id: `frame:${node.id}`, shape: 'task-frame',
-        x: node.x - 12, y: node.y - 12, width: node.frame.width + 24, height: node.frame.height + 24, zIndex: -2 }));
+        ...node.frame, zIndex: -2 }));
       const element = cards.current.get(node.id)!;
       element.style.height = `${node.height}px`;
       const port = { attrs: { circle: { r: 3, magnet: false, fill: '#71849a', stroke: '#fff', strokeWidth: 1 } } };
@@ -204,7 +204,6 @@ export const TaskCanvas = forwardRef<TaskCanvasHandle, Props>(function TaskCanva
       // Explicit normal terminal segments leave X6 free to avoid other cards.
       cells.push(graph.createEdge({ id: edge.id,
       source: { cell: edge.source, port: `out:${edge.id}` }, target: { cell: edge.target, port: `in:${edge.id}` },
-      ...(edge.kind === 'acceptance' ? { router: { name: 'metro', args: { ...taskRouterOptions, startDirections: ['right'], endDirections: ['right'] } } } : {}),
       zIndex: 1, data: edge, vertices: terminals.get(edge.id)!.vertices,
       ...(edge.kinds.length > 1 ? { labels: [{ position: .5, attrs: {
         label: { text: edge.kinds.map(kind => kind === 'dependency' ? 'Dependency' : kind === 'acceptance' ? 'Accepted delivery' : 'Replacement').join(' + '), fontSize: 11, fill: '#365f9c' },

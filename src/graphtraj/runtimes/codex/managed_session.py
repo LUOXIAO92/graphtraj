@@ -29,6 +29,41 @@ from graphtraj.runtimes.codex.codex_adapter import restore_codex_context
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 
 
+def _approval_history_text(value: object) -> object:
+    """Keep textual review evidence, replacing inline binary bodies explicitly.
+
+    Rollout tool results can contain MCP content, including JSON encoded inside
+    an output string. Sending their base64 as text cannot provide image evidence
+    to the reviewer and can exhaust its context before it sees the command.
+    This selection is only for historical evidence, never the pending request.
+    """
+    omitted = '[inline binary omitted; not available as review evidence]'
+    if isinstance(value, list):
+        return [_approval_history_text(item) for item in value]
+    if isinstance(value, dict):
+        binary = value.get('type') in {'image', 'audio', 'input_audio', 'input_file'}
+        return {
+            key: omitted if binary and key in {'data', 'file_data'}
+            else _approval_history_text(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, str):
+        # Preserve the string shape and all textual output, including safety
+        # restrictions. JSON tool envelopes are not always native content blocks.
+        if value.lstrip().startswith(('{', '[')):
+            try:
+                parsed = json.loads(value)
+            except (ValueError, RecursionError):
+                pass
+            else:
+                selected = _approval_history_text(parsed)
+                if selected != parsed:
+                    return json.dumps(selected, ensure_ascii=False)
+        return re.sub(r'data:[\w.+/-]+(?:;[\w=.+-]+)*;base64,[A-Za-z0-9+/=]+',
+                      lambda _: omitted, value)
+    return value
+
+
 def refresh_approval_route(request: dict, session_directory: Path) -> None:
     """Reload only approval routing for the mapped role, preserving work settings."""
     config = request.get('session_parameters', {}).get('config', {})
@@ -484,7 +519,7 @@ class CodexManagedExecution:
         return {'decision': decisions[result['decision']]}
 
     def _approval_context(self) -> dict:
-        """Map native rollout snapshots and subsequent items without new compaction.
+        """Select textual native evidence without summarizing safety constraints.
 
         Codex 0.154.0 history/src/rollout_payload.rs defines compacted.message,
         replacement_history, retained_context, and separate turn_context and
@@ -505,9 +540,16 @@ class CodexManagedExecution:
                 payload = record.get('payload', {})
                 kind = record.get('type')
                 if kind == 'response_item' and payload.get('type') in visible:
-                    context['history'].append(payload)
                     if payload.get('type') == 'message' and payload.get('role') in {'user', 'developer'}:
                         context['authorization_messages'].append(payload)
+                        # Keep provenance/order in history, but send this often
+                        # large authorization body only once across both fields.
+                        context['history'].append({
+                            'type': 'authorization_reference',
+                            'index': len(context['authorization_messages']) - 1,
+                        })
+                    else:
+                        context['history'].append(payload)
                 elif kind == 'compacted':
                     # Use the native replacement and summary rather than summarize
                     # or silently retain superseded tool evidence ourselves.
@@ -523,7 +565,17 @@ class CodexManagedExecution:
                     context['retained_context_events'].append(payload)
                 elif kind == 'turn_context':
                     context['turn_context'] = payload
-        return context
+        # A native replacement history may itself contain authorizations already
+        # retained above. Reference those too, without losing their new position.
+        for index, item in enumerate(context['history']):
+            if item.get('type') == 'message' and item.get('role') in {'user', 'developer'}:
+                if item not in context['authorization_messages']:
+                    context['authorization_messages'].append(item)
+                context['history'][index] = {
+                    'type': 'authorization_reference',
+                    'index': context['authorization_messages'].index(item),
+                }
+        return _approval_history_text(context)
 
     def _pending_requests(self) -> list[dict]:
         """Snapshot native contents with the identity of this execution's owner."""

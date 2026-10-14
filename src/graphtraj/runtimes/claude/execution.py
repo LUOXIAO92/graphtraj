@@ -16,6 +16,9 @@ import uuid
 
 from graphtraj.execution.runner_io import write_yaml_durably
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError, SessionStarted, record_runtime_process
+from graphtraj.runtimes.claude.diagnostics import (
+    launch_projection, model_projection, native_projection, warning_projection,
+)
 
 
 class ClaudeExecution:
@@ -56,6 +59,10 @@ class ClaudeExecution:
         self.results = 0
         self.native_state: str | None = None
         self.task_released = False
+        self.diagnostics = {'session_id': self.native_id, 'execution_id': self.execution_id,
+                            'launch': 'unknown', 'popen_returned': False,
+                            'initialize': {'reason': 'unknown'}, 'system_init': {'reason': 'unknown'},
+                            'warnings': []}
 
     @property
     def execution_id(self) -> str:
@@ -72,6 +79,19 @@ class ClaudeExecution:
                 self.proc.stdin.flush()
             except (OSError, ValueError) as error:
                 raise RuntimeAdapterError('RUNTIME_TRANSPORT_FAILED', 'Claude input pipe is closed.') from error
+
+    def _save_diagnostics(self) -> None:
+        """Persist only this execution's allowlisted diagnostic snapshot."""
+        write_yaml_durably(self.directory / f'claude-diagnostics-{self.execution_id}.yml', self.diagnostics)
+
+    def _diagnostic_warning(self, source: str, text: object) -> None:
+        """Retain at most eight fixed warning labels, with no native free text."""
+        with self.lock:
+            for label in warning_projection(text):
+                record = {'source': source, 'category': label}
+                if record not in self.diagnostics['warnings'] and len(self.diagnostics['warnings']) < 8:
+                    self.diagnostics['warnings'].append(record)
+                    self._save_diagnostics()
 
     def _control(self, subtype: str, **fields: object) -> str:
         """Send one official SDK control request; an ACK is not completion."""
@@ -259,9 +279,13 @@ class ClaudeExecution:
             try:
                 if self.stopping.is_set():
                     raise RuntimeAdapterError('RUNTIME_EXECUTION_INTERRUPTED', 'Claude stopped before process creation.')
+                self.diagnostics['launch'] = launch_projection(argv)
+                self._save_diagnostics()
                 self.proc = subprocess.Popen(argv, cwd=self.request['worktree_path'], env=environment,
                                              stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                              text=True, bufsize=1, start_new_session=True)
+                self.diagnostics['popen_returned'] = True
+                self._save_diagnostics()
                 record_runtime_process(self.proc.pid)
 
                 def drain_stderr() -> None:
@@ -270,6 +294,7 @@ class ClaudeExecution:
                     for line in self.proc.stderr:
                         stderr.write(line)
                         stderr.flush()
+                        self._diagnostic_warning('stderr', line)
 
                 stderr_reader = threading.Thread(target=drain_stderr, daemon=True)
                 stderr_reader.start()
@@ -292,9 +317,18 @@ class ClaudeExecution:
                     except queue.Empty:
                         continue
                     kind = event.get('type')
+                    if kind in ('warning', 'error') or (
+                            kind == 'system' and event.get('subtype') in ('warning', 'error')):
+                        self._diagnostic_warning('native_event', event.get('message'))
                     if kind == 'control_response':
                         response = event.get('response', {})
                         if response.get('request_id') == initialization:
+                            with self.lock:
+                                self.diagnostics['initialize'] = native_projection(response.get('response') or {})
+                                self.diagnostics['initialize']['control_status'] = (
+                                    response['subtype'] if response.get('subtype') in ('success', 'error') else 'unknown')
+                                self._save_diagnostics()
+                            self._diagnostic_warning('initialize', response.get('error'))
                             if response.get('subtype') != 'success':
                                 raise RuntimeAdapterError('RUNTIME_REQUEST_FAILED', 'Claude initialization failed.')
                             if response.get('response', {}).get('hooks_applied') is not True:
@@ -320,6 +354,10 @@ class ClaudeExecution:
                         if event.get('session_id') != self.native_id or event.get('model') != self.request['model']:
                             raise RuntimeAdapterError('RUNTIME_REQUEST_FAILED', 'Claude selected a different Session or model.')
                         self.native_init = event
+                        with self.lock:
+                            self.diagnostics['system_init'] = native_projection(event)
+                            self.diagnostics['system_init']['model'] = model_projection(event.get('model'))
+                            self._save_diagnostics()
                         if self.session is not None:
                             observed = yaml_document(self.directory / 'session.yml')
                             observed['native_init'] = event
@@ -328,6 +366,9 @@ class ClaudeExecution:
                     elif kind == 'system' and event.get('subtype') == 'session_state_changed':
                         self.native_state = event.get('state')
                     elif kind == 'result':
+                        self._diagnostic_warning('result', event.get('result'))
+                        for native_error in (event.get('errors') or [])[:8]:
+                            self._diagnostic_warning('result', native_error)
                         if event.get('session_id') != self.session:
                             raise RuntimeAdapterError('RUNTIME_SESSION_MISSING', 'Claude result has a different Session.')
                         self.results += 1

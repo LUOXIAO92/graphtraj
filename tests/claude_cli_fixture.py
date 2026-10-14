@@ -19,6 +19,8 @@ if '--version' in sys.argv:
 if os.environ.get('CLAUDE_FIXTURE_FAIL'):
     print('controlled startup failure', file=sys.stderr)
     raise SystemExit(17)
+if os.environ.get('CLAUDE_FIXTURE_DIAGNOSTICS'):
+    print('Warning: auto mode unavailable; token=sk-diagnosticsecret; email=private@example.invalid', file=sys.stderr)
 args = sys.argv
 session = args[args.index('--resume' if '--resume' in args else '--session-id') + 1]
 model = args[args.index('--model') + 1]
@@ -105,8 +107,12 @@ for line in sys.stdin:
     event = json.loads(line)
     if event['type'] == 'control_request':
         request = event['request']
+        initialized = {'hooks_applied': True}
+        if os.environ.get('CLAUDE_FIXTURE_DIAGNOSTICS'):
+            initialized.update(autoModeAvailable=False, permissionMode='default',
+                               reason='private-unknown-reason', account={'email': 'private@example.invalid'})
         emit({'type': 'control_response', 'response': {'subtype': 'success',
-              'request_id': event['request_id'], 'response': {'hooks_applied': True}}})
+              'request_id': event['request_id'], 'response': initialized}})
         if request['subtype'] == 'initialize':
             emit({'type': 'control_request', 'request_id': 'startup', 'request': {
                 'subtype': 'hook_callback', 'callback_id': 'graphtraj_start', 'input': {

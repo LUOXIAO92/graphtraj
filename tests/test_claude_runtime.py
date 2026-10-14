@@ -69,7 +69,8 @@ def execution(
         if expected is None:
             assert not (root / (session + '.json')).exists()
         mapping = yaml.safe_load((directory / 'mapping.yml').read_text())
-        mapping.update(runtime='claude', session=session, worker_pid=os.getpid(), runtime_pid=pid,
+        mapping.update(runtime='claude', session=session, execution_id=turn.execution_id,
+                       worker_pid=os.getpid(), runtime_pid=pid,
                        trace_file=str(trace))
         (directory / 'mapping.yml').write_text(yaml.safe_dump(mapping))
 
@@ -210,6 +211,61 @@ def test_claude_native_resume_and_activity(tmp_path: Path, claude_environment: N
     events = TraceReader(first.trace, 'claude', result['session_id']).page()['events']
     usages = [event['usage']['tokens'] for event in events if event['kind'] == 'usage']
     assert usages == [dict(input_uncached=11, cache_read=7, cache_write=2, output=5, input=20)] * 2
+
+
+def test_claude_public_launch_diagnostics_are_bounded_and_correlated(
+    tmp_path: Path, claude_environment: None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Compare public diagnostic fields with actual Popen inputs, excluding private data."""
+    import subprocess
+    from graphtraj.execution.runner_status import runtime_caller
+    from graphtraj.execution.runner_models import RunnerError
+    from graphtraj.interfaces import tools
+
+    runner, _, _ = result_project(tmp_path)
+    monkeypatch.setenv('CLAUDE_FIXTURE_DIAGNOSTICS', '1')
+    monkeypatch.setenv('CLAUDE_FIXTURE_PERMISSION_MODE', 'default')
+    captured = []
+    popen = subprocess.Popen
+
+    def observe(argv: list[str], **kwargs: object):
+        """Record the real subprocess boundary while executing the controlled native peer."""
+        if '--input-format' in argv:
+            captured.append(list(argv))
+        return popen(argv, **kwargs)
+
+    monkeypatch.setattr(subprocess, 'Popen', observe)
+    with ExitStack() as stack:
+        turn, _, _ = execution(tmp_path, stack, 'private-prompt-marker', claude={'permission_mode': 'auto'})
+        result = turn.run()
+    with runtime_caller(runner, None):
+        document = tools.read_reports({'alias': 'research@x1'}, cwd=tmp_path).document
+    diagnostics = document['runtime_diagnostics']
+    assert diagnostics['execution_id'] == result['execution_id']
+    assert diagnostics['session_id'] == result['session_id']
+    assert diagnostics['popen_returned'] is True
+    argv = captured[0]
+    launch = diagnostics['launch']
+    assert launch['permission_mode'] == argv[argv.index('--permission-mode') + 1] == 'auto'
+    settings = json.loads(argv[argv.index('--settings') + 1])
+    assert launch['inline_default_mode'] == settings['permissions']['defaultMode'] == 'auto'
+    assert launch['model'] == argv[argv.index('--model') + 1] == 'claude-opus-5-5'
+    assert launch['effort'] == argv[argv.index('--effort') + 1] == 'high'
+    assert launch['restricted'] and launch['strict_mcp'] and launch['stdio_permission_handler']
+    assert launch['sandbox']['enabled'] is True
+    assert launch['sandbox']['allowUnsandboxedCommands'] is False
+    assert diagnostics['initialize']['autoModeAvailable'] is False
+    assert diagnostics['initialize']['control_status'] == 'success'
+    assert diagnostics['system_init']['permissionMode'] == 'default'
+    assert diagnostics['initialize']['reason'] == diagnostics['system_init']['reason'] == 'unknown'
+    assert {'source': 'stderr', 'category': 'native_auto_unavailable'} in diagnostics['warnings']
+    serialized = json.dumps(diagnostics)
+    for private in ('sk-diagnosticsecret', 'private@example.invalid', 'private-unknown-reason',
+                    'private-prompt-marker', str(tmp_path), 'mcpServers'):
+        assert private not in serialized
+    assert len(serialized) < 4096
+    with runtime_caller(runner, 'research@x2'), pytest.raises(RunnerError):
+        tools.read_reports({'alias': 'research@x1'}, cwd=tmp_path)
 
 
 def test_claude_permission_reply_and_error(tmp_path: Path, claude_environment: None, monkeypatch: pytest.MonkeyPatch) -> None:

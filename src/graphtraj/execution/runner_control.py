@@ -327,6 +327,14 @@ def read_session_reports(alias: str, cwd: Path) -> dict:
     reports = [{'path': str(path), 'text': path.read_text(encoding='utf-8')}
                for path in paths if path.is_file()]
     result = {'alias': alias, 'reports': reports}
+    if mapping.get('runtime') == 'claude' and mapping.get('execution_id'):
+        diagnostic_path = directory / f"claude-diagnostics-{mapping['execution_id']}.yml"
+        if diagnostic_path.is_file() and not diagnostic_path.is_symlink():
+            diagnostics = yaml.safe_load(diagnostic_path.read_text())
+            if (isinstance(diagnostics, dict)
+                    and diagnostics.get('execution_id') == mapping['execution_id']
+                    and diagnostics.get('session_id') == mapping['session']):
+                result['runtime_diagnostics'] = diagnostics
     missing = [str(path) for path in paths if not path.is_file()]
     if missing:
         result['missing_reports'] = missing

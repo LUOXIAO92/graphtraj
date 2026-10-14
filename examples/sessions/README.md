@@ -241,3 +241,21 @@ user envelope and a compaction boundary. Opaque cases deliberately preserve
 facts that lack enough context for a faithful DSH semantic projection. The
 future collectors must resolve context before promoting them; this protocol
 does not assert opaque records are resumable across Runtimes.
+
+## DSH collection
+
+The DSH adapter archives Sessions as `dsh:<native-id>` and checkpoints native
+event sequence numbers. It retains seed and appended records, including streams,
+tool calls, failed attempts and unknown fields, through the Python Session store.
+Existing source classification and managed ownership checks distinguish Main
+from children; a Header association alone does not grant access.
+
+Attachment references retain archived bytes or a specific missing reason.
+`graphtraj.usage` selects final usage, or the latest stream usage snapshot when
+the final value is absent, once per attempt; `usageSource` identifies the selected
+location. DSH's uncached and cached input counters remain distinct. Flush and
+disposal drain pending semantic records, with failed flushes available for retry.
+
+The installed-library callback checks cover collection, flush, replay and
+disposal. The JSON files above remain structural examples, not live model captures
+or evidence that an existing project's history has been migrated.

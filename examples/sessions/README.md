@@ -283,3 +283,25 @@ can still lose received RPC output after the last checkpoint if Pi has not
 persisted that output; the archive does not claim this tail is recoverable.
 Controlled native SessionManager and subprocess checks cover these paths;
 they do not constitute live provider inference or migration of existing history.
+
+## Claude collection
+
+The Claude adapter retains native messages, tool exchanges, thinking/signatures,
+unknown records and final results in `claude:<native-id>` archives. The observed
+model comes from native output; a requested model is not proof of the model used.
+Unavailable probability or hidden content carries a missing reason. Intermediate
+message usage and final result usage remain distinguishable, not additive charges.
+
+When ancestry is not yet known, `session_read.pending` can contain
+`graphtraj/collection-pending`: durable raw observations, not canonical history.
+The store uses its existing draft and source checkpoints. Before any canonical
+event is published, `finish_initial_collection` confirms the ancestry and orders
+actual inherited records, their exact marker, then local observations in one
+transaction. Identity stays stable and the original Header observation is retained.
+This operation cannot rewrite already published history. Unknown ancestry stays
+pending and remains readable from an exported archive if its native source disappears.
+
+`session_read` retains its own-Session or human-project authorization boundary.
+Use bounded pages for large native records; Runtime clients can spill oversized
+tool results into files outside an Agent's permitted read paths. A successful
+request alone does not mean the Agent observed the returned content.

@@ -102,6 +102,7 @@ class ClaudeExecution:
                                            worktree / 'AGENTS.md', worktree / '.agents') if p.exists()]
         resources.extend(Path(path).resolve() for path in request['resources'])
         denied_read = [request['state_directory'], str(root / '.graphtraj/runner'),
+                       str(root / '.graphtraj/cli'),
                        str(root / '.codex'), str(Path.home() / '.codex'), str(home)]
         denied_write = [*map(str, resources), request['docs_directory'], str(home),
                         str(root / '.graphtraj/config.yml'), str(root / '.graphtraj/roles.yml'),

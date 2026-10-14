@@ -211,6 +211,8 @@ def test_public_query_authority_and_independent_archive(tmp_path: Path, monkeypa
         from graphtraj.runtimes.codex.managed_session import native_operation_features
         result = handle_request(request, cwd=tmp_path, allowed_features=native_operation_features())
         assert result.document['events'][0]['data']['ciphertext'] == 'opaque'
+        with pytest.raises(ValueError, match='unavailable'):
+            handle_request({**request, 'arguments': {'session_id': 'not-collected'}}, cwd=tmp_path)
     with runtime_caller(runner, 'research@x2'), pytest.raises(RunnerError, match='own verified'):
         handle_request(request, cwd=tmp_path)
     monkeypatch.setattr('graphtraj.sessions.query.caller_runtime', lambda: None)

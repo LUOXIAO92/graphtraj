@@ -45,7 +45,10 @@ class SessionStore:
         """Open an existing archive; never silently create an empty read target."""
         self.path = Path(path)
         mode = 'ro' if readonly else 'rw'
-        self.db = sqlite3.connect(self.path.resolve().as_uri() + f'?mode={mode}', uri=True)
+        try:
+            self.db = sqlite3.connect(self.path.resolve().as_uri() + f'?mode={mode}', uri=True)
+        except sqlite3.Error as error:
+            raise ValueError('Session archive is unavailable or unreadable.') from error
         self.db.execute('PRAGMA busy_timeout = 5000')
         self.db.execute('PRAGMA foreign_keys = ON')
         if not readonly:

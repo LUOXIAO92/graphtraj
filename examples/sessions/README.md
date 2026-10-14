@@ -85,6 +85,13 @@ message changes the message surface. A real fork uses `parentSession`,
 `isSeeded: true` and a `session/end-seed {inherited: true}` at the exact inherited
 prefix cut. The last tagged marker is that Session's cut. An ordinary untagged
 end-seed is a lifecycle boundary; neither is Agent or Task parentage.
+The marker cannot classify child-local hooks or collection observations as
+parent history. When native ancestry arrives late, preserve available raw
+observations durably without prematurely fixing an incorrect ancestry or log
+order. Appending a marker later cannot repair a boundary before already committed
+child events. Collector and storage implementations must preserve both facts
+and the canonical inheritance semantics; an opaque ancestry field is not a
+replacement for that contract.
 
 ## Provenance, absent data and reversibility
 

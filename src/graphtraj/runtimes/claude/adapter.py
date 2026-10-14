@@ -248,7 +248,12 @@ class ClaudeRuntimeAdapter:
                 preset = presets.get(reference)
                 config = preset.claude if preset is not None else None
                 if config is not None and 'read_paths' in config:
-                    if preset.runtime not in (None, 'claude'):
+                    # Connection presets have no resolved runtime here. The
+                    # original captured connection fixes it without reloading
+                    # a mutable catalog during Session recovery.
+                    same_connection = (preset.connection is not None
+                                       and preset.connection == request.get('connection'))
+                    if not (same_connection or preset.connection is None and preset.runtime == 'claude'):
                         raise ValueError('Original role no longer configures Claude resources')
                     refreshed['resources'] = _validated_resources(
                         config['read_paths'], Path(request['harness_root']),

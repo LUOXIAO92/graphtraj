@@ -212,16 +212,29 @@ def test_claude_public_interrupt_rechecks_drained_termination(
             assert after.get(key) == budget.get(key)
 
 
+@pytest.mark.parametrize('connection_role', [False, True])
 def test_recovery_refreshes_only_original_role_read_paths(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
     fake_codex: FakeCodex,
     tmp_path: Path,
+    connection_role: bool,
 ) -> None:
     """Later explicit grants reach resumed CLI policy without replacing captured settings."""
     root, environment = setup(installed_commands, temporary_git_repository, fake_codex, tmp_path)
     role_file = root / '.graphtraj/roles.yml'
     original = yaml.safe_load(role_file.read_text())['roles']['researcher']
+    if connection_role:
+        # Only the disposable fixture HOME owns this catalog, never the user.
+        catalog = Path(environment['HOME']) / '.graphtraj/connections.yml'
+        catalog.parent.mkdir(parents=True, exist_ok=True)
+        catalog.write_text(yaml.safe_dump({'version': 1, 'runtimes': {'claude': {
+            'runtime': 'claude', 'providers': {'anthropic': {'models': {'opus-5_5': {
+                'id': 'claude-opus-5-5', 'source': 'manual', 'supported_efforts': ['high'],
+            }}}},
+        }}}))
+        original = {key: value for key, value in original.items() if key not in {'runtime', 'model'}}
+        original['connection'] = 'claude/anthropic/opus-5_5'
     roles = {'roles': {'original_team': {'researcher': original},
                       'other_team': {'researcher': dict(original)}},
              'role_tree': {'original_team.researcher': {}, 'other_team.researcher': {}}}
@@ -234,6 +247,11 @@ def test_recovery_refreshes_only_original_role_read_paths(
     first = settled(installed_commands, root, environment, alias)
     directory = root / '.graphtraj/runner/sessions' / alias
     captured = yaml.safe_load((directory / 'launch.yml').read_text())['adapter_request']
+    if connection_role:
+        assert captured['runtime'] == 'claude'
+        assert captured['connection'] == 'claude/anthropic/opus-5_5'
+        # Resumption must use captured connection settings, not this catalog.
+        catalog.unlink()
     stopped = command(installed_commands, root, environment, 'interrupt', alias)
     assert stopped.returncode == 0, stopped.stdout + stopped.stderr
 
@@ -242,8 +260,8 @@ def test_recovery_refreshes_only_original_role_read_paths(
         path.mkdir(parents=True)
         (path / 'resource.txt').write_text('Explicit read-only resource\n')
     roles['roles']['original_team']['researcher'] = {
-        **original, 'model': 'later-model', 'reasoning_effort': 'max',
-        'base_url': 'https://later.invalid/v1',
+        **original, 'reasoning_effort': 'max',
+        **({} if connection_role else {'model': 'later-model', 'base_url': 'https://later.invalid/v1'}),
         'claude': {'read_paths': list(map(str, resources)), 'permission_mode': 'auto'},
     }
     roles['roles']['other_team']['researcher']['claude'] = {'read_paths': [str(root / 'unrelated')]}

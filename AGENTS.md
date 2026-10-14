@@ -1,7 +1,7 @@
 # Repository Guidance
 
 Keep this file limited to stable facts and constraints that apply to ordinary
-work in this Source Repository. Harness orchestration, Ticket-and-Team delivery
+work in this Source Repository. Harness orchestration, Task-and-Team delivery
 policy, review findings, and task-specific instructions belong in Main-owned
 Harness Project Documents.
 
@@ -17,7 +17,7 @@ Harness Project Documents.
 - `README.md` is the product-facing installation and operation guide.
 - `pyproject.toml` defines the GraphTraj distribution and the `graphtraj` /
   `agent-runner` command surfaces.
-- New delivery uses `.graphtraj` configuration, Ticket/Team state, retained
+- New delivery uses `.graphtraj` configuration, Task/Team state, retained
   Batches, Session Traces, and the Project Worldline. Historical Run state is
   never migrated, read as fallback, or modified by supported commands.
 - Reuse existing `CONTEXT.md` and `docs/` in linked Worktrees, preserving their
@@ -78,7 +78,7 @@ def calculate_total(
 
 ## Coordination and source investigation
 
-Main may investigate to decompose work and gives each Ticket its scope,
+Main may investigate to decompose work and gives each Task its scope,
 recorded task-breakdown difficulty assessment, investigation findings, relevant
 locations and reusable evidence. The Leader uses that assessment when selecting
 methods; new evidence requiring a changed assessment returns to task-breakdown.
@@ -95,7 +95,7 @@ descendants are confirmed stopped. Report missing tool capabilities through
 the direct hierarchy instead of bypassing it.
 
 Small fixes and test modifications do not use TDD or code-review Skills. Each
-Review axis runs at most once per Ticket, including later Rounds, Sessions and
+Review axis runs at most once per Task, including later Rounds, Sessions and
 Teams; the Leader verifies corrections using retained evidence. Do not wake an
 Agent that is already executing merely to collect reports or status. Preserve
 ponytail and reports with concrete supporting evidence.
@@ -136,10 +136,12 @@ are for the authorized test executors when source changes require them.
   seams. Do not freeze prose tokens, source text, private helper structure,
   absent code, or unsupported corruption scenarios.
 - Preserve existing user changes and keep unrelated cleanup outside the active
-  ticket.
+  task.
 - Do not modify, replace, move, or delete the Worktree `CONTEXT.md` or `docs/`
   views or their Harness-root targets.
-- Repository issues are tracked in GitHub Issues and managed with `gh`.
+- Project Tasks are retained locally and managed through GraphTraj's public
+  operations. Remote Issues are separate references; their numbers do not
+  determine local Task identity.
 
 ## Plain language and problem checks
 

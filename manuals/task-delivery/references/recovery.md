@@ -49,11 +49,11 @@ The administrative-only result is `applied`, with the actual changes and
 `recovery_event_id`. It does not claim that continuation occurred. Adding zero
 minutes does not clear a budget stop when continuation is requested either.
 
-A retained retired alias can request a positive Ticket budget increment with
+A retained retired alias can request a positive Task budget increment with
 `--no-resume` and without `--restore-active`. The same reviewer and caller
 authority checks apply. Approval changes only the retained budget; it neither
 restarts Sessions nor reverses retirement. Main can then separately use
-`continue --ticket-id <id> --budget-only --caused-by-event-id <recovery_event_id>`
+`continue --task-id <id> --budget-only --caused-by-event-id <recovery_event_id>`
 and ordinary swarm dispatch with explicit first instructions for a new member.
 Original accounting, stops and identities remain retained.
 
@@ -113,11 +113,11 @@ For a sampled stop that needs no additional administrative or time repair, the
 existing narrow continuation after actual authorization remains:
 
 ```text
-agent-runner continue --ticket-id <id> --caused-by-event-id <authorization-or-decision-event>
+agent-runner continue --task-id <id> --caused-by-event-id <authorization-or-decision-event>
 ```
 
 The default resumes existing roots with a generic continuation message. A revised
-Ticket or causal event alone does not deliver new execution limits. For an
+Task or causal event alone does not deliver new execution limits. For an
 explicitly restricted sampled-stop recovery, restore permission with
 `continue --budget-only`, then use `send` to deliver the allowed work, prohibited
 work, any explicitly authorized deadline and actual causal event ID to the
@@ -148,7 +148,7 @@ When authorized recovery work leaves the committed artifact unchanged, the
 original executing Session can write its new verification evidence and use
 `submit-result` with the same commit. Its actual parent accepts that new
 submission ID with `decide-result`, then the accepted result can be integrated
-through `graphtraj ticket integrate`. The original submission and acceptance
+through `graphtraj task integrate`. The original submission and acceptance
 remain historical facts. Do not decide the old submission a second time or
 manufacture an empty commit, a rejection or another Round to change the state.
 A new submission describes completed recovery work; it does not waive its
@@ -198,7 +198,7 @@ A replacement root retains the original owning host's notification connection.
 Replacement composes retirement and the existing role registration operation.
 If registration fails after retirement, handle the reported partial outcome
 through the public retry path; do not resume the retired Agent or claim that
-replacement succeeded. Ticket cleanup uses the same retirement operation before
+replacement succeeded. Task cleanup uses the same retirement operation before
 removing an unused Worktree and branch.
 
 If that root has no recorded connection, replacement uses the caller's existing

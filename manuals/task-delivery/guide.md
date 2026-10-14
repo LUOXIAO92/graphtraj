@@ -16,7 +16,7 @@ parameters. Known authorized operations need no prior describe call.
 ## Assign ready work
 
 Select tasks whose required predecessor results are integrated. Read the current
-Ticket definition and provide its scope, recorded difficulty assessment,
+Task definition and provide its scope, recorded difficulty assessment,
 resource assumptions, findings, inputs and acceptance criteria. Use that assessment
 to select the actual expertise and professional methods the task needs. A Team can
 have one member. Role names do not grant task acceptance or control authority;
@@ -31,7 +31,7 @@ and preserved evidence; use the project's selected professional methods without
 changing the common completion protocol.
 
 Formal dispatch uses `agent-runner --swarm-input <swarm.yml>` with the selected
-role, instruction and ready Ticket ID. Reuse the registered definition and
+role, instruction and ready Task ID. Reuse the registered definition and
 returned aliases. Supply external role instructions and explicitly selected
 resources through the configured Runtime's supported mechanisms; GraphTraj
 does not choose a professional Skill by its name.
@@ -57,10 +57,10 @@ The executing Session commits its file results and uses `submit-result` to recor
 the version, result references, completion statement, evidence and unresolved work.
 Use assigned report destinations. No role-specific filename or prose format is a
 universal submission or acceptance condition. Session completion alone does not
-accept or finish a Ticket.
+accept or finish a Task.
 
 Task notices identify their existing Agent alias and carry the recorded event
-and message, with `source: graphtraj`. They do not need duplicate Ticket or
+and message, with `source: graphtraj`. They do not need duplicate Task or
 Session identity fields. A mapped Agent notifies its actual direct parent; root
 notifications require the owning host's existing parent Session connection.
 Keep that host binding alive while Agents can still produce events, including
@@ -99,16 +99,16 @@ valid evidence for unchanged inputs and verify the affected combined result
 through the project's assigned executor. No coding review or named merge role
 is a universal integration requirement.
 
-Integrate the accepted result with `graphtraj ticket integrate`, using the task's
+Integrate the accepted result with `graphtraj task integrate`, using the task's
 necessary validation and its assigned executor. If integration changes the accepted
 result, confirm the affected behavior before completion and reuse unaffected
 checks. For an actual conflict, use a permitted specialist and the retained evidence.
 
-After integration use `agent-runner cleanup --ticket-id <id>`, retain original
+After integration use `agent-runner cleanup --task-id <id>`, retain original
 Batches/Sessions/Traces, regenerate the task graph and continue newly ready work. A completed input
 remains a dependency. A later node absorbs an earlier result only when it
 actually contains the artifact its consumer needs; retain independent inputs.
-A failed integration or necessary check does not complete the Ticket or unlock its
+A failed integration or necessary check does not complete the Task or unlock its
 successors. Finish when the accepted scope is integrated or authorized progress is
 blocked; report exact results and remaining obstacles.
 
@@ -130,8 +130,8 @@ required.
 The Adapter runs and collects the checker using Main's current native context
 and actual Runtime settings. Main does not relay prepare, spawn or collect
 operations. The checker identifies the current task from inherited context and
-verifies the applicable Issue, DAG and Tickets; a supplied Issue reference is
-a hint to verify, not a permanent task binding.
+verifies the applicable local Task, DAG and required Tasks. A supplied Issue
+reference is a hint to verify, not a permanent task binding.
 
 Every activation visibly reports its start and outcome. Completed work or
 legitimate waiting permits the turn to end without another Main input or reply.
@@ -161,7 +161,7 @@ focused rather than attaching the entire graph to every check.
 
 ## Limits and recovery
 
-Honor the existing Ticket budget and Runner's enforced stop. Budget notices go to
+Honor the existing Task budget and Runner's enforced stop. Budget notices go to
 the task's actual parent, which coordinates its children; stopping does not wait
 for the notice to be processed. Keep elapsed accounting and stop history. An
 interruption, recovery or replacement does not authorize more time.
@@ -173,6 +173,6 @@ and descendants are stopped and the real parent or user has authority. Preserve
 native approvals and file/report boundaries.
 
 When evidence changes task boundaries or reveals a common prerequisite, use
-the project's decomposition method and `ticket revise` to correct the graph before dependent
+the project's decomposition method and `task revise` to correct the graph before dependent
 work. Preserve original inputs and causal evidence. Product changes need user
 direction; ordinary product-preserving graph corrections follow project guidance.

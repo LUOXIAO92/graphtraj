@@ -1,17 +1,18 @@
 # Delivery command inputs
 
-Use block-style YAML for Ticket command inputs. Read current Ticket state before
+Use block-style YAML for Task command inputs. Read current Task state before
 updating it; commands validate and persist the supplied decisions.
 
-## Register a missing Ticket
+## Register a missing Task
 
-Run `graphtraj ticket register --ticket-file <issue.yml>` with:
+Run `graphtraj task register --task-file <task.yml>` with:
 
-- `ticket_id`: stable Ticket ID.
-- `ticket_name`: Ticket name.
-- `source`: accepted external task reference; v2 identity does not depend on its URL.
-- `title` and `body`: complete accepted Ticket, including acceptance criteria.
-- `dependencies`: prerequisite Ticket IDs, registered first.
+- `task_id`: stable Task ID.
+- `task_name`: Task name.
+- `source`: a nonempty reference to the accepted work, such as `local:task/12`
+  or an external Issue URL. It does not determine the local Task ID.
+- `title` and `body`: complete accepted Task, including acceptance criteria.
+- `dependencies`: prerequisite Task IDs, registered first.
 - `schema_version: 2`, `parent_id`, `disposition`, `replaced_by`, and
   `retirement_reason`: explicit task relationships and retirement facts.
   `parent_id: null` means a confirmed project root. Active tasks use
@@ -19,52 +20,70 @@ Run `graphtraj ticket register --ticket-file <issue.yml>` with:
   Superseded tasks name their direct replacements and reason; cancelled tasks
   have a reason and no replacements. Both retain their parent.
 
-Read `graphtraj ticket graph --schema` for the common task projection schema.
-Children, progress and the compatibility `active` value are derived. Existing
-Tickets use their `current_definition`; `ticket.md` is the immutable initial
-definition. Do not register an existing Ticket again.
+Read `graphtraj task graph --schema` for the common task projection schema.
+Children, progress and `active` are derived. Existing Tasks use their
+`current_definition`; `task.md` is the immutable initial
+definition. Do not register an existing Task again.
 
-Legacy definitions remain readable. Their unknown parent is not a confirmed
-root (`parent_known: false`); graph reads do not infer parentage from prose.
-Legacy writes retain their old contract, including the matching GitHub Issue
-source, and cannot overwrite a v2 task. Adopt a compatible native entry before
-an evidence-backed explicit migration; installing a CLI alone does not upgrade
-an already-running host.
+For a project retaining the old Ticket format, complete the explicit migration
+before adopting the Task interfaces. Keep the old installation with its old data
+until the cutover; installing a CLI alone does not upgrade an already-running
+host. Normal Task operations use the current format rather than old field or
+command aliases. Migration must preserve actual relationships; an unknown parent
+cannot be silently changed to a confirmed root.
+
+### Migrate a retained Ticket project
+
+Use the candidate's `graphtraj migrate-tickets` command on a representative
+project copy first, then verify the converted objects and relationships through
+the new public Task entries. The command converts explicit structural fields,
+event names and state paths, including `state/tickets` to `state/tasks`,
+`ticket.yml` to `task.yml`, and `ticket.md` to `task.md`. User text and native
+Runtime content retain their original meaning.
+
+Stop project writers before the actual cutover. The command retains a backup
+under `.graphtraj/backups` and restores the previous data if conversion fails.
+Keep the matching old installation available with that backup. A successful
+sample is not a full-project migration or permission to switch active Workers;
+complete the project's planned full-data validation and coordinated adoption.
+If an old definition lacks required relationship facts, resolve those facts from
+the retained evidence and record them through the old installation's public
+revision operation before conversion. Migration must report unresolved IDs and
+leave the old data usable rather than inventing parents or treating them as roots.
 
 ## Record readiness
 
-Run `graphtraj ticket update --state-file <state.yml>` for a selected pending
-Ticket whose prerequisites have validated integration. Supply:
+Run `graphtraj task update --state-file <state.yml>` for a selected pending
+Task whose prerequisites have validated integration. Supply:
 
-- `ticket_id` and `status: ready`.
+- `task_id` and `status: ready`.
 - Current `active_team_ordinal`, `worktree`, `branch`, and `current_candidate`.
-  Preserve these values; all four are null for a new Ticket.
+  Preserve these values; all four are null for a new Task.
 - `caused_by_event_ids` and `evidence_refs` supporting the authorized caller's readiness decision.
 
 ## Revise the graph
 
-Run `graphtraj ticket revise --revision-file <revision.yml>` with:
+Run `graphtraj task revise --revision-file <revision.yml>` with:
 
 - `product_preserving: true`.
 - `caused_by_event_ids` and Harness-root-relative `evidence_refs`.
-- `tickets`: every affected full definition. For v2, supply the registration
+- `tasks`: every affected full definition. Supply the registration
   fields above plus the observed `current_definition` (`null` only for a new
   task). Preserve stable IDs and direct replacement history.
-- `reopen_ticket_ids`: explicitly include completed tasks and affected ancestors
+- `reopen_task_ids`: explicitly include completed tasks and affected ancestors
   that must reopen when required work or relationships change.
 - Optional `dry_run: true` (or CLI `--dry-run`) validates without writing.
 
 Include definitions whose relationships change and evidence for parentage,
 retirement and scope changes. A stale definition fails instead of overwriting
-newer work. Legacy revisions still use their original `active`/`replaced_by`
-fields; they cannot clear v2 facts. Apply confirmed relations through the native
-revision, preserving original definitions and delivery history.
+newer work. Apply confirmed relations through the native revision, preserving
+original definitions and delivery history.
 
 ## Complete a task without a file result
 
-Use `graphtraj ticket complete --completion-file <completion.yml>` (Tool/MCP
-`ticket_complete`) for an active v2 task with its own accepted outcome and no
-file-delivery history. Supply `ticket_id`, observed `current_definition`, a
+Use `graphtraj task complete --completion-file <completion.yml>` (Tool/MCP
+`task_complete`) for an active v2 task with its own accepted outcome and no
+file-delivery history. Supply `task_id`, observed `current_definition`, a
 nonempty `reason`, `caused_by_event_ids`, existing `evidence_refs`, and
 `cancelled_scope`: a map of each required cancelled task ID to the reason that
 scope is no longer required, or `{}` when none applies.
@@ -172,7 +191,7 @@ for retained history, native rejection and changed-state handling.
 ## Integrate accepted files
 
 ```text
-graphtraj ticket integrate --ticket-id <id> -- <validation-command> <arguments>
+graphtraj task integrate --task-id <id> -- <validation-command> <arguments>
 ```
 
 Use the task's necessary validation and the project's assigned executor. For a
@@ -182,13 +201,13 @@ adopting the result. Keep the original argv and causal/stop history; it is not a
 shortcut for missing acceptance or failed validation. Use `--resolve-conflict`
 only for an actual conflict requiring a specialist.
 
-After successful integration use `agent-runner cleanup --ticket-id <id>` and
+After successful integration use `agent-runner cleanup --task-id <id>` and
 regenerate the task graph. These operations retain the original task evidence.
 
 For a retained integration conflict, select the permitted role explicitly:
 
 ```bash
-graphtraj ticket integrate --ticket-id <id> --resolve-conflict '<diagnosis>' --role <role-reference> -- <validation-command> <arguments>
+graphtraj task integrate --task-id <id> --resolve-conflict '<diagnosis>' --role <role-reference> -- <validation-command> <arguments>
 ```
 
 `--role` also accepts the same inline YAML role definition as swarm. The role's

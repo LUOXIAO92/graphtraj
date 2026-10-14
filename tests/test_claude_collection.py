@@ -130,6 +130,8 @@ def test_true_fork_retains_prefix_without_agent_parent(tmp_path: Path, monkeypat
     event = {'hook_event_name': 'SessionStart', 'source': 'fork', 'session_id': 'fork',
              'transcript_path': str(path), 'cwd': str(tmp_path)}
     result = hook(tmp_path, event, monkeypatch)
+    assert query(tmp_path, result['session_id'])['events'] == []
+    hook(tmp_path, {**event, 'hook_event_name': 'Stop'}, monkeypatch)
     data = query(tmp_path, result['session_id'])
     assert data['header']['parentSession'] == 'claude:original'
     assert data['header']['isSeeded']
@@ -206,14 +208,15 @@ def test_claude_command_hook_output(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     result = CliRunner().invoke(main, ['claude'], input=json.dumps(event))
     assert result.exit_code == 0 and json.loads(result.output) == {}
     with SessionStore(session_path(tmp_path / 'state', 'claude:new')) as store:
-        assert store.page()['events'][0]['data']['record'] == event
+        assert store.page()['events'] == []
+        assert store.pending()['event']['data']['observations'][0]['event']['data']['record'] == event
     invalid = CliRunner().invoke(main, ['claude'], input=json.dumps({**event, 'session_id': ''}))
     assert invalid.exit_code == 1
 
 
 @pytest.mark.parametrize('initial', ['missing', 'empty', 'populated'])
 def test_late_fork_and_interleaved_metadata(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, initial: str) -> None:
-    """Late native ancestry remains readable without rewriting an immutable header."""
+    """Late ancestry publishes the true inherited prefix before every local hook."""
     result_project(tmp_path)
     monkeypatch.setattr('graphtraj.sessions.query.caller_runtime', lambda: None)
     path = tmp_path / 'late.jsonl'
@@ -234,17 +237,19 @@ def test_late_fork_and_interleaved_metadata(tmp_path: Path, monkeypatch: pytest.
     path.write_text(''.join(json.dumps(r) + '\n' for r in [inherited, metadata, second, metadata]))
     hook(tmp_path, {**event, 'hook_event_name': 'Stop'}, monkeypatch)
     data = query(tmp_path, result['session_id'])
-    assert data['header'] == before
-    forks = [e for e in data['events'] if e.get('graphtraj', {}).get('fork')]
-    assert [e['graphtraj']['fork']['sourceMessageId'] for e in forks] == ['old-first', 'old-second']
-    assert all(e['graphtraj']['fork']['parentSession'] == 'claude:parent' for e in forks)
-    assert all(e['graphtraj']['fork']['inheritedThroughSeq'] == e['seq'] for e in forks)
-    assert forks[-1]['data']['record'] == second
-    markers = [e for e in data['events'] if e['type'] == 'session/end-seed']
-    if initial == 'populated':
-        assert markers[-1]['seq'] == forks[-1]['seq'] + 1
-    else:
-        assert not markers and 'parentSession' not in before
+    assert data['header']['id'] == before['id']
+    assert data['header']['graphtraj'] == before['graphtraj']
+    assert data['header']['parentSession'] == 'claude:parent'
+    assert data['header']['isSeeded']
+    assert [e['data']['record'] for e in data['events'][:2]] == [inherited, second]
+    assert data['events'][2]['type'] == 'session/end-seed'
+    assert data['events'][2]['data']['inherited'] is True
+    assert all(e['data'].get('record', {}).get('hook_event_name') is None
+               for e in data['events'][:2])
+    original = [e['graphtraj']['initialHeader'] for e in data['events']
+                if 'initialHeader' in e.get('graphtraj', {})]
+    assert original == [before]
+    assert any(e['data'].get('record') == event for e in data['events'][3:])
     hook(tmp_path, {**event, 'source': 'resume'}, monkeypatch)
     assert len(query(tmp_path, result['session_id'])['events']) == len(data['events']) + 1
     with SessionStore(session_path(tmp_path / 'state', result['session_id'])) as store:
@@ -287,3 +292,23 @@ def test_stream_model_is_observed_not_requested(tmp_path: Path, observed: str | 
         else:
             assert output['data']['interrupted']
         store.validate()
+
+
+def test_unknown_fork_stays_pending_after_terminal_and_source_loss(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A fork hint without actual parent proof never manufactures ancestry."""
+    result_project(tmp_path)
+    monkeypatch.setattr('graphtraj.sessions.query.caller_runtime', lambda: None)
+    path = tmp_path / 'unknown.jsonl'
+    record = {'type': 'user', 'sessionId': 'unknown', 'message': {'content': 'local'}}
+    path.write_text(json.dumps(record) + '\n')
+    event = {'hook_event_name': 'SessionStart', 'source': 'fork', 'session_id': 'unknown',
+             'transcript_path': str(path), 'cwd': str(tmp_path)}
+    result = hook(tmp_path, event, monkeypatch)
+    path.unlink()
+    hook(tmp_path, {**event, 'hook_event_name': 'Stop'}, monkeypatch)
+    data = query(tmp_path, result['session_id'])
+    assert data['events'] == [] and 'parentSession' not in data['header']
+    pending = data['pending']['event']
+    assert pending['graphtraj']['missing'][0]['path'] == 'parentSession/isSeeded'
+    records = [o['event']['data']['record'] for o in pending['data']['observations']]
+    assert records == [record, event, {**event, 'hook_event_name': 'Stop'}]

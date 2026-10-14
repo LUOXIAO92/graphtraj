@@ -160,7 +160,7 @@ def current_connection() -> dict | None:
 def send_event(connection: Mapping[str, Any], event: dict[str, str]) -> dict:
     """Use a bounded proxy connection to the existing service for this event only."""
     from graphtraj.runtimes.codex.app_server import CodexAppServer
-    from graphtraj.workspace.runner_project import runtime_executable
+    from graphtraj.workspace.runner_project import discover_project_root, runtime_executable
 
     if (set(event) != {'source', 'alias', 'event', 'message'}
             or event['source'] != 'graphtraj'
@@ -185,7 +185,10 @@ def send_event(connection: Mapping[str, Any], event: dict[str, str]) -> dict:
             # invalidate a newer fork that already includes this notification.
             pending = []
             try:
-                directory = session_binding(Path.cwd(), 'codex', connection['session']).parent
+                # Completion senders run in their assigned Worktree, whereas
+                # Main's binding belongs to the containing Harness Project.
+                root = discover_project_root(Path.cwd())
+                directory = session_binding(root, 'codex', connection['session']).parent
             except RunnerError:
                 directory = None  # This host has no project completion binding.
             if directory is not None:

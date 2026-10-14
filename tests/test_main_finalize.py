@@ -1053,8 +1053,10 @@ def test_superseded_fork_retains_cancellation(host: tuple[Path, Path], options: 
 
 
 @pytest.mark.parametrize('delivery', ['same-turn', 'different-turn', 'refused'])
+@pytest.mark.parametrize('sender_directory', ['root', 'worktree'])
 def test_acknowledged_input_cancels_running_check(
     host: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch, delivery: str,
+    sender_directory: str,
 ) -> None:
     """A real send receipt interrupts the peer before its delayed verdict exists."""
     import threading
@@ -1062,7 +1064,9 @@ def test_acknowledged_input_cancels_running_check(
     from graphtraj.runtimes.codex import app_server, host_events
 
     root, binding = host
-    monkeypatch.chdir(root)
+    cwd = root if sender_directory == 'root' else root / '.graphtraj' / '.agent-worktrees' / 'child'
+    cwd.mkdir(parents=True, exist_ok=True)
+    monkeypatch.chdir(cwd)
     monkeypatch.setattr(app_server, 'CodexAppServer', lambda **kwargs: CodexAppServer(
         cwd=root, command=(sys.executable, str(root / 'peer.py')), experimental_api=True,
     ))

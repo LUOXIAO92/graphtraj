@@ -15,6 +15,7 @@ from typing import Any
 
 SESSION_FORMAT_VERSION = 4
 EXTENSION_VERSION = 1
+INITIAL_COLLECTION_TYPE = 'graphtraj/collection-pending'
 MAX_SAFE_INTEGER = 2**53 - 1
 SURFACE_TYPES = frozenset({
     'user/message', 'assistant/message', 'system/message',
@@ -471,6 +472,7 @@ def validate_session(header: dict, events: list[dict], *, reconstruct: bool = Fa
         validate_event(event)
         _require(event['seq'] == seq, 'event.contiguous-seq')
         kind = event['type']
+        _require(kind != INITIAL_COLLECTION_TYPE, 'event.pending-collection is not canonical history')
 
         if kind in EXTENSION_TYPES:
             _require('graphtraj' in header, 'header.graphtraj required for extensions')

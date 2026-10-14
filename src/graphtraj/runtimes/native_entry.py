@@ -108,7 +108,7 @@ def dsh_event(event: dict, cwd: Path) -> dict:
 
 
 @click.command()
-@click.argument('runtime', type=click.Choice(['pi', 'dsh']))
+@click.argument('runtime', type=click.Choice(['pi', 'dsh', 'claude']))
 @click.option('--collect', is_flag=True, help='Collect the owning Pi extension event pipe.')
 def main(runtime: str, collect: bool = False) -> None:
     """Handle one native extension event without exporting config in environment."""
@@ -123,8 +123,19 @@ def main(runtime: str, collect: bool = False) -> None:
         event = json.load(sys.stdin)
         if not isinstance(event, dict):
             raise ValueError('A native event object is required.')
-        result = (pi_event if runtime == 'pi' else dsh_event)(event, Path.cwd())
+        if runtime == 'claude':
+            from graphtraj.runtimes.claude.collection import collect_hook
+
+            collect_hook(event, Path.cwd())
+            # Claude command hooks accept their own output schema, not the
+            # collector's internal result metadata. Successful collection is silent.
+            result = {}
+        else:
+            result = (pi_event if runtime == 'pi' else dsh_event)(event, Path.cwd())
     except Exception as error:
+        if runtime == 'claude':
+            click.echo(f'Claude Session collection failed: {error}', err=True)
+            raise click.exceptions.Exit(1) from error
         result = {'error': str(error)}
     click.echo(json.dumps(result, ensure_ascii=False))
 

@@ -18,7 +18,7 @@ import sqlite3
 from typing import Iterator
 
 from graphtraj.sessions.protocol import (
-    snapshot_event, validate_header, validate_session, validate_stream,
+    INITIAL_COLLECTION_TYPE, snapshot_event, validate_header, validate_session, validate_stream,
 )
 
 
@@ -115,7 +115,7 @@ class SessionStore:
 
     @property
     def header(self) -> dict:
-        """Return detached immutable metadata, including fork provenance."""
+        """Return detached metadata; initial ancestry can be confirmed before publication."""
         return json.loads(self.db.execute('SELECT value FROM header').fetchone()[0])
 
     @property
@@ -188,6 +188,82 @@ class SessionStore:
         """Return the latest durable unfinished output separately from final events."""
         row = self.db.execute('SELECT source, value FROM draft').fetchone()
         return {'source': row[0], 'event': json.loads(row[1])} if row else None
+
+    def stage_initial_observation(self, event: dict, *, source: str, position: int) -> bool:
+        """Persist raw observations and cursors before ancestry/order are known.
+
+        The existing draft is queryable and exported with the archive. This seam
+        cannot reopen initialization after any canonical event has committed.
+        """
+        event = snapshot_event(event)
+        with self._transaction():
+            if self.next_seq:
+                raise ValueError('Canonical collection has already started.')
+            if not self._fresh(source, position):
+                return False
+            pending = self.pending()
+            if pending and pending['event']['type'] != INITIAL_COLLECTION_TYPE:
+                raise ValueError('Another unfinished collection occupies the draft.')
+            draft = pending['event'] if pending else {
+                'type': INITIAL_COLLECTION_TYPE, 'seq': 0, 'time': event['time'],
+                'data': {'observations': []}, 'graphtraj': {
+                    'version': 1, 'initialHeader': self.header,
+                    'missing': [{'path': 'parentSession/isSeeded',
+                                 'reason': 'Native ancestry and inherited cut not yet confirmed.'}]}}
+            draft['data']['observations'].append({
+                'source': source, 'position': position, 'event': event})
+            self.db.execute('INSERT OR REPLACE INTO draft VALUES (1, ?, ?)',
+                            ('initial-collection', _json(draft)))
+            self._advance(source, position)
+        return True
+
+    def finish_initial_collection(
+        self,
+        *,
+        parent_session: str | None,
+        inherited: list[tuple[str, int]],
+    ) -> None:
+        """Confirm initial ancestry once, before publishing any canonical events.
+
+        ``inherited`` identifies verified parent records by their durable source
+        coordinates, in inherited order. Every other observation follows the
+        exact marker. Identity fields stay unchanged; the original header is
+        retained on the first local observation. Draft removal, header and log
+        publication commit together; source cursors already refer to this draft.
+        """
+        with self._transaction():
+            pending = self.pending()
+            if self.next_seq or not pending or pending['event']['type'] != INITIAL_COLLECTION_TYPE:
+                raise ValueError('Only pending initial collection can confirm ancestry.')
+            if bool(parent_session) != bool(inherited) or parent_session == self.header['id']:
+                raise ValueError('A real parent and nonempty inherited prefix are required together.')
+            observations = pending['event']['data']['observations']
+            indexed = {(o['source'], o['position']): o['event'] for o in observations}
+            if len(set(inherited)) != len(inherited) or any(key not in indexed for key in inherited):
+                raise ValueError('Inherited coordinates must identify distinct retained observations.')
+            events = [deepcopy(indexed[key]) for key in inherited]
+            if inherited:
+                events.append({'type': 'session/end-seed', 'seq': 0,
+                               'time': events[-1]['time'], 'data': {'inherited': True}})
+            local = [deepcopy(o['event']) for o in observations
+                     if (o['source'], o['position']) not in set(inherited)]
+            if not local:
+                raise ValueError('Retain a local collection observation for the original header.')
+            local[0].setdefault('graphtraj', {'version': 1})['initialHeader'] = pending['event']['graphtraj']['initialHeader']
+            events.extend(local)
+            header = self.header
+            header['isSeeded'] = bool(inherited)
+            if parent_session:
+                header['parentSession'] = parent_session
+            else:
+                header.pop('parentSession', None)
+            for seq, event in enumerate(events):
+                event['seq'] = seq
+            validate_session(header, events)
+            self.db.execute('UPDATE header SET value=? WHERE id=1', (_json(header),))
+            for event in events:
+                self._insert(event)
+            self.db.execute('DELETE FROM draft')
 
     def page(self, after: int = -1, limit: int = 200) -> dict:
         """Read an indexed bounded page; its cursor remains valid as events append."""

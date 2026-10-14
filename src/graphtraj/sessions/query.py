@@ -41,7 +41,8 @@ def read_session(cwd: Path, session_id: str, after: int = -1, limit: int = 200) 
         header = store.header
         native = header.get('graphtraj', {}).get('native', {})
         if own is not None and (native.get('runtime') != own['runtime']
-                                or native.get('sessionId') != own['session']):
+                                or native.get('sessionId') != own['session']
+                                or native.get('agentId') is not None):
             raise RunnerError('authority-denied', 'Agent archive access is limited to its own verified native Session.')
         if header['id'] != session_id:
             raise ValueError('Session archive identity does not match its location.')

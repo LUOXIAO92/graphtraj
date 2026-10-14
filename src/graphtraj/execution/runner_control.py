@@ -822,8 +822,8 @@ def _interrupt_session(
 def _confirm_termination(alias: str, directory: Path, mapping: dict) -> dict:
     """Recheck an ended owner's native evidence without replacing its failure.
 
-    Startup and confirmation share the same lock. No resume, PID-based signal
-    or administrative change is part of this original-execution confirmation.
+    Startup and confirmation share the same lock. The Adapter may stop an
+    exactly verified owned group; resume and administrative changes stay separate.
     """
     runner = directory.parent.parent
     with execution_start_lock(runner):
@@ -834,14 +834,16 @@ def _confirm_termination(alias: str, directory: Path, mapping: dict) -> dict:
         confirm = getattr(adapter, 'confirm_termination', None)
         if confirm is None:
             raise RunnerError('termination-unconfirmed', 'This Runtime has no retained native termination confirmation.')
+        request, _, _ = _read_session_resume_request(directory, mapping)
         try:
-            evidence = confirm(directory, mapping)
+            evidence = confirm(directory, mapping, request)
         except RuntimeAdapterError as error:
             raise RunnerError(error.code, error.message) from error
         execution_file = directory / 'execution.yml'
         receipt = {
             **{key: mapping[key] for key in ('session', 'execution_id', 'worker_pid', 'runtime_pid')},
             'execution_sha256': hashlib.sha256(execution_file.read_bytes()).hexdigest(),
+            'original_execution': read_execution_result(execution_file),
             'terminal_confirmed': True, 'evidence': evidence,
         }
         path = directory / f"terminal-confirmation-{mapping['execution_id']}.yml"

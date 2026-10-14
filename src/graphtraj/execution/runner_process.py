@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ctypes
+import math
 import os
 import signal
 import subprocess
@@ -259,3 +260,113 @@ def _process_arguments(pid: int) -> list[str]:
     if len(arguments) != count or count < 1:
         raise OSError('Process argument record is incomplete')
     return [os.fsdecode(arg) for arg in arguments]
+
+
+def process_started_at(pid: int) -> float:
+    """Read process creation time from the kernel, refusing unavailable identity."""
+    if sys.platform == 'darwin':
+        library = _libproc()
+        record = ctypes.create_string_buffer(136)
+        # PROC_PIDTBSDINFO: pbi_start_tvsec/usec follow the 120-byte BSD prefix.
+        if library is None or library.proc_pidinfo(pid, 3, 0, record, len(record)) != len(record):
+            raise OSError('Process creation time is unavailable')
+        seconds = int.from_bytes(record.raw[120:128], sys.byteorder)
+        micros = int.from_bytes(record.raw[128:136], sys.byteorder)
+        return seconds + micros / 1_000_000
+    if sys.platform.startswith('linux'):
+        fields = Path(f'/proc/{pid}/stat').read_text().rpartition(')')[2].split()
+        if len(fields) <= 19:
+            raise OSError('Process creation record is incomplete')
+        boot = next(line.split()[1] for line in Path('/proc/stat').read_text().splitlines()
+                    if line.startswith('btime '))
+        return int(boot) + int(fields[19]) / os.sysconf('SC_CLK_TCK')
+    raise OSError('Process creation time is unsupported')
+
+
+def _runtime_group(group: int) -> list[tuple[int, int, int]]:
+    """Read only the retained group; unrelated processes grant no authority."""
+    if sys.platform != 'darwin':
+        rows = subprocess.check_output(
+            ['/bin/ps', '-e', '-o', 'pid=,ppid=,pgid=,stat='], text=True,
+        )
+        return [tuple(map(int, fields[:3])) for row in rows.splitlines()
+                if (fields := row.split()) and int(fields[2]) == group
+                and not fields[3].startswith('Z')]
+    library = _libproc()
+    if library is None:
+        raise OSError('Native process group enumeration is unavailable')
+    # PROC_PGRP_ONLY avoids querying identities of other Agents or OS services.
+    ctypes.set_errno(0)
+    size = library.proc_listpids(2, group, None, 0)
+    if size < 0 or (size == 0 and ctypes.get_errno()):
+        raise OSError('Native process group enumeration failed')
+    pids = (ctypes.c_int * (size // 4 + 128))()
+    ctypes.set_errno(0)
+    written = library.proc_listpids(2, group, pids, ctypes.sizeof(pids))
+    if written < 0 or written >= ctypes.sizeof(pids) or (written == 0 and ctypes.get_errno()):
+        raise OSError('Native process group enumeration is incomplete')
+    result = []
+    for pid in pids[:written // 4]:
+        record = ctypes.create_string_buffer(_SHORTBSDINFO_BUFFER_SIZE)
+        # Nonzero arg explicitly includes zombies (XNU proc_pidinfo findzomb).
+        # An ESRCH from the live-only query is not a termination observation.
+        count = library.proc_pidinfo(pid, _PROC_PIDT_SHORTBSDINFO, 1, record, len(record))
+        if count != len(record):
+            if process_is_alive(pid):
+                raise OSError('Owned process group identity is unavailable')
+            continue
+        values = [int.from_bytes(record.raw[offset:offset + 4], sys.byteorder)
+                  for offset in (0, 4, 8, 12)]
+        if values[2] == group and values[3] != 5:
+            result.append(tuple(values[:3]))
+    return result
+
+
+def settle_runtime_group(
+    pid: int, executable: Path, session: str, owned_at: float | None,
+) -> dict:
+    """Observe or stop an exactly identified Runtime group, never a guessed PID.
+
+    The Adapter must have created the retained leader with start_new_session.
+    Its Worker must have released ownership and the caller must hold the Runner
+    startup lock. An orphaned nonempty group has no verifiable leader and is
+    refused. A live leader must predate this execution's retained heartbeat;
+    its kernel start time is rechecked before signalling to detect PID reuse.
+    """
+    if type(pid) is not int or pid <= 1 or not session:
+        raise OSError('Runtime group identity is unavailable')
+    if type(owned_at) not in (int, float) or not math.isfinite(owned_at):
+        owned_at = None
+    signals = []
+    for sig in (signal.SIGTERM, signal.SIGKILL, None):
+        members = _runtime_group(pid)
+        if not members:
+            return {'method': 'current-process-group', 'process_group': pid,
+                    'running_members': [], 'signals': signals, 'observed_at': time.time()}
+        if sig is None:
+            raise OSError('The owned Runtime group still has running members')
+        arguments = _process_arguments(pid)
+        started = process_started_at(pid)
+        if (not any(row[0] == pid for row in members)
+                or owned_at is None or started <= 0 or started > owned_at
+                or process_executable(pid) != executable.resolve()
+                or not any(arguments[index:index + 2] == [flag, session]
+                           for index in range(len(arguments))
+                           for flag in ('--session-id', '--resume'))
+                or not any(arguments[index:index + 2] == ['--input-format', 'stream-json']
+                           for index in range(len(arguments)))
+                or '--print' not in arguments):
+            raise OSError('Current Runtime group leader does not match the retained Claude invocation')
+        # Check again immediately before signalling, as for pre-Runtime stop.
+        if (os.getpgid(pid) != pid or _process_arguments(pid) != arguments
+                or process_started_at(pid) != started
+                or process_executable(pid) != executable.resolve()):
+            raise OSError('Runtime process identity changed during stop')
+        os.killpg(pid, sig)
+        signals.append(sig.name)
+        deadline = time.monotonic() + OPERATION_TIMEOUT_SECONDS
+        while time.monotonic() < deadline:
+            if not _runtime_group(pid):
+                break
+            time.sleep(0.05)
+    raise OSError('Runtime group stopping could not be confirmed')

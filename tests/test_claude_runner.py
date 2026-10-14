@@ -121,7 +121,7 @@ def test_claude_public_interrupt_rechecks_drained_termination(
     tmp_path: Path,
     native_idle: bool,
 ) -> None:
-    """Late native settlement can be confirmed; pipe exit alone cannot be."""
+    """Confirm retained settlement or current stopping when old receipts are missing."""
     root, environment = setup(installed_commands, temporary_git_repository, fake_codex, tmp_path)
     # The peer receives cancellation but settles only after the five-second
     # read loop ends, while the original Worker drains and closes its pipes.
@@ -153,6 +153,10 @@ def test_claude_public_interrupt_rechecks_drained_termination(
     while settled(installed_commands, root, environment, alias)['activity'] != 'abnormal':
         assert time.monotonic() < deadline
         time.sleep(0.1)
+    if not native_idle:
+        # A historical Worker did not retain these fields. Public control must
+        # establish present stopping without inventing an old EOF/idle receipt.
+        (directory / f"claude-termination-{status['execution_id']}.yml").unlink()
     response = command(installed_commands, root, environment, 'interrupt', alias)
     assert response.returncode == 0, response.stdout + response.stderr
     result = yaml.safe_load(response.stdout)
@@ -177,17 +181,35 @@ def test_claude_public_interrupt_rechecks_drained_termination(
         assert retired.returncode == 0, retired.stdout + retired.stderr
         assert settled(installed_commands, root, environment, alias)['activity'] == 'idle'
     else:
-        assert member['interrupt_status'] == 'unconfirmed'
-        assert member['error']['code'] == 'operation-failed'
-        assert settled(installed_commands, root, environment, alias)['activity'] == 'abnormal'
-        # Model the supported historical record, which stored only the merged
-        # false outcome and no separate native/process/pipe observations.
-        (directory / f"claude-termination-{status['execution_id']}.yml").unlink()
-        legacy = command(installed_commands, root, environment, 'interrupt', alias)
-        missing = yaml.safe_load(legacy.stdout)['members'][0]
-        assert missing['interrupt_status'] == 'unconfirmed'
-        assert missing['error']['code'] == 'operation-failed'
+        assert member['interrupt_status'] == 'stopped', result
+        evidence = yaml.safe_load(Path(member['evidence']).read_text())['evidence']
+        assert evidence['method'] == 'current-process-group'
+        assert evidence['running_members'] == []
+        assert settled(installed_commands, root, environment, alias)['activity'] == 'idle'
         assert (directory / 'execution.yml').read_bytes() == original
+        receipt = Path(member['evidence'])
+        retained = receipt.read_bytes()
+        assert yaml.safe_load(retained)['original_execution']['terminal_confirmed'] is False
+        budget_file = root / '.graphtraj/state/tickets/320-claude-probe/execution-budget.yml'
+        budget = yaml.safe_load(budget_file.read_text())
+        # No new spending, reviewer, interactive prompt or replacement Session.
+        recovered = command(
+            installed_commands, root, environment, 'recover', alias,
+            '--reason', 'Current native group stopping was verified',
+            '--instruction', 'Complete the authorized original task',
+            '--allowed-scope', 'Same Session fixture continuation',
+            '--forbidden-scope', 'No new time or replacement',
+            '--caused-by-event-id', events(root)[-1]['event_id'],
+        )
+        assert recovered.returncode == 0, recovered.stdout + recovered.stderr
+        assert yaml.safe_load(recovered.stdout)['recovery_status'] == 'resumed'
+        resumed = settled(installed_commands, root, environment, alias)
+        assert resumed['session'] == status['session']
+        assert resumed['execution_id'] != status['execution_id']
+        assert receipt.read_bytes() == retained
+        after = yaml.safe_load(budget_file.read_text())
+        for key in ('started_at', 'allowance_minutes', 'approved_minutes', 'sessions'):
+            assert after.get(key) == budget.get(key)
 
 
 @pytest.mark.skipif(not os.environ.get('CLAUDE_REAL_TEST_BINARY'), reason='Explicit real CLI probe only')

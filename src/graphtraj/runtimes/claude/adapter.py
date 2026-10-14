@@ -238,11 +238,14 @@ class ClaudeRuntimeAdapter:
         except (OSError, ValueError, KeyError, TypeError) as error:
             raise RuntimeAdapterError('OPERATION_TOTAL_UNREADABLE', 'Cannot read Claude native Trace.') from error
 
-    def confirm_termination(self, directory: Path, mapping: Mapping[str, Any]) -> dict:
-        """Verify the original owner's retained native and pipe termination facts.
+    def confirm_termination(
+        self, directory: Path, mapping: Mapping[str, Any], request: Mapping[str, Any],
+    ) -> dict:
+        """Use retained settlement or current owned-group observations.
 
-        No process is signalled or inferred dead from its PID. Older executions
-        without these observations remain unconfirmed.
+        Missing historical EOF/idle observations do not prevent proving that
+        the original process group has now stopped. Identity mismatches remain
+        errors; current observations never overwrite the original outcome.
         """
         if not isinstance(mapping.get('execution_id'), str) or not mapping['execution_id']:
             raise RuntimeAdapterError('termination-unconfirmed', 'The original Claude execution identity is missing.',
@@ -253,7 +256,9 @@ class ClaudeRuntimeAdapter:
         try:
             if path.parent != directory or path.is_symlink():
                 raise ValueError('Invalid evidence path')
-            evidence = yaml.safe_load(path.read_text())
+            evidence = yaml.safe_load(path.read_text()) if path.exists() else None
+            if evidence is None and not path.exists():
+                return self._confirm_current_group(directory, mapping, request)
             if not isinstance(evidence, dict) or any(evidence.get(key) != value for key, value in identity.items()):
                 raise ValueError('Termination evidence does not match the original execution')
         except (OSError, ValueError, yaml.YAMLError) as error:
@@ -266,10 +271,32 @@ class ClaudeRuntimeAdapter:
         if type(evidence.get('runtime_exit_code')) is not int:
             missing.append('runtime_exit_code')
         if missing:
-            raise RuntimeAdapterError('termination-unconfirmed',
-                                      'Original Claude termination is unconfirmed: ' + ', '.join(missing) + '.',
-                                      terminal_confirmed=False)
+            return self._confirm_current_group(directory, mapping, request)
         return evidence
+
+    def _confirm_current_group(
+        self, directory: Path, mapping: Mapping[str, Any], request: Mapping[str, Any],
+    ) -> dict:
+        """Confirm present stopping under the Runner's ownership/startup guard."""
+        from graphtraj.execution.runner_process import settle_runtime_group
+        from graphtraj.execution.runner_heartbeat import read_heartbeat
+
+        try:
+            if (self.read_session_identity(directory) != mapping['session']
+                    or request.get('runtime') != 'claude'
+                    or request.get('worktree_path') != mapping['worktree_path']):
+                raise ValueError('Retained Claude launch identity differs')
+            heartbeat = read_heartbeat(directory)
+            owned_at = (heartbeat['updated_at'] if heartbeat is not None
+                        and all(heartbeat.get(key) == mapping[key]
+                                for key in ('execution_id', 'worker_pid')) else None)
+            return settle_runtime_group(
+                mapping['runtime_pid'], Path(request['executable']), mapping['session'], owned_at,
+            )
+        except (OSError, ValueError, KeyError, subprocess.SubprocessError) as error:
+            raise RuntimeAdapterError('termination-unconfirmed',
+                                      'Current Claude stopping is unconfirmed: ' + str(error),
+                                      terminal_confirmed=False) from error
 
     def current_execution_diagnostic(
         self,

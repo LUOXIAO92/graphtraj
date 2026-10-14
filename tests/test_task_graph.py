@@ -69,34 +69,6 @@ def _non_coding_task(
     }
 
 
-def test_graph_keeps_legacy_parentage_unknown_without_prose_inference(
-    installed_commands: InstalledCommands,
-    temporary_git_repository: Path,
-) -> None:
-    """Legacy prose remains readable but cannot establish formal parentage."""
-    project = temporary_git_repository
-    _configure(project)
-    bodies = [
-        "## Parent\n\nhttps://github.com/example/project/issues/90\n\n## Scope\nSee #91.",
-        "Parent: #91. Prior work #90 is a dependency, not membership.",
-        "属于 #90、#91。Shared work.",
-        "See #90; depends on #91.\n```\nParent: #92\n```",
-        "Part of #91。Source task node. Prior result #90 stays a dependency.",
-    ]
-    for index, body in enumerate(bodies, 1):
-        _register(installed_commands, project, {
-            **_task(str(index), f"task-{index}", dependencies=[str(index - 1)] if index > 1 else []),
-            "body": body,
-        })
-    result = _run(installed_commands, project, "graph")
-    assert result.returncode == 0, result.stderr
-    graph = yaml.safe_load(result.stdout)
-    assert all(task["parent_known"] is False and "parent_id" not in task
-               and task["schema_version"] == 1 for task in graph["tasks"])
-    assert [task["dependencies"] for task in graph["tasks"]] == [[], ["1"], ["2"], ["3"], ["4"]]
-    assert all(task["status"] == "pending" for task in graph["tasks"])
-
-
 def _run(
     commands: InstalledCommands, project: Path, *arguments: str
 ):

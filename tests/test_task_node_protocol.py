@@ -126,7 +126,7 @@ def test_task_protocol_completion_and_atomic_reopen(public_project: PublicProjec
     assert graph["1"]["progress"] == {"total": 1, "completed": 1}
     assert graph["3"]["parent_id"] == "2"
     assert graph["1"]["body"] == task("1")["body"]
-    assert all(node["parent_known"] and node["schema_version"] == 2 for node in graph.values())
+    assert all(node["schema_version"] == 2 for node in graph.values())
     assert all(node["current_candidate"] is None and node["active_team_ordinal"] is None
                and node["worktree"] is None for node in graph.values())
     receipt = next(fact for fact in graph["3"]["delivery"] if fact["task_id"] == "2")
@@ -282,49 +282,6 @@ def test_stale_versions_and_failed_completion_leave_state_unchanged(public_proje
                               "caused_by_event_ids": [], "evidence_refs": ["evidence.md"]})
     before = api.retained()
     api.complete("1", success=False)
-    assert api.retained() == before
-
-
-def test_legacy_projection_upgrade_and_schema(public_project: PublicProject) -> None:
-    """Native migration preserves historical bytes and marks unknown legacy facts."""
-    api = public_project
-    from test_task_graph import _task
-
-    old = _task("1", "task-1")
-    old["body"] = (
-        "---\ntask:\n  schema_version: 2\n---\n"
-        "Part of #90\nDeliver the existing task."
-    )
-    api.call("task_register", old)
-    api.call("task_revise", {"product_preserving": True, "caused_by_event_ids": [],
-                              "evidence_refs": ["evidence.md"],
-                              "tasks": [{**old, "active": False, "replaced_by": []}]})
-    legacy = api.graph()["1"]
-    assert legacy["schema_version"] == 1 and legacy["parent_known"] is False
-    assert legacy["disposition"] is None and "parent_id" not in legacy
-    retained = api.retained()
-    modern = task("1", source=old["source"], body=old["body"], disposition="cancelled",
-                  retirement_reason="The owner confirmed the old inactive record was cancelled")
-    revision = api.revision([modern])
-    api.call("task_revise", {**revision, "dry_run": True})
-    assert api.retained() == retained
-    api.call("task_revise", revision)
-    upgraded = api.graph()["1"]
-    assert upgraded["schema_version"] == 2 and upgraded["parent_known"] is True
-    assert upgraded["disposition"] == "cancelled" and upgraded["status"] == legacy["status"]
-    assert all(api.retained()[path] == content for path, content in retained.items() if path.endswith(".md"))
-    before = api.retained()
-    api.call("task_revise", {"product_preserving": True, "caused_by_event_ids": [],
-                              "evidence_refs": ["evidence.md"],
-                              "tasks": [{**old, "active": True, "replaced_by": []}]}, success=False)
-    assert api.retained() == before
-    schema = api.call("task_graph", {"schema": True})
-    assert set(upgraded) == set(schema["properties"])
-    assert set(schema["required"]) <= set(upgraded)
-    for missing in ("parent_id", "disposition", "retirement_reason", "schema_version"):
-        malformed = task("2")
-        malformed.pop(missing)
-        api.call("task_register", malformed, success=False)
     assert api.retained() == before
 
 

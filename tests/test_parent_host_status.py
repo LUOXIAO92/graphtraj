@@ -220,8 +220,9 @@ def test_public_usage_diagnostic_excludes_conversation(
     assert 'private inherited prose' not in json.dumps(result.document)
 
 
+@pytest.mark.parametrize(('outcome', 'started'), [('completed', True), ('cancelled', True), ('cancelled', False)])
 def test_completed_stop_refreshes_pathless_usage_and_cli_projection(
-    host_peer: Path, monkeypatch: pytest.MonkeyPatch,
+    host_peer: Path, monkeypatch: pytest.MonkeyPatch, outcome: str, started: bool,
 ) -> None:
     """A completion during the public wait replaces older evidence without a rollout read."""
     import yaml
@@ -258,9 +259,12 @@ def test_completed_stop_refreshes_pathless_usage_and_cli_projection(
             latest.mkdir(exist_ok=True)
             (latest / 'session.yml').write_text(yaml.safe_dump({
                 'runtime': 'codex', 'session': 'new-checker', 'parent': 'original-host'}))
-            (latest / 'execution.yml').write_text(yaml.safe_dump({
+            execution = {
                 'session': 'new-checker', 'parent': 'original-host', 'parent_turn': 'main-turn',
-                'turn': 'check-turn', 'outcome': 'completed', 'output': 'private checker prose',
+                'turn': 'check-turn' if started else None, 'outcome': outcome, 'output': 'private checker prose',
+                'cancellation': ({'turn': 'main-turn', 'submitted_at': 100,
+                                  'accepted_at': 101, 'confirmed_at': 101.05,
+                                  'private_field': 'private receipt data'} if outcome == 'cancelled' else {}),
                 'response_usage': {'first_response': first, 'responses': [first, second],
                                    'terminal_status': 'completed'},
                 'usage': {'input_tokens': 300, 'cached_input_tokens': 270, 'model_requests': 2},
@@ -268,7 +272,11 @@ def test_completed_stop_refreshes_pathless_usage_and_cli_projection(
                     'id': 'new-checker', 'sessionId': 'native-child', 'forkedFromId': 'original-host',
                     'ephemeral': True, 'cliVersion': '0.162.0'}},
                 'parent_configuration': settings,
-            }))
+            }
+            if not started:
+                execution.pop('response_usage')
+                execution['usage'] = {'input_tokens': None, 'cached_input_tokens': None, 'model_requests': None}
+            (latest / 'execution.yml').write_text(yaml.safe_dump(execution))
         return state
 
     monkeypatch.setattr(CodexAppServer, 'read_host_status', read_status)
@@ -279,10 +287,20 @@ def test_completed_stop_refreshes_pathless_usage_and_cli_projection(
     facts = result.document['completion_usage']
     assert facts['session'] == 'new-checker'
     assert facts['parent'] == 'original-host' and facts['parent_turn'] == 'main-turn'
-    assert facts['turn'] == 'check-turn' and facts['native_identity']['ephemeral'] is True
-    assert facts['response_usage']['first_response'] == first
-    assert facts['response_usage']['responses'] == [first, second]
-    assert facts['usage']['input_tokens'] == 300 and facts['usage']['model_requests'] == 2
+    assert facts['turn'] == ('check-turn' if started else None)
+    assert facts['native_identity']['ephemeral'] is True
+    if started:
+        assert facts['response_usage']['first_response'] == first
+        assert facts['response_usage']['responses'] == [first, second]
+        assert facts['usage']['input_tokens'] == 300 and facts['usage']['model_requests'] == 2
+    else:
+        assert facts['response_usage'] is None
+        assert facts['usage']['input_tokens'] is None and facts['usage']['model_requests'] is None
+    assert facts['outcome'] == outcome
+    assert facts['cancellation'] == ({'turn': 'main-turn', 'submitted_at': 100,
+                                      'accepted_at': 101, 'confirmed_at': 101.05}
+                                     if outcome == 'cancelled' else {})
+    assert 'private receipt data' not in json.dumps(result.document)
     assert facts['configuration'] == facts['parent_configuration']
     assert facts['configuration']['reasoningEffort'] == 'high'
     assert facts['configuration']['serviceTier'] is None

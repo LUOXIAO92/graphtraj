@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import ExitStack
 import json
 import shlex
 import sys
+import tempfile
+import time
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
@@ -142,7 +145,7 @@ def check(
     created: Callable[[str], None],
 ) -> dict[str, Any] | None:
     """Fork native context, bind the returned child and append only its check task."""
-    async def run() -> dict | None:
+    async def run(resources: ExitStack) -> dict | None:
         """Keep the child owned until terminal; inherited hooks filter its distinct ID."""
         child_id: str | None = None
 
@@ -188,6 +191,16 @@ def check(
             parent['turn_settings'] = dict(context.get('settings', {}))
             if 'effort' not in parent['turn_settings'] and 'reasoningEffort' in configuration:
                 parent['turn_settings']['effort'] = configuration['reasoningEffort']
+            # Register this attempt before requesting its fixed native fork:
+            # new input during the request also invalidates the pending check.
+            # Distinct addresses keep older sends away from later same-turn checks.
+            from graphtraj.execution.main_finalize import session_binding
+
+            directory = session_binding(Path(binding['cwd']), 'codex', binding['session']).parent
+            pending = Path(resources.enter_context(tempfile.TemporaryDirectory(
+                prefix='pending-', dir=directory,
+            )))
+            (pending / 'turn').write_text(context['turn'] + '\n', encoding='utf-8')
             child = await client.fork_session(parent)
             child_id = child.thread_id
             created(child_id)
@@ -200,11 +213,26 @@ def check(
                 'parent_configuration': {key: configuration[key] for key in child.configuration
                                          if key != 'thread' and key in configuration},
             }
+
+            def receipt() -> dict | None:
+                """Read a send appended only after native acceptance of this turn."""
+                lines = (pending / 'turn').read_text(encoding='utf-8').splitlines()
+                if len(lines) < 2:
+                    return None
+                try:
+                    return json.loads(lines[1])
+                except json.JSONDecodeError:
+                    # The sender appends to this file only after native success.
+                    # A concurrent write need not delay cancellation for timing data.
+                    return {'turn': context['turn'], 'submitted_at': None, 'accepted_at': None}
             # Stop's turn is still in progress, so native lastTurnId is invalid.
             # The fork itself fixes its history boundary. Reject a superseding
             # Main turn before starting any model request against that snapshot.
             if not await client.is_current_turn(binding['session'], context['turn']):
                 return {**evidence, 'outcome': 'cancelled', 'usage': usage.finish('')}
+            if (accepted := receipt()) is not None:
+                return {**evidence, 'outcome': 'cancelled', 'cancellation': accepted,
+                        'usage': usage.finish('')}
             try:
                 execution = await client.start_execution(child, prompt)
             except Exception as error:
@@ -228,6 +256,15 @@ def check(
             stopped = asyncio.create_task(main_stopped())
             checked = asyncio.create_task(client.wait(execution, timeout=540))
 
+            async def input_received() -> dict:
+                """Wait for an acknowledged send targeting this exact snapshot."""
+                while True:
+                    if (accepted := receipt()) is not None:
+                        return accepted
+                    await asyncio.sleep(0.05)
+
+            received = asyncio.create_task(input_received())
+
             async def cancel_execution() -> None:
                 """Confirm termination even if completion raced with cancellation."""
                 try:
@@ -244,10 +281,18 @@ def check(
             result = {}
             try:
                 # Leave time for native cancellation before the default 600s hook deadline.
-                finished, _ = await asyncio.wait((stopped, checked), return_when=asyncio.FIRST_COMPLETED)
-                if stopped in finished:
-                    stopped.result()
+                finished, _ = await asyncio.wait((stopped, checked, received), return_when=asyncio.FIRST_COMPLETED)
+                accepted = receipt()
+                if stopped in finished or received in finished or accepted is not None:
+                    if received in finished:
+                        evidence['cancellation'] = received.result()
+                    elif accepted is not None:
+                        evidence['cancellation'] = accepted
+                    else:
+                        stopped.result()
                     await cancel_execution()
+                    if 'cancellation' in evidence:
+                        evidence['cancellation']['confirmed_at'] = time.time()
                     outcome = 'cancelled'
                 else:
                     result = checked.result()
@@ -263,12 +308,16 @@ def check(
             finally:
                 stopped.cancel()
                 checked.cancel()
-                await asyncio.gather(stopped, checked, return_exceptions=True)
+                received.cancel()
+                await asyncio.gather(stopped, checked, received, return_exceptions=True)
                 for notice in client.drain_notifications():
                     usage.observe(notice)
             try:
                 if (not await client.is_current_turn(binding['session'], context['turn'])
                         and outcome != 'error'):
+                    outcome = 'cancelled'
+                if outcome != 'error' and (accepted := receipt()) is not None:
+                    evidence.setdefault('cancellation', accepted)
                     outcome = 'cancelled'
             except Exception as error:
                 outcome = 'error'
@@ -280,4 +329,5 @@ def check(
             return {**evidence, 'output': result.get('last_agent_message'),
                     'outcome': outcome, 'error': failure, 'turn': execution.turn_id,
                     'usage': observed_usage, 'response_usage': usage.response_evidence(execution.turn_id)}
-    return asyncio.run(run())
+    with ExitStack() as resources:
+        return asyncio.run(run(resources))

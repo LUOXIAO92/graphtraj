@@ -140,6 +140,7 @@ def test_claude_native_resume_and_activity(tmp_path: Path, claude_environment: N
         result = first.run()
         assert ready.is_set() and result['outcome'] == 'completed'
         assert first.terminal_confirmed
+        assert result['terminal_confirmed'] is True
         assert json.loads((tmp_path / 'native-selection.json').read_text()) == {
             'model': 'claude-opus-5-5', 'effort': 'high', 'environment_effort': 'high',
         }
@@ -188,7 +189,9 @@ def test_claude_send_and_confirmed_stop(tmp_path: Path, claude_environment: None
         assert ready.wait(5)
         assert turn.terminate()
         assert not turn.done.is_set() and turn.proc.poll() is None
-        assert future.result(timeout=10)['outcome'] == 'interrupted'
+        stopped = future.result(timeout=10)
+        assert stopped['outcome'] == 'interrupted'
+        assert stopped['terminal_confirmed'] is True
         assert turn.terminal_confirmed and turn.proc.poll() is not None
     with ExitStack() as stack, ThreadPoolExecutor(max_workers=1) as pool:
         turn, ready, _ = execution(tmp_path, stack, 'wait-again')

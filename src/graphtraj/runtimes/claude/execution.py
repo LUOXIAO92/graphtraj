@@ -380,6 +380,7 @@ class ClaudeExecution:
                                                           'runtime_exit_code': self.proc.poll()})
                 if failure is None and self.session is not None:
                     self.outcome = {'outcome': 'interrupted' if self.stopping.is_set() else 'completed',
+                                    'terminal_confirmed': self.terminal_confirmed,
                                     'session_id': self.session, 'execution_id': self.execution_id,
                                     'last_agent_message': last}
                 self.done.set()

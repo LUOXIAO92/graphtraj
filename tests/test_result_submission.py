@@ -44,6 +44,36 @@ def result_project(tmp_path: Path, *, multiple: bool = True) -> tuple[Path, Path
     return runner, team, commit
 
 
+def test_reports_expose_retained_terminal_diagnostics_only_to_owner(tmp_path: Path) -> None:
+    """Expose stop evidence without inventing historical fields or widening access."""
+    import pytest
+    from graphtraj.execution.runner_models import RunnerError
+
+    runner, _, _ = result_project(tmp_path)
+    terminal = runner / 'sessions/research@x1/execution.yml'
+    terminal.write_text(yaml.safe_dump({'outcome': 'interrupted', 'budget_stopped': True,
+                                       'terminal_confirmed': True}))
+    with runtime_caller(runner, None):
+        result = tools.read_reports({'alias': 'research@x1'}, cwd=tmp_path).document
+    assert result['execution'] == {
+        'outcome': 'interrupted', 'budget_stopped': True, 'terminal_confirmed': True,
+    }
+    with runtime_caller(runner, 'research@x2'), pytest.raises(RunnerError):
+        tools.read_reports({'alias': 'research@x1'}, cwd=tmp_path)
+    terminal.write_text(yaml.safe_dump({'outcome': 'interrupted'}))
+    with runtime_caller(runner, None):
+        result = tools.read_reports({'alias': 'research@x1'}, cwd=tmp_path).document
+    assert result['execution'] == {'outcome': 'interrupted'}
+    terminal.write_text(yaml.safe_dump({'outcome': 'runtime-error', 'error': {
+        'code': 'RUNTIME_PROVIDER_FAILED', 'message': 'Bearer test-secret-value',
+    }}))
+    with runtime_caller(runner, None):
+        result = tools.read_reports({'alias': 'research@x1'}, cwd=tmp_path).document
+    assert result['execution']['error'] == {
+        'code': 'RUNTIME_PROVIDER_FAILED', 'message': 'Bearer [redacted]',
+    }
+
+
 def test_researchers_submit_distinct_retained_results_without_coding_reports(tmp_path: Path) -> None:
     """Each actual author exposes its commit and retained evidence to its parent."""
     runner, team, commit = result_project(tmp_path)

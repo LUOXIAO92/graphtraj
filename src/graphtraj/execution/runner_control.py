@@ -337,7 +337,22 @@ def read_session_reports(alias: str, cwd: Path) -> dict:
     terminal = directory / 'execution.yml'
     if terminal.is_file():
         read_terminal_outcome(terminal)
-        message = yaml.safe_load(terminal.read_text()).get('last_agent_message')
+        retained = yaml.safe_load(terminal.read_text())
+        # Only the direct owner reaches this projection; missing historical
+        # confirmation or stop-source fields remain unknown, not inferred.
+        result['execution'] = {
+            key: retained[key] for key in (
+                'outcome', 'session_id', 'execution_id', 'terminal_confirmed', 'budget_stopped',
+            ) if key in retained
+        }
+        if isinstance(retained.get('error'), dict):
+            from graphtraj.runtimes.activity import redact
+
+            result['execution']['error'] = {
+                key: redact(str(retained['error'][key]))
+                for key in ('code', 'message') if key in retained['error']
+            }
+        message = retained.get('last_agent_message')
         if isinstance(message, str):
             result['last_agent_message'] = message
     return result

@@ -109,8 +109,16 @@ def dsh_event(event: dict, cwd: Path) -> dict:
 
 @click.command()
 @click.argument('runtime', type=click.Choice(['pi', 'dsh']))
-def main(runtime: str) -> None:
+@click.option('--collect', is_flag=True, help='Collect the owning Pi extension event pipe.')
+def main(runtime: str, collect: bool = False) -> None:
     """Handle one native extension event without exporting config in environment."""
+    if collect:
+        if runtime != 'pi':
+            raise click.UsageError('--collect is only available for Pi.')
+        from graphtraj.runtimes.pi.collector import collect_stdio
+
+        collect_stdio()
+        return
     try:
         event = json.load(sys.stdin)
         if not isinstance(event, dict):

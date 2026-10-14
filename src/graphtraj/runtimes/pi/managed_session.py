@@ -100,40 +100,38 @@ class PiManagedExecution:
     def _read(self) -> None:
         """Drain replies and native events continuously, including idle dialogs."""
         assert self.proc is not None
-        with (self.trace.with_suffix('.pi') / 'rpc.jsonl').open('a', encoding='utf-8') as log:
-            try:
-                for line in self.proc.stdout:
-                    log.write(line)
-                    log.flush()
-                    try:
-                        event = json.loads(line)
-                    except ValueError:
-                        self.events.put({'type': 'transport_error'})
-                        break
-                    if not isinstance(event, dict):
-                        self.events.put({'type': 'transport_error'})
-                        break
-                    if event.get('type') == 'extension_ui_request' and event.get('method') not in INFORMATION:
-                        if self.session is None:
-                            self.events.put({'type': 'startup_interaction', 'event': event})
-                            for target in list(self.responses.values()):
-                                target.put({'success': False, 'error': 'Pi needs a native startup interaction before Session binding.'})
-                        else:
-                            try:
-                                self._interaction(event)
-                            except RuntimeAdapterError as error:
-                                self.events.put({'type': 'interaction_error', 'error': error})
-                        continue
-                    target = self.responses.get(event.get('id')) if event.get('type') == 'response' else None
-                    if target is not None:
-                        target.put(event)
+        try:
+            for line in self.proc.stdout:
+                try:
+                    event = json.loads(line)
+                except ValueError:
+                    self.events.put({'type': 'transport_error'})
+                    break
+                if not isinstance(event, dict):
+                    self.events.put({'type': 'transport_error'})
+                    break
+                if event.get('type') == 'extension_ui_request' and event.get('method') not in INFORMATION:
+                    self.events.put({'type': 'pi/dialog', 'event': event})
+                    if self.session is None:
+                        self.events.put({'type': 'startup_interaction', 'event': event})
+                        for target in list(self.responses.values()):
+                            target.put({'success': False, 'error': 'Pi needs a native startup interaction before Session binding.'})
                     else:
-                        self.events.put(event)
-            finally:
-                self.transport_closed.set()
-                for target in list(self.responses.values()):
-                    target.put({'success': False, 'error': 'transport closed'})
-                self.events.put({'type': 'transport_error'})
+                        try:
+                            self._interaction(event)
+                        except RuntimeAdapterError as error:
+                            self.events.put({'type': 'interaction_error', 'error': error})
+                    continue
+                target = self.responses.get(event.get('id')) if event.get('type') == 'response' else None
+                if target is not None:
+                    target.put(event)
+                else:
+                    self.events.put(event)
+        finally:
+            self.transport_closed.set()
+            for target in list(self.responses.values()):
+                target.put({'success': False, 'error': 'transport closed'})
+            self.events.put({'type': 'transport_error'})
 
     def _prepare(self, address: str) -> tuple[list[str], dict]:
         """Project native asb fields and preserve user resources through references."""
@@ -273,6 +271,7 @@ class PiManagedExecution:
         from graphtraj.runtimes.codex.managed_session import native_operation_features
 
         reader = None
+        collector = None
         with ExitStack() as resources:
             address = resources.enter_context(cli_connection(
                 Path(self.request['harness_root']), self.directory.name, native_operation_features()))
@@ -315,6 +314,16 @@ class PiManagedExecution:
                 })
                 self.created(self.session, self.proc.pid)
                 self.bound = True
+                from graphtraj.runtimes.pi.collector import PiCollector
+                import yaml
+
+                mapping = yaml.safe_load((self.directory / 'mapping.yml').read_text())
+                collector = PiCollector(
+                    Path(self.request['state_directory']), self.native_trace, self.session,
+                    project=self.request['harness_root'], agent=mapping.get('alias', self.directory.name),
+                    source='member', tasks=[mapping['ticket_id']] if mapping.get('ticket_id') else [],
+                    execution=self.execution_id,
+                )
                 with self.lock:
                     if self.stopping.is_set():
                         return self._result('interrupted', None)
@@ -332,6 +341,8 @@ class PiManagedExecution:
                     event = self.events.get()
                     self._retain_trace()
                     kind = event.get('type')
+                    if kind not in {'transport_error', 'interaction_error'}:
+                        collector.receive(event)
                     if kind == 'transport_error':
                         raise RuntimeAdapterError('RUNTIME_TRANSPORT_FAILED', 'Pi closed before confirmed settlement.')
                     if kind == 'interaction_error':
@@ -402,9 +413,13 @@ class PiManagedExecution:
                         self.stderr_reader.join(timeout=5)
                     if reader is not None:
                         reader.join(timeout=5)
-                    if hasattr(self, 'native_trace'):
-                        self._retain_trace()
-                    self.done.set()
+                    try:
+                        if collector is not None:
+                            collector.close()
+                        if hasattr(self, 'native_trace'):
+                            self._retain_trace()
+                    finally:
+                        self.done.set()
 
     def _shutdown_failure(self, cause: BaseException | None, stderr_offset: int) -> RuntimeAdapterError:
         """Expose this launch's cause through Runner without certifying native stop."""

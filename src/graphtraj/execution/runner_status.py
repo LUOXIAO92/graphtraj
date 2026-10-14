@@ -20,7 +20,7 @@ from graphtraj.execution.runner_process import process_ancestors
 from graphtraj.execution.runner_transport import valid_terminal_launch_failure
 from graphtraj.runtimes import runtime_adapter
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
-from graphtraj.workspace.runner_project import discover_runner_directory
+from graphtraj.workspace.runner_project import discover_project_root, discover_runner_directory
 
 
 _runtime_caller: ContextVar[tuple[Path, str | None] | None] = ContextVar('runtime_caller', default=None)
@@ -1128,7 +1128,9 @@ def read_terminal_outcome(turn_file: Path) -> str:
     if turn.get('terminal_confirmed') is False:
         try:
             directory = turn_file.parent
-            mapping, _ = read_alias_mapping(directory.parent.parent, directory.name)
+            alias = directory.parent.name if directory.name == 'runner' else directory.name
+            runner = discover_runner_directory(discover_project_root(directory))
+            mapping, _ = read_alias_mapping(runner, alias)
             receipt_file = directory / f"terminal-confirmation-{mapping['execution_id']}.yml"
             if receipt_file.parent != directory or receipt_file.is_symlink():
                 raise ValueError('Invalid confirmation path')

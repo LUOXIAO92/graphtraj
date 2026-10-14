@@ -176,6 +176,9 @@ def test_claude_public_interrupt_rechecks_drained_termination(
                          '--caused-by-event-id', events(root)[-1]['event_id'])
         assert denied.returncode != 0
         assert 'subtree-stopped' in denied.stdout + denied.stderr
+        retired = command(installed_commands, root, environment, 'retire', alias)
+        assert retired.returncode == 0, retired.stdout + retired.stderr
+        assert settled(installed_commands, root, environment, alias)['activity'] == 'idle'
     else:
         assert member['interrupt_status'] == 'unconfirmed'
         assert 'native_idle' in member['error']['message']

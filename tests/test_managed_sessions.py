@@ -225,21 +225,18 @@ def test_managed_archive_is_readable_after_native_shutdown(managed_project: Mana
 
 
 @pytest.mark.skipif(not os.environ.get('CODEX_ARCHIVE_PROBE_HOME'),
-                    reason='requires an explicitly prepared temporary native home')
+                    reason='requires an explicitly authorized native connection home')
 @pytest.mark.parametrize('managed_project', [
     {'CODEX_HOME': os.environ.get('CODEX_ARCHIVE_PROBE_HOME', '')},
 ], indirect=True)
 def test_real_codex_archive(managed_project: ManagedProject) -> None:
-    """Collect two real turns through Runner using only an explicitly supplied home.
+    """Collect two real turns through Runner with an explicitly authorized native Home.
 
-    The operator supplies a fresh temporary native home with authorized account
-    configuration and an explicit model. This probe never reads/copies global
-    authentication or selects a host model on the operator's behalf.
+    The authorized host may supply its existing native Home and login with an
+    explicit model. Only the Runtime reads credentials; the probe reads only
+    its new direct child's report, never credentials or native history.
     """
     root, cause, call, executable = managed_project
-    native_home = Path(os.environ['CODEX_ARCHIVE_PROBE_HOME']).resolve()
-    assert native_home.is_dir()
-    assert not (native_home / 'sessions').exists(), 'Use a fresh probe home, without private history.'
     model = os.environ['CODEX_ARCHIVE_PROBE_MODEL']
     real = shutil.which('codex')
     assert real

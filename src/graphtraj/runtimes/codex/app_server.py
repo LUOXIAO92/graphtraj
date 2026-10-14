@@ -339,6 +339,8 @@ class CodexAppServer:
             if self._stderr_reader is not None:
                 await self._stderr_reader
         await self._finish_native_traces()
+        for archive in self._fork_archives.values():
+            archive.close()
 
     @property
     def service_pid(self) -> int:

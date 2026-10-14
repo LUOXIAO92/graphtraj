@@ -14,7 +14,7 @@ import time
 from typing import BinaryIO
 
 from graphtraj.sessions.protocol import native_record, retain_native
-from graphtraj.sessions.storage import SessionStore, session_path
+from graphtraj.sessions.storage import SessionStore, StreamWriter, session_path
 
 
 def _timestamp(value: object) -> int | None:
@@ -139,7 +139,64 @@ class CodexSessionArchive:
         """
         if message.get('params', {}).get('threadId') != self.session_id:
             return
-        self._connection_record(message, 'received')
+        if not self._compact_delta(message):
+            self._connection_record(message, 'received')
+
+    def _compact_delta(self, message: dict) -> bool:
+        """Checkpoint known plain text deltas as one run, preserving semantic boundaries.
+
+        Unknown envelope/parameter fields stay native records. Each received
+        delta is checkpointed because the ephemeral connection cannot replay it.
+        This replaces per-delta finalized events with one recoverable draft.
+        """
+        method = message.get('method')
+        kinds = {'item/agentMessage/delta': ('text', None),
+                 'item/reasoning/textDelta': ('reasoning', 'contentIndex'),
+                 'item/reasoning/summaryTextDelta': ('reasoning', 'summaryIndex')}
+        if method not in kinds or set(message) != {'method', 'params'}:
+            return False
+        kind, index_key = kinds[method]
+        params = message['params']
+        keys = {'threadId', 'turnId', 'itemId', 'delta'} | ({index_key} if index_key else set())
+        if set(params) != keys or any(not isinstance(params[key], str)
+                                     for key in ('threadId', 'turnId', 'itemId', 'delta')):
+            return False
+        index = params[index_key] if index_key else 0
+        if type(index) is not int or index < 0:
+            return False
+        template = {'method': method, 'params': {key: value for key, value in params.items() if key != 'delta'}}
+        with SessionStore(self.path) as store:
+            pending = store.pending()
+            if pending and pending['event']['graphtraj']['native'].get('deltaTemplate') != template:
+                StreamWriter(store, 'connection').finish()
+                pending = None
+            event = None
+            if pending is None:
+                event = {'type': 'assistant/attempt', 'seq': store.next_seq,
+                         'time': time.time_ns() // 1000000,
+                         'data': {'turn': 0, 'step': 0, 'stream': []},
+                         'graphtraj': {'version': 1, 'direction': 'received', 'native': {
+                             'runtime': 'codex', 'sessionId': self.session_id,
+                             'locator': f"connection:{store.position('connection') + 1}",
+                             'deltaTemplate': template}, 'missing': [
+                                 {'path': 'turn/step', 'reason': 'Local output grouping; native numeric indices unknown.'},
+                                 {'path': 'time', 'reason': 'Native time unknown; receipt time used.'},
+                                 {'path': 'rawModelStream', 'reason': 'Unknown: semantic native text, not raw model bytes.'},
+                                 {'path': 'logprobs', 'reason': 'Unknown: native text delta supplied no probabilities.'},
+                             ]}}
+            writer = StreamWriter(store, 'connection', event)
+            writer.feed({'type': 'graphtraj/text-run', 'requestId': params['turnId'],
+                         'attemptId': params['itemId'], 'messageId': params['itemId'],
+                         'index': index, 'blockType': kind, 'text': params['delta']},
+                        store.position('connection') + 1)
+            writer.checkpoint()
+        return True
+
+    def close(self) -> None:
+        """Finalize a retained partial checker output when its native connection ends."""
+        with SessionStore(self.path) as store:
+            if store.pending() is not None:
+                StreamWriter(store, 'connection').finish(interrupted=True)
 
     def reply(self, message: dict) -> None:
         """Retain an owned native result or error before attempting delivery."""
@@ -148,6 +205,8 @@ class CodexSessionArchive:
     def _connection_record(self, message: dict, direction: str) -> None:
         """Commit one connection record and its local ordered receipt coordinate."""
         with SessionStore(self.path) as store:
+            if store.pending() is not None:
+                StreamWriter(store, 'connection').finish()
             position = store.position('connection') + 1
             event = retain_native('codex', message, session_id=self.session_id,
                                   locator=f'connection:{position}', seq=store.next_seq,

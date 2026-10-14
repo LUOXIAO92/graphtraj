@@ -127,7 +127,8 @@ def test_inline_attachments_survive_and_unfetched_references_are_explicit(tmp_pa
         assert native_record(event) == values[1]
         inline, malformed, external = event['graphtraj']['attachments']
         assert store.attachment(inline['sha256']) == b'image'
-        assert malformed['missing']['reason'] == 'Invalid inline base64 bytes.'
+        assert malformed['missing']['reason']
+        assert malformed['missing']['path'] == '/payload/content/1/file_data'
         assert external['missing']['reason']
 
 
@@ -225,3 +226,57 @@ def test_referenced_fork_copies_only_native_ordinal_prefix(tmp_path: Path, copie
         assert events[3]['type'] == 'session/end-seed'
         assert [native_record(event) for event in events[:3]] == parent_values[:3]
         assert [native_record(event) for event in events[4:]] == child_values
+
+
+@pytest.mark.parametrize('method, index', [
+    ('item/agentMessage/delta', {}),
+    ('item/reasoning/textDelta', {'contentIndex': 0}),
+    ('item/reasoning/summaryTextDelta', {'summaryIndex': 0}),
+])
+def test_checker_deltas_are_compact_and_survive_reopening(
+    tmp_path: Path, method: str, index: dict,
+) -> None:
+    """Many chunks produce one retained run and one exact final native snapshot."""
+    archive = CodexSessionArchive(tmp_path, 'project', 'checker', 'child')
+    archive.seed_fork({'id': 'child', 'forkedFromId': 'parent', 'turns': []})
+    for _ in range(300):
+        archive.notice({'method': method, 'params': {'threadId': 'child',
+                        'turnId': 'turn', 'itemId': 'item', 'delta': 'x', **index}})
+    # Reopen as a new collector without any native transport/file replay.
+    archive = CodexSessionArchive(tmp_path, 'project', 'checker', 'child')
+    with SessionStore(archive.path, readonly=True) as store:
+        assert len(store.page()['events']) == 2
+        assert store.pending()['event']['data']['stream'][0]['text'] == 'x' * 300
+        assert len(store.pending()['event']['data']['stream']) == 1
+    final = {'method': 'item/completed', 'params': {'threadId': 'child',
+             'turnId': 'turn', 'item': {'id': 'item', 'text': 'x' * 300,
+                                      'encrypted_content': 'opaque-retained'}}}
+    archive.notice(final)
+    archive.close()
+    with SessionStore(archive.path) as store:
+        store.validate()
+        events = store.page()['events']
+        assert len(events) == 4
+        assert events[2]['data']['stream'][0]['text'] == 'x' * 300
+        assert native_record(events[3]) == final
+        assert store.pending() is None
+
+
+def test_checker_unknown_delta_fields_and_interrupt_preserve_received_content(tmp_path: Path) -> None:
+    """An unknown semantic field breaks compaction; close retains partial output."""
+    archive = CodexSessionArchive(tmp_path, 'project', 'checker', 'child')
+    archive.seed_fork({'id': 'child', 'forkedFromId': 'parent', 'turns': []})
+    delta = {'method': 'item/agentMessage/delta', 'params': {'threadId': 'child',
+             'turnId': 'turn', 'itemId': 'item', 'delta': 'a'}}
+    archive.notice(delta)
+    unknown = {**delta, 'params': {**delta['params'], 'signature': 'ciphertext'}}
+    archive.notice(unknown)
+    archive.notice(delta)
+    archive.close()
+    with SessionStore(archive.path) as store:
+        store.validate()
+        events = store.page()['events']
+        assert len(events) == 5
+        assert native_record(events[3]) == unknown
+        assert events[4]['data']['stream'][0]['text'] == 'a'
+        assert events[4]['data']['interrupted'] is True

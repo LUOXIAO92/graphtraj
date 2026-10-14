@@ -353,6 +353,10 @@ def current_host_connection() -> dict | None:
 
 def select_runtime_adapter(runtime: str) -> RuntimeAdapter:
     """Select an implemented Adapter from the resolved role's Runtime setting."""
+    if runtime == "claude":
+        from graphtraj.runtimes.claude.adapter import ClaudeRuntimeAdapter
+
+        return ClaudeRuntimeAdapter()
     if runtime == "dsh":
         from graphtraj.runtimes.dsh.adapter import DshRuntimeAdapter
 

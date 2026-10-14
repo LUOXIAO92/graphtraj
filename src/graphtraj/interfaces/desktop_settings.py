@@ -177,8 +177,8 @@ def settings_request(request: dict, cwd: Path) -> dict:
     for old in set(edits) | set(renames):
         reference = renames.get(old, old)
         preset = roles.preset(reference)
-        if preset.runtime not in {"codex", "pi", "dsh"}:
-            raise ValueError("Choose a supported Runtime: codex, pi or dsh.")
+        if preset.runtime not in {"codex", "pi", "dsh", "claude"}:
+            raise ValueError("Choose a supported Runtime: codex, pi, dsh or claude.")
         # Reuse native prompt capability and instruction-file validation without
         # preparing a Runtime, reading credentials or launching any process.
         resolved = resolve_child_role(reference, preset, root)

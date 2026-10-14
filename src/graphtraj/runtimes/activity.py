@@ -211,6 +211,8 @@ def _image_part(block: dict) -> dict | None:
 def usage_fact(raw: dict, runtime: str, call_id: str | None, phase: str) -> dict:
     """Keep reported fields and semantic token names; never fill missing metrics."""
     names = {
+        'claude': {'input_tokens': 'input_uncached', 'output_tokens': 'output',
+                   'cache_read_input_tokens': 'cache_read', 'cache_creation_input_tokens': 'cache_write'},
         'codex': {'input_tokens': 'input', 'output_tokens': 'output',
                   'cached_input_tokens': 'cache_read', 'cache_write_input_tokens': 'cache_write',
                   'reasoning_output_tokens': 'reasoning'},
@@ -222,7 +224,7 @@ def usage_fact(raw: dict, runtime: str, call_id: str | None, phase: str) -> dict
     tokens = {target: raw[key] for key, target in names[runtime].items()
               if isinstance(raw.get(key), (int, float)) and not isinstance(raw[key], bool)}
     # Pi and DSH's DeepSeek Messages adapter keep cache input separate.
-    if runtime in {'pi', 'dsh'} and all(key in tokens for key in ('input_uncached', 'cache_read', 'cache_write')):
+    if runtime in {'pi', 'dsh', 'claude'} and all(key in tokens for key in ('input_uncached', 'cache_read', 'cache_write')):
         tokens['input'] = tokens['input_uncached'] + tokens['cache_read'] + tokens['cache_write']
     return {'provider_usage': raw, 'tokens': tokens, 'call_id': call_id,
             'phase': phase, 'attributable': call_id is not None}
@@ -381,6 +383,8 @@ def normalize(runtime: str, record: dict, context: dict) -> list[dict]:
         from graphtraj.runtimes.codex.activity import project
     elif runtime == 'pi':
         from graphtraj.runtimes.pi.activity import project
+    elif runtime == 'claude':
+        from graphtraj.runtimes.claude.activity import project
     elif runtime == 'dsh':
         from graphtraj.runtimes.dsh.activity import project
     else:

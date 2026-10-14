@@ -127,8 +127,34 @@ Child Agents can use different Runtimes without changing your main Agent's host.
 | Runtime | Preparation and limits |
 | --- | --- |
 | Codex (`codex`) | An installed, authenticated Codex CLI. Native permissions and approvals remain in effect. |
+| Claude Code (`claude`) | Official CLI 2.1.299 or later, authenticated separately. Uses structured CLI input/output, native permission prompts and mandatory native sandboxing. Finds `claude` on PATH or `~/.local/bin/claude`. |
 | Pi (`pi`) | An installed Pi backend, existing Pi configuration, and an `asb` sandbox with `srt`. The role's optional `pi.sandbox_python`, `pi.sandbox_path` and `pi.agent_dir` select those locations. |
 | DeepSeek Harness (`dsh`) | DSH `0.2.0-rc.2` and a host that supports its native subprocess sandbox. Native replacement and recovery approval routes are unavailable; its native file tools can read outside the task worktree. |
+
+For Claude Code, select the exact model `claude-opus-5-5` and
+`reasoning_effort: high` in a role, or save an explicit model entry through
+`graphtraj connections` and reference it from `graphtraj roles organize`.
+Discovery returns native catalog metadata; it does not test account access.
+Claude's `opus` alias is not a version pin. Other model IDs require an explicit
+connection; GraphTraj does not substitute a model or effort.
+
+Claude child execution uses restricted mode, the native sandbox with
+`failIfUnavailable` and no unsandboxed retry, and manual native permission
+responses through Runner `requests` / `reply`. A reply uses Claude's
+`behavior: allow` or `behavior: deny` shape. The native permission and filesystem
+checks still apply. `claude.read_paths` may list explicit external read-only
+resources. Assigned reports use the hosted `submit_report` tool, without granting
+write access to private state. User settings and other MCP servers are excluded
+from these restricted child launches; managed settings remain effective. The
+captured Context records these sources, model, effort, CLI version and paths.
+
+Runner retains the native Session on continuation, checks registration before
+releasing the first prompt, and distinguishes an interrupt request from verified
+termination. Native helpers and background tasks are disabled for these children.
+Raw structured output and the native transcript location remain available to
+collectors; this adapter does not implement unified Session storage. Interactive
+Claude Main hosting and its replacement approval route are explicitly unavailable.
+Unknown approval capability fails closed.
 
 The execution host needs access to the chosen Runtime executable, credentials,
 project files and subprocess sandbox. Role permissions do not replace the

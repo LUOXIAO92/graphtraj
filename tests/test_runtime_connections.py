@@ -772,3 +772,22 @@ def test_desktop_global_identity_fields_and_write_failure(project: Path, monkeyp
     reply = call(project, {**request, 'catalog': changed, 'expected_revision': saved['revision']})[-1]
     assert reply['failed'] and 'Controlled write failure' in reply['error']
     assert path.read_bytes() == before
+
+
+def test_claude_exact_connection_and_default_home(project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Public connections resolve exact Opus/high without changing native config discovery."""
+    monkeypatch.delenv('CLAUDE_CONFIG_DIR', raising=False)
+    draft = {'version': 1, 'runtimes': {'claude-code': {
+        'runtime': 'claude', 'providers': {'anthropic': {'models': {'opus55': {
+            'id': 'claude-opus-5-5', 'source': 'manual', 'supported_efforts': ['high'],
+        }}}},
+    }}}
+    saved = save(project, draft)
+    assert saved['catalog'] == draft
+    (project / '.graphtraj/roles.yml').write_text(yaml.safe_dump({'roles': {
+        'author': {'connection': 'claude-code/anthropic/opus55', 'reasoning_effort': 'high'},
+    }}))
+    role = load_project_roles(project).preset('author')
+    assert (role.runtime, role.model, role.reasoning_effort) == ('claude', 'claude-opus-5-5', 'high')
+    assert role.runtime_home is None  # No implicit CLAUDE_CONFIG_DIR override.
+    assert role.connection_revision == saved['revision']

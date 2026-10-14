@@ -145,7 +145,11 @@ def _tool_call_response(
         if session is not None and (not isinstance(session, str) or not session):
             raise ValueError('Invalid native MCP Session metadata.')
         with calling_session(session), _caller_notices(params) as recovery:
-            result = gateway.handle_request(arguments, cwd=Path.cwd())
+            from graphtraj.interfaces.hosted_cli import forward_request
+
+            result = forward_request(arguments, Path.cwd())
+            if result is None:
+                result = gateway.handle_request(arguments, cwd=Path.cwd())
             document = (
                 recovery.attach_stop_deliveries(result.document)
                 if recovery is not None
@@ -232,3 +236,7 @@ def main() -> None:
     """Run the MCP stdio server installed as the ``graphtraj-mcp`` command."""
 
     serve(sys.stdin, sys.stdout)
+
+
+if __name__ == '__main__':
+    main()

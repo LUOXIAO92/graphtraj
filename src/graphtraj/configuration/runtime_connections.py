@@ -19,6 +19,7 @@ from graphtraj.execution.runner_models import RunnerError
 NAME = re.compile(r"^[A-Za-z0-9_-]+$")
 ENV_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 EFFORTS = {
+    'claude': ('low', 'medium', 'high', 'xhigh', 'max'),
     'codex': ('none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'),
     'pi': ('off', 'minimal', 'low', 'medium', 'high', 'xhigh'),
     'dsh': ('off', 'low', 'high', 'max'),
@@ -65,7 +66,7 @@ def validate_catalog(document: object) -> dict:
         fields(runtime, {'runtime', 'home', 'providers'}, {'runtime', 'providers'})
         kind = runtime['runtime']
         if not isinstance(kind, str) or kind not in EFFORTS:
-            raise ValueError('Choose codex, pi or dsh.')
+            raise ValueError('Choose codex, pi, dsh or claude.')
         if 'home' in runtime and (
             not isinstance(runtime['home'], str) or not Path(runtime['home']).is_absolute()
             or '\x00' in runtime['home']
@@ -138,13 +139,15 @@ def resolve_connection(reference: str, effort: str | None) -> dict:
                               or supported is not None and effort not in supported):
         raise ValueError('The selected reasoning effort is not supported by this model.')
     homes = {'codex': ('CODEX_HOME', '.codex'), 'pi': ('PI_CODING_AGENT_DIR', '.pi/agent'),
-             'dsh': ('DSH_HOME', '.dsh')}
+             'dsh': ('DSH_HOME', '.dsh'), 'claude': ('CLAUDE_CONFIG_DIR', '.claude')}
     variable, default = homes[runtime['runtime']]
     home = runtime.get('home') or os.environ.get(variable) or str(Path.home() / default)
     return {
         'runtime': runtime['runtime'],
         'model': f"{provider_id}/{model['id']}" if runtime['runtime'] == 'pi' else model['id'],
-        'runtime_home': str(Path(home).resolve()), 'runtime_provider': provider_id,
+        'runtime_home': (None if runtime['runtime'] == 'claude' and not runtime.get('home')
+                         and not os.environ.get(variable) else str(Path(home).resolve())),
+        'runtime_provider': provider_id,
         'base_url': provider.get('base_url'), 'api_key_env': provider.get('api_key_env'),
         'provider_api': provider.get('api'), 'connection_revision': revision,
         'model_source': model['source'],
@@ -191,10 +194,10 @@ def _manage_connections(arguments: dict, *, cwd: Path, review: bool) -> dict:
             'capabilities': {'read': True, 'preview': True, 'save': True,
                              # Runtime request values, not a claim of model support.
                              'reasoning_efforts': {kind: list(values) for kind, values in EFFORTS.items()},
-                             'model_discovery': {'codex': 'native', 'pi': 'native', 'dsh': 'native-host'},
+                             'model_discovery': {'codex': 'native', 'pi': 'native', 'dsh': 'native-host', 'claude': 'native'},
                              'custom_api': {'codex': ['responses'],
                                             'pi': ['openai-completions', 'openai-responses', 'anthropic-messages'],
-                                            'dsh': ['anthropic-messages']}}}
+                                            'dsh': ['anthropic-messages'], 'claude': ['anthropic-messages']}}}
     if action == 'read':
         return view
     if action == 'discover':

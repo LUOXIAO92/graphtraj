@@ -24,6 +24,8 @@ def discover_models(runtime: dict) -> dict:
         with tempfile.TemporaryDirectory(prefix='graphtraj-models-') as directory:
             if runtime['runtime'] == 'codex':
                 metadata = {'models': asyncio.run(_codex(runtime, Path(directory)))}
+            elif runtime['runtime'] == 'claude':
+                metadata = _claude(runtime, Path(directory))
             elif runtime['runtime'] == 'pi':
                 metadata = {'models': [{
                     'id': model['id'], 'alias': model.get('name') or model['id'],
@@ -141,3 +143,31 @@ def _dsh(runtime: dict, cwd: Path) -> dict:
                 'status': 'available' if models or not catalog.get('failures') else 'unknown'}
     finally:
         service.close()
+
+
+def _claude(runtime: dict, cwd: Path) -> dict:
+    """Read the official initialization model catalog without sending user input."""
+    from graphtraj.runtimes.claude.adapter import executable
+
+    environment = dict(os.environ)
+    if runtime.get('home'):
+        environment['CLAUDE_CONFIG_DIR'] = runtime['home']
+    command = [executable(), '--print', '--verbose', '--input-format', 'stream-json',
+               '--output-format', 'stream-json', '--restricted', '--tools', '',
+               '--strict-mcp-config', '--mcp-config', '{"mcpServers":{}}']
+    query = {'type': 'control_request', 'request_id': 'catalog',
+             'request': {'subtype': 'initialize'}}
+    response = subprocess.run(command, input=json.dumps(query) + '\n', text=True,
+                              capture_output=True, timeout=30, env=environment, cwd=cwd, check=True)
+    for line in response.stdout.splitlines():
+        event = json.loads(line)
+        reply = event.get('response', {})
+        if event.get('type') == 'control_response' and reply.get('request_id') == 'catalog':
+            if reply.get('subtype') != 'success':
+                raise ValueError('Claude initialization failed.')
+            models = reply['response']['models']
+            return {'models': [{'id': item['value'], 'alias': item.get('displayName', item['value']),
+                                'provider': 'anthropic', 'source': 'native',
+                                'supported_efforts': item.get('supportedEffortLevels')}
+                               for item in models]}
+    raise ValueError('Claude did not expose a model catalog.')

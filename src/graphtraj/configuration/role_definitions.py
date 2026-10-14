@@ -13,6 +13,7 @@ from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 # Codex delivers them as developer instructions; Pi and DSH have one system
 # prompt channel and merge authored developer text into that channel.
 _RUNTIME_INSTRUCTION_LAYER = {
+    "claude": "system",
     "pi":    "system",
     "dsh":   "system",
     "codex": "developer",

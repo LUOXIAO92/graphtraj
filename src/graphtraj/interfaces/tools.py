@@ -578,6 +578,27 @@ def answer_pending_request(
     )
 
 
+def read_session_archive(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> ToolResult:
+    """Read a bounded canonical Session page through existing Runner authority."""
+    from graphtraj.sessions.query import read_session
+
+    return ToolResult(read_session(cwd or Path.cwd(), arguments['session_id'],
+                                   arguments.get('after', -1), arguments.get('limit', 200)))
+
+
+register_tool(
+    "session_read",
+    "Read a project-local canonical Session, ordered events and durable unfinished output. "
+    "Native Agents may read only their own verified Session; human hosts retain project access.",
+    {"type": "object", "properties": {
+        "session_id": {"type": "string"}, "after": {"type": "integer"},
+        "limit": {"type": "integer"},
+    }, "required": ["session_id"], "additionalProperties": False},
+    read_session_archive,
+    manual_ref="manuals/task-delivery/guide.md",
+)
+
+
 def read_desktop_activity(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> ToolResult:
     """Expose the native human monitor without widening Agent report access."""
     from graphtraj.execution.desktop_activity import observe

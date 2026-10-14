@@ -699,4 +699,4 @@ def native_operation_features() -> set[str]:
 
     return (set(NATIVE_RUNNER_TOOLS.values()) | set(METHOD_FEATURE_NAMES)
             | {'parent_status', 'retire', 'replace', 'cleanup', 'approved_recovery',
-               'role_organization', 'runtime_connections', 'desktop_activity'})
+               'role_organization', 'runtime_connections', 'desktop_activity', 'session_read'})

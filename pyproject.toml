@@ -34,6 +34,7 @@ graphtraj = [
     "runtimes/dsh/*.mjs",
     "runtimes/pi/*.mjs",
     "prompts/*.md",
+    "sessions/DSH-LICENSE",
 ]
 
 # Method guides are delivered data, not importable package resources and not

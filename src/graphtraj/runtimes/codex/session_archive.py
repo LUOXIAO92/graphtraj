@@ -66,7 +66,7 @@ class CodexSessionArchive:
 
     The owner supplies Agent identity; neither transcript fields nor task names
     establish it. No Runtime Home search or historical import happens here.
-    Reopening uses the original header and committed cursor, including after a
+    Reopening preserves owner identity and committed cursors, including after a
     source moves or a Worktree is deleted.
     """
 
@@ -223,25 +223,6 @@ class CodexSessionArchive:
             event['graphtraj']['attachments'] = _attachments(store, message)
             store.append_many([event], source='connection', position=position)
 
-    def _copied_fork_cut(self, stream: BinaryIO) -> int | None:
-        """Locate the first child-owned settings record after native copied history.
-
-        Codex 0.161.0 record_initial_history appends this record after the copied
-        prefix; inherited settings retain their original thread_id. Neither
-        timestamps nor the parent's current length establish this boundary.
-        """
-        while True:
-            start = stream.tell()
-            line = stream.readline()
-            if not line.endswith(b'\n'):
-                return None
-            record = json.loads(line)
-            payload = record.get('payload', {})
-            if (record.get('type') == 'event_msg'
-                    and payload.get('type') == 'thread_settings_applied'
-                    and payload.get('thread_id') == self.session_id):
-                return start
-
     def _seed_reference(self, store: SessionStore, base: dict) -> None:
         """Copy the native exclusive prefix from an already owned project archive.
 
@@ -314,23 +295,49 @@ class CodexSessionArchive:
         event['graphtraj']['attachments'] = _attachments(store, record)
         return event
 
-    def _seed_copied(self, store: SessionStore, stream: BinaryIO, cut: int) -> None:
-        """Commit inherited records, their cut and child metadata in one transaction.
+    def _promote_copied_prefix(self, store: SessionStore, parent: str) -> bool:
+        """Resume promotion even if a prior process stopped after staging the cut."""
+        pending = store.pending()
+        if pending is None:
+            return False
+        observations = pending['event']['data']['observations']
+        inherited = []
+        for item in observations:
+            event = item['event']
+            record = native_record(event)
+            payload = record.get('payload', {})
+            if (record.get('type') == 'event_msg'
+                    and payload.get('type') == 'thread_settings_applied'
+                    and payload.get('thread_id') == self.session_id):
+                store.finish_initial_collection(parent_session='codex:' + parent, inherited=inherited)
+                return True
+            if event['graphtraj']['native']['locator'] != 'byte:0':
+                inherited.append((item['source'], item['position']))
+        return False
 
-        Native files physically put child metadata before copied parent history.
-        Canonical inheritance puts it after the cut. Byte locators retain that
-        original source order, while a single cursor commit makes replay safe.
+    def _collect_copied_prefix(self, store: SessionStore, stream: BinaryIO, parent: str) -> bool:
+        """Stage owned observations until native settings establish the inherited cut.
+
+        The shared initial-collection draft retains complete records/cursors
+        independently of the Runtime file. Promotion publishes only parent
+        records before the marker; child metadata/settings remain local.
         """
-        stream.seek(0)
-        metadata = json.loads(stream.readline())
-        events = []
-        while stream.tell() < cut:
+        if self._promote_copied_prefix(store, parent):
+            return True
+        stream.seek(max(store.position('rollout'), 0))
+        while True:
             start = stream.tell()
-            events.append(self._rollout_event(store, json.loads(stream.readline()), start, len(events)))
-        events.append({'type': 'session/end-seed', 'seq': len(events),
-                       'time': store.header['createdAt'], 'data': {'inherited': True}})
-        events.append(self._rollout_event(store, metadata, 0, len(events)))
-        store.append_many(events, source='rollout', position=cut)
+            line = stream.readline()
+            if not line.endswith(b'\n'):
+                return False
+            record = json.loads(line)
+            event = self._rollout_event(store, record, start, 0)
+            store.stage_initial_observation(event, source='rollout', position=stream.tell())
+            payload = record.get('payload', {})
+            if (record.get('type') == 'event_msg'
+                    and payload.get('type') == 'thread_settings_applied'
+                    and payload.get('thread_id') == self.session_id):
+                return self._promote_copied_prefix(store, parent)
 
     def collect(self, rollout: Path) -> None:
         """Commit complete native records; retry unfinished input on the next call.
@@ -351,13 +358,6 @@ class CodexSessionArchive:
             else:
                 parent = metadata.get('forked_from_id')
                 base = metadata.get('history_base')
-                cut = None
-                if parent and base is None:
-                    cut = self._copied_fork_cut(stream)
-                    if cut is None:
-                        # Native creation may still be writing its prefix. Keep
-                        # the entire input replayable until the boundary exists.
-                        return
                 created = _timestamp(metadata.get('timestamp') or metadata_record.get('timestamp'))
                 missing = [] if created is not None else [{
                     'path': 'createdAt', 'reason': 'Native creation time unknown; archive receipt time used.',
@@ -365,16 +365,15 @@ class CodexSessionArchive:
                 header = {
                     'version': 4, 'id': 'codex:' + self.session_id,
                     'createdAt': created if created is not None else time.time_ns() // 1000000,
-                    'isSeeded': bool(parent),
+                    'isSeeded': bool(parent and base),
                     'graphtraj': {'version': 1, 'projectId': self.project_id,
                                  'agentId': self.agent_id, 'taskIds': list(self.task_ids),
                                  'native': {'runtime': 'codex', 'sessionId': self.session_id,
                                             'locator': 'byte:0', 'sourcePath': str(rollout.resolve())},
                                  'missing': missing},
                 }
-                if parent:
+                if parent and base:
                     header['parentSession'] = 'codex:' + parent
-                    header['graphtraj']['native']['inheritedEndByte'] = cut
                 store = SessionStore.create(self.path, header)
             with store:
                 header = store.header['graphtraj']
@@ -382,12 +381,13 @@ class CodexSessionArchive:
                     raise ValueError('Codex archive already belongs to another project or Agent.')
                 if metadata.get('forked_from_id') and metadata.get('history_base'):
                     self._seed_reference(store, metadata['history_base'])
-                cut = header['native'].get('inheritedEndByte')
-                if cut is not None and store.position('rollout') < 0:
-                    self._seed_copied(store, stream, cut)
                 position = store.position('rollout')
                 if rollout.stat().st_size < position:
                     raise ValueError('Codex rollout was truncated before its committed cursor.')
+                if metadata.get('forked_from_id') and not metadata.get('history_base') and not store.next_seq:
+                    if not self._collect_copied_prefix(store, stream, metadata['forked_from_id']):
+                        return
+                    position = store.position('rollout')
                 stream.seek(max(position, 0))
                 while True:
                     start = stream.tell()

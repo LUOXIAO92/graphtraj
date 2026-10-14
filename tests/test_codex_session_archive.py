@@ -154,7 +154,10 @@ def test_fork_retains_exact_returned_prefix_without_reading_parent(tmp_path: Pat
         assert store.header['parentSession'] == 'codex:parent'
 
 
-def test_persistent_copied_fork_uses_child_settings_boundary(tmp_path: Path) -> None:
+@pytest.mark.parametrize('interrupt_promotion', [False, True])
+def test_persistent_copied_fork_uses_child_settings_boundary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, interrupt_promotion: bool,
+) -> None:
     """A late first collection distinguishes inherited settings from child updates."""
     rollout = tmp_path / 'fork.jsonl'
     header = records('child')[0]
@@ -165,18 +168,39 @@ def test_persistent_copied_fork_uses_child_settings_boundary(tmp_path: Path) -> 
     write_records(rollout, [header, *inherited])
     archive = CodexSessionArchive(tmp_path, 'project', 'main', 'child')
     archive.collect(rollout)
-    assert not archive.path.exists()  # The unfinished native prefix remains replayable.
+    rollout.unlink()
+    with SessionStore(archive.path, readonly=True) as store:
+        assert store.page()['events'] == []
+        assert 'parentSession' not in store.header
+        assert store.header['isSeeded'] is False
+        observations = store.pending()['event']['data']['observations']
+        assert [native_record(item['event']) for item in observations] == [header, *inherited]
+    # Restore the owned source and resume with a new collector after restart.
+    archive = CodexSessionArchive(tmp_path, 'project', 'main', 'child')
     owned_settings = {'type': 'event_msg', 'payload': {
         'type': 'thread_settings_applied', 'thread_id': 'child', 'thread_settings': {},
     }}
     child_content = records('child')[1:]
     values = [header, *inherited, owned_settings, *child_content, owned_settings]
     write_records(rollout, values)
+    if interrupt_promotion:
+        def interrupted(
+            self: SessionStore, *, parent_session: str | None, inherited: list[tuple[str, int]],
+        ) -> None:
+            """Simulate interruption after the source boundary is durably staged."""
+            raise OSError('controlled interruption')
+
+        with monkeypatch.context() as fault:
+            fault.setattr(SessionStore, 'finish_initial_collection', interrupted)
+            with pytest.raises(OSError):
+                archive.collect(rollout)
+        archive = CodexSessionArchive(tmp_path, 'project', 'main', 'child')
     archive.collect(rollout)
     archive.collect(rollout)
     with SessionStore(archive.path) as store:
         store.validate()
         events = store.page()['events']
+        assert store.pending() is None
         cut = len(inherited)
         assert events[cut]['type'] == 'session/end-seed'
         assert [native_record(event) for event in events[:cut]] == inherited

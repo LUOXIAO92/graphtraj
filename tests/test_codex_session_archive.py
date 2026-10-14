@@ -188,9 +188,11 @@ def test_referenced_fork_copies_only_native_ordinal_prefix(tmp_path: Path) -> No
     for ordinal, record in enumerate(parent_values):
         record['ordinal'] = ordinal
     parent_source = tmp_path / 'parent.jsonl'
-    write_records(parent_source, parent_values)
+    write_records(parent_source, parent_values[:2])
     parent = CodexSessionArchive(tmp_path, 'project', 'parent-agent', 'parent')
     parent.collect(parent_source)
+    # The parent's native log has advanced after its last hook collection.
+    write_records(parent_source, parent_values)
     child_values = records('child')[:2]
     for ordinal, record in enumerate(child_values, start=3):
         record['ordinal'] = ordinal

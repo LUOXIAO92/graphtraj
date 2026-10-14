@@ -242,9 +242,11 @@ def test_cleaned_task_reopens_with_fresh_member_and_preserved_history(
     env.update(FAKE_CODEX_LIFECYCLE_ACTION='deliver-document',
                FAKE_CODEX_RESULT_FILE='CORRECTION.txt')
     # Each real thread/start returns a fresh native identity. The existing peer
-    # uses a fixed ID by default, so select another for this second lifecycle.
+    # uses an Agent-derived ID by default, so select another for this lifecycle.
     fake_codex.executable.write_text(
-        fake_codex.executable.read_text().replace("'fake-thread'", "'reopened-thread'"),
+        fake_codex.executable.read_text().replace(
+            "os.environ.get('GRAPHTRAJ_PARENT_ALIAS', 'fake-thread')", "'reopened-thread'",
+        ),
     )
 
     # A foreign leftover must fail before allocating any apparent member, even

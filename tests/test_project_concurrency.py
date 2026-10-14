@@ -258,7 +258,8 @@ def test_one_position_completes_one_round_with_sequential_reviewers(
     ]
     leaders = [event for event in events if event["kind"] == "start" and event["role"] == "team-leader"]
     assert "resume" not in leaders[0]["argv"]
-    assert all("resume" in event["argv"] and "fake-thread" in event["argv"] for event in leaders[1:])
+    native_session = yaml.safe_load(result.stdout)['tasks'][0]['session']
+    assert all("resume" in event["argv"] and native_session in event["argv"] for event in leaders[1:])
     ticket = root / ".graphtraj" / "state" / "tickets" / "78-parallel"
     team = yaml.safe_load((ticket / "teams" / "1" / "team.yml").read_text())
     assert team["current_round"] == 1

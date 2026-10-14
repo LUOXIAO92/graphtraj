@@ -67,8 +67,10 @@ def find_uv() -> Optional[Path]:
 
 
 
-def app_server_peer(script: str, identity: str = "'fake-thread'") -> str:
-    """Run a controlled Team scenario behind the native stdio test peer."""
+def app_server_peer(
+    script: str, identity: str = "os.environ.get('GRAPHTRAJ_PARENT_ALIAS', 'fake-thread')",
+) -> str:
+    """Run a controlled Team scenario with a distinct native identity per Agent."""
     peer = Path(__file__).with_name("runner_codex_peer.py")
     header = (
         "import sys, os\n"
@@ -128,7 +130,7 @@ def fake_codex(tmp_path: Path) -> FakeCodex:
         "configured_events = os.environ.get('FAKE_CODEX_EVENTS')\n"
         "if configured_events is None:\n"
         "    events = [\n"
-        "        {'type': 'thread.started', 'thread_id': 'fake-thread'},\n"
+        "        {'type': 'thread.started', 'thread_id': os.environ.get('FAKE_CODEX_SESSION_ID', 'fake-thread')},\n"
         "        {'type': 'turn.started'},\n"
         "        {\n"
         "            'type': 'turn.completed',\n"

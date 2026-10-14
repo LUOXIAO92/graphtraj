@@ -1079,24 +1079,34 @@ class CodexAppServer:
                     or (state and state.terminal)
                 ):
                     return  # Withdrawal or completion won the race with the reply.
+                reply = {'id': request.request_id, 'result': result}
                 archive = self._fork_archives.get(request.params.get('threadId'))
                 if archive is not None:
-                    archive.reply(request.request_id, result)
-                await self._send({'id': request.request_id, 'result': result})
+                    archive.reply(reply)
+                await self._send(reply)
             else:
                 scoped = all(isinstance(value, str) and value for value in key)
                 if scoped:
                     state = self._turns.setdefault(key, _ExecutionState())
                     if not state.result.done():
                         state.result.set_result(failure)
-                await self._send({'id': request.request_id, 'error': {
+                reply = {'id': request.request_id, 'error': {
                     'code': -32601 if failure.code == 'RUNTIME_REQUEST_UNHANDLED' else -32603,
                     'message': failure.message,
-                }})
+                }}
+                archive = self._fork_archives.get(request.params.get('threadId'))
+                if archive is not None:
+                    archive.reply(reply)
+                await self._send(reply)
                 if not scoped:
                     self._fail(failure)
         except CodexAdapterError as error:
             self._fail(error)
+        except (OSError, ValueError, sqlite3.Error):
+            self._fail(CodexAdapterError(
+                'RUNTIME_TRACE_FAILED', 'The native Codex reply could not be retained.',
+                terminal_confirmed=False,
+            ))
 
 
 class CodexMainRecovery:

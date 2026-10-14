@@ -42,7 +42,8 @@ def finish(turn: str, prompt: str) -> None:
         argv.extend(['resume', session])
     argv.append('-')
     process = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                               text=True, start_new_session=True)
+                               text=True, start_new_session=True,
+                               env={**os.environ, 'FAKE_CODEX_SESSION_ID': session})
     ready.set()
     try:
         process.stdin.write(prompt)

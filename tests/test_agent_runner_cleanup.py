@@ -399,6 +399,14 @@ def test_installed_cleanup_uses_only_ticket_identity_and_preserves_trajectory(
     durable_before = _durable_contents(ticket)
     mappings = _ticket_mappings(ticket)
     assert mappings
+    from graphtraj.sessions.storage import SessionStore, session_path
+
+    archives = {}
+    for directory in mappings:
+        mapping = yaml.safe_load((directory / 'mapping.yml').read_text())
+        path = session_path(ticket.state, 'codex:' + mapping['session'])
+        with SessionStore(path, readonly=True) as archive:
+            archives[path] = archive.page()
 
     cleaned = _cleanup(ticket)
 
@@ -414,6 +422,9 @@ def test_installed_cleanup_uses_only_ticket_identity_and_preserves_trajectory(
     ).returncode == 1
     assert all(not (path / "mapping.yml").exists() for path in mappings)
     _assert_durable_contents(ticket, durable_before)
+    for path, expected in archives.items():
+        with SessionStore(path, readonly=True) as archive:
+            assert archive.page() == expected
     assert historical_marker.read_text(encoding="utf-8") == "historical evidence\n"
 
     repeated = _cleanup(ticket)

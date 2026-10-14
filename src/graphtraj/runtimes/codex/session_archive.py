@@ -133,9 +133,9 @@ class CodexSessionArchive:
             return
         self._connection_record(message, 'received')
 
-    def reply(self, request_id: str | int, result: dict) -> None:
-        """Retain an owned native tool/approval result before attempting delivery."""
-        self._connection_record({'id': request_id, 'result': result}, 'outbound')
+    def reply(self, message: dict) -> None:
+        """Retain an owned native result or error before attempting delivery."""
+        self._connection_record(message, 'outbound')
 
     def _connection_record(self, message: dict, direction: str) -> None:
         """Commit one connection record and its local ordered receipt coordinate."""
@@ -183,8 +183,16 @@ class CodexSessionArchive:
             return
         cutoff = base['end_ordinal_exclusive']
         with SessionStore(session_path(self.state, 'codex:' + base['thread_id']), readonly=True) as parent:
-            if parent.header['graphtraj']['projectId'] != self.project_id:
+            owner = parent.header['graphtraj']
+            if owner['projectId'] != self.project_id:
                 raise ValueError('Native inherited history belongs to another project.')
+            if parent.position('rollout') < base['end_byte_offset']:
+                # A still-open Main may have flushed its terminal record after
+                # Stop. Refresh only this already-owned source, never scan Home.
+                source = owner['native'].get('sourcePath')
+                if source:
+                    CodexSessionArchive(self.state, self.project_id, owner['agentId'],
+                                        owner['native']['sessionId']).collect(Path(source))
             events = []
             after = -1
             while len(events) < cutoff:
@@ -248,7 +256,8 @@ class CodexSessionArchive:
                     'graphtraj': {'version': 1, 'projectId': self.project_id,
                                  'agentId': self.agent_id, 'taskIds': list(self.task_ids),
                                  'native': {'runtime': 'codex', 'sessionId': self.session_id,
-                                            'locator': 'byte:0'}, 'missing': missing},
+                                            'locator': 'byte:0', 'sourcePath': str(rollout.resolve())},
+                                 'missing': missing},
                 }
                 if parent:
                     header['parentSession'] = 'codex:' + parent

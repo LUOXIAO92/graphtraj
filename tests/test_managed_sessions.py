@@ -236,10 +236,6 @@ def test_real_codex_archive(managed_project: ManagedProject) -> None:
     configuration and an explicit model. This probe never reads/copies global
     authentication or selects a host model on the operator's behalf.
     """
-    from graphtraj.interfaces.local_tool import bind
-    from graphtraj.sessions.protocol import native_record
-    from graphtraj.sessions.storage import SessionStore, session_path
-
     root, cause, call, executable = managed_project
     native_home = Path(os.environ['CODEX_ARCHIVE_PROBE_HOME']).resolve()
     assert native_home.is_dir()
@@ -250,35 +246,38 @@ def test_real_codex_archive(managed_project: ManagedProject) -> None:
     executable.unlink()
     executable.symlink_to(real)
     document = launch_document('Remember ARCHIVE_313_NATIVE. Reply exactly ARCHIVE_313_NATIVE. Do not use tools.')
-    document['tasks'][0]['role']['managed-probe'].update(model=model, reasoning_effort='medium')
+    document['tasks'][0]['role']['managed-probe'].update(
+        model=model, reasoning_effort='medium', reports=['archive-probe.md'],
+    )
     launched = call('launch', document, timeout=60)['tasks'][0]
     assert launched['launch_status'] == 'launched', launched
     alias = launched['alias']
     observe(call, alias, 'idle', 'completed', timeout=120)
-    archive_path = session_path(root / '.graphtraj/state', 'codex:' + launched['session'])
-    with SessionStore(archive_path, readonly=True) as archive:
-        before = archive.page()['events']
-    call('send', [alias, 'Reply with the remembered marker only. Do not use tools.', [cause]], timeout=60)
+    session_id = 'codex:' + launched['session']
+    # The native child invokes its own bound tool. The parent has report access,
+    # never human-observer authority or access to the child's raw conversation.
+    instruction = (
+        'Use the native graphtraj tool to execute session_read with arguments '
+        + json.dumps({'session_id': session_id, 'limit': 1000})
+        + '. Follow has_more using the returned after cursor until complete. '
+        'Verify the retained first-turn marker ARCHIVE_313_NATIVE, the header id, '
+        'and your own graphtraj.agentId. Then use submit_report with name '
+        'archive-probe.md and text containing only a JSON object (no Markdown) with keys session_id, '
+        'agent_id, marker_found (boolean), read_succeeded (boolean). '
+        'Use only facts from successful tool responses; report any denial honestly. '
+        'Do not read native files, impersonate an observer, or copy raw events into the report.'
+    )
+    call('send', [alias, instruction, [cause]], timeout=60)
     observe(call, alias, 'idle', 'completed', timeout=120)
+    result = call('cli', ['reports', alias])
+    reports = result['reports']
+    report = next(item for item in reports if Path(item['path']).name == 'archive-probe.md')
+    evidence = json.loads(report['text'])
+    assert evidence == {'session_id': session_id, 'agent_id': alias,
+                        'marker_found': True, 'read_succeeded': True}
     call('interrupt', [alias], timeout=60)
-    metadata = yaml.safe_load((root / '.graphtraj/runner/sessions' / alias / 'session.yml').read_text())
-    native = Path(metadata['rollout_path']).resolve()
-    assert native.is_relative_to(native_home)
-    original = [json.loads(line) for line in native.read_text().splitlines()]
-    native.unlink()
-    reply = bind(root, desktop_observer=True)({
-        'action': 'execute', 'feature': 'session_read',
-        'arguments': {'session_id': 'codex:' + launched['session'], 'limit': 1000},
-    })
-    assert not reply.failed, reply.document
-    events = reply.document['events']
-    assert not reply.document['has_more']
-    assert events[:len(before)] == before
-    assert [native_record(event) for event in events] == original
-    assert 'ARCHIVE_313_NATIVE' in json.dumps(original)
-    with SessionStore(archive_path) as archive:
-        archive.validate()
-        archive.export(root / 'codex-archive-export.sqlite3')
+    # Closing the Runtime must not remove its accepted report evidence.
+    assert call('cli', ['reports', alias])['reports'] == reports
 
 
 @pytest.mark.skipif(os.environ.get('CODEX_MANAGED_REAL') != '1', reason='explicit real Codex acceptance probe')

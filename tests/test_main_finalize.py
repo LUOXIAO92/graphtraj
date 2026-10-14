@@ -420,6 +420,12 @@ def test_checker_reports_missing_native_approval_interface(host: tuple[Path, Pat
     assert 'no bound user approval interface' in result['stopReason']
     reply = json.loads((root / 'approval-reply.json').read_text())
     assert 'error' in reply and 'result' not in reply
+    from graphtraj.sessions.protocol import native_record
+    from graphtraj.sessions.storage import SessionStore, session_path
+
+    with SessionStore(session_path(root / '.graphtraj/state', 'codex:checker'), readonly=True) as archive:
+        assert reply in [native_record(event) for event in archive.page()['events']
+                         if event['type'] != 'session/end-seed']
     evidence = yaml.safe_load(next(binding.parent.glob('checks/*/execution.yml')).read_text())
     assert evidence['outcome'] == 'error'
     assert 'no bound user approval interface' in evidence['error']

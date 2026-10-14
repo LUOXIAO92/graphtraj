@@ -130,6 +130,63 @@ def test_claude_rejects_secret_configured_endpoint(
     assert 'secret' not in str(caught.value)
 
 
+@pytest.mark.parametrize('mode', [None, 'default', 'auto'])
+def test_claude_permission_mode_configuration_and_resume(
+    tmp_path: Path, claude_environment: None, mode: str | None,
+) -> None:
+    """Pin explicit choices but leave restricted native defaults unmodified."""
+    result_project(tmp_path)
+    config = {'permission_mode': mode} if mode is not None else {}
+    _, prepared = context(tmp_path, claude=config)
+    assert prepared.evidence_document()['permission_mode'] == mode
+    session = None
+    for prompt in ('first', 'resume'):
+        with ExitStack() as stack:
+            turn, _, _ = execution(tmp_path, stack, prompt, session, prepared_context=prepared)
+            result = turn.run()
+            session = result['session_id']
+        launch = json.loads((tmp_path / 'native-permissions.json').read_text())
+        assert launch['mode'] == mode
+        permissions = launch['settings']['permissions']
+        if mode is None:
+            assert 'defaultMode' not in permissions
+        else:
+            assert permissions['defaultMode'] == mode
+        assert launch['restricted'] and launch['permission_handler'] == 'stdio'
+        assert permissions['blockReadsOutsideWorkingDirectories'] is True
+        assert permissions['deny']
+        sandbox = launch['settings']['sandbox']
+        assert sandbox['enabled'] and sandbox['failIfUnavailable']
+        assert sandbox['allowUnsandboxedCommands'] is False
+        assert sandbox['autoAllowBashIfSandboxed'] is False
+        assert sandbox['filesystem']['denyRead'] and sandbox['filesystem']['denyWrite']
+        assert result['permissions']['requested'] == mode
+        assert result['permissions']['observed'] == (mode or 'unknown')
+
+
+@pytest.mark.parametrize('observed', ['default', 'unknown'])
+def test_claude_reports_mode_fallback_or_unknown(
+    tmp_path: Path, claude_environment: None, monkeypatch: pytest.MonkeyPatch, observed: str,
+) -> None:
+    """Do not label a native fallback or unavailable observation as active auto."""
+    result_project(tmp_path)
+    monkeypatch.setenv('CLAUDE_FIXTURE_PERMISSION_MODE', observed)
+    with ExitStack() as stack:
+        turn, _, _ = execution(tmp_path, stack, 'mode', claude={'permission_mode': 'auto'})
+        result = turn.run()
+    assert result['permissions']['observed'] == observed
+    assert result['permissions']['matches_request'] == (False if observed == 'default' else None)
+
+
+@pytest.mark.parametrize('mode', ['bypassPermissions', 'acceptEdits', None])
+def test_claude_rejects_unsupported_explicit_mode(
+    tmp_path: Path, claude_environment: None, mode: str | None,
+) -> None:
+    """Only the two supported explicit modes enter the Runtime configuration."""
+    with pytest.raises(RuntimeAdapterError, match='permission_mode'):
+        context(tmp_path, claude={'permission_mode': mode})
+
+
 def test_claude_native_resume_and_activity(tmp_path: Path, claude_environment: None) -> None:
     """Keep native history and new execution IDs, with usage counted at result only."""
     from graphtraj.runtimes.activity import TraceReader

@@ -68,6 +68,7 @@ class ClaudeContext:
             'runtime', 'executable', 'version', 'model', 'reasoning_effort',
             'runtime_home', 'connection', 'connection_revision', 'model_source',
             'worktree_access', 'settings_sources', 'provider', 'base_url', 'base_url_source', 'credential_source',
+            'permission_mode', 'permission_mode_source',
         )}
 
     def runtime_environment(self) -> Mapping[str, str]:
@@ -135,9 +136,11 @@ class ClaudeRuntimeAdapter:
                 raise RuntimeAdapterError('ROLE_CONFIG_INVALID', 'Claude Base URL must be credential-free HTTP(S).')
         config = dict(settings.claude or {})
         resources = config.get('read_paths', [])
-        if (set(config) - {'read_paths'} or not isinstance(resources, list)
+        if (set(config) - {'read_paths', 'permission_mode'} or not isinstance(resources, list)
                 or any(not isinstance(path, str) or not Path(path).is_absolute() for path in resources)):
             raise RuntimeAdapterError('ROLE_CONFIG_INVALID', 'claude.read_paths must list absolute resource paths.')
+        if 'permission_mode' in config and config['permission_mode'] not in ('default', 'auto'):
+            raise RuntimeAdapterError('ROLE_CONFIG_INVALID', 'claude.permission_mode must be default or auto.')
         credential_environment(settings.api_key_env)
         binary = executable()
         try:
@@ -180,6 +183,9 @@ class ClaudeRuntimeAdapter:
             'api_key_env': settings.api_key_env, 'instructions': role.instructions,
             'worktree_access': settings.worktree_access, 'reports': reports, 'resources': resources,
             'settings_sources': 'managed settings and explicit Runner settings; restricted mode',
+            'permission_mode': config.get('permission_mode'),
+            'permission_mode_source': ('role' if 'permission_mode' in config else
+                                       'native restricted selection; user/project/local settings excluded'),
         }))
 
     def recovery_environment(self, connection: Mapping[str, Any]) -> Mapping[str, str]:

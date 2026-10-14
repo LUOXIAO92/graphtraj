@@ -342,7 +342,7 @@ def read_session_reports(alias: str, cwd: Path) -> dict:
         # confirmation or stop-source fields remain unknown, not inferred.
         result['execution'] = {
             key: retained[key] for key in (
-                'outcome', 'session_id', 'execution_id', 'terminal_confirmed', 'budget_stopped',
+                'outcome', 'session_id', 'execution_id', 'terminal_confirmed', 'budget_stopped', 'permissions',
             ) if key in retained
         }
         if isinstance(retained.get('error'), dict):

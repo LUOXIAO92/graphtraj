@@ -115,7 +115,7 @@ class ClaudeExecution:
             denied_write.append(str(worktree))
         settings = {
             'permissions': {
-                'defaultMode': 'default', 'blockReadsOutsideWorkingDirectories': True,
+                'blockReadsOutsideWorkingDirectories': True,
                 'deny': [rule for p in denied_read for rule in (f'Read(/{p})', f'Read(/{p}/**)')]
                         + [rule for p in denied_write for rule in (f'Edit(/{p})', f'Edit(/{p}/**)')]
                         + (['Edit', 'Write', 'NotebookEdit'] if request['worktree_access'] == 'read' else []),
@@ -139,16 +139,20 @@ class ClaudeExecution:
             'command': sys.executable, 'args': ['-m', 'graphtraj.interfaces.mcp'],
             'env': {'GRAPHTRAJ_CLI_CONNECTION': address},
         }}}
+        if request.get('permission_mode') is not None:
+            settings['permissions']['defaultMode'] = request['permission_mode']
         argv = [request['executable'], '--print', '--verbose', '--input-format', 'stream-json',
                 '--output-format', 'stream-json', '--include-partial-messages',
                 '--permission-prompt-tool', 'stdio',
-                '--permission-mode', 'default', '--restricted', '--strict-mcp-config',
+                '--restricted', '--strict-mcp-config',
                 '--mcp-config', json.dumps(mcp), '--settings', json.dumps(settings),
                 '--tools', 'Bash,Read,Write,Edit,Glob,Grep', '--model', request['model'],
                 '--append-system-prompt', request['instructions'],
                 '--resume' if self.expected else '--session-id', self.native_id]
         if request['reasoning_effort'] is not None:
             argv += ['--effort', request['reasoning_effort']]
+        if request.get('permission_mode') is not None:
+            argv += ['--permission-mode', request['permission_mode']]
         environment = {key: value for key, value in os.environ.items() if not key.startswith('GRAPHTRAJ_')}
         environment.update(GRAPHTRAJ_CLI_CONNECTION=address, CLAUDE_CODE_SDK_READS_SESSION_STATE='1',
                            CLAUDE_CODE_DISABLE_BACKGROUND_TASKS='1', CLAUDE_CODE_SUBPROCESS_ENV_SCRUB='1')
@@ -203,6 +207,7 @@ class ClaudeExecution:
             'runtime_version': self.request['version'], 'source': native.get('source'),
             'configured_model': self.request['model'], 'configured_effort': self.request['reasoning_effort'],
             'native_init': getattr(self, 'native_init', None),
+            'permissions': self.permission_evidence(),
         })
         assert self.proc is not None
         self.created(self.session, self.proc.pid)
@@ -318,6 +323,7 @@ class ClaudeExecution:
                         if self.session is not None:
                             observed = yaml_document(self.directory / 'session.yml')
                             observed['native_init'] = event
+                            observed['permissions'] = self.permission_evidence()
                             write_yaml_durably(self.directory / 'session.yml', observed)
                     elif kind == 'system' and event.get('subtype') == 'session_state_changed':
                         self.native_state = event.get('state')
@@ -382,6 +388,7 @@ class ClaudeExecution:
                     self.outcome = {'outcome': 'interrupted' if self.stopping.is_set() else 'completed',
                                     'terminal_confirmed': self.terminal_confirmed,
                                     'session_id': self.session, 'execution_id': self.execution_id,
+                                    'permissions': self.permission_evidence(),
                                     'last_agent_message': last}
                 self.done.set()
         if failure is not None:
@@ -391,6 +398,21 @@ class ClaudeExecution:
         if self.outcome is None:
             raise RuntimeAdapterError('RUNTIME_SESSION_MISSING', 'Claude ended without a registered Session.')
         return self.outcome
+
+    def permission_evidence(self) -> dict:
+        """Distinguish retained selection from the mode actually reported by Claude."""
+        observed = getattr(self, 'native_init', {}).get('permissionMode')
+        if observed not in ('default', 'manual', 'auto', 'acceptEdits', 'plan', 'dontAsk', 'bypassPermissions'):
+            observed = 'unknown'
+        requested = self.request.get('permission_mode')
+        return {
+            'requested': requested,
+            'source': self.request.get('permission_mode_source', 'unknown'),
+            'observed': observed,
+            'observed_source': 'system/init' if observed != 'unknown' else 'unknown',
+            'matches_request': (None if requested is None or observed == 'unknown' else
+                                requested == ('default' if observed == 'manual' else observed)),
+        }
 
     def _close(self) -> None:
         """Reap the owned process group, including tools; never equate ACK with exit."""

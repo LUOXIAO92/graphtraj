@@ -139,7 +139,7 @@ Claude's `opus` alias is not a version pin. Other model IDs require an explicit
 connection; GraphTraj does not substitute a model or effort.
 
 Claude child execution uses restricted mode, the native sandbox with
-`failIfUnavailable` and no unsandboxed retry, and manual native permission
+`failIfUnavailable` and no unsandboxed retry, and native permission
 responses through Runner `requests` / `reply`. A reply uses Claude's
 `behavior: allow` or `behavior: deny` shape. The native permission and filesystem
 checks still apply. `claude.read_paths` may list explicit external read-only
@@ -147,6 +147,20 @@ resources. Assigned reports use the hosted `submit_report` tool, without grantin
 write access to private state. User settings and other MCP servers are excluded
 from these restricted child launches; managed settings remain effective. The
 captured Context records these sources, model, effort, CLI version and paths.
+
+Set `claude: {permission_mode: default}` for manual tool approval or
+`claude: {permission_mode: auto}` for Claude's native tool classifier. Explicit
+choices are retained on resume. When omitted, Runner supplies no permission-mode
+flag or `defaultMode`: Claude selects from managed settings and its native
+restricted-session defaults, including its native resume behavior. This does
+**not** inherit user, project or local settings, which `--restricted` excludes;
+represent a desired choice explicitly in the role instead of changing global
+settings. Sandbox and file restrictions remain the same in either mode.
+Runner `reports` distinguishes requested mode, its source and the mode reported
+by native initialization; missing observations are `unknown`, and a fallback is
+not evidence that auto became active. Native auto availability depends on Claude
+policy and service support. Tool auto approval does not approve GraphTraj budget
+recovery; recovery still requires the calling parent's selected reviewer.
 
 Runner retains the native Session on continuation, checks registration before
 releasing the first prompt, and distinguishes an interrupt request from verified

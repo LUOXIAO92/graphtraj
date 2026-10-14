@@ -22,6 +22,12 @@ if os.environ.get('CLAUDE_FIXTURE_FAIL'):
 args = sys.argv
 session = args[args.index('--resume' if '--resume' in args else '--session-id') + 1]
 model = args[args.index('--model') + 1]
+permission_mode = args[args.index('--permission-mode') + 1] if '--permission-mode' in args else None
+Path(os.environ['CLAUDE_FIXTURE_HOME'], 'native-permissions.json').write_text(json.dumps({
+    'mode': permission_mode, 'settings': json.loads(args[args.index('--settings') + 1]),
+    'restricted': '--restricted' in args,
+    'permission_handler': args[args.index('--permission-prompt-tool') + 1],
+}))
 history = Path(os.environ['CLAUDE_FIXTURE_HOME']) / (session + '.json')
 Path(os.environ['CLAUDE_FIXTURE_HOME'], 'native-selection.json').write_text(json.dumps({
     'model': model, 'effort': args[args.index('--effort') + 1] if '--effort' in args else None,
@@ -115,7 +121,11 @@ for line in sys.stdin:
         response = event['response']
         if response['request_id'] == 'startup':
             started = True
-            emit({'type': 'system', 'subtype': 'init', 'session_id': session, 'model': model})
+            init = {'type': 'system', 'subtype': 'init', 'session_id': session, 'model': model}
+            observed_mode = os.environ.get('CLAUDE_FIXTURE_PERMISSION_MODE', permission_mode)
+            if observed_mode is not None:
+                init['permissionMode'] = observed_mode
+            emit(init)
         elif response['request_id'] == 'permission-1':
             result(json.dumps(response['response']))
     elif event['type'] == 'user':

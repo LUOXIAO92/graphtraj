@@ -206,6 +206,9 @@ def test_public_query_authority_and_independent_archive(tmp_path: Path, monkeypa
     with SessionStore.create(path, header()) as store:
         store.append({'type': 'unknown/encrypted', 'seq': 0, 'time': 1,
                       'data': {'ciphertext': 'opaque'}}, source='native', position=0)
+        store.export(tmp_path / 'portable.sqlite3')
+    path.unlink()
+    (tmp_path / 'portable.sqlite3').replace(path)
     request = {'action': 'execute', 'feature': 'session_read', 'arguments': {'session_id': 'canonical'}}
     with runtime_caller(runner, 'research@x1'):
         from graphtraj.runtimes.codex.managed_session import native_operation_features
@@ -244,7 +247,6 @@ def test_fragment_size_equivalence_and_measurements(tmp_path: Path) -> None:
             usage = {'type': 'chunk', 'time': 2, 'chunk': {'type': 'usage',
                      'usage': {'inputTokens': 30, 'outputTokens': 4000, 'cacheReadTokens': 10}}}
             writer.feed(usage, position)
-            writer.finish()
             probability = {'type': 'graphtraj/logprobs', 'seq': 1, 'time': 3, 'data': {
                 'target': {'eventSeq': 0, 'requestId': 'request', 'attemptId': 'attempt',
                            'model': 'test', 'tokenizer': 'test'},
@@ -252,7 +254,7 @@ def test_fragment_size_equivalence_and_measurements(tmp_path: Path) -> None:
                 'distribution': 'raw', 'semantics': 'natural log before sampling',
                 'tokens': [{'position': 0, 'text': 'a', 'logprob': -0.5,
                             'span': {'blockIndex': 0, 'start': 0, 'end': 1}}]}}
-            store.append(probability, source='rpc', position=position + 1)
+            writer.finish(following=[probability])
             store.validate()
             write_time = perf_counter() - started
             started = perf_counter()
@@ -282,3 +284,25 @@ def test_graph_query_does_not_open_session_archives(tmp_path: Path) -> None:
     path.write_bytes(b'not a readable Session database')
     result = handle_request({'action': 'execute', 'feature': 'ticket_graph', 'arguments': {}}, cwd=tmp_path)
     assert not result.failed and result.document['tickets']
+
+
+def test_one_native_record_commits_all_its_semantic_events(tmp_path: Path) -> None:
+    """Failed batch mapping cannot advance the native cursor past missing evidence."""
+    with SessionStore.create(tmp_path / 'session.sqlite3', header()) as store:
+        events = [{'type': 'unknown', 'seq': seq, 'time': 1, 'data': {'value': seq}}
+                  for seq in range(2)]
+        with pytest.raises(ValueError):
+            store.append_many([events[0], {**events[1], 'seq': 3}], source='native', position=100)
+        assert store.next_seq == 0 and store.position('native') == -1
+        assert store.append_many(events, source='native', position=100)
+        assert not store.append_many(events, source='native', position=100)
+        assert store.page()['events'] == events
+        writer = StreamWriter(store, 'rpc', assistant(2))
+        writer.feed(run('partial with boundary'), 0)
+        writer.checkpoint()
+        boundary = {'type': 'permission', 'seq': 3, 'time': 2, 'data': {'denied': True}}
+        with pytest.raises(ValueError):
+            writer.finish(interrupted=True, following=[{**boundary, 'seq': 4}])
+        assert store.next_seq == 2 and store.pending() is not None
+        writer.finish(interrupted=True, following=[boundary])
+        assert store.next_seq == 4 and store.pending() is None

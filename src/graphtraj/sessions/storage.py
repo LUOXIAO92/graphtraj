@@ -163,12 +163,23 @@ class SessionStore:
         native byte offsets). Start a new source ID if the underlying log resets.
         An unfinished stream must be finalized before another event is appended.
         """
+        return self.append_many([event], source=source, position=position)
+
+    def append_many(self, events: list[dict], *, source: str, position: int) -> bool:
+        """Commit all semantic events mapped from one native source position together.
+
+        For example, a message and its probability observation cannot commit
+        independently while advancing past their shared original source record.
+        """
+        if not isinstance(events, list) or not events:
+            raise ValueError('At least one semantic event is required.')
         with self._transaction():
             if not self._fresh(source, position):
                 return False
             if self.pending() is not None:
                 raise ValueError('Finalize the pending stream before appending a boundary event.')
-            self._insert(event)
+            for event in events:
+                self._insert(event)
             self._advance(source, position)
         return True
 
@@ -328,12 +339,20 @@ class StreamWriter:
                 or pending != self.committed_draft):
             raise ValueError('Session changed; reopen the stream from its committed checkpoint.')
 
-    def finish(self, *, content: list | None = None, interrupted: bool = False) -> int:
+    def finish(
+        self,
+        *,
+        content: list | None = None,
+        interrupted: bool = False,
+        following: list[dict] | None = None,
+    ) -> int:
         """Append received output on completion, cancellation, failure or abort.
 
         For a message without explicit final content, construct text/reasoning
         blocks from retained runs. Other block kinds must be mapped explicitly
         by the Runtime; their original stream records remain intact regardless.
+        ``following`` commits observations or boundary events from the same
+        source position atomically with the output, before advancing its cursor.
         """
         if self.closed:
             raise ValueError('Stream is finalized.')
@@ -358,6 +377,8 @@ class StreamWriter:
         with self.store._transaction():
             self._check_owner()
             self.store._insert(event)
+            for observation in following or []:
+                self.store._insert(observation)
             self.store.db.execute('DELETE FROM draft')
             self.store._advance(self.source, self.position)
         self.closed = True

@@ -230,6 +230,7 @@ def test_referenced_fork_copies_only_native_ordinal_prefix(tmp_path: Path, copie
 
 @pytest.mark.parametrize('method, index', [
     ('item/agentMessage/delta', {}),
+    ('item/plan/delta', {}),
     ('item/reasoning/textDelta', {'contentIndex': 0}),
     ('item/reasoning/summaryTextDelta', {'summaryIndex': 0}),
 ])
@@ -249,7 +250,7 @@ def test_checker_deltas_are_compact_and_survive_reopening(
         assert store.pending()['event']['data']['stream'][0]['text'] == 'x' * 300
         assert len(store.pending()['event']['data']['stream']) == 1
     final = {'method': 'item/completed', 'params': {'threadId': 'child',
-             'turnId': 'turn', 'item': {'id': 'item', 'text': 'x' * 300,
+             'turnId': 'turn', 'item': {'id': 'item', 'text': 'final snapshot can differ',
                                       'encrypted_content': 'opaque-retained'}}}
     archive.notice(final)
     archive.close()

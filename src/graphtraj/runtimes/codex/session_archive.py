@@ -151,6 +151,7 @@ class CodexSessionArchive:
         """
         method = message.get('method')
         kinds = {'item/agentMessage/delta': ('text', None),
+                 'item/plan/delta': ('text', None),
                  'item/reasoning/textDelta': ('reasoning', 'contentIndex'),
                  'item/reasoning/summaryTextDelta': ('reasoning', 'summaryIndex')}
         if method not in kinds or set(message) != {'method', 'params'}:

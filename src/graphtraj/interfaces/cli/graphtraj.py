@@ -59,6 +59,21 @@ main.add_command(roles)
 main.add_command(bind_command)
 
 
+@main.command("migrate-tickets")
+def migrate_tickets_command() -> None:
+    """Convert this project's retained Ticket state to the Task format once.
+
+    Stop all Agents first. The previous state and Runner records are copied
+    to .graphtraj/backups and restored automatically if conversion fails."""
+    from graphtraj.workspace.task_migration import migrate_project
+
+    try:
+        result = migrate_project(Path.cwd())
+    except (OSError, ValueError, yaml.YAMLError) as error:
+        raise click.ClickException(str(error)) from error
+    click.echo(yaml.safe_dump(result, sort_keys=False), nl=False)
+
+
 @main.command("connections", cls=OperationCommand, feature="runtime_connections")
 @click.option("--action", type=click.Choice(["read", "preview", "save", "discover"]), default="read")
 @click.option("--catalog-file", type=click.Path(path_type=Path, exists=True, dir_okay=False))

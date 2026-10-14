@@ -108,8 +108,10 @@ class ClaudeExecution:
 
     def _prompt(self, text: str) -> None:
         """Queue a native user message while counting each expected result."""
-        self._send({'type': 'user', 'session_id': self.native_id,
-                    'message': {'role': 'user', 'content': text}, 'parent_tool_use_id': None})
+        message = {'type': 'user', 'session_id': self.native_id,
+                   'message': {'role': 'user', 'content': text}, 'parent_tool_use_id': None}
+        self._send(message)
+        self.events.put({**message, 'graphtraj_direction': 'sent'})
         self.sent += 1
 
     def _prepare(self, address: str) -> tuple[list[str], dict]:
@@ -200,8 +202,6 @@ class ClaudeExecution:
         try:
             with self.trace.open('a', encoding='utf-8') as trace:
                 for line in self.proc.stdout:
-                    trace.write(line)
-                    trace.flush()
                     try:
                         event = json.loads(line)
                         if not isinstance(event, dict):
@@ -209,6 +209,11 @@ class ClaudeExecution:
                     except ValueError:
                         self.events.put({'type': 'transport_error'})
                         return
+                    # Partial text is compacted in the canonical archive, not copied
+                    # to a second permanent per-fragment transport log.
+                    if event.get('type') != 'stream_event':
+                        trace.write(line)
+                        trace.flush()
                     self.events.put(event)
         finally:
             self.events.put({'type': 'eof'})
@@ -265,6 +270,7 @@ class ClaudeExecution:
         from graphtraj.interfaces.hosted_cli import cli_connection
         from graphtraj.runtimes.codex.managed_session import native_operation_features
         from graphtraj.runtimes.activity import redact
+        from graphtraj.runtimes.claude.collection import open_archive, StreamCollector
 
         last = None
         result_error = None
@@ -272,6 +278,20 @@ class ClaudeExecution:
         stderr_reader = None
         failure = None
         with ExitStack() as resources:
+            mapping = yaml_document(self.directory / 'mapping.yml')
+            archive = resources.enter_context(open_archive(
+                Path(self.request['state_directory']), Path(self.request['harness_root']),
+                self.native_id, self.directory.name, source='managed',
+                task_ids=[mapping['ticket_id']] if mapping.get('ticket_id') else []))
+            if archive.pending():
+                from graphtraj.sessions.storage import StreamWriter
+
+                StreamWriter(archive, archive.pending()['source']).finish(content=[], interrupted=True)
+            provider = self.request.get('provider', 'native')
+            if provider == 'native' and not self.request.get('base_url'):
+                provider = 'anthropic'
+            collector = StreamCollector(archive, self.execution_id, self.request['model'], provider)
+            source_position = 0
             address = resources.enter_context(cli_connection(
                 Path(self.request['harness_root']), self.directory.name, native_operation_features()))
             argv, environment = self._prepare(address)
@@ -302,6 +322,7 @@ class ClaudeExecution:
                 reader.start()
                 initialization = self._control('initialize', hooks={
                     'UserPromptSubmit': [{'matcher': None, 'hookCallbackIds': ['graphtraj_start']}],
+                    'SubagentStop': [{'matcher': None, 'hookCallbackIds': ['graphtraj_collect_child']}],
                 })
                 startup_deadline = time.monotonic() + 45
                 stop_deadline = None
@@ -316,6 +337,9 @@ class ClaudeExecution:
                         event = self.events.get(timeout=0.1)
                     except queue.Empty:
                         continue
+                    source_position += 1
+                    if event.get('type') != 'eof':
+                        collector.accept(event, source_position)
                     kind = event.get('type')
                     if kind in ('warning', 'error') or (
                             kind == 'system' and event.get('subtype') in ('warning', 'error')):
@@ -342,6 +366,11 @@ class ClaudeExecution:
                             self._bind(request)
                             self._reply(event['request_id'], {})
                             self.task_released = True
+                        elif request.get('subtype') == 'hook_callback' and request.get('callback_id') == 'graphtraj_collect_child':
+                            from graphtraj.runtimes.claude.collection import collect_hook
+
+                            collect_hook(request['input'], Path(self.request['worktree_path']))
+                            self._reply(event['request_id'], {})
                         elif request.get('subtype') == 'can_use_tool':
                             self._permission(event)
                         else:
@@ -410,6 +439,18 @@ class ClaudeExecution:
                     stderr_reader.join(timeout=5)
                 pipes_drained = all(thread is None or not thread.is_alive()
                                     for thread in (reader, stderr_reader))
+                try:
+                    if pipes_drained:
+                        while not self.events.empty():
+                            event = self.events.get_nowait()
+                            source_position += 1
+                            if event.get('type') != 'eof':
+                                collector.accept(event, source_position)
+                        collector.close()
+                    elif collector.writer:
+                        collector.writer.checkpoint()
+                except Exception as error:
+                    failure = RuntimeAdapterError('RUNTIME_ARCHIVE_FAILED', str(error))
                 if self.proc is not None and pipes_drained:
                     for stream in (self.proc.stdout, self.proc.stderr):
                         if stream is not None:

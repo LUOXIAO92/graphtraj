@@ -37,6 +37,10 @@ def setup(
                                  'reasoning_effort': 'high', 'reports': ['evidence.md']}},
         'role_tree': {'researcher': {}},
     }))
+    if native:
+        # Keep the real user's existing official login; only fixture peers use
+        # configure_harness's disposable user home. Never copy credentials.
+        environment['HOME'] = os.environ['HOME']
     environment['CLAUDE_FIXTURE_HOME'] = str(tmp_path)
     if os.environ.get('CLAUDE_CONFIG_DIR'):
         environment['CLAUDE_CONFIG_DIR'] = os.environ['CLAUDE_CONFIG_DIR']
@@ -134,4 +138,39 @@ def test_real_claude_public_runner_startup(
     task = document['tasks'][0]
     terminal = settled(installed_commands, root, environment, task['alias'])
     print(json.dumps(terminal))
+    assert terminal['last_outcome'] == 'completed', terminal
+
+
+@pytest.mark.skipif(not os.environ.get('CLAUDE_REAL_TEST_BINARY'), reason='Explicit real CLI probe only')
+def test_real_claude_archive_public_query(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    """Collect a real Runner call and read its archive through the public gateway."""
+    from graphtraj.execution.runner_status import runtime_caller
+    from graphtraj.interfaces.gateway import handle_request
+
+    root, environment = setup(installed_commands, temporary_git_repository, fake_codex,
+                              tmp_path, os.environ['CLAUDE_REAL_TEST_BINARY'])
+    batch = root / 'archive-probe.yml'
+    batch.write_text(yaml.safe_dump({'tasks': [{'ticket_id': '320', 'role': 'researcher'}]}))
+    result = command(installed_commands, root, environment, '--swarm-input', str(batch))
+    print('REAL_CLAUDE_321_HARNESS=' + str(root))
+    print(result.stdout)
+    print(result.stderr)
+    assert result.returncode == 0, result.stdout + result.stderr
+    task = yaml.safe_load(result.stdout)['tasks'][0]
+    terminal = settled(installed_commands, root, environment, task['alias'])
+    print(json.dumps(terminal))
+    # The real Runner has already established this mapping. This test selects
+    # that existing owner at the public host seam, without creating identity.
+    with runtime_caller(root / '.graphtraj/runner', task['alias']):
+        result = handle_request({'action': 'execute', 'feature': 'session_read',
+                                 'arguments': {'session_id': 'claude:' + terminal['session']}}, cwd=root)
+    data = result.document
+    assert data['header']['graphtraj']['native']['sessionId'] == terminal['session']
+    assert any(e.get('data', {}).get('record', {}).get('type') == 'result' for e in data['events'])
+    print('REAL_CLAUDE_321_QUERY=' + json.dumps(data, ensure_ascii=False))
     assert terminal['last_outcome'] == 'completed', terminal

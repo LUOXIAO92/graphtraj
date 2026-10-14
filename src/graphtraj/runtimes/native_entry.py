@@ -103,14 +103,19 @@ def dsh_event(event: dict, cwd: Path) -> dict:
 
 
 @click.command()
-@click.argument('runtime', type=click.Choice(['pi', 'dsh']))
+@click.argument('runtime', type=click.Choice(['pi', 'dsh', 'claude']))
 def main(runtime: str) -> None:
     """Handle one native extension event without exporting config in environment."""
     try:
         event = json.load(sys.stdin)
         if not isinstance(event, dict):
             raise ValueError('A native event object is required.')
-        result = (pi_event if runtime == 'pi' else dsh_event)(event, Path.cwd())
+        if runtime == 'claude':
+            from graphtraj.runtimes.claude.collection import collect_hook
+
+            result = collect_hook(event, Path.cwd())
+        else:
+            result = (pi_event if runtime == 'pi' else dsh_event)(event, Path.cwd())
     except Exception as error:
         result = {'error': str(error)}
     click.echo(json.dumps(result, ensure_ascii=False))

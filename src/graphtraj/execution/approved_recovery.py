@@ -22,7 +22,7 @@ from graphtraj.execution.runner_status import (
 )
 from graphtraj.graph.delivery_state import read_team
 from graphtraj.graph.delivery_worldline import append_project_worldline_event, read_worldline, _read_shards
-from graphtraj.graph.ticket_graph import _load_states, _lock, _unlock
+from graphtraj.graph.task_graph import _load_states, _lock, _unlock
 from graphtraj.runtimes import runtime_adapter
 from graphtraj.runtimes.replacement import caller_runtime
 from graphtraj.workspace.runner_project import discover_project
@@ -119,21 +119,21 @@ def _repair_snapshot(project: Any, before: dict, request: dict) -> dict:
                 'Retired-member recovery requires a positive budget increment without resume or restore_active.',
             )
         # The retained binding preserves ownership; this repair changes only its
-        # Ticket budget, leaving the retired Session and Team untouched.
+        # Task budget, leaving the retired Session and Team untouched.
         after['budget']['approved_minutes'] = after['budget'].get('approved_minutes', 0) + minutes
         return after
     if request.get('restore_active', False):
-        if before['ticket'].get('schema_version') == 2 and (
-            not before['ticket']['active'] or before['ticket']['status'] == 'integrated'
+        if before['task'].get('schema_version') == 2 and (
+            not before['task']['active'] or before['task']['status'] == 'integrated'
         ):
             raise RunnerError('invalid-input', 'Task disposition and completed ancestors require task-graph revision.')
-        if before['ticket']['replaced_by']:
-            raise RunnerError('invalid-input', 'A replaced Ticket requires task-graph revision.')
-        after['ticket']['active'] = True
+        if before['task']['replaced_by']:
+            raise RunnerError('invalid-input', 'A replaced Task requires task-graph revision.')
+        after['task']['active'] = True
         if Path(before['mapping']['worktree_path']) == project.integration_worktree:
-            after['ticket']['status'] = 'resolving-integration'
-        elif after['ticket']['status'] not in {'implementing', 'reviewing', 'reworking'}:
-            after['ticket']['status'] = 'implementing'
+            after['task']['status'] = 'resolving-integration'
+        elif after['task']['status'] not in {'implementing', 'reviewing', 'reworking'}:
+            after['task']['status'] = 'implementing'
         after['team']['status'] = 'active'
         for field in ('retired_by', 'retirement_event_id', 'retired_at', 'final_session_ref', 'final_trace_ref'):
             after['team'].pop(field, None)
@@ -148,7 +148,7 @@ def _repair_snapshot(project: Any, before: dict, request: dict) -> dict:
     # Administrative reopening grants neither execution permission nor more time.
     if resume and not budget_stopped and after['stop'] is not None:
         after['stop']['resumed'] = True
-    if not after['ticket']['active'] or after['team']['status'] != 'active':
+    if not after['task']['active'] or after['team']['status'] != 'active':
         raise RunnerError('team-not-active', 'This recovery needs restore_active to repair administrative state.')
     return after
 
@@ -162,27 +162,27 @@ def _snapshot(
 ) -> tuple[dict, dict]:
     """Read the exact target state and derive all paths from registered ownership."""
     mapping, session = read_alias_mapping(project.runner_directory, alias)
-    directory, ticket = _load_states(project.state_directory / 'tickets')[mapping['ticket_id']]
-    if ticket['active_team_ordinal'] != mapping['team_generation']:
+    directory, task = _load_states(project.state_directory / 'tasks')[mapping['task_id']]
+    if task['active_team_ordinal'] != mapping['team_generation']:
         raise RunnerError('seat-replaced', 'Recovery cannot change Session ownership.')
     team_path = directory / 'teams' / str(mapping['team_generation']) / 'team.yml'
     team = read_team(team_path)
     if not administrative and alias not in {member['session_ref'] for member in team['members'].values()}:
         raise RunnerError('seat-replaced', 'Recovery requires the original current Team member.')
-    paths = {'ticket': directory / 'ticket.yml', 'team': team_path,
+    paths = {'task': directory / 'task.yml', 'team': team_path,
              'budget': directory / 'execution-budget.yml', 'stop': session / 'stop.yml',
              'round': team_path.parent / 'rounds' / str(team['current_round'])}
     events = (_read_shards(project.state_directory)[1] if worldline_locked
               else read_worldline(project.state_directory, project.harness_root))
-    latest = [event['event_id'] for event in events if event.get('ticket_id') == mapping['ticket_id']]
+    latest = [event['event_id'] for event in events if event.get('task_id') == mapping['task_id']]
     snapshot = {
-        'ticket': ticket, 'team': team,
+        'task': task, 'team': team,
         'budget': yaml.safe_load(paths['budget'].read_text()) if paths['budget'].exists() else None,
         'stop': yaml.safe_load(paths['stop'].read_text()) if paths['stop'].exists() else None,
         'round_mode': paths['round'].stat().st_mode & 0o777,
         'mapping': mapping,
-        'definition_sha256': hashlib.sha256((directory / ticket['current_definition']).read_bytes()).hexdigest(),
-        'latest_ticket_event': latest[-1] if latest else None,
+        'definition_sha256': hashlib.sha256((directory / task['current_definition']).read_bytes()).hexdigest(),
+        'latest_task_event': latest[-1] if latest else None,
     }
     return snapshot, paths
 
@@ -198,7 +198,7 @@ def _differences(expected: Any, actual: Any, prefix: str = '') -> list[dict]:
 def _apply_recovery(proposal: dict, cwd: Path) -> dict:
     """Apply the authorized snapshot atomically with its Worldline fact.
 
-    Called only by recovery after required review. The execution, Ticket,
+    Called only by recovery after required review. The execution, Task,
     budget and Worldline locks serialize existing writers.
     A repeated approved payload uses its retained applied event without adding time.
     """
@@ -233,7 +233,7 @@ def _apply_recovery(proposal: dict, cwd: Path) -> dict:
     digest = hashlib.sha256(json.dumps(proposal, sort_keys=True).encode()).hexdigest()
     _, paths = _snapshot(project, alias, administrative=not request['resume'])
     with execution_start_lock(project.runner_directory):
-        lock = _lock(project.state_directory / 'tickets', exclusive=True)
+        lock = _lock(project.state_directory / 'tasks', exclusive=True)
         try:
             with (paths['budget'].parent / '.execution-budget.lock').open('a+b') as budget_lock:
                 file_lock.flock(budget_lock, file_lock.LOCK_EX)
@@ -271,7 +271,7 @@ def _apply_recovery(proposal: dict, cwd: Path) -> dict:
                             for key in original:
                                 if proposal['before'][key] != proposal['after'][key]:
                                     value = proposal['after'][key]
-                                    if key == 'ticket':
+                                    if key == 'task':
                                         from graphtraj.graph.task_protocol import execution_record
 
                                         value = execution_record(value)
@@ -287,7 +287,7 @@ def _apply_recovery(proposal: dict, cwd: Path) -> dict:
                         applied = append_project_worldline_event(
                             project.state_directory, project.harness_root,
                             {'event': 'recovery-applied', 'alias': alias, 'session': mapping['session'],
-                             'ticket_id': mapping['ticket_id'], 'proposal_sha256': digest,
+                             'task_id': mapping['task_id'], 'proposal_sha256': digest,
                              'proposal': proposal,
                              'caused_by_event_ids': proposal['request']['caused_by_event_ids'],
                              'evidence_refs': []}, mutate,
@@ -331,7 +331,7 @@ def _resume_locked(project: Any, applied: dict, directory: Path) -> dict:
     if prior:
         return {**result, 'recovery_status': 'resumed', 'resumption': prior['resumption']}
     current, _ = _snapshot(project, alias)
-    expected = {**proposal['after'], 'latest_ticket_event': applied['event_id']}
+    expected = {**proposal['after'], 'latest_task_event': applied['event_id']}
     differences = _differences(expected, current)
     # Native startup replaces transport and clears the terminal summary before
     # turn admission. These changes do not alter Session ownership or authority.
@@ -363,7 +363,7 @@ def _resume_locked(project: Any, applied: dict, directory: Path) -> dict:
         append_project_worldline_event(
             project.state_directory, project.harness_root,
             {'event': 'recovery-resumed', 'alias': alias, 'session': applied['session'],
-             'ticket_id': applied['ticket_id'], 'resumption': resumption,
+             'task_id': applied['task_id'], 'resumption': resumption,
              'caused_by_event_ids': [applied['event_id']], 'evidence_refs': []},
         )
     except (OSError, ValueError) as error:

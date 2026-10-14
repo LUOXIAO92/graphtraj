@@ -26,10 +26,10 @@ export default function (pi: ExtensionAPI) {
   pi.on('session_shutdown', stop);
   pi.registerTool({
     name: 'usage_dashboard_check', label: 'Owned usage dashboard check',
-    description: 'Start one explicitly authorized native Dashboard check, inspect its result, or stop only its owned child. Requires current project, Ticket, absolute deadline and executable paths. Does not authorize resources, sandbox exceptions or extra time.',
+    description: 'Start one explicitly authorized native Dashboard check, inspect its result, or stop only its owned child. Requires current project, Task, absolute deadline and executable paths. Does not authorize resources, sandbox exceptions or extra time.',
     parameters: Type.Object({
       action: Type.Union([Type.Literal('start'), Type.Literal('status'), Type.Literal('stop')]),
-      project: Type.Optional(Type.String()), ticket: Type.Optional(Type.String()),
+      project: Type.Optional(Type.String()), task: Type.Optional(Type.String()),
       deadline: Type.Optional(Type.String({ description: 'Approved absolute ISO execution deadline with timezone; no time extension.' })),
       tool: Type.Optional(Type.String({ description: 'Current approved absolute graphtraj-tool path.' })),
       electron: Type.Optional(Type.String({ description: 'Approved absolute Electron executable path.' })),
@@ -46,7 +46,7 @@ export default function (pi: ExtensionAPI) {
         for (const value of [args.project, args.tool, args.electron, args.artifacts, args.node || process.execPath]) {
           if (!value || !path.isAbsolute(value)) throw new Error('Supply the approved absolute resource paths.');
         }
-        if (!args.ticket) throw new Error('Supply the current Ticket.');
+        if (!args.task) throw new Error('Supply the current Task.');
         const deadline = args.deadline && /T.*(?:Z|[+-]\d{2}:\d{2})$/.test(args.deadline) ? Date.parse(args.deadline) : NaN;
         if (!Number.isFinite(deadline) || deadline <= Date.now() + 10000) throw new Error('Supply the approved future absolute deadline.');
         used = true;
@@ -55,7 +55,7 @@ export default function (pi: ExtensionAPI) {
           cwd: args.project, stdio: ['ignore', 'pipe', 'pipe'],
           env: { ...process.env, GRAPHTRAJ_TOOL: args.tool,
             GRAPHTRAJ_LIVE_NO_SANDBOX: args.noSandbox ? '1' : '0',
-            GRAPHTRAJ_LIVE_PROJECT: args.project, GRAPHTRAJ_LIVE_TICKET: args.ticket,
+            GRAPHTRAJ_LIVE_PROJECT: args.project, GRAPHTRAJ_LIVE_TASK: args.task,
             GRAPHTRAJ_LIVE_DEADLINE: args.deadline, GRAPHTRAJ_ELECTRON_EXECUTABLE: args.electron,
             GRAPHTRAJ_LIVE_ARTIFACTS: args.artifacts, TMPDIR: args.artifacts,
             MAC_CHROMIUM_TMPDIR: args.artifacts, CLAUDE_TMPDIR: args.artifacts },

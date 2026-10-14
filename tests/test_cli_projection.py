@@ -138,29 +138,29 @@ def test_file_content_uses_same_nested_schema_as_gateway(
     calls = []
 
     def handler(arguments: dict[str, Any]) -> tools.ToolResult:
-        """Capture valid ticket input without registering a Ticket."""
+        """Capture valid task input without registering a Task."""
         calls.append(arguments)
-        return tools.ToolResult({"ticket_directory": "registered"})
+        return tools.ToolResult({"task_directory": "registered"})
 
-    original = tools.TOOLS["ticket_register"]
+    original = tools.TOOLS["task_register"]
     schema = deepcopy(original.input_schema)
-    schema["properties"]["ticket_id"] = {"type": "integer", "enum": [210]}
+    schema["properties"]["task_id"] = {"type": "integer", "enum": [210]}
     for alternative in schema.get("anyOf", []):
-        alternative["properties"]["ticket_id"] = schema["properties"]["ticket_id"]
-    monkeypatch.setitem(tools.TOOLS, "ticket_register", replace(original, input_schema=schema, handler=handler))
-    document = {"ticket_id": 210, "ticket_name": "fixture", "source": "source", "title": "title",
+        alternative["properties"]["task_id"] = schema["properties"]["task_id"]
+    monkeypatch.setitem(tools.TOOLS, "task_register", replace(original, input_schema=schema, handler=handler))
+    document = {"task_id": 210, "task_name": "fixture", "source": "source", "title": "title",
                 "body": "body", "dependencies": []}
-    path = tmp_path / "ticket.yml"
+    path = tmp_path / "task.yml"
     for value in ("210", 211, 210):
-        arguments = {**document, "ticket_id": value}
+        arguments = {**document, "task_id": value}
         path.write_text(yaml.safe_dump(arguments))
-        described = gateway.handle_request({"action": "describe", "feature": "ticket_register", "schema": True})
+        described = gateway.handle_request({"action": "describe", "feature": "task_register", "schema": True})
         assert described.document["input_schema"] == schema
-        result = CliRunner().invoke(graphtraj.main, ["ticket", "register", "--ticket-file", str(path)])
+        result = CliRunner().invoke(graphtraj.main, ["task", "register", "--task-file", str(path)])
         assert result.exit_code == (0 if value == 210 else 2), result.output
     assert calls == [document]
-    path.write_text("ticket_id: 210\n")
-    result = CliRunner().invoke(graphtraj.main, ["ticket", "register", "--ticket-file", str(path)])
+    path.write_text("task_id: 210\n")
+    result = CliRunner().invoke(graphtraj.main, ["task", "register", "--task-file", str(path)])
     assert result.exit_code == 2
     assert "required" in result.output
     assert calls == [document]
@@ -220,21 +220,21 @@ def test_integration_preserves_unprocessed_words_and_inline_role(
         calls.append(arguments)
         return tools.ToolResult({"status": "integrated"})
 
-    monkeypatch.setitem(tools.TOOLS, "ticket_integrate", replace(
-        tools.TOOLS["ticket_integrate"], handler=handler,
+    monkeypatch.setitem(tools.TOOLS, "task_integrate", replace(
+        tools.TOOLS["task_integrate"], handler=handler,
     ))
     result = CliRunner().invoke(graphtraj.main, [
-        "ticket", "integrate", "--ticket-id", "210", "--role", "{name: fixer}",
+        "task", "integrate", "--task-id", "210", "--role", "{name: fixer}",
         "--confirm-resolution", "commit", "--resolve-conflict", "diagnosis",
         "--", "python", "-c", "print('unchanged words')",
     ])
     assert result.exit_code == 0, result.output
     assert calls == [{
-        "ticket_id": "210", "role": {"name": "fixer"}, "confirmed_commit": "commit",
+        "task_id": "210", "role": {"name": "fixer"}, "confirmed_commit": "commit",
         "resolve_conflict": "diagnosis", "validation_command": ["python", "-c", "print('unchanged words')"],
     }]
     rejected = CliRunner().invoke(graphtraj.main, [
-        "ticket", "integrate", "--ticket-id", "210", "--role", "[wrong]", "--", "true",
+        "task", "integrate", "--task-id", "210", "--role", "[wrong]", "--", "true",
     ])
     assert rejected.exit_code == 2
     assert len(calls) == 1

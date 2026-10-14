@@ -81,7 +81,7 @@ def test_accepted_result_correction_and_integration(
     assert read_worldline(tmp_path / 'state', tmp_path)[:len(before)] == before
     assert old_report.read_text() == 'Original evidence'
     assert not old_report.stat().st_mode & 0o200
-    integrate = ['ticket', 'integrate', '--ticket-id', '148', '--', sys.executable, '-c', 'pass']
+    integrate = ['task', 'integrate', '--task-id', '148', '--', sys.executable, '-c', 'pass']
     with runtime_caller(runner, None):
         denied = CliRunner().invoke(main, integrate)
         assert denied.exit_code == 1, denied.output
@@ -117,7 +117,7 @@ def test_accepted_result_correction_and_integration(
     assert yaml.safe_load(integrated.output)['candidate'] == corrected
     assert (tmp_path / 'worktrees/dev/result.md').read_text() == (worktree / 'result.md').read_text()
     events = read_worldline(tmp_path / 'state', tmp_path)
-    started = next(event for event in events if event['event'] == 'ticket-integration-started')
+    started = next(event for event in events if event['event'] == 'task-integration-started')
     assert started['caused_by_event_ids'] == [fresh['event_id']]
     assert accepted in events and returned in events
     assert (tmp_path / decision['evidence_refs'][0]).read_text() == 'A versioned research result\n'
@@ -165,16 +165,16 @@ def test_failed_return_preserves_acceptance(tmp_path: Path, monkeypatch: pytest.
     assert not (team.parent / 'rounds/1/researcher-x1.md').stat().st_mode & 0o200
 
 
-def test_ticket_update_cannot_return_an_accepted_result(
+def test_task_update_cannot_return_an_accepted_result(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The generic state command cannot bypass the accepting parent's decision."""
     runner, team, _, accepted = accepted_result(tmp_path)
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv('CODEX_THREAD_ID', raising=False)
-    ticket = yaml.safe_load((team.parents[2] / 'ticket.yml').read_text())
-    request = {key: ticket[key] for key in (
-        'ticket_id', 'active_team_ordinal', 'worktree', 'branch', 'current_candidate',
+    task = yaml.safe_load((team.parents[2] / 'task.yml').read_text())
+    request = {key: task[key] for key in (
+        'task_id', 'active_team_ordinal', 'worktree', 'branch', 'current_candidate',
     )}
     request.update(status='reworking', caused_by_event_ids=[accepted['event_id']],
                    evidence_refs=accepted['evidence_refs'])
@@ -182,7 +182,7 @@ def test_ticket_update_cannot_return_an_accepted_result(
     path.write_text(yaml.safe_dump(request))
     before = read_worldline(tmp_path / 'state', tmp_path)
     with runtime_caller(runner, 'research@x2'):
-        denied = CliRunner().invoke(main, ['ticket', 'update', '--state-file', str(path)])
+        denied = CliRunner().invoke(main, ['task', 'update', '--state-file', str(path)])
     assert denied.exit_code == 1, denied.output
     assert "requires its parent's result decision" in denied.output
     assert read_worldline(tmp_path / 'state', tmp_path) == before
@@ -204,42 +204,42 @@ def test_explicit_reopening_of_integrated_file_task_requires_new_result_acceptan
     for args in [('worktree', 'add', '--detach', str(tmp_path / 'source')),
                  ('worktree', 'add', '-b', 'dev', str(tmp_path / 'worktrees/dev'))]:
         subprocess.run(['git', *args], cwd=worktree, check=True, capture_output=True)
-    old = tools.read_current_graph({}, cwd=tmp_path).document['tickets'][0]
-    definition = {key: old[key] for key in ('ticket_id', 'ticket_name', 'source', 'title', 'body', 'dependencies')}
+    old = tools.read_current_graph({}, cwd=tmp_path).document['tasks'][0]
+    definition = {key: old[key] for key in ('task_id', 'task_name', 'source', 'title', 'body', 'dependencies')}
     definition.update(schema_version=2, parent_id=None, disposition='active', replaced_by=[], retirement_reason=None,
                       current_definition=old['current_definition'])
     revision = {'product_preserving': True, 'caused_by_event_ids': [], 'evidence_refs': ['evidence.md'],
-                'tickets': [definition]}
+                'tasks': [definition]}
     with runtime_caller(runner, None):
-        tools.revise_current_tickets(revision)
-    integrate = ['ticket', 'integrate', '--ticket-id', '148', '--', sys.executable, '-c', 'pass']
+        tools.revise_current_tasks(revision)
+    integrate = ['task', 'integrate', '--task-id', '148', '--', sys.executable, '-c', 'pass']
     with runtime_caller(runner, 'research@x3'):
         integrated = CliRunner().invoke(main, integrate)
     assert integrated.exit_code == 0, integrated.output
     old_report = team.parent / 'rounds/1/researcher-x1.md'
     original = old_report.read_bytes()
-    current = tools.read_current_graph({}, cwd=tmp_path).document['tickets'][0]
+    current = tools.read_current_graph({}, cwd=tmp_path).document['tasks'][0]
     definition['current_definition'] = current['current_definition']
-    revision.update(tickets=[definition, {**task('149', '148'), 'current_definition': None}],
-                    reopen_ticket_ids=['148'])
+    revision.update(tasks=[definition, {**task('149', '148'), 'current_definition': None}],
+                    reopen_task_ids=['148'])
     with runtime_caller(runner, 'research@x1'), pytest.raises(RunnerError):
-        tools.revise_current_tickets(revision)
+        tools.revise_current_tasks(revision)
     with runtime_caller(runner, 'research@x3'):
-        tools.revise_current_tickets(revision)
+        tools.revise_current_tasks(revision)
         denied = CliRunner().invoke(main, integrate)
     assert denied.exit_code == 1
-    nodes = {node['ticket_id']: node for node in tools.read_current_graph({}, cwd=tmp_path).document['tickets']}
+    nodes = {node['task_id']: node for node in tools.read_current_graph({}, cwd=tmp_path).document['tasks']}
     assert nodes['148']['status'] == 'reworking'
     assert nodes['148']['current_candidate'] == decision['commit']
     with runtime_caller(runner, 'research@x1'), pytest.raises(ValueError):
-        tools.complete_current_ticket({
-            'ticket_id': '149', 'current_definition': 'ticket.md',
+        tools.complete_current_task({
+            'task_id': '149', 'current_definition': 'task.md',
             'reason': 'A member cannot self-accept a pure summary', 'cancelled_scope': {},
             'evidence_refs': ['evidence.md'], 'caused_by_event_ids': [],
         })
     with runtime_caller(runner, None):
-        tools.complete_current_ticket({
-            'ticket_id': '149', 'current_definition': 'ticket.md',
+        tools.complete_current_task({
+            'task_id': '149', 'current_definition': 'task.md',
             'reason': 'The added child scope has been independently accepted', 'cancelled_scope': {},
             'evidence_refs': ['evidence.md'], 'caused_by_event_ids': [],
         })

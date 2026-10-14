@@ -171,7 +171,7 @@ class RuntimeContext(Protocol):
 
 
 class RuntimeContextPreflight(Protocol):
-    """A side-effect-free preparation awaiting Ticket Worktree facts."""
+    """A side-effect-free preparation awaiting Task Worktree facts."""
 
     def finalize(self) -> RuntimeContext:
         """Resolve Worktree-local facts and freeze the effective Context."""

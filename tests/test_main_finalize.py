@@ -112,7 +112,7 @@ for line in sys.stdin:
                 'threadId':params['threadId'],'tokenUsage':options['usage']}})
         for notice in options.get('notifications', []): send(notice)
         text = options.get('output',json.dumps({'status':'completed',
-            'conclusion':'Main may end this turn.','reason':'All required tickets integrated.','nodes':[]}))
+            'conclusion':'Main may end this turn.','reason':'All required tasks integrated.','nodes':[]}))
         send({'method':'item/completed','params':{'threadId':params['threadId'],'turnId':'check-turn',
               'item':{'id':'answer','type':'agentMessage','text':text}}})
         turn['status'] = 'completed'
@@ -168,7 +168,7 @@ def stop(binding: Path, **changes: object) -> dict:
 
 
 @pytest.mark.parametrize('status,reason,nodes', [
-    ('completed', 'All required tickets integrated.', []),
+    ('completed', 'All required tasks integrated.', []),
     ('waiting', 'Required child execution remains running.', ['237']),
     ('waiting', 'User approval pending; no other actionable node.', ['238']),
     ('waiting', 'External event pending; no other actionable node.', ['239']),
@@ -198,7 +198,7 @@ def test_main_end_decision(
     visible = [result[key] for key in ('systemMessage', 'reason', 'stopReason') if key in result]
     assert len(visible) == 1 and visible[0].count(reason) == 1
     # One layered message: English title/status, checker conclusion and reason,
-    # optional related Tickets, then this check's usage line, with no blank rows.
+    # optional related Tasks, then this check's usage line, with no blank rows.
     lines = visible[0].splitlines()
     assert lines[0] == f'Completion Check · {status}'
     assert lines[1] == f'Conclusion · {conclusion}'
@@ -373,7 +373,7 @@ def test_other_adapter_uses_opaque_host_event(
     }
 
 
-@pytest.mark.parametrize('feature,allowed', [('ticket_graph', True), ('send_instruction', False)])
+@pytest.mark.parametrize('feature,allowed', [('task_graph', True), ('send_instruction', False)])
 def test_checker_has_no_sibling_control(
     host: tuple[Path, Path], feature: str, allowed: bool,
 ) -> None:

@@ -11,14 +11,14 @@ from click.testing import CliRunner
 
 from conftest import FakeCodex, InstalledCommands
 from graphtraj.interfaces.cli.graphtraj import main
-from test_ticket_graph import _configure, _ticket, _write
+from test_task_graph import _configure, _task, _write
 
 
 def test_python_and_cli_register_validate_and_read_the_same_graph(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture,
 ) -> None:
     """A mapping can be registered without CLI context, including its validation."""
-    from graphtraj.graph.ticket_graph import read_graph, register_ticket
+    from graphtraj.graph.task_graph import read_graph, register_task
 
     roots = [tmp_path / name for name in ("python", "cli")]
     for root in roots:
@@ -26,36 +26,36 @@ def test_python_and_cli_register_validate_and_read_the_same_graph(
         _configure(root)
     python_root, cli_root = roots
     state = python_root / ".graphtraj/state"
-    issue = _ticket("73", "shared-graph")
-    directory = register_ticket(state, python_root, issue)
-    assert directory == state / "tickets/73-shared-graph"
+    issue = _task("73", "shared-graph")
+    directory = register_task(state, python_root, issue)
+    assert directory == state / "tasks/73-shared-graph"
     assert capsys.readouterr() == ("", "")
 
     monkeypatch.chdir(cli_root)
     runner = CliRunner()
-    result = runner.invoke(main, ["ticket", "register", "--ticket-file", str(_write(cli_root / "issue.yml", issue))])
+    result = runner.invoke(main, ["task", "register", "--task-file", str(_write(cli_root / "issue.yml", issue))])
     assert result.exit_code == 0, result.output
     assert Path(result.stdout.strip()).relative_to(cli_root) == directory.relative_to(python_root)
-    graph = runner.invoke(main, ["ticket", "graph"])
+    graph = runner.invoke(main, ["task", "graph"])
     assert graph.exit_code == 0, graph.output
     assert yaml.safe_load(graph.stdout) == read_graph(state)
-    node = read_graph(state)["tickets"][0]
+    node = read_graph(state)["tasks"][0]
     expected = {
-        "ticket_id": "73", "ticket_name": "shared-graph", "status": "pending",
+        "task_id": "73", "task_name": "shared-graph", "status": "pending",
         "active": True, "ready": True, "dependencies": [], "replaced_by": [],
     }
     assert {key: node[key] for key in expected} == expected
     assert node["schema_version"] == 1 and node["parent_known"] is False
 
-    for invalid in (issue, {**issue, "ticket_id": "../escape"}):
+    for invalid in (issue, {**issue, "task_id": "../escape"}):
         before = read_graph(state)
         with pytest.raises(ValueError) as error:
-            register_ticket(state, python_root, invalid)
-        failed = runner.invoke(main, ["ticket", "register", "--ticket-file", str(_write(cli_root / "issue.yml", invalid))])
+            register_task(state, python_root, invalid)
+        failed = runner.invoke(main, ["task", "register", "--task-file", str(_write(cli_root / "issue.yml", invalid))])
         assert failed.exit_code == 1
         assert str(error.value) in failed.stderr
         assert read_graph(state) == before
-        assert yaml.safe_load(runner.invoke(main, ["ticket", "graph"]).stdout) == before
+        assert yaml.safe_load(runner.invoke(main, ["task", "graph"]).stdout) == before
 
 
 @pytest.mark.parametrize("separated", [False, True])
@@ -131,16 +131,16 @@ def test_python_and_cli_revise_and_transition_with_the_same_validation(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Revision and state mapping validation protect both entry points."""
-    from graphtraj.graph.ticket_graph import (
-        read_graph, register_ticket, revise_tickets, update_ticket_state,
+    from graphtraj.graph.task_graph import (
+        read_graph, register_task, revise_tasks, update_task_state,
     )
     from graphtraj.graph.delivery_worldline import read_worldline
 
     python_root, cli_root = tmp_path / "python", tmp_path / "cli"
     python_root.mkdir()
     state = _configure(python_root)
-    issue = _ticket("73", "shared-graph")
-    register_ticket(state, python_root, issue)
+    issue = _task("73", "shared-graph")
+    register_task(state, python_root, issue)
     (python_root / "evidence.md").write_text("Main confirmed the revision and readiness.\n")
     shutil.copytree(python_root, cli_root)
     monkeypatch.chdir(cli_root)
@@ -148,33 +148,33 @@ def test_python_and_cli_revise_and_transition_with_the_same_validation(
     revision = {
         "product_preserving": True, "caused_by_event_ids": [],
         "evidence_refs": ["evidence.md"],
-        "tickets": [{**issue, "body": "Deliver the revised definition.", "active": True, "replaced_by": []}],
+        "tasks": [{**issue, "body": "Deliver the revised definition.", "active": True, "replaced_by": []}],
     }
     change = {
-        "ticket_id": "73", "status": "ready", "active_team_ordinal": None,
+        "task_id": "73", "status": "ready", "active_team_ordinal": None,
         "worktree": None, "branch": None, "current_candidate": None,
         "caused_by_event_ids": [], "evidence_refs": ["evidence.md"],
     }
     for operation, command, option, document in (
-        (revise_tickets, "revise", "--revision-file", revision),
-        (update_ticket_state, "update", "--state-file", change),
+        (revise_tasks, "revise", "--revision-file", revision),
+        (update_task_state, "update", "--state-file", change),
     ):
         recorded = operation(state, python_root, document)
-        result = runner.invoke(main, ["ticket", command, option, str(_write(cli_root / "input.yml", document))])
+        result = runner.invoke(main, ["task", command, option, str(_write(cli_root / "input.yml", document))])
         assert result.exit_code == 0, result.output
         rendered = yaml.safe_load(result.stdout)
         assert rendered["event"] == recorded["event"]
         assert rendered["evidence_refs"][:1] == recorded["evidence_refs"][:1] == ["evidence.md"]
         assert read_worldline(state, python_root)[-1] == recorded
         assert read_worldline(cli_root / ".graphtraj/state", cli_root)[-1] == rendered
-        cli_graph = yaml.safe_load(runner.invoke(main, ["ticket", "graph"]).stdout)
+        cli_graph = yaml.safe_load(runner.invoke(main, ["task", "graph"]).stdout)
         python_graph = read_graph(state)
         assert cli_graph["schema_version"] == python_graph["schema_version"]
-        for cli_node, python_node in zip(cli_graph["tickets"], python_graph["tickets"], strict=True):
+        for cli_node, python_node in zip(cli_graph["tasks"], python_graph["tasks"], strict=True):
             assert {key: value for key, value in cli_node.items() if key != "current_definition"} == {
                 key: value for key, value in python_node.items() if key != "current_definition"
             }
-            directory = f".graphtraj/state/tickets/{cli_node['ticket_id']}-{cli_node['ticket_name']}"
+            directory = f".graphtraj/state/tasks/{cli_node['task_id']}-{cli_node['task_name']}"
             assert (cli_root / directory / cli_node["current_definition"]).read_bytes() == (
                 python_root / directory / python_node["current_definition"]
             ).read_bytes()
@@ -183,11 +183,11 @@ def test_python_and_cli_revise_and_transition_with_the_same_validation(
         for invalid in ({}, {**document, "evidence_refs": []}):
             with pytest.raises(ValueError) as error:
                 operation(state, python_root, invalid)
-            failed = runner.invoke(main, ["ticket", command, option, str(_write(cli_root / "input.yml", invalid))])
+            failed = runner.invoke(main, ["task", command, option, str(_write(cli_root / "input.yml", invalid))])
             assert failed.exit_code != 0
             assert read_worldline(state, python_root) == before
             assert read_worldline(cli_root / ".graphtraj/state", cli_root) == cli_before
-    assert read_graph(state)["tickets"][0]["status"] == "ready"
+    assert read_graph(state)["tasks"][0]["status"] == "ready"
 
 
 def test_python_and_cli_commit_team_state_and_worldline_facts(
@@ -196,15 +196,15 @@ def test_python_and_cli_commit_team_state_and_worldline_facts(
     """Both interfaces enforce authoritative facts and retain the same effects."""
     from graphtraj.graph.delivery_state import apply_delivery_state_request
     from graphtraj.graph.delivery_worldline import append_project_worldline_event, read_worldline
-    from graphtraj.graph.ticket_graph import read_graph, register_ticket, update_ticket_state
+    from graphtraj.graph.task_graph import read_graph, register_task, update_task_state
 
     python_root, cli_root = tmp_path / "python", tmp_path / "cli"
     python_root.mkdir()
     state = _configure(python_root)
-    register_ticket(state, python_root, _ticket("73", "shared-state"))
+    register_task(state, python_root, _task("73", "shared-state"))
     (python_root / "evidence.md").write_text("Main approved this Team.\n")
-    predecessor = update_ticket_state(state, python_root, {
-        "ticket_id": "73", "status": "ready", "active_team_ordinal": None,
+    predecessor = update_task_state(state, python_root, {
+        "task_id": "73", "status": "ready", "active_team_ordinal": None,
         "worktree": None, "branch": None, "current_candidate": None,
         "caused_by_event_ids": [], "evidence_refs": ["evidence.md"],
     })
@@ -213,7 +213,7 @@ def test_python_and_cli_commit_team_state_and_worldline_facts(
     monkeypatch.chdir(cli_root)
     runner = CliRunner()
     request = {
-        "phase": "start", "ticket_id": "73",
+        "phase": "start", "task_id": "73",
         "caused_by_event_ids": [predecessor["event_id"]], "evidence_refs": ["evidence.md"],
         "worktree": ".graphtraj/worktrees/73-shared-state", "branch": "agent/73-shared-state",
         "members": {
@@ -224,13 +224,13 @@ def test_python_and_cli_commit_team_state_and_worldline_facts(
         },
     }
     command = ["delivery-state", "apply", "--request-file", str(_write(cli_root / "request.yml", request)),
-               "--facts-file", str(_write(cli_root / "facts.yml", {**request, "ticket_id": "74"}))]
+               "--facts-file", str(_write(cli_root / "facts.yml", {**request, "task_id": "74"}))]
     with pytest.raises(ValueError) as error:
-        apply_delivery_state_request(state, python_root, request, {**request, "ticket_id": "74"})
+        apply_delivery_state_request(state, python_root, request, {**request, "task_id": "74"})
     rejected = runner.invoke(main, command)
     assert rejected.exit_code == 1
     assert str(error.value) in rejected.stderr
-    assert read_graph(state)["tickets"][0]["status"] == "ready"
+    assert read_graph(state)["tasks"][0]["status"] == "ready"
 
     _write(cli_root / "facts.yml", request)
     recorded = apply_delivery_state_request(state, python_root, request, request)
@@ -241,8 +241,8 @@ def test_python_and_cli_commit_team_state_and_worldline_facts(
         k: v for k, v in rendered.items() if k not in {"event_id", "captured_at"}
     }
     assert recorded["event"] == "team-started"
-    assert yaml.safe_load(runner.invoke(main, ["ticket", "graph"]).stdout) == read_graph(state)
-    assert read_graph(state)["tickets"][0]["status"] == "implementing"
+    assert yaml.safe_load(runner.invoke(main, ["task", "graph"]).stdout) == read_graph(state)
+    assert read_graph(state)["tasks"][0]["status"] == "implementing"
 
     event = {"event": "main-decision", "caused_by_event_ids": [predecessor["event_id"]],
              "evidence_refs": ["evidence.md"], "decision": "Continue the accepted work."}
@@ -280,7 +280,7 @@ def test_python_and_cli_launch_the_same_structured_batch_and_errors(
     from graphtraj.execution.runner_batch import parse_batch, read_batch
     from graphtraj.execution.runner_launch import launch_batch
     from graphtraj.execution.runner_models import RunnerError
-    from graphtraj.graph.ticket_graph import register_ticket
+    from graphtraj.graph.task_graph import register_task
     from graphtraj.interfaces.cli.agent_runner import main as runner_main
 
     root, _, _, environment = configure_harness(
@@ -290,8 +290,8 @@ def test_python_and_cli_launch_the_same_structured_batch_and_errors(
         monkeypatch.setenv(name, value)
     monkeypatch.setenv("PYTHONPATH", str(PROJECT_ROOT / "src"))
     monkeypatch.chdir(root)
-    register_ticket(root / ".graphtraj/state", root, _ticket("73", "shared-runner"))
-    from test_ticket_graph import _change_status
+    register_task(root / ".graphtraj/state", root, _task("73", "shared-runner"))
+    from test_task_graph import _change_status
     _change_status(installed_commands, root, '73', 'ready')
     roles_file = root / '.graphtraj/roles.yml'
     roles = yaml.safe_load(roles_file.read_text())
@@ -299,9 +299,9 @@ def test_python_and_cli_launch_the_same_structured_batch_and_errors(
     roles_file.write_text(yaml.safe_dump(roles))
 
     document = {"tasks": [{
-        "ticket_id": "73", "ticket_name": "shared-runner",
+        "task_id": "73", "task_name": "shared-runner",
         "role": {"investigation-specialist": {"runtime": "codex", "model": "gpt-5.6-luna"}},
-        "instruction": "Inspect the accepted Ticket.",
+        "instruction": "Inspect the accepted Task.",
     }]}
     batch = parse_batch(document)
     direct = launch_batch(batch, root)
@@ -333,7 +333,7 @@ def test_python_and_cli_launch_the_same_structured_batch_and_errors(
     # in the environment cannot divert a Main caller into the child-registration
     # route, so the direct call and the CLI dispatch the same Team.
     monkeypatch.setenv("GRAPHTRAJ_PARENT_REGISTRATION", str(root / "registration.yml"))
-    monkeypatch.setenv("GRAPHTRAJ_TICKET_ID", "74")
+    monkeypatch.setenv("GRAPHTRAJ_TASK_ID", "74")
     direct = launch_batch(batch, root)
     result = CliRunner().invoke(runner_main, ["--swarm-input", str(_write(path, document))])
     assert result.exit_code == 0, result.output
@@ -359,7 +359,7 @@ def test_python_budgeted_launch_preserves_notices_without_writing_to_terminal(
     from graphtraj.execution.execution_budget import budget_notice_output
     from graphtraj.execution.runner_batch import parse_batch
     from graphtraj.execution.runner_launch import launch_batch
-    from graphtraj.graph.ticket_graph import register_ticket, update_ticket_state
+    from graphtraj.graph.task_graph import register_task, update_task_state
 
     root, _, _, environment = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path,
@@ -370,12 +370,12 @@ def test_python_budgeted_launch_preserves_notices_without_writing_to_terminal(
     monkeypatch.setenv("FAKE_CODEX_LIFECYCLE_ACTION", "complete-team-round")
     monkeypatch.setenv("GRAPHTRAJ_AGENT_RUNNER", str(installed_commands.runner))
     state = root / ".graphtraj/state"
-    directory = register_ticket(state, root, {
-        **_ticket("73", "shared-budget"), "body": _budget_body(total=1000).replace('team_leader: 1', 'team_leader: 0.5'),
+    directory = register_task(state, root, {
+        **_task("73", "shared-budget"), "body": _budget_body(total=1000).replace('team_leader: 1', 'team_leader: 0.5'),
     })
     (root / "evidence.md").write_text("Main selected this Team.\n")
-    update_ticket_state(state, root, {
-        "ticket_id": "73", "status": "ready", "active_team_ordinal": None,
+    update_task_state(state, root, {
+        "task_id": "73", "status": "ready", "active_team_ordinal": None,
         "worktree": None, "branch": None, "current_candidate": None,
         "caused_by_event_ids": [], "evidence_refs": ["evidence.md"],
     })
@@ -384,12 +384,12 @@ def test_python_budgeted_launch_preserves_notices_without_writing_to_terminal(
     with notices.open("w") as output:
         with budget_notice_output(output.fileno()) if capture_notices else nullcontext():
             response = launch_batch(parse_batch({"tasks": [{
-                "ticket_id": "73", "ticket_name": "shared-budget", "role": "team-leader",
+                "task_id": "73", "task_name": "shared-budget", "role": "team-leader",
             }]}), root)
     assert response.succeeded, response.document
     assert capfd.readouterr() == ("", "")
-    from runner_fixtures import wait_for_ticket_status
-    wait_for_ticket_status(installed_commands, root, "73", "awaiting-integration")
+    from runner_fixtures import wait_for_task_status
+    wait_for_task_status(installed_commands, root, "73", "awaiting-integration")
     budget = yaml.safe_load((directory / "execution-budget.yml").read_text())
     assert budget["notifications"]
     assert budget["sessions"]["team_leader"] == 1
@@ -401,12 +401,12 @@ def test_python_budgeted_launch_preserves_notices_without_writing_to_terminal(
     else:
         assert events == []
 
-    from graphtraj.execution.runner_cleanup import cleanup_ticket
+    from graphtraj.execution.runner_cleanup import cleanup_task
     from graphtraj.execution.runner_control import interrupt_session, send_instruction
     from graphtraj.execution.runner_models import RunnerError
     from graphtraj.execution.runner_status import status_aliases
     from graphtraj.interfaces.cli.agent_runner import main as runner_main
-    from graphtraj.teams.team_round import continue_stopped_ticket
+    from graphtraj.teams.team_round import continue_stopped_task
     from graphtraj.teams.team_replacement import replace_session
 
     monkeypatch.chdir(root)
@@ -425,7 +425,7 @@ def test_python_budgeted_launch_preserves_notices_without_writing_to_terminal(
 
     for operation, arguments, cli_arguments, identity in (
         (send_instruction, (alias, " ", root, ()), ["send", alias, "--instruction", " "], {"alias": alias}),
-        (continue_stopped_ticket, ("73", ("",), root), ["continue", "--ticket-id", "73", "--caused-by-event-id", ""], {"ticket_id": "73"}),
+        (continue_stopped_task, ("73", ("",), root), ["continue", "--task-id", "73", "--caused-by-event-id", ""], {"task_id": "73"}),
         (replace_session, (alias, "main", ("",), root), ["replace", alias, "--actor", "main", "--caused-by-event-id", ""], {"alias": alias}),
     ):
         with pytest.raises(RunnerError) as error:
@@ -437,8 +437,8 @@ def test_python_budgeted_launch_preserves_notices_without_writing_to_terminal(
     rendered = runner.invoke(runner_main, ['interrupt', alias])
     assert rendered.exit_code == 0, rendered.output
     assert yaml.safe_load(rendered.stdout) == stopped
-    refused = cleanup_ticket(root, "73")
+    refused = cleanup_task(root, "73")
     assert not refused.succeeded
-    rendered = runner.invoke(runner_main, ["cleanup", "--ticket-id", "73"])
+    rendered = runner.invoke(runner_main, ["cleanup", "--task-id", "73"])
     assert rendered.exit_code == 1
     assert yaml.safe_load(rendered.stdout) == refused.document

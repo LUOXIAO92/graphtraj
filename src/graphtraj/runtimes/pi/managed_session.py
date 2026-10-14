@@ -321,7 +321,7 @@ class PiManagedExecution:
                 collector = PiCollector(
                     Path(self.request['state_directory']), self.native_trace, self.session,
                     project=self.request['harness_root'], agent=mapping.get('alias', self.directory.name),
-                    source='member', tasks=[mapping['ticket_id']] if mapping.get('ticket_id') else [],
+                    source='member', tasks=[mapping['task_id']] if mapping.get('task_id') else [],
                     execution=self.execution_id,
                 )
                 with self.lock:

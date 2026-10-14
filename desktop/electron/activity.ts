@@ -6,7 +6,7 @@ import { link, mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 export type Agent = {
-  alias: string; kind?: 'main' | 'member'; ticket_id?: string | null; session?: string; source?: string; parent?: string | null; runtime?: string; model?: string | null;
+  alias: string; kind?: 'main' | 'member'; task_id?: string | null; session?: string; source?: string; parent?: string | null; runtime?: string; model?: string | null;
   historical: boolean; state: string; last_outcome?: string; reason?: string;
 };
 /** One readable part of a recorded tool result, kept in native order. */
@@ -24,11 +24,11 @@ export type ActivityEvent = {
     phase: string; attributable: boolean; [key: string]: unknown };
 };
 export type Activity = {
-  ticket_id: string | null; notices?: string[]; read_records?: number; scope?: 'self' | 'human'; agents: Agent[]; updated_at: string; events?: ActivityEvent[];
+  task_id: string | null; notices?: string[]; read_records?: number; scope?: 'self' | 'human'; agents: Agent[]; updated_at: string; events?: ActivityEvent[];
   cursor?: string | null; has_more?: boolean; waiting_for_record?: boolean;
   availability?: string; reason?: string;
 };
-export type ActivityRequest = { ticket_id?: string; alias?: string; cursor?: string };
+export type ActivityRequest = { task_id?: string; alias?: string; cursor?: string };
 
 /** Keep only failure code/reason, applying native credential and diagnostic redaction. */
 function activityFailure(reply: { error?: unknown; result?: { error?: unknown } }): Error {

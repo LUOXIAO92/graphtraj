@@ -115,7 +115,7 @@ def parse_check_result(text: str) -> dict[str, Any]:
         raise ValueError('The completion checker returned no reason.')
     nodes = result['nodes']
     if not isinstance(nodes, list) or any(not isinstance(n, str) or not n.strip() for n in nodes):
-        raise ValueError('Completion nodes must be nonempty Ticket identifiers or URLs.')
+        raise ValueError('Completion nodes must be nonempty Task identifiers or URLs.')
     if result['status'] == 'actionable' and not nodes:
         raise ValueError('Actionable work must identify concrete unfinished nodes.')
     return result

@@ -12,18 +12,18 @@ from graphtraj.execution.runner_status import read_alias_mapping
 from graphtraj.graph.delivery_worldline import read_worldline
 from graphtraj.interfaces import local_tool
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
-from test_ticket_integration import accepted_ticket
+from test_task_integration import accepted_task
 
 
 @pytest.mark.parametrize('operation', ['retire', 'replace'])
 @pytest.mark.parametrize('decision', ['accept', 'decline', 'error'])
 def test_public_retirement_review(
-    accepted_ticket: tuple,
+    accepted_task: tuple,
     operation: str,
     decision: str,
 ) -> None:
     """Shared callers apply only the selected host's approval, never an actor flag."""
-    root, _, state, _ = accepted_ticket
+    root, _, state, _ = accepted_task
     runner = root / '.graphtraj/runner'
     mappings = [yaml.safe_load(path.read_text()) for path in (runner / 'sessions').glob('*/mapping.yml')]
     child = next(mapping for mapping in mappings if mapping['parent'] is not None)
@@ -81,13 +81,13 @@ def test_public_retirement_review(
 
 
 def test_cleanup_retries_after_root_retirement(
-    accepted_ticket: tuple,
+    accepted_task: tuple,
     installed_commands: InstalledCommands,
 ) -> None:
     """A refused child leaves the retired root and history intact for public retry."""
-    root, worktrees, state, _ = accepted_ticket
+    root, worktrees, state, _ = accepted_task
     integrated = run_process([
-        str(installed_commands.product), 'ticket', 'integrate', '--ticket-id', '83',
+        str(installed_commands.product), 'task', 'integrate', '--task-id', '83',
         '--', sys.executable, '-c', 'pass',
     ], cwd=root)
     assert integrated.returncode == 0, integrated.stdout + integrated.stderr
@@ -109,7 +109,7 @@ def test_cleanup_retries_after_root_retirement(
     assert call({'action': 'execute', 'feature': 'retire',
                  'arguments': {'alias': parent['alias']}}).document['retire_status'] == 'retired'
     assert seen == []
-    request = {'action': 'execute', 'feature': 'cleanup', 'arguments': {'ticket_id': '83'}}
+    request = {'action': 'execute', 'feature': 'cleanup', 'arguments': {'task_id': '83'}}
     refused = call(request).document
     assert refused['cleanup_status'] == 'refused'
     assert len(seen) == 1

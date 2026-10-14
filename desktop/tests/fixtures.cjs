@@ -12,9 +12,9 @@ function operate(root, feature, args = {}) {
   return reply.result;
 }
 
-function ticket(id, name, dependencies = []) {
+function task(id, name, dependencies = []) {
   return {
-    ticket_id: id, ticket_name: name, title: name.replaceAll('-', ' '),
+    task_id: id, task_name: name, title: name.replaceAll('-', ' '),
     source: `https://github.com/example/desktop-test/issues/${id}`,
     body: 'A controlled desktop read-boundary fixture. No model execution.', dependencies,
   };
@@ -28,35 +28,35 @@ async function makeProject(root, name) {
   execFileSync('git', ['-c', 'user.name=Desktop Test', '-c', 'user.email=test@example.invalid',
     'commit', '-m', 'Test source'], { cwd: root });
   operate(root, 'project_setup', { source_repository: root, apply: true, create_dev: true });
-  operate(root, 'ticket_register', ticket('1', name));
-  operate(root, 'ticket_register', ticket('2', 'dependent', ['1']));
+  operate(root, 'task_register', task('1', name));
+  operate(root, 'task_register', task('2', 'dependent', ['1']));
   return root;
 }
 
 /**
- * Attach a controlled, clearly labeled record set to one fixture Ticket.
+ * Attach a controlled, clearly labeled record set to one fixture Task.
  *
  * The records are a hand-written native Trace for this fixture only: no model
  * is invoked and no cost is incurred. Membership is created through the public
  * semantic-state entry, so the desktop reads the records through the same
  * desktop_activity boundary it uses in production.
  */
-async function recordActivity(root, { ticketId, ticketName, alias, records, additionalMembers = [] }) {
+async function recordActivity(root, { taskId, taskName, alias, records, additionalMembers = [] }) {
   const members = [{ alias, records, historical: true }, ...additionalMembers];
   require('node:assert/strict').equal(await fs.readFile(path.join(root, 'seed.txt'), 'utf8'),
     'Desktop boundary test source.\n', 'Retained records belong only in disposable adoption fixtures');
-  const ticketDirectory = path.join(root, '.graphtraj', 'state', 'tickets',
-    `${ticketId}-${ticketName}`);
+  const taskDirectory = path.join(root, '.graphtraj', 'state', 'tasks',
+    `${taskId}-${taskName}`);
   await fs.writeFile(path.join(root, 'evidence.md'), 'Controlled adoption fixture. No model execution.\n');
 
-  const ready = operate(root, 'ticket_update', {
-    ticket_id: ticketId, status: 'ready', active_team_ordinal: null, worktree: null,
+  const ready = operate(root, 'task_update', {
+    task_id: taskId, status: 'ready', active_team_ordinal: null, worktree: null,
     branch: null, current_candidate: null, caused_by_event_ids: [], evidence_refs: ['evidence.md'],
   });
   const request = {
-    phase: 'start', ticket_id: ticketId, caused_by_event_ids: [ready.event_id],
+    phase: 'start', task_id: taskId, caused_by_event_ids: [ready.event_id],
     evidence_refs: ['evidence.md'], worktree: 'worktrees/research',
-    branch: `agent/${ticketId}-${ticketName}`,
+    branch: `agent/${taskId}-${taskName}`,
     members: Object.fromEntries(members.map((member, index) =>
       [`member${index}`, { role: 'researcher', session_ref: member.alias }])),
   };
@@ -64,7 +64,7 @@ async function recordActivity(root, { ticketId, ticketName, alias, records, addi
 
   for (const { alias, records, historical = true } of members) {
     const session = path.join(root, '.graphtraj', 'runner', 'sessions', alias);
-    const trace = path.join(ticketDirectory, 'teams', '1', 'traces', alias, 'events.jsonl');
+    const trace = path.join(taskDirectory, 'teams', '1', 'traces', alias, 'events.jsonl');
     await fs.mkdir(session, { recursive: true });
     await fs.mkdir(path.dirname(trace), { recursive: true });
     await fs.writeFile(trace, records.map(record => JSON.stringify(record)).join('\n') + '\n');
@@ -72,7 +72,7 @@ async function recordActivity(root, { ticketId, ticketName, alias, records, addi
     // Controlled membership, never a launched Runtime or the caller's identity.
     // Current members have a completed execution; no process is presented as live.
     const mapping = {
-      alias, runtime: 'codex', session: `native-${alias}`, ticket_id: ticketId,
+      alias, runtime: 'codex', session: `native-${alias}`, task_id: taskId,
       team_generation: 1, role: 'researcher', parent: null, retained_batch_file: 'batch.yml',
       worktree_path: path.join(root, 'worktrees', 'research'), trace_file: trace,
       worker_pid: 2147483647, runtime_pid: 2147483647,
@@ -88,7 +88,7 @@ async function recordActivity(root, { ticketId, ticketName, alias, records, addi
     }
     await fs.writeFile(path.join(session, 'launch.yml'), 'context_evidence:\n  model: recorded-model\n');
   }
-  return path.join(ticketDirectory, 'teams', '1', 'traces', alias, 'events.jsonl');
+  return path.join(taskDirectory, 'teams', '1', 'traces', alias, 'events.jsonl');
 }
 
-module.exports = { operate, ticket, makeProject, recordActivity };
+module.exports = { operate, task, makeProject, recordActivity };

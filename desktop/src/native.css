@@ -2,8 +2,8 @@
 .native-notice { padding: 9px 22px; font-size: 11px; color: var(--muted); overflow-wrap: anywhere; flex-shrink: 0; }
 .native-notice.error { background: #fcf1ef; color: #9b4237; }
 .d-focused-stage > .native-notice.error { position: absolute; inset: 48px 0 auto; z-index: 20; }
-.native-ticket-facts { font-size: 10px; color: var(--muted); margin-top: 8px; }
-.native-ticket-facts p { margin-top: 7px; }
+.native-task-facts { font-size: 10px; color: var(--muted); margin-top: 8px; }
+.native-task-facts p { margin-top: 7px; }
 .activity { display: flex; flex: 1; flex-direction: column; min-height: 0; min-width: 0; }
 .d-library-content, .config-property-scroll { border: 0; margin: 0; }
 .record-source { display: flex; justify-content: space-between; font-size: 9px; color: var(--muted); margin-top: 9px; }

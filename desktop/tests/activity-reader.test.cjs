@@ -22,7 +22,7 @@ test('observer preserves safe rejection details, redacts credentials, and contin
   const reader = new ActivityReader('graphtraj-tool');
   t.after(() => reader.close());
   const exchange = async wire => {
-    const result = reader.read('/controlled-project', { ticket_id: '299' });
+    const result = reader.read('/controlled-project', { task_id: '299' });
     await new Promise(resolve => setImmediate(resolve));
     child.stderr.write('stderr-private-value');
     child.stdout.write(typeof wire === 'string' ? wire + '\n' : JSON.stringify(wire) + '\n');
@@ -55,7 +55,7 @@ test('queued polls retain FIFO replies without spending the active request timeo
   t.after(()=>{t.mock.restoreAll();syncBuiltinESMExports();});
   const sent=[];child.stdin.on('data',data=>sent.push(JSON.parse(data.toString()).arguments.alias));
   const reader=new ActivityReader('graphtraj-tool');
-  const replies=Array.from({length:7},(_,i)=>reader.read('/controlled-project',{ticket_id:'299',alias:String(i)}));
+  const replies=Array.from({length:7},(_,i)=>reader.read('/controlled-project',{task_id:'299',alias:String(i)}));
   // Attach rejection handlers immediately, including the pre-fix timeout case.
   const all=Promise.all(replies);
   await new Promise(resolve=>setImmediate(resolve));
@@ -76,8 +76,8 @@ test('a genuinely stalled active poll still times out and rejects queued callers
   t.mock.method(childProcess,'spawn',()=>child);syncBuiltinESMExports();
   t.after(()=>{t.mock.restoreAll();syncBuiltinESMExports();});
   const reader=new ActivityReader('graphtraj-tool');
-  const first=reader.read('/controlled-project',{ticket_id:'299'});
-  const second=reader.read('/controlled-project',{ticket_id:'299',alias:'member'});
+  const first=reader.read('/controlled-project',{task_id:'299'});
+  const second=reader.read('/controlled-project',{task_id:'299',alias:'member'});
   const results=Promise.allSettled([first,second]);
   await new Promise(resolve=>setImmediate(resolve));
   t.mock.timers.tick(15000);

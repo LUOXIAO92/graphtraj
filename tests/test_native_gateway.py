@@ -157,19 +157,19 @@ def test_native_gateway_restricts_features_and_context(
                 set(NATIVE_RUNNER_TOOLS.values())
                 | {'parent_status', 'retire', 'replace', 'cleanup',
                    'approved_recovery', 'role_organization'}
-                if issuer == 'owner' else {'alias_status', 'ticket_graph'}
+                if issuer == 'owner' else {'alias_status', 'task_graph'}
             )
             assert {entry['feature'] for entry in discovered['features']} == (
                 callable_features | set(tools.METHOD_FEATURE_NAMES)
             )
-            for feature in ('ticket_update', 'not_registered'):
+            for feature in ('task_update', 'not_registered'):
                 for action in ('describe', 'execute'):
                     request = {'action': action, 'feature': feature}
                     if action == 'execute':
                         request['arguments'] = {}
                     assert not (await call(request))[1]
             for field, value in [('caller', 'parent@l1'), ('threadId', 'owner'),
-                                 ('allowed_features', ['ticket_update']), ('cwd', str(project))]:
+                                 ('allowed_features', ['task_update']), ('cwd', str(project))]:
                 assert not (await call({'action': 'discover', field: value}))[1]
                 assert not (await call({'action': 'execute', 'feature': 'alias_status',
                                        'arguments': {field: value}}))[1]
@@ -180,7 +180,7 @@ def test_native_gateway_restricts_features_and_context(
                 assert document['error']['code'] == 'authority-denied'
                 assert not (await call({'action': 'describe', 'feature': 'submit_report'}))[1]
                 assert not (await call({'action': 'execute', 'feature': [], 'arguments': {}}))[1]
-                assert (await call({'action': 'execute', 'feature': 'ticket_graph', 'arguments': {}}))[1]
+                assert (await call({'action': 'execute', 'feature': 'task_graph', 'arguments': {}}))[1]
 
     asyncio.run(exercise())
 
@@ -193,7 +193,7 @@ def test_formal_child_cannot_use_gateway_as_its_parent(project: Path, peer: Path
     directory.mkdir(parents=True)
     (directory / 'mapping.yml').write_text(yaml.safe_dump({
         'alias': 'sibling@e1', 'parent': 'parent@l1', 'runtime': 'codex',
-        'session': 'sibling-thread', 'execution_id': 'turn-2', 'ticket_id': '209',
+        'session': 'sibling-thread', 'execution_id': 'turn-2', 'task_id': '209',
         'team_generation': 1, 'role': 'engineer', 'retained_batch_file': 'batch.yml',
         'worktree_path': str(project), 'trace_file': 'unused',
         'worker_pid': 1, 'runtime_pid': 1,
@@ -251,7 +251,7 @@ def test_native_gateway_discloses_method_guides_without_widening_execution(
                 assert Path(described['manual_ref']).read_text(encoding='utf-8') == guide.read_text(encoding='utf-8')
                 assert set(described) == {'feature', 'description', 'manual_ref'}
 
-            for feature in ('ticket_register', 'task-delivery'):
+            for feature in ('task_register', 'task-delivery'):
                 document, success = await call('helper', {
                     'action': 'execute', 'feature': feature, 'arguments': {},
                 })

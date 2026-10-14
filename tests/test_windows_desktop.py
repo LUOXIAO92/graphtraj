@@ -31,9 +31,9 @@ def test_public_setup_and_concurrent_registration(temporary_git_repository: Path
     operation(root, 'project_setup', {'source_repository': str(root), 'apply': True, 'create_dev': True})
 
     def register(number: int) -> None:
-        """Register one controlled ticket through the public entry."""
-        operation(root, 'ticket_register', {
-            'ticket_id': str(number), 'ticket_name': f'controlled-{number}',
+        """Register one controlled task through the public entry."""
+        operation(root, 'task_register', {
+            'task_id': str(number), 'task_name': f'controlled-{number}',
             'title': f'Controlled {number}', 'body': 'No Agent or model execution.',
             'source': f'https://github.com/example/controlled/issues/{number}',
             'dependencies': [] if number == 1 else ['1'],
@@ -42,9 +42,9 @@ def test_public_setup_and_concurrent_registration(temporary_git_repository: Path
     register(1)
     with ThreadPoolExecutor(max_workers=4) as workers:
         list(workers.map(register, range(2, 6)))
-    graph = operation(root, 'ticket_graph', {})
-    assert {ticket['ticket_id'] for ticket in graph['tickets']} == {'1', '2', '3', '4', '5'}
-    assert all(ticket['dependencies'] == ['1'] for ticket in graph['tickets'] if ticket['ticket_id'] != '1')
+    graph = operation(root, 'task_graph', {})
+    assert {task['task_id'] for task in graph['tasks']} == {'1', '2', '3', '4', '5'}
+    assert all(task['dependencies'] == ['1'] for task in graph['tasks'] if task['task_id'] != '1')
 
 
 def test_public_settings_processes_keep_one_winner(temporary_git_repository: Path) -> None:

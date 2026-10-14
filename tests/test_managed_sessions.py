@@ -14,7 +14,7 @@ import yaml
 
 from conftest import FakeCodex, InstalledCommands, run_process
 from runner_fixtures import configure_harness
-from test_ticket_graph import _ticket
+from test_task_graph import _task
 
 
 ManagedProject = tuple[Path, str, Callable[..., dict], Path]
@@ -55,7 +55,7 @@ try:
         with (directory / 'worker-stderr.log').open('w') as diagnostics:
             worker = subprocess.Popen([sys.executable, '-m', 'graphtraj.execution.runner_worker', str(job_file)],
                                       stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=diagnostics,
-                                      env={**os.environ, "GRAPHTRAJ_TICKET_ID": parent_mapping["ticket_id"],
+                                      env={**os.environ, "GRAPHTRAJ_TASK_ID": parent_mapping["task_id"],
                                            "GRAPHTRAJ_ROLE": parent_mapping["role"], "GRAPHTRAJ_PARENT_ALIAS": alias})
             worker.stdin.write((arguments[2] if len(arguments) > 2 else 'hold').encode())
             worker.stdin.close()
@@ -89,15 +89,15 @@ def managed_project(
     request: pytest.FixtureRequest,
 ) -> Iterator[ManagedProject]:
     """Prepare an explicitly authorized, ready task for native Session checks."""
-    from graphtraj.graph.ticket_graph import register_ticket
+    from graphtraj.graph.task_graph import register_task
     from graphtraj.graph.delivery_worldline import append_project_worldline_event
 
     root, _, _, environment = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path,
     )
     state = root / '.graphtraj/state'
-    register_ticket(state, root, _ticket('113', 'managed-probe'))
-    from test_ticket_graph import _change_status
+    register_task(state, root, _task('113', 'managed-probe'))
+    from test_task_graph import _change_status
     _change_status(installed_commands, root, '113', 'ready')
     role_file = root / '.graphtraj/roles.yml'
     roles = yaml.safe_load(role_file.read_text())
@@ -156,7 +156,7 @@ def managed_project(
 def launch_document(instruction: str = 'hold', role: str = 'managed-probe') -> dict:
     """Use the existing inline role on a registered task."""
     return {'tasks': [{
-        'ticket_id': '113', 'ticket_name': 'managed-probe',
+        'task_id': '113', 'task_name': 'managed-probe',
         'role': {role: {'runtime': 'codex', 'model': 'gpt-5.6', 'reasoning_effort': 'low'}},
         'instruction': instruction,
     }]}
@@ -400,19 +400,19 @@ def test_concurrent_idle_sends_keep_one_native_owner(managed_project: ManagedPro
 
 def test_each_registered_task_keeps_its_role_context(managed_project: ManagedProject) -> None:
     """The shared launch operation passes independent native task/model/effort contexts."""
-    from graphtraj.graph.ticket_graph import register_ticket
+    from graphtraj.graph.task_graph import register_task
 
     root, cause, call, _ = managed_project
-    register_ticket(root / '.graphtraj/state', root, _ticket('114', 'other-probe'))
-    from graphtraj.graph.ticket_graph import update_ticket_state
-    update_ticket_state(root / '.graphtraj/state', root, {
-        'ticket_id': '114', 'status': 'ready', 'active_team_ordinal': None,
+    register_task(root / '.graphtraj/state', root, _task('114', 'other-probe'))
+    from graphtraj.graph.task_graph import update_task_state
+    update_task_state(root / '.graphtraj/state', root, {
+        'task_id': '114', 'status': 'ready', 'active_team_ordinal': None,
         'worktree': None, 'branch': None, 'current_candidate': None,
         'caused_by_event_ids': [cause], 'evidence_refs': ['instruction.md'],
     })
     first = launch_document(role='first-probe')['tasks'][0]
     second = {
-        **first, 'ticket_id': '114', 'ticket_name': 'other-probe',
+        **first, 'task_id': '114', 'task_name': 'other-probe',
         'role': {'second-probe': {'runtime': 'codex', 'model': 'different-model', 'reasoning_effort': 'high'}},
     }
     launched = call('launch', {'tasks': [first, second]})['tasks']
@@ -422,7 +422,7 @@ def test_each_registered_task_keeps_its_role_context(managed_project: ManagedPro
         native = root / 'native' / ('rollout-' + task['session'] + '.jsonl')
         context = [json.loads(line)['payload'] for line in native.read_text().splitlines()
                    if json.loads(line)['type'] == 'turn_context'][0]
-        observed.append((context['ticket_id'], context['role'], context['model'], context['effort']))
+        observed.append((context['task_id'], context['role'], context['model'], context['effort']))
         call('send', [task['alias'], 'complete task', [cause]])
     assert observed == [('113', 'first-probe', 'gpt-5.6', 'low'),
                         ('114', 'second-probe', 'different-model', 'high')]
@@ -748,7 +748,7 @@ def test_identifier_without_the_ownership_lock_is_not_the_owned_execution(
                     'alias': alias,
                     'runtime': 'codex',
                     'session': 'native-session',
-                    'ticket_id': '113',
+                    'task_id': '113',
                     'team_generation': 1,
                     'role': 'managed-probe',
                     'parent': None,

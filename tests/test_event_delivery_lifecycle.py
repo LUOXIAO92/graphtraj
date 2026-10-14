@@ -19,7 +19,7 @@ import yaml
 from conftest import FakeCodex, InstalledCommands, app_server_peer, run_process, wait_for_file
 from runner_fixtures import configure_harness
 from test_parent_permission_notice import _await_records, _last_worldline_event, _mapping_for_role
-from test_session_alias_control import _register_ready_ticket
+from test_session_alias_control import _register_ready_task
 from test_task_budget_control import BODY
 
 
@@ -221,15 +221,15 @@ def test_send_returned_before_result_parent_consumes_and_acts(
         installed_commands, temporary_git_repository, fake_codex, tmp_path,
     )
     lifecycle_peer(fake_codex)
-    _register_ready_ticket(installed_commands, root, body=BODY)
+    _register_ready_task(installed_commands, root, body=BODY)
     batch = root / 'child.yml'
     batch.write_text(yaml.safe_dump({'tasks': [{
-        'ticket_id': '76', 'ticket_name': 'session-alias-control',
+        'task_id': '76', 'task_name': 'session-alias-control',
         'role': 'coding-team.engineer', 'instruction': 'initial',
     }]}))
     initial = root / 'initial.yml'
     initial.write_text(yaml.safe_dump({'tasks': [{
-        'ticket_id': '76', 'ticket_name': 'session-alias-control', 'role': 'team-leader',
+        'task_id': '76', 'task_name': 'session-alias-control', 'role': 'team-leader',
     }]}))
     log = tmp_path / 'actions.jsonl'
     child_file = tmp_path / 'child-alias'
@@ -272,7 +272,7 @@ def test_send_returned_before_result_parent_consumes_and_acts(
             from graphtraj.execution import execution_budget as budgets
             from test_task_budget_control import sample_stop
 
-            evidence = root / '.graphtraj/state/tickets/76-session-alias-control'
+            evidence = root / '.graphtraj/state/tasks/76-session-alias-control'
             monitor = budgets.execution_budget_monitor(evidence, '76', 'session-alias-control')
             with (runner / 'sessions' / parent['alias'] / 'launch.yml').open('rb') as lock:
                 fcntl.flock(lock, fcntl.LOCK_EX)
@@ -326,13 +326,13 @@ def test_original_driver_keeps_its_result_when_parent_starts_successor(
         installed_commands, temporary_git_repository, fake_codex, tmp_path,
     )
     lifecycle_peer(fake_codex)
-    _register_ready_ticket(installed_commands, root, body=BODY)
+    _register_ready_task(installed_commands, root, body=BODY)
     child_batch = root / 'child.yml'
     child_batch.write_text(yaml.safe_dump({'tasks': [{
-        'ticket_id': '76', 'role': 'coding-team.engineer', 'instruction': 'initial',
+        'task_id': '76', 'role': 'coding-team.engineer', 'instruction': 'initial',
     }]}))
     initial = root / 'initial.yml'
-    initial.write_text(yaml.safe_dump({'tasks': [{'ticket_id': '76', 'role': 'team-leader'}]}))
+    initial.write_text(yaml.safe_dump({'tasks': [{'task_id': '76', 'role': 'team-leader'}]}))
     log = tmp_path / 'actions.jsonl'
     release = tmp_path / 'release'
     ready = tmp_path / 'ready'

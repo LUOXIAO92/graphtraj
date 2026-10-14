@@ -282,8 +282,8 @@ def test_graph_query_does_not_open_session_archives(tmp_path: Path) -> None:
     path = session_path(tmp_path / 'state', 'canonical')
     path.parent.mkdir(parents=True)
     path.write_bytes(b'not a readable Session database')
-    result = handle_request({'action': 'execute', 'feature': 'ticket_graph', 'arguments': {}}, cwd=tmp_path)
-    assert not result.failed and result.document['tickets']
+    result = handle_request({'action': 'execute', 'feature': 'task_graph', 'arguments': {}}, cwd=tmp_path)
+    assert not result.failed and result.document['tasks']
 
 
 def test_one_native_record_commits_all_its_semantic_events(tmp_path: Path) -> None:

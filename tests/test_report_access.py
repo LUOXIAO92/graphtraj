@@ -170,7 +170,7 @@ def test_installed_send_recovers_historical_reports(
     from conftest import run_process
     from runner_fixtures import configure_harness
     from test_generic_role_execution import wait_for_idle
-    from test_ticket_graph import _register, _change_status, _ticket
+    from test_task_graph import _register, _change_status, _task
 
     root, _, _, env = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path,
@@ -179,10 +179,10 @@ def test_installed_send_recovers_historical_reports(
         'roles': {'researcher': {'runtime': 'codex', 'model': 'selected-model'}},
         'role_tree': {'researcher': {}},
     }))
-    _register(installed_commands, root, _ticket('166', 'historical-reports'))
+    _register(installed_commands, root, _task('166', 'historical-reports'))
     _change_status(installed_commands, root, '166', 'ready')
     batch = root / 'batch.yml'
-    batch.write_text('tasks:\n  - role: researcher\n    ticket_id: "166"\n')
+    batch.write_text('tasks:\n  - role: researcher\n    task_id: "166"\n')
     env['FAKE_CODEX_APPEND_LOG'] = '1'
     result = run_process([str(installed_commands.runner), '--swarm-input', str(batch)],
                          cwd=root, env=env, timeout=30)
@@ -199,7 +199,7 @@ def test_installed_send_recovers_historical_reports(
     if source == 'mapping':
         mapping['report_file'] = report_ref
         launch['mapping']['report_file'] = report_ref
-    evidence = root / '.graphtraj/state/tickets/166-historical-reports'
+    evidence = root / '.graphtraj/state/tasks/166-historical-reports'
     own = evidence.joinpath(*Path(report_ref).parts[1:])
     own.write_text('Retained evidence')
     reference = own.with_name('reference.md')

@@ -39,7 +39,7 @@ def test_native_status_uses_callback_identity(
     configuration.write_text(default_configuration_content(tmp_path, tmp_path))
     mapping = {
         'alias': 'probe@e1', 'runtime': 'codex', 'session': 'child-session',
-        'execution_id': 'child-turn', 'ticket_id': '133', 'team_generation': 2,
+        'execution_id': 'child-turn', 'task_id': '133', 'team_generation': 2,
         'role': 'engineer', 'parent': 'probe@l1', 'retained_batch_file': 'batch.yml',
         'worktree_path': str(tmp_path), 'trace_file': 'unused',
         'worker_pid': 1, 'runtime_pid': 1,

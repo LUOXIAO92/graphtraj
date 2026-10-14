@@ -11,8 +11,8 @@ from graphtraj.execution.execution_budget import (
     ExecutionBudgetError, read_execution_budget, split_execution_budget_front_matter,
 )
 
-TICKET_ID = re.compile(r"[1-9]\d*\Z")
-TICKET_NAME = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*\Z")
+TASK_ID = re.compile(r"[1-9]\d*\Z")
+TASK_NAME = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*\Z")
 ISSUE_SOURCE = re.compile(r"https://github\.com/[^/]+/[^/]+/issues/([1-9]\d*)\Z")
 STATUSES = [
     "pending", "ready", "implementing", "reviewing", "reworking",
@@ -21,8 +21,8 @@ STATUSES = [
 ]
 
 BASE_PROPERTIES = {
-    "ticket_id": {"type": "string"},
-    "ticket_name": {"type": "string"},
+    "task_id": {"type": "string"},
+    "task_name": {"type": "string"},
     "source": {"type": "string"},
     "title": {"type": "string"},
     "body": {"type": "string"},
@@ -37,7 +37,7 @@ TASK_PROPERTIES = {
     "retirement_reason": {"type": ["string", "null"]},
 }
 EXECUTION_FIELDS = {
-    "ticket_id", "ticket_name", "current_definition", "status",
+    "task_id", "task_name", "current_definition", "status",
     "active_team_ordinal", "worktree", "branch", "current_candidate",
 }
 LEGACY_RELATIONS = {"active", "replaced_by", "dependencies"}
@@ -68,16 +68,16 @@ REVISION_SCHEMA = object_schema({
     "product_preserving": {"const": True},
     "caused_by_event_ids": {"type": "array", "items": {"type": "string"}},
     "evidence_refs": {"type": "array", "minItems": 1, "items": {"type": "string"}},
-    "tickets": {"type": "array", "minItems": 1, "items": definition_schema(revision=True)},
+    "tasks": {"type": "array", "minItems": 1, "items": definition_schema(revision=True)},
     "dry_run": {"type": "boolean", "default": False},
-    "reopen_ticket_ids": {"type": "array", "items": {"type": "string"}},
+    "reopen_task_ids": {"type": "array", "items": {"type": "string"}},
     "completed_input_corrections": {
         "type": "object", "additionalProperties": {"type": "string"},
         "description": "Completed task IDs mapped to the owner's evidence-backed reason for recording already-consumed completed inputs without changing the accepted scope.",
     },
-}, {"product_preserving", "caused_by_event_ids", "evidence_refs", "tickets"})
+}, {"product_preserving", "caused_by_event_ids", "evidence_refs", "tasks"})
 COMPLETE_SCHEMA = object_schema({
-    "ticket_id": {"type": "string"},
+    "task_id": {"type": "string"},
     "current_definition": {"type": "string"},
     "reason": {"type": "string"},
     "cancelled_scope": {"type": "object", "additionalProperties": {"type": "string"}},
@@ -109,7 +109,7 @@ def read_definition(snapshot: str) -> dict[str, Any]:
     split = split_execution_budget_front_matter(snapshot)
     metadata = yaml.safe_load(split[1]) if split is not None else None
     if not isinstance(metadata, dict) or not isinstance(metadata.get("task"), dict):
-        raise ValueError("Ticket v2 definition is invalid")
+        raise ValueError("Task v2 definition is invalid")
     return {**metadata["task"], "body": split[2]}
 
 
@@ -131,7 +131,7 @@ TASK_SCHEMA = object_schema({
     "delivery": {"type": "array", "items": object_schema({
         "event_id": {"type": "string"},
         "event": {"type": "string"},
-        "ticket_id": {"type": "string"},
+        "task_id": {"type": "string"},
         "candidate": {"type": ["string", "null"]},
         "dev_commit": {"type": ["string", "null"]},
         "reason": {"type": ["string", "null"]},
@@ -152,57 +152,57 @@ def validate_definition(issue: Any) -> None:
     modern = isinstance(issue, dict) and issue.get("schema_version") == 2
     expected = set(TASK_PROPERTIES) if modern else frozenset(BASE_PROPERTIES)
     if not isinstance(issue, dict) or set(issue) != expected:
-        raise ValueError("accepted Ticket definition is invalid")
-    ticket_id = issue["ticket_id"]
-    ticket_name = issue["ticket_name"]
+        raise ValueError("accepted Task definition is invalid")
+    task_id = issue["task_id"]
+    task_name = issue["task_name"]
     source = issue["source"]
     title = issue["title"]
     body = issue["body"]
     dependencies = issue["dependencies"]
     source_match = ISSUE_SOURCE.fullmatch(source) if isinstance(source, str) else None
     if (
-        not isinstance(ticket_id, str)
-        or TICKET_ID.fullmatch(ticket_id) is None
-        or not isinstance(ticket_name, str)
-        or TICKET_NAME.fullmatch(ticket_name) is None
-        or (not modern and (source_match is None or source_match.group(1) != ticket_id))
+        not isinstance(task_id, str)
+        or TASK_ID.fullmatch(task_id) is None
+        or not isinstance(task_name, str)
+        or TASK_NAME.fullmatch(task_name) is None
+        or (not modern and (source_match is None or source_match.group(1) != task_id))
         or (modern and (not isinstance(source, str) or not source.strip()))
         or not isinstance(title, str)
         or not title.strip()
         or not isinstance(body, str)
         or not isinstance(dependencies, list)
         or any(
-            not isinstance(item, str) or TICKET_ID.fullmatch(item) is None
+            not isinstance(item, str) or TASK_ID.fullmatch(item) is None
             for item in dependencies
         )
         or len(dependencies) != len(set(dependencies))
-        or ticket_id in dependencies
+        or task_id in dependencies
     ):
-        raise ValueError("accepted Ticket definition is invalid")
+        raise ValueError("accepted Task definition is invalid")
     if modern:
         parent = issue["parent_id"]
         disposition = issue["disposition"]
         reason = issue["retirement_reason"]
         replacements = issue["replaced_by"]
         if (type(issue["schema_version"]) is not int
-                or (parent is not None and (not isinstance(parent, str) or TICKET_ID.fullmatch(parent) is None))
+                or (parent is not None and (not isinstance(parent, str) or TASK_ID.fullmatch(parent) is None))
                 or disposition not in {"active", "superseded", "cancelled"}
                 or not isinstance(replacements, list)
-                or any(not isinstance(item, str) or TICKET_ID.fullmatch(item) is None for item in replacements)
+                or any(not isinstance(item, str) or TASK_ID.fullmatch(item) is None for item in replacements)
                 or len(replacements) != len(set(replacements))
                 or (disposition == "superseded") != bool(replacements)
                 or (disposition == "active" and reason is not None)
                 or (disposition != "active" and (not isinstance(reason, str) or not reason.strip()))):
-            raise ValueError("Ticket v2 parent, disposition or retirement facts are invalid")
+            raise ValueError("Task v2 parent, disposition or retirement facts are invalid")
     try:
         read_execution_budget(body)
     except ExecutionBudgetError as error:
-        raise ValueError("accepted Ticket execution budget is invalid") from error
+        raise ValueError("accepted Task execution budget is invalid") from error
 
 
 STATE_CHANGE_SCHEMA = object_schema({
     **{key: TASK_SCHEMA["properties"][key] for key in (
-        "ticket_id", "status", "active_team_ordinal", "worktree", "branch", "current_candidate",
+        "task_id", "status", "active_team_ordinal", "worktree", "branch", "current_candidate",
     )},
     "caused_by_event_ids": {"type": "array", "items": {"type": "string"}},
     "evidence_refs": {"type": "array", "minItems": 1, "items": {"type": "string"}},

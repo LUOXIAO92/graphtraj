@@ -111,7 +111,7 @@ def test_native_main_two_projects_reopen_and_attribution(
     assert 'unrelated private output' not in json.dumps([one, two])
     facts = [e['usage'] for e in one['events'] if e['kind'] == 'usage']
     assert [(f['cumulative']['input_tokens'], f['previous_cumulative']['input_tokens']) for f in facts] == [(1100, 1000), (2550, 2450)]
-    assert all(f['ticket_id'] is None and f['agent'] == alias for f in facts)
+    assert all(f['task_id'] is None and f['agent'] == alias for f in facts)
     assert source.as_posix() in json.dumps(one)
     totals = dashboard_totals({'one': one['events'], 'two': two['events']})
     assert totals['one']['tokens']['input']['value'] == 200
@@ -147,7 +147,7 @@ def test_member_cursor_reconnect_rotation_truncation_and_counts(tmp_path: Path, 
     cold_reads = 0
     cold_events = []
     while True:
-        page = project_query(tmp_path, ticket_id='148', alias=alias, **({'cursor': cursor} if cursor else {}))
+        page = project_query(tmp_path, task_id='148', alias=alias, **({'cursor': cursor} if cursor else {}))
         cold_reads += page['read_records']
         cold_events.extend(page['events'])
         cursor = page['cursor']
@@ -155,12 +155,12 @@ def test_member_cursor_reconnect_rotation_truncation_and_counts(tmp_path: Path, 
             break
     cold_ms = (time.perf_counter() - started) * 1000
     started = time.perf_counter()
-    hot = project_query(tmp_path, ticket_id='148', alias=alias, cursor=cursor)
+    hot = project_query(tmp_path, task_id='148', alias=alias, cursor=cursor)
     hot_ms = (time.perf_counter() - started) * 1000
     from graphtraj.execution.desktop_activity import _READERS
     _READERS.clear()
     started = time.perf_counter()
-    reopened = project_query(tmp_path, ticket_id='148', alias=alias, cursor=cursor)
+    reopened = project_query(tmp_path, task_id='148', alias=alias, cursor=cursor)
     reopen_ms = (time.perf_counter() - started) * 1000
     assert hot['events'] == reopened['events'] == []
     assert hot['read_records'] < cold_reads and reopened['read_records'] < cold_reads
@@ -170,18 +170,18 @@ def test_member_cursor_reconnect_rotation_truncation_and_counts(tmp_path: Path, 
     tampered = json.loads(base64.urlsafe_b64decode(data))
     tampered['context'] = []
     forged = base64.urlsafe_b64encode(json.dumps(tampered).encode()).decode() + '.' + signature
-    assert project_query(tmp_path, ticket_id='148', alias=alias, cursor=forged)['availability'] == 'cursor-expired'
+    assert project_query(tmp_path, task_id='148', alias=alias, cursor=forged)['availability'] == 'cursor-expired'
     print(json.dumps({'dataset': '601 native records', 'cold_ms': cold_ms, 'hot_ms': hot_ms,
                       'reopen_ms': reopen_ms, 'cold_records_read': cold_reads,
                       'hot_records_read': hot['read_records'], 'reopen_records_read': reopened['read_records']}))
     trace.rename(trace.with_suffix('.rotated'))
     write_records(trace, [turn(tmp_path, 'two'), count(60000), count(60100)])
-    assert project_query(tmp_path, ticket_id='148', alias=alias, cursor=cursor)['availability'] == 'trace-changed'
-    replay = project_query(tmp_path, ticket_id='148', alias=alias)
+    assert project_query(tmp_path, task_id='148', alias=alias, cursor=cursor)['availability'] == 'trace-changed'
+    replay = project_query(tmp_path, task_id='148', alias=alias)
     assert replay['events'][0]['usage']['identity'] == cold_events[-1]['usage']['identity']
     write_records(trace, [turn(tmp_path, 'three'), count(60100)])
-    assert project_query(tmp_path, ticket_id='148', alias=alias, cursor=replay['cursor'])['availability'] == 'trace-changed'
-    # An Agent remains restricted to its own ticket: project-wide Main observation is human-only.
+    assert project_query(tmp_path, task_id='148', alias=alias, cursor=replay['cursor'])['availability'] == 'trace-changed'
+    # An Agent remains restricted to its own task: project-wide Main observation is human-only.
     from graphtraj.workspace.runner_project import discover_runner_directory
     with runtime_caller(discover_runner_directory(tmp_path), alias), pytest.raises(RunnerError, match='own Session'):
         project_query(tmp_path)

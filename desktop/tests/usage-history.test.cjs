@@ -12,7 +12,7 @@ const { records, summarize } = require('../src/usage.ts');
 function event(id, input, output, extra = {}) {
   return { id, kind: 'usage', time: '2026-10-10T12:00:00Z', model: 'gpt-5.3-codex',
     source: { runtime: 'codex', offset: Number(id), trace: '/native/owned-session.jsonl' },
-    text: 'must-not-be-copied', usage: { identity: 's:' + id, session: 's', ticket_id: '1',
+    text: 'must-not-be-copied', usage: { identity: 's:' + id, session: 's', task_id: '1',
       agent: 'child', attributable: true, phase: 'final', provider_usage: { secret: 'must-not-be-copied' },
       tokens: { input, output, cache_read: input / 2 }, ...extra } };
 }
@@ -24,7 +24,7 @@ test('controlled Projects boundary persists monitor/backfill usage across refres
   let offline = false;
   const reader = { read: async () => {
     if (offline) throw new Error('Source removed');
-    return { tickets: [{ ticket_id: '1' }] };
+    return { tasks: [{ task_id: '1' }] };
   } };
   const a = event('1', 100, 5, { cumulative: { input_tokens: 100, output_tokens: 5 } });
   const b = event('2', 100, 10, { cumulative: { input_tokens: 100, output_tokens: 10 } });
@@ -48,7 +48,7 @@ test('controlled Projects boundary persists monitor/backfill usage across refres
   const second = (await projects.add(path.join(root, 'second'))).selected;
   await assert.rejects(async () => projects.usage('../unselected'), /added project/);
   // Monitor ingestion and simultaneous usage backfill may see the same event.
-  await Promise.all([projects.activity({ projectId: first, ticket_id: '1', alias: 'child' }), projects.usage(first)]);
+  await Promise.all([projects.activity({ projectId: first, task_id: '1', alias: 'child' }), projects.usage(first)]);
   const totals = value => summarize(records(new Map(value.calls.map(call => [call.key, call]))));
   let page = await settled(projects, first);
   assert.equal(totals(page).tokens.input.value, 300);
@@ -126,7 +126,7 @@ test('same representative dataset cold/hot/reopen avoids history pages and multi
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'usage-benchmark-'));
   t.after(() => fs.rm(root, { recursive: true, force: true }));
   await fs.mkdir(path.join(root, 'one')); await fs.mkdir(path.join(root, 'two'));
-  const reader = { read: async () => ({ tickets: [] }) };
+  const reader = { read: async () => ({ tasks: [] }) };
   let reads = 0, written = 600;
   let release;
   let slow = false;
@@ -194,7 +194,7 @@ test('removing an indexed project stops the remainder of its active native read 
     if (request.alias === 'first') await new Promise(resolve => { release = resolve; entered(); });
     return { agents: [], events: [event('1', 100, 10)], availability: 'available' };
   });
-  const projects = new Projects(path.join(root, '.graphtraj/projects.json'), { read: async () => ({ tickets: [] }) });
+  const projects = new Projects(path.join(root, '.graphtraj/projects.json'), { read: async () => ({ tasks: [] }) });
   t.after(() => projects.close());
   await projects.load();
   const id = (await projects.add(root)).selected;

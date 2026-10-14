@@ -23,7 +23,7 @@ test('global index merges legacy aliases once, retains invalid paths and safely 
   const original = JSON.stringify({ projects: [{ id: 'duplicate', root: alias },
     { id: 'b', root: second }, { id: 'missing', root: absent }], selected: 'b' });
   await fs.writeFile(legacy, original);
-  const reader = { read: async folder => { await fs.access(folder); return { tickets: [] }; } };
+  const reader = { read: async folder => { await fs.access(folder); return { tasks: [] }; } };
   const index = new Projects(file, reader, legacy);
   t.after(() => index.close());
   await index.load();
@@ -61,7 +61,7 @@ test('first migration preserves selection and malformed legacy/global files are 
   const legacy = path.join(root, 'legacy.json');
   const original = JSON.stringify({ projects: [{ id: 'chosen', root }], selected: 'chosen' });
   await fs.writeFile(legacy, original);
-  const reader = { read: async () => ({ tickets: [] }) };
+  const reader = { read: async () => ({ tasks: [] }) };
   const index = new Projects(file, reader, legacy);
   t.after(() => index.close());
   await index.load();
@@ -93,6 +93,6 @@ test('reopening a saved index does not wait for an offline native availability c
   await started;
   assert.ok(release, 'native availability is still running after saved index returns');
   const finishing = index.refreshAvailability();
-  release({ tickets: [] });
+  release({ tasks: [] });
   assert.equal((await finishing).projects[0].unavailable, undefined);
 });

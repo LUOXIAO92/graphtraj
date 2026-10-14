@@ -43,7 +43,7 @@ test('desktop main-process settings pipe saves directly, detects conflict and re
   const before = await client.request(project);
   const catalog = await client.connections(project, { action: 'read' });
   assert.ok(catalog.capabilities.reasoning_efforts.codex.includes('max'));
-  const graph = fixtures.operate(project, 'ticket_graph');
+  const graph = fixtures.operate(project, 'task_graph');
   const draft = { revision: before.revision, edits: { 'custom_group.observer': { model: 'saved-model', reasoning_effort: 'max' } },
     renames: {}, add_edges: [], remove_edges: [] };
   const saved = await client.request(project, draft);
@@ -59,6 +59,6 @@ test('desktop main-process settings pipe saves directly, detects conflict and re
     edits: { 'custom_group.observer': { model: before.roles['custom_group.observer'].model, reasoning_effort: null } } });
   assert.deepEqual(restored.roles, before.roles);
   assert.deepEqual(restored.edges, before.edges);
-  assert.deepEqual(fixtures.operate(project, 'ticket_graph'), graph);
+  assert.deepEqual(fixtures.operate(project, 'task_graph'), graph);
   assert.match(await fs.readFile(file, 'utf8'), /unknown_future_field: preserved/);
 });

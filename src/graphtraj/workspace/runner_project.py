@@ -30,7 +30,7 @@ def provision_worktree(
     branch: str,
     worktree: Path,
 ) -> None:
-    """Reuse or create the one deterministic Ticket Worktree from validated dev."""
+    """Reuse or create the one deterministic Task Worktree from validated dev."""
 
     if preflight_worktree(project, task, branch, worktree):
         return
@@ -47,7 +47,7 @@ def provision_worktree(
     except OSError as error:
         raise RunnerError(
             "WORKTREE_PROVISION_FAILED",
-            "The derived Ticket Worktree could not be provisioned from dev.",
+            "The derived Task Worktree could not be provisioned from dev.",
         ) from error
     try:
         if branch_exists:
@@ -65,19 +65,19 @@ def provision_worktree(
     except RunnerError as error:
         raise RunnerError(
             "WORKTREE_PROVISION_FAILED",
-            "The derived Ticket Worktree could not be provisioned from dev. " + error.message,
+            "The derived Task Worktree could not be provisioned from dev. " + error.message,
         ) from error
 
     # Retain the existing ownership link before any post-add validation can fail.
     # Retry can then attribute this clean Worktree without inventing a Session.
-    evidence = project.state_directory / "tickets" / (task.ticket_id + "-" + task.ticket_name)
+    evidence = project.state_directory / "tasks" / (task.task_id + "-" + task.task_name)
     try:
         (worktree / ".state").symlink_to(
             os.path.relpath(evidence, worktree), target_is_directory=True,
         )
     except OSError as error:
         raise RunnerError(
-            "STATE_LINK_FAILED", "The Ticket Worktree ownership link could not be retained.",
+            "STATE_LINK_FAILED", "The Task Worktree ownership link could not be retained.",
         ) from error
 
     record = next(
@@ -105,7 +105,7 @@ def provision_worktree(
     ):
         raise RunnerError(
             "WORKTREE_PROVISION_FAILED",
-            "The derived Ticket Worktree could not be validated.",
+            "The derived Task Worktree could not be validated.",
         )
 
 
@@ -117,7 +117,7 @@ def preflight_worktree(
 ) -> bool:
     """Validate one derived Worktree without provisioning it.
 
-    Return whether the exact registered Ticket Worktree already exists.
+    Return whether the exact registered Task Worktree already exists.
     """
 
     records = registered_worktrees(project.repository)
@@ -131,19 +131,19 @@ def preflight_worktree(
         if record_branch == expected_branch and record_path != worktree:
             raise RunnerError(
                 "WORKTREE_CONFLICT",
-                "The derived Ticket branch is registered at a different Worktree.",
+                "The derived Task branch is registered at a different Worktree.",
             )
     if registered is not None:
         if registered.get("branch") != expected_branch or not worktree.is_dir():
             raise RunnerError(
                 "WORKTREE_CONFLICT",
-                "The derived Ticket Worktree does not match its registered branch.",
+                "The derived Task Worktree does not match its registered branch.",
             )
         return True
     if os.path.lexists(str(worktree)):
         raise RunnerError(
             "WORKTREE_CONFLICT",
-            "The derived Ticket Worktree path exists but is not registered.",
+            "The derived Task Worktree path exists but is not registered.",
         )
 
     branch_exists = git_succeeds(
@@ -160,7 +160,7 @@ def preflight_worktree(
     ):
         raise RunnerError(
             "WORKTREE_CONFLICT",
-            "The existing Ticket branch is not at the current validated dev state.",
+            "The existing Task branch is not at the current validated dev state.",
         )
     return False
 
@@ -376,7 +376,7 @@ def discover_project_root(cwd: Path) -> Path:
     """Locate the Harness Project Root that contains one working directory.
 
     A Batch dispatch may be invoked from inside the project, such as from the
-    Ticket Worktree of the Session that dispatches it, so the entry walks up
+    Task Worktree of the Session that dispatches it, so the entry walks up
     from its own working directory instead of trusting a projected root path.
     When an Agent Session inside the project resolves its root this way, the
     directory it resolves is the same one Main reaches from the project root.

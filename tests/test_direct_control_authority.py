@@ -16,7 +16,7 @@ from conftest import FakeCodex, InstalledCommands, run_process
 from graphtraj.execution import runner_status
 from graphtraj.execution.runner_models import RunnerError
 from runner_fixtures import configure_harness
-from test_session_alias_control import _register_ready_ticket
+from test_session_alias_control import _register_ready_task
 
 
 PROBE_FILE = Path(__file__).with_name("direct_control_probes.py")
@@ -146,8 +146,8 @@ def _temporary_specialist(
             {
                 "tasks": [
                     {
-                        "ticket_id": "76",
-                        "ticket_name": "session-alias-control",
+                        "task_id": "76",
+                        "task_name": "session-alias-control",
                         "role": {
                             "investigation-specialist": {
                                 "runtime": "codex",
@@ -312,7 +312,7 @@ def _record_direct_session(
         yaml.safe_dump(
             {
                 "alias": alias, "runtime": "codex", "session": "native",
-                "execution_id": "turn", "ticket_id": "132", "team_generation": 1,
+                "execution_id": "turn", "task_id": "132", "team_generation": 1,
                 "role": role, "parent": parent, "retained_batch_file": "batch.yml",
                 "worktree_path": str(directory / "worktree"),
                 "trace_file": str(directory / "events.jsonl"),
@@ -352,13 +352,13 @@ def test_control_entries_follow_recorded_direct_ownership(
         installed_commands, temporary_git_repository, fake_codex, tmp_path,
     )
     _controlled_codex(fake_codex)
-    _register_ready_ticket(installed_commands, root)
+    _register_ready_task(installed_commands, root)
     release  = tmp_path / "release-reviews"
     hold     = tmp_path / "hold-specialist"
     batch    = root / "authority-batch.yml"
     batch.write_text(
         yaml.safe_dump(
-            {"tasks": [{"ticket_id": "76", "ticket_name": "session-alias-control",
+            {"tasks": [{"task_id": "76", "task_name": "session-alias-control",
                         "role": "team-leader"}]}
         ),
         encoding="utf-8",
@@ -497,8 +497,8 @@ def test_control_entries_follow_recorded_direct_ownership(
 
     # Main observes the Team Leader it dispatched itself in full, and a Session
     # beyond that direct relation as a summary only.
-    ticket_directory = root / ".graphtraj" / "state" / "tickets" / "76-session-alias-control"
-    team_file = ticket_directory / "teams" / "1" / "team.yml"
+    task_directory = root / ".graphtraj" / "state" / "tasks" / "76-session-alias-control"
+    team_file = task_directory / "teams" / "1" / "team.yml"
     seat = yaml.safe_load(team_file.read_text(encoding="utf-8"))["members"]["engineer"]["session_ref"]
     _assert_status_document(
         _status(installed_commands, root, environment, leader), leader, full=True,
@@ -596,8 +596,8 @@ def test_caller_selected_history_cannot_authorize_replacement(
 ) -> None:
     """History, including a denied or replayed result, grants no replacement authority."""
     runner_directory = tmp_path / "harness" / ".graphtraj" / "runner"
-    leader = "132-ticket-handover0-team_leader@team_leader"
-    member = "132-ticket-handover0-engineer@engineer_2"
+    leader = "132-task-handover0-team_leader@team_leader"
+    member = "132-task-handover0-engineer@engineer_2"
     _record_direct_session(runner_directory, leader, "team_leader", None)
     _record_direct_session(runner_directory, member, "engineer", leader)
     thread = "01a0c781-608b-7a90-b640-1422636d029f"
@@ -645,9 +645,9 @@ def test_only_the_recorded_direct_parent_answers_a_grandchild(
         installed_commands, temporary_git_repository, fake_codex, tmp_path,
     )
     runner_directory = root / ".graphtraj" / "runner"
-    leader     = "132-ticket-handover0-team_leader@team_leader"
-    engineer   = "132-ticket-handover0-engineer@engineer_2"
-    grandchild = "132-ticket-handover0-specialist@specialist_1"
+    leader     = "132-task-handover0-team_leader@team_leader"
+    engineer   = "132-task-handover0-engineer@engineer_2"
+    grandchild = "132-task-handover0-specialist@specialist_1"
     _record_direct_session(runner_directory, leader, "team_leader", None)
     _record_direct_session(runner_directory, engineer, "engineer", leader)
     _record_direct_session(

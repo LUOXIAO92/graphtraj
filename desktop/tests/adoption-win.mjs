@@ -47,7 +47,7 @@ function operate(project, feature, args = {}) {
   assert.ok(!reply.failed, JSON.stringify(reply));
   return reply.result;
 }
-/** Set up disposable source/configuration, then register tickets through public operations. */
+/** Set up disposable source/configuration, then register tasks through public operations. */
 async function makeProject(name, retained = false) {
   const project = path.join(root, name);
   await fs.mkdir(project);
@@ -58,19 +58,19 @@ async function makeProject(name, retained = false) {
   git(['-c', 'user.name=Windows adoption', '-c', 'user.email=test@example.invalid', 'commit', '-m', 'Controlled project']);
   operate(project, 'project_setup', { source_repository: project, apply: true, create_dev: true });
   await fs.writeFile(path.join(project, '.graphtraj/roles.yml'), 'roles:\n  observation:\n    reader:\n      runtime: codex\n      model: controlled-original\n      api_key_env: WINDOWS_ADOPTION_TEST_KEY\nrole_tree: {}\n');
-  let ticketDirectory;
+  let taskDirectory;
   for (const [id, title, dependencies] of [['1', name, []], ['2', 'dependent', ['1']]]) {
-    const registered = operate(project, 'ticket_register', {
-      ticket_id: id, ticket_name: title, title, dependencies,
+    const registered = operate(project, 'task_register', {
+      task_id: id, task_name: title, title, dependencies,
       source: `https://github.com/example/controlled-windows/issues/${id}`,
       body: 'Controlled Windows adoption record. No model execution.',
     });
-    if (id === '1') ticketDirectory = registered.ticket_directory;
+    if (id === '1') taskDirectory = registered.task_directory;
   }
   if (retained) {
-    await retainedRecords(project, ticketDirectory, true);
+    await retainedRecords(project, taskDirectory, true);
     for (const [status, ordinal] of [['ready', null], ['implementing', 1]]) {
-      operate(project, 'ticket_update', { ticket_id: '1', status,
+      operate(project, 'task_update', { task_id: '1', status,
         active_team_ordinal: ordinal, worktree: null, branch: null, current_candidate: null,
         caused_by_event_ids: [], evidence_refs: ['seed.txt'] });
     }
@@ -266,8 +266,8 @@ try {
   const original = await fs.readFile(firstRoles);
   cli('graphtraj.interfaces.cli.graphtraj', ['--help'], first);
   cli('graphtraj.interfaces.cli.agent_runner', ['--help'], first);
-  const before = operate(first, 'ticket_graph');
-  const secondGraph = operate(second, 'ticket_graph');
+  const before = operate(first, 'task_graph');
+  const secondGraph = operate(second, 'task_graph');
   const firstState = await taskFiles(first);
   const secondState = await taskFiles(second);
   await launch();
@@ -283,15 +283,15 @@ try {
   await capture('two-projects');
   await page.locator('.project-button').filter({ hasText: first }).click();
   await page.locator('.monitor-page:visible .react-flow__node[data-id="1"]').filter({ hasText: 'first-project' }).click();
-  await page.getByRole('complementary', { name: 'Ticket details' }).waitFor();
-  const activity = operate(first, 'desktop_activity', { ticket_id: '1' });
+  await page.getByRole('complementary', { name: 'Task details' }).waitFor();
+  const activity = operate(first, 'desktop_activity', { task_id: '1' });
   assert.equal(activity.agents.length, 2);
   const historical = activity.agents.find(agent => agent.historical);
   assert.equal(historical.state, 'retired');
   await parallelChat({ page, members: activity.agents, shot: capture });
   {
     await page.locator('.activity-event').first().waitFor();
-    const observed = operate(first, 'desktop_activity', { ticket_id: '1', alias: historical.alias });
+    const observed = operate(first, 'desktop_activity', { task_id: '1', alias: historical.alias });
     const message = observed.events?.find(event => event.kind === 'message' && event.text);
     const tool = observed.events?.find(event => event.kind === 'tool' && event.name);
     assert.ok(message, 'Nonempty Chat messages required');
@@ -312,7 +312,7 @@ try {
   await capture('node-chat');
   await page.getByRole('button', { name: 'Project usage', exact: true }).click();
   await page.locator('.usage-dashboard').waitFor();
-  const usageDate = localDate(new Date(operate(first, 'desktop_activity', { ticket_id: '1', alias: historical.alias }).events.find(event => event.kind === 'usage').time));
+  const usageDate = localDate(new Date(operate(first, 'desktop_activity', { task_id: '1', alias: historical.alias }).events.find(event => event.kind === 'usage').time));
   await page.getByLabel('Start date').fill(usageDate);
   await page.getByLabel('End date').fill(usageDate);
   {
@@ -370,7 +370,7 @@ try {
   facts.phase = 'normal-close';
   await persist();
   await bounded('Normal GUI close', app.close()); app = null;
-  assert.deepEqual(operate(first, 'ticket_graph'), before);
+  assert.deepEqual(operate(first, 'task_graph'), before);
   await launch();
   await page.locator('.project-button.current').filter({ hasText: first }).waitFor();
   assert.deepEqual(await page.evaluate(id => window.graphtraj.settings(id), firstId), settings.roles);
@@ -378,7 +378,7 @@ try {
   await datedUsage({ page, first, second, agent: historical.alias, date: usageDate, shot: name => capture(`reopened-${name}`) });
   await page.getByRole('button', { name: `Remove ${second}`, exact: true }).click();
   assert.equal(await page.locator('.project-button').count(), 1);
-  assert.equal(operate(second, 'ticket_graph').tickets.length, 2);
+  assert.equal(operate(second, 'task_graph').tasks.length, 2);
   await capture('restart-removal');
   const crashed = app.process();
   const exited = new Promise(resolve => crashed.once('exit', resolve));
@@ -386,9 +386,9 @@ try {
   await bounded('Terminated GUI exit', exited);
   // Retain the connection for final cleanup: the launcher and Electron main PIDs can differ.
   cli('graphtraj.interfaces.cli.agent_runner', ['--help'], first);
-  assert.deepEqual(operate(first, 'ticket_graph'), before);
+  assert.deepEqual(operate(first, 'task_graph'), before);
   facts.steps.push('CLI and native graph survive GUI normal exit and process termination; removed project retained');
-  assert.deepEqual(operate(second, 'ticket_graph'), secondGraph);
+  assert.deepEqual(operate(second, 'task_graph'), secondGraph);
   assert.deepEqual(await taskFiles(first), firstState);
   assert.deepEqual(await taskFiles(second), secondState);
   assert.deepEqual(await fs.readFile(secondRoles), secondBefore);

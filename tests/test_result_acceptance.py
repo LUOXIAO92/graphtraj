@@ -186,7 +186,7 @@ def test_cli_accepts_code_as_actual_parent_and_mcp_exposes_same_operation(tmp_pa
     assert accepted['alias'] == 'research@x3'
     assert accepted['candidate'] == commit
     graph = tools.read_current_graph({}, cwd=tmp_path).document
-    assert graph['tickets'][0]['status'] == 'awaiting-integration'
+    assert graph['tasks'][0]['status'] == 'awaiting-integration'
 
     output = io.StringIO()
     mcp.serve(io.StringIO(json.dumps({
@@ -305,7 +305,7 @@ def test_delivery_state_cli_cannot_bypass_actual_caller_authority(tmp_path: Path
                                      cwd=tmp_path).document
     request = tmp_path / 'decision.yml'
     request.write_text(yaml.safe_dump({
-        'phase': 'final', 'ticket_id': '148', 'candidate': commit,
+        'phase': 'final', 'task_id': '148', 'candidate': commit,
         'submission_id': submitted['event_id'], 'decision': 'accepted', 'reason': 'Claimed.',
         'caused_by_event_ids': [submitted['event_id']], 'evidence_refs': submitted['evidence_refs'],
     }))

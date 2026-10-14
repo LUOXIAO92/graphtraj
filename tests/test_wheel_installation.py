@@ -20,7 +20,7 @@ from conftest import InstalledCommands, run_process
 from graphtraj.configuration.project_configuration import default_configuration_content
 from test_existing_repository_setup import run_setup
 from test_mcp_host_tools import TOOL_NAMES, _started_mcp
-from test_ticket_graph import _ticket, _write
+from test_task_graph import _task, _write
 
 
 UNBUNDLED_RESOURCE_DIRECTORIES = (
@@ -139,11 +139,11 @@ def test_installed_wheel_initializes_both_layouts_and_serves_host_tools(
     mcp_executable = installed_commands.product.with_name("graphtraj-mcp")
     with _started_mcp(mcp_executable, harness_root) as server:
         discovered = server.request("tools/list")["result"]["tools"]
-        call = server.call("ticket_graph", {})
+        call = server.call("task_graph", {})
 
     assert {tool["name"] for tool in discovered} == TOOL_NAMES
     assert call["result"]["isError"] is False
-    assert call["result"]["structuredContent"] == {"schema_version": 2, "tickets": []}
+    assert call["result"]["structuredContent"] == {"schema_version": 2, "tasks": []}
 
 
 def test_upgrading_the_installation_preserves_existing_project_records(
@@ -182,28 +182,28 @@ def test_upgrading_the_installation_preserves_existing_project_records(
     registered = run_process(
         [
             str(installed_commands.product),
-            "ticket",
+            "task",
             "register",
-            "--ticket-file",
-            str(_write(repository / "issue.yml", _ticket("119", "runtime-core-install"))),
+            "--task-file",
+            str(_write(repository / "issue.yml", _task("119", "runtime-core-install"))),
         ],
         cwd=repository,
     )
     assert registered.returncode == 0, registered.stderr
     (repository / "evidence.md").write_text(
-        "Main approved this Ticket.\n", encoding="utf-8"
+        "Main approved this Task.\n", encoding="utf-8"
     )
     changed = run_process(
         [
             str(installed_commands.product),
-            "ticket",
+            "task",
             "update",
             "--state-file",
             str(
                 _write(
                     repository / "state-change.yml",
                     {
-                        "ticket_id":            "119",
+                        "task_id":            "119",
                         "status":               "ready",
                         "active_team_ordinal":  None,
                         "worktree":             None,
@@ -222,9 +222,9 @@ def test_upgrading_the_installation_preserves_existing_project_records(
         command: run_process(
             [str(installed_commands.product), *command], cwd=repository
         ).stdout
-        for command in (("ticket", "graph"), ("worldline", "read"))
+        for command in (("task", "graph"), ("worldline", "read"))
     }
-    assert yaml.safe_load(history_before[("ticket", "graph")])["tickets"][0][
+    assert yaml.safe_load(history_before[("task", "graph")])["tasks"][0][
         "status"
     ] == "ready"
 
@@ -237,7 +237,7 @@ def test_upgrading_the_installation_preserves_existing_project_records(
         command: run_process(
             [str(upgraded.product), *command], cwd=repository
         ).stdout
-        for command in (("ticket", "graph"), ("worldline", "read"))
+        for command in (("task", "graph"), ("worldline", "read"))
     }
     assert history_after == history_before
     assert roles.read_bytes() == selections["roles"]
@@ -287,8 +287,8 @@ def test_installed_tool_reads_the_delivered_guide_from_another_directory(
         for request in [
             {"action": "discover", "query": "task-breakdown"},
             {"action": "describe", "feature": "task-breakdown"},
-            {"action": "describe", "feature": "ticket_graph"},
-            {"action": "execute", "feature": "ticket_graph", "arguments": {}},
+            {"action": "describe", "feature": "task_graph"},
+            {"action": "execute", "feature": "task_graph", "arguments": {}},
         ]
     )
     completed = subprocess.run(
@@ -312,4 +312,4 @@ def test_installed_tool_reads_the_delivered_guide_from_another_directory(
     ).read_text(encoding="utf-8")
     assert Path(described["manual_ref"]).is_absolute()
     assert replies[2]["result"]["manual_ref"] == described["manual_ref"]
-    assert replies[3]["result"] == {"schema_version": 2, "tickets": []}
+    assert replies[3]["result"] == {"schema_version": 2, "tasks": []}

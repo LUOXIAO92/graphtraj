@@ -11,9 +11,9 @@ test.before(async () => {
   vm.runInNewContext(result.outputFiles[0].text, { module, exports: module.exports, structuredClone });
   ({ monitorGraph, taskFocus, dependencyTerminals, taskStatus, projectBounds } = module.exports);
 });
-const task = (id, parent_id, dependencies = []) => ({ ticket_id: id, title: `Real title ${id}`, parent_id,
-  schema_version: 2, ticket_name: `task-${id}`, dependencies, active: true, status: 'pending', replaced_by: [] });
-const input = () => ({ tickets: [task('A', null), task('B', null), task('C', 'A'),
+const task = (id, parent_id, dependencies = []) => ({ task_id: id, title: `Real title ${id}`, parent_id,
+  schema_version: 2, task_name: `task-${id}`, dependencies, active: true, status: 'pending', replaced_by: [] });
+const input = () => ({ tasks: [task('A', null), task('B', null), task('C', 'A'),
   task('1', 'C'), task('2', 'B', ['1']), task('3', 'C', ['2']), task('4', null, ['3']), task('unrelated', null)] });
 
 test('native hierarchy is lossless across nested expansion, contraction and projected return edges', () => {
@@ -27,7 +27,7 @@ test('native hierarchy is lossless across nested expansion, contraction and proj
     assert.equal(result.edges.length, 3);
     for (const edge of result.edges) {
       assert.ok(ids.has(edge.source) && ids.has(edge.target));
-      assert.ok(graph.tickets.find(ticket => ticket.ticket_id === edge.relations[0].target).dependencies.includes(edge.relations[0].source));
+      assert.ok(graph.tasks.find(task => task.task_id === edge.relations[0].target).dependencies.includes(edge.relations[0].source));
     }
     const first = result.edges.find(edge => edge.relations.some(item => item.source === '1'));
     assert.equal(first.source, open.includes('C') ? '1' : open.includes('A') ? 'C' : 'A');
@@ -43,13 +43,13 @@ test('measured long titles and nested frames have separate sibling space', () =>
   const graph = input();
   const result = monitorGraph(graph, new Set(['A', 'B', 'C']), { '1': { width: 320, height: 320 } });
   for (const node of result.nodes) for (const other of result.nodes) {
-    if (node.id === other.id || node.ticket.parent_id !== other.ticket.parent_id) continue;
+    if (node.id === other.id || node.task.parent_id !== other.task.parent_id) continue;
     const a = node.frame ?? node, b = other.frame ?? other;
     assert.ok(a.x + a.width + 60 <= b.x || b.x + b.width + 60 <= a.x ||
       a.y + a.height + 60 <= b.y || b.y + b.height + 60 <= a.y);
   }
-  for (const node of result.nodes.filter(node => node.ticket.parent_id)) {
-    const parent = result.nodes.find(other => other.id === node.ticket.parent_id);
+  for (const node of result.nodes.filter(node => node.task.parent_id)) {
+    const parent = result.nodes.find(other => other.id === node.task.parent_id);
     assert.ok(parent.frame);
     const bounds = node.frame ?? node;
     assert.ok(bounds.x >= parent.frame.x && bounds.y >= parent.frame.y);
@@ -62,12 +62,12 @@ test('selection traces real dependencies and selected summary internals, excludi
   const graph = input();
   assert.deepEqual([...taskFocus(graph, 'A')].sort(), ['1', '2', '3', '4', 'A', 'C']);
   assert.deepEqual([...taskFocus(graph, '2')].sort(), ['1', '2', '3', '4']);
-  assert.equal(taskFocus(graph, null).size, graph.tickets.length);
+  assert.equal(taskFocus(graph, null).size, graph.tasks.length);
 });
 
 test('legacy unknown parents remain standalone; old display groups cannot create parents', () => {
-  const graph = { tickets: [task('1', undefined), task('2', undefined, ['1'])],
-    groups: [{ id: 'invented', title: 'Body derived grouping', ticket_ids: ['1', '2'] }] };
+  const graph = { tasks: [task('1', undefined), task('2', undefined, ['1'])],
+    groups: [{ id: 'invented', title: 'Body derived grouping', task_ids: ['1', '2'] }] };
   const result = monitorGraph(graph, new Set());
   assert.deepEqual(Array.from(result.nodes, node => node.id), ['1', '2']);
   assert.ok(result.nodes.every(node => node.children.length === 0));
@@ -75,7 +75,7 @@ test('legacy unknown parents remain standalone; old display groups cannot create
 
 
 test('dependency ranks retain inactive historical tasks', () => {
-  const graph = { tickets: [task('1', null), task('2', null), task('3', null, ['1', '2']),
+  const graph = { tasks: [task('1', null), task('2', null), task('3', null, ['1', '2']),
     { ...task('4', null, ['3']), active: false }] };
   const { nodes } = monitorGraph(graph, new Set());
   const positions = Object.fromEntries(nodes.map(node => [node.id, node]));
@@ -87,7 +87,7 @@ test('dependency ranks retain inactive historical tasks', () => {
 });
 
 test('parallel collapsed dependencies retain every native edge with finite routes', () => {
-  const graph = { tickets: [task('126', null), task('127', null), task('147', null),
+  const graph = { tasks: [task('126', null), task('127', null), task('147', null),
     task('133', '127'), task('143', '127'), task('139', '127'),
     task('148', '147', ['133', '143']), task('150', '147', ['139'])] };
   const original = JSON.stringify(graph);
@@ -98,14 +98,14 @@ test('parallel collapsed dependencies retain every native edge with finite route
     assert.equal(view.edges.flatMap(edge => edge.relations).length, 3);
     assert.ok(view.nodes.every(node => Number.isFinite(node.x) && Number.isFinite(node.y)));
     assert.ok(view.edges.every(edge => edge.vertices.every(point => Number.isFinite(point.x) && Number.isFinite(point.y))));
-    for (const edge of view.edges) assert.ok(graph.tickets.find(ticket => ticket.ticket_id === edge.relations[0].target).dependencies.includes(edge.relations[0].source));
+    for (const edge of view.edges) assert.ok(graph.tasks.find(task => task.task_id === edge.relations[0].target).dependencies.includes(edge.relations[0].source));
   }
   assert.equal(JSON.stringify(graph), original);
 });
 
 
 test('collapsed visible pairs aggregate only matching directions and restore real endpoints on expansion', () => {
-  const graph = { tickets: [task('252', null), task('260', null), task('275', null), task('270', null),
+  const graph = { tasks: [task('252', null), task('260', null), task('275', null), task('270', null),
     task('a', '252'), task('b', '252'), task('261', '260', ['a']), task('269', '260', ['b']),
     task('264', '260', ['261', '269']), task('p', '275', ['261', '264']),
     task('q', '270', ['269']), task('r', '252', ['q'])] };
@@ -120,14 +120,14 @@ test('collapsed visible pairs aggregate only matching directions and restore rea
   assert.deepEqual(Array.from(expanded.edges.filter(e => e.target === '264'), e => e.source).sort(), ['261', '269']);
   for (const view of [collapsed, expanded]) {
     const native = view.edges.flatMap(e => e.relations.map(d => `${d.source}->${d.target}`)).sort();
-    assert.deepEqual(Array.from(native), graph.tickets.flatMap(t => t.dependencies.map(d => `${d}->${t.ticket_id}`)).sort());
+    assert.deepEqual(Array.from(native), graph.tasks.flatMap(t => t.dependencies.map(d => `${d}->${t.task_id}`)).sort());
   }
   assert.equal(JSON.stringify(graph), original);
 });
 
 
 test('ports follow opposite card position and leave horizontal clear terminal segments', () => {
-  const graph = { tickets: [task('252', null), task('260', null, ['252']), task('283', null, ['252', '260'])] };
+  const graph = { tasks: [task('252', null), task('260', null, ['252']), task('283', null, ['252', '260'])] };
   const view = monitorGraph(graph, new Set());
   // Source insertion order deliberately opposes visual target order.
   const upper = view.nodes.find(n => n.id === '283'), lower = view.nodes.find(n => n.id === '260');
@@ -155,7 +155,7 @@ test('cancelled and superseded tasks never appear under their old execution stat
 });
 
 test('expanded summary exits leave from the delivery side of its frame', () => {
-  const graph = { tickets: [task('226', null), task('227', '226'),
+  const graph = { tasks: [task('226', null), task('227', '226'),
     task('228', '226', ['227']), task('236', null, ['226']),
     task('240', null, ['226', '236'])] };
   const view = monitorGraph(graph, new Set(['226']));
@@ -172,7 +172,7 @@ test('expanded summary exits leave from the delivery side of its frame', () => {
 });
 
 test('replacement chains preserve direction, kinds and native endpoints across summaries', () => {
-  const graph = { tickets: [task('A', null), task('B', null),
+  const graph = { tasks: [task('A', null), task('B', null),
     { ...task('101', 'A'), active: false, replaced_by: ['102'] },
     { ...task('102', 'B'), active: false, replaced_by: ['103'] }, task('103', 'B'),
     { ...task('104', 'A'), active: false, replaced_by: ['103'] },
@@ -215,10 +215,10 @@ test('a common project boundary contains independent tasks and native nested sum
 });
 
 test('accepted delivery is an evidenced relation, distinct from membership and execution ordering', () => {
-  const graph = { tickets: [task('summary', null), task('next', null, ['summary']),
-    { ...task('result', 'summary'), delivery: [{ event: 'ticket-completed', ticket_id: 'summary', event_id: 'accepted-1' }] },
+  const graph = { tasks: [task('summary', null), task('next', null, ['summary']),
+    { ...task('result', 'summary'), delivery: [{ event: 'task-completed', task_id: 'summary', event_id: 'accepted-1' }] },
     task('unaccepted', 'summary'),
-    { ...task('cross', null), delivery: [{ event: 'ticket-completed', ticket_id: 'summary', event_id: 'accepted-1' }] }] };
+    { ...task('cross', null), delivery: [{ event: 'task-completed', task_id: 'summary', event_id: 'accepted-1' }] }] };
   const original = JSON.stringify(graph);
   for (const expanded of [[], ['summary']]) {
     const view = monitorGraph(graph, new Set(expanded));
@@ -244,8 +244,8 @@ test('accepted delivery is an evidenced relation, distinct from membership and e
 
 
 test('a collapsed dependency and accepted receipt share an arrow while preserving both facts', () => {
-  const graph = { tickets: [task('226', null), task('236', null, ['226']),
-    { ...task('233', '226'), delivery: [{ event: 'ticket-completed', ticket_id: '236', event_id: 'accept-236' }] }] };
+  const graph = { tasks: [task('226', null), task('236', null, ['226']),
+    { ...task('233', '226'), delivery: [{ event: 'task-completed', task_id: '236', event_id: 'accept-236' }] }] };
   const collapsed = monitorGraph(graph, new Set());
   assert.equal(collapsed.edges.length, 1);
   assert.deepEqual(Array.from(collapsed.edges[0].kinds).sort(), ['acceptance', 'dependency']);
@@ -257,8 +257,8 @@ test('a collapsed dependency and accepted receipt share an arrow while preservin
 });
 
 test('nested and cross-summary accepted results flow toward their real delivery cards', () => {
-  const receipt = target => [{ event: 'ticket-completed', ticket_id: target, event_id: `accepted-${target}` }];
-  const graph = { tickets: [task('outer', null),
+  const receipt = target => [{ event: 'task-completed', task_id: target, event_id: `accepted-${target}` }];
+  const graph = { tasks: [task('outer', null),
     { ...task('inner', 'outer'), delivery: receipt('outer') },
     { ...task('first', 'inner'), delivery: receipt('inner') },
     { ...task('last', 'inner', ['first']), delivery: receipt('inner') },
@@ -279,9 +279,9 @@ test('nested and cross-summary accepted results flow toward their real delivery 
 });
 
 test('dense delivery terminals remain in the gap before their summary', () => {
-  const graph = { tickets: [task('summary', null), ...Array.from({ length: 24 }, (_, index) => ({
+  const graph = { tasks: [task('summary', null), ...Array.from({ length: 24 }, (_, index) => ({
     ...task(String(index), 'summary', index ? [String(index - 1)] : []),
-    delivery: [{ event: 'ticket-completed', ticket_id: 'summary', event_id: 'accepted-summary' }],
+    delivery: [{ event: 'task-completed', task_id: 'summary', event_id: 'accepted-summary' }],
   }))] };
   const view = monitorGraph(graph, new Set(['summary']), { summary: { width: 320, height: 500 } });
   const last = view.nodes.find(node => node.id === '23'), summary = view.nodes.find(node => node.id === 'summary');

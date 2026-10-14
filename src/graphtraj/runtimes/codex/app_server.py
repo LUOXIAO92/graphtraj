@@ -1228,10 +1228,10 @@ class CodexMainRecovery:
             with self._lock:
                 if stop in self._stops:
                     return
-                ticket_id, ticket_name, limit = json.loads(stop)
+                task_id, task_name, limit = json.loads(stop)
                 delivery = self._stop_delivery(
-                    ticket_id,
-                    ticket_name,
+                    task_id,
+                    task_name,
                     limit,
                     notice["occurred_at"],
                     notice["actual"]["elapsed_minutes"],
@@ -1248,8 +1248,8 @@ class CodexMainRecovery:
 
     def _stop_delivery(
         self,
-        ticket_id: str,
-        ticket_name: str,
+        task_id: str,
+        task_name: str,
         limit: float,
         triggered_at: str,
         elapsed_minutes: float,
@@ -1258,12 +1258,12 @@ class CodexMainRecovery:
         elapsed = _duration(elapsed_minutes)
         stop_id = str(uuid.uuid5(
             uuid.NAMESPACE_URL,
-            "graphtraj:budget-stop:{0}:{1}:{2}".format(ticket_id, ticket_name, limit),
+            "graphtraj:budget-stop:{0}:{1}:{2}".format(task_id, task_name, limit),
         ))
         delivery = {
             "stop_id": stop_id,
             "stop": "stochastic_stop:{0}".format(limit),
-            "ticket": {"ticket_id": ticket_id, "ticket_name": ticket_name},
+            "task": {"task_id": task_id, "task_name": task_name},
             "triggered_at": triggered_at,
             "elapsed": elapsed,
         }
@@ -1322,15 +1322,15 @@ class CodexMainRecovery:
             raise CodexAdapterError("RUNTIME_REQUEST_INVALID", "The budget notice threshold is invalid.")
         if threshold["kind"] != "stochastic_stop":
             return None
-        ticket = notice.get("ticket")
+        task = notice.get("task")
         limit = threshold.get("limit")
         actual = notice.get("actual")
         if (
-            not isinstance(ticket, Mapping)
-            or not isinstance(ticket.get("ticket_id"), str)
-            or not ticket["ticket_id"]
-            or not isinstance(ticket.get("ticket_name"), str)
-            or not ticket["ticket_name"]
+            not isinstance(task, Mapping)
+            or not isinstance(task.get("task_id"), str)
+            or not task["task_id"]
+            or not isinstance(task.get("task_name"), str)
+            or not task["task_name"]
             or isinstance(limit, bool)
             or not isinstance(limit, (int, float))
             or not math.isfinite(limit)
@@ -1340,7 +1340,7 @@ class CodexMainRecovery:
         ):
             raise CodexAdapterError("RUNTIME_REQUEST_INVALID", "The stochastic-stop notice is invalid.")
         return json.dumps(
-            (ticket["ticket_id"], ticket["ticket_name"], limit),
+            (task["task_id"], task["task_name"], limit),
             allow_nan=False,
             separators=(",", ":"),
         )

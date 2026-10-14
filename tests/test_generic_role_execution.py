@@ -12,7 +12,7 @@ import yaml
 from conftest import FakeCodex, InstalledCommands, run_process
 from runner_fixtures import configure_harness
 from test_project_setup import CODING_METHOD_SKILL_NAMES
-from test_ticket_graph import _change_status, _register, _ticket
+from test_task_graph import _change_status, _register, _task
 
 
 def remove_coding_method_skills(root: Path, user_home: Path) -> None:
@@ -91,7 +91,7 @@ def test_single_role_launch_registers_and_executes_without_placeholder_members(
         'roles': roles,
         'role_tree': {role: {}},
     }))
-    _register(installed_commands, root, _ticket('150', 'formal-author'))
+    _register(installed_commands, root, _task('150', 'formal-author'))
     _change_status(installed_commands, root, '150', 'ready')
     original = Path(__file__).with_name('runner_codex_peer.py')
     peer = tmp_path / 'author-peer.py'
@@ -113,19 +113,19 @@ def test_single_role_launch_registers_and_executes_without_placeholder_members(
     fake_codex.executable.write_text(code)
     env['FAKE_CODEX_APPEND_LOG'] = '1'
     batch = root / 'batch.yml'
-    batch.write_text(yaml.safe_dump({'tasks': [{'role': role, 'ticket_id': '150'}]}))
+    batch.write_text(yaml.safe_dump({'tasks': [{'role': role, 'task_id': '150'}]}))
     result = run_process([str(installed_commands.runner), '--swarm-input', str(batch)],
                          cwd=root, env=env, timeout=30)
     assert result.returncode == 0, result.stdout + result.stderr
     task = yaml.safe_load(result.stdout)['tasks'][0]
     assert task['launch_status'] == 'launched'
     wait_for_idle(installed_commands, root, env, task['alias'])
-    ticket = root / '.graphtraj/state/tickets/150-formal-author'
-    state = yaml.safe_load((ticket / 'ticket.yml').read_text())
-    team = yaml.safe_load((ticket / 'teams/1/team.yml').read_text())
+    task_directory = root / '.graphtraj/state/tasks/150-formal-author'
+    state = yaml.safe_load((task_directory / 'task.yml').read_text())
+    team = yaml.safe_load((task_directory / 'teams/1/team.yml').read_text())
     assert {member['role'] for member in team['members'].values()} == {role.rpartition('.')[2].replace('_', '-')}
     assert state['status'] != 'integrated' and state['current_candidate'] is None
-    assert (ticket / 'teams/1/traces' / task['alias'] / 'events.jsonl').read_text()
+    assert (task_directory / 'teams/1/traces' / task['alias'] / 'events.jsonl').read_text()
     events = [json.loads(line) for shard in (root / '.graphtraj/state/worldline').glob('*.jsonl')
               for line in shard.read_text().splitlines()]
     assert sum(event['event'] == 'team-started' for event in events) == 1
@@ -154,7 +154,7 @@ def test_single_role_launch_registers_and_executes_without_placeholder_members(
     expected = reports or [role.rpartition('.')[2].replace('_', '-') + '.md']
     assert [Path(path).name for path in mapping['report_files']] == expected
     assert permission[str(root / '.graphtraj/state')] == 'none'
-    before = (ticket / 'teams/1/traces' / task['alias'] / 'events.jsonl').read_bytes()
+    before = (task_directory / 'teams/1/traces' / task['alias'] / 'events.jsonl').read_bytes()
     sent = run_process([str(installed_commands.runner), 'send', task['alias'],
                         '--instruction', 'Continue the same research.', '--caused-by-event-id', events[-1]['event_id']],
                        cwd=root, env=env, timeout=20)
@@ -169,7 +169,7 @@ def test_single_role_launch_registers_and_executes_without_placeholder_members(
     assert observed['last_outcome'] == 'completed', observed
     assert observed['session'] == task['session']
     assert (worktree / 'visits.txt').read_text() == '2'
-    assert (ticket / 'teams/1/traces' / task['alias'] / 'events.jsonl').read_bytes().startswith(before)
+    assert (task_directory / 'teams/1/traces' / task['alias'] / 'events.jsonl').read_bytes().startswith(before)
     reports = run_process([str(installed_commands.runner), 'reports', task['alias']], cwd=root, env=env)
     assert len(yaml.safe_load(reports.stdout)['submissions']) == 2
 
@@ -221,12 +221,12 @@ def test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority(
     )
     fake_codex.executable.write_text(code)
     first_child = None
-    for ticket_id in ('150', '151'):
-        _register(installed_commands, root, _ticket(ticket_id, 'dispatch'))
-        _change_status(installed_commands, root, ticket_id, 'ready')
+    for task_id in ('150', '151'):
+        _register(installed_commands, root, _task(task_id, 'dispatch'))
+        _change_status(installed_commands, root, task_id, 'ready')
         if first_child:
             env.update(FOREIGN_CHILD=first_child, CAUSE=events[-1]['event_id'])
-        request = {'tasks': [{'role': parent_role, 'ticket_id': ticket_id}]}
+        request = {'tasks': [{'role': parent_role, 'task_id': task_id}]}
         if surface == 'cli':
             batch = root / 'batch.yml'
             batch.write_text(yaml.safe_dump(request))
@@ -254,8 +254,8 @@ def test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority(
         assert child['launch_status'] == 'registered'
         if first_child is None:
             first_child = child['alias']
-        ticket = root / '.graphtraj/state/tickets' / (ticket_id + '-dispatch')
-        team = yaml.safe_load((ticket / 'teams/1/team.yml').read_text())
+        task = root / '.graphtraj/state/tasks' / (task_id + '-dispatch')
+        team = yaml.safe_load((task / 'teams/1/team.yml').read_text())
         assert {member['role'] for member in team['members'].values()} == {actual_parent, child_role}
         assert len(team['members']) == 2
         mapping = yaml.safe_load((root / '.graphtraj/runner/sessions' / child['alias'] / 'mapping.yml').read_text())
@@ -291,7 +291,7 @@ def test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority(
         time.sleep(.05)
     assert (worktree / 'parent-turns.txt').read_text() == '4'
     wait_for_idle(installed_commands, root, env, parent['alias'])
-    team = yaml.safe_load((ticket / 'teams/1/team.yml').read_text())
+    team = yaml.safe_load((task / 'teams/1/team.yml').read_text())
     assert len(team['members']) == 3
     assert sum(member['role'] == child_role for member in team['members'].values()) == 2
     assert all(member['session_ref'] for member in team['members'].values())
@@ -325,11 +325,11 @@ def test_selected_resources_fail_clearly_when_absent(
         }},
         'role_tree': {'coding_team.engineer': {}},
     }))
-    _register(installed_commands, root, _ticket('150', 'absent-method'))
+    _register(installed_commands, root, _task('150', 'absent-method'))
     _change_status(installed_commands, root, '150', 'ready')
     batch = root / 'batch.yml'
     batch.write_text(yaml.safe_dump({'tasks': [{
-        'role': 'coding_team.engineer', 'ticket_id': '150',
+        'role': 'coding_team.engineer', 'task_id': '150',
     }]}))
 
     unreadable = root / 'unreadable.txt'
@@ -374,10 +374,10 @@ def test_unpermitted_root_does_not_start_a_session(
         'roles': {'researcher': {'runtime': 'codex', 'model': 'selected'}},
         'role_tree': tree,
     }))
-    _register(installed_commands, root, _ticket('150', 'no-dispatch'))
+    _register(installed_commands, root, _task('150', 'no-dispatch'))
     _change_status(installed_commands, root, '150', 'ready')
     batch = root / 'batch.yml'
-    batch.write_text(yaml.safe_dump({'tasks': [{'ticket_id': '150', **task}]}))
+    batch.write_text(yaml.safe_dump({'tasks': [{'task_id': '150', **task}]}))
     result = run_process([str(installed_commands.runner), '--swarm-input', str(batch)], cwd=root, env=env)
     assert result.returncode == 1
     assert yaml.safe_load(result.stdout)['error']['code'] == 'authority-denied'
@@ -400,9 +400,9 @@ def test_public_launch_rejects_retired_skill_selection(
     root, _, _, env = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path,
     )
-    _register(installed_commands, root, _ticket('176', 'native-selection'))
+    _register(installed_commands, root, _task('176', 'native-selection'))
     _change_status(installed_commands, root, '176', 'ready')
-    request = {'tasks': [{'role': 'coding_team.engineer', 'ticket_id': '176', 'skills': skills}]}
+    request = {'tasks': [{'role': 'coding_team.engineer', 'task_id': '176', 'skills': skills}]}
     if surface == 'cli':
         batch = root / 'input.yml'
         batch.write_text(yaml.safe_dump(request))

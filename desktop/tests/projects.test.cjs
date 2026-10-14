@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
-const { operate, ticket, makeProject } = require('./fixtures.cjs');
+const { operate, task, makeProject } = require('./fixtures.cjs');
 
 test('explicit project paths retain directory and native validation before saving', async t => {
   const { Projects } = await import('../electron/projects.ts');
@@ -17,7 +17,7 @@ test('explicit project paths retain directory and native validation before savin
   const reader = { read: async folder => {
     calls.push(folder);
     if (folder === await fs.realpath(invalid)) throw new Error('Native configuration unavailable');
-    return { tickets: [] };
+    return { tasks: [] };
   } };
   const projects = new Projects(path.join(root, 'prefs/projects.json'), reader);
   t.after(() => projects.close());
@@ -65,10 +65,10 @@ test('native desktop bridge isolates projects, persists preferences and reconnec
   const secondId = b.selected;
   assert.equal(b.projects.length, 2);
   assert.notEqual(firstId, secondId);
-  assert.equal((await projects.graph(firstId)).graph.tickets[0].title, 'first project');
-  await assert.rejects(projects.activity({ projectId: '/', ticket_id: '1' }), /Choose an added project/);
-  assert.equal((await projects.graph(secondId)).graph.tickets[0].title, 'second project');
-  assert.deepEqual((await projects.graph(secondId)).graph.tickets[1].dependencies, ['1']);
+  assert.equal((await projects.graph(firstId)).graph.tasks[0].title, 'first project');
+  await assert.rejects(projects.activity({ projectId: '/', task_id: '1' }), /Choose an added project/);
+  assert.equal((await projects.graph(secondId)).graph.tasks[0].title, 'second project');
+  assert.deepEqual((await projects.graph(secondId)).graph.tasks[1].dependencies, ['1']);
   await assert.rejects(projects.graph(first), /Choose an added project/);
   await assert.rejects(projects.graph({ root: first }), /Choose an added project/);
 
@@ -85,36 +85,36 @@ test('native desktop bridge isolates projects, persists preferences and reconnec
   const reopened = new Projects(file, reader);
   await reopened.load();
   assert.deepEqual(reopened.list(), projects.list());
-  const original = operate(first, 'ticket_graph');
+  const original = operate(first, 'task_graph');
   await projects.graph(firstId);
-  assert.deepEqual(operate(first, 'ticket_graph'), original);
+  assert.deepEqual(operate(first, 'task_graph'), original);
 
   // Public graph revision appears on the next read, including historical nodes.
   await fs.writeFile(path.join(first, 'evidence.txt'), 'Replace dependent with successor.\n');
-  operate(first, 'ticket_revise', {
+  operate(first, 'task_revise', {
     product_preserving: true, caused_by_event_ids: [], evidence_refs: ['evidence.txt'],
-    tickets: [
-      { ...ticket('2', 'dependent', ['1']), title: 'Historical dependency', active: false, replaced_by: ['3'] },
-      { ...ticket('3', 'successor', ['1']), active: true, replaced_by: [] },
+    tasks: [
+      { ...task('2', 'dependent', ['1']), title: 'Historical dependency', active: false, replaced_by: ['3'] },
+      { ...task('3', 'successor', ['1']), active: true, replaced_by: [] },
     ],
   });
   const updated = (await projects.graph(firstId)).graph;
-  assert.deepEqual(updated.tickets.map(t => t.ticket_id), ['1', '2', '3']);
-  assert.equal(updated.tickets[1].active, false);
-  assert.equal(updated.tickets[1].title, 'Historical dependency');
-  assert.deepEqual(updated.tickets[1].replaced_by, ['3']);
-  assert.equal((await projects.graph(secondId)).graph.tickets.length, 2);
+  assert.deepEqual(updated.tasks.map(t => t.task_id), ['1', '2', '3']);
+  assert.equal(updated.tasks[1].active, false);
+  assert.equal(updated.tasks[1].title, 'Historical dependency');
+  assert.deepEqual(updated.tasks[1].replaced_by, ['3']);
+  assert.equal((await projects.graph(secondId)).graph.tasks.length, 2);
 
   const moved = first + '-moved';
   await fs.rename(first, moved);
   await assert.rejects(projects.graph(firstId), /ENOENT/);
   await fs.rename(moved, first);
-  assert.equal((await projects.graph(firstId)).graph.tickets.length, 3);
+  assert.equal((await projects.graph(firstId)).graph.tasks.length, 3);
   await projects.remove(firstId);
-  assert.deepEqual(operate(first, 'ticket_graph'), updated);
+  assert.deepEqual(operate(first, 'task_graph'), updated);
   assert.equal(projects.list().projects.length, 1);
   await assert.rejects(projects.graph(firstId), /Choose an added project/);
   reader.close();
   await assert.rejects(projects.graph(secondId), /observer is closed/);
-  assert.equal(operate(second, 'ticket_graph').tickets.length, 2);
+  assert.equal(operate(second, 'task_graph').tasks.length, 2);
 });

@@ -6,7 +6,7 @@ function event(id, tokens, extra = {}) {
   return { id, kind: 'usage', model: 'gpt-5.3-codex', time: '2026-10-10T12:00:00Z',
     source: { offset: Number(id.replace(/\D/g, '')) || 1, runtime: 'dsh' },
     usage: { tokens, identity: 's:' + id, phase: 'final', attributable: true,
-      session: 's', ticket_id: '263', agent: 'child', ...extra } };
+      session: 's', task_id: '263', agent: 'child', ...extra } };
 }
 
 test('stream totals replace, final wins, replay and parent display count the actual child once', () => {
@@ -87,7 +87,7 @@ test('project, ownership, model and time filters preserve unknown/unattributable
   assert.equal(summarize(records(map)).unidentified, 1);
   assert.equal(records(map, { agent: 'parent' }).length, 0);
   assert.equal(records(map, { model: 'other' }).length, 0);
-  assert.equal(records(map, { ticket: '262' }).length, 0);
+  assert.equal(records(map, { task: '262' }).length, 0);
   assert.equal(records(map, { to: '2026-10-09T00:00:00Z' }).length, 0);
 });
 

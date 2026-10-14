@@ -27,7 +27,7 @@ def _withdrawn_mapping(
     purpose = alias.split("_", 1)[0]
     return {
         "alias": alias, "purpose": purpose, "parent": parent, "runtime": "codex",
-        "hosted": True, "role": purpose, "ticket_id": None, "team_generation": None,
+        "hosted": True, "role": purpose, "task_id": None, "team_generation": None,
         "worktree_path": str(root), "session": session,
         "worker_pid": worker_pid, "runtime_pid": runtime_pid,
     }
@@ -56,7 +56,7 @@ def _current_mapping(alias: str, root: Path, *, parent: str | None = None) -> di
     """Return one complete current execution mapping for an adjacent Session."""
     return {
         "alias": alias, "runtime": "codex", "session": "native-session",
-        "ticket_id": "154", "team_generation": 1, "role": "researcher", "parent": parent,
+        "task_id": "154", "team_generation": 1, "role": "researcher", "parent": parent,
         "retained_batch_file": "batch.yml", "worktree_path": str(root),
         "trace_file": str(root / "trace"), "worker_pid": 111, "runtime_pid": 111,
     }
@@ -64,7 +64,7 @@ def _current_mapping(alias: str, root: Path, *, parent: str | None = None) -> di
 
 def _retired_record(root: Path, alias: str, *, parent: str) -> Path:
     """Write one retained record whose active mapping is already removed."""
-    directory = (root / ".graphtraj/state/tickets/154-recovery/teams/1/traces"
+    directory = (root / ".graphtraj/state/tasks/154-recovery/teams/1/traces"
                  / alias / "runner")
     directory.mkdir(parents=True, exist_ok=True)
     mapping = _withdrawn_mapping(
@@ -284,7 +284,7 @@ def test_retire_refuses_running_descendant_then_preserves_history(
         assert all((Path(original['trace_file']).parent / 'runner' / name).read_bytes() == content for name, content in evidence.items())
         assert Path(task['worktree_path']).is_dir()
         assert yaml.safe_load((runner / child / 'mapping.yml').read_text())['parent'] == alias
-        team = yaml.safe_load((root / '.graphtraj/state/tickets/154-recovery/teams/1/team.yml').read_text())
+        team = yaml.safe_load((root / '.graphtraj/state/tasks/154-recovery/teams/1/team.yml').read_text())
         assert alias not in {member['session_ref'] for member in team['members'].values()}
         assert command(installed_commands, root, env, 'reports', alias).returncode == 0
         assert command(installed_commands, root, env, 'status', alias).returncode == 0

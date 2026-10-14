@@ -14,7 +14,7 @@ const desktop = fileURLToPath(new URL('..', import.meta.url));
 const worktree = path.dirname(desktop);
 const tool = process.env.GRAPHTRAJ_TOOL;
 const project = process.env.GRAPHTRAJ_LIVE_PROJECT;
-const ticket = process.env.GRAPHTRAJ_LIVE_TICKET;
+const task = process.env.GRAPHTRAJ_LIVE_TASK;
 
 function selfQuery() {
   return new Promise((resolve, reject) => {
@@ -30,11 +30,11 @@ function selfQuery() {
         } catch (failure) { reject(failure); }
       });
     child.stdin.on('error', reject);
-    child.stdin.end(JSON.stringify({ action: 'execute', feature: 'desktop_activity', arguments: { ticket_id: ticket } }) + '\n');
+    child.stdin.end(JSON.stringify({ action: 'execute', feature: 'desktop_activity', arguments: { task_id: task } }) + '\n');
   });
 }
 
-test('one native window observes its real executing Agent', { timeout: 240000, skip: !project || !ticket || !tool }, async () => {
+test('one native window observes its real executing Agent', { timeout: 240000, skip: !project || !task || !tool }, async () => {
   // Authentication is native and inherited. No identity fields, detached host,
   // fake activity backend, fixture Trace or replacement directory dialog.
   const member = await selfQuery();
@@ -49,7 +49,7 @@ test('one native window observes its real executing Agent', { timeout: 240000, s
   let stopping = false;
   const stopOwned = () => { stopping = true; if (app) void app.close().catch(() => {}); };
   process.once('SIGTERM', stopOwned);
-  const facts = { project, ticket, alias: member.alias, launches: 0, steps: [],
+  const facts = { project, task, alias: member.alias, launches: 0, steps: [],
     noSandbox: process.env.GRAPHTRAJ_LIVE_NO_SANDBOX === '1' };
   try {
     app = await electron.launch({ executablePath: electronExecutable,
@@ -127,8 +127,8 @@ test('one native window observes its real executing Agent', { timeout: 240000, s
       facts.observerInstallError = 'Activity reader instrumentation installation failed';
       throw error;
     }
-    await page.getByRole('searchbox').fill(ticket);
-    await page.getByRole('button', { name: new RegExp('^#' + ticket + ' ') }).click();
+    await page.getByRole('searchbox').fill(task);
+    await page.getByRole('button', { name: new RegExp('^#' + task + ' ') }).click();
     await page.getByRole('button', { name: 'Expand chat', exact: true }).click();
     await page.getByText('This Agent connection shows only its own Session.').waitFor();
     facts.steps.push('real native self connection visible');

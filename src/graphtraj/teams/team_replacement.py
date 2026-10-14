@@ -1,4 +1,4 @@
-"""Replace an actual Team member while retaining its Ticket and Session evidence."""
+"""Replace an actual Team member while retaining its Task and Session evidence."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ from graphtraj.teams.team_round import (
     _run_agent,
     _trace_ref,
 )
-from graphtraj.graph.ticket_graph import _load_states
+from graphtraj.graph.task_graph import _load_states
 from graphtraj.graph.delivery_state import read_team
 from graphtraj.runtimes import runtime_adapter
 
@@ -36,18 +36,18 @@ def require_active_session(
     record_file = session_directory / "session.yml"
     if record_file.is_file() and yaml.safe_load(record_file.read_text()).get("retirement"):
         raise RunnerError("session-retired", "This Session has retired from its task.")
-    directory, ticket = _load_states(project.state_directory / "tickets")[mapping["ticket_id"]]
+    directory, task = _load_states(project.state_directory / "tasks")[mapping["task_id"]]
     if (Path(mapping["worktree_path"]) == project.integration_worktree
-            and ticket["status"] != "resolving-integration" and not reports_only):
+            and task["status"] != "resolving-integration" and not reports_only):
         raise RunnerError("authority-denied", "Integration Worktree work requires an active conflict assignment.")
     team_file = directory / "teams" / str(mapping["team_generation"]) / "team.yml"
     # The newly launched parent Session registers its first Batch before Team start.
     if not team_file.exists():
         return
     team = read_team(team_file)
-    if (not ticket["active"]
+    if (not task["active"]
             or team["status"] != "active"
-            or ticket["active_team_ordinal"] != mapping["team_generation"]):
+            or task["active_team_ordinal"] != mapping["team_generation"]):
         raise RunnerError("team-not-active", "The Team has stopped starting new work.")
     seats = [member for member in team["members"].values()
              if configured_role_name(member["role"]) == configured_role_name(mapping["role"])]
@@ -90,7 +90,7 @@ def _replace_member(alias: str, caused_by_event_ids: tuple[str, ...], cwd: Path)
     if not caused_by_event_ids or len(caused_by_event_ids) != len(set(caused_by_event_ids)):
         raise RunnerError("invalid-input", "Replacement requires unique causal Project Worldline event IDs.")
     _require_project_events(cwd, caused_by_event_ids)
-    directory, ticket = _load_states(project.state_directory / "tickets")[mapping["ticket_id"]]
+    directory, task_directory = _load_states(project.state_directory / "tasks")[mapping["task_id"]]
     generation = mapping["team_generation"]
     team_file = directory / "teams" / str(generation) / "team.yml"
     team = read_team(team_file)
@@ -112,18 +112,18 @@ def _replace_member(alias: str, caused_by_event_ids: tuple[str, ...], cwd: Path)
         if launch.get("member_registration", {}).get("replaces") == alias:
             return {"alias": alias, "replacement_alias": successor, "team_ordinal": generation}
         raise RunnerError("seat-replaced", "Another Session already occupies the retired member seat.")
-    if seat is None or ticket["active_team_ordinal"] != generation:
+    if seat is None or task_directory["active_team_ordinal"] != generation:
         raise RunnerError("seat-replaced", "The alias must identify a current Team seat.")
-    if not ticket["active"] or ticket["status"] in {"integrating", "resolving-integration", "integrated"}:
-        raise RunnerError("team-not-active", "This Ticket is inactive or has entered integration.")
-    worktree = project.harness_root / ticket["worktree"]
+    if not task_directory["active"] or task_directory["status"] in {"integrating", "resolving-integration", "integrated"}:
+        raise RunnerError("team-not-active", "This Task is inactive or has entered integration.")
+    worktree = project.harness_root / task_directory["worktree"]
     traces = team_file.parent / "traces"
     retained = Path(mapping["retained_batch_file"])
     task = read_session_task(mapping, cwd)
-    definition = directory / ticket["current_definition"]
+    definition = directory / task_directory["current_definition"]
     # Replacement selects current explicit resources; old Skill names stay in
     # the retained Batch and must not become a fresh preflight selection.
-    task = replace(task, ticket_file=definition, ticket_content=definition.read_text(),
+    task = replace(task, task_file=definition, task_content=definition.read_text(),
                    requested_skills=())
     if not retirement:
         require_active_session(project, alias)
@@ -138,7 +138,7 @@ def _replace_member(alias: str, caused_by_event_ids: tuple[str, ...], cwd: Path)
             or (runtime_adapter.current_host_connection() if mapping["parent"] is None else None))
     retire_session(alias, cwd, replacement={
         'role': task.role, 'role_reference': task.role_reference,
-        'parent': mapping['parent'], 'ticket_id': mapping['ticket_id'],
+        'parent': mapping['parent'], 'task_id': mapping['task_id'],
         'team_ordinal': generation, 'member': seat, 'replaces': alias,
         'worktree_path': str(worktree), 'caused_by_event_ids': list(caused_by_event_ids),
     })
@@ -148,12 +148,12 @@ def _replace_member(alias: str, caused_by_event_ids: tuple[str, ...], cwd: Path)
                 project, task, task.role, worktree, directory, traces,
                 None, None, None, mapping["parent"], retained,
                 "Continue this Team seat from previous Session {0} and Trace {1}.\n"
-                "Accepted Ticket and constraints:\n{2}\n"
+                "Accepted Task and constraints:\n{2}\n"
                 "Current commit: {3}\n"
                 "Valid retained evidence: {1}\n"
                 "Previous Session reports supplied by the authorized replacement:\n{5}\n"
                 "Remaining work: continue only the current {4} Team seat, preserving closed Team Round evidence."
-                .format(alias, prior_trace, task.ticket_content, current_commit, task.role, reports),
+                .format(alias, prior_trace, task.task_content, current_commit, task.role, reports),
                 register_member=True, replaces_alias=alias, wait_for_completion=False,
             )
     except (RunnerError, runtime_adapter.RuntimeAdapterError, OSError, ValueError, yaml.YAMLError) as error:

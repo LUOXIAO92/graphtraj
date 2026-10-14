@@ -20,7 +20,7 @@ OPERATOR_SKILL_NAMES = (
     "grilling",
     "domain-modeling",
     "to-spec",
-    "to-tickets",
+    "to-tasks",
     "task-delivery",
     "implement",
     "ponytail",
@@ -712,7 +712,7 @@ def test_setup_runtime_layout_selection(
     assert diagnose_project(root).succeeded
     monkeypatch.chdir(root)
     runner = CliRunner()
-    for arguments in (["--help"], ["ticket", "graph"]):
+    for arguments in (["--help"], ["task", "graph"]):
         result = runner.invoke(main, arguments)
         assert result.exit_code == 0, result.output
     assert (root / ".codex").exists() == (runtime == "codex")

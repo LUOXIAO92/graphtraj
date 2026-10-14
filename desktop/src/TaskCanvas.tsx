@@ -1,6 +1,6 @@
 import React, { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import { Graph as X6, Shape, NodeView, type Cell } from '@antv/x6';
-import type { Graph, Ticket } from '../electron/types';
+import type { Graph, Task } from '../electron/types';
 import { taskFocus, taskRouterOptions, monitorGraph, taskChildren, taskStatus, taskPaths, projectBounds, type Size, type MonitorEdge } from './monitor-graph';
 import './task-canvas.css';
 import { TaskMiniMap } from './task-minimap';
@@ -34,45 +34,45 @@ X6.registerNode('task-frame', { inherit: 'rect', attrs: { body: {
 } } });
 
 /** Build a text-only card shared by measurement and X6; task content is never HTML. */
-function card(ticket: Ticket, children: Ticket[], open: boolean, select: () => void, toggle: () => void): HTMLDivElement {
+function card(task: Task, children: Task[], open: boolean, select: () => void, toggle: () => void): HTMLDivElement {
   const element = document.createElement('div');
   element.className = 'native-task-card';
-  element.dataset.taskId = ticket.ticket_id;
+  element.dataset.taskId = task.task_id;
   element.setAttribute('role', 'group');
-  element.setAttribute('aria-label', ticket.title);
+  element.setAttribute('aria-label', task.title);
   const title = document.createElement('button');
   title.className = 'native-task-title';
-  title.textContent = ticket.title;
+  title.textContent = task.title;
   title.onclick = event => { event.stopPropagation(); select(); };
   element.append(title);
   const meta = document.createElement('div');
   meta.className = 'native-task-meta';
-  meta.textContent = `#${ticket.ticket_id} · ${taskStatus(ticket)}${ticket.replaced_by.length ? ` · → ${ticket.replaced_by.map(id => `#${id}`).join(', ')}` : ''}`;
+  meta.textContent = `#${task.task_id} · ${taskStatus(task)}${task.replaced_by.length ? ` · → ${task.replaced_by.map(id => `#${id}`).join(', ')}` : ''}`;
   element.append(meta);
   const delivery = document.createElement('div');
   delivery.className = 'native-task-meta';
-  const receipts = (ticket.delivery ?? []).filter(fact => fact.ticket_id !== ticket.ticket_id);
-  const own = ticket.delivery?.find(fact => fact.ticket_id === ticket.ticket_id);
-  delivery.textContent = receipts.length ? `Accepted in ${receipts.map(fact => `#${fact.ticket_id}`).join(', ')}`
+  const receipts = (task.delivery ?? []).filter(fact => fact.task_id !== task.task_id);
+  const own = task.delivery?.find(fact => fact.task_id === task.task_id);
+  delivery.textContent = receipts.length ? `Accepted in ${receipts.map(fact => `#${fact.task_id}`).join(', ')}`
     : own?.dev_commit ? `Integrated · ${own.dev_commit.slice(0, 8)}`
     : own ? 'Own acceptance recorded'
-    : taskStatus(ticket) === 'integrated' ? 'Delivery evidence unavailable' : '';
+    : taskStatus(task) === 'integrated' ? 'Delivery evidence unavailable' : '';
   if (delivery.textContent) element.append(delivery);
   const footer = document.createElement('div');
   footer.className = 'native-task-footer';
   const facts = document.createElement('span');
   facts.textContent = children.length
-    ? ticket.progress ? `${ticket.progress.completed}/${ticket.progress.total} children delivered` : `${children.length} child tasks`
-    : `${ticket.dependencies.length} dependencies`;
+    ? task.progress ? `${task.progress.completed}/${task.progress.total} children delivered` : `${children.length} child tasks`
+    : `${task.dependencies.length} dependencies`;
   footer.append(facts);
   if (children.length) {
     const button = document.createElement('button');
     button.textContent = open ? 'Collapse' : 'Expand';
-    button.setAttribute('aria-label', `${button.textContent} ${ticket.title}`);
+    button.setAttribute('aria-label', `${button.textContent} ${task.title}`);
     button.setAttribute('aria-expanded', String(open));
     button.onclick = event => { event.stopPropagation(); toggle(); };
     footer.append(button);
-  } else if (ticket.parent_known === false || ticket.parent_id === undefined) {
+  } else if (task.parent_known === false || task.parent_id === undefined) {
     const unknown = document.createElement('span');
     unknown.textContent = 'Parent unknown';
     footer.append(unknown);
@@ -98,7 +98,7 @@ export const TaskCanvas = forwardRef<TaskCanvasHandle, Props>(function TaskCanva
   const pendingToggle = useRef<string | null>(null);
   const pathLabel = useRef<HTMLOutputElement>(null);
   // Polling unchanged native facts must not rebuild cells or move the viewport.
-  const topology = JSON.stringify([props.projectName, props.graph.tickets, [...props.expanded].sort()]);
+  const topology = JSON.stringify([props.projectName, props.graph.tasks, [...props.expanded].sort()]);
 
   function fit(minScale = .05): void {
     const graph = engine.current;
@@ -134,7 +134,7 @@ export const TaskCanvas = forwardRef<TaskCanvasHandle, Props>(function TaskCanva
     // A single readable label avoids collisions inside dense routing channels.
     graph.on('edge:mouseenter', ({ edge }) => {
       const data = edge.getData<MonitorEdge>();
-      const title = (id: string) => current.current.graph.tickets.find(ticket => ticket.ticket_id === id)?.title ?? '';
+      const title = (id: string) => current.current.graph.tasks.find(task => task.task_id === id)?.title ?? '';
       if (pathLabel.current) pathLabel.current.textContent = data.relations.map(item => `#${item.source} ${title(item.source)} ${item.kind === 'replacement' ? 'replaced by' : item.kind === 'acceptance' ? 'accepted into' : '→'} #${item.target} ${title(item.target)}${item.event_id ? ` · ${item.event_id}` : ''}`).join(' · ');
     });
     graph.on('edge:mouseleave', () => { if (pathLabel.current) pathLabel.current.textContent = ''; });
@@ -145,22 +145,22 @@ export const TaskCanvas = forwardRef<TaskCanvasHandle, Props>(function TaskCanva
     const graph = engine.current!;
     const data = current.current;
     const children = taskChildren(data.graph);
-    const tickets = new Map(data.graph.tickets.map(ticket => [ticket.ticket_id, ticket]));
+    const tasks = new Map(data.graph.tasks.map(task => [task.task_id, task]));
     const sizes: Record<string, Size> = {};
     const measure = document.createElement('div');
     measure.className = 'native-task-measure';
     container.current!.append(measure);
     cards.current.clear();
     if (pathLabel.current) pathLabel.current.textContent = '';
-    for (const ticket of data.graph.tickets) {
-      const element = card(ticket, children.get(ticket.ticket_id)!.map(id => tickets.get(id)!), data.expanded.has(ticket.ticket_id),
-        () => current.current.select(ticket.ticket_id), () => {
-          pendingToggle.current = ticket.ticket_id;
-          current.current.toggle(ticket.ticket_id);
+    for (const task of data.graph.tasks) {
+      const element = card(task, children.get(task.task_id)!.map(id => tasks.get(id)!), data.expanded.has(task.task_id),
+        () => current.current.select(task.task_id), () => {
+          pendingToggle.current = task.task_id;
+          current.current.toggle(task.task_id);
         });
       measure.append(element);
-      sizes[ticket.ticket_id] = { width: 320, height: Math.ceil(element.getBoundingClientRect().height) };
-      cards.current.set(ticket.ticket_id, element);
+      sizes[task.task_id] = { width: 320, height: Math.ceil(element.getBoundingClientRect().height) };
+      cards.current.set(task.task_id, element);
     }
     // Reserve ports for visible directed pairs, not hidden internal endpoints.
     const preliminary = monitorGraph(data.graph, data.expanded, sizes);
@@ -176,7 +176,7 @@ export const TaskCanvas = forwardRef<TaskCanvasHandle, Props>(function TaskCanva
     const cells: Cell[] = [];
     if (result.nodes.length) {
       const bounds = projectBounds(result.nodes);
-      // View-only containment, never a Ticket or an execution dependency.
+      // View-only containment, never a Task or an execution dependency.
       cells.push(graph.createNode({ id: 'project-frame', shape: 'task-frame', ...bounds, zIndex: -4,
         attrs: { body: { fill: '#f8fafc', stroke: '#94a3b8', strokeWidth: 2, pointerEvents: 'none' } } }));
       cells.push(graph.createNode({ id: 'project-heading', shape: 'task-frame',

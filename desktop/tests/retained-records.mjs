@@ -6,12 +6,12 @@ export const controlledInput = { message: 'GraphTraj GUI controlled message', to
   model: 'gpt-5.3-codex', input: 1000, cacheRead: 600, output: 80, reasoning: 20 };
 
 /** Only seed the new disposable test project; these are retained controlled records, not live identities. */
-export async function retainedRecords(project, ticketDirectory, parallel = false) {
+export async function retainedRecords(project, taskDirectory, parallel = false) {
   assert.equal(await fs.readFile(path.join(project, 'seed.txt'), 'utf8'),
     'Controlled Windows adoption project; no model execution.\n');
   const alias = 'controlled@x1';
   const session = 'controlled-retained-session';
-  const team = path.join(ticketDirectory, 'teams/1');
+  const team = path.join(taskDirectory, 'teams/1');
   const record = path.join(project, '.graphtraj/runner/sessions', alias);
   await fs.mkdir(team, { recursive: true });
   await fs.mkdir(record, { recursive: true });
@@ -24,7 +24,7 @@ export async function retainedRecords(project, ticketDirectory, parallel = false
     started_at: time, members: { controlled: { role: 'controlled', session_ref: alias },
       ...(parallel ? { current: { role: 'controlled', session_ref: 'current@x2' } } : {}) } });
   await write(path.join(record, 'session.yml'), { retirement: { mapping: {
-    alias, runtime: 'codex', session, ticket_id: '1', team_generation: 1,
+    alias, runtime: 'codex', session, task_id: '1', team_generation: 1,
     role: 'controlled', parent: null, retained_batch_file: 'controlled-test-input',
     worktree_path: project, trace_file: trace, worker_pid: 2147483647, runtime_pid: 2147483647,
   } } });
@@ -45,7 +45,7 @@ export async function retainedRecords(project, ticketDirectory, parallel = false
     const currentTrace = path.join(team, 'current.jsonl');
     await write(path.join(current, 'mapping.yml'), {
       alias: 'current@x2', runtime: 'codex', session: 'controlled-completed-session',
-      ticket_id: '1', team_generation: 1, role: 'controlled', parent: null,
+      task_id: '1', team_generation: 1, role: 'controlled', parent: null,
       retained_batch_file: 'controlled-test-input', worktree_path: project,
       trace_file: currentTrace, worker_pid: 2147483647, runtime_pid: 2147483647,
     });

@@ -84,7 +84,7 @@ def test_worker_uses_selected_adapter_for_launch_control_and_resume(
     directory.mkdir(parents=True)
     base = {
         'alias': directory.name, 'runtime': 'alternative', 'parent': 'parent@l1',
-        'ticket_id': '214', 'team_generation': 1, 'role': 'engineer',
+        'task_id': '214', 'team_generation': 1, 'role': 'engineer',
         'worktree_path': str(tmp_path), 'trace_file': str(directory / 'trace.jsonl'),
         'retained_batch_file': str(tmp_path / 'batch.yml'),
     }

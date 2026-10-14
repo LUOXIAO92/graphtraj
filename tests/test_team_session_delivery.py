@@ -12,23 +12,23 @@ import pytest
 import yaml
 
 from conftest import FakeCodex, InstalledCommands, run_process, wait_for_file
-from runner_fixtures import configure_harness, wait_for_ticket_status
+from runner_fixtures import configure_harness, wait_for_task_status
 from test_managed_sessions import CALL
 
 
 def ready_team(root: Path, body: str) -> Path:
-    """Register an isolated, ready Ticket using the public graph operations."""
-    from graphtraj.graph.ticket_graph import register_ticket, update_ticket_state
+    """Register an isolated, ready Task using the public graph operations."""
+    from graphtraj.graph.task_graph import register_task, update_task_state
 
     state = root / ".graphtraj/state"
-    directory = register_ticket(state, root, {
-        "ticket_id": "114", "ticket_name": "small-team",
+    directory = register_task(state, root, {
+        "task_id": "114", "task_name": "small-team",
         "source": "https://github.com/example/project/issues/114",
         "title": "Deliver a greeting", "body": body, "dependencies": [],
     })
-    (root / "readiness.md").write_text("This isolated Ticket is ready.\n")
-    update_ticket_state(state, root, {
-        "ticket_id": "114", "status": "ready", "active_team_ordinal": None,
+    (root / "readiness.md").write_text("This isolated Task is ready.\n")
+    update_task_state(state, root, {
+        "task_id": "114", "status": "ready", "active_team_ordinal": None,
         "worktree": None, "branch": None, "current_candidate": None,
         "caused_by_event_ids": [], "evidence_refs": ["readiness.md"],
     })
@@ -58,7 +58,7 @@ def test_dispatch_depth_one_stops_before_registering_team_children(
     result = run_process([
         str(installed_commands.runner.with_name("python")), "-c", CALL, str(root),
         json.dumps(["launch", {"tasks": [{
-            "ticket_id": "114", "ticket_name": "small-team", "role": "team-leader",
+            "task_id": "114", "task_name": "small-team", "role": "team-leader",
         }]}]),
     ], cwd=root, env=environment, timeout=30)
     task = json.loads(result.stdout)["tasks"][0]
@@ -102,13 +102,13 @@ def test_a_projected_role_cannot_choose_the_launch_entry(
     result = run_process([
         str(installed_commands.runner.with_name("python")), "-c", CALL, str(root),
         json.dumps(["launch", {"tasks": [{
-            "ticket_id": "114", "ticket_name": "small-team", "role": "team-leader",
+            "task_id": "114", "task_name": "small-team", "role": "team-leader",
         }]}]),
     ], cwd=root, env=environment, timeout=30)
     document = json.loads(result.stdout)
     assert "error" not in document, result.stdout
     assert document["tasks"][0]["launch_status"] == "launched", document
-    wait_for_ticket_status(installed_commands, root, "114", "awaiting-integration")
+    wait_for_task_status(installed_commands, root, "114", "awaiting-integration")
     assert list((root / ".graphtraj/state/batches").glob("*.yml"))
 
 
@@ -123,15 +123,15 @@ def test_public_team_phases_and_parent_capacity_transfer(
     """Observe implementation, fixed Review and acceptance while roles use shared capacity."""
     from graphtraj.execution.runner_status import read_alias_mapping
     from graphtraj.graph.delivery_worldline import read_worldline
-    from graphtraj.graph.ticket_graph import read_graph
+    from graphtraj.graph.task_graph import read_graph
     from test_project_concurrency import observe_runtime, starts
 
     root, worktrees, _, environment = configure_harness(
         installed_commands, temporary_git_repository, fake_codex, tmp_path,
     )
-    ticket = ready_team(root, "Deliver one complete Team Round.")
+    task = ready_team(root, "Deliver one complete Team Round.")
     state = root / ".graphtraj/state"
-    assert read_graph(state)["tickets"][0]["status"] == "ready"
+    assert read_graph(state)["tasks"][0]["status"] == "ready"
     configuration_file = root / ".graphtraj/config.yml"
     configuration = yaml.safe_load(configuration_file.read_text())
     configuration["agent_runner"]["max_concurrency"] = capacity
@@ -151,7 +151,7 @@ def test_public_team_phases_and_parent_capacity_transfer(
     process = subprocess.Popen([
         str(installed_commands.runner.with_name("python")), "-c", CALL, str(root),
         json.dumps(["launch", {"tasks": [{
-            "ticket_id": "114", "ticket_name": "small-team", "role": "team-leader",
+            "task_id": "114", "task_name": "small-team", "role": "team-leader",
         }]}]),
     ], cwd=root, env=environment, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     runner = root / ".graphtraj/runner"
@@ -170,7 +170,7 @@ def test_public_team_phases_and_parent_capacity_transfer(
         mapping, _ = read_alias_mapping(runner, alias)
         assert mapping["parent"] == leader
         assert mapping["worktree_path"] == str(worktrees / "114-small-team")
-        assert mapping["ticket_id"] == "114" and mapping["team_generation"] == 1
+        assert mapping["task_id"] == "114" and mapping["team_generation"] == 1
         deadline = time.monotonic() + 10
         while time.monotonic() < deadline:
             child, parent = statuses([alias, leader])
@@ -186,7 +186,7 @@ def test_public_team_phases_and_parent_capacity_transfer(
     try:
         engineer = running_child("114-small_team-handover0-engineer@engineer")
         assert engineer["role"] == "engineer"
-        assert read_graph(state)["tickets"][0]["status"] == "implementing"
+        assert read_graph(state)["tasks"][0]["status"] == "implementing"
         engineer_release.touch()
         assert running_child(
             "114-small_team-handover0-standards_reviewer@standards_reviewer"
@@ -195,7 +195,7 @@ def test_public_team_phases_and_parent_capacity_transfer(
             assert running_child(
                 "114-small_team-handover0-spec_reviewer@spec_reviewer"
             )["role"] == "spec-reviewer"
-        reviewing = read_graph(state)["tickets"][0]
+        reviewing = read_graph(state)["tasks"][0]
         assert reviewing["status"] == "implementing"
         candidate = next(event["candidate"] for event in read_worldline(state, root)
                          if event["event"] == "result-submitted")
@@ -206,11 +206,11 @@ def test_public_team_phases_and_parent_capacity_transfer(
         stdout, stderr = process.communicate(timeout=45)
     assert process.returncode == 0, stdout + stderr
     assert json.loads(stdout)["tasks"][0]["launch_status"] == "launched"
-    wait_for_ticket_status(installed_commands, root, "114", "awaiting-integration")
-    accepted = read_graph(state)["tickets"][0]
+    wait_for_task_status(installed_commands, root, "114", "awaiting-integration")
+    accepted = read_graph(state)["tasks"][0]
     assert accepted["status"] == "awaiting-integration"
     assert read_worldline(state, root)[-1]["candidate"] == candidate
-    reports = ticket / "teams/1/rounds/1"
+    reports = task / "teams/1/rounds/1"
     assert {path.name for path in reports.iterdir()} == {
         "engineer.md", "validation.md", "standards.md", "spec.md", "leader.md",
     }
@@ -271,12 +271,12 @@ def test_real_small_team(
     configuration = yaml.safe_load(limits.read_text())
     configuration["agent_runner"]["max_concurrency"] = int(os.environ.get("CODEX_TEAM_CAPACITY", "1"))
     limits.write_text(yaml.safe_dump(configuration))
-    ticket = ready_team(root, (
+    task_directory = ready_team(root, (
         "Implement greeting.py with greet(name: str) -> str returning 'Hello, ' + name + '!'. "
         "Add test_greeting.py with a standard-library unittest proving greet('Ada') == 'Hello, Ada!'. "
         "No dependencies. Commit the implementation and record actual validation and self-review. "
         "The Leader must run the normal Engineer, fixed candidate, Standards/Spec Review "
-        "and final decision flow. This is an isolated validation Ticket."
+        "and final decision flow. This is an isolated validation Task."
     ))
     python = installed_commands.runner.with_name("python")
     environment.update(CODEX_HOME=str(native_home))
@@ -293,7 +293,7 @@ def test_real_small_team(
         "Do not invoke native helpers."
     )
     document = {"tasks": [{
-        "ticket_id": "114", "ticket_name": "small-team", "role": "team-leader",
+        "task_id": "114", "task_name": "small-team", "role": "team-leader",
         "instruction": instruction,
     }]}
     (root / "real-team-input.json").write_text(json.dumps(document, indent=2))
@@ -373,7 +373,7 @@ def test_real_small_team(
         assert checked.returncode == 0, checked.stdout + checked.stderr
         assert (worktree / "test_greeting.py").is_file()
         candidate = run_process(["git", "rev-parse", "HEAD"], cwd=worktree).stdout.strip()
-        reports = ticket / "teams/1/rounds/1"
+        reports = task_directory / "teams/1/rounds/1"
         assert {path.name for path in reports.iterdir()} == {
             "engineer.md", "validation.md", "standards.md", "spec.md", "leader.md",
         }

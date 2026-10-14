@@ -22,7 +22,7 @@ from graphtraj.runtimes.codex.app_server import CodexMainRecovery
 STOP = {
     "type": "execution-budget-exceeded",
     "occurred_at": datetime.fromtimestamp(1000.0).astimezone().isoformat(timespec="seconds"),
-    "ticket": {"ticket_id": "116", "ticket_name": "session-budget-control"},
+    "task": {"task_id": "116", "task_name": "session-budget-control"},
     "threshold": {"kind": "stochastic_stop", "limit": 2},
     "actual": {"elapsed_minutes": 2.011},
 }
@@ -102,7 +102,7 @@ def test_custom_stop_text_is_delivered_verbatim_beside_unchanged_facts() -> None
     assert custom["instruction"] == CUSTOM_TEXT
     assert set(custom) == set(default)
     # delivered_at is stamped at each return, so only the stable facts compare.
-    for key in ("stop_id", "stop", "ticket", "triggered_at", "elapsed"):
+    for key in ("stop_id", "stop", "task", "triggered_at", "elapsed"):
         assert custom[key] == default[key]
 
 
@@ -111,7 +111,7 @@ def test_empty_stop_text_delivers_only_the_stop_facts() -> None:
     delivery = one_delivery("")
     assert "instruction" not in delivery
     assert set(delivery) == {
-        "stop_id", "stop", "ticket", "triggered_at", "delivered_at", "elapsed",
+        "stop_id", "stop", "task", "triggered_at", "delivered_at", "elapsed",
     }
 
 
@@ -152,7 +152,7 @@ def test_cli_delivers_the_configured_stop_text_to_its_caller(
     delivery = document["stop_deliveries"][0]
     assert delivery["instruction"] == CUSTOM_TEXT
     assert delivery["stop"] == "stochastic_stop:2"
-    assert delivery["ticket"] == {"ticket_id": "116", "ticket_name": "session-budget-control"}
+    assert delivery["task"] == {"task_id": "116", "task_name": "session-budget-control"}
 
 
 def test_cli_empty_stop_text_returns_facts_without_method_text(
@@ -203,7 +203,7 @@ def test_mcp_delivers_the_configured_stop_text_to_the_request_caller(
     })
     delivery = response["result"]["structuredContent"]["stop_deliveries"][0]
     assert delivery["instruction"] == CUSTOM_TEXT
-    assert delivery["ticket"] == {"ticket_id": "116", "ticket_name": "session-budget-control"}
+    assert delivery["task"] == {"task_id": "116", "task_name": "session-budget-control"}
 
 
 def test_ordinary_caller_notice_adds_no_stop_text() -> None:

@@ -83,7 +83,7 @@ def collect_session(event: dict, cwd: Path) -> dict:
         mapping, _ = read_alias_mapping(runner, alias)
         if mapping['runtime'] != 'dsh':
             raise ValueError('DSH collection belongs to another Runtime owner.')
-        task_ids = [mapping['ticket_id']]
+        task_ids = [mapping['task_id']]
         if mapping['session'] == header['id']:
             agent_id, source = alias, 'member'
         elif source != 'child':

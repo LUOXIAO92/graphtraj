@@ -87,7 +87,7 @@ def append_project_worldline_event(
             try:
                 if target_existed:
                     # A refused append leaves the shard unchanged and may also
-                    # refuse truncate; it must not prevent Ticket restoration.
+                    # refuse truncate; it must not prevent Task restoration.
                     if target.stat().st_size != original_size:
                         os.truncate(target, original_size)
                 elif target.exists():

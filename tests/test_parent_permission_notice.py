@@ -20,7 +20,7 @@ import yaml
 from conftest import FakeCodex, InstalledCommands, run_process, wait_for_file
 from runner_fixtures import configure_harness
 from test_managed_sessions import managed_project
-from test_session_alias_control import _register_ready_ticket
+from test_session_alias_control import _register_ready_task
 
 
 # The Leader's model work, executed as the scenario of its app-server peer.
@@ -297,16 +297,16 @@ def test_parent_consumes_notices_and_replies_while_driver_waits(
     )
     _controlled_peers(fake_codex)
     from test_task_budget_control import BODY
-    _register_ready_ticket(installed_commands, root, body=BODY)
+    _register_ready_task(installed_commands, root, body=BODY)
     child_batch = root / "child-batch.yml"
     child_batch.write_text(yaml.safe_dump({"tasks": [{
-        "ticket_id": "76", "ticket_name": "session-alias-control",
+        "task_id": "76", "task_name": "session-alias-control",
         "role": "coding-team.engineer",
         "instruction": "request:approval" if idle else "hold",
     }]}, sort_keys=False), encoding="utf-8")
     batch = root / "batch.yml"
     batch.write_text(yaml.safe_dump({"tasks": [{
-        "ticket_id": "76", "ticket_name": "session-alias-control",
+        "task_id": "76", "task_name": "session-alias-control",
         "role": "team-leader",
     }]}, sort_keys=False), encoding="utf-8")
     parent_log = tmp_path / "parent-calls.jsonl"
@@ -454,7 +454,7 @@ def test_parent_consumes_notices_and_replies_while_driver_waits(
         # The actual child monitor sees a retained threshold, retries a native
         # refusal if configured, and the same parent consumes the budget notice.
         from graphtraj.execution import execution_budget as budgets
-        evidence = root / '.graphtraj/state/tickets/76-session-alias-control'
+        evidence = root / '.graphtraj/state/tasks/76-session-alias-control'
         monitor = budgets.execution_budget_monitor(evidence, '76', 'session-alias-control')
         usage = yaml.safe_load((evidence / 'execution-budget.yml').read_text())
         with (parent_directory / 'launch.yml').open('rb') as input_lock:
@@ -539,7 +539,7 @@ def test_real_native_parent_receives_the_child_request_notice(
     The parent runs the installed real Codex through the existing configured
     connection, so the notice has to be accepted by that Runtime in the
     execution it already owns. Only the child keeps the controlled peer that
-    produces the synthetic approval request, which is the side this ticket does
+    produces the synthetic approval request, which is the side this task does
     not have to prove.
     """
     import shutil

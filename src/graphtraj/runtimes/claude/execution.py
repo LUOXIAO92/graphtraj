@@ -288,7 +288,7 @@ class ClaudeExecution:
         with ExitStack() as resources:
             # Runner supplies Task context before the native registration hook;
             # mapping.yml does not exist until that hook has been acknowledged.
-            task_id = os.environ.get('GRAPHTRAJ_TICKET_ID')
+            task_id = os.environ.get('GRAPHTRAJ_TASK_ID')
             archive = resources.enter_context(open_archive(
                 Path(self.request['state_directory']), Path(self.request['harness_root']),
                 self.native_id, self.directory.name, source='managed',

@@ -21,23 +21,23 @@ from graphtraj.configuration.project_roles import (
 from graphtraj.execution.runner_models import Batch, RunnerError, Task
 
 
-TICKET_ID = re.compile(r"^[A-Za-z0-9._-]{1,32}$")
-TICKET_NAME = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+TASK_ID = re.compile(r"^[A-Za-z0-9._-]{1,32}$")
+TASK_NAME = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
 
-def valid_ticket_id(value: object) -> bool:
-    """Return whether a value is one accepted stable ticket identity."""
+def valid_task_id(value: object) -> bool:
+    """Return whether a value is one accepted stable task identity."""
 
-    return isinstance(value, str) and TICKET_ID.fullmatch(value) is not None
+    return isinstance(value, str) and TASK_ID.fullmatch(value) is not None
 
 
-def valid_ticket_name(value: object) -> bool:
-    """Return whether a value is one accepted ticket artifact name."""
+def valid_task_name(value: object) -> bool:
+    """Return whether a value is one accepted task artifact name."""
 
     return (
         isinstance(value, str)
         and len(value) <= 64
-        and TICKET_NAME.fullmatch(value) is not None
+        and TASK_NAME.fullmatch(value) is not None
     )
 
 
@@ -60,7 +60,7 @@ def read_batch(
 def read_session_task(mapping: Mapping[str, Any], cwd: Path) -> Task:
     """Match retained input against actual Session bindings without role inference."""
     tasks = [task for task in read_batch(Path(mapping["retained_batch_file"]), cwd).tasks
-             if task.ticket_id == mapping["ticket_id"]]
+             if task.task_id == mapping["task_id"]]
     reference = mapping.get("role_reference")
     if reference is not None:
         tasks = [task for task in tasks if task.role_reference == reference]
@@ -76,17 +76,17 @@ def read_session_task(mapping: Mapping[str, Any], cwd: Path) -> Task:
 def read_swarm(
     swarm_file: Path,
     cwd: Path,
-    caller_ticket_id: str | None,
-    registered_tickets: Mapping[str, str],
+    caller_task_id: str | None,
+    registered_tasks: Mapping[str, str],
 ) -> Batch:
-    """Read one swarm launch input and project each task's current Ticket.
+    """Read one swarm launch input and project each task's current Task.
 
     The file is validated exactly like a structured swarm document; only the
-    Ticket identity a caller must not repeat per task is filled in from the
-    calling Session and the registered Ticket state.
+    Task identity a caller must not repeat per task is filled in from the
+    calling Session and the registered Task state.
     """
     document, source_bytes = _read_document(swarm_file, cwd)
-    resolved = _resolved_swarm(document, caller_ticket_id, registered_tickets)
+    resolved = _resolved_swarm(document, caller_task_id, registered_tasks)
     batch = parse_batch(resolved)
     # An input that already names every task's identity keeps its own bytes as
     # the retained record; when the caller left identity out, the resolved
@@ -125,16 +125,16 @@ def _read_document(
 
 def parse_swarm(
     document: object,
-    caller_ticket_id: str | None,
-    registered_tickets: Mapping[str, str],
+    caller_task_id: str | None,
+    registered_tasks: Mapping[str, str],
 ) -> Batch:
-    """Validate one swarm launch input and project each task's current Ticket.
+    """Validate one swarm launch input and project each task's current Task.
 
     Each task names the role alias to activate and the launch instruction it
-    receives. Ticket identity is not repeated per task: a caller working inside
-    a Ticket Session keeps that Ticket, and a name left out is read from the
-    registered Ticket state Main selected through the DAG. A task may still
-    name the Ticket its caller selected, which the existing Ticket and
+    receives. Task identity is not repeated per task: a caller working inside
+    a Task Session keeps that Task, and a name left out is read from the
+    registered Task state Main selected through the DAG. A task may still
+    name the Task its caller selected, which the existing Task and
     authority checks keep judging.
 
     The returned Batch is the resolved, self-contained record: every later read
@@ -142,19 +142,19 @@ def parse_swarm(
     complete task identity. Returns Batch, or raises RunnerError before any
     dispatch or retention.
     """
-    return parse_batch(_resolved_swarm(document, caller_ticket_id, registered_tickets))
+    return parse_batch(_resolved_swarm(document, caller_task_id, registered_tasks))
 
 
 def _resolved_swarm(
     document: object,
-    caller_ticket_id: str | None,
-    registered_tickets: Mapping[str, str],
+    caller_task_id: str | None,
+    registered_tasks: Mapping[str, str],
 ) -> dict[str, Any]:
     """Return the swarm document whose tasks all carry complete identity."""
     tasks = _launch_input_tasks(document)
     return {
         "tasks": [
-            _resolve_swarm_task(task, caller_ticket_id, registered_tickets)
+            _resolve_swarm_task(task, caller_task_id, registered_tasks)
             for task in tasks
         ]
     }
@@ -178,37 +178,37 @@ def _launch_input_tasks(document: object) -> list[Any]:
 
 def _resolve_swarm_task(
     task: object,
-    caller_ticket_id: str | None,
-    registered_tickets: Mapping[str, str],
+    caller_task_id: str | None,
+    registered_tasks: Mapping[str, str],
 ) -> dict[str, Any]:
-    """Return one swarm task with the Ticket identity its caller left out.
+    """Return one swarm task with the Task identity its caller left out.
 
-    A supplied Ticket id wins over the calling Session's own Ticket, so any
-    caller may select a Ticket while omitting its name; a missing name is that
-    registered Ticket's name.
+    A supplied Task id wins over the calling Session's own Task, so any
+    caller may select a Task while omitting its name; a missing name is that
+    registered Task's name.
     """
-    allowed = {"ticket_id", "ticket_name", "role", "instruction", "skills"}
+    allowed = {"task_id", "task_name", "role", "instruction", "skills"}
     if not isinstance(task, dict) or "role" not in task or not set(task) <= allowed:
         raise RunnerError(
             "TASK_SCHEMA_INVALID",
             "A swarm task must contain a role and only supported instruction, "
-            "or Ticket selection.",
+            "or Task selection.",
         )
-    ticket_id = task.get("ticket_id", caller_ticket_id)
-    if ticket_id is None:
+    task_id = task.get("task_id", caller_task_id)
+    if task_id is None:
         raise RunnerError(
             "TASK_SCHEMA_INVALID",
-            "A swarm task outside a Ticket Session must select the Ticket Main dispatched.",
+            "A swarm task outside a Task Session must select the Task Main dispatched.",
         )
-    ticket_name = task.get("ticket_name")
-    if ticket_name is not None:
-        return {**task, "ticket_id": ticket_id}
-    ticket_name = registered_tickets.get(ticket_id)
-    if ticket_name is None:
+    task_name = task.get("task_name")
+    if task_name is not None:
+        return {**task, "task_id": task_id}
+    task_name = registered_tasks.get(task_id)
+    if task_name is None:
         raise RunnerError(
-            "invalid-ticket", "The selected swarm Ticket is not registered."
+            "invalid-task", "The selected swarm Task is not registered."
         )
-    return {**task, "ticket_id": ticket_id, "ticket_name": ticket_name}
+    return {**task, "task_id": task_id, "task_name": task_name}
 
 
 def parse_batch(document: object, *, retained: bool = False) -> Batch:
@@ -225,11 +225,11 @@ def parse_batch(document: object, *, retained: bool = False) -> Batch:
         _read_task(task_document, retained=retained)
         for task_document in tasks
     )
-    identities = [(task.ticket_id, task.role) for task in validated_tasks]
+    identities = [(task.task_id, task.role) for task in validated_tasks]
     if len(identities) != len(set(identities)):
         raise RunnerError(
-            "TICKET_ID_DUPLICATE",
-            "A Batch cannot repeat the same Ticket, Team generation, and role.",
+            "TASK_ID_DUPLICATE",
+            "A Batch cannot repeat the same Task, Team generation, and role.",
         )
     return Batch(
         tasks=validated_tasks,
@@ -244,7 +244,7 @@ def _read_task(
 ) -> Task:
     """Validate and resolve one task without changing the supplied choices."""
 
-    required = {"ticket_id", "ticket_name", "role"}
+    required = {"task_id", "task_name", "role"}
     allowed = required | {"instruction", "skills"}
     if (
         not isinstance(task_document, dict)
@@ -253,7 +253,7 @@ def _read_task(
     ):
         raise RunnerError(
             "TASK_SCHEMA_INVALID",
-            "A task must contain ticket identity, role, and only supported instruction.",
+            "A task must contain task identity, role, and only supported instruction.",
         )
     if "skills" in task_document and not retained:
         raise RunnerError(
@@ -261,17 +261,17 @@ def _read_task(
             "Task skills is no longer supported; use Runtime native Skill selection "
             "or explicit external resource references in the instruction.",
         )
-    ticket_id = task_document["ticket_id"]
-    if not valid_ticket_id(ticket_id):
+    task_id = task_document["task_id"]
+    if not valid_task_id(task_id):
         raise RunnerError(
-            "TICKET_ID_INVALID",
-            "ticket_id must be 1-32 ASCII letters, digits, dots, underscores, or hyphens.",
+            "TASK_ID_INVALID",
+            "task_id must be 1-32 ASCII letters, digits, dots, underscores, or hyphens.",
         )
-    ticket_name = task_document["ticket_name"]
-    if not valid_ticket_name(ticket_name):
+    task_name = task_document["task_name"]
+    if not valid_task_name(task_name):
         raise RunnerError(
-            "TICKET_NAME_INVALID",
-            "ticket_name must be 1-64 ASCII lowercase kebab-case characters.",
+            "TASK_NAME_INVALID",
+            "task_name must be 1-64 ASCII lowercase kebab-case characters.",
         )
     role_value = task_document["role"]
     inline_preset = None
@@ -321,11 +321,11 @@ def _read_task(
             "instruction must be non-empty plain text when supplied.",
         )
     return Task(
-        ticket_id=ticket_id,
-        ticket_name=ticket_name,
+        task_id=task_id,
+        task_name=task_name,
         role=role,
-        ticket_file=None,
-        ticket_content="",
+        task_file=None,
+        task_content="",
         instruction=instruction,
         requested_skills=tuple(requested_skills),
         inline_preset=inline_preset,

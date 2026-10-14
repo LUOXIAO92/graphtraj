@@ -96,9 +96,9 @@ def test_cli_host_accepts_the_session_worktree_and_refuses_other_directories(tmp
                          '.state/teams/1/rounds/1/researcher-x1.md', '--completion', 'Complete')
         assert submission.returncode == 0, submission.stdout + submission.stderr
         assert yaml.safe_load(submission.stdout)['alias'] == 'research@x1'
-        graph = product_cli(worktree, address, 'ticket', 'graph')
+        graph = product_cli(worktree, address, 'task', 'graph')
         assert graph.returncode == 0, graph.stdout + graph.stderr
-        assert [item['ticket_id'] for item in yaml.safe_load(graph.stdout)['tickets']] == ['148']
+        assert [item['task_id'] for item in yaml.safe_load(graph.stdout)['tasks']] == ['148']
         assert cli(nested, address, 'reports', 'research@x1').returncode == 0
         refused = cli(foreign, address, 'reports', 'research@x1')
         assert refused.returncode == 1

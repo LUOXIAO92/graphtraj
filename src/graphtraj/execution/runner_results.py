@@ -17,7 +17,7 @@ from graphtraj.execution.runner_io import _sync_directory
 from graphtraj.execution.runner_status import caller_alias, read_alias_mapping, require_task_authority
 from graphtraj.graph.delivery_state import current_result_rework_cause, read_team
 from graphtraj.graph.delivery_worldline import append_project_worldline_event, read_worldline
-from graphtraj.graph.ticket_graph import _load_states
+from graphtraj.graph.task_graph import _load_states
 from graphtraj.workspace.runner_project import discover_project_root, discover_runner_directory, run_git
 
 
@@ -45,7 +45,7 @@ def assign_session_reports(
 def task_report_paths(mapping: Mapping[str, Any], cwd: Path) -> tuple[Path, ...]:
     """Resolve retained assignments, advancing only their Team Round component."""
     configuration = load_project_configuration(discover_project_root(cwd))
-    directory, _ = _load_states(configuration.state / 'tickets')[mapping['ticket_id']]
+    directory, _ = _load_states(configuration.state / 'tasks')[mapping['task_id']]
     team_file = directory / 'teams' / str(mapping['team_generation']) / 'team.yml'
     team = read_team(team_file) if team_file.exists() else None
     paths = []
@@ -96,7 +96,7 @@ def submit_session_result(
     if alias is None:
         raise RunnerError('authority-denied', 'A task result requires its own Session.')
     mapping, _ = read_alias_mapping(runner, alias)
-    require_task_authority(configuration.state, runner, mapping['ticket_id'], alias, 'submit')
+    require_task_authority(configuration.state, runner, mapping['task_id'], alias, 'submit')
     if not isinstance(commit, str) or not re.fullmatch(r'[0-9a-f]{40}', commit):
         raise ValueError('A result requires a full Git commit.')
     if not isinstance(completion, str) or not completion.strip():
@@ -109,8 +109,8 @@ def submit_session_result(
     if len(set(evidence_refs)) != len(evidence_refs):
         raise ValueError('Evidence references must be distinct.')
     worktree = Path(mapping['worktree_path'])
-    directory, ticket = _load_states(configuration.state / 'tickets')[mapping['ticket_id']]
-    if ticket['status'] == 'resolving-integration' and worktree != configuration.integration_worktree:
+    directory, task = _load_states(configuration.state / 'tasks')[mapping['task_id']]
+    if task['status'] == 'resolving-integration' and worktree != configuration.integration_worktree:
         raise RunnerError('authority-denied', 'Integration results must belong to the assigned Integration Worktree.')
     if run_git(worktree, 'rev-parse', 'HEAD') != commit:
         raise ValueError('The result commit must be the current Worktree version.')
@@ -137,7 +137,7 @@ def submit_session_result(
         supplied = Path(reference)
         path = supplied if supplied.is_absolute() else worktree / supplied
         if supplied.parts and supplied.parts[0] == '.state':
-            directory, _ = _load_states(configuration.state / 'tickets')[mapping['ticket_id']]
+            directory, _ = _load_states(configuration.state / 'tasks')[mapping['task_id']]
             path = directory.joinpath(*supplied.parts[1:])
         resolved = path.resolve()
         if resolved in assigned or (trace.is_absolute() and resolved == trace.resolve()):
@@ -149,13 +149,13 @@ def submit_session_result(
             content = subprocess.check_output(['git', 'show', f'{commit}:{relative}'], cwd=worktree)
         snapshots.append((path.name, content))
     start_result_correction(mapping, cwd)
-    directory, _ = _load_states(configuration.state / 'tickets')[mapping['ticket_id']]
+    directory, _ = _load_states(configuration.state / 'tasks')[mapping['task_id']]
     team = read_team(directory / 'teams' / str(mapping['team_generation']) / 'team.yml')
     ordinal = team['current_round']
     predecessors = [event['event_id'] for event in read_worldline(configuration.state, configuration.harness_root)
-                    if event.get('ticket_id') == mapping['ticket_id']]
+                    if event.get('task_id') == mapping['task_id']]
     event = {
-        'event': 'result-submitted', 'ticket_id': mapping['ticket_id'],
+        'event': 'result-submitted', 'task_id': mapping['task_id'],
         'alias': alias, 'session': mapping['session'], 'role': mapping['role'],
         'team_ordinal': mapping['team_generation'], 'round': ordinal,
         'candidate': commit, 'result_refs': list(result_refs),
@@ -165,9 +165,9 @@ def submit_session_result(
 
     def retain(recorded: dict[str, Any]) -> Callable[[], None]:
         """Recheck current ownership under the Worldline mutation lock."""
-        require_task_authority(configuration.state, runner, mapping['ticket_id'], alias, 'submit')
+        require_task_authority(configuration.state, runner, mapping['task_id'], alias, 'submit')
         current = read_team(directory / 'teams' / str(mapping['team_generation']) / 'team.yml')
-        if (_load_states(configuration.state / 'tickets')[mapping['ticket_id']][1]['status']
+        if (_load_states(configuration.state / 'tasks')[mapping['task_id']][1]['status']
                 not in {'implementing', 'reviewing', 'resolving-integration'} or current['current_round'] != ordinal):
             raise RunnerError('authority-denied', 'The submission Round has changed.')
         if not snapshots:
@@ -210,21 +210,21 @@ def start_result_correction(mapping: Mapping[str, Any], cwd: Path) -> None:
     configuration = load_project_configuration(discover_project_root(cwd))
     cwd = configuration.harness_root
     require_task_authority(configuration.state, discover_runner_directory(cwd),
-                           mapping['ticket_id'], mapping['alias'], 'submit')
-    directory, ticket = _load_states(configuration.state / 'tickets')[mapping['ticket_id']]
-    if ticket['status'] not in {'implementing', 'reviewing', 'reworking', 'resolving-integration'}:
+                           mapping['task_id'], mapping['alias'], 'submit')
+    directory, task = _load_states(configuration.state / 'tasks')[mapping['task_id']]
+    if task['status'] not in {'implementing', 'reviewing', 'reworking', 'resolving-integration'}:
         raise ValueError('This task is not accepting result submissions.')
     team = read_team(directory / 'teams' / str(mapping['team_generation']) / 'team.yml')
-    rejection = current_result_rework_cause(read_worldline(configuration.state, cwd), ticket, team)
-    if ticket['status'] == 'reworking' or (
-        ticket['status'] == 'resolving-integration' and rejection is not None
+    rejection = current_result_rework_cause(read_worldline(configuration.state, cwd), task, team)
+    if task['status'] == 'reworking' or (
+        task['status'] == 'resolving-integration' and rejection is not None
     ):
         from graphtraj.graph.delivery_state import apply_delivery_state_request
 
         if rejection is None:
             raise ValueError('Rework requires a confirmed result rejection or explicit graph reopening')
         request = {
-            'phase': 'rework', 'ticket_id': mapping['ticket_id'],
+            'phase': 'rework', 'task_id': mapping['task_id'],
             'caused_by_event_ids': [rejection['event_id']],
             'evidence_refs': rejection['evidence_refs'],
         }
@@ -250,7 +250,7 @@ def decide_session_result(
     if submission is None:
         raise ValueError("Unknown result submission")
     request = {
-        "phase": "final", "ticket_id": submission["ticket_id"],
+        "phase": "final", "task_id": submission["task_id"],
         "submission_id": submission_id, "candidate": commit,
         "decision": decision, "reason": reason,
         "caused_by_event_ids": [submission_id], "evidence_refs": list(evidence_refs),

@@ -6,7 +6,7 @@ from pathlib import Path
 import yaml
 
 from conftest import InstalledCommands, run_process
-from test_ticket_graph import _configure, _register, _ticket, _change_status
+from test_task_graph import _configure, _register, _task, _change_status
 
 
 def test_delivery_state_request_rolls_back_state_when_its_event_is_invalid(
@@ -15,10 +15,10 @@ def test_delivery_state_request_rolls_back_state_when_its_event_is_invalid(
 ) -> None:
     project = temporary_git_repository
     state = _configure(project)
-    _register(installed_commands, project, _ticket("74", "complete-team-round"))
+    _register(installed_commands, project, _task("74", "complete-team-round"))
     _change_status(installed_commands, project, "74", "ready")
-    ticket = state / "tickets" / "74-complete-team-round"
-    ticket_before = (ticket / "ticket.yml").read_bytes()
+    task = state / "tasks" / "74-complete-team-round"
+    task_before = (task / "task.yml").read_bytes()
     worldline_before = {
         path: path.read_bytes() for path in (state / "worldline").glob("*.jsonl")
     }
@@ -32,7 +32,7 @@ def test_delivery_state_request_rolls_back_state_when_its_event_is_invalid(
         yaml.safe_dump(
             {
                 "phase": "start",
-                "ticket_id": "74",
+                "task_id": "74",
                 "caused_by_event_ids": [predecessor],
                 "evidence_refs": ["missing-batch.yml"],
                 "worktree": ".graphtraj/worktrees/74-complete-team-round",
@@ -65,6 +65,6 @@ def test_delivery_state_request_rolls_back_state_when_its_event_is_invalid(
     )
 
     assert result.returncode == 1
-    assert (ticket / "ticket.yml").read_bytes() == ticket_before
-    assert not (ticket / "teams").exists()
+    assert (task / "task.yml").read_bytes() == task_before
+    assert not (task / "teams").exists()
     assert {path: path.read_bytes() for path in worldline_before} == worldline_before

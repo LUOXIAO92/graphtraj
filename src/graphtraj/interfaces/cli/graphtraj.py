@@ -14,13 +14,13 @@ from graphtraj.interfaces.cli.projection import (
 
 from graphtraj.interfaces.cli.worldline import worldline
 from graphtraj.interfaces.cli.project_setup import setup, doctor
-from graphtraj.interfaces.cli.ticket import delivery_state, ticket
+from graphtraj.interfaces.cli.task import delivery_state, task
 from graphtraj.interfaces.cli.finalize import bind_command
 
 
 @click.group(cls=OperationGroup)
 def main() -> None:
-    """Set up GraphTraj and manage Ticket, Team, and Project Worldline evidence.
+    """Set up GraphTraj and manage Task, Team, and Project Worldline evidence.
 
     Configuration lives in .graphtraj; historical Delivery Runs have no
     compatibility reader or migration."""
@@ -52,7 +52,7 @@ def organize_command(change_file: Path | None) -> None:
 main.add_command(setup)
 main.add_command(doctor)
 main.add_command(worldline)
-main.add_command(ticket)
+main.add_command(task)
 main.add_command(delivery_state)
 main.add_command(roles)
 

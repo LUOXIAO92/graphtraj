@@ -12,7 +12,7 @@ from conftest import FakeCodex, InstalledCommands, run_process
 from runner_fixtures import configure_harness
 from test_task_recovery import installed_commands, events
 from test_task_budget_control import BODY
-from test_ticket_graph import _change_status, _register, _ticket
+from test_task_graph import _change_status, _register, _task
 
 
 def setup(
@@ -44,9 +44,9 @@ def setup(
     environment['CLAUDE_FIXTURE_HOME'] = str(tmp_path)
     if os.environ.get('CLAUDE_CONFIG_DIR'):
         environment['CLAUDE_CONFIG_DIR'] = os.environ['CLAUDE_CONFIG_DIR']
-    ticket = _ticket('320', 'claude-probe')
-    ticket['body'] = BODY + 'Reply with only CLAUDE-RUNNER-320. Do not use tools.'
-    _register(commands, root, ticket)
+    task = _task('320', 'claude-probe')
+    task['body'] = BODY + 'Reply with only CLAUDE-RUNNER-320. Do not use tools.'
+    _register(commands, root, task)
     _change_status(commands, root, '320', 'ready')
     return root, environment
 
@@ -78,7 +78,7 @@ def test_claude_public_launch_resume_interrupt(
     """Run registration, continuation and actual peer termination through Runner."""
     root, environment = setup(installed_commands, temporary_git_repository, fake_codex, tmp_path)
     batch = root / 'probe.yml'
-    batch.write_text(yaml.safe_dump({'tasks': [{'ticket_id': '320', 'role': 'researcher'}]}))
+    batch.write_text(yaml.safe_dump({'tasks': [{'task_id': '320', 'role': 'researcher'}]}))
     result = command(installed_commands, root, environment, '--swarm-input', str(batch))
     assert result.returncode == 0, result.stdout + result.stderr
     task = yaml.safe_load(result.stdout)['tasks'][0]
@@ -108,10 +108,10 @@ def test_claude_public_launch_resume_interrupt(
     assert accepted.returncode == 0, accepted.stdout + accepted.stderr
     import sys
 
-    integrated = run_process([str(installed_commands.product), 'ticket', 'integrate', '--ticket-id', '320',
+    integrated = run_process([str(installed_commands.product), 'task', 'integrate', '--task-id', '320',
                               '--', sys.executable, '-c', 'pass'], cwd=root, env=environment, timeout=30)
     assert integrated.returncode == 0, integrated.stdout + integrated.stderr
-    cleanup = command(installed_commands, root, environment, 'cleanup', '--ticket-id', '320')
+    cleanup = command(installed_commands, root, environment, 'cleanup', '--task-id', '320')
     assert cleanup.returncode == 0, cleanup.stdout + cleanup.stderr
     assert yaml.safe_load(cleanup.stdout)['cleanup_status'] == 'cleaned'
     assert not Path(task['worktree_path']).exists()
@@ -133,7 +133,7 @@ def test_claude_public_interrupt_rechecks_drained_termination(
     if not native_idle:
         environment['CLAUDE_FIXTURE_NO_SETTLE'] = '1'
     batch = root / 'probe.yml'
-    batch.write_text(yaml.safe_dump({'tasks': [{'ticket_id': '320', 'role': 'researcher'}]}))
+    batch.write_text(yaml.safe_dump({'tasks': [{'task_id': '320', 'role': 'researcher'}]}))
     launched = command(installed_commands, root, environment, '--swarm-input', str(batch))
     assert launched.returncode == 0, launched.stdout + launched.stderr
     alias = yaml.safe_load(launched.stdout)['tasks'][0]['alias']
@@ -194,7 +194,7 @@ def test_claude_public_interrupt_rechecks_drained_termination(
         receipt = Path(member['evidence'])
         retained = receipt.read_bytes()
         assert yaml.safe_load(retained)['original_execution']['terminal_confirmed'] is False
-        budget_file = root / '.graphtraj/state/tickets/320-claude-probe/execution-budget.yml'
+        budget_file = root / '.graphtraj/state/tasks/320-claude-probe/execution-budget.yml'
         budget = yaml.safe_load(budget_file.read_text())
         # No new spending, reviewer, interactive prompt or replacement Session.
         recovered = command(
@@ -244,7 +244,7 @@ def test_recovery_refreshes_only_original_role_read_paths(
              'role_tree': {'original_team.researcher': {}, 'other_team.researcher': {}}}
     role_file.write_text(yaml.safe_dump(roles))
     batch = root / 'probe.yml'
-    batch.write_text(yaml.safe_dump({'tasks': [{'ticket_id': '320', 'role': 'original_team.researcher'}]}))
+    batch.write_text(yaml.safe_dump({'tasks': [{'task_id': '320', 'role': 'original_team.researcher'}]}))
     launched = command(installed_commands, root, environment, '--swarm-input', str(batch))
     assert launched.returncode == 0, launched.stdout + launched.stderr
     alias = yaml.safe_load(launched.stdout)['tasks'][0]['alias']
@@ -314,7 +314,7 @@ def test_real_claude_public_runner_startup(
     native = os.environ['CLAUDE_REAL_TEST_BINARY']
     root, environment = setup(installed_commands, temporary_git_repository, fake_codex, tmp_path, native)
     batch = root / 'real-probe.yml'
-    batch.write_text(yaml.safe_dump({'tasks': [{'ticket_id': '320', 'role': 'researcher'}]}))
+    batch.write_text(yaml.safe_dump({'tasks': [{'task_id': '320', 'role': 'researcher'}]}))
     result = command(installed_commands, root, environment, '--swarm-input', str(batch))
     print('REAL_CLAUDE_HARNESS=' + str(root))
     print(result.stdout)
@@ -341,7 +341,7 @@ def test_real_claude_archive_public_query(
     root, environment = setup(installed_commands, temporary_git_repository, fake_codex,
                               tmp_path, os.environ['CLAUDE_REAL_TEST_BINARY'])
     batch = root / 'archive-probe.yml'
-    batch.write_text(yaml.safe_dump({'tasks': [{'ticket_id': '320', 'role': 'researcher'}]}))
+    batch.write_text(yaml.safe_dump({'tasks': [{'task_id': '320', 'role': 'researcher'}]}))
     result = command(installed_commands, root, environment, '--swarm-input', str(batch))
     print('REAL_CLAUDE_321_HARNESS=' + str(root))
     print(result.stdout)

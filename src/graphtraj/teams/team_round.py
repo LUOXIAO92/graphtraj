@@ -1,4 +1,4 @@
-"""Formal task execution with retained Ticket, Team and Session evidence."""
+"""Formal task execution with retained Task, Team and Session evidence."""
 
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ from graphtraj.execution.runner_batch import (
     read_batch,
     read_session_task,
     retain_batch,
-    valid_ticket_id,
+    valid_task_id,
 )
 from graphtraj.execution.runner_capacity import capacity_positions
 from graphtraj.execution.runner_connection import (
@@ -67,7 +67,7 @@ from graphtraj.execution.runner_status import (
 from graphtraj.execution.runner_transport import record_runtime_identity
 from graphtraj.runtimes import runtime_adapter
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
-from graphtraj.graph.ticket_graph import _load_states, _result_complete
+from graphtraj.graph.task_graph import _load_states, _result_complete
 
 
 _AGENT_EVIDENCE_ERROR = "AGENT_EVIDENCE_INVALID"
@@ -97,10 +97,10 @@ def register_child_batch(batch: Batch, cwd: Path, registration: Path) -> LaunchR
             "A caller may register a direct child Batch only "
             "through its own Session registration.",
         )
-    parent_ticket = parent["ticket_id"]
+    parent_task = parent["task_id"]
     _require_dispatch_roles(project, batch, parent)
-    if any(task.ticket_id != parent_ticket for task in batch.tasks):
-        raise RunnerError("authority-denied", "Children must belong to their parent's Ticket.")
+    if any(task.task_id != parent_task for task in batch.tasks):
+        raise RunnerError("authority-denied", "Children must belong to their parent's Task.")
     limit = load_project_configuration(project.harness_root).dispatch_depth
     depth = 1
     parent_alias = caller
@@ -118,7 +118,7 @@ def register_child_batch(batch: Batch, cwd: Path, registration: Path) -> LaunchR
 
     require_active_session(project, caller)
     children = [
-        {"ticket_id": task.ticket_id, "role": task.role,
+        {"task_id": task.task_id, "role": task.role,
          "alias": _agent_alias(project, task, task.role, parent["team_generation"]),
          "launch_status": "registered"}
         for task in batch.tasks
@@ -174,8 +174,8 @@ def launch_team_batch(batch: Batch, cwd: Path) -> LaunchResponse:
         return _run_batch_workers(project, batch)
 
 
-def continue_stopped_ticket(
-    ticket_id: str,
+def continue_stopped_task(
+    task_id: str,
     caused_by_event_ids: tuple[str, ...],
     cwd: Path,
     *,
@@ -183,8 +183,8 @@ def continue_stopped_ticket(
 ) -> dict[str, Any]:
     """Restore budget permission, optionally leaving all original Sessions stopped."""
 
-    if not valid_ticket_id(ticket_id):
-        raise RunnerError("invalid-input", "Ticket identity is invalid.")
+    if not valid_task_id(task_id):
+        raise RunnerError("invalid-input", "Task identity is invalid.")
     if (
         not caused_by_event_ids
         or len(caused_by_event_ids) != len(set(caused_by_event_ids))
@@ -196,36 +196,36 @@ def continue_stopped_ticket(
         )
     project = discover_project(cwd, require_clean_integration=False)
     try:
-        states = _load_states(project.state_directory / "tickets")
-        ticket_directory, state = states[ticket_id]
+        states = _load_states(project.state_directory / "tasks")
+        task_directory, state = states[task_id]
     except KeyError:
-        raise RunnerError("invalid-input", "The supplied Ticket is not registered.") from None
+        raise RunnerError("invalid-input", "The supplied Task is not registered.") from None
     except (OSError, UnicodeError, ValueError, yaml.YAMLError) as error:
         raise RunnerError(
-            "TICKET_FILE_INVALID", "The selected registered Ticket is invalid."
+            "TASK_FILE_INVALID", "The selected registered Task is invalid."
         ) from error
     generation = state["active_team_ordinal"]
     roots = {}
     team_context = {}
     if not state["active"]:
-        raise RunnerError("invalid-input", "Explicit continuation requires an active Ticket.")
+        raise RunnerError("invalid-input", "Explicit continuation requires an active Task.")
     if generation is None:
         # Before native creation there is no member whose parent can authorize
         # recovery. Use the same actual root caller identity as root dispatch.
         if caller_alias(project.runner_directory) is not None:
-            raise RunnerError("authority-denied", "Only the root caller may continue this Ticket.")
+            raise RunnerError("authority-denied", "Only the root caller may continue this Task.")
         if state["status"] != "ready" or any(
             not _result_complete({key: value for key, (_, value) in states.items()}, dependency)
             for dependency in state["dependencies"]
         ):
-            raise RunnerError("invalid-input", "Explicit continuation requires a ready Ticket.")
+            raise RunnerError("invalid-input", "Explicit continuation requires a ready Task.")
     elif state["status"] not in {"implementing", "reviewing", "reworking"} and not (
         # Integration recovery may restore budget permission, but must not
         # resume the accepted roots or change the retained integration state.
         budget_only and state["status"] in {"integrating", "resolving-integration", "escalated"}
         and any(
-            event.get("ticket_id") == ticket_id
-            and event["event"].startswith("ticket-integration-")
+            event.get("task_id") == task_id
+            and event["event"].startswith("task-integration-")
             and event.get("to_status") == state["status"]
             and event.get("candidate") == state["current_candidate"]
             for event in read_worldline(project.state_directory, project.harness_root)
@@ -237,7 +237,7 @@ def continue_stopped_ticket(
     if generation is not None:
         try:
             team = yaml.safe_load(
-                (ticket_directory / "teams" / str(generation) / "team.yml").read_text(
+                (task_directory / "teams" / str(generation) / "team.yml").read_text(
                     encoding="utf-8"
                 )
             )
@@ -248,7 +248,7 @@ def continue_stopped_ticket(
                 alias = member.get("session_ref")
                 if isinstance(alias, str):
                     mapping, _ = read_alias_mapping(project.runner_directory, alias)
-                    if (mapping["ticket_id"] != ticket_id
+                    if (mapping["task_id"] != task_id
                             or mapping["team_generation"] != generation):
                         raise ValueError("Member mapping does not match the current Team")
                     members[alias] = mapping
@@ -259,7 +259,7 @@ def continue_stopped_ticket(
                     parent_mapping, _ = read_alias_mapping(project.runner_directory, parent)
                     # Replacing a parent does not promote its retained children to
                     # task roots or transfer their control to the replacement.
-                    if (parent_mapping["ticket_id"] == ticket_id
+                    if (parent_mapping["task_id"] == task_id
                             and parent_mapping["team_generation"] == generation):
                         continue
                 roots[alias] = mapping
@@ -267,9 +267,9 @@ def continue_stopped_ticket(
                 if members or not budget_only:
                     raise ValueError("The Team has no actual root Sessions")
                 # Retired members stay retired. Main may restore only the
-                # Ticket's budget permission before a separately scoped swarm.
+                # Task's budget permission before a separately scoped swarm.
                 if caller_alias(project.runner_directory) is not None:
-                    raise RunnerError("authority-denied", "Only the root caller may continue this Ticket.")
+                    raise RunnerError("authority-denied", "Only the root caller may continue this Task.")
             # Validate the whole operation before clearing its sampled stop. Explicit
             # subtree stops stay bound to the old entities and require replacement.
             for alias, mapping in roots.items():
@@ -282,10 +282,10 @@ def continue_stopped_ticket(
             raise RunnerError(
                 "operation-failed", "The stopped Team cannot resume its retained lifecycle."
             ) from error
-    monitor = execution_budget_monitor(ticket_directory, ticket_id, state["ticket_name"])
+    monitor = execution_budget_monitor(task_directory, task_id, state["task_name"])
     if monitor is None or not monitor.is_stopped():
         raise RunnerError(
-            "invalid-input", "Explicit continuation requires a sampled stopped Ticket."
+            "invalid-input", "Explicit continuation requires a sampled stopped Task."
         )
     try:
         events = read_worldline(project.state_directory, project.harness_root)
@@ -315,7 +315,7 @@ def continue_stopped_ticket(
                         for reference in event["evidence_refs"]
                     )
                 ),
-                "ticket_id": ticket_id,
+                "task_id": task_id,
                 **team_context,
             },
         )
@@ -335,7 +335,7 @@ def continue_stopped_ticket(
         )
         for alias in roots if not budget_only
     ]
-    return {"ticket_id": ticket_id, "continuation_event_id": continuation["event_id"],
+    return {"task_id": task_id, "continuation_event_id": continuation["event_id"],
             "tasks": resumed}
 
 
@@ -396,50 +396,50 @@ def _run_batch_workers(
 
 def _failed_task(task: Task, error: RunnerError) -> dict[str, Any]:
     return {
-        "ticket_id": task.ticket_id, "ticket_name": task.ticket_name,
+        "task_id": task.task_id, "task_name": task.task_name,
         "role": task.role, "launch_status": "failed", "error": error.as_document(),
     }
 
 
-def _registered_ticket_task(project: Any, requested: Task) -> Task:
-    """Read one registered Ticket definition without changing its state."""
+def _registered_batch_task(project: Any, requested: Task) -> Task:
+    """Read one registered Task definition without changing its state."""
 
-    ticket_directory = project.state_directory / "tickets" / (
-        requested.ticket_id + "-" + requested.ticket_name
+    task_directory = project.state_directory / "tasks" / (
+        requested.task_id + "-" + requested.task_name
     )
     try:
-        state = yaml.safe_load((ticket_directory / "ticket.yml").read_text(encoding="utf-8"))
-        definition = ticket_directory / state["current_definition"]
+        state = yaml.safe_load((task_directory / "task.yml").read_text(encoding="utf-8"))
+        definition = task_directory / state["current_definition"]
         content = definition.read_text(encoding="utf-8")
     except (KeyError, OSError, TypeError, yaml.YAMLError) as error:
-        raise RunnerError("TICKET_FILE_INVALID", "The selected registered Ticket is invalid.") from error
-    if state.get("ticket_id") != requested.ticket_id or state.get("ticket_name") != requested.ticket_name:
-        raise RunnerError("TICKET_FILE_INVALID", "The selected registered Ticket is invalid.")
-    return replace(requested, ticket_file=definition.resolve(), ticket_content=content)
+        raise RunnerError("TASK_FILE_INVALID", "The selected registered Task is invalid.") from error
+    if state.get("task_id") != requested.task_id or state.get("task_name") != requested.task_name:
+        raise RunnerError("TASK_FILE_INVALID", "The selected registered Task is invalid.")
+    return replace(requested, task_file=definition.resolve(), task_content=content)
 
 
-def _deliver_ticket(
+def _deliver_task(
     project: Any,
     requested: Task,
     retained_batch: Path,
     capacity_fd: int,
     parent_alias: str | None = None,
 ) -> dict[str, Any]:
-    """Prepare a Ticket workspace and run exactly the selected actual member.
+    """Prepare a Task workspace and run exactly the selected actual member.
 
     The existing native Worker creates, binds and registers the Session before
     its first turn. Execution completion does not decide task acceptance.
     """
-    task = _registered_ticket_task(project, requested)
-    evidence = project.state_directory / "tickets" / (task.ticket_id + "-" + task.ticket_name)
+    task = _registered_batch_task(project, requested)
+    evidence = project.state_directory / "tasks" / (task.task_id + "-" + task.task_name)
     with execution_start_lock(project.runner_directory):
-        states = _load_states(project.state_directory / "tickets")
-        state = states[task.ticket_id][1]
+        states = _load_states(project.state_directory / "tasks")
+        state = states[task.task_id][1]
         if not state["active"] or any(
             not _result_complete({key: value for key, (_, value) in states.items()}, dependency)
             for dependency in state["dependencies"]
         ):
-            raise RunnerError("TICKET_NOT_READY", "The Ticket needs active disposition and completed dependencies.")
+            raise RunnerError("TASK_NOT_READY", "The Task needs active disposition and completed dependencies.")
         generation = state.get("active_team_ordinal")
         team = None
         if generation is not None:
@@ -455,13 +455,13 @@ def _deliver_ticket(
             cause = current_result_rework_cause(
                 read_worldline(project.state_directory, project.harness_root), state, team,
             )
-            reopened = cause is not None and cause["event"] == "ticket-graph-revised"
+            reopened = cause is not None and cause["event"] == "task-graph-revised"
         if parent_alias is None and (generation is None or reopened):
             if not reopened and state["status"] != "ready":
-                raise RunnerError("TICKET_ALREADY_ACTIVE", "The selected Ticket is not ready.")
+                raise RunnerError("TASK_ALREADY_ACTIVE", "The selected Task is not ready.")
             generation = generation or 1
-            worktree = project.worktree_root / (task.ticket_id + "-" + task.ticket_name)
-            branch = "agent/" + task.ticket_id + "-" + task.ticket_name
+            worktree = project.worktree_root / (task.task_id + "-" + task.task_name)
+            branch = "agent/" + task.task_id + "-" + task.task_name
             if os.path.lexists(worktree):
                 # Another selected root may be preparing this same Team.
                 if (
@@ -475,7 +475,7 @@ def _deliver_ticket(
                 provision_worktree(project, task, branch, worktree)
             _link_worktree(project, worktree, evidence)
             if run_git(worktree, "status", "--porcelain", "--untracked-files=all"):
-                raise RunnerError("WORKTREE_CONFLICT", "The unregistered Ticket Worktree is not clean.")
+                raise RunnerError("WORKTREE_CONFLICT", "The unregistered Task Worktree is not clean.")
         else:
             if team["status"] != "active":
                 raise RunnerError("team-not-active", "The task Team has stopped starting work.")
@@ -483,7 +483,7 @@ def _deliver_ticket(
             if parent_alias is not None:
                 parent, _ = read_alias_mapping(project.runner_directory, parent_alias)
                 _require_dispatch_roles(project, Batch((task,), b""), parent)
-                if parent["ticket_id"] != task.ticket_id or parent["team_generation"] != generation:
+                if parent["task_id"] != task.task_id or parent["team_generation"] != generation:
                     raise RunnerError("authority-denied", "Child must retain its parent's active task.")
         if not worktree.is_dir():
             raise RunnerError("WORKTREE_CONFLICT", "The task Worktree is unavailable.")
@@ -503,7 +503,7 @@ def _deliver_ticket(
     )
     if parent_alias is not None:
         _run_registered_children(project, task, alias, session, retained_batch, capacity_fd)
-    return {"ticket_id": task.ticket_id, "ticket_name": task.ticket_name,
+    return {"task_id": task.task_id, "task_name": task.task_name,
             "role": task.role, "alias": alias, "session": session,
             "execution_id": read_alias_mapping(project.runner_directory, alias)[0]["execution_id"],
             "worktree_path": str(worktree),
@@ -520,7 +520,7 @@ def run_session_children(job_file: Path) -> None:
     retained = Path(mapping["retained_batch_file"])
     task = read_session_task(mapping, project.harness_root)
     _run_registered_children(
-        project, _registered_ticket_task(project, task), mapping["alias"],
+        project, _registered_batch_task(project, task), mapping["alias"],
         mapping["session"], retained, int(os.environ["GRAPHTRAJ_CAPACITY_FD"]),
     )
 
@@ -624,22 +624,22 @@ def _runtime_command_parse_error(diagnostic: str) -> str | None:
     return None
 
 
-def _readiness_predecessor(project: Any, ticket_id: str) -> str:
+def _readiness_predecessor(project: Any, task_id: str) -> str:
     event = next(
         (
             item
             for item in reversed(
                 read_worldline(project.state_directory, project.harness_root)
             )
-            if item.get("ticket_id") == ticket_id
+            if item.get("task_id") == task_id
             and item.get("to_status") == "ready"
         ),
         None,
     )
     if event is None:
         raise RunnerError(
-            "TICKET_FILE_INVALID",
-            "The ready Ticket has no causal readiness event.",
+            "TASK_FILE_INVALID",
+            "The ready Task has no causal readiness event.",
         )
     return event["event_id"]
 
@@ -735,12 +735,12 @@ def _execute_agent(
     monitor = (
         None
         if reports_only
-        else execution_budget_monitor(evidence, task.ticket_id, task.ticket_name)
+        else execution_budget_monitor(evidence, task.task_id, task.task_name)
     )
     team_file = traces.parent / "team.yml"
     ordinal = yaml.safe_load(team_file.read_text())["current_round"] if team_file.exists() else 1
     if (new_session and team_file.exists()
-            and yaml.safe_load((evidence / "ticket.yml").read_text())["status"] == "resolving-integration"
+            and yaml.safe_load((evidence / "task.yml").read_text())["status"] == "resolving-integration"
             and not (traces.parent / "rounds" / str(ordinal)).stat().st_mode & 0o200):
         ordinal += 1
     report_files: tuple[Path, ...] = ()
@@ -820,7 +820,7 @@ def _execute_agent(
                 "mapping": {
                     "alias": alias,
                     "runtime": context.runtime,
-                    "ticket_id": task.ticket_id,
+                    "task_id": task.task_id,
                     "team_generation": generation,
                     "role": role,
                     "role_reference": reference,
@@ -847,7 +847,7 @@ def _execute_agent(
             reports_only=reports_only,
         )
 
-    task_prompt = prompt or task.ticket_content
+    task_prompt = prompt or task.task_content
     if task.instruction:
         task_prompt += "\n## Additional instruction\n\n" + task.instruction + "\n"
     round_directory = traces.parent / "rounds" / str(ordinal)
@@ -888,8 +888,8 @@ def _execute_agent(
         "GRAPHTRAJ_TEAM_ROUND": str(ordinal),
         "GRAPHTRAJ_ROLE": role,
         "GRAPHTRAJ_EVIDENCE": str(evidence),
-        "GRAPHTRAJ_TICKET_ID": task.ticket_id,
-        "GRAPHTRAJ_TICKET_NAME": task.ticket_name,
+        "GRAPHTRAJ_TASK_ID": task.task_id,
+        "GRAPHTRAJ_TASK_NAME": task.task_name,
         "GRAPHTRAJ_HARNESS_ROOT": str(project.harness_root),
         "GRAPHTRAJ_TEAM_GENERATION": str(generation),
     }
@@ -903,7 +903,7 @@ def _execute_agent(
     if outcome == "budget-stopped":
         raise RunnerError(
             "EXECUTION_BUDGET_STOPPED",
-            "Runner selected stopping for the Ticket execution budget.",
+            "Runner selected stopping for the Task execution budget.",
         )
     if not wait_for_completion:
         return alias, session_id
@@ -1163,20 +1163,20 @@ def _run_session_worker(
 def _agent_alias(project: Any, task: Task, role: str, generation: int = 1) -> str:
     """Return a free Agent alias for one Session of this Team generation.
 
-    The alias names the Ticket, the whole-Team handover generation counted from
+    The alias names the Task, the whole-Team handover generation counted from
     zero, the configured role and the entity. Word groups inside one component
     use '_'; the entity starts as the role name and takes a numbered successor
     when that name is occupied, so no existing Session is overwritten.
     """
     role_name = configured_role_name(role).replace("-", "_")
     prefix = "{0}-{1}-handover{2}-{3}@".format(
-        task.ticket_id, task.ticket_name.replace("-", "_"), generation - 1, role_name
+        task.task_id, task.task_name.replace("-", "_"), generation - 1, role_name
     )
     suffix = 1
     while True:
         entity = role_name if suffix == 1 else "{0}_{1}".format(role_name, suffix)
         alias = prefix + entity
-        retained = (project.state_directory / "tickets" / (task.ticket_id + "-" + task.ticket_name)
+        retained = (project.state_directory / "tasks" / (task.task_id + "-" + task.task_name)
                     / "teams" / str(generation) / "traces" / alias)
         if not (project.runner_directory / "sessions" / alias).exists() and not retained.exists():
             return alias
@@ -1220,7 +1220,7 @@ def _link_worktree(project: Any, worktree: Path, evidence: Path) -> None:
                     created_documents.append(name)
                 continue
             if not link.is_symlink() or link.resolve() != target.resolve():
-                raise RunnerError("STATE_LINK_FAILED", "A Ticket Worktree retained path points elsewhere.")
+                raise RunnerError("STATE_LINK_FAILED", "A Task Worktree retained path points elsewhere.")
             continue
         link.symlink_to(os.path.relpath(target, worktree), target_is_directory=target.is_dir())
         if name in {"docs", "CONTEXT.md"}:
@@ -1239,7 +1239,7 @@ def _worker_main() -> None:
     try:
         project = discover_project(Path.cwd(), require_clean_integration=False)
         capacity_fd = int(sys.argv[3])
-        result = _deliver_ticket(project, task, retained, capacity_fd, sys.argv[4] or None)
+        result = _deliver_task(project, task, retained, capacity_fd, sys.argv[4] or None)
     except (RunnerError, RuntimeAdapterError) as error:
         result = _failed_task(task, RunnerError(error.code, error.message))
         if error.code == "EXECUTION_BUDGET_STOPPED":

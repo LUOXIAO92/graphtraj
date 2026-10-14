@@ -193,7 +193,7 @@ def test_preflight_leaves_duplicate_harness_skills_to_native_discovery(
     user_home = tmp_path / "runtime-user"
     user_home.mkdir()
     monkeypatch.setenv("HOME", str(user_home))
-    worktree = tmp_path / "ticket-worktree"
+    worktree = tmp_path / "task-worktree"
     evidence = tmp_path / "evidence"
     worktree.mkdir()
     evidence.mkdir()
@@ -245,7 +245,7 @@ def test_preflight_projects_a_linked_harness_skill_at_its_canonical_path(
     user_home = tmp_path / "runtime-user"
     user_home.mkdir()
     monkeypatch.setenv("HOME", str(user_home))
-    worktree = tmp_path / "ticket-worktree"
+    worktree = tmp_path / "task-worktree"
     evidence = tmp_path / "evidence"
     worktree.mkdir()
     evidence.mkdir()
@@ -365,7 +365,7 @@ def test_setup_keeps_bundled_skills_out_of_the_project(
         executable=_runtime_executable(tmp_path),
         git_common_directory=temporary_git_repository / ".git",
         role=_engineer_role(),
-        worktree=tmp_path / "ticket-worktree",
+        worktree=tmp_path / "task-worktree",
         evidence=tmp_path / "evidence",
         requested_skills=(),
     )
@@ -395,7 +395,7 @@ def test_engineer_runtime_context_preflight_validates_without_launch_artifacts(
     plan.apply()
 
     runtime_store = harness_root / ".codex"
-    target_worktree = tmp_path / "ticket-worktree"
+    target_worktree = tmp_path / "task-worktree"
     evidence = tmp_path / "evidence"
     user_config = user_home / ".codex" / "config.toml"
     user_config.parent.mkdir()
@@ -479,7 +479,7 @@ def test_runtime_preflight_uses_fixed_policy_and_selected_model(
             executable=fake_codex.executable,
             git_common_directory=temporary_git_repository / ".git",
             role=_engineer_role("project-engineer"),
-            worktree=tmp_path / "ticket-worktree",
+            worktree=tmp_path / "task-worktree",
             evidence=tmp_path / "evidence",
             requested_skills=(),
         )
@@ -513,7 +513,7 @@ def test_engineer_runtime_context_preflight_rejects_retired_skill_selection(
     install_skills(user_home / ".agents" / "skills", ("implement", "ponytail", "tdd"))
     plan = plan_project_setup(harness_root, temporary_git_repository)
     plan.apply()
-    worktree = tmp_path / "ticket-worktree"
+    worktree = tmp_path / "task-worktree"
     evidence = tmp_path / "evidence"
 
     with pytest.raises(CodexAdapterError) as raised:
@@ -561,10 +561,10 @@ def test_engineer_runtime_context_finalizes_worktree_facts_once(
     plan.apply()
     runtime_store = harness_root / ".codex"
     source = tmp_path / "integration"
-    ticket = tmp_path / "ticket-worktree"
+    task = tmp_path / "task-worktree"
     evidence = tmp_path / "evidence"
     git_common = tmp_path / "git-common"
-    for root in (source, ticket):
+    for root in (source, task):
         selected = root / ".agents" / "skills" / "repo-selected" / "SKILL.md"
         disabled = root / ".agents" / "skills" / "repo-disabled" / "SKILL.md"
         selected.parent.mkdir(parents=True)
@@ -582,7 +582,7 @@ def test_engineer_runtime_context_finalizes_worktree_facts_once(
     preflight = preflight_runtime_context(
         runtime_store=runtime_store,
         executable=_runtime_executable(tmp_path),
-        worktree=ticket,
+        worktree=task,
         evidence=evidence,
         git_common_directory=git_common,
         role=_engineer_role(reasoning_effort=reasoning_effort),
@@ -594,7 +594,7 @@ def test_engineer_runtime_context_finalizes_worktree_facts_once(
     evidence_document = context.evidence_document()
 
     assert launch["runtime"] == "codex"
-    assert launch["adapter_request"]["worktree_path"] == str(ticket)
+    assert launch["adapter_request"]["worktree_path"] == str(task)
     assert evidence_document["runtime"] == "codex"
     assert evidence_document["effective_role"] == "engineer"
     assert evidence_document["model"] == "gpt-5.6-sol"
@@ -617,10 +617,10 @@ def test_engineer_runtime_context_finalizes_worktree_facts_once(
     assert workspace_roots["docs"] == "read"
     assert "README.md" not in workspace_roots
     assert "skills" not in settings
-    assert str(ticket / ".agents" / "skills" / "repo-disabled") not in filesystem
+    assert str(task / ".agents" / "skills" / "repo-disabled") not in filesystem
     launch["adapter_request"].clear()
     assert context.launch_document()["adapter_request"]["worktree_path"] == str(
-        ticket
+        task
     )
     evidence_document["native_skills"] = {"config": []}
     assert context.evidence_document()["native_skills"] is None
@@ -830,9 +830,9 @@ def test_real_codex_uses_native_permissions_and_explicit_skill_configuration(
             encoding="utf-8",
         )
 
-    ticket_file = harness_root / "tickets" / "real-codex.md"
-    ticket_file.parent.mkdir()
-    ticket_file.write_text(
+    task_file = harness_root / "tasks" / "real-codex.md"
+    task_file.parent.mkdir()
+    task_file.write_text(
         "# Real Codex native permissions\n\n"
         "This is only the Harness Skill acceptance probe. Read enabled Skill "
         "files with Bash cat using their supplied paths. "
@@ -852,33 +852,33 @@ def test_real_codex_uses_native_permissions_and_explicit_skill_configuration(
     assert real_codex is not None
     with engineer_probe(
         mutable_installed_commands, harness_root, fake_codex, runtime_environment,
-        body=ticket_file.read_text(), executable=real_codex,
-    ) as (alias, ticket_worktree, probe_environment):
+        body=task_file.read_text(), executable=real_codex,
+    ) as (alias, task_worktree, probe_environment):
         wait_for_probe_artifacts(
             mutable_installed_commands, alias, harness_root, probe_environment,
             [
-                ticket_worktree / '.harness-skill-proof',
-                ticket_worktree / '.external-reference-proof',
-                ticket_worktree / '.repository-selected-skill-proof',
-                ticket_worktree / '.native-permissions-complete-proof',
+                task_worktree / '.harness-skill-proof',
+                task_worktree / '.external-reference-proof',
+                task_worktree / '.repository-selected-skill-proof',
+                task_worktree / '.native-permissions-complete-proof',
             ],
         )
-    assert (ticket_worktree / ".harness-skill-proof").read_text(
+    assert (task_worktree / ".harness-skill-proof").read_text(
         encoding="utf-8"
     ).strip() == "implement"
-    assert (ticket_worktree / ".external-reference-proof").read_text(
+    assert (task_worktree / ".external-reference-proof").read_text(
         encoding="utf-8"
     ).strip() == "native reference"
-    assert (ticket_worktree / ".repository-selected-skill-proof").read_text().strip() == "repository-selected"
-    assert (ticket_worktree / ".native-permissions-complete-proof").read_text(
+    assert (task_worktree / ".repository-selected-skill-proof").read_text().strip() == "repository-selected"
+    assert (task_worktree / ".native-permissions-complete-proof").read_text(
         encoding="utf-8"
     ).strip() == "complete"
-    assert not (ticket_worktree / ".repository-disabled-skill-proof").exists()
-    assert (ticket_worktree / "README.md").read_text(encoding="utf-8") == (
+    assert not (task_worktree / ".repository-disabled-skill-proof").exists()
+    assert (task_worktree / "README.md").read_text(encoding="utf-8") == (
         "# Native README\n"
     )
     assert (
-        ticket_worktree
+        task_worktree
         / ".agents"
         / "skills"
         / "repository-selected"

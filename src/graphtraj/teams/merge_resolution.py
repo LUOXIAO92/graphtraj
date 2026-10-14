@@ -29,8 +29,8 @@ def require_unestablished_resolution(
     or replacement; neither their identity nor a stop may be bypassed here.
     """
     conflict = next((event for event in reversed(events)
-                     if event.get('ticket_id') == task.ticket_id
-                     and event['event'] == 'ticket-integration-conflict-started'), None)
+                     if event.get('task_id') == task.task_id
+                     and event['event'] == 'task-integration-conflict-started'), None)
     if conflict is None or conflict.get('parent') != parent_alias:
         raise ValueError('Retry must retain the original resolution actual parent')
     runner = configuration.harness_root / '.graphtraj/runner'
@@ -38,7 +38,7 @@ def require_unestablished_resolution(
     for launch_file in (runner / 'sessions').glob('*/launch.yml'):
         launch = yaml.safe_load(launch_file.read_text(encoding='utf-8'))
         mapping = launch['mapping']
-        if (mapping.get('ticket_id') != task.ticket_id
+        if (mapping.get('task_id') != task.task_id
                 or mapping.get('team_generation') != record['active_team_ordinal']
                 or mapping.get('worktree_path') != str(configuration.integration_worktree)):
             continue
@@ -67,16 +67,16 @@ def integration_assignment(
     """
     conflict = next((event for event in reversed(read_worldline(
         project.state_directory, project.harness_root,
-    )) if event.get('ticket_id') == task.ticket_id
-        and event['event'] == 'ticket-integration-conflict-started'), None)
-    if (conflict is None or conflict['event'] != 'ticket-integration-conflict-started'
+    )) if event.get('task_id') == task.task_id
+        and event['event'] == 'task-integration-conflict-started'), None)
+    if (conflict is None or conflict['event'] != 'task-integration-conflict-started'
             or conflict.get('parent') != parent_alias
             or conflict.get('role_reference') != (task.role_reference or task.role)
             or conflict.get('instruction') != task.instruction
             or run_git(project.integration_worktree, 'rev-parse', 'HEAD') != conflict['dev_commit']):
         raise RunnerError('authority-denied', 'Dispatch does not match the authorized integration assignment.')
     prompt = (
-        task.ticket_content
+        task.task_content
         + f"\nFixed incoming candidate: {conflict['candidate']}\nExisting dev state: {conflict['dev_before']}"
         + f"\nCurrent dev commit: {conflict['dev_commit']}\nDiagnosis: {conflict['diagnosis']}\n"
         + 'Resolve only this conflict, commit the reconciliation and submit its result through Runner. '

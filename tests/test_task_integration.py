@@ -14,11 +14,11 @@ import yaml
 from conftest import FakeCodex, InstalledCommands, run_process, wait_for_file
 from test_existing_repository_setup import run_setup
 from runner_fixtures import configure_harness, retained_state
-from test_ticket_graph import _change_status, _register, _ticket
+from test_task_graph import _change_status, _register, _task
 
 
 @pytest.fixture
-def accepted_ticket(
+def accepted_task(
     installed_commands, temporary_git_repository, fake_codex, tmp_path, request
 ):
     root, worktrees, _, environment = configure_harness(
@@ -26,7 +26,7 @@ def accepted_ticket(
     )
     from test_execution_budgets import _budget_body
 
-    definition = _ticket("83", "integration")
+    definition = _task("83", "integration")
     definition["body"] = _budget_body(total=60)
     if getattr(request, "param", None) == "v2":
         from test_task_node_protocol import task
@@ -36,10 +36,10 @@ def accepted_ticket(
                           replaced_by=[], retirement_reason=None)
     _register(installed_commands, root, definition)
     for identifier, dependencies in (("84", ["83"]), ("85", ["83"]), ("86", ["83", "84"])):
-        _register(installed_commands, root, _ticket(identifier, "dependent", dependencies=dependencies))
+        _register(installed_commands, root, _task(identifier, "dependent", dependencies=dependencies))
     _change_status(installed_commands, root, "83", "ready")
     batch = root / "batch.yml"
-    batch.write_text(yaml.safe_dump({"tasks": [{"ticket_id": "83", "ticket_name": "integration", "role": "coding-team.team-leader"}]}))
+    batch.write_text(yaml.safe_dump({"tasks": [{"task_id": "83", "task_name": "integration", "role": "coding-team.team-leader"}]}))
     selected_axes = getattr(request, "param", None)
     if selected_axes == "v2":
         selected_axes = ""
@@ -50,11 +50,11 @@ def accepted_ticket(
     )
     launched = run_process([str(installed_commands.runner), "--swarm-input", str(batch)], cwd=root, env=environment)
     assert launched.returncode == 0, launched.stderr
-    from runner_fixtures import wait_for_ticket_status
+    from runner_fixtures import wait_for_task_status
 
-    wait_for_ticket_status(installed_commands, root, '83', 'awaiting-integration')
+    wait_for_task_status(installed_commands, root, '83', 'awaiting-integration')
     state = root / ".graphtraj/state"
-    record = yaml.safe_load((state / "tickets/83-integration/ticket.yml").read_text())
+    record = yaml.safe_load((state / "tasks/83-integration/task.yml").read_text())
     assert record["status"] == "awaiting-integration"
     candidate = record["current_candidate"]
     assert run_process(["git", "merge-base", "--is-ancestor", candidate, "HEAD"], cwd=worktrees / "dev").returncode == 1
@@ -62,9 +62,9 @@ def accepted_ticket(
 
 
 def test_main_integrates_an_accepted_candidate_and_unlocks_only_satisfied_dependencies(
-    installed_commands, accepted_ticket, fake_codex
+    installed_commands, accepted_task, fake_codex
 ):
-    root, worktrees, state, candidate = accepted_ticket
+    root, worktrees, state, candidate = accepted_task
     previous_runtime = fake_codex.log_file.read_bytes()
     # Later branch work must not silently replace the Team's fixed candidate.
     worktree = worktrees / "83-integration"
@@ -74,7 +74,7 @@ def test_main_integrates_an_accepted_candidate_and_unlocks_only_satisfied_depend
     validator = root / "validate.py"
     validator.write_text(
         "import pathlib, subprocess, yaml\n"
-        f"state = yaml.safe_load(pathlib.Path({str(state / 'tickets/83-integration/ticket.yml')!r}).read_text())\n"
+        f"state = yaml.safe_load(pathlib.Path({str(state / 'tasks/83-integration/task.yml')!r}).read_text())\n"
         "assert state['status'] == 'integrating'\n"
         f"assert state['current_candidate'] == {candidate!r}\n"
         "assert subprocess.check_output(['git', 'branch', '--show-current'], text=True).strip() == 'dev'\n"
@@ -82,7 +82,7 @@ def test_main_integrates_an_accepted_candidate_and_unlocks_only_satisfied_depend
         "print('integration checks passed')\n"
     )
     result = run_process(
-        [str(installed_commands.product), "ticket", "integrate", "--ticket-id", "83", "--", sys.executable, str(validator)], cwd=root
+        [str(installed_commands.product), "task", "integrate", "--task-id", "83", "--", sys.executable, str(validator)], cwd=root
     )
     assert result.returncode == 0, result.stderr
     output = yaml.safe_load(result.stdout)
@@ -92,43 +92,43 @@ def test_main_integrates_an_accepted_candidate_and_unlocks_only_satisfied_depend
     assert not any("@m" in path.name for path in state.rglob("*"))
     assert run_process(["git", "merge-base", "--is-ancestor", candidate, "HEAD"], cwd=worktrees / "dev").returncode == 0
     assert not (worktrees / "dev/LATER.txt").exists()
-    graph = yaml.safe_load(run_process([str(installed_commands.product), "ticket", "graph"], cwd=root).stdout)
-    assert [item["ticket_id"] for item in graph["tickets"] if item["ready"]] == ["84", "85"]
-    assert [item["status"] for item in graph["tickets"]] == ["integrated", "ready", "ready", "pending"]
+    graph = yaml.safe_load(run_process([str(installed_commands.product), "task", "graph"], cwd=root).stdout)
+    assert [item["task_id"] for item in graph["tasks"] if item["ready"]] == ["84", "85"]
+    assert [item["status"] for item in graph["tasks"]] == ["integrated", "ready", "ready", "pending"]
     events = [json.loads(line) for shard in (state / "worldline").glob("*.jsonl") for line in shard.read_text().splitlines()]
     accepted = next(event for event in events if event["event"] == "team-round-accepted")
-    started = next(event for event in events if event["event"] == "ticket-integration-started")
-    integrated = next(event for event in events if event["event"] == "ticket-integrated")
+    started = next(event for event in events if event["event"] == "task-integration-started")
+    integrated = next(event for event in events if event["event"] == "task-integrated")
     assert started["caused_by_event_ids"] == [accepted["event_id"]]
     assert integrated["caused_by_event_ids"] == [started["event_id"]]
     assert "integration checks passed" in (root / integrated["evidence_refs"][0]).read_text()
-    unlocked = [event for event in events if event["event"] == "ticket-dependency-unlocked"]
-    assert {event["ticket_id"] for event in unlocked} == {"84", "85"}
+    unlocked = [event for event in events if event["event"] == "task-dependency-unlocked"]
+    assert {event["task_id"] for event in unlocked} == {"84", "85"}
     assert all(event["caused_by_event_ids"] == [integrated["event_id"]] for event in unlocked)
     assert not any(path.name in {"task-map.yml", "dag.md", "ledger.yml"} for path in state.rglob("*"))
 
 
-@pytest.mark.parametrize("accepted_ticket", [""], indirect=True)
+@pytest.mark.parametrize("accepted_task", [""], indirect=True)
 def test_main_integrates_a_candidate_accepted_without_review_reports(
-    installed_commands, accepted_ticket,
+    installed_commands, accepted_task,
 ):
     """A zero-axis acceptance leaves no report or Session to forge for Main."""
-    root, worktrees, state, candidate = accepted_ticket
-    ticket = state / "tickets/83-integration"
-    round_directory = ticket / "teams/1/rounds/1"
+    root, worktrees, state, candidate = accepted_task
+    task = state / "tasks/83-integration"
+    round_directory = task / "teams/1/rounds/1"
     assert {path.name for path in round_directory.iterdir()} == {
         "engineer.md", "validation.md", "leader.md"
     }
-    team = yaml.safe_load((ticket / "teams/1/team.yml").read_text())
+    team = yaml.safe_load((task / "teams/1/team.yml").read_text())
     assert "standards_reviewer" not in team["members"]
     assert "spec_reviewer" not in team["members"]
 
     result = run_process(
         [
             str(installed_commands.product),
-            "ticket",
+            "task",
             "integrate",
-            "--ticket-id",
+            "--task-id",
             "83",
             "--",
             sys.executable,
@@ -148,21 +148,21 @@ def test_main_integrates_a_candidate_accepted_without_review_reports(
 
 
 def test_main_integration_refuses_dirty_dev(
-    installed_commands, accepted_ticket,
+    installed_commands, accepted_task,
 ):
-    root, worktrees, state, candidate = accepted_ticket
+    root, worktrees, state, candidate = accepted_task
     dev = worktrees / "dev"
     before = run_process(["git", "rev-parse", "HEAD"], cwd=dev).stdout
-    (dev / "other-ticket-in-progress.txt").write_text(
-        "temporary work from another Ticket\n", encoding="utf-8"
+    (dev / "other-task-in-progress.txt").write_text(
+        "temporary work from another Task\n", encoding="utf-8"
     )
 
     result = run_process(
         [
             str(installed_commands.product),
-            "ticket",
+            "task",
             "integrate",
-            "--ticket-id",
+            "--task-id",
             "83",
             "--",
             sys.executable,
@@ -175,16 +175,16 @@ def test_main_integration_refuses_dirty_dev(
     assert result.returncode == 1
     assert "must be clean" in yaml.safe_load(result.stdout)["error"]
     assert run_process(["git", "rev-parse", "HEAD"], cwd=dev).stdout == before
-    record = yaml.safe_load((state / "tickets/83-integration/ticket.yml").read_text())
+    record = yaml.safe_load((state / "tasks/83-integration/task.yml").read_text())
     assert record["status"] == "awaiting-integration"
     assert record["current_candidate"] == candidate
 
 
 @pytest.mark.parametrize("flat_roles", (False, True))
 def test_grouped_presets_apply_operator_settings_and_preserve_existing_history(
-    installed_commands, accepted_ticket, fake_codex, flat_roles,
+    installed_commands, accepted_task, fake_codex, flat_roles,
 ):
-    root, _, state, _ = accepted_ticket
+    root, _, state, _ = accepted_task
     roles_file = root / ".graphtraj/roles.yml"
     document = yaml.safe_load(roles_file.read_text())
     presets = document["roles"]["coding_team"]
@@ -202,7 +202,7 @@ def test_grouped_presets_apply_operator_settings_and_preserve_existing_history(
     roles_before = roles_file.read_bytes()
     retained = {
         path: retained_state(path)
-        for directory in (state / "batches", state / "worldline", state / "tickets/83-integration/teams")
+        for directory in (state / "batches", state / "worldline", state / "tasks/83-integration/teams")
         for path in directory.rglob("*") if path.is_file()
     }
     setup = run_setup(installed_commands, root, answers="")
@@ -210,11 +210,11 @@ def test_grouped_presets_apply_operator_settings_and_preserve_existing_history(
     assert roles_file.read_bytes() == roles_before
     assert {path: retained_state(path) for path in retained} == retained
 
-    _register(installed_commands, root, _ticket("89", "grouped-settings"))
+    _register(installed_commands, root, _task("89", "grouped-settings"))
     _change_status(installed_commands, root, "89", "ready")
     batch = root / "grouped-settings.yml"
     batch.write_text(yaml.safe_dump({"tasks": [{
-        "ticket_id": "89", "ticket_name": "grouped-settings", "role": "coding-team.team-leader",
+        "task_id": "89", "task_name": "grouped-settings", "role": "coding-team.team-leader",
     }]}))
     fake_codex.log_file.write_text("")
     environment = dict(
@@ -256,10 +256,10 @@ def test_grouped_presets_apply_operator_settings_and_preserve_existing_history(
 
 
 def test_failed_validation_retains_evidence_without_unlocking_and_main_can_retry(
-    installed_commands, accepted_ticket
+    installed_commands, accepted_task
 ):
-    root, worktrees, state, candidate = accepted_ticket
-    command = [str(installed_commands.product), "ticket", "integrate", "--ticket-id", "83", "--"]
+    root, worktrees, state, candidate = accepted_task
+    command = [str(installed_commands.product), "task", "integrate", "--task-id", "83", "--"]
     failed = run_process(command + [sys.executable, "-c", "print('validation failed'); raise SystemExit(1)"], cwd=root)
     assert failed.returncode == 1
     output = yaml.safe_load(failed.stdout)
@@ -268,48 +268,48 @@ def test_failed_validation_retains_evidence_without_unlocking_and_main_can_retry
     retained = evidence.read_bytes()
     assert b"validation failed" in retained
     assert run_process(["git", "merge-base", "--is-ancestor", candidate, "HEAD"], cwd=worktrees / "dev").returncode == 0
-    graph = yaml.safe_load(run_process([str(installed_commands.product), "ticket", "graph"], cwd=root).stdout)
-    assert not any(item["ready"] for item in graph["tickets"])
+    graph = yaml.safe_load(run_process([str(installed_commands.product), "task", "graph"], cwd=root).stdout)
+    assert not any(item["ready"] for item in graph["tasks"])
     # Generic semantic updates must not turn failed validation into integration.
-    record = yaml.safe_load((state / "tickets/83-integration/ticket.yml").read_text())
-    change = {key: record[key] for key in ("ticket_id", "active_team_ordinal", "worktree", "branch", "current_candidate")}
+    record = yaml.safe_load((state / "tasks/83-integration/task.yml").read_text())
+    change = {key: record[key] for key in ("task_id", "active_team_ordinal", "worktree", "branch", "current_candidate")}
     change.update(status="integrated", caused_by_event_ids=[output["event_id"]], evidence_refs=[output["evidence"]])
     request = root / "bypass.yml"
     request.write_text(yaml.safe_dump(change))
-    bypass = run_process([str(installed_commands.product), "ticket", "update", "--state-file", str(request)], cwd=root)
+    bypass = run_process([str(installed_commands.product), "task", "update", "--state-file", str(request)], cwd=root)
     assert bypass.returncode == 1
-    assert yaml.safe_load((state / "tickets/83-integration/ticket.yml").read_text())["status"] == "integrating"
+    assert yaml.safe_load((state / "tasks/83-integration/task.yml").read_text())["status"] == "integrating"
     retried = run_process(command + [sys.executable, "-c", "print('validation passed')"], cwd=root)
     assert retried.returncode == 0, retried.stderr
     assert yaml.safe_load(retried.stdout)["status"] == "integrated"
     assert evidence.read_bytes() == retained
 
 
-def test_integration_rejects_an_unaccepted_ticket(installed_commands, accepted_ticket):
+def test_integration_rejects_an_unaccepted_task(installed_commands, accepted_task):
     """An unaccepted dependent cannot enter the common integration gate."""
-    root, worktrees, state, candidate = accepted_ticket
+    root, worktrees, state, candidate = accepted_task
     before = run_process(["git", "rev-parse", "HEAD"], cwd=worktrees / "dev").stdout
-    result = run_process([str(installed_commands.product), "ticket", "integrate", "--ticket-id", "84", "--", sys.executable, "-c", "pass"], cwd=root)
+    result = run_process([str(installed_commands.product), "task", "integrate", "--task-id", "84", "--", sys.executable, "-c", "pass"], cwd=root)
     assert result.returncode == 1
     assert "error" in yaml.safe_load(result.stdout)
     assert run_process(["git", "rev-parse", "HEAD"], cwd=worktrees / "dev").stdout == before
 
 
-def test_failed_merge_retains_conflict_evidence_and_does_not_run_validation(installed_commands, accepted_ticket):
-    root, worktrees, state, candidate = accepted_ticket
+def test_failed_merge_retains_conflict_evidence_and_does_not_run_validation(installed_commands, accepted_task):
+    root, worktrees, state, candidate = accepted_task
     dev = worktrees / "dev"
     (dev / "TEAM_ROUND_DELIVERED.txt").write_text("conflicting integration work\n")
     for arguments in (("add", "TEAM_ROUND_DELIVERED.txt"), ("commit", "-m", "Independent dev change")):
         run_process(["git", *arguments], cwd=dev).check_returncode()
-    result = run_process([str(installed_commands.product), "ticket", "integrate", "--ticket-id", "83", "--", sys.executable, "-c", "print('VALIDATOR RAN')"], cwd=root)
+    result = run_process([str(installed_commands.product), "task", "integrate", "--task-id", "83", "--", sys.executable, "-c", "print('VALIDATOR RAN')"], cwd=root)
     assert result.returncode == 1
     output = yaml.safe_load(result.stdout)
     evidence = (root / output["evidence"]).read_text()
     assert "CONFLICT" in evidence
     assert "VALIDATOR RAN" not in evidence
     assert output["status"] == "integrating"
-    graph = yaml.safe_load(run_process([str(installed_commands.product), "ticket", "graph"], cwd=root).stdout)
-    assert not any(item["ready"] for item in graph["tickets"])
+    graph = yaml.safe_load(run_process([str(installed_commands.product), "task", "graph"], cwd=root).stdout)
+    assert not any(item["ready"] for item in graph["tasks"])
 
 
 @pytest.fixture
@@ -330,11 +330,11 @@ def accepted_document(
                                 'reports': ['sources.md']}
     roles['role_tree']['editor'] = {}
     roles_file.write_text(yaml.safe_dump(roles))
-    _register(installed_commands, root, _ticket('83', 'integration'))
-    _register(installed_commands, root, _ticket('84', 'dependent', dependencies=['83']))
+    _register(installed_commands, root, _task('83', 'integration'))
+    _register(installed_commands, root, _task('84', 'dependent', dependencies=['83']))
     _change_status(installed_commands, root, '83', 'ready')
     batch = root / 'document.yml'
-    batch.write_text(yaml.safe_dump({'tasks': [{'ticket_id': '83', 'role': 'editor'}]}))
+    batch.write_text(yaml.safe_dump({'tasks': [{'task_id': '83', 'role': 'editor'}]}))
     environment.update(FAKE_CODEX_LIFECYCLE_ACTION='deliver-document',
                        FAKE_CODEX_RESULT_FILE='article.md',
                        GRAPHTRAJ_AGENT_RUNNER=str(installed_commands.runner))
@@ -377,11 +377,11 @@ def test_configured_document_conflict_requires_common_result_and_validation(
         (dev / 'article.md').write_text('conflicting integration work\n')
         run_process(['git', 'add', 'article.md'], cwd=dev).check_returncode()
         run_process(['git', 'commit', '-m', 'Existing document requirement'], cwd=dev).check_returncode()
-    command = [str(installed_commands.product), 'ticket', 'integrate', '--ticket-id', '83']
+    command = [str(installed_commands.product), 'task', 'integrate', '--task-id', '83']
     validator = [sys.executable, '-c', "from pathlib import Path; assert Path('article.md').read_text() == 'complete team round\\nconflicting integration work\\n'"]
     failed = run_process(command + ['--', *validator], cwd=root)
     assert failed.returncode == 1, failed.stdout
-    original_round = {path: path.read_bytes() for path in (state / 'tickets/83-integration/teams/1/rounds/1').glob('*')}
+    original_round = {path: path.read_bytes() for path in (state / 'tasks/83-integration/teams/1/rounds/1').glob('*')}
     assert original_round
     environment.update(FAKE_CODEX_LIFECYCLE_ACTION='resolve-integration', FAKE_CODEX_RESOLUTION=outcome,
                        FAKE_CODEX_CAPTURE_STDIN='1')
@@ -392,7 +392,7 @@ def test_configured_document_conflict_requires_common_result_and_validation(
     assert output['status'] == ('escalated' if outcome == 'prose-only' else 'resolving-integration'), (root / output['evidence']).read_text()
     alias = output['resolution']['alias']
     mapping = yaml.safe_load((root / '.graphtraj/runner/sessions' / alias / 'mapping.yml').read_text())
-    team = yaml.safe_load((state / 'tickets/83-integration/teams/1/team.yml').read_text())
+    team = yaml.safe_load((state / 'tasks/83-integration/teams/1/team.yml').read_text())
     assert any(member['session_ref'] == alias for member in team['members'].values())
     assert mapping['parent'] is None and mapping['role_reference'] == 'editor'
     assert mapping['worktree_path'] == str(dev) and team['current_round'] == 2
@@ -407,9 +407,9 @@ def test_configured_document_conflict_requires_common_result_and_validation(
     assert permissions[':workspace_roots']['.'] == 'write'
     assert permissions[str(state)] == 'none'
     assert permissions[':workspace_roots']['docs'] == 'read'
-    assert permissions.get(str(state / 'tickets/83-integration')) is None
+    assert permissions.get(str(state / 'tasks/83-integration')) is None
     assigned_reports = [Path(path) for path, access in permissions.items()
-                        if access == 'read' and path.startswith(str(state / 'tickets/83-integration'))]
+                        if access == 'read' and path.startswith(str(state / 'tasks/83-integration'))]
     assert len(assigned_reports) == 1 and assigned_reports[0].parent.name == '2'
     assert native['argv'][native['argv'].index('--model') + 1] == ('document-model' if conflict == 'textual' else 'inline-document-model')
     trace = Path(mapping['trace_file']).read_text()
@@ -471,8 +471,8 @@ def test_configured_document_conflict_requires_common_result_and_validation(
                 tools.send_session_instruction({'alias': alias, 'instruction': 'More work',
                                              'caused_by_event_ids': [yaml.safe_load(checked.stdout)['event_id']]}, cwd=root)
 
-    graph = yaml.safe_load(run_process([str(installed_commands.product), 'ticket', 'graph'], cwd=root).stdout)
-    assert any(item['ready'] for item in graph['tickets']) == (outcome == 'resolved')
+    graph = yaml.safe_load(run_process([str(installed_commands.product), 'task', 'graph'], cwd=root).stdout)
+    assert any(item['ready'] for item in graph['tasks']) == (outcome == 'resolved')
     assert run_process(['git', 'merge-base', '--is-ancestor', candidate, 'HEAD'], cwd=dev).returncode == (1 if conflict == 'textual' and outcome == 'prose-only' else 0)
 
 
@@ -481,7 +481,7 @@ def test_conflict_selection_rejects_missing_role_and_unauthorized_tree(
 ) -> None:
     """No implicit role or denied tree edge starts integration work."""
     root, _, _, _, environment = accepted_document
-    command = [str(installed_commands.product), 'ticket', 'integrate', '--ticket-id', '83']
+    command = [str(installed_commands.product), 'task', 'integrate', '--task-id', '83']
     validator = [sys.executable, '-c', 'raise SystemExit(1)']
     assert run_process(command + ['--', *validator], cwd=root).returncode == 1
     before = fake_codex.log_file.read_bytes()
@@ -499,22 +499,22 @@ def test_role_named_merge_resolver_is_an_ordinary_swarm_member(
 ) -> None:
     """A name neither grants Integration Worktree access nor needs a conflict."""
     root, worktrees, _, environment = configure_harness(installed_commands, temporary_git_repository, fake_codex, tmp_path)
-    _register(installed_commands, root, _ticket('91', 'ordinary'))
+    _register(installed_commands, root, _task('91', 'ordinary'))
     _change_status(installed_commands, root, '91', 'ready')
     batch = root / 'ordinary.yml'
-    batch.write_text(yaml.safe_dump({'tasks': [{'ticket_id': '91', 'role': 'merge-resolver'}]}))
+    batch.write_text(yaml.safe_dump({'tasks': [{'task_id': '91', 'role': 'merge-resolver'}]}))
     launched = run_process([str(installed_commands.runner), '--swarm-input', str(batch)], cwd=root, env=environment)
     assert launched.returncode == 0, launched.stdout + launched.stderr
     member = yaml.safe_load(launched.stdout)['tasks'][0]
     assert member['worktree_path'] == str(worktrees / '91-ordinary')
     from test_generic_role_execution import wait_for_idle
     wait_for_idle(installed_commands, root, environment, member['alias'])
-    team = yaml.safe_load((root / '.graphtraj/state/tickets/91-ordinary/teams/1/team.yml').read_text())
+    team = yaml.safe_load((root / '.graphtraj/state/tasks/91-ordinary/teams/1/team.yml').read_text())
     assert any(item['session_ref'] == member['alias'] for item in team['members'].values())
 
 
-def test_main_integration_is_serialized_until_validation_finishes(installed_commands, accepted_ticket):
-    root, worktrees, state, candidate = accepted_ticket
+def test_main_integration_is_serialized_until_validation_finishes(installed_commands, accepted_task):
+    root, worktrees, state, candidate = accepted_task
     started = root / "validation-started"
     release = root / "validation-release"
     validator = root / "wait-validation.py"
@@ -523,14 +523,14 @@ def test_main_integration_is_serialized_until_validation_finishes(installed_comm
         f"Path({str(started)!r}).touch()\n"
         f"while not Path({str(release)!r}).exists():\n    time.sleep(0.01)\n"
     )
-    command = [str(installed_commands.product), "ticket", "integrate", "--ticket-id", "83", "--", sys.executable, str(validator)]
+    command = [str(installed_commands.product), "task", "integrate", "--task-id", "83", "--", sys.executable, str(validator)]
     first = subprocess.Popen(command, cwd=root, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     try:
         wait_for_file(started)
         second = run_process(command, cwd=root, timeout=5)
         assert second.returncode == 1
         assert "in progress" in yaml.safe_load(second.stdout)["error"]
-        assert yaml.safe_load((state / "tickets/83-integration/ticket.yml").read_text())["status"] == "integrating"
+        assert yaml.safe_load((state / "tasks/83-integration/task.yml").read_text())["status"] == "integrating"
     finally:
         release.touch()
         stdout, stderr = first.communicate(timeout=10)
@@ -542,7 +542,7 @@ def test_main_integration_is_serialized_until_validation_finishes(installed_comm
 @pytest.mark.parametrize("validation_exit", [0, 1])
 def test_shared_integration_enforces_task_authority_and_returns_retained_outcome(
     installed_commands: InstalledCommands,
-    accepted_ticket: tuple[Path, Path, Path, str],
+    accepted_task: tuple[Path, Path, Path, str],
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture,
     entrypoint: str,
@@ -552,11 +552,11 @@ def test_shared_integration_enforces_task_authority_and_returns_retained_outcome
     from click.testing import CliRunner
     from graphtraj.configuration.project_configuration import load_project_configuration
     from graphtraj.graph.delivery_worldline import read_worldline
-    from graphtraj.graph.ticket_graph import read_graph
+    from graphtraj.graph.task_graph import read_graph
     from graphtraj.interfaces.cli.graphtraj import main
-    from graphtraj.teams.ticket_integration import integrate_ticket
+    from graphtraj.teams.task_integration import integrate_task
 
-    root, worktrees, state, candidate = accepted_ticket
+    root, worktrees, state, candidate = accepted_task
     configuration = load_project_configuration(root)
     command = (sys.executable, "-c", "assert open('TEAM_ROUND_DELIVERED.txt').read() == 'complete team round\\n'")
     command = (*command[:2], command[2] + f"; raise SystemExit({validation_exit})")
@@ -567,32 +567,32 @@ def test_shared_integration_enforces_task_authority_and_returns_retained_outcome
     with runtime_caller(root / ".graphtraj/runner", "bound-member"):
         from graphtraj.execution.runner_models import RunnerError
         with pytest.raises((ValueError, RunnerError)) as error:
-            integrate_ticket(configuration, "83", command)
-        denied = CliRunner().invoke(main, ["ticket", "integrate", "--ticket-id", "83", "--", *command])
+            integrate_task(configuration, "83", command)
+        denied = CliRunner().invoke(main, ["task", "integrate", "--task-id", "83", "--", *command])
     assert denied.exit_code == 1
     assert yaml.safe_load(denied.stdout) == {"error": str(error.value)}
     assert read_worldline(state, root) == before
     monkeypatch.setenv("GRAPHTRAJ_ROLE", "engineer")
     with pytest.raises(ValueError):
-        integrate_ticket(configuration, "83", ())
+        integrate_task(configuration, "83", ())
     assert read_worldline(state, root) == before
 
     if entrypoint == "python":
-        result = integrate_ticket(configuration, "83", command)
+        result = integrate_task(configuration, "83", command)
         assert capsys.readouterr() == ("", "")
     else:
-        completed = CliRunner().invoke(main, ["ticket", "integrate", "--ticket-id", "83", "--", *command])
+        completed = CliRunner().invoke(main, ["task", "integrate", "--task-id", "83", "--", *command])
         assert completed.exit_code == validation_exit, completed.output
         result = yaml.safe_load(completed.stdout)
     assert result["status"] == ("integrated" if validation_exit == 0 else "integrating")
     assert result["candidate"] == candidate
-    assert set(result["unlocked_ticket_ids"]) == ({"84", "85"} if validation_exit == 0 else set())
+    assert set(result["unlocked_task_ids"]) == ({"84", "85"} if validation_exit == 0 else set())
     event = next(item for item in read_worldline(state, root) if item["event_id"] == result["event_id"])
-    assert event["event"] == ("ticket-integrated" if validation_exit == 0 else "ticket-integration-failed")
+    assert event["event"] == ("task-integrated" if validation_exit == 0 else "task-integration-failed")
     assert event["validation_command"] == list(command)
     assert result["evidence"] in event["evidence_refs"]
     assert (root / result["evidence"]).is_file()
-    node = read_graph(state)["tickets"][0]
+    node = read_graph(state)["tasks"][0]
     assert node["status"] == result["status"]
     if validation_exit == 0:
         assert node["delivery"][0]["event_id"] == result["event_id"]
@@ -605,20 +605,20 @@ def test_shared_integration_enforces_task_authority_and_returns_retained_outcome
 @pytest.fixture
 def stopped_committed_integration(
     installed_commands: InstalledCommands,
-    accepted_ticket: tuple[Path, Path, Path, str],
+    accepted_task: tuple[Path, Path, Path, str],
     fake_codex: FakeCodex,
     monkeypatch: pytest.MonkeyPatch,
 ) -> tuple[Path, Path, Path, str, list[str]]:
     """Retain a public conflict escalation, sampled stop and committed resolution."""
     from graphtraj.execution import execution_budget
 
-    root, worktrees, state, candidate = accepted_ticket
+    root, worktrees, state, candidate = accepted_task
     dev = worktrees / 'dev'
     delivered = dev / 'TEAM_ROUND_DELIVERED.txt'
     delivered.write_text('conflicting integration work\n')
     for args in (('add', delivered.name), ('commit', '-m', 'Independent integration work')):
         run_process(['git', *args], cwd=dev).check_returncode()
-    command = [str(installed_commands.product), 'ticket', 'integrate', '--ticket-id', '83']
+    command = [str(installed_commands.product), 'task', 'integrate', '--task-id', '83']
     validator = root / 'validate-recovery.py'
     validator.write_text(
         "from pathlib import Path\n"
@@ -636,14 +636,14 @@ def stopped_committed_integration(
         'FAKE_CODEX_RESOLUTION': 'escalated',
     })
     assert yaml.safe_load(escalated.stdout)['status'] == 'escalated', escalated.stdout + escalated.stderr
-    ticket = state / 'tickets/83-integration'
-    monitor = execution_budget.ExecutionBudgetMonitor(ticket, '83', 'integration')
-    usage = yaml.safe_load((ticket / 'execution-budget.yml').read_text())
+    task = state / 'tasks/83-integration'
+    monitor = execution_budget.ExecutionBudgetMonitor(task, '83', 'integration')
+    usage = yaml.safe_load((task / 'execution-budget.yml').read_text())
     with monkeypatch.context() as controlled:
         controlled.setattr(execution_budget.time, 'time', lambda: usage['started_at'] + 100000)
         controlled.setattr(execution_budget.random, 'random', lambda: 1.0)
         assert monitor.check('merge-resolver', 'integration')
-    assert yaml.safe_load((ticket / 'execution-budget.yml').read_text())['stopped']
+    assert yaml.safe_load((task / 'execution-budget.yml').read_text())['stopped']
     delivered.write_text('complete team round\nconflicting integration work\n')
     run_process(['git', 'add', delivered.name], cwd=dev).check_returncode()
     run_process(['git', 'commit', '--no-edit'], cwd=dev).check_returncode()
@@ -660,21 +660,21 @@ def test_public_recovery_adopts_committed_merge_and_preserves_history(
     from graphtraj.graph.delivery_worldline import read_worldline
 
     root, dev, state, candidate, command = stopped_committed_integration
-    ticket = state / 'tickets/83-integration'
+    task = state / 'tasks/83-integration'
     before = read_worldline(state, root)
-    retained = {path: retained_state(path) for path in ticket.rglob('*')
-                if path.is_file() and path.name != 'ticket.yml'}
+    retained = {path: retained_state(path) for path in task.rglob('*')
+                if path.is_file() and path.name != 'task.yml'}
     runtime = fake_codex.log_file.read_bytes()
     head = run_process(['git', 'rev-parse', 'HEAD'], cwd=dev).stdout
     result = run_process(command, cwd=root)
     assert result.returncode == 0, result.stdout + result.stderr
     outcome = yaml.safe_load(result.stdout)
     assert outcome['status'] == 'integrated' and outcome['candidate'] == candidate
-    assert set(outcome['unlocked_ticket_ids']) == {'84', '85'}
+    assert set(outcome['unlocked_task_ids']) == {'84', '85'}
     assert run_process(['git', 'rev-parse', 'HEAD'], cwd=dev).stdout == head
     assert fake_codex.log_file.read_bytes() == runtime
     assert all(retained_state(path) == content for path, content in retained.items())
-    assert sorted(path.name for path in (ticket / 'teams/1/rounds').iterdir()) == ['1', '2']
+    assert sorted(path.name for path in (task / 'teams/1/rounds').iterdir()) == ['1', '2']
     events = read_worldline(state, root)
     assert events[:len(before)] == before
     started = events[len(before)]
@@ -699,20 +699,20 @@ def test_public_recovery_rejects_invalid_adoption(
     root, dev, state, candidate, command = stopped_committed_integration
     before = read_worldline(state, root)
     runtime = fake_codex.log_file.read_bytes()
-    ticket = state / 'tickets/83-integration'
-    budget = (ticket / 'execution-budget.yml').read_bytes()
+    task = state / 'tasks/83-integration'
+    budget = (task / 'execution-budget.yml').read_bytes()
     if invalid == 'unconfirmed':
         index = command.index('--confirm-resolution')
         command = command[:index] + command[index + 2:]
     elif invalid == 'candidate':
         # A public state revision cannot reuse acceptance for another version.
-        from graphtraj.graph.ticket_graph import update_ticket_state
-        record = yaml.safe_load((ticket / 'ticket.yml').read_text())
+        from graphtraj.graph.task_graph import update_task_state
+        record = yaml.safe_load((task / 'task.yml').read_text())
         other = run_process(['git', 'rev-parse', 'HEAD'], cwd=dev).stdout.strip()
         cause = before[-1]['event_id']
         for status in ('blocked', 'escalated'):
-            revised = update_ticket_state(state, root, {
-                key: record[key] for key in ('ticket_id', 'active_team_ordinal', 'worktree', 'branch')
+            revised = update_task_state(state, root, {
+                key: record[key] for key in ('task_id', 'active_team_ordinal', 'worktree', 'branch')
             } | {'status': status, 'current_candidate': other, 'caused_by_event_ids': [cause],
                  'evidence_refs': before[-1]['evidence_refs']})
             cause = revised['event_id']
@@ -737,11 +737,11 @@ def test_public_recovery_rejects_invalid_adoption(
     else:
         result = run_process(command, cwd=root)
     assert result.returncode == 1, result.stdout + result.stderr
-    assert yaml.safe_load((ticket / 'ticket.yml').read_text())['status'] == 'escalated'
-    assert (ticket / 'execution-budget.yml').read_bytes() == budget
+    assert yaml.safe_load((task / 'task.yml').read_text())['status'] == 'escalated'
+    assert (task / 'execution-budget.yml').read_bytes() == budget
     assert fake_codex.log_file.read_bytes() == runtime
-    graph = yaml.safe_load(run_process([str(installed_commands.product), 'ticket', 'graph'], cwd=root).stdout)
-    assert not any(item['ready'] for item in graph['tickets'])
+    graph = yaml.safe_load(run_process([str(installed_commands.product), 'task', 'graph'], cwd=root).stdout)
+    assert not any(item['ready'] for item in graph['tasks'])
     if invalid == 'failed-validation':
         (root / 'fail-validation').unlink()
         retry = run_process(command, cwd=root)
@@ -749,39 +749,39 @@ def test_public_recovery_rejects_invalid_adoption(
 
 
 def test_actual_result_parent_can_integrate_without_role_name_authority(
-    installed_commands: InstalledCommands, accepted_ticket: tuple,
+    installed_commands: InstalledCommands, accepted_task: tuple,
 ) -> None:
     """A bound direct parent may integrate the result it actually accepted."""
     from graphtraj.configuration.project_configuration import load_project_configuration
     from graphtraj.execution.runner_status import runtime_caller
     from graphtraj.graph.delivery_worldline import read_worldline
-    from graphtraj.teams.ticket_integration import integrate_ticket
+    from graphtraj.teams.task_integration import integrate_task
 
-    root, _, state, candidate = accepted_ticket
+    root, _, state, candidate = accepted_task
     events = read_worldline(state, root)
     accepted = next(event for event in reversed(events) if event['event'] == 'team-round-accepted')
     submitted = next(event for event in events if event['event_id'] == accepted['submission_id'])
     mapping = yaml.safe_load((root / '.graphtraj/runner/sessions' / submitted['alias'] / 'mapping.yml').read_text())
     assert mapping['parent'] is not None
     with runtime_caller(root / '.graphtraj/runner', mapping['parent']):
-        result = integrate_ticket(load_project_configuration(root), '83', (sys.executable, '-c', 'pass'))
+        result = integrate_task(load_project_configuration(root), '83', (sys.executable, '-c', 'pass'))
     assert result['candidate'] == candidate and result['status'] == 'integrated'
 
 
 @pytest.fixture
 def failed_resolver_start(
     installed_commands: InstalledCommands,
-    accepted_ticket: tuple,
+    accepted_task: tuple,
     fake_codex: FakeCodex,
 ) -> tuple:
     """Fail a real native thread/start request during public conflict dispatch."""
-    root, worktrees, state, candidate = accepted_ticket
+    root, worktrees, state, candidate = accepted_task
     dev = worktrees / 'dev'
     delivered = dev / 'TEAM_ROUND_DELIVERED.txt'
     delivered.write_text('conflicting integration work\n')
     run_process(['git', 'add', delivered.name], cwd=dev).check_returncode()
     run_process(['git', 'commit', '-m', 'Independent integration work'], cwd=dev).check_returncode()
-    command = [str(installed_commands.product), 'ticket', 'integrate', '--ticket-id', '83']
+    command = [str(installed_commands.product), 'task', 'integrate', '--task-id', '83']
     validation = [sys.executable, '-c', "from pathlib import Path; assert Path('TEAM_ROUND_DELIVERED.txt').read_text() == 'complete team round\\nconflicting integration work\\n'"]
     failed = run_process(command + ['--', *validation], cwd=root)
     assert failed.returncode == 1, failed.stdout + failed.stderr
@@ -816,14 +816,14 @@ def test_public_retry_of_unestablished_resolver_preserves_attempt_and_integrates
     from graphtraj.configuration.project_configuration import load_project_configuration
     from graphtraj.execution.runner_status import runtime_caller
     from graphtraj.graph.delivery_worldline import read_worldline
-    from graphtraj.teams.ticket_integration import integrate_ticket
+    from graphtraj.teams.task_integration import integrate_task
 
     root, dev, state, candidate, command, selection, validation, environment, allocation = failed_resolver_start
-    ticket = state / 'tickets/83-integration'
+    task = state / 'tasks/83-integration'
     before = read_worldline(state, root)
-    retained = {path: path.read_bytes() for directory in (allocation, state / 'batches', ticket / 'teams/1/rounds')
+    retained = {path: path.read_bytes() for directory in (allocation, state / 'batches', task / 'teams/1/rounds')
                 for path in directory.rglob('*') if path.is_file()}
-    budget = yaml.safe_load((ticket / 'execution-budget.yml').read_text())
+    budget = yaml.safe_load((task / 'execution-budget.yml').read_text())
     original = yaml.safe_load((allocation / 'launch.yml').read_text())['mapping']
     # Even the accepted result's parent cannot take over Main's failed launch.
     roles_file = root / '.graphtraj/roles.yml'
@@ -835,7 +835,7 @@ def test_public_retry_of_unestablished_resolver_preserves_attempt_and_integrates
     accepted_mapping = yaml.safe_load((allocation.parent / submission['alias'] / 'mapping.yml').read_text())
     with runtime_caller(root / '.graphtraj/runner', accepted_mapping['parent']):
         with pytest.raises(ValueError, match='actual parent'):
-            integrate_ticket(load_project_configuration(root), '83', tuple(validation), selection[1], selection[3])
+            integrate_task(load_project_configuration(root), '83', tuple(validation), selection[1], selection[3])
     assert read_worldline(state, root) == before
     release = root / 'resolver-release'
     fake_codex.log_file.unlink()
@@ -859,12 +859,12 @@ def test_public_retry_of_unestablished_resolver_preserves_attempt_and_integrates
     assert mapping['parent'] == original['parent'] is None
     assert mapping['team_generation'] == original['team_generation']
     assert all(path.read_bytes() == content for path, content in retained.items())
-    after = yaml.safe_load((ticket / 'execution-budget.yml').read_text())
+    after = yaml.safe_load((task / 'execution-budget.yml').read_text())
     for field in ('started_at', 'allowance_minutes', 'budget', 'stopping_checks', 'stopped'):
         assert after[field] == budget[field]
     events = read_worldline(state, root)
     assert events[:len(before)] == before
-    retry = next(event for event in events[len(before):] if event['event'] == 'ticket-integration-conflict-started')
+    retry = next(event for event in events[len(before):] if event['event'] == 'task-integration-conflict-started')
     assert retry['caused_by_event_ids'] == [before[-1]['event_id']]
     pending = run_process(command + ['--', *validation], cwd=root)
     assert pending.returncode == 1 and 'acceptance' in pending.stdout
@@ -891,29 +891,29 @@ def test_unestablished_resolver_retry_does_not_restart_stopped_budget(
     from graphtraj.teams import team_round
 
     root, dev, state, candidate, command, selection, validation, environment, allocation = failed_resolver_start
-    ticket = state / 'tickets/83-integration'
-    monitor = ExecutionBudgetMonitor(ticket, '83', 'integration')
-    usage = yaml.safe_load((ticket / 'execution-budget.yml').read_text())
+    task = state / 'tasks/83-integration'
+    monitor = ExecutionBudgetMonitor(task, '83', 'integration')
+    usage = yaml.safe_load((task / 'execution-budget.yml').read_text())
     with monkeypatch.context() as controlled:
         controlled.setattr('graphtraj.execution.execution_budget.time.time', lambda: usage['started_at'] + 100000)
         controlled.setattr('graphtraj.execution.execution_budget.random.random', lambda: 1.0)
         assert monitor.check('merge-resolver', 'integration')
-    budget = yaml.safe_load((ticket / 'execution-budget.yml').read_text())
+    budget = yaml.safe_load((task / 'execution-budget.yml').read_text())
     runtime = fake_codex.log_file.read_bytes()
     retried = run_process(command + selection + ['--', *validation], cwd=root, env=environment, timeout=20)
     assert retried.returncode == 1, retried.stdout + retried.stderr
     assert yaml.safe_load(retried.stdout)['status'] == 'escalated'
-    after = yaml.safe_load((ticket / 'execution-budget.yml').read_text())
+    after = yaml.safe_load((task / 'execution-budget.yml').read_text())
     for field in ('started_at', 'allowance_minutes', 'budget', 'sessions', 'corrections', 'stopping_checks', 'stopped'):
         assert after[field] == budget[field]
     assert fake_codex.log_file.read_bytes() == runtime
     cause = yaml.safe_load(retried.stdout)['event_id']
-    continue_command = [str(installed_commands.runner), 'continue', '--ticket-id', '83',
+    continue_command = [str(installed_commands.runner), 'continue', '--task-id', '83',
                         '--caused-by-event-id', cause]
     ordinary = run_process(continue_command, cwd=root, env=environment)
     assert ordinary.returncode == 1 and 'current active Team' in ordinary.stdout
     history = read_worldline(state, root)
-    before_ticket = (ticket / 'ticket.yml').read_bytes()
+    before_task = (task / 'task.yml').read_bytes()
     before_head = run_process(['git', 'rev-parse', 'HEAD'], cwd=dev).stdout
     before_merge = run_process(['git', 'rev-parse', 'MERGE_HEAD'], cwd=dev).stdout
     retained = {path: path.read_bytes() for path in allocation.parent.glob('*/*')
@@ -922,9 +922,9 @@ def test_unestablished_resolver_retry_does_not_restart_stopped_budget(
     child = next(mapping for mapping in mappings if mapping['parent'] is not None)
     with runtime_caller(root / '.graphtraj/runner', child['alias']):
         with pytest.raises(RunnerError, match='direct parent'):
-            team_round.continue_stopped_ticket('83', (cause,), root, budget_only=True)
+            team_round.continue_stopped_task('83', (cause,), root, budget_only=True)
     # Missing/unsupported current Teams fail before clearing the sampled stop.
-    states = team_round._load_states(state / 'tickets')
+    states = team_round._load_states(state / 'tasks')
     for change in ({'active_team_ordinal': None}, {'active_team_ordinal': 99},
                    {'status': 'awaiting-integration'}):
         with monkeypatch.context() as controlled:
@@ -932,8 +932,8 @@ def test_unestablished_resolver_retry_does_not_restart_stopped_budget(
                 **states, '83': (states['83'][0], {**states['83'][1], **change}),
             })
             with pytest.raises(RunnerError):
-                team_round.continue_stopped_ticket('83', (cause,), root, budget_only=True)
-    assert yaml.safe_load((ticket / 'execution-budget.yml').read_text()) == after
+                team_round.continue_stopped_task('83', (cause,), root, budget_only=True)
+    assert yaml.safe_load((task / 'execution-budget.yml').read_text()) == after
     assert read_worldline(state, root) == history
     if manual_stop:
         original_root = next(mapping['alias'] for mapping in mappings if mapping['parent'] is None)
@@ -942,16 +942,16 @@ def test_unestablished_resolver_retry_does_not_restart_stopped_budget(
         assert stopped.returncode == 0, stopped.stdout + stopped.stderr
         refused = run_process(continue_command + ['--budget-only'], cwd=root, env=environment)
         assert refused.returncode == 1 and 'subtree-stopped' in refused.stdout
-        assert yaml.safe_load((ticket / 'execution-budget.yml').read_text()) == after
+        assert yaml.safe_load((task / 'execution-budget.yml').read_text()) == after
         assert fake_codex.log_file.read_bytes() == runtime
         return
     continued = run_process(continue_command + ['--budget-only'], cwd=root, env=environment)
     assert continued.returncode == 0, continued.stdout + continued.stderr
     assert yaml.safe_load(continued.stdout)['tasks'] == []
-    assert yaml.safe_load((ticket / 'execution-budget.yml').read_text()) == dict(after, stopped=False)
+    assert yaml.safe_load((task / 'execution-budget.yml').read_text()) == dict(after, stopped=False)
     assert fake_codex.log_file.read_bytes() == runtime
     assert all(path.read_bytes() == content for path, content in retained.items())
-    assert (ticket / 'ticket.yml').read_bytes() == before_ticket
+    assert (task / 'task.yml').read_bytes() == before_task
     assert run_process(['git', 'rev-parse', 'HEAD'], cwd=dev).stdout == before_head
     assert run_process(['git', 'rev-parse', 'MERGE_HEAD'], cwd=dev).stdout == before_merge
     resolved = run_process(command + selection + ['--', *validation], cwd=root, env=environment, timeout=30)
@@ -971,30 +971,30 @@ def test_unestablished_resolver_retry_does_not_restart_stopped_budget(
     assert yaml.safe_load(integrated.stdout)['status'] == 'integrated'
 
 
-@pytest.mark.parametrize("accepted_ticket", ["v2"], indirect=True)
+@pytest.mark.parametrize("accepted_task", ["v2"], indirect=True)
 def test_v2_file_delivery_keeps_acceptance_and_enables_summary_completion(
-    installed_commands: InstalledCommands, accepted_ticket: tuple,
+    installed_commands: InstalledCommands, accepted_task: tuple,
 ) -> None:
     """Real candidates still require acceptance/integration before parent completion."""
-    root, _, _, candidate = accepted_ticket
+    root, _, _, candidate = accepted_task
     request = root / "complete.yml"
-    for ticket_id in ("83", "82"):
+    for task_id in ("83", "82"):
         request.write_text(yaml.safe_dump({
-            "ticket_id": ticket_id, "current_definition": "ticket.md",
+            "task_id": task_id, "current_definition": "task.md",
             "reason": "Accept the defined result", "cancelled_scope": {},
             "caused_by_event_ids": [], "evidence_refs": ["delivery-evidence.md"],
         }))
-        result = run_process([str(installed_commands.product), "ticket", "complete",
+        result = run_process([str(installed_commands.product), "task", "complete",
                               "--completion-file", str(request)], cwd=root)
         assert result.returncode != 0
-    result = run_process([str(installed_commands.product), "ticket", "integrate",
-                          "--ticket-id", "83", "--", sys.executable, "-c", "pass"], cwd=root)
+    result = run_process([str(installed_commands.product), "task", "integrate",
+                          "--task-id", "83", "--", sys.executable, "-c", "pass"], cwd=root)
     assert result.returncode == 0, result.stderr
-    result = run_process([str(installed_commands.product), "ticket", "complete",
+    result = run_process([str(installed_commands.product), "task", "complete",
                           "--completion-file", str(request)], cwd=root)
     assert result.returncode == 0, result.stderr
-    graph = run_process([str(installed_commands.product), "ticket", "graph"], cwd=root)
-    nodes = {node["ticket_id"]: node for node in yaml.safe_load(graph.stdout)["tickets"]}
+    graph = run_process([str(installed_commands.product), "task", "graph"], cwd=root)
+    nodes = {node["task_id"]: node for node in yaml.safe_load(graph.stdout)["tasks"]}
     assert nodes["82"]["status"] == nodes["83"]["status"] == "integrated"
     assert nodes["82"]["current_candidate"] is None
     assert nodes["83"]["current_candidate"] == candidate

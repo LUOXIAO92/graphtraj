@@ -99,7 +99,7 @@ def response(result: dict | None, continued: bool) -> dict:
     """Return one layered Stop message; repeated checker errors cannot self-continue forever.
 
     The message keeps an English title with its status token, the checker's own
-    conclusion and reason, related Tickets, and this check's compact usage on
+    conclusion and reason, related Tasks, and this check's compact usage on
     separate lines without blank separators. A mechanical failure that never
     reached a checker conclusion falls back to fixed English, since the checker
     language is unknown; all four statuses still produce exactly one message.
@@ -168,7 +168,7 @@ def check(
                 root = Path(binding['cwd'])
                 with runtime_caller(discover_runner_directory(root), child_id):
                     result = handle_request(request.params.get('arguments', {}), cwd=root,
-                                            allowed_features={'ticket_graph', 'alias_status'})
+                                            allowed_features={'task_graph', 'alias_status'})
                 return {'contentItems': [{'type': 'inputText', 'text': json.dumps(result.document)}],
                         'success': not result.failed}
             return await asyncio.to_thread(call)

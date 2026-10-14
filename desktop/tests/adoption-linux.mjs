@@ -104,8 +104,8 @@ async function pick(folder, name) {
   await exec('xdotool', ['mousemove', '--sync', '--window', chooser,
     String(width - 50), String(height - 26), 'click', '1']);
   await page.locator('.project-button.current').filter({ hasText: folder }).waitFor();
-  const graph = fixtures.operate(folder, 'ticket_graph');
-  await page.getByText(graph.tickets[0].title, { exact: true }).waitFor();
+  const graph = fixtures.operate(folder, 'task_graph');
+  await page.getByText(graph.tasks[0].title, { exact: true }).waitFor();
 }
 
 /** Exercise the shared writer after a real OS approval or rejection. */
@@ -122,7 +122,7 @@ async function save(model, approve, name) {
 
 try {
   await assert.rejects(fs.access(path.join(os.homedir(), '.graphtraj/projects.json')), { code: 'ENOENT' });
-  assert.ok(process.env.ADOPTION_ACTIVITY_PROJECT && process.env.ADOPTION_AGENT_ALIAS && process.env.ADOPTION_TICKET_ID,
+  assert.ok(process.env.ADOPTION_ACTIVITY_PROJECT && process.env.ADOPTION_AGENT_ALIAS && process.env.ADOPTION_TASK_ID,
     'Launch via tests/linux_adoption_input.py to create controlled records through public Runner');
   facts.source = JSON.parse(await fs.readFile(path.join(installedRoot, 'source.json'), 'utf8'));
   if (process.env.GITHUB_SHA) assert.equal(facts.source.source, process.env.GITHUB_SHA);
@@ -131,7 +131,7 @@ try {
     'xvfb', 'xdotool', 'openbox', 'libgtk-3-0t64'], { encoding: 'utf8' });
   const first = await fs.realpath(process.env.ADOPTION_ACTIVITY_PROJECT);
   const second = await fixtures.makeProject(path.join(root, 'second'), 'linux-second');
-  await fixtures.recordActivity(second, { ticketId: '1', ticketName: 'linux-second', alias: 'historical@x1',
+  await fixtures.recordActivity(second, { taskId: '1', taskName: 'linux-second', alias: 'historical@x1',
     records: [{ type: 'response_item', payload: { type: 'message', role: 'assistant',
       content: [{ type: 'output_text', text: 'Controlled historical message; no model execution.' }] } }],
     additionalMembers: [{ alias: 'current@x2', historical: false, records: [{ type: 'response_item',
@@ -143,10 +143,10 @@ try {
   await fs.writeFile(roles, 'roles:\n  custom_group:\n    observer:\n      runtime: codex\n      model: original-model\n      api_key_env: LINUX_ADOPTION_SECRET\n      reports: [report.md]\nrole_tree: {}\n');
   const original = await fs.readFile(roles);
   const firstRoles = await fs.readFile(path.join(first, '.graphtraj/roles.yml'));
-  const graphBefore = fixtures.operate(first, 'ticket_graph');
+  const graphBefore = fixtures.operate(first, 'task_graph');
   const runningBefore = runningTask(first);
   facts.controlledExecution = runningBefore;
-  assert.ok(graphBefore.tickets.length, 'Activity project needs at least one Ticket');
+  assert.ok(graphBefore.tasks.length, 'Activity project needs at least one Task');
   await launch();
   await pick(first, 'first');
   await pick(second, 'second');
@@ -158,7 +158,7 @@ try {
   facts.stage = 'parallel Chat through installed desktop bridge';
   const roster = await page.evaluate(async () => {
     const { selected } = await window.graphtraj.projects();
-    return window.graphtraj.activity(selected, { ticket_id: '1' });
+    return window.graphtraj.activity(selected, { task_id: '1' });
   });
   await parallelChat({ page, members: roster.agents, shot: screenshot });
   await page.getByRole('button', { name: 'Teams & roles', exact: true }).click();
@@ -207,24 +207,24 @@ try {
   facts.settings = settings;
   await page.getByRole('button', { name: 'Monitor', exact: true }).click();
   await page.locator('.project-button').filter({ hasText: first }).click();
-  await page.locator('.monitor-page:visible .react-flow__node').filter({ hasText: graphBefore.tickets[0].title }).waitFor();
+  await page.locator('.monitor-page:visible .react-flow__node').filter({ hasText: graphBefore.tasks[0].title }).waitFor();
   await closeApp();
-  assert.deepEqual(fixtures.operate(first, 'ticket_graph'), graphBefore);
+  assert.deepEqual(fixtures.operate(first, 'task_graph'), graphBefore);
   assert.deepEqual(runningTask(first), runningBefore);
   await launch();
   await page.locator('.project-button.current').filter({ hasText: first }).waitFor();
   assert.equal(await page.locator('.project-button').count(), 2);
-  const ticketId = process.env.ADOPTION_TICKET_ID;
+  const taskId = process.env.ADOPTION_TASK_ID;
   assert.deepEqual(await page.evaluate(id => window.graphtraj.settings(id), settingsId), settings.roles);
   assert.deepEqual((await page.evaluate(id => window.graphtraj.connections(id, { action: 'read' }), activityId)).catalog, settings.global.catalog);
   facts.stage = 'controlled Chat';
-  await page.locator(`.monitor-page:visible .react-flow__node[data-id="${ticketId}"]`).click();
-  await page.getByRole('complementary', { name: 'Ticket details' }).waitFor();
+  await page.locator(`.monitor-page:visible .react-flow__node[data-id="${taskId}"]`).click();
+  await page.getByRole('complementary', { name: 'Task details' }).waitFor();
   {
-    const activity = await page.evaluate(async ({ ticketId, alias }) => {
+    const activity = await page.evaluate(async ({ taskId, alias }) => {
       const { selected } = await window.graphtraj.projects();
-      return window.graphtraj.activity(selected, { ticket_id: ticketId, alias });
-    }, { ticketId, alias: process.env.ADOPTION_AGENT_ALIAS });
+      return window.graphtraj.activity(selected, { task_id: taskId, alias });
+    }, { taskId, alias: process.env.ADOPTION_AGENT_ALIAS });
     const message = activity.events?.find(event => event.kind === 'message' && event.text === 'GraphTraj GUI controlled message');
     const tool = activity.events?.find(event => event.kind === 'tool' && event.name);
     assert.ok(message && tool, 'Controlled input needs readable message and named tool records in its first page');
@@ -249,10 +249,10 @@ try {
   facts.stage = 'controlled Dashboard';
   await page.getByRole('button', { name: 'Project usage', exact: true }).click();
   await page.locator('.usage-dashboard').waitFor();
-  const activity = await page.evaluate(async ({ ticketId, alias }) => {
+  const activity = await page.evaluate(async ({ taskId, alias }) => {
     const { selected } = await window.graphtraj.projects();
-    return window.graphtraj.activity(selected, { ticket_id: ticketId, alias });
-  }, { ticketId, alias: process.env.ADOPTION_AGENT_ALIAS });
+    return window.graphtraj.activity(selected, { task_id: taskId, alias });
+  }, { taskId, alias: process.env.ADOPTION_AGENT_ALIAS });
   const usageDate = localDate(new Date(activity.events.find(event => event.kind === 'usage').time));
   await page.getByLabel('Start date').fill(usageDate);
   await page.getByLabel('End date').fill(usageDate);
@@ -283,10 +283,10 @@ try {
   try { facts.terminatedProcess = await exited; }
   finally { clearTimeout(exitTimer); }
   app = null;
-  assert.deepEqual(fixtures.operate(first, 'ticket_graph'), graphBefore);
+  assert.deepEqual(fixtures.operate(first, 'task_graph'), graphBefore);
   assert.deepEqual(runningTask(first), runningBefore);
-  fixtures.operate(second, 'ticket_register', fixtures.ticket('3', 'cli-after-gui-failure', ['2']));
-  assert.equal(fixtures.operate(second, 'ticket_graph').tickets.length, 3);
+  fixtures.operate(second, 'task_register', fixtures.task('3', 'cli-after-gui-failure', ['2']));
+  assert.equal(fixtures.operate(second, 'task_graph').tasks.length, 3);
   await launch();
   await page.locator('.project-button.current').filter({ hasText: first }).waitFor();
   await datedUsage({ page, first, second, agent: process.env.ADOPTION_AGENT_ALIAS, date: usageDate, shot: name => screenshot(`reopened-${name}`) });
@@ -294,7 +294,7 @@ try {
   await page.getByRole('button', { name: `Remove ${second}`, exact: true }).click();
   await page.locator('.project-button').filter({ hasText: second }).waitFor({ state: 'detached' });
   assert.equal(await page.locator('.project-button').count(), 1);
-  assert.equal(fixtures.operate(second, 'ticket_graph').tickets.length, 3);
+  assert.equal(fixtures.operate(second, 'task_graph').tasks.length, 3);
   assert.deepEqual(runningTask(first), runningBefore);
   facts.steps.push('Persisted projects, GUI normal exit and main-process termination preserve the active controlled Runner Session/execution and CLI operation; removal retains project');
   facts.reusedEvidence = 'Accepted A/B/C/D summary supplied via Worldline20261010T042341.450707+0900; integration20261010T030236.725956+0900. This test makes no model calls.';

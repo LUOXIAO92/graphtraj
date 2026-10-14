@@ -55,7 +55,7 @@ export async function datedUsage({ page, first, second, agent, date, input = 100
   await dates(date, date);
   await model.waitFor();
   const filters = page.locator('.usage-filters');
-  await filters.getByLabel('Ticket', { exact: false }).selectOption('1');
+  await filters.getByLabel('Task', { exact: false }).selectOption('1');
   await filters.getByLabel('Agent', { exact: false }).selectOption(agent);
   await filters.getByLabel('Model', { exact: false }).selectOption('gpt-5.3-codex');
   assert.equal(await model.locator('td').nth(1).evaluate(cell => cell.firstChild.textContent.replaceAll(',', '')), String(input));

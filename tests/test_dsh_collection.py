@@ -160,7 +160,7 @@ def test_main_native_child_and_managed_member_sources(
     assert collect(member, []) == {'deferred': True}
     monkeypatch.setattr(runner_status, 'process_caller_alias', lambda *args: 'owned-member')
     monkeypatch.setattr(runner_status, 'read_alias_mapping', lambda *args: (
-        {'runtime': 'dsh', 'session': 'member', 'ticket_id': '315'}, project))
+        {'runtime': 'dsh', 'session': 'member', 'task_id': '315'}, project))
     assert collect(member, [])['position'] == -1
     with SessionStore(session_path(project / '.graphtraj/state', 'dsh:member')) as store:
         assert store.header['graphtraj']['source'] == 'member'

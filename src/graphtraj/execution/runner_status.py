@@ -67,7 +67,7 @@ def runtime_caller(runner_directory: Path, identity: str | None) -> Iterator[Non
         _runtime_caller.reset(token)
 
 
-# One Agent alias. A current alias names the Ticket, its whole-Team handover
+# One Agent alias. A current alias names the Task, its whole-Team handover
 # generation counted from zero, the configured role and the entity, joined by
 # '-' with '_' inside a word group; the entity name after '@' may be any
 # non-English name. A retained alias keeps its historical Team suffix, role
@@ -88,7 +88,7 @@ SESSION_MAPPING_FIELDS = frozenset(
         "alias",
         "runtime",
         "session",
-        "ticket_id",
+        "task_id",
         "team_generation",
         "role",
         "parent",
@@ -105,7 +105,7 @@ SESSION_MAPPING_FIELDS = frozenset(
 SESSION_BINDING_FIELDS = (
     "alias",
     "runtime",
-    "ticket_id",
+    "task_id",
     "team_generation",
     "role",
     "parent",
@@ -277,7 +277,7 @@ def require_direct_authority(
 def require_task_authority(
     state_directory: Path,
     runner_directory: Path,
-    ticket_id: str,
+    task_id: str,
     alias: str,
     operation: str,
 ) -> dict[str, Any]:
@@ -290,16 +290,16 @@ def require_task_authority(
     Role names and caller-supplied identity fields confer no authority.
     """
     from graphtraj.graph.delivery_state import read_team
-    from graphtraj.graph.ticket_graph import _load_states
+    from graphtraj.graph.task_graph import _load_states
 
     mapping, _ = read_alias_mapping(runner_directory, alias)
-    if mapping["ticket_id"] != ticket_id:
+    if mapping["task_id"] != task_id:
         raise _authority_denied()
-    record = _load_states(state_directory / "tickets").get(ticket_id)
+    record = _load_states(state_directory / "tasks").get(task_id)
     if record is None:
         raise _authority_denied()
-    directory, ticket = record
-    if ticket["active_team_ordinal"] != mapping["team_generation"]:
+    directory, task = record
+    if task["active_team_ordinal"] != mapping["team_generation"]:
         raise _authority_denied()
     team = read_team(directory / "teams" / str(mapping["team_generation"]) / "team.yml")
     if team["status"] != "active":
@@ -950,7 +950,7 @@ def _numstat_file(entry: bytes) -> Dict[str, Any]:
 
 
 def retained_session_directories(runner_directory: Path) -> list[Path]:
-    """Locate retired Session records within the existing durable Ticket Traces."""
+    """Locate retired Session records within the existing durable Task Traces."""
     from graphtraj.configuration.project_configuration import load_project_configuration
     from graphtraj.workspace.runner_project import discover_project_root
 
@@ -958,7 +958,7 @@ def retained_session_directories(runner_directory: Path) -> list[Path]:
         configuration = load_project_configuration(discover_project_root(runner_directory))
     except (OSError, ValueError, RunnerError):
         return []
-    return [directory for directory in (configuration.state / "tickets").glob("*/teams/*/traces/*/runner")
+    return [directory for directory in (configuration.state / "tasks").glob("*/teams/*/traces/*/runner")
             if (directory / "session.yml").is_file()]
 
 

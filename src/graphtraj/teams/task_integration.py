@@ -14,12 +14,12 @@ from graphtraj.execution.runner_status import caller_alias, read_alias_mapping, 
 from graphtraj.graph.delivery_worldline import append_project_worldline_event, read_worldline
 from graphtraj.workspace.git_repository import GitRepositoryError, SourceRepository, _git
 from graphtraj.configuration.project_configuration import ProjectConfiguration
-from graphtraj.graph.ticket_graph import _load_states, _lock, _restore, _unlock, _write_yaml, _result_complete
+from graphtraj.graph.task_graph import _load_states, _lock, _restore, _unlock, _write_yaml, _result_complete
 
 
-def integrate_ticket(
+def integrate_task(
     configuration: ProjectConfiguration,
-    ticket_id: str,
+    task_id: str,
     validation_command: tuple[str, ...],
     diagnosis: str | None = None,
     role: str | dict | None = None,
@@ -45,12 +45,12 @@ def integrate_ticket(
             file_lock.flock(lock, file_lock.LOCK_EX | file_lock.LOCK_NB)
         except BlockingIOError as error:
             raise ValueError("Another integration is in progress") from error
-        return _integrate(configuration, ticket_id, validation_command, diagnosis, role, confirmed_commit)
+        return _integrate(configuration, task_id, validation_command, diagnosis, role, confirmed_commit)
 
 
 def _integrate(
     configuration: ProjectConfiguration,
-    ticket_id: str,
+    task_id: str,
     validation_command: tuple[str, ...],
     diagnosis: str | None = None,
     role: str | dict | None = None,
@@ -58,15 +58,15 @@ def _integrate(
 ) -> dict:
     """Merge or adopt the retained accepted version, then validate completion."""
     root, state = configuration.harness_root, configuration.state
-    current = _load_states(state / "tickets")
-    if ticket_id not in current:
-        raise ValueError("Ticket is not registered")
-    directory, record = current[ticket_id]
+    current = _load_states(state / "tasks")
+    if task_id not in current:
+        raise ValueError("Task is not registered")
+    directory, record = current[task_id]
     candidate = record["current_candidate"]
     events = read_worldline(state, root)
     acceptance = next((event for event in reversed(events) if (
         event["event"] == "team-round-accepted"
-        and event.get("ticket_id") == ticket_id
+        and event.get("task_id") == task_id
         and event.get("candidate") == candidate
         and event.get("team_ordinal") == record["active_team_ordinal"]
     )), None)
@@ -77,7 +77,7 @@ def _integrate(
                            and event['event_id'] == acceptance.get('submission_id')), None)
         if submission is None:
             raise ValueError("Integration requires the actual accepted result's parent")
-        require_task_authority(state, runner, ticket_id, submission['alias'], 'integrate')
+        require_task_authority(state, runner, task_id, submission['alias'], 'integrate')
     if (diagnosis is None) != (role is None):
         raise ValueError("Conflict resolution requires an explicitly selected role and diagnosis")
     batch = None
@@ -86,7 +86,7 @@ def _integrate(
         from graphtraj.teams.team_round import _require_dispatch_roles
         from graphtraj.workspace.runner_project import discover_project
 
-        batch = parse_batch({"tasks": [{"ticket_id": ticket_id, "ticket_name": record["ticket_name"],
+        batch = parse_batch({"tasks": [{"task_id": task_id, "task_name": record["task_name"],
                                        "role": role, "instruction": diagnosis}]})
         parent = read_alias_mapping(runner, caller)[0] if caller is not None else None
         _require_dispatch_roles(discover_project(root, require_clean_integration=False), batch, parent)
@@ -96,14 +96,14 @@ def _integrate(
     if not record["active"] or record["status"] not in {"awaiting-integration", "integrating", "escalated", "resolving-integration"} or acceptance is None:
         raise ValueError("Integration requires acceptance of the current candidate")
     escalated_integrations = {
-        event.get("ticket_id") for event in events
-        if event["event"] == "ticket-integration-escalated"
+        event.get("task_id") for event in events
+        if event["event"] == "task-integration-escalated"
     }
-    if any(other_id != ticket_id and (
+    if any(other_id != task_id and (
         other["status"] in {"integrating", "resolving-integration"}
         or other["status"] == "escalated" and other_id in escalated_integrations
     ) for other_id, (_, other) in current.items()):
-        raise ValueError("Another Ticket has unfinished integration")
+        raise ValueError("Another Task has unfinished integration")
     repository = SourceRepository.from_root(configuration.project_root)
     dev = configuration.integration_worktree
     if repository.worktree_for_branch("dev") != dev or _git(dev, "branch", "--show-current") != "dev":
@@ -112,13 +112,13 @@ def _integrate(
                               or (dev / _git(dev, "rev-parse", "--git-path", "MERGE_HEAD")).exists()):
         raise ValueError("The dev Integration Worktree must be clean")
     before = _git(dev, "rev-parse", "HEAD")
-    predecessor = next((event for event in reversed(events) if event.get("ticket_id") == ticket_id and event["event"].startswith("ticket-integration-")), acceptance)
+    predecessor = next((event for event in reversed(events) if event.get("task_id") == task_id and event["event"].startswith("task-integration-")), acceptance)
     if resolving and diagnosis is None:
         conflict = next(event for event in reversed(events)
-                        if event.get('ticket_id') == ticket_id
-                        and event['event'] == 'ticket-integration-conflict-started')
+                        if event.get('task_id') == task_id
+                        and event['event'] == 'task-integration-conflict-started')
         submitted = next((event for event in reversed(events)
-                          if event['event'] == 'result-submitted' and event.get('ticket_id') == ticket_id
+                          if event['event'] == 'result-submitted' and event.get('task_id') == task_id
                           and event.get('team_ordinal') == record['active_team_ordinal']
                           and event['event_id'] > conflict['event_id']), None)
         decision = next((event for event in reversed(events)
@@ -137,7 +137,7 @@ def _integrate(
     if recovering:
         if confirmed_commit != before:
             raise ValueError("Recovery requires explicit confirmation of the committed resolution")
-        if (diagnosis is not None or predecessor["event"] != "ticket-integration-escalated"
+        if (diagnosis is not None or predecessor["event"] != "task-integration-escalated"
             or predecessor.get("candidate") != candidate
             or predecessor.get("validation_command") != list(validation_command)):
             raise ValueError("Recovery requires the retained accepted candidate and the same integration validation")
@@ -150,7 +150,7 @@ def _integrate(
             raise ValueError("Recovery requires the accepted candidate and retained dev commit in HEAD") from error
     if diagnosis is not None:
         if (not diagnosis.strip() or predecessor["event"] != (
-                "ticket-integration-escalated" if retrying else "ticket-integration-failed")
+                "task-integration-escalated" if retrying else "task-integration-failed")
             or predecessor.get("conflict_kind") not in {"textual", "semantic"}
             or predecessor.get("candidate") != candidate or predecessor.get("dev_commit") != before
             or predecessor.get("validation_command") != list(validation_command)):
@@ -162,7 +162,7 @@ def _integrate(
 
             require_unestablished_resolution(configuration, record, events, batch.tasks[0], caller)
     started = _record(configuration, directory, record, "integrating" if diagnosis is None else "resolving-integration", {
-        "event": "ticket-integration-started" if diagnosis is None else "ticket-integration-conflict-started",
+        "event": "task-integration-started" if diagnosis is None else "task-integration-conflict-started",
         "caused_by_event_ids": [predecessor["event_id"]] + ([decision["event_id"]] if resolving and diagnosis is None else []),
         "alias": caller,
         "session": read_alias_mapping(runner, caller)[0]["session"] if caller is not None else None,
@@ -234,7 +234,7 @@ def _integrate(
         resolution and resolution.get('launch_status') != 'registered' and not resolution.get('submissions')
     ) else "resolving-integration" if resolution or resolving else "integrating")
     integrated = _record(configuration, directory, record, status, {
-        "event": ("ticket-integration-conflict-resolved" if resolving else "ticket-integrated") if succeeded else "ticket-integration-escalated" if status == "escalated" else "ticket-integration-conflict-dispatched" if resolution else "ticket-integration-failed",
+        "event": ("task-integration-conflict-resolved" if resolving else "task-integrated") if succeeded else "task-integration-escalated" if status == "escalated" else "task-integration-conflict-dispatched" if resolution else "task-integration-failed",
         "caused_by_event_ids": [started["event_id"]],
         "evidence_refs": evidence_refs,
         "candidate": candidate,
@@ -246,19 +246,19 @@ def _integrate(
     })
     unlocked = []
     if succeeded:
-        current = _load_states(state / "tickets")
+        current = _load_states(state / "tasks")
         for dependent_id, (dependent_directory, dependent) in current.items():
             if (dependent["active"] and dependent["status"] == "pending"
-                and ticket_id in dependent["dependencies"]
+                and task_id in dependent["dependencies"]
                 and all(_result_complete({key: value for key, (_, value) in current.items()}, blocker)
                         for blocker in dependent["dependencies"])):
                 _record(configuration, dependent_directory, dependent, "ready", {
-                    "event": "ticket-dependency-unlocked",
+                    "event": "task-dependency-unlocked",
                     "caused_by_event_ids": [integrated["event_id"]],
                     "evidence_refs": integrated["evidence_refs"],
                 })
                 unlocked.append(dependent_id)
-    return {"ticket_id": ticket_id, "candidate": candidate, "status": status, **({"resolution": resolution} if resolution else {}), "event_id": integrated["event_id"], "evidence": evidence.relative_to(root).as_posix(), "unlocked_ticket_ids": unlocked}
+    return {"task_id": task_id, "candidate": candidate, "status": status, **({"resolution": resolution} if resolution else {}), "event_id": integrated["event_id"], "evidence": evidence.relative_to(root).as_posix(), "unlocked_task_ids": unlocked}
 
 
 def _resolve(configuration: ProjectConfiguration, batch: Batch, log: TextIO) -> dict:
@@ -278,25 +278,25 @@ def _resolve(configuration: ProjectConfiguration, batch: Batch, log: TextIO) -> 
 
 def _record(configuration: ProjectConfiguration, directory: Path, record: dict, status: str, event: dict) -> dict:
     """Recheck the current version and record one integration lifecycle event."""
-    lock = _lock(configuration.state / "tickets", exclusive=True)
+    lock = _lock(configuration.state / "tasks", exclusive=True)
     try:
-        current = _load_states(configuration.state / "tickets")
-        latest = current[record["ticket_id"]][1]
+        current = _load_states(configuration.state / "tasks")
+        latest = current[record["task_id"]][1]
         if (latest["current_definition"] != record["current_definition"]
                 or latest["current_candidate"] != record["current_candidate"]):
-            raise ValueError("The Ticket changed during integration; inspect its current definition and result")
+            raise ValueError("The Task changed during integration; inspect its current definition and result")
         if status == "integrated":
             records = {key: value for key, (_, value) in current.items()}
             required = list(latest["dependencies"]) + [
                 key for key, child in records.items()
-                if child.get("parent_id") == record["ticket_id"] and child.get("disposition") != "cancelled"
+                if child.get("parent_id") == record["task_id"] and child.get("disposition") != "cancelled"
             ]
             if any(not _result_complete(records, key) for key in required):
                 raise ValueError("Integration completion requires the task's necessary child and dependency results")
-        path = directory / "ticket.yml"
+        path = directory / "task.yml"
         previous = path.read_bytes()
         updated = {**record, "status": status}
-        event.update(ticket_id=record["ticket_id"], from_status=record["status"], to_status=status)
+        event.update(task_id=record["task_id"], from_status=record["status"], to_status=status)
 
         def mutation(_):
             try:

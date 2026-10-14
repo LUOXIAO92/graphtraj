@@ -1,7 +1,7 @@
 """Run Linux desktop adoption with public registration and controlled model work.
 
 Run only on an unbound disposable CI host. Current caller identity is never
-removed or replaced. All setup, Ticket and Session state uses public operations.
+removed or replaced. All setup, Task and Session state uses public operations.
 """
 
 import json
@@ -48,21 +48,21 @@ def main() -> None:
         executable.write_text(f'#!{sys.executable}\nimport runpy\nrunpy.run_path({str(runtime)!r}, run_name="__main__")\n')
         executable.chmod(0o755)
         os.environ['PATH'] = str(fixture_bin) + os.pathsep + os.environ['PATH']
-        # Public Ticket operations resolve configuration from the host's cwd.
+        # Public Task operations resolve configuration from the host's cwd.
         os.chdir(project)
         call = bind(project)
         operate(call, 'project_setup', {'source_repository': str(source), 'apply': True, 'create_dev': True})
         (project / '.graphtraj/roles.yml').write_text(
             'roles:\n  observer:\n    runtime: codex\n    model: gpt-5.3-codex\nrole_tree:\n  observer: {}\n')
-        registered = operate(call, 'ticket_register', {'ticket_id': '1', 'ticket_name': 'controlled-linux',
+        registered = operate(call, 'task_register', {'task_id': '1', 'task_name': 'controlled-linux',
             'title': 'Controlled Linux desktop observation', 'source': 'https://github.com/example/desktop-test/issues/1',
             'body': 'Controlled message/tool/usage records, not real model execution.', 'dependencies': []})
         result['registration'] = registered
-        graph = operate(call, 'ticket_graph', {})
-        assert len(graph['tickets']) == 1, graph
-        ticket_id = graph['tickets'][0]['ticket_id']
+        graph = operate(call, 'task_graph', {})
+        assert len(graph['tasks']) == 1, graph
+        task_id = graph['tasks'][0]['task_id']
         (project / 'controlled-input.txt').write_text('Disposable CI fixture authorized to emit known records.\n')
-        operate(call, 'ticket_update', {'ticket_id': ticket_id, 'status': 'ready',
+        operate(call, 'task_update', {'task_id': task_id, 'status': 'ready',
             'active_team_ordinal': None, 'worktree': None, 'branch': None, 'current_candidate': None,
             'caused_by_event_ids': [], 'evidence_refs': ['controlled-input.txt']})
         terminal = threading.Event()
@@ -79,7 +79,7 @@ def main() -> None:
                 listener.settimeout(30)
                 os.environ['LINUX_ADOPTION_CONTROL'] = str(Path(control) / 'fixture.sock')
                 with bind(project, event_receiver=receive) as host:
-                    launched = operate(host, 'swarm', {'tasks': [{'ticket_id': ticket_id,
+                    launched = operate(host, 'swarm', {'tasks': [{'task_id': task_id,
                         'role': 'observer', 'instruction': 'Emit the controlled desktop records and await test release.'}]})
                     task = launched['tasks'][0]
                     assert task['launch_status'] == 'launched', launched
@@ -89,7 +89,7 @@ def main() -> None:
                             connection.settimeout(30)
                             assert connection.recv(128) == b'controlled records ready\n'
                             environment = {**os.environ, 'ADOPTION_ACTIVITY_PROJECT': str(project),
-                                'ADOPTION_AGENT_ALIAS': task['alias'], 'ADOPTION_TICKET_ID': ticket_id}
+                                'ADOPTION_AGENT_ALIAS': task['alias'], 'ADOPTION_TASK_ID': task_id}
                             try:
                                 desktop = Path(__file__).resolve().parents[1] / 'desktop'
                                 completed = subprocess.run(['node', 'tests/adoption-linux.mjs'], cwd=desktop,

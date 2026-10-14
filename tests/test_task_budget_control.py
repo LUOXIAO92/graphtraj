@@ -14,8 +14,8 @@ import yaml
 from conftest import FakeCodex, InstalledCommands, app_server_peer, run_process, wait_for_file
 from graphtraj.execution import execution_budget as budgets
 from runner_fixtures import configure_harness
-from test_ticket_integration import accepted_ticket
-from test_ticket_graph import _change_status, _register, _ticket
+from test_task_integration import accepted_task
+from test_task_graph import _change_status, _register, _task
 
 
 BODY = '''---
@@ -34,7 +34,7 @@ execution_budget:
 @pytest.fixture
 def commands(request: pytest.FixtureRequest) -> InstalledCommands:
     """Use an explicitly supplied candidate installation or the suite wheel."""
-    candidate = os.environ.get('TICKET153_CANDIDATE_BIN')
+    candidate = os.environ.get('TASK153_CANDIDATE_BIN')
     if candidate:
         return InstalledCommands(Path(candidate) / 'graphtraj', Path(candidate) / 'agent-runner')
     from conftest import _install_commands
@@ -51,14 +51,14 @@ def installed_commands(commands: InstalledCommands) -> InstalledCommands:
 def monitor_at(path: Path) -> budgets.ExecutionBudgetMonitor:
     """Create a registered task budget without any programming seats."""
     path.mkdir()
-    (path / 'ticket.yml').write_text('current_definition: ticket.md\n')
-    (path / 'ticket.md').write_text(BODY)
+    (path / 'task.yml').write_text('current_definition: task.md\n')
+    (path / 'task.md').write_text(BODY)
     return budgets.execution_budget_monitor(path, '153', 'research')
 
 
 def sample_stop(monitor: budgets.ExecutionBudgetMonitor, monkeypatch: pytest.MonkeyPatch) -> dict:
     """Advance the existing budget clock and force the existing stochastic draw."""
-    before = yaml.safe_load((monitor.ticket_directory / 'execution-budget.yml').read_text())
+    before = yaml.safe_load((monitor.task_directory / 'execution-budget.yml').read_text())
     with monkeypatch.context() as patch:
         patch.setattr(budgets.time, 'time', lambda: before['started_at'] + 20 * 60)
         patch.setattr(budgets.random, 'random', lambda: .999)
@@ -69,13 +69,13 @@ def sample_stop(monitor: budgets.ExecutionBudgetMonitor, monkeypatch: pytest.Mon
 def test_budget_accepts_actual_work_and_keeps_allowance_across_roles_and_resume(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Renaming or resuming a participant never creates a fresh Ticket allowance."""
-    monitor = monitor_at(tmp_path / 'ticket')
+    """Renaming or resuming a participant never creates a fresh Task allowance."""
+    monitor = monitor_at(tmp_path / 'task')
     monitor.record_session('researcher', 'researcher')
     before = sample_stop(monitor, monkeypatch)
     monitor.record_session('analyst', 'analyst')
     monitor.continue_after_stop()
-    after = yaml.safe_load((monitor.ticket_directory / 'execution-budget.yml').read_text())
+    after = yaml.safe_load((monitor.task_directory / 'execution-budget.yml').read_text())
     assert after['sessions'] == {'researcher': 1, 'analyst': 1}
     for field in ('started_at', 'allowance_minutes'):
         assert after[field] == before[field]
@@ -91,7 +91,7 @@ def test_existing_notice_records_stay_readable_under_the_parent_key(
     monitor = monitor_at(tmp_path / 'retained-budget')
     monitor.record_session('researcher', 'researcher')
     sample_stop(monitor, monkeypatch)
-    usage_file = monitor.ticket_directory / 'execution-budget.yml'
+    usage_file = monitor.task_directory / 'execution-budget.yml'
 
     current = yaml.safe_load(usage_file.read_text())
     assert 'parent_notices' in current and 'leader_notices' not in current
@@ -126,15 +126,15 @@ def test_existing_notice_records_stay_readable_under_the_parent_key(
 
 def test_distinct_configured_roles_keep_independent_budget_counts(tmp_path: Path) -> None:
     """Each actual role crosses only its own configured Session threshold."""
-    monitor = monitor_at(tmp_path / 'ticket')
-    definition = monitor.ticket_directory / 'ticket.md'
+    monitor = monitor_at(tmp_path / 'task')
+    definition = monitor.task_directory / 'task.md'
     definition.write_text(BODY.replace(
         'planned_sessions: {researcher: 1}',
         'planned_sessions: {researcher: 1, engineer: 1, engineer_expert: 1}',
     ))
     for role in ('engineer', 'engineer-expert', 'researcher'):
         monitor.record_session(role, role)
-    usage = monitor.ticket_directory / 'execution-budget.yml'
+    usage = monitor.task_directory / 'execution-budget.yml'
     before = yaml.safe_load(usage.read_text())
     assert before['sessions'] == {'engineer': 1, 'engineer_expert': 1, 'researcher': 1}
     assert not before['notifications']
@@ -162,9 +162,9 @@ def test_runner_physically_interrupts_any_role_and_retains_trace_and_result(
         'roles': {role: {'runtime': 'codex', 'model': 'selected'}},
         'role_tree': {role: {}},
     }))
-    ticket = _ticket('153', 'research')
-    ticket['body'] = BODY + ticket['body']
-    _register(commands, root, ticket)
+    task = _task('153', 'research')
+    task['body'] = BODY + task['body']
+    _register(commands, root, task)
     _change_status(commands, root, '153', 'ready')
     release = tmp_path / 'release'
     scenario = '''
@@ -194,7 +194,7 @@ print(json.dumps({'type': 'item.completed', 'item': {'type': 'agent_message', 't
     env['BUDGET_PROTOCOL'] = str(protocol)
     env['BUDGET_RELEASE'] = str(release)
     batch = root / 'batch.yml'
-    batch.write_text(yaml.safe_dump({'tasks': [{'role': role, 'ticket_id': '153'}]}))
+    batch.write_text(yaml.safe_dump({'tasks': [{'role': role, 'task_id': '153'}]}))
     # No caller metadata means no notice reader; this path remains detached.
     result = subprocess.run(
         [str(commands.runner.with_name('graphtraj-mcp'))], cwd=root, env=env,
@@ -208,7 +208,7 @@ print(json.dumps({'type': 'item.completed', 'item': {'type': 'agent_message', 't
     launched = json.loads(result.stdout)['result']['structuredContent']['tasks'][0]
     alias = launched['alias']
     directory = root / '.graphtraj/runner/sessions' / alias
-    evidence = root / '.graphtraj/state/tickets/153-research'
+    evidence = root / '.graphtraj/state/tasks/153-research'
     try:
         wait_for_file(Path(launched['worktree_path']) / 'result.md')
         # The Session may wait normally without being classified as failed.
@@ -224,7 +224,7 @@ print(json.dumps({'type': 'item.completed', 'item': {'type': 'agent_message', 't
             other.record_session('author', 'author')
             root_child = directory.parent / (mode + '@x1')
             root_child.mkdir()
-            child_mapping = dict(parent_mapping, alias=root_child.name, ticket_id='other', parent=alias)
+            child_mapping = dict(parent_mapping, alias=root_child.name, task_id='other', parent=alias)
             if mode == 'admission':
                 launch = yaml.safe_load((directory / 'launch.yml').read_text())
                 launch['mapping'] = {key: value for key, value in child_mapping.items()
@@ -242,15 +242,15 @@ print(json.dumps({'type': 'item.completed', 'item': {'type': 'agent_message', 't
             sample_stop(other, monkeypatch)
             # Earlier releases retained this queue as leader_notices; notices
             # from such a record must still reach the actual parent.
-            record = yaml.safe_load((other.ticket_directory / 'execution-budget.yml').read_text())
+            record = yaml.safe_load((other.task_directory / 'execution-budget.yml').read_text())
             record['leader_notices'] = record.pop('parent_notices')
-            (other.ticket_directory / 'execution-budget.yml').write_text(yaml.safe_dump(record))
+            (other.task_directory / 'execution-budget.yml').write_text(yaml.safe_dump(record))
             if mode == 'admission':
                 stopped = run_process(
                     [str(commands.runner.with_name('python')), '-I', '-m',
                      'graphtraj.execution.runner_worker', str(root_child / 'launch.yml')],
-                    cwd=root, env={**env, 'GRAPHTRAJ_EVIDENCE': str(other.ticket_directory),
-                                   'GRAPHTRAJ_TICKET_NAME': 'research'}, timeout=10,
+                    cwd=root, env={**env, 'GRAPHTRAJ_EVIDENCE': str(other.task_directory),
+                                   'GRAPHTRAJ_TASK_NAME': 'research'}, timeout=10,
                 )
                 assert stopped.returncode == 1, stopped.stdout + stopped.stderr
                 failure = yaml.safe_load((root_child / 'launch-error.yml').read_text())
@@ -272,7 +272,7 @@ print(json.dumps({'type': 'item.completed', 'item': {'type': 'agent_message', 't
                 assert os.read(read_fd, 10000) == b''  # no extra caller copy
             finally:
                 os.close(read_fd)
-            retained = yaml.safe_load((other.ticket_directory / 'execution-budget.yml').read_text())
+            retained = yaml.safe_load((other.task_directory / 'execution-budget.yml').read_text())
             assert all(notice['delivered'] for notice in retained['parent_notices'])
         native = [json.loads(line) for line in protocol.read_text().splitlines()]
         assert len([request for request in native if request['method'] == 'turn/steer']) == 9
@@ -300,10 +300,10 @@ print(json.dumps({'type': 'item.completed', 'item': {'type': 'agent_message', 't
             [str(commands.runner.with_name('python')), '-I', '-c',
              'from pathlib import Path; from graphtraj.execution.execution_budget import ExecutionBudgetMonitor; '
              'import sys; ExecutionBudgetMonitor(Path(sys.argv[1]), "153", "research").deliver_parent_notices(Path(sys.argv[2]))',
-             str(pending.ticket_directory), str(root_child)], cwd=root, env=env, timeout=15,
+             str(pending.task_directory), str(root_child)], cwd=root, env=env, timeout=15,
         )
         assert resumed_notice.returncode == 0, resumed_notice.stderr
-        received = yaml.safe_load((pending.ticket_directory / 'execution-budget.yml').read_text())
+        received = yaml.safe_load((pending.task_directory / 'execution-budget.yml').read_text())
         assert all(notice['delivered'] for notice in received['parent_notices'])
         resumed_mapping = yaml.safe_load((directory / 'mapping.yml').read_text())
         assert resumed_mapping['session'] == parent_mapping['session']
@@ -340,13 +340,13 @@ def test_top_level_caller_channel_is_retained_without_claiming_agent_receipt(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The bound caller receives each event once; persistence is not native receipt."""
-    monitor = monitor_at(tmp_path / 'ticket')
+    monitor = monitor_at(tmp_path / 'task')
     monitor.record_session('researcher', 'researcher')
     sample_stop(monitor, monkeypatch)
     session = tmp_path / 'runner/sessions/research@x1'
     session.mkdir(parents=True)
     (session / 'launch.yml').write_text(yaml.safe_dump({'mapping': {
-        'alias': session.name, 'ticket_id': '153', 'parent': None,
+        'alias': session.name, 'task_id': '153', 'parent': None,
     }}))
     read_fd, write_fd = os.pipe()
     try:
@@ -360,7 +360,7 @@ def test_top_level_caller_channel_is_retained_without_claiming_agent_receipt(
     assert [event['threshold']['kind'] for event in events] == [
         'elapsed_minutes', 'additional_allowance', 'stochastic_stop',
     ]
-    usage = yaml.safe_load((monitor.ticket_directory / 'execution-budget.yml').read_text())
+    usage = yaml.safe_load((monitor.task_directory / 'execution-budget.yml').read_text())
     assert all(notice['channel_written'] and not notice['delivered'] for notice in usage['parent_notices'])
 
 
@@ -379,11 +379,11 @@ def test_sampled_stop_blocks_native_execution_admission(
         'roles': {'researcher': {'runtime': 'codex', 'model': 'selected'}},
         'role_tree': {'researcher': {}},
     }))
-    ticket = _ticket('153', 'research')
-    ticket['body'] = BODY + ticket['body']
-    _register(commands, root, ticket)
+    task_record = _task('153', 'research')
+    task_record['body'] = BODY + task_record['body']
+    _register(commands, root, task_record)
     _change_status(commands, root, '153', 'ready')
-    evidence = root / '.graphtraj/state/tickets/153-research'
+    evidence = root / '.graphtraj/state/tasks/153-research'
     monitor = budgets.execution_budget_monitor(evidence, '153', 'research')
     monitor.check('researcher', 'researcher')
     if when == 'before-create':
@@ -406,7 +406,7 @@ def test_sampled_stop_blocks_native_execution_admission(
     ))
     fake_codex.executable.write_text(fake_codex.executable.read_text().replace(str(original_peer), str(peer)))
     batch = root / 'batch.yml'
-    batch.write_text(yaml.safe_dump({'tasks': [{'role': 'researcher', 'ticket_id': '153'}]}))
+    batch.write_text(yaml.safe_dump({'tasks': [{'role': 'researcher', 'task_id': '153'}]}))
     result = run_process([str(commands.runner), '--swarm-input', str(batch)], cwd=root, env=env, timeout=20)
     assert result.returncode == 1, result.stdout + result.stderr
     task = yaml.safe_load(result.stdout)['tasks'][0]
@@ -428,18 +428,18 @@ def test_sampled_stop_blocks_native_execution_admission(
 @pytest.mark.parametrize('caller', ['cli', 'codex-binding'])
 def test_integration_helper_stops_and_returns_notice_to_its_caller(
     commands: InstalledCommands,
-    accepted_ticket: tuple,
+    accepted_task: tuple,
     fake_codex: FakeCodex,
     monkeypatch: pytest.MonkeyPatch,
     caller: str,
 ) -> None:
     """The synchronous integration helper interrupts instead of waiting on model work."""
-    root, worktrees, state, _ = accepted_ticket
+    root, worktrees, state, _ = accepted_task
     dev = worktrees / 'dev'
     (dev / 'TEAM_ROUND_DELIVERED.txt').write_text('conflicting integration work\n')
     run_process(['git', 'add', 'TEAM_ROUND_DELIVERED.txt'], cwd=dev).check_returncode()
     run_process(['git', 'commit', '-m', 'Independent integration work'], cwd=dev).check_returncode()
-    command = [str(commands.product), 'ticket', 'integrate', '--ticket-id', '83']
+    command = [str(commands.product), 'task', 'integrate', '--task-id', '83']
     validation = [sys.executable, '-c', 'pass']
     conflict = run_process(command + ['--', *validation], cwd=root)
     assert conflict.returncode == 1
@@ -465,8 +465,8 @@ def test_integration_helper_stops_and_returns_notice_to_its_caller(
             time.sleep(.02)
         assert mappings
         directory = mappings[0].parent
-        monitor = budgets.execution_budget_monitor(state / 'tickets/83-integration', '83', 'integration')
-        before = yaml.safe_load((monitor.ticket_directory / 'execution-budget.yml').read_text())
+        monitor = budgets.execution_budget_monitor(state / 'tasks/83-integration', '83', 'integration')
+        before = yaml.safe_load((monitor.task_directory / 'execution-budget.yml').read_text())
         with monkeypatch.context() as patch:
             patch.setattr(budgets.time, 'time', lambda: before['started_at'] + 100000)
             patch.setattr(budgets.random, 'random', lambda: .999)
@@ -481,11 +481,11 @@ def test_integration_helper_stops_and_returns_notice_to_its_caller(
         else:
             deliveries = yaml.safe_load(stdout)['stop_deliveries']
             assert len(deliveries) == 1
-            assert deliveries[0]['ticket']['ticket_id'] == '83'
+            assert deliveries[0]['task']['task_id'] == '83'
             assert deliveries[0]['delivered_at'] and deliveries[0]['triggered_at']
             assert not events  # one connected caller, no duplicate stderr channel
         assert not release.exists()  # stopped before the test/model chose to finish
-        usage = yaml.safe_load((monitor.ticket_directory / 'execution-budget.yml').read_text())
+        usage = yaml.safe_load((monitor.task_directory / 'execution-budget.yml').read_text())
         assert usage['allowance_minutes'] == before['allowance_minutes']
     finally:
         release.touch()

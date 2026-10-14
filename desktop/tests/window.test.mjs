@@ -56,7 +56,7 @@ test('actual Electron window uses native graph, safe preload, refresh and persis
     catch (error) { return String(error); }
   }), /Choose an added project/);
   await page.locator('.monitor-page:visible .react-flow__node').first().click();
-  await page.getByRole('complementary', { name: 'Ticket details' }).waitFor();
+  await page.getByRole('complementary', { name: 'Task details' }).waitFor();
   await page.getByText('No participating Agents recorded.').waitFor();
   await page.evaluate(() => window.graphtraj.copyText('Observed plain text'));
   assert.equal(await app.evaluate(({ clipboard }) => clipboard.readText()), 'Observed plain text');
@@ -65,15 +65,15 @@ test('actual Electron window uses native graph, safe preload, refresh and persis
   await page.getByRole('button', { name: 'Close details' }).click();
   await page.getByRole('searchbox').fill('dependent');
   await page.getByRole('button', { name: '#2 dependent', exact: true }).click();
-  await page.getByRole('complementary', { name: 'Ticket details' }).waitFor();
+  await page.getByRole('complementary', { name: 'Task details' }).waitFor();
   await page.getByRole('searchbox').fill('');
-  const nativeBeforeClose = fixtures.operate(second, 'ticket_graph');
+  const nativeBeforeClose = fixtures.operate(second, 'task_graph');
   await app.close();
   app = await electron.launch({ args });
   page = await app.firstWindow();
   await page.getByText('second project', { exact: true }).waitFor();
-  assert.deepEqual(fixtures.operate(second, 'ticket_graph'), nativeBeforeClose);
-  fixtures.operate(second, 'ticket_register', fixtures.ticket('3', 'newly-observed', ['2']));
+  assert.deepEqual(fixtures.operate(second, 'task_graph'), nativeBeforeClose);
+  fixtures.operate(second, 'task_register', fixtures.task('3', 'newly-observed', ['2']));
   await page.getByText('newly observed', { exact: true }).waitFor({ timeout: 15000 });
   const moved = second + '-moved';
   await fs.rename(second, moved);
@@ -83,6 +83,6 @@ test('actual Electron window uses native graph, safe preload, refresh and persis
   await page.getByRole('button', { name: `Remove ${canonicalSecond}`, exact: true }).click();
   await page.locator('.project-button').filter({ hasText: canonicalFirst }).click();
   await page.getByText('first project', { exact: true }).waitFor();
-  assert.equal(fixtures.operate(second, 'ticket_graph').tickets.length, 3);
+  assert.equal(fixtures.operate(second, 'task_graph').tasks.length, 3);
   // The after hook removes the remaining fixture entry and closes this window.
 });

@@ -15,7 +15,7 @@ from conftest import FakeCodex, InstalledCommands, app_server_peer, run_process,
 from graphtraj.runtimes.codex.host_events import current_connection, send_event
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 from runner_fixtures import configure_harness
-from test_session_alias_control import _register_ready_ticket
+from test_session_alias_control import _register_ready_task
 from test_task_budget_control import BODY
 
 
@@ -146,7 +146,7 @@ def test_root_completion_after_entry_and_send_exit(
         'roles': {'researcher': {'runtime': 'codex', 'model': 'selected'}},
         'role_tree': {'researcher': {}},
     }))
-    _register_ready_ticket(installed_commands, root, body=BODY)
+    _register_ready_task(installed_commands, root, body=BODY)
     fake_codex.executable.write_text(
         '#!' + sys.executable + '\n' + PROXY
         + app_server_peer(CHILD, "os.environ['GRAPHTRAJ_PARENT_ALIAS']"),
@@ -176,7 +176,7 @@ def test_root_completion_after_entry_and_send_exit(
         assert 'associated' in json.loads(entered.stdout)['systemMessage']
     if not capture_host:
         environment.pop('CODEX_THREAD_ID')
-    batch = {'tasks': [{'ticket_id': '76', 'role': 'researcher', 'instruction': 'wait for release'}]}
+    batch = {'tasks': [{'task_id': '76', 'role': 'researcher', 'instruction': 'wait for release'}]}
     batch_file = tmp_path / 'batch.yml'
     batch_file.write_text(yaml.safe_dump(batch))
     if entry == 'cli':

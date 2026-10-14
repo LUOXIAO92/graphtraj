@@ -259,3 +259,20 @@ disposal drain pending semantic records, with failed flushes available for retry
 The installed-library callback checks cover collection, flush, replay and
 disposal. The JSON files above remain structural examples, not live model captures
 or evidence that an existing project's history has been migrated.
+
+## Pi collection
+
+The Pi adapter archives native Session records and branch ancestry in the same
+project-local store. Complete native JSONL records supply replay checkpoints;
+missing parent history remains an explicit missing inherited boundary.
+
+Streaming text and reasoning use compact runs instead of a permanent raw RPC
+log for each fragment. Tool, permission, error, usage and completion boundaries
+remain separate. Fragment size does not turn one response into more messages
+or duplicate its usage. Interruption preserves received partial output.
+
+Committed drafts and replayable native records support recovery. A hard crash
+can still lose received RPC output after the last checkpoint if Pi has not
+persisted that output; the archive does not claim this tail is recoverable.
+Controlled native SessionManager and subprocess checks cover these paths;
+they do not constitute live provider inference or migration of existing history.

@@ -86,7 +86,8 @@ def execution(
 
 @pytest.mark.parametrize('configured,inherited,source', [
     ('https://configured.example', 'https://environment.example', 'configuration'),
-    (None, 'https://environment.example', 'environment'),
+    (None, 'https://environment.example', 'native'),
+    (None, 'https://secret@example.com', 'native'),
     (None, None, 'native'),
 ])
 def test_claude_retains_endpoint_on_resume(
@@ -104,28 +105,28 @@ def test_claude_retains_endpoint_on_resume(
         monkeypatch.setenv('ANTHROPIC_BASE_URL', inherited)
     _, prepared = context(tmp_path, **({'base_url': configured} if configured else {}))
     evidence = prepared.evidence_document()
-    assert evidence['base_url'] == (configured or inherited)
+    assert evidence['base_url'] == configured
     assert evidence['base_url_source'] == source
     with ExitStack() as stack:
         turn, _, _ = execution(tmp_path, stack, 'first', prepared_context=prepared)
         first = turn.run()
+    assert json.loads((tmp_path / 'native-endpoint.json').read_text()) == configured
     monkeypatch.setenv('ANTHROPIC_BASE_URL', 'https://later.example')
     with ExitStack() as stack:
         turn, _, _ = execution(tmp_path, stack, 'resume', first['session_id'], prepared_context=prepared)
         assert turn.run()['outcome'] == 'completed'
-    assert json.loads((tmp_path / 'native-endpoint.json').read_text()) == (configured or inherited)
+    assert json.loads((tmp_path / 'native-endpoint.json').read_text()) == configured
 
 
 @pytest.mark.parametrize('endpoint', [
     'https://secret@example.com', 'https://example.com?token=secret',
 ])
-def test_claude_rejects_secret_environment_endpoint(
+def test_claude_rejects_secret_configured_endpoint(
     tmp_path: Path, claude_environment: None, monkeypatch: pytest.MonkeyPatch, endpoint: str,
 ) -> None:
-    """Reject credential-bearing inherited URLs without reproducing secrets in diagnostics."""
-    monkeypatch.setenv('ANTHROPIC_BASE_URL', endpoint)
+    """Reject credential-bearing selected URLs without reproducing secrets in diagnostics."""
     with pytest.raises(RuntimeAdapterError) as caught:
-        context(tmp_path)
+        context(tmp_path, base_url=endpoint)
     assert 'secret' not in str(caught.value)
 
 

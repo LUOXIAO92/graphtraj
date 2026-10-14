@@ -123,9 +123,9 @@ class ClaudeRuntimeAdapter:
             raise RuntimeAdapterError('ROLE_CONFIG_INVALID', 'Unsupported Claude effort.')
         if settings.model != 'claude-opus-5-5' and not settings.connection:
             raise RuntimeAdapterError('ROLE_CONFIG_INVALID', 'Use exact claude-opus-5-5 or an explicit model connection.')
-        base_url = settings.base_url or os.environ.get('ANTHROPIC_BASE_URL') or None
-        base_url_source = ('configuration' if settings.base_url else
-                           'environment' if base_url else 'native')
+        # Only an explicit connection endpoint may replace the official service.
+        base_url = settings.base_url
+        base_url_source = 'configuration' if base_url else 'native'
         if base_url:
             from urllib.parse import urlsplit
 

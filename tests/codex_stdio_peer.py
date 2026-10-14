@@ -85,7 +85,7 @@ def write_native_prefix(rollout: Path) -> None:
     records = [
         json.dumps({
             'timestamp': 'native-1', 'type': 'session_meta',
-            'payload': {'base_instructions': {'text': 'original'}},
+            'payload': {'id': 'thread-1', 'base_instructions': {'text': 'original'}},
         }, separators=(',', ':')),
         json.dumps({
             'timestamp': 'native-2', 'type': 'response_item',

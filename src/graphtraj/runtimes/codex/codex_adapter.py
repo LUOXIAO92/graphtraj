@@ -18,6 +18,8 @@ from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
 import yaml
 
+from graphtraj.runtimes.codex.session_archive import CodexSessionArchive
+
 from graphtraj.runtimes.runtime_adapter import (
     NativeReplacement,
     RuntimeAdapterError,
@@ -820,8 +822,9 @@ class CodexNativeTrace:
 
     The Trace entry is a symbolic link to the native rollout file that the
     Runtime owns, so a reader sees the native records themselves, including
-    records appended while the Session runs, and no copy is retained.
-    GraphTraj never writes through this link.
+    records appended while the Session runs. An assigned archive additionally
+    commits those records into project storage. GraphTraj never writes through
+    the native link.
     """
 
     def __init__(
@@ -830,6 +833,8 @@ class CodexNativeTrace:
         session: str,
         rollout_path: Path | None,
         codex_home: Path,
+        *,
+        archive: CodexSessionArchive | None = None,
     ) -> None:
         """Record the Trace entry and the native Session it must read."""
 
@@ -837,15 +842,18 @@ class CodexNativeTrace:
         self._session = session
         self._codex_home = codex_home
         self._rollout = rollout_path
+        self._archive = archive
 
     def collect(self) -> None:
-        """Link the Trace entry to the native Session file once it exists."""
+        """Archive new records and link the Trace when the native file exists."""
 
         if self._rollout is None or not self._rollout.is_file():
             discovered = _find_native_session(self._session, self._codex_home)
             if discovered is None:
                 return
             self._rollout = discovered
+        if self._archive is not None:
+            self._archive.collect(self._rollout)
         if _linked_to(self._trace_file, self._rollout):
             return
         if _retains_records(self._trace_file):

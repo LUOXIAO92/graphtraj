@@ -8,6 +8,7 @@ import math
 import os
 import select
 import signal
+import sqlite3
 import threading
 import time
 import uuid
@@ -24,6 +25,7 @@ from graphtraj.runtimes.codex.codex_adapter import (
 )
 from graphtraj.runtimes.runtime_adapter import RuntimeContext, RuntimeExecutionResult
 from graphtraj.runtimes.codex.websocket import CodexWebSocket
+from graphtraj.runtimes.codex.session_archive import CodexSessionArchive
 
 
 _DEFAULT_TIMEOUT = object()
@@ -132,6 +134,7 @@ class CodexSession:
     rollout_path: Path | None
     configuration: dict[str, Any] = field(default_factory=dict)
     turn_settings: dict[str, Any] = field(default_factory=dict)
+    inherited_history: dict[str, Any] | None = field(default=None, repr=False)
 
 
 @dataclass(frozen=True)
@@ -242,9 +245,10 @@ class CodexAppServer:
         self._closed = False
         self._opened = False
         self._close_task: asyncio.Task[None] | None = None
-        # ponytail: one observer drains these per-connection control records;
-        # durable, incremental native record retention belongs to C.2.
+        # One observer drains control records. Fork archives receive their own
+        # native notices before delivery; persistent Sessions use their rollout.
         self._notifications: asyncio.Queue[dict[str, Any] | CodexAdapterError] = asyncio.Queue()
+        self._fork_archives: dict[str, CodexSessionArchive] = {}
 
     async def __aenter__(self) -> CodexAppServer:
         """Open stdio and perform initialize/initialized before Session operations."""
@@ -426,13 +430,17 @@ class CodexAppServer:
         self._sessions[session.thread_id] = session
         return session
 
-    def retain_native_trace(self, session: CodexSession, trace_file: Path) -> None:
+    def retain_native_trace(
+        self, session: CodexSession, trace_file: Path,
+        *, archive: CodexSessionArchive | None = None,
+    ) -> None:
         """Read one owned Session's native records through the given Trace entry.
 
         The Trace entry becomes a symbolic link to the Runtime-owned native
         rollout as soon as that file exists, and keeps reading it while the
         Session runs. Calling this once per connection Session preserves C.1's
-        Session and execution handles unchanged.
+        Session and execution handles unchanged. An archive copies complete
+        native records and commits their source cursor in project storage.
         """
 
         self._require_session(session)
@@ -454,8 +462,9 @@ class CodexAppServer:
                         'CODEX_HOME', Path.home() / '.codex',
                     )
                 ),
+                archive=archive,
             )
-        except OSError as error:
+        except (OSError, ValueError, sqlite3.Error) as error:
             raise CodexAdapterError(
                 'RUNTIME_TRACE_FAILED', 'The native Codex Session Trace could not be retained.',
                 terminal_confirmed=False,
@@ -463,7 +472,7 @@ class CodexAppServer:
         self._traces[session.thread_id] = trace
         try:
             trace.collect()
-        except OSError as error:
+        except (OSError, ValueError, sqlite3.Error) as error:
             raise CodexAdapterError(
                 'RUNTIME_TRACE_FAILED', 'The native Codex Session Trace could not be retained.',
                 terminal_confirmed=False,
@@ -592,7 +601,7 @@ class CodexAppServer:
                 await asyncio.sleep(0.02)
         except asyncio.CancelledError:
             raise
-        except OSError:
+        except (OSError, ValueError, sqlite3.Error):
             self._fail(CodexAdapterError(
                 'RUNTIME_TRACE_FAILED', 'The native Codex Session Trace could not be retained.',
                 terminal_confirmed=False,
@@ -606,7 +615,7 @@ class CodexAppServer:
             return
         try:
             trace.collect()
-        except OSError as error:
+        except (OSError, ValueError, sqlite3.Error) as error:
             failure = CodexAdapterError(
                 'RUNTIME_TRACE_FAILED', 'The native Codex Session Trace could not be retained.',
                 terminal_confirmed=False,
@@ -762,7 +771,7 @@ class CodexAppServer:
             raise CodexAdapterError('RUNTIME_REQUEST_INVALID', 'Main model metadata is unavailable.')
         parameters = {
             'threadId': parent['id'], 'model': parent['model'],
-            'modelProvider': parent['modelProvider'], 'excludeTurns': True,
+            'modelProvider': parent['modelProvider'], 'excludeTurns': False,
             'ephemeral': True,
         }
         settings = parent.get('turn_settings', {})
@@ -803,9 +812,17 @@ class CodexAppServer:
         turn_settings = {}
         if settings.get('collaboration_mode') is not None:
             turn_settings['collaborationMode'] = settings['collaboration_mode']
-        session = CodexSession(thread['id'], rollout, facts, turn_settings)
+        session = CodexSession(thread['id'], rollout, facts, turn_settings, thread)
         self._sessions[session.thread_id] = session
         return session
+
+    def retain_fork_archive(self, session: CodexSession, archive: CodexSessionArchive) -> None:
+        """Archive an owned ephemeral fork at its actual native inheritance cut."""
+        self._require_session(session)
+        if session.inherited_history is None or session.thread_id in self._fork_archives:
+            raise CodexAdapterError('RUNTIME_LIFECYCLE_INVALID', 'A new native fork is required.')
+        archive.seed_fork(session.inherited_history)
+        self._fork_archives[session.thread_id] = archive
 
     async def is_current_turn(self, session: str, turn: str) -> bool:
         """Check the exact live turn without loading dialogue or execution items."""
@@ -954,6 +971,9 @@ class CodexAppServer:
         if 'method' in message:
             if not isinstance(message['method'], str) or not isinstance(message.get('params'), dict):
                 raise ValueError('Invalid native method/params')
+            archive = self._fork_archives.get(message['params'].get('threadId'))
+            if archive is not None:
+                archive.notice(message)
             if 'id' in message:
                 request = CodexServerRequest(message['id'], message['method'], message['params'])
                 if request.request_id in self._handlers:
@@ -1059,6 +1079,9 @@ class CodexAppServer:
                     or (state and state.terminal)
                 ):
                     return  # Withdrawal or completion won the race with the reply.
+                archive = self._fork_archives.get(request.params.get('threadId'))
+                if archive is not None:
+                    archive.reply(request.request_id, result)
                 await self._send({'id': request.request_id, 'result': result})
             else:
                 scoped = all(isinstance(value, str) and value for value in key)

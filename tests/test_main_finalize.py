@@ -72,7 +72,9 @@ for line in sys.stdin:
         # The peer owns context inheritance; the caller supplies no history.
         parent_context = ['original developer instructions','private context sentinel']
         child = {'id':options.get('child','checker'),'forkedFromId':'main',
-                 'ephemeral':params.get('ephemeral', False)}
+                 'ephemeral':params.get('ephemeral', False),
+                 'turns': [{'id':'inherited-turn','items':[{'type':'agentMessage',
+                            'id':'inherited-answer','text':'inherited context'}]}]}
         if 'records' in options:
             child['path'] = str(root / 'checker.jsonl')
             records = [{'type':'session_meta','payload':{'id':child['id']}}]
@@ -214,7 +216,7 @@ def test_main_end_decision(
     assert sum(item['method'] == 'thread/fork' for item in wire) == 1
     fork = next(item['params'] for item in wire if item['method'] == 'thread/fork')
     assert fork == {'threadId':'main', 'model':'actual-model', 'modelProvider':'actual-provider',
-                    'excludeTurns':True, 'ephemeral':True}
+                    'excludeTurns':False, 'ephemeral':True}
     context = json.loads((root / 'child-context.json').read_text())
     assert context[:2] == ['original developer instructions', 'private context sentinel']
     assert len(context) == 3
@@ -606,6 +608,25 @@ def test_native_start_resume_and_stop_need_no_main_binding_input(host: tuple[Pat
     assert len(forks) == 1
     assert forks[0]['config']['model_reasoning_effort'] == 'high'
     assert [r['params']['threadId'] for r in wire if r['method'] == 'turn/start'] == ['checker']
+    from graphtraj.sessions.protocol import native_record
+    from graphtraj.sessions.storage import SessionStore, session_path
+
+    state = root / '.graphtraj/state'
+    with SessionStore(session_path(state, 'codex:main')) as archive:
+        archive.validate()
+        assert [native_record(event) for event in archive.page()['events']] == [
+            json.loads(line) for line in (root / 'rollout.jsonl').read_text().splitlines()
+        ]
+        assert archive.header['graphtraj']['agentId'] == 'main'
+    with SessionStore(session_path(state, 'codex:checker')) as archive:
+        archive.validate()
+        events = archive.page()['events']
+        assert archive.header['parentSession'] == 'codex:main'
+        assert archive.header['graphtraj']['agentId'] != 'main'
+        assert native_record(events[0])['turns'][0]['id'] == 'inherited-turn'
+        assert events[1]['type'] == 'session/end-seed'
+        assert events[1]['data'] == {'inherited': True}
+        assert any(native_record(event).get('method') == 'item/completed' for event in events[2:])
 
 
 @pytest.mark.parametrize('source', [
@@ -1064,7 +1085,8 @@ def test_consecutive_native_checks_attribute_all_counters_to_current_checker(
               ((85000, 73000, 1200, 500), (75, 50, 12, 4), (125, 100, 28, 8))]
     for index, (history, first, second) in enumerate(rounds):
         child = f'checker-{index}'
-        rollout(root)
+        if index == 0:
+            rollout(root)
         if with_baseline:
             with (root / 'rollout.jsonl').open('a') as stream:
                 stream.write(json.dumps(token_record(**dict(zip(fields, history)))) + '\n')

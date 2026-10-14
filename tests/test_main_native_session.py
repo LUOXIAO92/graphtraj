@@ -40,6 +40,17 @@ def test_main_start_and_resume_preserve_native_configuration(
         assert resumed['last_agent_message'] == 'second'
 
     asyncio.run(exercise())
+    from graphtraj.sessions.protocol import native_record
+    from graphtraj.sessions.storage import SessionStore, session_path
+
+    with SessionStore(session_path(tmp_path / '.graphtraj/state', 'codex:thread-1')) as archive:
+        archive.validate()
+        saved = [native_record(event) for event in archive.page()['events']]
+        source = next((tmp_path / 'native').glob('*.jsonl'))
+        assert saved == [json.loads(line) for line in source.read_text().splitlines()]
+        assert archive.header['graphtraj']['agentId'] == 'main'
+        source.unlink()
+        assert [native_record(event) for event in archive.page()['events']] == saved
     requests = [json.loads(line) for line in protocol.read_text().splitlines()]
     start = next(item['params'] for item in requests if item.get('method') == 'thread/start')
     resume = next(item['params'] for item in requests if item.get('method') == 'thread/resume')

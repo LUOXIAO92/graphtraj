@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Awaitable, Callable
 
 from graphtraj import file_lock
+from graphtraj.runtimes.codex.session_archive import CodexSessionArchive
 from graphtraj.configuration.project_configuration import load_project_configuration
 from graphtraj.execution.runner_models import RunnerError
 from graphtraj.execution.runner_status import caller_alias
@@ -136,7 +137,9 @@ async def run_main(
                 original = json.loads((record / 'session.yml').read_text())['session']
                 session = await adapter.resume_session(context, original)
             native_session = session.thread_id
-            adapter.retain_native_trace(session, record / 'events.jsonl')
+            adapter.retain_native_trace(session, record / 'events.jsonl', archive=CodexSessionArchive(
+                configuration.state, str(configuration.harness_root), 'main', session.thread_id,
+            ))
             execution = await adapter.start_execution(session, instruction)
             result = await adapter.wait(execution)
             (record / 'execution.yml').write_text(json.dumps(result) + '\n')

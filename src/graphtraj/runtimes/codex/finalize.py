@@ -187,6 +187,13 @@ def check(
             child = await client.fork_session(parent)
             child_id = child.thread_id
             created(child_id)
+            from graphtraj.configuration.project_configuration import load_project_configuration
+            from graphtraj.runtimes.codex.session_archive import CodexSessionArchive
+
+            project = load_project_configuration(Path(binding['cwd']))
+            client.retain_fork_archive(child, CodexSessionArchive(
+                project.state, str(project.harness_root), 'checker:' + child_id, child_id,
+            ))
             usage = CodexCheckUsage(child.rollout_path, child_id,
                                     parent['turn_settings'].get('check_usage_baseline'))
             evidence = {

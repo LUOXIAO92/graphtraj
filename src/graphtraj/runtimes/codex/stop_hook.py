@@ -64,6 +64,7 @@ def native_event(event: dict) -> dict:
     binding = session_binding(root, 'codex', session)
     if name == 'SessionStart':
         bind_session(connection, root, activity_source=event.get('transcript_path'))
+        _archive(root, session, event['transcript_path'])
         return {'systemMessage': 'GraphTraj Main Session associated.'}
     if not binding.is_file():
         if not owns_native_root(runner, connection):
@@ -71,6 +72,7 @@ def native_event(event: dict) -> dict:
         # A hook can be adopted after this host's startup event was consumed.
         # Use the real Stop context and existing owner proof, not a fake start.
         bind_session(connection, root, activity_source=event.get('transcript_path'))
+    _archive(root, session, event['transcript_path'])
     result = check_main_finalize(binding, event)
     if not result:
         return skipped('the bound native Session/turn did not match, or its owning turn stopped. '
@@ -86,6 +88,16 @@ def native_event(event: dict) -> dict:
         field = next((key for key in ('systemMessage', 'reason', 'stopReason') if key in result), 'systemMessage')
         result[field] = result.get(field, '') + '\nMain activity source could not be retained.'
     return result
+
+
+def _archive(root: Path, session: str, transcript: str) -> None:
+    """Archive only after native source and Main ownership checks have passed."""
+    from graphtraj.configuration.project_configuration import load_project_configuration
+    from graphtraj.runtimes.codex.session_archive import CodexSessionArchive
+
+    configuration = load_project_configuration(root)
+    CodexSessionArchive(configuration.state, str(configuration.harness_root),
+                        'main', session).collect(Path(transcript))
 
 
 @click.command()
@@ -120,6 +132,12 @@ def main(binding: Path | None, hook_session: str | None, configuration: bool) ->
             result = {}
         else:
             result = check_main_finalize(binding, event)
+            if result and event.get('transcript_path'):
+                saved = yaml.safe_load(binding.read_text(encoding='utf-8'))
+                metadata, _ = event_record(event)
+                if metadata['id'] != saved['session']:
+                    raise ValueError('Main archive source does not match the bound native Session.')
+                _archive(Path(saved['cwd']), saved['session'], event['transcript_path'])
     except KeyboardInterrupt:
         raise SystemExit(130)
     except Exception as error:

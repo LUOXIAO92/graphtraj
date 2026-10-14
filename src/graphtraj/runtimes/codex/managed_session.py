@@ -19,6 +19,7 @@ from graphtraj.configuration.project_configuration import (
     load_project_configuration,
 )
 from graphtraj.configuration.project_roles import load_project_roles
+from graphtraj.runtimes.codex.session_archive import CodexSessionArchive
 from graphtraj.runtimes.codex.approval import approval_route, review_request
 
 from graphtraj.execution.runner_batch import read_session_task
@@ -211,9 +212,17 @@ class CodexManagedExecution:
                     'session': session.thread_id,
                     'rollout_path': str(session.rollout_path) if session.rollout_path else None,
                 })
-                adapter.retain_native_trace(session, self.trace_file)
                 if self.created is not None:
                     self.created(session.thread_id, adapter.service_pid)
+                archive = None
+                if self.created is not None:
+                    configuration = load_project_configuration(root)
+                    mapping = yaml.safe_load((self.directory / 'mapping.yml').read_text())
+                    archive = CodexSessionArchive(
+                        configuration.state, str(configuration.harness_root),
+                        self.directory.name, session.thread_id, (mapping['ticket_id'],),
+                    )
+                adapter.retain_native_trace(session, self.trace_file, archive=archive)
                 if self.termination_requested:
                     raise RuntimeAdapterError(
                         "RUNTIME_EXECUTION_INTERRUPTED", "Stopped before native execution started.",

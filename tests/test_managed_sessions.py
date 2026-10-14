@@ -194,6 +194,36 @@ def test_returned_launch_keeps_execution_owned(managed_project: ManagedProject) 
     assert status['execution_id']
 
 
+def test_managed_archive_is_readable_after_native_shutdown(managed_project: ManagedProject) -> None:
+    """Public Runner start/resume collect into one independent, authorized archive."""
+    from graphtraj.execution.runner_status import runtime_caller
+    from graphtraj.interfaces.gateway import handle_request
+    from graphtraj.sessions.protocol import native_record
+    from graphtraj.workspace.runner_project import discover_runner_directory
+
+    root, cause, call, _ = managed_project
+    launched = call('launch', launch_document())['tasks'][0]
+    alias = launched['alias']
+    call('send', [alias, 'complete first execution', [cause]])
+    observe(call, alias, 'idle', 'completed')
+    call('send', [alias, 'hold', [cause]])
+    observe(call, alias, 'running')
+    call('interrupt', [alias])
+    observe(call, alias, 'idle', 'interrupted')
+    runner = discover_runner_directory(root)
+    directory = runner / 'sessions' / alias
+    metadata = yaml.safe_load((directory / 'session.yml').read_text())
+    native = Path(metadata['rollout_path'])
+    expected = [json.loads(line) for line in native.read_text().splitlines()]
+    native.unlink()
+    with runtime_caller(runner, alias):
+        result = handle_request({'action': 'execute', 'feature': 'session_read',
+                                 'arguments': {'session_id': 'codex:' + launched['session']}}, cwd=root)
+    assert not result.failed
+    assert [native_record(event) for event in result.document['events']] == expected
+    assert result.document['header']['graphtraj']['agentId'] == alias
+
+
 @pytest.mark.skipif(os.environ.get('CODEX_MANAGED_REAL') != '1', reason='explicit real Codex acceptance probe')
 def test_real_registered_session(managed_project: ManagedProject) -> None:
     """Exercise public Runner ownership against the installed real Codex Adapter."""

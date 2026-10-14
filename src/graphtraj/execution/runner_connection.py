@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import ctypes
+import math
 import os
 import stat
 import sys
@@ -137,9 +138,21 @@ def session_operation(mapping: dict, operation: str, **arguments: object) -> dic
 
 
 def connection_operation(
-    address: str | dict, document: dict, *, authenticate: bool = False,
+    address: str | dict,
+    document: dict,
+    *,
+    authenticate: bool = False,
+    response_timeout: float = OPERATION_TIMEOUT_SECONDS,
 ) -> dict:
-    """Exchange one request with an existing owner, retaining acknowledgement semantics."""
+    """Exchange one request, bounding its reply wait without changing ownership.
+
+    Ordinary controls retain the default deadline. A caller hosting a finite
+    observation may include that observation's duration in its response wait.
+    This timeout neither cancels an accepted operation nor grants execution time.
+    """
+    if (type(response_timeout) not in (int, float)
+            or not math.isfinite(response_timeout) or response_timeout <= 0):
+        raise RunnerError('invalid-input', 'response_timeout must be finite and positive.')
     if isinstance(address, dict):
         from graphtraj.runtimes.runtime_adapter import select_runtime_adapter
 
@@ -161,7 +174,7 @@ def connection_operation(
                 stream.flush()
                 os.replace(request, request.with_suffix('.json'))
                 response_file = Path(directory) / 'response.json'
-                deadline = time.monotonic() + OPERATION_TIMEOUT_SECONDS
+                deadline = time.monotonic() + response_timeout
                 while not response_file.is_file():
                     if time.monotonic() >= deadline:
                         raise TimeoutError('Session control timed out; delivery is unconfirmed.')

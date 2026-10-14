@@ -18,13 +18,22 @@ from test_result_submission import result_project
 from test_codex_app_server import context, peer
 
 
-def run_cli(module: str, root: Path, address: str, *arguments: str, **claims: str) -> subprocess.CompletedProcess:
+def run_cli(
+    module: str,
+    root: Path,
+    address: str,
+    *arguments: str,
+    process_timeout: float = 20,
+    input_text: str | None = None,
+    **claims: str,
+) -> subprocess.CompletedProcess:
     """Execute one public entry in a distinct process, retaining real kernel locks."""
     environment = {**os.environ, 'PYTHONPATH': str(Path(__file__).resolve().parents[1] / 'src'),
                    CONNECTION_ENV: address, **claims}
     return subprocess.run(
         [sys.executable, '-c', f'from {module} import main; main()', *arguments],
-        cwd=root, env=environment, capture_output=True, text=True, timeout=20,
+        cwd=root, env=environment, capture_output=True, text=True,
+        timeout=process_timeout, input=input_text,
     )
 
 

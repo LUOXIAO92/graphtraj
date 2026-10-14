@@ -54,7 +54,8 @@ def host_peer(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
                 result['result'] = {'thread':{'id':'wrong' if mode == 'wrong' else 'original-host', 'status':{'type':'notLoaded' if mode == 'unloaded' else 'active' if mode in ('active','turn','quiet','unrelated','drop') else 'idle'}}}
                 result['result']['thread'].update(cwd=str(root), source='appServer', sessionId='native-session')
                 if subscribed and mode in ('active','turn','quiet','unrelated','drop'):
-                    (root / 'mode').write_text('idle')
+                    if not (root / 'keep-active').exists():
+                        (root / 'mode').write_text('idle')
 """
     notifications = """
             if subscribed and request['method'] == 'thread/read':
@@ -88,6 +89,104 @@ def host_peer(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         {'parent':None, 'parent_connection':connection}, tmp_path,
     ))
     return tmp_path
+
+
+@pytest.fixture
+def hosted_parent(host_peer: Path, monkeypatch: pytest.MonkeyPatch):
+    """Use real registered CLI ownership, replacing only the native peer transport."""
+    from graphtraj.execution import runner_status
+    from graphtraj.execution.runner_heartbeat import hold_ownership
+    from graphtraj.interfaces.hosted_cli import cli_connection
+    from graphtraj.runtimes.codex.managed_session import native_operation_features
+    from graphtraj.workspace.runner_project import discover_runner_directory
+    from test_hosted_cli import own_process
+    from test_result_submission import result_project
+
+    monkeypatch.setattr(parent_status, 'discover_runner_directory', discover_runner_directory)
+    monkeypatch.setattr(parent_status, 'caller_alias', runner_status.caller_alias)
+    monkeypatch.setattr(parent_status, 'read_alias_mapping', runner_status.read_alias_mapping)
+    runner, _, _ = result_project(host_peer)
+    directory = own_process(runner)
+    import yaml
+
+    path = directory / 'mapping.yml'
+    mapping = yaml.safe_load(path.read_text())
+    mapping['parent_connection'] = {
+        'runtime': 'codex', 'session': 'original-host', 'codex_home': str(host_peer / 'home'),
+    }
+    path.write_text(yaml.safe_dump(mapping))
+    (host_peer / 'mode').write_text('quiet')
+    (host_peer / 'keep-active').touch()
+    with hold_ownership(directory, os.getpid()), cli_connection(
+        host_peer, 'research@x1', native_operation_features(),
+    ) as address:
+        yield host_peer, address
+
+
+def test_hosted_cli_waits_for_full_parent_observation(hosted_parent: tuple[Path, str]) -> None:
+    """The genuine 45-second observation must outlive the ordinary 10-second channel limit."""
+    import time
+    import yaml
+    from test_hosted_cli import run_cli
+
+    root, address = hosted_parent
+    started = time.monotonic()
+    result = run_cli('graphtraj.interfaces.cli.agent_runner', root, address,
+                     'parent-status', '--include-hooks', '--timeout-seconds', '45', process_timeout=60)
+    elapsed = time.monotonic() - started
+    # A completed observation window with no idle event has exit status 1;
+    # its structured timeout is distinct from a lost transport response.
+    assert result.returncode == 1, result.stdout + result.stderr
+    document = yaml.safe_load(result.stdout)
+    assert 'error' not in document
+    assert document['alias'] == 'research@x1' and document['outcome'] == 'timeout'
+    assert document['observations'][0]['activity'] == 'active'
+    assert 45 <= elapsed < 58
+    wire = [json.loads(line)['request'] for line in (root / 'wire.jsonl').read_text().splitlines()]
+    assert any(row['method'] == 'thread/resume' for row in wire)
+    assert not any(row['method'] in {'turn/start', 'turn/steer'} for row in wire)
+
+
+@pytest.mark.parametrize('timeout', [-1, float('nan'), float('inf'), True, '45', None])
+def test_hosted_cli_rejects_invalid_parent_observation(
+    hosted_parent: tuple[Path, str], timeout: object,
+) -> None:
+    """Raw public envelopes cannot obtain unbounded waits or weaken argument validation."""
+    from test_hosted_cli import run_cli
+
+    root, address = hosted_parent
+    request = {'action': 'execute', 'feature': 'parent_status', 'arguments': {'timeout_seconds': timeout}}
+    result = run_cli('graphtraj.interfaces.local_tool', root, address,
+                     input_text=json.dumps(request) + '\n')
+    document = json.loads(result.stdout)
+    assert document.get('error') or document.get('result', {}).get('error'), result.stdout
+    assert not (root / 'wire.jsonl').exists()
+
+
+def test_hosted_cli_keeps_ordinary_control_deadline(
+    hosted_parent: tuple[Path, str], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An unrelated slow report request still times out at the ordinary deadline."""
+    import time
+    from dataclasses import replace
+    from graphtraj.interfaces.tools import TOOLS
+    from test_hosted_cli import run_cli
+
+    root, address = hosted_parent
+    original = TOOLS['session_reports']
+
+    def delayed(arguments: dict, *, cwd: Path):
+        """Model a slow report read without replacing the authenticated transport."""
+        time.sleep(11)
+        return original.handler(arguments, cwd=cwd)
+
+    monkeypatch.setitem(TOOLS, 'session_reports', replace(original, handler=delayed))
+    started = time.monotonic()
+    result = run_cli('graphtraj.interfaces.cli.agent_runner', root, address, 'reports', 'research@x1')
+    elapsed = time.monotonic() - started
+    assert result.returncode != 0
+    assert 'Session control timed out' in result.stdout + result.stderr
+    assert 10 <= elapsed < 15
 
 
 @pytest.mark.parametrize(('mode', 'method'), [('active', 'thread/status/changed'), ('turn', 'turn/completed')])

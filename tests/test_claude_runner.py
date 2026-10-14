@@ -147,19 +147,16 @@ def test_claude_public_interrupt_rechecks_drained_termination(
     assert reports.returncode == 0, reports.stdout + reports.stderr
     assert yaml.safe_load(reports.stdout)['execution']['terminal_confirmed'] is False
 
-    # Confirmation is forbidden while that same Worker still owns its lock.
-    # Poll the public interrupt until its owner has returned; no PID is used.
+    # Wait for the public observation that the original Worker released its
+    # lock, then attempt confirmation once; no PID or error prose is used.
     deadline = time.monotonic() + 15
-    while True:
-        response = command(installed_commands, root, environment, 'interrupt', alias)
-        assert response.returncode == 0, response.stdout + response.stderr
-        result = yaml.safe_load(response.stdout)
-        member = result['members'][0]
-        if member.get('error', {}).get('message', '').startswith('The original Worker'):
-            assert time.monotonic() < deadline
-            time.sleep(0.1)
-            continue
-        break
+    while settled(installed_commands, root, environment, alias)['activity'] != 'abnormal':
+        assert time.monotonic() < deadline
+        time.sleep(0.1)
+    response = command(installed_commands, root, environment, 'interrupt', alias)
+    assert response.returncode == 0, response.stdout + response.stderr
+    result = yaml.safe_load(response.stdout)
+    member = result['members'][0]
     assert (directory / 'execution.yml').read_bytes() == original
     if native_idle:
         assert member['interrupt_status'] == 'stopped', result
@@ -181,7 +178,7 @@ def test_claude_public_interrupt_rechecks_drained_termination(
         assert settled(installed_commands, root, environment, alias)['activity'] == 'idle'
     else:
         assert member['interrupt_status'] == 'unconfirmed'
-        assert 'native_idle' in member['error']['message']
+        assert member['error']['code'] == 'operation-failed'
         assert settled(installed_commands, root, environment, alias)['activity'] == 'abnormal'
         # Model the supported historical record, which stored only the merged
         # false outcome and no separate native/process/pipe observations.
@@ -189,7 +186,7 @@ def test_claude_public_interrupt_rechecks_drained_termination(
         legacy = command(installed_commands, root, environment, 'interrupt', alias)
         missing = yaml.safe_load(legacy.stdout)['members'][0]
         assert missing['interrupt_status'] == 'unconfirmed'
-        assert 'process_group_closed, stdout_eof, stderr_eof, pipes_closed, native_idle' in missing['error']['message']
+        assert missing['error']['code'] == 'operation-failed'
         assert (directory / 'execution.yml').read_bytes() == original
 
 

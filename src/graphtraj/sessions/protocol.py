@@ -236,19 +236,27 @@ def _observation(data: dict, kind: str, seq: int) -> None:
     sparse; no API name alone proves raw versus sampled semantics.
     """
     _fields(data, {'target': dict, 'source': dict}, kind)
+
     target = data['target']
     _fields(target, {'eventSeq': int}, 'observation.target')
     _integer(target['eventSeq'], 'observation.target.eventSeq')
     _require(target['eventSeq'] < seq, 'observation.target.eventSeq')
+
     for key in ('tokenPosition', 'blockIndex'):
         if key in target:
             _integer(target[key], f'target.{key}')
+
     for key in ('requestId', 'attemptId', 'model', 'tokenizer'):
         _require(key in target and (target[key] is None or
                  (type(target[key]) is str and bool(target[key]))), f'target.{key}')
         if target[key] is None:
-            _require(type(target.get('missing')) is dict and
-                     type(target['missing'].get(key)) is str and bool(target['missing'][key]), f'target.missing.{key}')
+            _require(
+                type(target.get('missing')) is dict
+                and type(target['missing'].get(key)) is str
+                and bool(target['missing'][key]),
+                f'target.missing.{key}',
+            )
+
     source = data['source']
     _fields(source, {'kind': str, 'producer': str, 'evidence': str}, 'observation.source')
     _require(source['kind'] in {'native', 'recomputed', 'supplemented'}, 'observation.source.kind')
@@ -259,6 +267,7 @@ def _observation(data: dict, kind: str, seq: int) -> None:
         for context in source['context']:
             _fields(context, {'sessionId': str, 'eventSeq': int}, 'observation.source.context')
             _integer(context['eventSeq'], 'observation.source.context.eventSeq')
+
     if kind == 'graphtraj/score':
         _fields(data, {'name': str, 'rule': str}, 'score')
         _require(type(data.get('value')) in (int, float), 'score.value')
@@ -269,22 +278,29 @@ def _observation(data: dict, kind: str, seq: int) -> None:
         _fields(data, {'distribution': str, 'semantics': str, 'tokens': list}, 'logprobs')
         _require(data['distribution'] in {'raw', 'sampled', 'unspecified'}, 'logprobs.distribution')
         _strings(data, ('semantics',), 'logprobs')
+
         if data['distribution'] == 'sampled':
             _fields(data, {'sampling': dict}, 'logprobs')
             for key in ('temperature', 'topP', 'topK'):
                 _require(key in data['sampling'], f'logprobs.sampling.{key}')
                 if data['sampling'][key] is None:
                     missing = data['sampling'].get('missing')
-                    _require(type(missing) is dict and type(missing.get(key)) is str and
-                             bool(missing[key]), f'logprobs.sampling.missing.{key}')
+                    _require(
+                        type(missing) is dict
+                        and type(missing.get(key)) is str
+                        and bool(missing[key]),
+                        f'logprobs.sampling.missing.{key}',
+                    )
                 else:
                     _require(type(data['sampling'][key]) in (int, float), f'logprobs.sampling.{key}')
+
         positions = set()
         for token in data['tokens']:
             _fields(token, {'position': int}, 'token')
             _integer(token['position'], 'token.position')
             _require(token['position'] not in positions, 'token.position.duplicate')
             positions.add(token['position'])
+
             _require('logprob' in token, 'token.logprob')
             probability = token['logprob']
             # JSON cannot encode -infinity: preserve its native spelling separately.
@@ -292,10 +308,12 @@ def _observation(data: dict, kind: str, seq: int) -> None:
                 _require(type(token.get('missing')) is str and bool(token['missing']), 'token.missing')
             else:
                 _require(type(probability) in (float, int) and probability <= 0, 'token.logprob')
+
             if 'tokenId' in token:
                 _integer(token['tokenId'], 'token.tokenId')
             if 'text' in token:
                 _require(type(token['text']) is str, 'token.text')
+
             if 'span' in token:
                 span = token['span']
                 _fields(span, {'blockIndex': int, 'start': int, 'end': int}, 'token.span')
@@ -445,27 +463,36 @@ def validate_session(header: dict, events: list[dict], *, reconstruct: bool = Fa
     """
     validate_header(header)
     _require(type(events) is list, 'events')
+
     surface: list[int] = []
     inherited = []
+
     for seq, event in enumerate(events):
         validate_event(event)
         _require(event['seq'] == seq, 'event.contiguous-seq')
         kind = event['type']
+
         if kind in EXTENSION_TYPES:
             _require('graphtraj' in header, 'header.graphtraj required for extensions')
         if reconstruct and kind == 'graphtraj/native':
             _require(False, 'event.opaque-native requires Runtime interpretation')
         if reconstruct and kind not in CORE_TYPES | EXTENSION_TYPES:
             _require(event.get('ignorable') is True, 'event.unknown-required')
+
         if kind == 'session/end-seed' and event['data'].get('inherited') is True:
             inherited.append(seq)
+
         if kind == 'developer/message':
-            additions = any(block['type'] == 'tool-addition' for block in event['data']['message']['content'])
+            additions = any(
+                block['type'] == 'tool-addition'
+                for block in event['data']['message']['content']
+            )
             ref = event['data'].get('headerSeq')
             _require(additions == (ref is not None), 'developer.headerSeq')
             if ref is not None:
                 _integer(ref, 'developer.headerSeq')
                 _require(ref < seq and events[ref]['type'] == 'request/header', 'developer.headerSeq')
+
         if kind == 'graphtraj/logprobs':
             target = events[event['data']['target']['eventSeq']]
             for token in event['data']['tokens']:
@@ -473,12 +500,16 @@ def validate_session(header: dict, events: list[dict], *, reconstruct: bool = Fa
                     continue
                 span = token['span']
                 _require(target['type'] in SURFACE_TYPES, 'token.span.target-message')
-                message = target['data'] if target['type'] == 'user/message' else target['data'].get('message', {})
+                message = (
+                    target['data'] if target['type'] == 'user/message'
+                    else target['data'].get('message', {})
+                )
                 blocks = message.get('content', [])
                 _require(span['blockIndex'] < len(blocks), 'token.span.blockIndex')
                 block = blocks[span['blockIndex']]
                 _require(block.get('type') in {'text', 'reasoning'}, 'token.span.opaque-content')
                 _require(span['end'] <= len(block['text'].encode('utf-8')), 'token.span.end')
+
         if kind not in SURFACE_TYPES:
             continue
         op = event['surfaceOp']
@@ -488,8 +519,12 @@ def validate_session(header: dict, events: list[dict], *, reconstruct: bool = Fa
             _require(op['startSeq'] in surface and op['endSeq'] in surface, 'surfaceOp.nodes')
             start, end = surface.index(op['startSeq']), surface.index(op['endSeq'])
             _require(start <= end, 'surfaceOp.order')
-            _require(set(surface[start:end + 1]) <= set(event.get('sourceEventSeqs', [])), 'surfaceOp.sources')
+            _require(
+                set(surface[start:end + 1]) <= set(event.get('sourceEventSeqs', [])),
+                'surfaceOp.sources',
+            )
             surface[start:end + 1] = [seq]
+
     _require(bool(inherited) == header['isSeeded'], 'header.isSeeded')
 
 

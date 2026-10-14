@@ -2,12 +2,13 @@
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { spawn } from 'node:child_process';
+import { installCollection } from './collection.mjs';
 
 const require = createRequire(process.env.GRAPHTRAJ_DSH_PACKAGE || process.argv[1]);
 const { defineTool } = await import(pathToFileURL(require.resolve('@deepseek-ai/dsh-tools')));
 const { default: z } = await import(pathToFileURL(require.resolve('@deepseek-ai/schemastery')));
 export const name = 'graphtraj';
-export const inject = ['tools', 'shellEnv'];
+export const inject = ['tools', 'shellEnv', 'sessionQuery'];
 export const Config = z.object({ finishCheck: z.boolean().default(false) });
 
 /** Read actual durable source facts from this execution's native Agent. */
@@ -57,9 +58,12 @@ export function apply(ctx, config = { finishCheck: false }) {
     if (result.error) throw new Error(result.error);
     return result;
   }
+  const collect = installCollection(ctx, entry);
   ctx.on('agent/created', async ({ agent, source, signal }) => {
-    if (process.env.GRAPHTRAJ_ROLE) return; // Existing managed Session registration owns this case.
-    await entry(agent, { event: 'agent/created', source, header: agent.session.header }, signal);
+    if (!process.env.GRAPHTRAJ_ROLE) {
+      await entry(agent, { event: 'agent/created', source, header: agent.session.header }, signal);
+    }
+    await collect(agent);
   });
   ctx.on('agent/turn-stopping', async ({ agent, signal }) => {
     if (!config.finishCheck || process.env.GRAPHTRAJ_ROLE ||

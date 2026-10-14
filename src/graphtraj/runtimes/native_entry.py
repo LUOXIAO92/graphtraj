@@ -77,6 +77,11 @@ def dsh_event(event: dict, cwd: Path) -> dict:
     """Consume DSH's native agent/created header without reading its private store."""
     from graphtraj.runtimes.dsh.session_entry import current_connection, session_source
 
+    if event.get('event') == 'session/collect':
+        from graphtraj.runtimes.dsh.session_entry import collect_session
+
+        return collect_session(event, cwd)
+
     if process_caller_alias(discover_runner_directory(cwd), os.getpid()) is not None:
         return {'source': 'member'}
     connection = current_connection()

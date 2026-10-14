@@ -67,7 +67,10 @@ class NativePeer:
         log = Path(root) / 'workspace' / self.session / 'v4.jsonl'
         log.parent.mkdir(parents=True, exist_ok=True)
         if not log.exists():
-            log.write_text('{"type":"session/header","data":{"id":"native-dsh"}}\n')
+            log.write_text(json.dumps({'type': 'session', 'version': 4, 'id': self.session,
+                                       'createdAt': 1, 'isSeeded': False}) + '\n')
+        self.archive_root = cwd
+        self.log = log
         self.instances.append(self)
 
     def start(self) -> None:
@@ -144,6 +147,12 @@ class NativePeer:
 
     def close(self) -> None:
         """Only this native service is closed."""
+        from graphtraj.runtimes.dsh.collection import collect
+
+        collect(self.archive_root / '.graphtraj/state',
+                {'version': 4, 'id': self.session, 'createdAt': 1, 'isSeeded': False}, [],
+                project_id=str(self.archive_root), agent_id='controlled-member',
+                task_ids=[], source='member')
         self.closed = True
 
 
@@ -165,6 +174,11 @@ def run_turn(
     instructions: str = 'Assigned responsibility', package: str | None = None,
 ) -> tuple:
     """Run the public RuntimeTurn asynchronously so controls overlap active work."""
+    from graphtraj.configuration.project_configuration import default_configuration_content
+
+    config = tmp_path / '.graphtraj/config.yml'
+    config.parent.mkdir(exist_ok=True)
+    config.write_text(default_configuration_content(tmp_path, tmp_path))
     bindings = []
     turn = select_runtime_adapter('dsh').managed_execution(
         request(tmp_path, instructions, package or '/installed/dsh/package.json'),
@@ -570,6 +584,18 @@ def test_native_trace_survives_control_directory_retirement(tmp_path: Path, peer
     content = trace.read_bytes()
     control.rename(tmp_path / 'retired')
     assert trace.read_bytes() == content
+
+
+def test_completion_requires_the_final_native_prefix(tmp_path: Path, peer: list) -> None:
+    """A native completion receipt cannot hide an uncommitted archive tail."""
+    turn, thread, outcome = run_turn(tmp_path)
+    with peer[0].log.open('a') as stream:
+        stream.write(json.dumps({'type': 'turn/end', 'seq': 0, 'time': 1,
+                                 'data': {'turn': 0, 'reason': {'kind': 'completed'}}}) + '\n')
+    peer[0].frames.append('turn/end')
+    thread.join(3)
+    assert outcome['error'].code == 'RUNTIME_TRACE_FAILED'
+    assert 'result' not in outcome
 
 
 def test_public_json_cli_uses_host_identity_and_report_checks(tmp_path: Path) -> None:

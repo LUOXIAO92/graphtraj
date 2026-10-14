@@ -1,13 +1,17 @@
 # Session protocol and Runtime mapping examples
 
-`graphtraj.sessions.protocol` is the executable Python value schema. It has no
-Runtime, storage, TypeScript, npm or Node dependency. `validate_header`,
-`validate_content`, `validate_stream`, `validate_event` and `validate_session`
-raise `ValueError` for invalid values and never mutate their input.
-`snapshot_event` returns a detached validated copy. `retain_native` and
-`native_record` are the reversible archival mapping seam; they do not collect
-or resume a Runtime. This module deliberately does not implement a Session
-store, event writer, live collector, migration or RL training.
+Use these examples to map native conversations into GraphTraj's unified Session
+protocol. Each example preserves the native record alongside its interpretation
+and identifies facts that the source did not expose. The field reference below
+covers the shared representation, provenance, RL observations and stream boundaries.
+
+`graphtraj.sessions.protocol` implements the value schema in Python.
+`validate_header`, `validate_content`, `validate_stream`, `validate_event` and
+`validate_session` raise `ValueError` for invalid values without mutating input.
+`snapshot_event` returns a detached validated copy; `retain_native` preserves a
+native JSON record and `native_record` retrieves it. These are schema and mapping
+operations. Project storage, live collection and migration are separate consumers;
+validating an example does not establish that those consumers are implemented.
 
 ## Fixed upstream and attribution
 
@@ -43,8 +47,9 @@ Events use `type`, contiguous zero-based `seq`, epoch-ms `time`, and `data`.
 The original fields, nulls and unknown JSON values survive snapshots. Unknown
 events may be archived; `validate_session(..., reconstruct=True)` refuses an
 unknown required type and refuses opaque `graphtraj/native` records until a
-Runtime-specific interpreter supplies their meaning. Only explicit `ignorable: true` permits skipping that
-event during interpretation. This flag never authorizes deleting its record.
+Runtime-specific interpreter supplies their meaning. Only explicit
+`ignorable: true` permits skipping that event during interpretation. This flag
+never authorizes deleting its record.
 Unknown nested content and fields stay opaque; accepting their JSON does not
 claim a Runtime can replay them. Consumers must understand any fields they use.
 This is structural/reference validation, not a live loop state machine or a
@@ -187,7 +192,7 @@ translate them to output offsets with evidence or record alignment as missing.
 Usage, scores, calls and unknown semantic events remain independent of text
 fragment sizes. A storage implementation must test character-sized and normal
 chunks, interruptions and boundaries for equal content/usage/probabilities and
-bounded record/byte growth. This ticket validates the representation only;
+bounded record/byte growth. This task validates the representation only;
 it makes no file-size, crash-recovery or live Pi collection claim.
 
 ## Four Runtime examples

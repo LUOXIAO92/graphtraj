@@ -180,6 +180,8 @@ class CodexSessionArchive:
                              'locator': f"connection:{store.position('connection') + 1}",
                              'deltaTemplate': template}, 'missing': [
                                  {'path': 'turn/step', 'reason': 'Local output grouping; native numeric indices unknown.'},
+                                 {'path': 'requestId/attemptId',
+                                  'reason': 'Mapping IDs from turn/item; model request and attempt IDs unknown.'},
                                  {'path': 'time', 'reason': 'Native time unknown; receipt time used.'},
                                  {'path': 'rawModelStream', 'reason': 'Unknown: semantic native text, not raw model bytes.'},
                                  {'path': 'logprobs', 'reason': 'Unknown: native text delta supplied no probabilities.'},

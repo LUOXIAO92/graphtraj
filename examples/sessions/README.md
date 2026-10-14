@@ -126,7 +126,9 @@ actual evaluator/model/rule version, and evidence identifies how the value was
 obtained. Context Session authorization and cross-Session reference resolution
 belong to storage/query, not this value validator.
 
-Scores add `name`, `rule`, and numeric `value`. Log probabilities add:
+Scores add `name`, `rule`, and numeric `value`. A token-level score can add
+zero-based `target.tokenPosition` and `target.blockIndex`; omitting them keeps
+the score at the named event/request/attempt scope. Log probabilities add:
 
 - `distribution`: `raw`, `sampled`, or `unspecified` when the provider does not
   establish which distribution it returned. Never infer raw from an API field

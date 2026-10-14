@@ -46,6 +46,7 @@ def observation(kind: str = 'graphtraj/logprobs', *, source: str = 'native') -> 
     if kind == 'graphtraj/score':
         data = {key: data[key] for key in ('target', 'source')}
         data.update(name='test-score', rule='Synthetic rubric v1', value=0.75)
+        data['target'].update(tokenPosition=3, blockIndex=0)
     elif kind == 'graphtraj/derived':
         data = {key: data[key] for key in ('target', 'source')}
         data['content'] = [{'type': 'reasoning', 'text': 'A later model hypothesis'}]

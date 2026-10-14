@@ -240,8 +240,12 @@ def _observation(data: dict, kind: str, seq: int) -> None:
     _fields(target, {'eventSeq': int}, 'observation.target')
     _integer(target['eventSeq'], 'observation.target.eventSeq')
     _require(target['eventSeq'] < seq, 'observation.target.eventSeq')
+    for key in ('tokenPosition', 'blockIndex'):
+        if key in target:
+            _integer(target[key], f'target.{key}')
     for key in ('requestId', 'attemptId', 'model', 'tokenizer'):
-        _require(key in target and (target[key] is None or type(target[key]) is str), f'target.{key}')
+        _require(key in target and (target[key] is None or
+                 (type(target[key]) is str and bool(target[key]))), f'target.{key}')
         if target[key] is None:
             _require(type(target.get('missing')) is dict and
                      type(target['missing'].get(key)) is str and bool(target['missing'][key]), f'target.missing.{key}')

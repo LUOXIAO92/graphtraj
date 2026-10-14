@@ -358,11 +358,20 @@ class ClaudeExecution:
                     reader.join(timeout=5)
                 if stderr_reader is not None:
                     stderr_reader.join(timeout=5)
-                if self.task_released and self.native_state != 'idle':
+                pipes_drained = all(thread is None or not thread.is_alive()
+                                    for thread in (reader, stderr_reader))
+                if self.proc is not None and pipes_drained:
+                    for stream in (self.proc.stdout, self.proc.stderr):
+                        if stream is not None:
+                            stream.close()
+                if not pipes_drained or self.task_released and self.native_state != 'idle':
                     self.terminal_confirmed = False
-                    failure = RuntimeAdapterError('RUNTIME_SHUTDOWN_FAILED',
-                                                  'Claude process exited without native settlement; tool termination is unconfirmed.',
-                                                  terminal_confirmed=False)
+                    failure = RuntimeAdapterError(
+                        'RUNTIME_SHUTDOWN_FAILED',
+                        'Claude native settlement or pipe closure is unconfirmed.'
+                        + (f' Original failure: {failure}' if failure is not None else ''),
+                        terminal_confirmed=False,
+                    )
                 if self.proc is not None:
                     record_runtime_process(self.proc.pid, {'terminal_confirmed': self.terminal_confirmed,
                                                           'runtime_exit_code': self.proc.poll()})

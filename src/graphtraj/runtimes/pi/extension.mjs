@@ -55,6 +55,44 @@ export function nativeEntry(ctx, environment, event, signal) {
   });
 }
 
+/** Keep one collector pipe per native Session; no per-token subprocess or log. */
+export function startCollection(ctx, environment) {
+  return new Promise((resolve, reject) => {
+    const child = spawn('graphtraj-session', ['pi', '--collect'], {
+      cwd: ctx.cwd, env: { ...process.env, ...environment }, stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    let diagnostic = '';
+    let failure;
+    let ready = false;
+    child.stderr.setEncoding('utf8');
+    child.stderr.on('data', value => { diagnostic = (diagnostic + value).slice(-8192); });
+    const ended = new Promise(done => child.on('close', code => {
+      if (code !== 0 || !ready) failure = new Error(diagnostic || 'Pi Session collection failed');
+      if (failure) reject(failure);
+      done();
+    }));
+    child.on('error', error => { failure = error; reject(error); });
+    child.stdin.on('error', error => { failure = error; });
+    child.stdin.write(JSON.stringify({header: ctx.sessionManager?.getHeader(),
+      entries: ctx.sessionManager?.getEntries().filter(entry => entry.type === 'custom')}) + '\n');
+    child.stdout.once('data', () => {
+      ready = true;
+      resolve({
+        write(event) {
+          if (failure) return Promise.reject(failure);
+          return new Promise((done, failed) => child.stdin.write(JSON.stringify(event) + '\n',
+            error => error ? failed(error) : done()));
+        },
+        async close() {
+          child.stdin.end();
+          await ended;
+          if (failure) throw failure;
+        },
+      });
+    });
+  });
+}
+
 /** Quote an environment value for the existing POSIX bash tool backend. */
 function quote(value) {
   return "'" + value.replaceAll("'", "'\\''") + "'";
@@ -62,9 +100,12 @@ function quote(value) {
 
 export default function graphtraj(pi) {
   const sessions = new WeakMap();
+  const collectors = new WeakMap();
   pi.registerFlag('graphtraj-finish-check', { type: 'boolean', default: false,
     description: 'Check Main completion using the current native Session context.' });
   pi.on('session_start', async (event, ctx) => {
+    await collectors.get(ctx.sessionManager)?.close();
+    collectors.delete(ctx.sessionManager);
     const environment = sessionEnvironment(ctx, process.env);
     sessions.set(ctx.sessionManager, environment);
     const result = await nativeEntry(ctx, environment, {
@@ -74,11 +115,26 @@ export default function graphtraj(pi) {
     });
     if (result.error) ctx.ui.notify(result.error, 'error');
     else if (result.source === 'main') ctx.ui.notify('GraphTraj Main Session associated.', 'info');
+    if (!result.error && ['main', 'child'].includes(result.source)) {
+      collectors.set(ctx.sessionManager, await startCollection(ctx, environment));
+    }
     pi.registerMcpServer('graphtraj', {
       command: 'graphtraj-mcp', cwd: ctx.cwd, env: environment, exposure: 'direct',
     });
   });
-  pi.on('tool_call', (event, ctx) => {
+  for (const kind of ['before_agent_start', 'model_select', 'tool_result', 'agent_start', 'turn_start', 'message_start', 'message_update',
+    'message_end', 'tool_execution_start', 'tool_execution_update', 'tool_execution_end',
+    'turn_end', 'agent_end', 'session_tree', 'session_compact']) {
+    pi.on(kind, async (event, ctx) => {
+      await collectors.get(ctx.sessionManager)?.write(event);
+    });
+  }
+  pi.on('session_shutdown', async (_event, ctx) => {
+    await collectors.get(ctx.sessionManager)?.close();
+    collectors.delete(ctx.sessionManager);
+  });
+  pi.on('tool_call', async (event, ctx) => {
+    await collectors.get(ctx.sessionManager)?.write(event);
     if (event.toolName !== 'bash') return;
     const environment = sessions.get(ctx.sessionManager);
     if (!environment) return { block: true, reason: 'GraphTraj Session entry is unavailable.' };

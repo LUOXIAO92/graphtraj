@@ -158,6 +158,8 @@ class ClaudeExecution:
             environment['CLAUDE_CODE_EFFORT_LEVEL'] = request['reasoning_effort']
         if request.get('base_url'):
             environment['ANTHROPIC_BASE_URL'] = request['base_url']
+        else:
+            environment.pop('ANTHROPIC_BASE_URL', None)
         if request.get('api_key_env'):
             from graphtraj.runtimes.runtime_adapter import credential_environment
 

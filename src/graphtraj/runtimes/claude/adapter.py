@@ -67,7 +67,7 @@ class ClaudeContext:
         return {key: request[key] for key in (
             'runtime', 'executable', 'version', 'model', 'reasoning_effort',
             'runtime_home', 'connection', 'connection_revision', 'model_source',
-            'worktree_access', 'settings_sources', 'provider', 'base_url', 'credential_source',
+            'worktree_access', 'settings_sources', 'provider', 'base_url', 'base_url_source', 'credential_source',
         )}
 
     def runtime_environment(self) -> Mapping[str, str]:
@@ -123,10 +123,13 @@ class ClaudeRuntimeAdapter:
             raise RuntimeAdapterError('ROLE_CONFIG_INVALID', 'Unsupported Claude effort.')
         if settings.model != 'claude-opus-5-5' and not settings.connection:
             raise RuntimeAdapterError('ROLE_CONFIG_INVALID', 'Use exact claude-opus-5-5 or an explicit model connection.')
-        if settings.base_url:
+        base_url = settings.base_url or os.environ.get('ANTHROPIC_BASE_URL') or None
+        base_url_source = ('configuration' if settings.base_url else
+                           'environment' if base_url else 'native')
+        if base_url:
             from urllib.parse import urlsplit
 
-            url = urlsplit(settings.base_url)
+            url = urlsplit(base_url)
             if (url.scheme not in {'http', 'https'} or not url.hostname or url.username
                     or url.password or url.query or url.fragment):
                 raise RuntimeAdapterError('ROLE_CONFIG_INVALID', 'Claude Base URL must be credential-free HTTP(S).')
@@ -170,7 +173,8 @@ class ClaudeRuntimeAdapter:
             'explicit_runtime_home': bool(settings.runtime_home or os.environ.get('CLAUDE_CONFIG_DIR')),
             'model': settings.model, 'reasoning_effort': settings.reasoning_effort,
             'connection': settings.connection, 'connection_revision': settings.connection_revision,
-            'model_source': settings.model_source, 'base_url': settings.base_url,
+            'model_source': settings.model_source, 'base_url': base_url,
+            'base_url_source': base_url_source,
             'provider': settings.runtime_provider or 'native',
             'credential_source': 'api_key_env' if settings.api_key_env else 'native',
             'api_key_env': settings.api_key_env, 'instructions': role.instructions,

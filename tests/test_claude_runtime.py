@@ -14,6 +14,7 @@ import yaml
 from graphtraj.configuration.project_roles import parse_inline_role
 from graphtraj.configuration.role_definitions import resolve_child_role
 from graphtraj.execution.runner_heartbeat import hold_ownership
+from graphtraj.runtimes.claude.adapter import ClaudeContext
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError, select_runtime_adapter
 from test_result_submission import result_project
 
@@ -45,9 +46,20 @@ def context(root: Path, **fields: object):
     return adapter, prepared
 
 
-def execution(root: Path, stack: ExitStack, prompt: str, expected: str | None = None, **fields: object):
+def execution(
+    root: Path,
+    stack: ExitStack,
+    prompt: str,
+    expected: str | None = None,
+    prepared_context: ClaudeContext | None = None,
+    **fields: object,
+):
     """Bind real native process identity before releasing its startup hook."""
-    adapter, prepared = context(root, **fields)
+    if prepared_context is None:
+        adapter, prepared = context(root, **fields)
+    else:
+        adapter = select_runtime_adapter('claude')
+        prepared = prepared_context
     directory = root / '.graphtraj/runner/sessions/research@x1'
     trace = root / 'state/claude.jsonl'
     ready = threading.Event()
@@ -70,6 +82,51 @@ def execution(root: Path, stack: ExitStack, prompt: str, expected: str | None = 
                                     started, prepared.evidence_document(), trace_file=trace,
                                     expected_session=expected, session_created=created)
     return turn, ready, adapter
+
+
+@pytest.mark.parametrize('configured,inherited,source', [
+    ('https://configured.example', 'https://environment.example', 'configuration'),
+    (None, 'https://environment.example', 'environment'),
+    (None, None, 'native'),
+])
+def test_claude_retains_endpoint_on_resume(
+    tmp_path: Path,
+    claude_environment: None,
+    monkeypatch: pytest.MonkeyPatch,
+    configured: str | None,
+    inherited: str | None,
+    source: str,
+) -> None:
+    """Retained Runtime context fixes both endpoint value and absence across resume."""
+    result_project(tmp_path)
+    monkeypatch.delenv('ANTHROPIC_BASE_URL', raising=False)
+    if inherited:
+        monkeypatch.setenv('ANTHROPIC_BASE_URL', inherited)
+    _, prepared = context(tmp_path, **({'base_url': configured} if configured else {}))
+    evidence = prepared.evidence_document()
+    assert evidence['base_url'] == (configured or inherited)
+    assert evidence['base_url_source'] == source
+    with ExitStack() as stack:
+        turn, _, _ = execution(tmp_path, stack, 'first', prepared_context=prepared)
+        first = turn.run()
+    monkeypatch.setenv('ANTHROPIC_BASE_URL', 'https://later.example')
+    with ExitStack() as stack:
+        turn, _, _ = execution(tmp_path, stack, 'resume', first['session_id'], prepared_context=prepared)
+        assert turn.run()['outcome'] == 'completed'
+    assert json.loads((tmp_path / 'native-endpoint.json').read_text()) == (configured or inherited)
+
+
+@pytest.mark.parametrize('endpoint', [
+    'https://secret@example.com', 'https://example.com?token=secret',
+])
+def test_claude_rejects_secret_environment_endpoint(
+    tmp_path: Path, claude_environment: None, monkeypatch: pytest.MonkeyPatch, endpoint: str,
+) -> None:
+    """Reject credential-bearing inherited URLs without reproducing secrets in diagnostics."""
+    monkeypatch.setenv('ANTHROPIC_BASE_URL', endpoint)
+    with pytest.raises(RuntimeAdapterError) as caught:
+        context(tmp_path)
+    assert 'secret' not in str(caught.value)
 
 
 def test_claude_native_resume_and_activity(tmp_path: Path, claude_environment: None) -> None:

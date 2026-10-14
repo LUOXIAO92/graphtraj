@@ -28,6 +28,8 @@ Path(os.environ['CLAUDE_FIXTURE_HOME'], 'native-selection.json').write_text(json
     'environment_effort': os.environ.get('CLAUDE_CODE_EFFORT_LEVEL'),
 }))
 messages = json.loads(history.read_text()) if history.exists() else []
+Path(os.environ['CLAUDE_FIXTURE_HOME'], 'native-endpoint.json').write_text(
+    json.dumps(os.environ.get('ANTHROPIC_BASE_URL')))
 started = False
 waiting = []
 

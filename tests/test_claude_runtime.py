@@ -365,6 +365,28 @@ def test_claude_configuration_is_exact_and_approval_fails_closed(tmp_path: Path,
         context(tmp_path, model='opus')
 
 
+def test_read_resources_do_not_become_native_working_directories(
+    tmp_path: Path, claude_environment: None,
+) -> None:
+    """Deliver read grants without promoting them to writable native workspaces."""
+    result_project(tmp_path)
+    resources = [tmp_path / 'authorized/bin', tmp_path / 'authorized/lib']
+    for path in resources:
+        path.mkdir(parents=True)
+    with ExitStack() as stack:
+        turn, _, _ = execution(tmp_path, stack, 'Inspect native permission configuration',
+                               claude={'read_paths': list(map(str, resources))})
+        turn.run()
+    launch = json.loads((tmp_path / 'native-permissions.json').read_text())
+    settings = launch['settings']
+    assert settings['permissions']['additionalDirectories'] == []
+    filesystem = settings['sandbox']['filesystem']
+    for path in resources:
+        assert str(path.resolve()) in filesystem['allowRead']
+        assert str(path.resolve()) in filesystem['denyWrite']
+        assert str(path.resolve()) not in filesystem['allowWrite']
+
+
 def test_claude_resource_grants_and_read_only_recovery(tmp_path: Path, claude_environment: None) -> None:
     """Retain external read-only resources and refuse grants to private state."""
     result_project(tmp_path)

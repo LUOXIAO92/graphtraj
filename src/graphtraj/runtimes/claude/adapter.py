@@ -40,6 +40,20 @@ def unsupported(*args: object, **kwargs: object) -> Any:
     raise RuntimeAdapterError('RUNTIME_UNSUPPORTED', 'Claude Code interactive Main hosting is unavailable.')
 
 
+def _validated_resources(value: object, root: Path, state: Path, home: Path) -> list[str]:
+    """Validate explicit read grants against the same private paths on launch and resume."""
+    if (not isinstance(value, list)
+            or any(not isinstance(path, str) or not Path(path).is_absolute() for path in value)):
+        raise RuntimeAdapterError('ROLE_CONFIG_INVALID', 'claude.read_paths must list absolute resource paths.')
+    protected = (state, root / '.graphtraj/runner', root / '.graphtraj/cli',
+                 root / '.codex', Path.home() / '.codex', home)
+    for resource in value:
+        path = Path(resource).resolve()
+        if any(path.is_relative_to(item.resolve()) or item.resolve().is_relative_to(path) for item in protected):
+            raise RuntimeAdapterError('RUNTIME_ACCESS_DENIED', 'A Claude resource grant would expose private control/history.')
+    return list(value)
+
+
 @dataclass(frozen=True)
 class ClaudeContext:
     """Immutable native launch and configuration provenance, without credentials."""
@@ -160,13 +174,10 @@ class ClaudeRuntimeAdapter:
         state = project.state if project else harness_root / '.graphtraj/state'
         if state.resolve().is_relative_to(worktree.resolve()):
             raise RuntimeAdapterError('RUNTIME_ACCESS_DENIED', 'Claude needs a Worktree outside private state.')
-        protected = (state, harness_root / '.graphtraj/runner', harness_root / '.graphtraj/cli',
-                     harness_root / '.codex', Path.home() / '.codex',
-                     Path(settings.runtime_home or os.environ.get('CLAUDE_CONFIG_DIR', str(Path.home() / '.claude'))))
-        for resource in resources:
-            path = Path(resource).resolve()
-            if any(path.is_relative_to(item.resolve()) or item.resolve().is_relative_to(path) for item in protected):
-                raise RuntimeAdapterError('RUNTIME_ACCESS_DENIED', 'A Claude resource grant would expose private control/history.')
+        resources = _validated_resources(
+            resources, harness_root, state,
+            Path(settings.runtime_home or os.environ.get('CLAUDE_CONFIG_DIR', str(Path.home() / '.claude'))),
+        )
         return ClaudeContext(json.dumps({
             'runtime': 'claude', 'executable': binary, 'version': version,
             'harness_root': str(harness_root), 'worktree_path': str(worktree),
@@ -219,10 +230,37 @@ class ClaudeRuntimeAdapter:
         reports_only: bool = False,
         session_directory: Path | None = None,
     ) -> dict:
-        """Refresh owned reports without widening native access on recovery."""
+        """Refresh reports and explicit resource grants for the original configured role.
+
+        Model, connection and other captured permissions remain unchanged. An
+        inline or removed role has no current configured grants to import.
+        """
         refreshed = copy.deepcopy(dict(request))
         if refreshed.get('worktree_path') != str(worktree):
             raise RuntimeAdapterError('session-not-resumable', 'Claude Worktree changed during recovery.')
+        if session_directory is not None:
+            from graphtraj.configuration.project_roles import load_project_roles, ProjectRolesError
+
+            try:
+                mapping = yaml.safe_load((session_directory / 'mapping.yml').read_text())
+                reference = mapping.get('role_reference')
+                presets = load_project_roles(Path(request['harness_root'])).presets
+                preset = presets.get(reference)
+                config = preset.claude if preset is not None else None
+                if config is not None and 'read_paths' in config:
+                    # Connection presets have no resolved runtime here. The
+                    # original captured connection fixes it without reloading
+                    # a mutable catalog during Session recovery.
+                    same_connection = (preset.connection is not None
+                                       and preset.connection == request.get('connection'))
+                    if not (same_connection or preset.connection is None and preset.runtime == 'claude'):
+                        raise ValueError('Original role no longer configures Claude resources')
+                    refreshed['resources'] = _validated_resources(
+                        config['read_paths'], Path(request['harness_root']),
+                        Path(request['state_directory']), Path(request['runtime_home']),
+                    )
+            except (OSError, ValueError, TypeError, KeyError, yaml.YAMLError, ProjectRolesError) as error:
+                raise RuntimeAdapterError('ROLE_CONFIG_INVALID', 'Cannot refresh original role resource grants: ' + str(error)) from error
         refreshed['reports'] = [str(path) for path in report_files]
         if reports_only:
             refreshed['worktree_access'] = 'read'
@@ -237,6 +275,66 @@ class ClaudeRuntimeAdapter:
                         if isinstance(part, dict) and part.get('type') == 'tool_use'})
         except (OSError, ValueError, KeyError, TypeError) as error:
             raise RuntimeAdapterError('OPERATION_TOTAL_UNREADABLE', 'Cannot read Claude native Trace.') from error
+
+    def confirm_termination(
+        self, directory: Path, mapping: Mapping[str, Any], request: Mapping[str, Any],
+    ) -> dict:
+        """Use retained settlement or current owned-group observations.
+
+        Missing historical EOF/idle observations do not prevent proving that
+        the original process group has now stopped. Identity mismatches remain
+        errors; current observations never overwrite the original outcome.
+        """
+        if not isinstance(mapping.get('execution_id'), str) or not mapping['execution_id']:
+            raise RuntimeAdapterError('termination-unconfirmed', 'The original Claude execution identity is missing.',
+                                      terminal_confirmed=False)
+        identity = {key: mapping[key] for key in ('session', 'execution_id', 'runtime_pid', 'worker_pid')}
+        path = directory / f"claude-termination-{mapping['execution_id']}.yml"
+        facts = ('process_group_closed', 'stdout_eof', 'stderr_eof', 'pipes_closed', 'native_idle')
+        try:
+            if path.parent != directory or path.is_symlink():
+                raise ValueError('Invalid evidence path')
+            evidence = yaml.safe_load(path.read_text()) if path.exists() else None
+            if evidence is None and not path.exists():
+                return self._confirm_current_group(directory, mapping, request)
+            if not isinstance(evidence, dict) or any(evidence.get(key) != value for key, value in identity.items()):
+                raise ValueError('Termination evidence does not match the original execution')
+        except (OSError, ValueError, yaml.YAMLError) as error:
+            raise RuntimeAdapterError(
+                'termination-unconfirmed',
+                'Original Claude termination evidence is unavailable or mismatched; required: '
+                + ', '.join((*facts, 'runtime_exit_code')) + '.', terminal_confirmed=False,
+            ) from error
+        missing = [key for key in facts if evidence.get(key) is not True]
+        if type(evidence.get('runtime_exit_code')) is not int:
+            missing.append('runtime_exit_code')
+        if missing:
+            return self._confirm_current_group(directory, mapping, request)
+        return evidence
+
+    def _confirm_current_group(
+        self, directory: Path, mapping: Mapping[str, Any], request: Mapping[str, Any],
+    ) -> dict:
+        """Confirm present stopping under the Runner's ownership/startup guard."""
+        from graphtraj.execution.runner_process import settle_runtime_group
+        from graphtraj.execution.runner_heartbeat import read_heartbeat
+
+        try:
+            if (self.read_session_identity(directory) != mapping['session']
+                    or request.get('runtime') != 'claude'
+                    or request.get('worktree_path') != mapping['worktree_path']):
+                raise ValueError('Retained Claude launch identity differs')
+            heartbeat = read_heartbeat(directory)
+            owned_at = (heartbeat['updated_at'] if heartbeat is not None
+                        and all(heartbeat.get(key) == mapping[key]
+                                for key in ('execution_id', 'worker_pid')) else None)
+            return settle_runtime_group(
+                mapping['runtime_pid'], Path(request['executable']), mapping['session'], owned_at,
+            )
+        except (OSError, ValueError, KeyError, subprocess.SubprocessError) as error:
+            raise RuntimeAdapterError('termination-unconfirmed',
+                                      'Current Claude stopping is unconfirmed: ' + str(error),
+                                      terminal_confirmed=False) from error
 
     def current_execution_diagnostic(
         self,

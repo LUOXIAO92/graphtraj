@@ -238,6 +238,39 @@ class ClaudeRuntimeAdapter:
         except (OSError, ValueError, KeyError, TypeError) as error:
             raise RuntimeAdapterError('OPERATION_TOTAL_UNREADABLE', 'Cannot read Claude native Trace.') from error
 
+    def confirm_termination(self, directory: Path, mapping: Mapping[str, Any]) -> dict:
+        """Verify the original owner's retained native and pipe termination facts.
+
+        No process is signalled or inferred dead from its PID. Older executions
+        without these observations remain unconfirmed.
+        """
+        if not isinstance(mapping.get('execution_id'), str) or not mapping['execution_id']:
+            raise RuntimeAdapterError('termination-unconfirmed', 'The original Claude execution identity is missing.',
+                                      terminal_confirmed=False)
+        identity = {key: mapping[key] for key in ('session', 'execution_id', 'runtime_pid', 'worker_pid')}
+        path = directory / f"claude-termination-{mapping['execution_id']}.yml"
+        facts = ('process_group_closed', 'stdout_eof', 'stderr_eof', 'pipes_closed', 'native_idle')
+        try:
+            if path.parent != directory or path.is_symlink():
+                raise ValueError('Invalid evidence path')
+            evidence = yaml.safe_load(path.read_text())
+            if not isinstance(evidence, dict) or any(evidence.get(key) != value for key, value in identity.items()):
+                raise ValueError('Termination evidence does not match the original execution')
+        except (OSError, ValueError, yaml.YAMLError) as error:
+            raise RuntimeAdapterError(
+                'termination-unconfirmed',
+                'Original Claude termination evidence is unavailable or mismatched; required: '
+                + ', '.join((*facts, 'runtime_exit_code')) + '.', terminal_confirmed=False,
+            ) from error
+        missing = [key for key in facts if evidence.get(key) is not True]
+        if type(evidence.get('runtime_exit_code')) is not int:
+            missing.append('runtime_exit_code')
+        if missing:
+            raise RuntimeAdapterError('termination-unconfirmed',
+                                      'Original Claude termination is unconfirmed: ' + ', '.join(missing) + '.',
+                                      terminal_confirmed=False)
+        return evidence
+
     def current_execution_diagnostic(
         self,
         session_directory: Path,

@@ -113,6 +113,83 @@ def test_claude_public_launch_resume_interrupt(
     assert not Path(task['worktree_path']).exists()
 
 
+@pytest.mark.parametrize('native_idle', [True, False])
+def test_claude_public_interrupt_rechecks_drained_termination(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+    native_idle: bool,
+) -> None:
+    """Late native settlement can be confirmed; pipe exit alone cannot be."""
+    root, environment = setup(installed_commands, temporary_git_repository, fake_codex, tmp_path)
+    # The peer receives cancellation but settles only after the five-second
+    # read loop ends, while the original Worker drains and closes its pipes.
+    environment['CLAUDE_FIXTURE_STOP_DELAY'] = '6'
+    if not native_idle:
+        environment['CLAUDE_FIXTURE_NO_SETTLE'] = '1'
+    batch = root / 'probe.yml'
+    batch.write_text(yaml.safe_dump({'tasks': [{'ticket_id': '320', 'role': 'researcher'}]}))
+    launched = command(installed_commands, root, environment, '--swarm-input', str(batch))
+    assert launched.returncode == 0, launched.stdout + launched.stderr
+    alias = yaml.safe_load(launched.stdout)['tasks'][0]['alias']
+    settled(installed_commands, root, environment, alias)
+    sent = command(installed_commands, root, environment, 'send', alias, '--instruction', 'wait-late-idle',
+                   '--caused-by-event-id', events(root)[-1]['event_id'])
+    assert sent.returncode == 0, sent.stdout + sent.stderr
+    command(installed_commands, root, environment, 'interrupt', alias)
+    status = settled(installed_commands, root, environment, alias)
+    assert status['activity'] in {'abnormal', 'unreachable'}
+    assert status['terminal_confirmed'] is False
+    directory = root / '.graphtraj/runner/sessions' / alias
+    original = (directory / 'execution.yml').read_bytes()
+    reports = command(installed_commands, root, environment, 'reports', alias)
+    assert reports.returncode == 0, reports.stdout + reports.stderr
+    assert yaml.safe_load(reports.stdout)['execution']['terminal_confirmed'] is False
+
+    # Confirmation is forbidden while that same Worker still owns its lock.
+    # Poll the public interrupt until its owner has returned; no PID is used.
+    deadline = time.monotonic() + 15
+    while True:
+        response = command(installed_commands, root, environment, 'interrupt', alias)
+        assert response.returncode == 0, response.stdout + response.stderr
+        result = yaml.safe_load(response.stdout)
+        member = result['members'][0]
+        if member.get('error', {}).get('message', '').startswith('The original Worker'):
+            assert time.monotonic() < deadline
+            time.sleep(0.1)
+            continue
+        break
+    assert (directory / 'execution.yml').read_bytes() == original
+    if native_idle:
+        assert member['interrupt_status'] == 'stopped', result
+        assert settled(installed_commands, root, environment, alias)['activity'] == 'idle'
+        confirmation = Path(member['evidence']).read_bytes()
+        retained = command(installed_commands, root, environment, 'reports', alias)
+        report = yaml.safe_load(retained.stdout)
+        assert report['execution']['terminal_confirmed'] is False
+        assert report['termination_confirmation']['evidence']['native_idle'] is True
+        again = command(installed_commands, root, environment, 'interrupt', alias)
+        assert yaml.safe_load(again.stdout)['interrupt_status'] == 'interrupted'
+        assert Path(member['evidence']).read_bytes() == confirmation
+        denied = command(installed_commands, root, environment, 'send', alias, '--instruction', 'continue',
+                         '--caused-by-event-id', events(root)[-1]['event_id'])
+        assert denied.returncode != 0
+        assert 'subtree-stopped' in denied.stdout + denied.stderr
+    else:
+        assert member['interrupt_status'] == 'unconfirmed'
+        assert 'native_idle' in member['error']['message']
+        assert settled(installed_commands, root, environment, alias)['activity'] == 'abnormal'
+        # Model the supported historical record, which stored only the merged
+        # false outcome and no separate native/process/pipe observations.
+        (directory / f"claude-termination-{status['execution_id']}.yml").unlink()
+        legacy = command(installed_commands, root, environment, 'interrupt', alias)
+        missing = yaml.safe_load(legacy.stdout)['members'][0]
+        assert missing['interrupt_status'] == 'unconfirmed'
+        assert 'process_group_closed, stdout_eof, stderr_eof, pipes_closed, native_idle' in missing['error']['message']
+        assert (directory / 'execution.yml').read_bytes() == original
+
+
 @pytest.mark.skipif(not os.environ.get('CLAUDE_REAL_TEST_BINARY'), reason='Explicit real CLI probe only')
 def test_real_claude_public_runner_startup(
     installed_commands: InstalledCommands,

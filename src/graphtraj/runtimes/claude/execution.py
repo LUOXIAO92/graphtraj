@@ -58,6 +58,9 @@ class ClaudeExecution:
         self.sent = 0
         self.results = 0
         self.native_state: str | None = None
+        self.drained_native_state: str | None = None
+        self.stdout_eof = False
+        self.stderr_eof = False
         self.task_released = False
         self.diagnostics = {'session_id': self.native_id, 'execution_id': self.execution_id,
                             'launch': 'unknown', 'popen_returned': False,
@@ -209,7 +212,10 @@ class ClaudeExecution:
                     except ValueError:
                         self.events.put({'type': 'transport_error'})
                         return
+                    if event.get('type') == 'system' and event.get('subtype') == 'session_state_changed':
+                        self.drained_native_state = event.get('state')
                     self.events.put(event)
+                self.stdout_eof = True
         finally:
             self.events.put({'type': 'eof'})
 
@@ -295,6 +301,7 @@ class ClaudeExecution:
                         stderr.write(line)
                         stderr.flush()
                         self._diagnostic_warning('stderr', line)
+                    self.stderr_eof = True
 
                 stderr_reader = threading.Thread(target=drain_stderr, daemon=True)
                 stderr_reader.start()
@@ -404,6 +411,7 @@ class ClaudeExecution:
                     self._close()
                 except RuntimeAdapterError as error:
                     failure = error
+                process_group_closed = self.terminal_confirmed
                 if reader is not None:
                     reader.join(timeout=5)
                 if stderr_reader is not None:
@@ -414,6 +422,18 @@ class ClaudeExecution:
                     for stream in (self.proc.stdout, self.proc.stderr):
                         if stream is not None:
                             stream.close()
+                if self.proc is not None:
+                    # Keep the owner's separate observations: the native idle
+                    # event may arrive while _close drains after the loop ends.
+                    write_yaml_durably(self.directory / f'claude-termination-{self.execution_id}.yml', {
+                        'session': self.session, 'execution_id': self.execution_id,
+                        'runtime_pid': self.proc.pid, 'worker_pid': os.getpid(),
+                        'process_group_closed': process_group_closed,
+                        'runtime_exit_code': self.proc.poll(),
+                        'stdout_eof': self.stdout_eof, 'stderr_eof': self.stderr_eof,
+                        'pipes_closed': pipes_drained and self.proc.stdout.closed and self.proc.stderr.closed,
+                        'native_idle': self.drained_native_state == 'idle',
+                    })
                 if not pipes_drained or self.task_released and self.native_state != 'idle':
                     self.terminal_confirmed = False
                     failure = RuntimeAdapterError(

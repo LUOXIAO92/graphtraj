@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 from contextlib import contextmanager
@@ -833,17 +834,13 @@ def _status_session(
         identity.update(session=mapping["session"], execution_id=mapping["execution_id"])
     execution_file = session_directory / "execution.yml"
     if os.path.lexists(str(execution_file)):
-        return {
-            **identity, "activity": "idle",
-            "last_outcome": read_terminal_outcome(execution_file),
-        }
+        return {**identity, **_retained_activity(mapping, session_directory)}
     try:
         status = session_operation(mapping, "status")
     except RunnerError:
         # Completion can close the socket between the file read and the request.
         if execution_file.is_file():
-            return {**identity, "activity": "idle",
-                    "last_outcome": read_terminal_outcome(execution_file)}
+            return {**identity, **_retained_activity(mapping, session_directory)}
         unresponsive = _unresponsive_status(mapping, session_directory)
         if unresponsive["activity"] == "abnormal" and respond_to_abnormal:
             # The judged abnormality is answered here, as part of the judgement
@@ -1108,7 +1105,8 @@ def _valid_session_mapping(mapping: Dict[str, Any], alias: str) -> bool:
     )
 
 
-def read_terminal_outcome(turn_file: Path) -> str:
+def read_execution_result(turn_file: Path) -> dict:
+    """Read a valid retained outcome without claiming termination was confirmed."""
     if turn_file.is_symlink() or not turn_file.is_file():
         raise _invalid_activity()
     try:
@@ -1119,10 +1117,44 @@ def read_terminal_outcome(turn_file: Path) -> str:
         not isinstance(turn, dict)
         or not isinstance(turn.get("outcome"), str)
         or turn["outcome"] not in TERMINAL_OUTCOMES
-        or turn.get("terminal_confirmed") is False
     ):
         raise _invalid_activity()
-    return turn["outcome"]
+    return turn
+
+
+def read_terminal_outcome(turn_file: Path) -> str:
+    """Require original terminal evidence or a separately retained confirmation."""
+    turn = read_execution_result(turn_file)
+    if turn.get('terminal_confirmed') is False:
+        try:
+            directory = turn_file.parent
+            mapping, _ = read_alias_mapping(directory.parent.parent, directory.name)
+            receipt_file = directory / f"terminal-confirmation-{mapping['execution_id']}.yml"
+            if receipt_file.parent != directory or receipt_file.is_symlink():
+                raise ValueError('Invalid confirmation path')
+            receipt = yaml.safe_load(receipt_file.read_text())
+            if (not isinstance(receipt, dict) or receipt.get('terminal_confirmed') is not True
+                    or receipt.get('execution_sha256') != hashlib.sha256(turn_file.read_bytes()).hexdigest()
+                    or any(receipt.get(key) != mapping[key] for key in
+                           ('session', 'execution_id', 'worker_pid', 'runtime_pid'))):
+                raise ValueError('Confirmation does not match this execution')
+        except (OSError, ValueError, KeyError, yaml.YAMLError) as error:
+            raise _invalid_activity() from error
+    return turn['outcome']
+
+
+def _retained_activity(mapping: dict, directory: Path) -> dict:
+    """Expose unconfirmed failures without treating them as an idle execution."""
+    turn_file = directory / 'execution.yml'
+    turn = read_execution_result(turn_file)
+    try:
+        outcome = read_terminal_outcome(turn_file)
+    except RunnerError:
+        if turn.get('terminal_confirmed') is not False:
+            raise
+        return {**_unresponsive_status(mapping, directory), 'last_outcome': turn['outcome'],
+                'terminal_confirmed': False}
+    return {'activity': 'idle', 'last_outcome': outcome}
 
 
 def _authority_denied() -> RunnerError:

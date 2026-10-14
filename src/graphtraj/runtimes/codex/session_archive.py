@@ -109,17 +109,25 @@ class CodexSessionArchive:
                                     'locator': 'thread/fork'}, 'missing': missing},
         }
         with SessionStore.create(self.path, header) as store:
+            events = []
+            if seeded:
+                for index, turn in enumerate(thread['turns']):
+                    event = retain_native('codex', turn, session_id=self.session_id,
+                                          locator=f'thread/fork/turns/{index}', seq=len(events), time=now)
+                    event['graphtraj']['attachments'] = _attachments(store, turn)
+                    events.append(event)
+                events.append({'type': 'session/end-seed', 'seq': len(events), 'time': now,
+                               'data': {'inherited': True}})
+            # The response describes the newly created child. Only its returned
+            # turns are inherited; the response envelope is a local observation.
             event = retain_native('codex', thread, session_id=self.session_id,
-                                  locator='thread/fork', seq=0, time=now)
+                                  locator='thread/fork', seq=len(events), time=now)
             event['graphtraj']['missing'] = [{
                 'path': 'rawModelStream',
                 'reason': 'Unknown: public fork history is not the original model stream.',
             }]
             event['graphtraj']['attachments'] = _attachments(store, thread)
-            events = [event]
-            if seeded:
-                events.append({'type': 'session/end-seed', 'seq': 1, 'time': now,
-                               'data': {'inherited': True}})
+            events.append(event)
             store.append_many(events, source='thread/fork', position=0)
 
     def notice(self, message: dict) -> None:
@@ -201,9 +209,10 @@ class CodexSessionArchive:
                     if event['type'] == 'session/end-seed':
                         continue
                     record = native_record(event)
-                    if record.get('ordinal') != len(events):
+                    if type(record.get('ordinal')) is not int:
                         raise ValueError('Native inherited ordinal prefix is unavailable.')
-                    event['seq'] = len(events)
+                    if record['ordinal'] >= cutoff:
+                        continue
                     for attachment in event.get('graphtraj', {}).get('attachments', []):
                         if attachment.get('storage') == 'session':
                             store.put_attachment(parent.attachment(attachment['sha256']))
@@ -213,11 +222,53 @@ class CodexSessionArchive:
                 if not page['has_more']:
                     break
                 after = page['after']
-            if len(events) != cutoff:
+            events.sort(key=lambda event: native_record(event)['ordinal'])
+            if [native_record(event)['ordinal'] for event in events] != list(range(cutoff)):
                 raise ValueError('Native inherited prefix has not been collected in this project.')
+            for seq, event in enumerate(events):
+                event['seq'] = seq
         events.append({'type': 'session/end-seed', 'seq': len(events),
                        'time': store.header['createdAt'], 'data': {'inherited': True}})
         store.append_many(events, source='history-base', position=base['end_byte_offset'])
+
+    def _rollout_event(
+        self,
+        store: SessionStore,
+        record: dict,
+        start: int,
+        seq: int,
+    ) -> dict:
+        """Preserve one source record and byte coordinate without inferring model data."""
+        native_time = _timestamp(record.get('timestamp'))
+        event = retain_native(
+            'codex', record, session_id=self.session_id, locator=f'byte:{start}', seq=seq,
+            time=native_time if native_time is not None else time.time_ns() // 1000000,
+        )
+        missing = [{'path': field, 'reason': 'Unknown: native record does not establish this mapping.'}
+                   for field in ('rawModelStream', 'rawLogprobs', 'sampledLogprobs')]
+        if native_time is None:
+            missing.append({'path': 'time', 'reason': 'Native time unknown; receipt time used.'})
+        event['graphtraj']['missing'] = missing
+        event['graphtraj']['attachments'] = _attachments(store, record)
+        return event
+
+    def _seed_copied(self, store: SessionStore, stream: BinaryIO, cut: int) -> None:
+        """Commit inherited records, their cut and child metadata in one transaction.
+
+        Native files physically put child metadata before copied parent history.
+        Canonical inheritance puts it after the cut. Byte locators retain that
+        original source order, while a single cursor commit makes replay safe.
+        """
+        stream.seek(0)
+        metadata = json.loads(stream.readline())
+        events = []
+        while stream.tell() < cut:
+            start = stream.tell()
+            events.append(self._rollout_event(store, json.loads(stream.readline()), start, len(events)))
+        events.append({'type': 'session/end-seed', 'seq': len(events),
+                       'time': store.header['createdAt'], 'data': {'inherited': True}})
+        events.append(self._rollout_event(store, metadata, 0, len(events)))
+        store.append_many(events, source='rollout', position=cut)
 
     def collect(self, rollout: Path) -> None:
         """Commit complete native records; retry unfinished input on the next call.
@@ -269,6 +320,9 @@ class CodexSessionArchive:
                     raise ValueError('Codex archive already belongs to another project or Agent.')
                 if metadata.get('forked_from_id') and metadata.get('history_base'):
                     self._seed_reference(store, metadata['history_base'])
+                cut = header['native'].get('inheritedEndByte')
+                if cut is not None and store.position('rollout') < 0:
+                    self._seed_copied(store, stream, cut)
                 position = store.position('rollout')
                 if rollout.stat().st_size < position:
                     raise ValueError('Codex rollout was truncated before its committed cursor.')
@@ -279,23 +333,6 @@ class CodexSessionArchive:
                     if not line.endswith(b'\n'):
                         break
                     record = json.loads(line)
-                    native_time = _timestamp(record.get('timestamp'))
-                    event = retain_native(
-                        'codex', record, session_id=self.session_id, locator=f'byte:{start}',
-                        seq=store.next_seq,
-                        time=native_time if native_time is not None else time.time_ns() // 1000000,
-                    )
-                    missing = [{'path': field, 'reason': 'Unknown: native record does not establish this mapping.'}
-                               for field in ('rawModelStream', 'rawLogprobs', 'sampledLogprobs')]
-                    if native_time is None:
-                        missing.append({'path': 'time', 'reason': 'Native time unknown; receipt time used.'})
-                    event['graphtraj']['missing'] = missing
-                    event['graphtraj']['attachments'] = _attachments(store, record)
-                    # Preserve cumulative usage as a native observation. It is not
-                    # an additive DSH charge, and replay cannot count it twice.
-                    events = [event]
-                    if start == header['native'].get('inheritedEndByte'):
-                        events.insert(0, {'type': 'session/end-seed', 'seq': event['seq'],
-                                          'time': event['time'], 'data': {'inherited': True}})
-                        event['seq'] += 1
-                    store.append_many(events, source='rollout', position=stream.tell())
+                    event = self._rollout_event(store, record, start, store.next_seq)
+                    # Native cumulative usage is evidence, never an additive charge.
+                    store.append_many([event], source='rollout', position=stream.tell())

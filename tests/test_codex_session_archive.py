@@ -145,10 +145,11 @@ def test_fork_retains_exact_returned_prefix_without_reading_parent(tmp_path: Pat
     with SessionStore(archive.path) as store:
         store.validate()
         events = store.page()['events']
-        assert len(events) == 3
-        assert native_record(events[0]) == thread
+        assert len(events) == 4
+        assert native_record(events[0]) == thread['turns'][0]
         assert events[1]['data'] == {'inherited': True}
-        assert native_record(events[2]) == notice
+        assert native_record(events[2]) == thread
+        assert native_record(events[3]) == notice
         assert store.header['parentSession'] == 'codex:parent'
 
 
@@ -175,20 +176,30 @@ def test_persistent_copied_fork_uses_child_settings_boundary(tmp_path: Path) -> 
     with SessionStore(archive.path) as store:
         store.validate()
         events = store.page()['events']
-        cut = len(inherited) + 1
+        cut = len(inherited)
         assert events[cut]['type'] == 'session/end-seed'
-        assert [native_record(event) for event in events if event['type'] != 'session/end-seed'] == values
+        assert [native_record(event) for event in events[:cut]] == inherited
+        assert native_record(events[cut + 1]) == header
+        native_events = [event for event in events if event['type'] != 'session/end-seed']
+        native_events.sort(key=lambda event: int(event['graphtraj']['native']['locator'].split(':')[1]))
+        assert [native_record(event) for event in native_events] == values
         assert len(events) == len(values) + 1
         assert store.header['parentSession'] == 'codex:parent'
 
 
-def test_referenced_fork_copies_only_native_ordinal_prefix(tmp_path: Path) -> None:
+@pytest.mark.parametrize('copied_parent', [False, True])
+def test_referenced_fork_copies_only_native_ordinal_prefix(tmp_path: Path, copied_parent: bool) -> None:
     """Parent growth and source cleanup cannot change a referenced child's prefix."""
     parent_values = records('parent')
+    if copied_parent:
+        parent_values[0]['payload']['forked_from_id'] = 'ancestor'
+        parent_values.insert(4, {'type': 'event_msg', 'payload': {
+            'type': 'thread_settings_applied', 'thread_id': 'parent', 'thread_settings': {},
+        }})
     for ordinal, record in enumerate(parent_values):
         record['ordinal'] = ordinal
     parent_source = tmp_path / 'parent.jsonl'
-    write_records(parent_source, parent_values[:2])
+    write_records(parent_source, parent_values[:5 if copied_parent else 2])
     parent = CodexSessionArchive(tmp_path, 'project', 'parent-agent', 'parent')
     parent.collect(parent_source)
     # The parent's native log has advanced after its last hook collection.

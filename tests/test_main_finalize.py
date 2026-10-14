@@ -640,7 +640,8 @@ def test_native_start_resume_and_stop_need_no_main_binding_input(host: tuple[Pat
         events = archive.page()['events']
         assert archive.header['parentSession'] == 'codex:main'
         assert archive.header['graphtraj']['agentId'] != 'main'
-        assert native_record(events[0])['turns'][0]['id'] == 'inherited-turn'
+        assert native_record(events[0])['id'] == 'inherited-turn'
+        assert native_record(events[2])['id'] == 'checker'
         assert events[1]['type'] == 'session/end-seed'
         assert events[1]['data'] == {'inherited': True}
         assert any(native_record(event).get('method') == 'item/completed' for event in events[2:])
@@ -667,6 +668,7 @@ def test_native_session_end_archives_terminal_tail_without_checking(host: tuple[
 def test_native_copied_fork_keeps_own_first_header(host: tuple[Path, Path]) -> None:
     """An inherited Main header cannot replace the current fork's native identity."""
     from graphtraj.execution.main_finalize import session_binding
+    from graphtraj.sessions.protocol import native_record
     from graphtraj.sessions.storage import SessionStore, session_path
 
     root, binding = host
@@ -686,7 +688,8 @@ def test_native_copied_fork_keeps_own_first_header(host: tuple[Path, Path]) -> N
     with SessionStore(session_path(root / '.graphtraj/state', 'codex:fork')) as store:
         store.validate()
         assert store.header['parentSession'] == 'codex:main'
-        assert store.page()['events'][3]['type'] == 'session/end-seed'
+        assert store.page()['events'][2]['type'] == 'session/end-seed'
+        assert native_record(store.page()['events'][3]) == records[0]
 
 
 @pytest.mark.parametrize('source', [

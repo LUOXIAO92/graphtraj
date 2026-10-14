@@ -40,6 +40,20 @@ def unsupported(*args: object, **kwargs: object) -> Any:
     raise RuntimeAdapterError('RUNTIME_UNSUPPORTED', 'Claude Code interactive Main hosting is unavailable.')
 
 
+def _validated_resources(value: object, root: Path, state: Path, home: Path) -> list[str]:
+    """Validate explicit read grants against the same private paths on launch and resume."""
+    if (not isinstance(value, list)
+            or any(not isinstance(path, str) or not Path(path).is_absolute() for path in value)):
+        raise RuntimeAdapterError('ROLE_CONFIG_INVALID', 'claude.read_paths must list absolute resource paths.')
+    protected = (state, root / '.graphtraj/runner', root / '.graphtraj/cli',
+                 root / '.codex', Path.home() / '.codex', home)
+    for resource in value:
+        path = Path(resource).resolve()
+        if any(path.is_relative_to(item.resolve()) or item.resolve().is_relative_to(path) for item in protected):
+            raise RuntimeAdapterError('RUNTIME_ACCESS_DENIED', 'A Claude resource grant would expose private control/history.')
+    return list(value)
+
+
 @dataclass(frozen=True)
 class ClaudeContext:
     """Immutable native launch and configuration provenance, without credentials."""
@@ -160,13 +174,10 @@ class ClaudeRuntimeAdapter:
         state = project.state if project else harness_root / '.graphtraj/state'
         if state.resolve().is_relative_to(worktree.resolve()):
             raise RuntimeAdapterError('RUNTIME_ACCESS_DENIED', 'Claude needs a Worktree outside private state.')
-        protected = (state, harness_root / '.graphtraj/runner', harness_root / '.graphtraj/cli',
-                     harness_root / '.codex', Path.home() / '.codex',
-                     Path(settings.runtime_home or os.environ.get('CLAUDE_CONFIG_DIR', str(Path.home() / '.claude'))))
-        for resource in resources:
-            path = Path(resource).resolve()
-            if any(path.is_relative_to(item.resolve()) or item.resolve().is_relative_to(path) for item in protected):
-                raise RuntimeAdapterError('RUNTIME_ACCESS_DENIED', 'A Claude resource grant would expose private control/history.')
+        resources = _validated_resources(
+            resources, harness_root, state,
+            Path(settings.runtime_home or os.environ.get('CLAUDE_CONFIG_DIR', str(Path.home() / '.claude'))),
+        )
         return ClaudeContext(json.dumps({
             'runtime': 'claude', 'executable': binary, 'version': version,
             'harness_root': str(harness_root), 'worktree_path': str(worktree),
@@ -219,10 +230,32 @@ class ClaudeRuntimeAdapter:
         reports_only: bool = False,
         session_directory: Path | None = None,
     ) -> dict:
-        """Refresh owned reports without widening native access on recovery."""
+        """Refresh reports and explicit resource grants for the original configured role.
+
+        Model, connection and other captured permissions remain unchanged. An
+        inline or removed role has no current configured grants to import.
+        """
         refreshed = copy.deepcopy(dict(request))
         if refreshed.get('worktree_path') != str(worktree):
             raise RuntimeAdapterError('session-not-resumable', 'Claude Worktree changed during recovery.')
+        if session_directory is not None:
+            from graphtraj.configuration.project_roles import load_project_roles, ProjectRolesError
+
+            try:
+                mapping = yaml.safe_load((session_directory / 'mapping.yml').read_text())
+                reference = mapping.get('role_reference')
+                presets = load_project_roles(Path(request['harness_root'])).presets
+                preset = presets.get(reference)
+                config = preset.claude if preset is not None else None
+                if config is not None and 'read_paths' in config:
+                    if preset.runtime not in (None, 'claude'):
+                        raise ValueError('Original role no longer configures Claude resources')
+                    refreshed['resources'] = _validated_resources(
+                        config['read_paths'], Path(request['harness_root']),
+                        Path(request['state_directory']), Path(request['runtime_home']),
+                    )
+            except (OSError, ValueError, TypeError, KeyError, yaml.YAMLError, ProjectRolesError) as error:
+                raise RuntimeAdapterError('ROLE_CONFIG_INVALID', 'Cannot refresh original role resource grants: ' + str(error)) from error
         refreshed['reports'] = [str(path) for path in report_files]
         if reports_only:
             refreshed['worktree_access'] = 'read'

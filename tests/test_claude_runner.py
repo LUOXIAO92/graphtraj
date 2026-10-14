@@ -212,6 +212,75 @@ def test_claude_public_interrupt_rechecks_drained_termination(
             assert after.get(key) == budget.get(key)
 
 
+def test_recovery_refreshes_only_original_role_read_paths(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    """Later explicit grants reach resumed CLI policy without replacing captured settings."""
+    root, environment = setup(installed_commands, temporary_git_repository, fake_codex, tmp_path)
+    role_file = root / '.graphtraj/roles.yml'
+    original = yaml.safe_load(role_file.read_text())['roles']['researcher']
+    roles = {'roles': {'original_team': {'researcher': original},
+                      'other_team': {'researcher': dict(original)}},
+             'role_tree': {'original_team.researcher': {}, 'other_team.researcher': {}}}
+    role_file.write_text(yaml.safe_dump(roles))
+    batch = root / 'probe.yml'
+    batch.write_text(yaml.safe_dump({'tasks': [{'ticket_id': '320', 'role': 'original_team.researcher'}]}))
+    launched = command(installed_commands, root, environment, '--swarm-input', str(batch))
+    assert launched.returncode == 0, launched.stdout + launched.stderr
+    alias = yaml.safe_load(launched.stdout)['tasks'][0]['alias']
+    first = settled(installed_commands, root, environment, alias)
+    directory = root / '.graphtraj/runner/sessions' / alias
+    captured = yaml.safe_load((directory / 'launch.yml').read_text())['adapter_request']
+    stopped = command(installed_commands, root, environment, 'interrupt', alias)
+    assert stopped.returncode == 0, stopped.stdout + stopped.stderr
+
+    resources = [root / 'approved/bin', root / 'approved/lib']
+    for path in resources:
+        path.mkdir(parents=True)
+        (path / 'resource.txt').write_text('Explicit read-only resource\n')
+    roles['roles']['original_team']['researcher'] = {
+        **original, 'model': 'later-model', 'reasoning_effort': 'max',
+        'base_url': 'https://later.invalid/v1',
+        'claude': {'read_paths': list(map(str, resources)), 'permission_mode': 'auto'},
+    }
+    roles['roles']['other_team']['researcher']['claude'] = {'read_paths': [str(root / 'unrelated')]}
+    role_file.write_text(yaml.safe_dump(roles))
+    recovered = command(
+        installed_commands, root, environment, 'recover', alias,
+        '--reason', 'Apply later authorized read resources', '--instruction', 'Report resource configuration',
+        '--allowed-scope', 'Read only explicitly authorized resources',
+        '--forbidden-scope', 'No changes to model, connection, or other permissions',
+        '--caused-by-event-id', events(root)[-1]['event_id'],
+    )
+    assert recovered.returncode == 0, recovered.stdout + recovered.stderr
+    assert yaml.safe_load(recovered.stdout)['recovery_status'] == 'resumed'
+    assert settled(installed_commands, root, environment, alias)['session'] == first['session']
+    resumed = yaml.safe_load((directory / 'resume.yml').read_text())['adapter_request']
+    assert resumed == {**captured, 'resources': list(map(str, resources))}
+    native = json.loads((root / 'native-permissions.json').read_text())['settings']
+    filesystem = native['sandbox']['filesystem']
+    for path in resources:
+        assert str(path.resolve()) in filesystem['allowRead']
+        assert str(path.resolve()) in filesystem['denyWrite']
+        assert str(path.resolve()) not in filesystem['allowWrite']
+        assert str(path.resolve()) in native['permissions']['additionalDirectories']
+        assert f'Edit(/{path.resolve()}/**)' in native['permissions']['deny']
+    assert str(root / 'unrelated') not in filesystem['allowRead']
+
+    # A later role change still cannot expose private control/state paths.
+    roles['roles']['original_team']['researcher']['claude']['read_paths'] = [str(root / '.graphtraj/state')]
+    role_file.write_text(yaml.safe_dump(roles))
+    refused = command(installed_commands, root, environment, 'send', alias,
+                      '--instruction', 'Do not start with private resource access',
+                      '--caused-by-event-id', events(root)[-1]['event_id'])
+    assert refused.returncode != 0
+    assert yaml.safe_load(refused.stdout)['error']['code'] == 'invalid-config'
+    assert yaml.safe_load((directory / 'resume.yml').read_text())['adapter_request'] == resumed
+
+
 @pytest.mark.skipif(not os.environ.get('CLAUDE_REAL_TEST_BINARY'), reason='Explicit real CLI probe only')
 def test_real_claude_public_runner_startup(
     installed_commands: InstalledCommands,

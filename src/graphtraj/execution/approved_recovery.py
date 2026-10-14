@@ -123,9 +123,7 @@ def _repair_snapshot(project: Any, before: dict, request: dict) -> dict:
         after['budget']['approved_minutes'] = after['budget'].get('approved_minutes', 0) + minutes
         return after
     if request.get('restore_active', False):
-        if before['task'].get('schema_version') == 2 and (
-            not before['task']['active'] or before['task']['status'] == 'integrated'
-        ):
+        if not before['task']['active'] or before['task']['status'] == 'integrated':
             raise RunnerError('invalid-input', 'Task disposition and completed ancestors require task-graph revision.')
         if before['task']['replaced_by']:
             raise RunnerError('invalid-input', 'A replaced Task requires task-graph revision.')

@@ -45,7 +45,7 @@ def _task(
     return {
         "task_id": task_id,
         "task_name": name,
-        "source": f"https://github.com/example/project/issues/{task_id}",
+        "source": f"https://github.com/example/project/issues/{task_id}", "schema_version": 2, "parent_id": None, "disposition": "active", "replaced_by": [], "retirement_reason": None,
         "title": name.replace("-", " ").title(),
         "body": f"Deliver {name}.",
         "dependencies": dependencies or [],

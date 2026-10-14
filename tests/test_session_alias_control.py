@@ -24,7 +24,7 @@ def _register_ready_task(
             {
                 "task_id": "76",
                 "task_name": "session-alias-control",
-                "source": "https://github.com/example/project/issues/76",
+                "source": "https://github.com/example/project/issues/76", "schema_version": 2, "parent_id": None, "disposition": "active", "replaced_by": [], "retirement_reason": None,
                 "title": "Session alias control",
                 "body": body,
                 "dependencies": [],

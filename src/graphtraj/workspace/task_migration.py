@@ -95,6 +95,11 @@ def migrate_project(cwd: Path) -> dict[str, Any]:
         raise ValueError("No Ticket state exists to convert")
     if (state / "tasks").exists():
         raise ValueError("Task state already exists; refusing to convert twice")
+    missing = _missing_parent_facts(state / "tickets")
+    if missing:
+        raise ValueError("Legacy definitions lack required Task facts; revise them to complete "
+                         "v2 definitions first: " + "; ".join(
+                             f"{task_id}: {', '.join(fields)}" for task_id, fields in missing.items()))
 
     # Copy first so that a failed conversion returns to the unchanged data.
     stamp  = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
@@ -124,6 +129,22 @@ def migrate_project(cwd: Path) -> dict[str, Any]:
         _restore(backup, state, runner, links)
         raise
     return {"backup": backup.relative_to(harness).as_posix(), "converted": dict(counts)}
+
+
+def _missing_parent_facts(tickets: Path) -> dict[str, list[str]]:
+    """Return each legacy Ticket that lacks the facts a Task definition requires.
+
+    A v1 record never stated its parent, disposition or retirement reason;
+    these facts cannot be inferred, so conversion stops before any change.
+    """
+    missing = {}
+    for path in sorted(tickets.glob("*/ticket.yml")):
+        record = yaml.safe_load(path.read_text(encoding="utf-8"))
+        if record.get("schema_version") != 2:
+            missing[str(record.get("ticket_id"))] = [
+                "schema_version", "parent_id", "disposition", "retirement_reason",
+            ]
+    return dict(sorted(missing.items(), key=lambda item: int(item[0])))
 
 
 def _convert_records(root: Path, counts: Counts) -> None:
@@ -200,39 +221,20 @@ def _path(value: str, counts: Counts) -> str:
 
 
 def _convert_definitions(tickets: Path, counts: Counts) -> None:
-    """Rename identity keys in definition metadata, leaving each body unchanged."""
+    """Rename identity keys in v2 definition metadata, leaving each body unchanged."""
     for path in sorted(tickets.glob("*/ticket.md")) + sorted(tickets.glob("*/definitions/*.md")):
         text  = path.read_text(encoding="utf-8")
         split = split_execution_budget_front_matter(text)
         metadata = yaml.safe_load(split[1]) if split is not None else None
-        if isinstance(metadata, dict) and isinstance(metadata.get("task"), dict):
-            # v2: the front matter is generated metadata; the body follows it unchanged.
-            metadata["task"] = {KEYS.get(key, key): item for key, item in metadata["task"].items()}
-            converted = "---\n" + yaml.safe_dump(metadata, sort_keys=False) + "---\n" + split[2]
-        else:
-            # v1: rename only the generated heading and name lines.
-            converted = _legacy_headings(text)
+        if not isinstance(metadata, dict) or not isinstance(metadata.get("task"), dict):
+            # A historical v1 snapshot is immutable evidence; only current_definition is read.
+            continue
+        # The front matter is generated metadata; the body follows it unchanged.
+        metadata["task"] = {KEYS.get(key, key): item for key, item in metadata["task"].items()}
+        converted = "---\n" + yaml.safe_dump(metadata, sort_keys=False) + "---\n" + split[2]
         if converted != text:
             _write(path, converted)
             counts.add("definitions")
-
-
-def _legacy_headings(text: str) -> str:
-    """Rename the generated ``# Ticket N:`` and ``Ticket name:`` lines only."""
-    split  = split_execution_budget_front_matter(text)
-    prefix = split[0] if split is not None else ""
-    body   = split[2] if split is not None else text
-    lines  = body.splitlines(keepends=True)
-    seen_heading = seen_name = False
-    for index, line in enumerate(lines):
-        if not seen_heading and line.startswith("# Ticket "):
-            lines[index]  = "# Task " + line.removeprefix("# Ticket ")
-            seen_heading = True
-        elif seen_heading and not seen_name and line.startswith("Ticket name: "):
-            lines[index] = "Task name: " + line.removeprefix("Ticket name: ")
-            seen_name    = True
-            break
-    return prefix + "".join(lines)
 
 
 def _move_layout(state: Path, counts: Counts) -> None:

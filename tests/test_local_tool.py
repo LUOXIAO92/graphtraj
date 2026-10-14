@@ -18,7 +18,7 @@ from graphtraj.interfaces import gateway, local_tool, tools
 ISSUE = {
     "task_id":   "900",
     "task_name": "probe-task",
-    "source":      "https://github.com/example/project/issues/900",
+    "source":      "https://github.com/example/project/issues/900", "schema_version": 2, "parent_id": None, "disposition": "active", "replaced_by": [], "retirement_reason": None,
     "title":       "Probe Task",
     "body":        "Deliver probe.",
     "dependencies": [],

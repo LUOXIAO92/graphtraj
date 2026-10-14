@@ -14,10 +14,7 @@ from graphtraj import file_lock
 from graphtraj.graph import task_protocol as protocol
 from graphtraj.graph.task_protocol import validate_definition as _validate_issue
 from graphtraj.graph.delivery_worldline import append_project_worldline_event
-from graphtraj.execution.execution_budget import (
-    read_execution_budget,
-    split_execution_budget_front_matter,
-)
+from graphtraj.execution.execution_budget import read_execution_budget
 
 
 _TASK_ID = protocol.TASK_ID
@@ -26,8 +23,6 @@ _EVENT_DEFINITION = re.compile(
     r"\d{8}T\d{6}\.\d{6}[+-]\d{4}(?:-[1-9]\d*)?\.md\Z"
 )
 _COMMIT = re.compile(r"[0-9a-f]{40}\Z")
-_ISSUE_FIELDS = frozenset(protocol.BASE_PROPERTIES)
-_STATE_FIELDS = protocol.EXECUTION_FIELDS | protocol.LEGACY_RELATIONS
 _STATUSES = frozenset(protocol.STATUSES)
 _STATE_CHANGE_FIELDS = frozenset(protocol.STATE_CHANGE_SCHEMA["properties"])
 _TRANSITIONS = {
@@ -56,13 +51,7 @@ def _validate_revision(revision: Any) -> None:
         _validate_string_list(revision, "reopen_task_ids", allow_empty=True)
     identifiers = []
     for definition in revision["tasks"]:
-        if definition.get("schema_version") == 2:
-            _validate_issue({key: definition[key] for key in protocol.TASK_PROPERTIES})
-        else:
-            _validate_issue({key: definition[key] for key in _ISSUE_FIELDS})
-            if (definition["active"] and definition["replaced_by"]
-                    or len(definition["replaced_by"]) != len(set(definition["replaced_by"]))):
-                raise ValueError("Task revision contains invalid replacements")
+        _validate_issue({key: definition[key] for key in protocol.TASK_PROPERTIES})
         identifiers.append(definition["task_id"])
     if len(identifiers) != len(set(identifiers)):
         raise ValueError("Task revision repeats a Task")
@@ -124,23 +113,16 @@ def register_task(state: Path, harness_root: Path, issue: dict[str, Any]) -> Pat
     if tasks.is_dir() and any(tasks.glob("{0}-*".format(issue["task_id"]))):
         raise ValueError("Task {0} is already registered".format(issue["task_id"]))
     state_record = {
-        "task_id": issue["task_id"],
-        "task_name": issue["task_name"],
+        **issue,
         "current_definition": "task.md",
-        "active": True,
-        "replaced_by": [],
-        "dependencies": issue["dependencies"],
+        "active": issue["disposition"] == "active",
         "status": "pending",
         "active_team_ordinal": None,
         "worktree": None,
         "branch": None,
         "current_candidate": None,
     }
-    if issue.get("schema_version") == 2:
-        state_record.update(issue, active=issue["disposition"] == "active")
-    snapshot = _render_definition(
-        {**issue, **({} if issue.get("schema_version") == 2 else {"active": True, "replaced_by": []})}
-    )
+    snapshot = protocol.render_definition(issue)
     tasks.mkdir(parents=True, exist_ok=True)
     lock = _lock(tasks, exclusive=True)
     try:
@@ -204,15 +186,9 @@ def revise_tasks(
         for task_id, definition in revised.items():
             if task_id in current:
                 directory, old = current[task_id]
-                if old.get("schema_version") == 2 and definition.get("schema_version") != 2:
-                    raise ValueError("Legacy revision is incompatible with a v2 Task; supply all v2 fields")
-                if (
-                    old["task_name"] != definition["task_name"]
-                    or (definition.get("schema_version") != 2
-                        and _snapshot_source(directory / "task.md") != definition["source"])
-                ):
+                if old["task_name"] != definition["task_name"]:
                     raise ValueError("a stable Task identity cannot change")
-                if definition.get("schema_version") == 2 and definition["current_definition"] != old["current_definition"]:
+                if definition["current_definition"] != old["current_definition"]:
                     raise ValueError("Task current_definition changed; inspect the current definition")
                 previous_budget = read_execution_budget(
                     (directory / old["current_definition"]).read_text(
@@ -239,7 +215,7 @@ def revise_tasks(
                 )
                 record = dict(old)
                 record.update(
-                    active=definition.get("disposition", "active" if definition.get("active") else "cancelled") == "active",
+                    active=definition["disposition"] == "active",
                     replaced_by=definition["replaced_by"],
                     dependencies=definition["dependencies"],
                 )
@@ -254,7 +230,7 @@ def revise_tasks(
                     "task_id": task_id,
                     "task_name": definition["task_name"],
                     "current_definition": "task.md",
-                    "active": definition.get("disposition", "active" if definition.get("active") else "cancelled") == "active",
+                    "active": definition["disposition"] == "active",
                     "replaced_by": definition["replaced_by"],
                     "dependencies": definition["dependencies"],
                     "status": "pending",
@@ -263,18 +239,17 @@ def revise_tasks(
                     "branch": None,
                     "current_candidate": None,
                 }
-            if definition.get("schema_version") == 2:
-                if task_id not in current and definition["current_definition"] is not None:
-                    raise ValueError("A new Task requires current_definition: null")
-                record.update({key: definition[key] for key in protocol.TASK_PROPERTIES})
+            if task_id not in current and definition["current_definition"] is not None:
+                raise ValueError("A new Task requires current_definition: null")
+            record.update({key: definition[key] for key in protocol.TASK_PROPERTIES})
             proposed[task_id] = record
         reopened = revision.get("reopen_task_ids", [])
         for task_id in reopened:
             if task_id not in revised or task_id not in current:
                 raise ValueError("Reopening requires an explicit revision of each existing Task")
             record = proposed[task_id]
-            if record.get("schema_version") != 2 or record["status"] != "integrated":
-                raise ValueError("Only an integrated v2 Task can be reopened by graph revision")
+            if record["status"] != "integrated":
+                raise ValueError("Only an integrated Task can be reopened by graph revision")
             if record["active_team_ordinal"] is not None:
                 from graphtraj.execution.runner_status import caller_alias, require_task_authority
                 from graphtraj.graph.delivery_worldline import read_worldline
@@ -397,7 +372,6 @@ def read_graph(state: Path) -> dict[str, Any]:
             children = [key for key, other in records.items() if other.get("parent_id") == task_id]
             completed = sum(_result_complete(records, child) for child in children)
             record.update(
-                parent_known=record.get("schema_version") == 2,
                 children=children,
                 progress={"total": len(children), "completed": completed},
                 delivery=delivery[task_id],
@@ -474,7 +448,7 @@ def update_task_state(
                     old_status, change["status"]
                 )
             )
-        if record.get("schema_version") == 2 and any(
+        if any(
             record[field] is not None and change[field] is None
             for field in ("active_team_ordinal", "worktree", "branch", "current_candidate")
         ):
@@ -547,8 +521,8 @@ def complete_task(state: Path, harness_root: Path, request: dict[str, Any]) -> d
         if task_id not in records:
             raise ValueError("Completion names an unknown Task")
         directory, record = current[task_id]
-        if record.get("schema_version") != 2 or not record["active"]:
-            raise ValueError("Completion requires an active v2 task")
+        if not record["active"]:
+            raise ValueError("Completion requires an active task")
         if record["current_definition"] != request["current_definition"]:
             raise ValueError("Completion current_definition is stale")
         if record["status"] not in {"pending", "ready", "blocked", "escalated"}:
@@ -595,34 +569,8 @@ def complete_task(state: Path, harness_root: Path, request: dict[str, Any]) -> d
 
 
 def _render_definition(definition: dict[str, Any]) -> str:
-    """Render the selected immutable definition format."""
-    if definition.get("schema_version") == 2:
-        return protocol.render_definition(definition)
-    replacements = ", ".join(definition["replaced_by"]) or "none"
-    dependencies = ", ".join(definition["dependencies"]) or "none"
-    metadata = (
-        "# Task {0}: {1}\n\n"
-        "Task name: {2}\n\n"
-        "Source: {3}\n\n"
-        "Active: {4}\n\n"
-        "Replaced by: {5}\n\n"
-        "Dependencies: {6}\n\n"
-    ).format(
-        definition["task_id"],
-        definition["title"],
-        definition["task_name"],
-        definition["source"],
-        str(definition["active"]).lower(),
-        replacements,
-        dependencies,
-    )
-    front_matter = split_execution_budget_front_matter(definition["body"])
-    if front_matter is None:
-        return metadata + definition["body"] + "\n"
-    preserved, _, body = front_matter
-    separator = "\n" if preserved.endswith(("\n", "\r")) else "\n\n"
-    body = body.lstrip("\r\n")
-    return preserved + separator + metadata + body + ("" if body.endswith("\n") else "\n")
+    """Render the immutable Task definition."""
+    return protocol.render_definition(definition)
 
 
 def _load_states(tasks: Path) -> dict[str, tuple[Path, dict[str, Any]]]:
@@ -630,9 +578,7 @@ def _load_states(tasks: Path) -> dict[str, tuple[Path, dict[str, Any]]]:
     states: dict[str, tuple[Path, dict[str, Any]]] = {}
     for path in tasks.glob("*/task.yml"):
         record = yaml.safe_load(path.read_text(encoding="utf-8"))
-        modern = isinstance(record, dict) and record.get("schema_version") == 2
-        expected = protocol.EXECUTION_FIELDS | {"schema_version"} if modern else _STATE_FIELDS
-        if not isinstance(record, dict) or set(record) != expected:
+        if not isinstance(record, dict) or set(record) != protocol.EXECUTION_FIELDS:
             raise ValueError("Task state is invalid")
         task_id = record["task_id"]
         definition = (
@@ -649,7 +595,7 @@ def _load_states(tasks: Path) -> dict[str, tuple[Path, dict[str, Any]]]:
             )
         )
         definition_path = path.parent / definition if definition is not None else path
-        if modern and valid_definition and definition_path.is_file() and not definition_path.is_symlink():
+        if valid_definition and definition_path.is_file() and not definition_path.is_symlink():
             definition_record = protocol.read_definition(definition_path.read_text(encoding="utf-8"))
             _validate_issue(definition_record)
             if any(definition_record[key] != record[key] for key in ("task_id", "task_name", "schema_version")):
@@ -690,23 +636,6 @@ def _load_states(tasks: Path) -> dict[str, tuple[Path, dict[str, Any]]]:
             )
         ):
             raise ValueError("Task state is invalid")
-        if not modern:
-            snapshot = definition_path.read_text(encoding="utf-8")
-            front = split_execution_budget_front_matter(snapshot)
-            text = front[2] if front is not None else snapshot
-            heading = text.lstrip("\r\n").splitlines()[0]
-            prefix = f"# Task {task_id}: "
-            if not heading.startswith(prefix):
-                raise ValueError("Task snapshot is invalid")
-            parts = text.lstrip("\r\n").split("\n\n", 6)
-            if len(parts) != 7:
-                raise ValueError("Legacy Task definition is invalid")
-            body = (front[0] if front is not None else "") + parts[6]
-            # Unknown history is explicit; prose declarations never become facts.
-            record.update(schema_version=1, parent_known=False,
-                          disposition="active" if record["active"] else "superseded" if record["replaced_by"] else None,
-                          retirement_reason=None, title=heading.removeprefix(prefix),
-                          source=_snapshot_source(definition_path), body=body)
         states[task_id] = (path.parent, record)
     directories = {path for path in tasks.iterdir() if path.is_dir()}
     if directories != {directory for directory, _ in states.values()}:
@@ -733,10 +662,6 @@ def _validate_graph(records: dict[str, dict[str, Any]]) -> None:
     for record in records.values():
         if record["active"] and record["replaced_by"]:
             raise ValueError("An active Task cannot have replacements")
-        if record.get("schema_version", 1) == 1 and record["active"] and any(
-            not records[item]["active"] for item in record["dependencies"]
-        ):
-            raise ValueError("an active dependency cannot point to an inactive Task")
 
 
 def _validate_dag(edges: dict[str, list[str]]) -> None:
@@ -803,8 +728,7 @@ def _validate_completed_input_corrections(
         old, record = before[key], records[key]
         added = set(record["dependencies"]) - set(old["dependencies"])
         if (
-            old.get("schema_version") != 2
-            or old["status"] != "integrated" or record["status"] != "integrated"
+            old["status"] != "integrated" or record["status"] != "integrated"
             or not old["active"] or not record["active"]
             or not added or not set(old["dependencies"]) <= set(record["dependencies"])
             or any(old.get(field) != record.get(field)
@@ -824,7 +748,7 @@ def _require_reopened_ancestors(
     """Require explicit reopening when necessary scope or its results change."""
     for child, record in records.items():
         old = before.get(child, {})
-        changed_scope = old.get("schema_version") == 2 and any(
+        changed_scope = bool(old) and any(
             old.get(field) != record.get(field)
             for field in ("body", "dependencies", "disposition", "replaced_by", "retirement_reason")
         )
@@ -875,18 +799,6 @@ def _rollback_revision(changed: list[tuple[Path, bytes | None, Path]]) -> None:
         if definition_path.exists():
             definition_path.chmod(0o644)
             definition_path.unlink()
-
-
-def _snapshot_source(path: Path) -> str:
-    """Read the external source from a known legacy Markdown definition."""
-    snapshot = path.read_text(encoding="utf-8")
-    front_matter = split_execution_budget_front_matter(snapshot)
-    if front_matter is not None:
-        _, _, snapshot = front_matter
-    for line in snapshot.splitlines():
-        if line.startswith("Source: "):
-            return line.removeprefix("Source: ")
-    raise ValueError("Task snapshot is invalid")
 
 
 def _remove_task_directory(directory: Path) -> None:

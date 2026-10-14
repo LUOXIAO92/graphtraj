@@ -55,7 +55,7 @@ def main() -> None:
         (project / '.graphtraj/roles.yml').write_text(
             'roles:\n  observer:\n    runtime: codex\n    model: gpt-5.3-codex\nrole_tree:\n  observer: {}\n')
         registered = operate(call, 'task_register', {'task_id': '1', 'task_name': 'controlled-linux',
-            'title': 'Controlled Linux desktop observation', 'source': 'https://github.com/example/desktop-test/issues/1',
+            'title': 'Controlled Linux desktop observation', 'source': 'https://github.com/example/desktop-test/issues/1', 'schema_version': 2, 'parent_id': None, 'disposition': 'active', 'replaced_by': [], 'retirement_reason': None,
             'body': 'Controlled message/tool/usage records, not real model execution.', 'dependencies': []})
         result['registration'] = registered
         graph = operate(call, 'task_graph', {})

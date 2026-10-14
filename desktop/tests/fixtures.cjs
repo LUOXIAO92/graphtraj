@@ -16,6 +16,7 @@ function task(id, name, dependencies = []) {
   return {
     task_id: id, task_name: name, title: name.replaceAll('-', ' '),
     source: `https://github.com/example/desktop-test/issues/${id}`,
+    schema_version: 2, parent_id: null, disposition: 'active', replaced_by: [], retirement_reason: null,
     body: 'A controlled desktop read-boundary fixture. No model execution.', dependencies,
   };
 }

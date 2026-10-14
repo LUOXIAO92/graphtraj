@@ -21,7 +21,7 @@ def _register_ready_inline_task(harness_root: Path, product: Path) -> None:
             {
                 "task_id": "75",
                 "task_name": "inline-specialist",
-                "source": "https://github.com/example/project/issues/75",
+                "source": "https://github.com/example/project/issues/75", "schema_version": 2, "parent_id": None, "disposition": "active", "replaced_by": [], "retirement_reason": None,
                 "title": "Run an inline specialist",
                 "body": "Investigate the accepted Task.",
                 "dependencies": [],

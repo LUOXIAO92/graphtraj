@@ -12,7 +12,6 @@ export type Task = {
   schema_version?: number;
   parent_id?: string | null;
   disposition?: string;
-  parent_known?: boolean;
   progress?: { total: number; completed: number };
   status: string;
   active: boolean;

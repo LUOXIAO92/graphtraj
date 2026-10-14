@@ -23,7 +23,7 @@ def ready_team(root: Path, body: str) -> Path:
     state = root / ".graphtraj/state"
     directory = register_task(state, root, {
         "task_id": "114", "task_name": "small-team",
-        "source": "https://github.com/example/project/issues/114",
+        "source": "https://github.com/example/project/issues/114", "schema_version": 2, "parent_id": None, "disposition": "active", "replaced_by": [], "retirement_reason": None,
         "title": "Deliver a greeting", "body": body, "dependencies": [],
     })
     (root / "readiness.md").write_text("This isolated Task is ready.\n")

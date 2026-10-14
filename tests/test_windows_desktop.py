@@ -35,7 +35,7 @@ def test_public_setup_and_concurrent_registration(temporary_git_repository: Path
         operation(root, 'task_register', {
             'task_id': str(number), 'task_name': f'controlled-{number}',
             'title': f'Controlled {number}', 'body': 'No Agent or model execution.',
-            'source': f'https://github.com/example/controlled/issues/{number}',
+            'source': f'https://github.com/example/controlled/issues/{number}', 'schema_version': 2, 'parent_id': None, 'disposition': 'active', 'replaced_by': [], 'retirement_reason': None,
             'dependencies': [] if number == 1 else ['1'],
         })
 

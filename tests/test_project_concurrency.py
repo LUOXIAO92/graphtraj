@@ -19,7 +19,7 @@ def ready_batch(commands, root, ids, name):
         source = root / "task-input.yml"
         source.write_text(yaml.safe_dump({
             "task_id": task_id, "task_name": "parallel",
-            "source": "https://github.com/example/project/issues/" + task_id,
+            "source": "https://github.com/example/project/issues/" + task_id, "schema_version": 2, "parent_id": None, "disposition": "active", "replaced_by": [], "retirement_reason": None,
             "title": "Parallel delivery", "body": "Deliver this Task.", "dependencies": [],
         }))
         run_process([str(commands.product), "task", "register", "--task-file", str(source)], cwd=root).check_returncode()

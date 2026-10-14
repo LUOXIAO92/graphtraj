@@ -72,10 +72,6 @@ function card(task: Task, children: Task[], open: boolean, select: () => void, t
     button.setAttribute('aria-expanded', String(open));
     button.onclick = event => { event.stopPropagation(); toggle(); };
     footer.append(button);
-  } else if (task.parent_known === false || task.parent_id === undefined) {
-    const unknown = document.createElement('span');
-    unknown.textContent = 'Parent unknown';
-    footer.append(unknown);
   }
   element.append(footer);
   // Card controls do not start an editor drag or its deferred edge rerouting.

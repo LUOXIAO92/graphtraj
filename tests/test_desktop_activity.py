@@ -476,7 +476,7 @@ def test_windows_adoption_fixture_projects_retired_content_and_usage(
     operation(root, 'project_setup', {'source_repository': str(root), 'apply': True, 'create_dev': True})
     registered = operation(root, 'task_register', {
         'task_id': '1', 'task_name': 'controlled', 'title': 'Controlled',
-        'source': 'https://github.com/example/controlled/issues/1',
+        'source': 'https://github.com/example/controlled/issues/1', 'schema_version': 2, 'parent_id': None, 'disposition': 'active', 'replaced_by': [], 'retirement_reason': None,
         'body': 'Controlled fixture, no Runtime execution.', 'dependencies': [],
     })
     # Match Node's adoption seed bytes on Windows as well as POSIX.

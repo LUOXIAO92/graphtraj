@@ -101,7 +101,7 @@ def apply_delivery_state_request(
     task_directory, task = current[task_id]
     if phase in {"start", "final", "rework"} and not task["active"]:
         raise ValueError("Delivery requires an active Task")
-    if phase == "start" and task.get("schema_version") == 2 and task["status"] == "integrated":
+    if phase == "start" and task["status"] == "integrated":
         raise ValueError("Completed tasks must explicitly reopen through task-graph revision")
     ordinal = task["active_team_ordinal"] or 1
     replacing = False

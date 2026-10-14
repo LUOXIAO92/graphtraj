@@ -13,23 +13,19 @@ from graphtraj.execution.execution_budget import (
 
 TASK_ID = re.compile(r"[1-9]\d*\Z")
 TASK_NAME = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*\Z")
-ISSUE_SOURCE = re.compile(r"https://github\.com/[^/]+/[^/]+/issues/([1-9]\d*)\Z")
 STATUSES = [
     "pending", "ready", "implementing", "reviewing", "reworking",
     "awaiting-integration", "integrating", "resolving-integration", "integrated",
     "blocked", "escalated",
 ]
 
-BASE_PROPERTIES = {
+TASK_PROPERTIES = {
     "task_id": {"type": "string"},
     "task_name": {"type": "string"},
     "source": {"type": "string"},
     "title": {"type": "string"},
     "body": {"type": "string"},
     "dependencies": {"type": "array", "items": {"type": "string"}},
-}
-TASK_PROPERTIES = {
-    **BASE_PROPERTIES,
     "schema_version": {"const": 2},
     "parent_id": {"type": ["string", "null"]},
     "disposition": {"enum": ["active", "superseded", "cancelled"]},
@@ -38,9 +34,8 @@ TASK_PROPERTIES = {
 }
 EXECUTION_FIELDS = {
     "task_id", "task_name", "current_definition", "status",
-    "active_team_ordinal", "worktree", "branch", "current_candidate",
+    "active_team_ordinal", "worktree", "branch", "current_candidate", "schema_version",
 }
-LEGACY_RELATIONS = {"active", "replaced_by", "dependencies"}
 
 
 def object_schema(properties: dict, required: set | None = None) -> dict:
@@ -51,16 +46,11 @@ def object_schema(properties: dict, required: set | None = None) -> dict:
 
 
 def definition_schema(*, revision: bool = False) -> dict:
-    """Expose explicit legacy and v2 alternatives through every transport."""
-    legacy = dict(BASE_PROPERTIES)
+    """Describe one complete Task definition, optionally with its revision base."""
+    properties = dict(TASK_PROPERTIES)
     if revision:
-        legacy.update(active={"type": "boolean"}, replaced_by=TASK_PROPERTIES["replaced_by"])
-    modern = dict(TASK_PROPERTIES)
-    if revision:
-        modern["current_definition"] = {"type": ["string", "null"]}
-    return {"type": "object", "properties": {**legacy, **modern},
-            "anyOf": [object_schema(legacy), object_schema(modern)],
-            "additionalProperties": False}
+        properties["current_definition"] = {"type": ["string", "null"]}
+    return object_schema(properties)
 
 
 REGISTER_SCHEMA = definition_schema()
@@ -87,10 +77,8 @@ COMPLETE_SCHEMA = object_schema({
 
 
 def execution_record(record: dict[str, Any]) -> dict[str, Any]:
-    """Persist execution facts only for v2; retain legacy storage unchanged."""
-    fields = EXECUTION_FIELDS | ({"schema_version"} if record.get("schema_version") == 2
-                                 else LEGACY_RELATIONS)
-    return {key: value for key, value in record.items() if key in fields}
+    """Persist only execution facts; the immutable definition holds the rest."""
+    return {key: value for key, value in record.items() if key in EXECUTION_FIELDS}
 
 
 def render_definition(definition: dict[str, Any]) -> str:
@@ -109,15 +97,12 @@ def read_definition(snapshot: str) -> dict[str, Any]:
     split = split_execution_budget_front_matter(snapshot)
     metadata = yaml.safe_load(split[1]) if split is not None else None
     if not isinstance(metadata, dict) or not isinstance(metadata.get("task"), dict):
-        raise ValueError("Task v2 definition is invalid")
+        raise ValueError("Task definition is invalid")
     return {**metadata["task"], "body": split[2]}
 
 
 TASK_SCHEMA = object_schema({
     **TASK_PROPERTIES,
-    "schema_version": {"enum": [1, 2]},
-    "disposition": {"enum": ["active", "superseded", "cancelled", None]},
-    "parent_known": {"type": "boolean"},
     "current_definition": {"type": "string"},
     "status": {"type": "string", "enum": STATUSES},
     "active_team_ordinal": {"type": ["integer", "null"]},
@@ -139,19 +124,11 @@ TASK_SCHEMA = object_schema({
         "evidence_refs": {"type": "array", "items": {"type": "string"}},
     })},
 })
-# A missing legacy parent is unknown; null is reserved for a confirmed v2 root.
-TASK_SCHEMA["required"].remove("parent_id")
-TASK_SCHEMA["anyOf"] = [
-    {"properties": {"schema_version": {"const": 1}}},
-    {"properties": {"schema_version": {"const": 2}}, "required": ["parent_id"]},
-]
 
 
 def validate_definition(issue: Any) -> None:
-    """Validate either an explicit v2 definition or an unchanged legacy input."""
-    modern = isinstance(issue, dict) and issue.get("schema_version") == 2
-    expected = set(TASK_PROPERTIES) if modern else frozenset(BASE_PROPERTIES)
-    if not isinstance(issue, dict) or set(issue) != expected:
+    """Validate one complete Task definition; the source is any nonempty text."""
+    if not isinstance(issue, dict) or set(issue) != set(TASK_PROPERTIES):
         raise ValueError("accepted Task definition is invalid")
     task_id = issue["task_id"]
     task_name = issue["task_name"]
@@ -159,14 +136,13 @@ def validate_definition(issue: Any) -> None:
     title = issue["title"]
     body = issue["body"]
     dependencies = issue["dependencies"]
-    source_match = ISSUE_SOURCE.fullmatch(source) if isinstance(source, str) else None
     if (
         not isinstance(task_id, str)
         or TASK_ID.fullmatch(task_id) is None
         or not isinstance(task_name, str)
         or TASK_NAME.fullmatch(task_name) is None
-        or (not modern and (source_match is None or source_match.group(1) != task_id))
-        or (modern and (not isinstance(source, str) or not source.strip()))
+        or not isinstance(source, str)
+        or not source.strip()
         or not isinstance(title, str)
         or not title.strip()
         or not isinstance(body, str)
@@ -179,21 +155,20 @@ def validate_definition(issue: Any) -> None:
         or task_id in dependencies
     ):
         raise ValueError("accepted Task definition is invalid")
-    if modern:
-        parent = issue["parent_id"]
-        disposition = issue["disposition"]
-        reason = issue["retirement_reason"]
-        replacements = issue["replaced_by"]
-        if (type(issue["schema_version"]) is not int
-                or (parent is not None and (not isinstance(parent, str) or TASK_ID.fullmatch(parent) is None))
-                or disposition not in {"active", "superseded", "cancelled"}
-                or not isinstance(replacements, list)
-                or any(not isinstance(item, str) or TASK_ID.fullmatch(item) is None for item in replacements)
-                or len(replacements) != len(set(replacements))
-                or (disposition == "superseded") != bool(replacements)
-                or (disposition == "active" and reason is not None)
-                or (disposition != "active" and (not isinstance(reason, str) or not reason.strip()))):
-            raise ValueError("Task v2 parent, disposition or retirement facts are invalid")
+    parent = issue["parent_id"]
+    disposition = issue["disposition"]
+    reason = issue["retirement_reason"]
+    replacements = issue["replaced_by"]
+    if (type(issue["schema_version"]) is not int
+            or (parent is not None and (not isinstance(parent, str) or TASK_ID.fullmatch(parent) is None))
+            or disposition not in {"active", "superseded", "cancelled"}
+            or not isinstance(replacements, list)
+            or any(not isinstance(item, str) or TASK_ID.fullmatch(item) is None for item in replacements)
+            or len(replacements) != len(set(replacements))
+            or (disposition == "superseded") != bool(replacements)
+            or (disposition == "active" and reason is not None)
+            or (disposition != "active" and (not isinstance(reason, str) or not reason.strip()))):
+        raise ValueError("Task parent, disposition or retirement facts are invalid")
     try:
         read_execution_budget(body)
     except ExecutionBudgetError as error:

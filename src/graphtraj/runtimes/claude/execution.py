@@ -142,7 +142,9 @@ class ClaudeExecution:
                 'deny': [rule for p in denied_read for rule in (f'Read(/{p})', f'Read(/{p}/**)')]
                         + [rule for p in denied_write for rule in (f'Edit(/{p})', f'Edit(/{p}/**)')]
                         + (['Edit', 'Write', 'NotebookEdit'] if request['worktree_access'] == 'read' else []),
-                'additionalDirectories': [str(p) for p in resources if p.is_dir()],
+                # Native additional working directories are writable sandbox
+                # roots. Read-only resources belong solely in allowRead below.
+                'additionalDirectories': [],
             },
             'sandbox': {
                 'enabled': True, 'failIfUnavailable': True, 'allowUnsandboxedCommands': False,

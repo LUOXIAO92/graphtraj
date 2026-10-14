@@ -126,23 +126,19 @@ def test_installed_command_registers_an_accepted_issue_as_a_task(
     directory = state / "tasks" / "73-task-readiness"
     assert directory.is_dir()
     snapshot = (directory / "task.md").read_text(encoding="utf-8")
-    assert "# Task 73: Task Readiness" in snapshot
-    assert "Task name: task-readiness" in snapshot
-    assert "Source: https://github.com/example/project/issues/73" in snapshot
-    assert "Dependencies: none" in snapshot
-    assert snapshot.endswith("Deliver task-readiness.\n")
+    assert "  task_id: '73'\n" in snapshot
+    assert "  source: https://github.com/example/project/issues/73\n" in snapshot
+    assert snapshot.endswith("---\nDeliver task-readiness.")
     assert yaml.safe_load((directory / "task.yml").read_text(encoding="utf-8")) == {
         "task_id": "73",
         "task_name": "task-readiness",
         "current_definition": "task.md",
-        "active": True,
-        "replaced_by": [],
-        "dependencies": [],
         "status": "pending",
         "active_team_ordinal": None,
         "worktree": None,
         "branch": None,
         "current_candidate": None,
+        "schema_version": 2,
     }
     events = [
         json.loads(line)
@@ -419,7 +415,6 @@ def test_installed_command_corrects_a_dependency_and_generates_current_readiness
     }
     for actual, wanted in zip(projection["tasks"], expected["tasks"], strict=True):
         assert {key: actual[key] for key in wanted} == wanted
-    assert all(node["parent_known"] is False for node in projection["tasks"])
     assert not (state / "dag.md").exists()
     assert not (state / "task-map.yml").exists()
 

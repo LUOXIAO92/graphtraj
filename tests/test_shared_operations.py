@@ -45,7 +45,7 @@ def test_python_and_cli_register_validate_and_read_the_same_graph(
         "active": True, "ready": True, "dependencies": [], "replaced_by": [],
     }
     assert {key: node[key] for key in expected} == expected
-    assert node["schema_version"] == 1 and node["parent_known"] is False
+    assert node["schema_version"] == 2 and node["parent_id"] is None
 
     for invalid in (issue, {**issue, "task_id": "../escape"}):
         before = read_graph(state)
@@ -148,7 +148,7 @@ def test_python_and_cli_revise_and_transition_with_the_same_validation(
     revision = {
         "product_preserving": True, "caused_by_event_ids": [],
         "evidence_refs": ["evidence.md"],
-        "tasks": [{**issue, "body": "Deliver the revised definition.", "active": True, "replaced_by": []}],
+        "tasks": [{**issue, "body": "Deliver the revised definition.", "current_definition": "task.md"}],
     }
     change = {
         "task_id": "73", "status": "ready", "active_team_ordinal": None,

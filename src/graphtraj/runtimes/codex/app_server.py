@@ -135,6 +135,7 @@ class CodexSession:
     configuration: dict[str, Any] = field(default_factory=dict)
     turn_settings: dict[str, Any] = field(default_factory=dict)
     inherited_history: dict[str, Any] | None = field(default=None, repr=False)
+    inherited_history_excluded: bool = False
 
 
 @dataclass(frozen=True)
@@ -773,7 +774,10 @@ class CodexAppServer:
             raise CodexAdapterError('RUNTIME_REQUEST_INVALID', 'Main model metadata is unavailable.')
         parameters = {
             'threadId': parent['id'], 'model': parent['model'],
-            'modelProvider': parent['modelProvider'], 'excludeTurns': False,
+            'modelProvider': parent['modelProvider'],
+            # Paginated ephemeral forks reject included history. Unknown modes
+            # use the same safe request; only explicit legacy exposes turns.
+            'excludeTurns': parent.get('historyMode') != 'legacy',
             'ephemeral': True,
         }
         settings = parent.get('turn_settings', {})
@@ -814,7 +818,8 @@ class CodexAppServer:
         turn_settings = {}
         if settings.get('collaboration_mode') is not None:
             turn_settings['collaborationMode'] = settings['collaboration_mode']
-        session = CodexSession(thread['id'], rollout, facts, turn_settings, thread)
+        session = CodexSession(thread['id'], rollout, facts, turn_settings, thread,
+                               inherited_history_excluded=parameters['excludeTurns'])
         self._sessions[session.thread_id] = session
         return session
 
@@ -823,7 +828,7 @@ class CodexAppServer:
         self._require_session(session)
         if session.inherited_history is None or session.thread_id in self._fork_archives:
             raise CodexAdapterError('RUNTIME_LIFECYCLE_INVALID', 'A new native fork is required.')
-        archive.seed_fork(session.inherited_history)
+        archive.seed_fork(session.inherited_history, history_excluded=session.inherited_history_excluded)
         self._fork_archives[session.thread_id] = archive
 
     async def is_current_turn(self, session: str, turn: str) -> bool:

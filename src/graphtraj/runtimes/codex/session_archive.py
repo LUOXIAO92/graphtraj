@@ -86,20 +86,24 @@ class CodexSessionArchive:
         self.session_id = session_id
         self.task_ids = task_ids
 
-    def seed_fork(self, thread: dict) -> None:
+    def seed_fork(self, thread: dict, *, history_excluded: bool = False) -> None:
         """Retain the history returned atomically by native thread/fork.
 
         This handles ephemeral checkers without substituting their parent's
         later history. An omitted turns field is an explicit unknown, never an
-        invented empty inherited prefix.
+        invented empty inherited prefix. With excludeTurns, an empty returned
+        list is unavailable history, not evidence of an empty inherited seed.
         """
         if thread.get('id') != self.session_id or not thread.get('forkedFromId'):
             raise ValueError('Native fork did not identify its Session and parent.')
         now = time.time_ns() // 1000000
-        seeded = isinstance(thread.get('turns'), list)
+        seeded = not history_excluded and isinstance(thread.get('turns'), list)
         missing = [{'path': 'createdAt', 'reason': 'Archive receipt time; native creation time unknown.'}]
         if not seeded:
-            missing.append({'path': 'inheritedPrefix', 'reason': 'Native fork response omitted history.'})
+            missing.append({'path': 'inheritedPrefix', 'reason': (
+                'Unknown: excludeTurns requested; returned turns do not establish an inherited cut.'
+                if history_excluded else 'Unknown: native fork response omitted history.'
+            )})
         header = {
             'version': 4, 'id': 'codex:' + self.session_id, 'createdAt': now,
             'isSeeded': seeded, 'parentSession': 'codex:' + thread['forkedFromId'],

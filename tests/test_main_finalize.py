@@ -44,6 +44,7 @@ def send(message):
 def main_thread():
     return {'id':'main', 'sessionId':'shared-native-session', 'model':'configured-model', 'modelProvider':'actual-provider',
             'source':options.get('source','appServer'), 'parentThreadId':options.get('parent'),
+            'historyMode':options.get('history_mode','legacy'),
             'status':{'type':'active' if not options.get('stopped') else 'idle'}}
 
 for line in sys.stdin:
@@ -66,6 +67,9 @@ for line in sys.stdin:
     elif method == 'thread/turns/list':
         result = {'data':[{'id':options.get('current_turn','main-turn'), 'status':'inProgress'}]}
     elif method == 'thread/fork':
+        if options.get('history_mode') == 'paginated' and not params.get('excludeTurns'):
+            send({'id':request['id'],'error':{'code':-32600,'message':'history must be excluded'}})
+            continue
         if options.get('fork_error'):
             send({'id':request['id'],'error':{'code':-32600,'message':'fork unavailable'}})
             continue
@@ -75,6 +79,7 @@ for line in sys.stdin:
                  'ephemeral':params.get('ephemeral', False),
                  'turns': [{'id':'inherited-turn','items':[{'type':'agentMessage',
                             'id':'inherited-answer','text':'inherited context'}]}]}
+        if params.get('excludeTurns'): child['turns'] = []
         if 'records' in options:
             child['path'] = str(root / 'checker.jsonl')
             records = [{'type':'session_meta','payload':{'id':child['id']}}]
@@ -1216,3 +1221,38 @@ def test_check_usage_summary_keeps_unknowns_unknown() -> None:
     # A known cache count without a usable input baseline keeps the rate unknown.
     assert 'Cached 5 (unknown)' in CheckUsage(cached_input_tokens=5).summary()
     assert 'Cached 0 (unknown)' in CheckUsage(input_tokens=0, cached_input_tokens=0).summary()
+
+
+@pytest.mark.parametrize('history_mode', ['paginated', None])
+def test_ephemeral_fork_excluded_history_is_unknown_not_an_empty_seed(
+    host: tuple[Path, Path], history_mode: str | None,
+) -> None:
+    """A valid checker can run without claiming the excluded inherited prefix."""
+    from graphtraj.sessions.protocol import native_record
+    from graphtraj.sessions.storage import SessionStore, session_path
+
+    root, binding = host
+    binding.unlink()
+    (root / 'options.json').write_text(json.dumps({'history_mode': history_mode}))
+    rollout(root)
+    native_hook(root, 'SessionStart', source='startup')
+    result = native_hook(root)
+    assert 'Completion Check · completed' in result['systemMessage']
+    wire = [json.loads(line) for line in (root / 'wire.jsonl').read_text().splitlines()]
+    fork = next(item['params'] for item in wire if item['method'] == 'thread/fork')
+    assert fork['excludeTurns'] is True and fork['ephemeral'] is True
+    state = root / '.graphtraj/state'
+    with SessionStore(session_path(state, 'codex:checker')) as archive:
+        archive.validate()
+        assert archive.header['isSeeded'] is False
+        assert archive.header['parentSession'] == 'codex:main'
+        assert any(item['path'] == 'inheritedPrefix' and item['reason']
+                   for item in archive.header['graphtraj']['missing'])
+        events = archive.page()['events']
+        assert not any(event['type'] == 'session/end-seed' for event in events)
+        assert native_record(events[0])['turns'] == []
+        assert any(native_record(event).get('method') == 'item/completed' for event in events)
+    with SessionStore(session_path(state, 'codex:main')) as archive:
+        assert [native_record(event) for event in archive.page()['events']] == [
+            json.loads(line) for line in (root / 'rollout.jsonl').read_text().splitlines()
+        ]

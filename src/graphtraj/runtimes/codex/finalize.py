@@ -103,9 +103,13 @@ def response(result: dict | None, continued: bool) -> dict:
     separate lines without blank separators. A mechanical failure that never
     reached a checker conclusion falls back to fixed English, since the checker
     language is unknown; all four statuses still produce exactly one message.
+    A cancelled execution has no task verdict and only emits visible feedback.
     """
     if result is None:
         return {}
+    if result.get('outcome') == 'cancelled':
+        return {'systemMessage': 'Completion Check · cancelled\n'
+                'The Main snapshot is no longer current. No completion decision was returned.'}
     status = result['status']
     conclusions = {
         'completed': 'Main may end this turn: the task is complete.',

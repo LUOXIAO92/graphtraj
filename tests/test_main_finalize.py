@@ -282,7 +282,13 @@ def test_stopped_or_changed_main_is_not_continued(host: tuple[Path, Path], optio
     options['output'] = json.dumps({'status':'actionable', 'conclusion':'Main must continue this turn.',
                                     'reason':'unfinished', 'nodes':['237']})
     (root / 'options.json').write_text(json.dumps(options))
-    assert stop(binding) == {}
+    result = stop(binding)
+    if options.get('interrupt_during_check'):
+        assert set(result) == {'systemMessage'}
+        assert 'cancelled' in result['systemMessage']
+        assert 'unfinished' not in result['systemMessage']
+    else:
+        assert result == {}
 
 
 def test_binding_rejects_managed_caller(host: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch) -> None:
@@ -991,12 +997,26 @@ def test_superseded_fork_retains_cancellation(host: tuple[Path, Path], options: 
     """A new Main turn cancels the old snapshot and never wakes Main with its result."""
     root, binding = host
     (root / 'options.json').write_text(json.dumps(options))
-    assert stop(binding) == {}
+    result = stop(binding)
+    assert set(result) == {'systemMessage'}
+    assert 'cancelled' in result['systemMessage']
+    assert 'All required tickets integrated.' not in result['systemMessage']
     evidence = yaml.safe_load(next(binding.parent.glob('checks/*/execution.yml')).read_text())
     assert evidence['outcome'] == 'cancelled'
     if options.get('supersede_during_fork'):
         wire = [json.loads(line) for line in (root / 'wire.jsonl').read_text().splitlines()]
         assert not any(message['method'] == 'turn/start' for message in wire)
+
+    # Cancellation is not a task verdict or turn-ID deduplication: another
+    # legitimate Stop in the same Main turn must still check the current task.
+    (root / 'options.json').write_text(json.dumps({'child': 'next-checker'}))
+    resumed = stop(binding)
+    assert set(resumed) == {'systemMessage'}
+    assert 'completed' in resumed['systemMessage']
+    wire = [json.loads(line) for line in (root / 'wire.jsonl').read_text().splitlines()]
+    starts = [message['params']['threadId'] for message in wire if message['method'] == 'turn/start']
+    assert starts[-1] == 'next-checker'
+    assert 'main' not in starts
 
 
 def test_fork_preserves_observed_configuration(host: tuple[Path, Path]) -> None:

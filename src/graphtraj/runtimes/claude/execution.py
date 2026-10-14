@@ -278,11 +278,13 @@ class ClaudeExecution:
         stderr_reader = None
         failure = None
         with ExitStack() as resources:
-            mapping = yaml_document(self.directory / 'mapping.yml')
+            # Runner supplies Task context before the native registration hook;
+            # mapping.yml does not exist until that hook has been acknowledged.
+            task_id = os.environ.get('GRAPHTRAJ_TICKET_ID')
             archive = resources.enter_context(open_archive(
                 Path(self.request['state_directory']), Path(self.request['harness_root']),
                 self.native_id, self.directory.name, source='managed',
-                task_ids=[mapping['ticket_id']] if mapping.get('ticket_id') else []))
+                task_ids=[task_id] if task_id else []))
             if archive.pending():
                 from graphtraj.sessions.storage import StreamWriter
 

@@ -217,6 +217,8 @@ def test_installed_native_session_apis(project: Path, runtime: str) -> None:
     package = Path(__file__).resolve().parents[1] / 'src/graphtraj/runtimes'
     module = package / runtime / ('extension.mjs' if runtime == 'pi' else 'tool.mjs')
     module = Path(shutil.copy2(module, project / module.name))
+    if runtime == 'dsh':
+        shutil.copy2(package / runtime / 'collection.mjs', project / 'collection.mjs')
     environment = {**os.environ, 'GRAPHTRAJ_DSH_PACKAGE': str(Path(executable).resolve())}
     script = '''
 import assert from 'node:assert/strict';

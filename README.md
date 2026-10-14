@@ -165,8 +165,9 @@ recovery; recovery still requires the calling parent's selected reviewer.
 Runner retains the native Session on continuation, checks registration before
 releasing the first prompt, and distinguishes an interrupt request from verified
 termination. Native helpers and background tasks are disabled for these children.
-Raw structured output and the native transcript location remain available to
-collectors; this adapter does not implement unified Session storage. Interactive
+Managed output and supported native Main hook records are collected into
+[project-local Session archives](examples/sessions/README.md#claude-collection).
+Collection does not install hooks or migrate existing history. Interactive
 Claude Main hosting and its replacement approval route are explicitly unavailable.
 Unknown approval capability fails closed.
 

@@ -420,3 +420,29 @@ def test_claude_stop_without_native_settlement_is_unconfirmed(
             future.result(timeout=15)
         assert not caught.value.terminal_confirmed
         assert turn.proc.poll() is not None and turn.outcome is None
+
+
+def test_default_home_is_not_injected_into_native_environment(
+    tmp_path: Path, claude_environment: None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Observe the actual native launch environment without querying credentials."""
+    import subprocess
+
+    result_project(tmp_path)
+    monkeypatch.delenv('CLAUDE_CONFIG_DIR', raising=False)
+    captured = []
+    popen = subprocess.Popen
+
+    def observe(argv: list[str], **kwargs: object):
+        """Capture only nonsecret home-selection fields on the process boundary."""
+        if '--input-format' in argv:
+            environment = kwargs['env']
+            captured.append({key: environment.get(key) for key in ('HOME', 'CLAUDE_CONFIG_DIR')})
+        return popen(argv, **kwargs)
+
+    monkeypatch.setattr(subprocess, 'Popen', observe)
+    with ExitStack() as stack:
+        turn, _, _ = execution(tmp_path, stack, 'home-environment')
+        assert turn.request['explicit_runtime_home'] is False
+        assert turn.run()['outcome'] == 'completed'
+    assert captured == [{'HOME': os.environ.get('HOME'), 'CLAUDE_CONFIG_DIR': None}]

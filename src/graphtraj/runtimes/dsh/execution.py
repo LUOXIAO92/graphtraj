@@ -480,6 +480,15 @@ class DshExecution:
                 self._retain_trace()
                 if self.outcome is not None and not self.trace_file.is_file():
                     raise RuntimeAdapterError('RUNTIME_TRACE_FAILED', 'DSH native Trace was not retained.')
+                if self.outcome is not None:
+                    from graphtraj.configuration.project_configuration import load_project_configuration
+                    from graphtraj.runtimes.dsh.collection import confirm_collection
+
+                    configuration = load_project_configuration(Path(self.request['harness_root']))
+                    try:
+                        confirm_collection(configuration.state, self.session, self.trace_file)
+                    except (OSError, ValueError, StopIteration) as error:
+                        raise RuntimeAdapterError('RUNTIME_TRACE_FAILED', str(error)) from error
             finally:
                 connections.close()
                 self.finished.set()

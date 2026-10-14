@@ -55,3 +55,47 @@ def caller_identity(runner: Path, connection: dict) -> str | None:
     if binding['connection'] != connection:
         raise RunnerError('authority-denied', 'The DSH native Session association is stale.')
     return None
+
+
+def collect_session(event: dict, cwd: Path) -> dict:
+    """Archive only the native callback's Session under its observed ownership.
+
+    Managed creation may precede Runner's native-ID receipt. Defer that early
+    callback and replay it after binding, rather than registering it as Main.
+    Native subagents and checkers never overwrite their owning Main's binding.
+    """
+    from graphtraj.configuration.project_configuration import load_project_configuration
+    from graphtraj.execution.runner_status import process_caller_alias, read_alias_mapping
+    from graphtraj.runtimes.dsh.collection import collect
+    from graphtraj.workspace.runner_project import discover_runner_directory
+
+    connection = current_connection()
+    header = event['header']
+    if (connection is None or header.get('id') != connection['session']
+            or session_source(header) != connection['source']):
+        raise ValueError('DSH collection does not match the native Session association.')
+    runner = discover_runner_directory(cwd)
+    alias = process_caller_alias(runner, os.getpid())
+    task_ids = []
+    agent_id = 'dsh:' + header['id']
+    source = connection['source']
+    if alias is not None:
+        mapping, _ = read_alias_mapping(runner, alias)
+        if mapping['runtime'] != 'dsh':
+            raise ValueError('DSH collection belongs to another Runtime owner.')
+        task_ids = [mapping['ticket_id']]
+        if mapping['session'] == header['id']:
+            agent_id, source = alias, 'member'
+        elif source != 'child':
+            raise ValueError('DSH collection belongs to another managed Session.')
+    elif os.environ.get('GRAPHTRAJ_ROLE'):
+        return {'deferred': True}
+    elif source == 'main':
+        caller_identity(runner, connection)
+
+    configuration = load_project_configuration(cwd)
+    return collect(
+        configuration.state, header, event['records'],
+        project_id=str(configuration.harness_root), agent_id=agent_id,
+        task_ids=task_ids, source=source,
+    )

@@ -7,17 +7,18 @@ import pytest
 
 from graphtraj.interfaces.local_tool import bind
 from graphtraj.runtimes.native_entry import main
-from graphtraj.runtimes.claude.collection import open_archive, StreamCollector
+from graphtraj.runtimes.claude.collection import collect_hook, open_archive, StreamCollector
 from graphtraj.sessions.storage import SessionStore, session_path
 from test_result_submission import result_project
 
 
 def hook(root: Path, event: dict, monkeypatch: pytest.MonkeyPatch) -> dict:
-    """Deliver an official hook shape through the public native entry command."""
+    """Deliver an official hook shape through the Runtime collection seam."""
     monkeypatch.chdir(root)
-    result = CliRunner().invoke(main, ['claude'], input=json.dumps(event))
-    assert result.exit_code == 0, result.output
-    return json.loads(result.output)
+    try:
+        return collect_hook(event, root)
+    except ValueError as error:
+        return {'error': str(error)}
 
 
 def query(root: Path, identity: str) -> dict:
@@ -194,3 +195,17 @@ def test_attachment_bytes_and_child_query_scope(tmp_path: Path, monkeypatch: pyt
     with runtime_caller(runner, 'research@x1'), pytest.raises(RunnerError, match='own verified'):
         handle_request({'action': 'execute', 'feature': 'session_read',
                         'arguments': {'session_id': result['session_id']}}, cwd=tmp_path)
+
+
+def test_claude_command_hook_output(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The installed hook carrier returns Claude-compatible JSON and visible errors."""
+    result_project(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    event = {'hook_event_name': 'SessionStart', 'source': 'startup', 'session_id': 'new',
+             'transcript_path': str(tmp_path / 'not-created-yet.jsonl'), 'cwd': str(tmp_path)}
+    result = CliRunner().invoke(main, ['claude'], input=json.dumps(event))
+    assert result.exit_code == 0 and json.loads(result.output) == {}
+    with SessionStore(session_path(tmp_path / 'state', 'claude:new')) as store:
+        assert store.page()['events'][0]['data']['record'] == event
+    invalid = CliRunner().invoke(main, ['claude'], input=json.dumps({**event, 'session_id': ''}))
+    assert invalid.exit_code == 1

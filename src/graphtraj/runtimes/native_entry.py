@@ -113,10 +113,16 @@ def main(runtime: str) -> None:
         if runtime == 'claude':
             from graphtraj.runtimes.claude.collection import collect_hook
 
-            result = collect_hook(event, Path.cwd())
+            collect_hook(event, Path.cwd())
+            # Claude command hooks accept their own output schema, not the
+            # collector's internal result metadata. Successful collection is silent.
+            result = {}
         else:
             result = (pi_event if runtime == 'pi' else dsh_event)(event, Path.cwd())
     except Exception as error:
+        if runtime == 'claude':
+            click.echo(f'Claude Session collection failed: {error}', err=True)
+            raise click.exceptions.Exit(1) from error
         result = {'error': str(error)}
     click.echo(json.dumps(result, ensure_ascii=False))
 

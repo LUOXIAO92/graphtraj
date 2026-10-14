@@ -102,18 +102,14 @@ def native_event(store: SessionStore, record: dict, locator: str) -> dict:
     return event
 
 
-def seed_pending(store: SessionStore) -> bool:
-    """Determine whether this fork still needs its inherited-prefix boundary."""
-    if not store.header.get('isSeeded'):
-        return False
-    after = -1
-    while True:
-        page = store.page(after)
-        if any(e['type'] == 'session/end-seed' for e in page['events']):
-            return False
-        if not page['has_more']:
-            return True
-        after = page['after']
+def fork_source(record: dict, native_id: str) -> dict | None:
+    """Recognize an explicitly identified inherited message, never a parent guess."""
+    fork = record.get('forkedFrom')
+    if (isinstance(fork, dict) and isinstance(fork.get('sessionId'), str)
+            and fork['sessionId'] and fork['sessionId'] != native_id
+            and isinstance(fork.get('messageUuid'), str) and fork['messageUuid']):
+        return fork
+    return None
 
 
 def collect_transcript(store: SessionStore, path: Path, *, child_id: str | None = None) -> int:
@@ -125,7 +121,6 @@ def collect_transcript(store: SessionStore, path: Path, *, child_id: str | None 
     """
     source = 'transcript:' + str(path.resolve())
     count = 0
-    inherited = seed_pending(store)
     with path.open('rb') as stream:
         stream.seek(max(0, store.position(source)))
         while line := stream.readline():
@@ -145,12 +140,24 @@ def collect_transcript(store: SessionStore, path: Path, *, child_id: str | None 
             elif record.get('isSidechain') or record.get('agentId'):
                 raise ValueError('A native child transcript cannot be collected as Main.')
             event = native_event(store, record, source + ':' + str(position))
-            if inherited and not record.get('forkedFrom'):
-                marker = {'type': 'session/end-seed', 'seq': store.next_seq,
-                          'time': event['time'], 'data': {'inherited': True}}
-                event['seq'] += 1
-                store.append_many([marker, event], source=source, position=position)
-                inherited = False
+            fork = fork_source(record, native) if not child_id else None
+            if fork:
+                # Header metadata is immutable. A late native observation keeps
+                # its parent and exact inherited record coordinate on the event,
+                # including when the initial hook knew no fork ancestry.
+                parent = 'claude:' + fork['sessionId']
+                event['graphtraj']['fork'] = {
+                    'parentSession': parent, 'sourceMessageId': fork['messageUuid'],
+                    'inheritedThroughSeq': event['seq'],
+                }
+                if store.header.get('parentSession') == parent:
+                    # The protocol's last inherited marker defines the cut.
+                    # Metadata between copied messages cannot close it early.
+                    marker = {'type': 'session/end-seed', 'seq': event['seq'] + 1,
+                              'time': event['time'], 'data': {'inherited': True}}
+                    store.append_many([event, marker], source=source, position=position)
+                else:
+                    store.append(event, source=source, position=position)
             else:
                 store.append(event, source=source, position=position)
             count += 1
@@ -198,8 +205,9 @@ def collect_hook(event: dict, cwd: Path) -> dict:
                 if not line.endswith(b'\n'):
                     break
                 record = json.loads(line)
-                if record.get('forkedFrom'):
-                    fork_parent = record['forkedFrom'].get('sessionId')
+                fork = fork_source(record, native_id)
+                if fork:
+                    fork_parent = fork['sessionId']
                     break
                 if record.get('type') in {'user', 'assistant'}:
                     break
@@ -220,13 +228,7 @@ def collect_hook(event: dict, cwd: Path) -> dict:
         if kind == 'SessionStart' and event.get('source') == 'fork' and not fork_parent:
             retained['graphtraj']['missing'].append({
                 'path': 'parentSession', 'reason': 'SessionStart reports fork but supplies no parent identity or inherited cut.'})
-        if count and seed_pending(store):
-            marker = {'type': 'session/end-seed', 'seq': store.next_seq,
-                      'time': retained['time'], 'data': {'inherited': True}}
-            retained['seq'] += 1
-            store.append_many([marker, retained], source=hook_source, position=position)
-        else:
-            store.append(retained, source=hook_source, position=position)
+        store.append(retained, source=hook_source, position=position)
         return {'session_id': store.header['id'], 'source': source, 'records': count,
                 'missing': unavailable}
 
@@ -238,11 +240,14 @@ class StreamCollector:
         """Use an execution-scoped ordered source; resume its durable draft if any."""
         self.store = store
         self.source = source
-        self.model = model
+        self.requested_model = model
+        self.observed_model = None
         self.provider = provider
         self.writer = StreamWriter(store, source, checkpoint_bytes=1) if store.pending() else None
         self.message_id = source
         if self.writer:
+            message = self.writer.event['data'].get('message', {})
+            self.observed_model = message.get('source', {}).get('model')
             self.message_id = next((item['messageId'] for item in self.writer.event['data']['stream']
                                     if item['type'] == 'graphtraj/text-run'), source)
 
@@ -260,15 +265,20 @@ class StreamCollector:
                       or set(delta) == {'type', 'thinking'} and delta['type'] == 'thinking_delta'))
         if plain:
             if self.writer is None:
-                template = {'type': 'assistant/message', 'seq': self.store.next_seq,
-                            'time': int(time.time() * 1000), 'surfaceOp': 'append',
-                            'data': {'turn': 0, 'step': 0, 'stream': [], 'message': {
-                                'id': self.message_id + ':' + str(position), 'role': 'assistant',
-                                'source': {'kind': 'model', 'provider': self.provider, 'model': self.model},
-                                'content': []}}, 'graphtraj': {'version': 1, 'missing': [
+                template = {'type': 'assistant/attempt', 'seq': self.store.next_seq,
+                            'time': int(time.time() * 1000),
+                            'data': {'turn': 0, 'step': 0, 'stream': []},
+                            'graphtraj': {'version': 1, 'requestedModel': self.requested_model,
+                                          'missing': [
                                     {'path': 'turn/step', 'reason': 'Local collection coordinates, not native turn numbers.'},
                                     {'path': 'requestId/attemptId', 'reason': 'Collection message/execution coordinates; native request identity unavailable.'},
                                     {'path': 'time', 'reason': 'Local collection receipt time.'}]}}
+                if self.observed_model:
+                    template.update(type='assistant/message', surfaceOp='append')
+                    template['data']['message'] = self.message(self.observed_model)
+                else:
+                    template['graphtraj']['missing'].append({
+                        'path': 'model', 'reason': 'Native model not observed; configured model is only a request.'})
                 # ponytail: stdout cannot replay after a Worker crash, so commit
                 # each received fragment to the replaceable SQLite draft. Batch
                 # checkpoints only if the native transport gains durable replay.
@@ -286,6 +296,19 @@ class StreamCollector:
             self.writer.position = position
             message = record.get('message', {})
             if record.get('type') == 'assistant' and record.get('parent_tool_use_id') is None:
+                returned_model = message.get('model')
+                if 'model' in message:
+                    self.observed_model = (returned_model if isinstance(returned_model, str)
+                                           and returned_model and returned_model != '<synthetic>' else None)
+                if self.observed_model:
+                    self.writer.event.update(type='assistant/message', surfaceOp='append')
+                    self.writer.event['data']['message'] = self.message(self.observed_model)
+                    self.writer.event['graphtraj']['missing'] = [
+                        item for item in self.writer.event['graphtraj']['missing'] if item['path'] != 'model']
+                else:
+                    self.writer.event['type'] = 'assistant/attempt'
+                    self.writer.event.pop('surfaceOp', None)
+                    self.writer.event['data'].pop('message', None)
                 content = []
                 for block in message.get('content', []):
                     if block.get('type') == 'thinking':
@@ -304,8 +327,18 @@ class StreamCollector:
             self.writer = None
         else:
             self.store.append(retained, source=self.source, position=position)
-        if event.get('type') == 'message_start':
-            self.message_id = event.get('message', {}).get('id') or self.source + ':' + str(position)
+        if event.get('type') == 'message_start' and record.get('parent_tool_use_id') is None:
+            message = event.get('message', {})
+            self.message_id = message.get('id') or self.source + ':' + str(position)
+            model = message.get('model')
+            self.observed_model = model if isinstance(model, str) and model and model != '<synthetic>' else None
+        elif record.get('type') in {'assistant', 'result'} and record.get('parent_tool_use_id') is None:
+            self.observed_model = None
+
+    def message(self, model: str) -> dict:
+        """Build a projection only for a model observed on the native channel."""
+        return {'id': self.message_id, 'role': 'assistant', 'content': [],
+                'source': {'kind': 'model', 'provider': self.provider, 'model': model}}
 
     def close(self) -> None:
         """Keep received partial text after interruption rather than lose the draft."""

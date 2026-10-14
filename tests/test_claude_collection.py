@@ -98,7 +98,7 @@ def test_stream_fragment_compaction_unknown_boundaries_and_interrupt(tmp_path: P
             unknown = {'type': 'stream_event', 'event': {'type': 'future', 'signature': 'untouched'}}
             collector.accept(unknown, position)
             position += 1
-            collector.accept({'type': 'assistant', 'message': {'content': [{'type': 'text', 'text': text}],
+            collector.accept({'type': 'assistant', 'message': {'model': 'observed-model', 'content': [{'type': 'text', 'text': text}],
                               'usage': {'input_tokens': 2, 'output_tokens': 4}}}, position)
             collector.close()
             store.validate()
@@ -209,3 +209,81 @@ def test_claude_command_hook_output(tmp_path: Path, monkeypatch: pytest.MonkeyPa
         assert store.page()['events'][0]['data']['record'] == event
     invalid = CliRunner().invoke(main, ['claude'], input=json.dumps({**event, 'session_id': ''}))
     assert invalid.exit_code == 1
+
+
+@pytest.mark.parametrize('initial', ['missing', 'empty', 'populated'])
+def test_late_fork_and_interleaved_metadata(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, initial: str) -> None:
+    """Late native ancestry remains readable without rewriting an immutable header."""
+    result_project(tmp_path)
+    monkeypatch.setattr('graphtraj.sessions.query.caller_runtime', lambda: None)
+    path = tmp_path / 'late.jsonl'
+    inherited = {'type': 'user', 'sessionId': 'late', 'uuid': 'first',
+                 'forkedFrom': {'sessionId': 'parent', 'messageUuid': 'old-first'},
+                 'message': {'content': 'first inherited'}}
+    metadata = {'type': 'custom-title', 'sessionId': 'late', 'customTitle': 'metadata'}
+    second = {**inherited, 'uuid': 'second',
+              'forkedFrom': {'sessionId': 'parent', 'messageUuid': 'old-second'}}
+    if initial == 'empty':
+        path.touch()
+    elif initial == 'populated':
+        path.write_text(json.dumps(inherited) + '\n')
+    event = {'hook_event_name': 'SessionStart', 'source': 'fork', 'session_id': 'late',
+             'transcript_path': str(path), 'cwd': str(tmp_path)}
+    result = hook(tmp_path, event, monkeypatch)
+    before = query(tmp_path, result['session_id'])['header']
+    path.write_text(''.join(json.dumps(r) + '\n' for r in [inherited, metadata, second, metadata]))
+    hook(tmp_path, {**event, 'hook_event_name': 'Stop'}, monkeypatch)
+    data = query(tmp_path, result['session_id'])
+    assert data['header'] == before
+    forks = [e for e in data['events'] if e.get('graphtraj', {}).get('fork')]
+    assert [e['graphtraj']['fork']['sourceMessageId'] for e in forks] == ['old-first', 'old-second']
+    assert all(e['graphtraj']['fork']['parentSession'] == 'claude:parent' for e in forks)
+    assert all(e['graphtraj']['fork']['inheritedThroughSeq'] == e['seq'] for e in forks)
+    assert forks[-1]['data']['record'] == second
+    markers = [e for e in data['events'] if e['type'] == 'session/end-seed']
+    if initial == 'populated':
+        assert markers[-1]['seq'] == forks[-1]['seq'] + 1
+    else:
+        assert not markers and 'parentSession' not in before
+    hook(tmp_path, {**event, 'source': 'resume'}, monkeypatch)
+    assert len(query(tmp_path, result['session_id'])['events']) == len(data['events']) + 1
+    with SessionStore(session_path(tmp_path / 'state', result['session_id'])) as store:
+        store.validate()
+
+
+@pytest.mark.parametrize('observed,finish', [('returned-model', True), (None, True),
+                                          ('started-model', False), (None, False)])
+def test_stream_model_is_observed_not_requested(tmp_path: Path, observed: str | None, finish: bool) -> None:
+    """Final and interrupted output never substitutes the configured model for evidence."""
+    with open_archive(tmp_path / 'state', tmp_path, 'model-session', 'managed', source='managed') as store:
+        collector = StreamCollector(store, 'execution', 'requested-model', 'anthropic')
+        if not finish and observed:
+            collector.accept({'type': 'stream_event', 'event': {'type': 'message_start',
+                              'message': {'id': 'm', 'model': observed}}}, 0)
+            collector.accept({'type': 'stream_event', 'parent_tool_use_id': 'child-tool',
+                              'event': {'type': 'message_start',
+                                        'message': {'id': 'child', 'model': 'child-model'}}}, 1)
+        collector.accept({'type': 'stream_event', 'event': {'type': 'content_block_delta', 'index': 0,
+                          'delta': {'type': 'text_delta', 'text': 'received'}}}, 2)
+        pending = store.pending()['event']
+        if finish or observed is None:
+            assert 'message' not in pending['data']
+        else:
+            assert pending['data']['message']['source']['model'] == observed
+        if finish:
+            message = {'content': [{'type': 'text', 'text': 'received'}]}
+            if observed:
+                message['model'] = observed
+            collector.accept({'type': 'assistant', 'message': message}, 3)
+        collector.close()
+        output = store.page()['events'][-1]
+        if observed:
+            assert output['data']['message']['source']['model'] == observed
+        else:
+            assert 'message' not in output['data'] and 'surfaceOp' not in output
+        assert output['data']['stream'][0]['text'] == 'received'
+        if finish:
+            assert output['graphtraj']['native']['record']['message'] == message
+        else:
+            assert output['data']['interrupted']
+        store.validate()

@@ -1,9 +1,10 @@
 """Transactional project Session archives and bounded, resumable stream collection.
 
 Final events are append-only. A draft is a replaceable checkpoint, never a final
-log event. SQLite's rollback journal and FULL synchronization commit the draft,
-source position and attachments together; a returned commit survives process
-termination. Bytes received since the last checkpoint are not yet durable and
+log event. SQLite's rollback journal and FULL synchronization commit the draft
+and source position together. Attachment bytes commit separately and are included
+in archive exports; a returned commit survives process termination.
+Bytes received since the last checkpoint are not yet durable and
 must be replayed by the Runtime source. No transport-fragment log is retained.
 """
 from __future__ import annotations

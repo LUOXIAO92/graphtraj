@@ -9,9 +9,12 @@ covers the shared representation, provenance, RL observations and stream boundar
 `validate_header`, `validate_content`, `validate_stream`, `validate_event` and
 `validate_session` raise `ValueError` for invalid values without mutating input.
 `snapshot_event` returns a detached validated copy; `retain_native` preserves a
-native JSON record and `native_record` retrieves it. These are schema and mapping
-operations. Project storage, live collection and migration are separate consumers;
-validating an example does not establish that those consumers are implemented.
+native JSON record and `native_record` retrieves it. These remain schema and
+mapping operations. `graphtraj.sessions.storage` provides `SessionStore` for
+project-local archives and `StreamWriter` for compact, checkpointed assistant
+streams. The `session_read` operation exposes authorized ordered pages and
+durable unfinished output. Live Runtime collection and migration are separate
+consumers; the structural examples are not live-collection evidence.
 
 ## Fixed upstream and attribution
 
@@ -194,6 +197,29 @@ fragment sizes. A storage implementation must test character-sized and normal
 chunks, interruptions and boundaries for equal content/usage/probabilities and
 bounded record/byte growth. This task validates the representation only;
 it makes no file-size, crash-recovery or live Pi collection claim.
+
+## Storage and collector responsibilities
+
+Each Session archive contains its header, final events, source checkpoints,
+unfinished draft and attachment bytes. The archive lives under the project's
+configured state directory at
+`sessions/<SHA256(canonical Session ID)>/session.sqlite3`; the hash only forms a
+safe directory name. SQLite backup exports an independently readable archive.
+Header Agent and Task associations do not grant access: queries retain the
+existing caller and project authorization checks.
+
+Collectors assign stable ordered source positions and commit every event mapped
+from one source record atomically with `append_many` or
+`StreamWriter.finish(following=...)`. Draft and source position commit together.
+Attachments commit separately before referring events, so an interrupted write
+may leave an unused attachment. Acquisition failures retain their returned
+missing reason.
+
+Automatic checkpoints occur after 65,536 bytes of incoming compact records;
+collectors can call `checkpoint` or `finish` sooner. Bytes received after the
+last checkpoint require source replay after a hard crash. Failed or cancelled
+output is finalized with `interrupted=True`. Final-log validation remains
+explicit; none of these operations silently imports an existing Runtime history.
 
 ## Four Runtime examples
 

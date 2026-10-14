@@ -386,6 +386,14 @@ def test_checker_has_no_sibling_control(
     assert stop(binding)['systemMessage']
     reply = json.loads((root / 'tool-reply.json').read_text())
     assert reply['result']['success'] is allowed
+    from graphtraj.sessions.protocol import native_record
+    from graphtraj.sessions.storage import SessionStore, session_path
+
+    with SessionStore(session_path(root / '.graphtraj/state', 'codex:checker'), readonly=True) as archive:
+        records = [native_record(event) for event in archive.page()['events']
+                   if event['type'] != 'session/end-seed']
+        assert any(record.get('params', {}).get('arguments') == request for record in records)
+        assert reply in records
 
 
 @pytest.mark.parametrize('resolved', [False, True])
@@ -459,7 +467,10 @@ def test_whole_check_usage_excludes_inheritance_and_repeated_records(host: tuple
                          output_tokens=1020, reasoning_output_tokens=505)
     last = token_record(input_tokens=10400, cached_input_tokens=8240,
                         output_tokens=1030, reasoning_output_tokens=505)
-    records = check_records([baseline, call_record('old')], [
+    records = check_records([
+        {'type': 'session_meta', 'payload': {'id': 'inherited-parent'}},
+        baseline, call_record('old'),
+    ], [
         first, call_record('one'), call_record('two', 'custom_tool_call'),
         first, call_record('one'), call_record('old'),
         call_record('search', 'web_search_call'), last, last,
@@ -627,6 +638,49 @@ def test_native_start_resume_and_stop_need_no_main_binding_input(host: tuple[Pat
         assert events[1]['type'] == 'session/end-seed'
         assert events[1]['data'] == {'inherited': True}
         assert any(native_record(event).get('method') == 'item/completed' for event in events[2:])
+
+
+def test_native_session_end_archives_terminal_tail_without_checking(host: tuple[Path, Path]) -> None:
+    """The native shutdown flush exposes records written after the Stop hook."""
+    from graphtraj.sessions.protocol import native_record
+    from graphtraj.sessions.storage import SessionStore, session_path
+
+    root, _ = host
+    rollout(root)
+    assert native_hook(root, 'SessionStart')['systemMessage']
+    terminal = {'type': 'event_msg', 'payload': {'type': 'task_complete', 'turn_id': 'main-turn'}}
+    with (root / 'rollout.jsonl').open('a') as stream:
+        stream.write(json.dumps(terminal) + '\n')
+    before = (root / 'wire.jsonl').read_bytes()
+    assert native_hook(root, 'SessionEnd') == {}
+    assert (root / 'wire.jsonl').read_bytes() == before
+    with SessionStore(session_path(root / '.graphtraj/state', 'codex:main')) as store:
+        assert native_record(store.page()['events'][-1]) == terminal
+
+
+def test_native_copied_fork_keeps_own_first_header(host: tuple[Path, Path]) -> None:
+    """An inherited Main header cannot replace the current fork's native identity."""
+    from graphtraj.execution.main_finalize import session_binding
+    from graphtraj.sessions.storage import SessionStore, session_path
+
+    root, binding = host
+    original = binding.read_bytes()
+    (root / 'options.json').write_text(json.dumps({'read_id_from_request': True}))
+    records = [
+        {'type': 'session_meta', 'payload': {'id': 'fork', 'source': 'cli', 'forked_from_id': 'main'}},
+        {'type': 'session_meta', 'payload': {'id': 'main', 'source': 'cli'}},
+        {'type': 'response_item', 'payload': {'type': 'reasoning', 'encrypted_content': 'inherited'}},
+        {'type': 'event_msg', 'payload': {'type': 'thread_settings_applied', 'thread_id': 'fork',
+                                        'thread_settings': {}}},
+    ]
+    (root / 'rollout.jsonl').write_text(''.join(json.dumps(record) + '\n' for record in records))
+    assert native_hook(root, 'SessionStart', source='fork')['systemMessage']
+    assert binding.read_bytes() == original
+    assert session_binding(root, 'codex', 'fork').is_file()
+    with SessionStore(session_path(root / '.graphtraj/state', 'codex:fork')) as store:
+        store.validate()
+        assert store.header['parentSession'] == 'codex:main'
+        assert store.page()['events'][3]['type'] == 'session/end-seed'
 
 
 @pytest.mark.parametrize('source', [
@@ -812,7 +866,7 @@ def test_hook_configuration_is_only_adoption_material(tmp_path: Path) -> None:
     reply = CliRunner().invoke(stop_hook, ['--configuration'])
     assert reply.exit_code == 0
     configuration = json.loads(reply.output)
-    assert set(configuration['hooks']) == {'SessionStart', 'Stop'}
+    assert set(configuration['hooks']) == {'SessionStart', 'Stop', 'SessionEnd'}
     for groups in configuration['hooks'].values():
         handler = groups[0]['hooks'][0]
         assert handler['statusMessage'].strip()

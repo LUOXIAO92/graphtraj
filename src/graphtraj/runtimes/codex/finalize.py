@@ -58,6 +58,7 @@ def hook(path: Path, binding: dict) -> dict:
     messages = {
         'SessionStart': 'GraphTraj: associating Main session',
         'Stop': 'GraphTraj: checking task completion',
+        'SessionEnd': 'GraphTraj: retaining Main session',
     }
     return {'hooks': {
         event: [{'hooks': [{'type': 'command', 'command': command, 'statusMessage': message}]}]

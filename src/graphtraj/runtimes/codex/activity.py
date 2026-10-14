@@ -9,7 +9,8 @@ def project(record: dict, context: dict) -> list[dict]:
     if record.get('type') == 'session_meta':
         from graphtraj.runtimes.codex.session_entry import session_source
 
-        context.update(native_session=payload.get('id'), source_kind=session_source(payload))
+        if not context.get('native_session'):
+            context.update(native_session=payload.get('id'), source_kind=session_source(payload))
         return []
     if record.get('type') == 'turn_context':
         context.update(model=payload.get('model'), turn_id=payload.get('turn_id'), cwd=payload.get('cwd'))

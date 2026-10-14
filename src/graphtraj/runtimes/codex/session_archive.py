@@ -11,8 +11,9 @@ from datetime import datetime
 import json
 from pathlib import Path
 import time
+from typing import BinaryIO
 
-from graphtraj.sessions.protocol import retain_native
+from graphtraj.sessions.protocol import native_record, retain_native
 from graphtraj.sessions.storage import SessionStore, session_path
 
 
@@ -79,6 +80,7 @@ class CodexSessionArchive:
     ) -> None:
         """Capture authorized associations without opening a native transcript."""
         self.path = session_path(state, 'codex:' + session_id)
+        self.state = state
         self.project_id = project_id
         self.agent_id = agent_id
         self.session_id = session_id
@@ -151,6 +153,64 @@ class CodexSessionArchive:
             event['graphtraj']['attachments'] = _attachments(store, message)
             store.append_many([event], source='connection', position=position)
 
+    def _copied_fork_cut(self, stream: BinaryIO) -> int | None:
+        """Locate the first child-owned settings record after native copied history.
+
+        Codex 0.161.0 record_initial_history appends this record after the copied
+        prefix; inherited settings retain their original thread_id. Neither
+        timestamps nor the parent's current length establish this boundary.
+        """
+        while True:
+            start = stream.tell()
+            line = stream.readline()
+            if not line.endswith(b'\n'):
+                return None
+            record = json.loads(line)
+            payload = record.get('payload', {})
+            if (record.get('type') == 'event_msg'
+                    and payload.get('type') == 'thread_settings_applied'
+                    and payload.get('thread_id') == self.session_id):
+                return start
+
+    def _seed_reference(self, store: SessionStore, base: dict) -> None:
+        """Copy the native exclusive prefix from an already owned project archive.
+
+        Native history_base coordinates name the immutable source prefix, not
+        whichever records the parent has acquired since the fork. No Runtime
+        Home search or unrelated Session import is authorized by the reference.
+        """
+        if store.position('history-base') >= 0:
+            return
+        cutoff = base['end_ordinal_exclusive']
+        with SessionStore(session_path(self.state, 'codex:' + base['thread_id']), readonly=True) as parent:
+            if parent.header['graphtraj']['projectId'] != self.project_id:
+                raise ValueError('Native inherited history belongs to another project.')
+            events = []
+            after = -1
+            while len(events) < cutoff:
+                page = parent.page(after)
+                for event in page['events']:
+                    if event['type'] == 'session/end-seed':
+                        continue
+                    record = native_record(event)
+                    if record.get('ordinal') != len(events):
+                        raise ValueError('Native inherited ordinal prefix is unavailable.')
+                    event['seq'] = len(events)
+                    for attachment in event.get('graphtraj', {}).get('attachments', []):
+                        if attachment.get('storage') == 'session':
+                            store.put_attachment(parent.attachment(attachment['sha256']))
+                    events.append(event)
+                    if len(events) == cutoff:
+                        break
+                if not page['has_more']:
+                    break
+                after = page['after']
+            if len(events) != cutoff:
+                raise ValueError('Native inherited prefix has not been collected in this project.')
+        events.append({'type': 'session/end-seed', 'seq': len(events),
+                       'time': store.header['createdAt'], 'data': {'inherited': True}})
+        store.append_many(events, source='history-base', position=base['end_byte_offset'])
+
     def collect(self, rollout: Path) -> None:
         """Commit complete native records; retry unfinished input on the next call.
 
@@ -168,6 +228,15 @@ class CodexSessionArchive:
             if self.path.exists():
                 store = SessionStore(self.path)
             else:
+                parent = metadata.get('forked_from_id')
+                base = metadata.get('history_base')
+                cut = None
+                if parent and base is None:
+                    cut = self._copied_fork_cut(stream)
+                    if cut is None:
+                        # Native creation may still be writing its prefix. Keep
+                        # the entire input replayable until the boundary exists.
+                        return
                 created = _timestamp(metadata.get('timestamp') or metadata_record.get('timestamp'))
                 missing = [] if created is not None else [{
                     'path': 'createdAt', 'reason': 'Native creation time unknown; archive receipt time used.',
@@ -175,24 +244,22 @@ class CodexSessionArchive:
                 header = {
                     'version': 4, 'id': 'codex:' + self.session_id,
                     'createdAt': created if created is not None else time.time_ns() // 1000000,
-                    'isSeeded': False,
+                    'isSeeded': bool(parent),
                     'graphtraj': {'version': 1, 'projectId': self.project_id,
                                  'agentId': self.agent_id, 'taskIds': list(self.task_ids),
                                  'native': {'runtime': 'codex', 'sessionId': self.session_id,
                                             'locator': 'byte:0'}, 'missing': missing},
                 }
-                # Native ancestry alone does not expose the inherited prefix cut.
-                # Preserve it without claiming that an arbitrary first turn is it.
-                parent = metadata.get('forked_from_id')
                 if parent:
                     header['parentSession'] = 'codex:' + parent
-                    missing.append({'path': 'inheritedPrefix',
-                                    'reason': 'Native fork cut unknown in this rollout metadata.'})
+                    header['graphtraj']['native']['inheritedEndByte'] = cut
                 store = SessionStore.create(self.path, header)
             with store:
                 header = store.header['graphtraj']
                 if header['projectId'] != self.project_id or header['agentId'] != self.agent_id:
                     raise ValueError('Codex archive already belongs to another project or Agent.')
+                if metadata.get('forked_from_id') and metadata.get('history_base'):
+                    self._seed_reference(store, metadata['history_base'])
                 position = store.position('rollout')
                 if rollout.stat().st_size < position:
                     raise ValueError('Codex rollout was truncated before its committed cursor.')
@@ -217,4 +284,9 @@ class CodexSessionArchive:
                     event['graphtraj']['attachments'] = _attachments(store, record)
                     # Preserve cumulative usage as a native observation. It is not
                     # an additive DSH charge, and replay cannot count it twice.
-                    store.append_many([event], source='rollout', position=stream.tell())
+                    events = [event]
+                    if start == header['native'].get('inheritedEndByte'):
+                        events.insert(0, {'type': 'session/end-seed', 'seq': event['seq'],
+                                          'time': event['time'], 'data': {'inherited': True}})
+                        event['seq'] += 1
+                    store.append_many(events, source='rollout', position=stream.tell())

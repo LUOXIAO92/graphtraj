@@ -224,6 +224,63 @@ def test_managed_archive_is_readable_after_native_shutdown(managed_project: Mana
     assert result.document['header']['graphtraj']['agentId'] == alias
 
 
+@pytest.mark.skipif(not os.environ.get('CODEX_ARCHIVE_PROBE_HOME'),
+                    reason='requires an explicitly prepared temporary native home')
+@pytest.mark.parametrize('managed_project', [
+    {'CODEX_HOME': os.environ.get('CODEX_ARCHIVE_PROBE_HOME', '')},
+], indirect=True)
+def test_real_codex_archive(managed_project: ManagedProject) -> None:
+    """Collect two real turns through Runner using only an explicitly supplied home.
+
+    The operator supplies a fresh temporary native home with authorized account
+    configuration and an explicit model. This probe never reads/copies global
+    authentication or selects a host model on the operator's behalf.
+    """
+    from graphtraj.interfaces.local_tool import bind
+    from graphtraj.sessions.protocol import native_record
+    from graphtraj.sessions.storage import SessionStore, session_path
+
+    root, cause, call, executable = managed_project
+    native_home = Path(os.environ['CODEX_ARCHIVE_PROBE_HOME']).resolve()
+    assert native_home.is_dir()
+    assert not (native_home / 'sessions').exists(), 'Use a fresh probe home, without private history.'
+    model = os.environ['CODEX_ARCHIVE_PROBE_MODEL']
+    real = shutil.which('codex')
+    assert real
+    executable.unlink()
+    executable.symlink_to(real)
+    document = launch_document('Remember ARCHIVE_313_NATIVE. Reply exactly ARCHIVE_313_NATIVE. Do not use tools.')
+    document['tasks'][0]['role']['managed-probe'].update(model=model, reasoning_effort='medium')
+    launched = call('launch', document, timeout=60)['tasks'][0]
+    assert launched['launch_status'] == 'launched', launched
+    alias = launched['alias']
+    observe(call, alias, 'idle', 'completed', timeout=120)
+    archive_path = session_path(root / '.graphtraj/state', 'codex:' + launched['session'])
+    with SessionStore(archive_path, readonly=True) as archive:
+        before = archive.page()['events']
+    call('send', [alias, 'Reply with the remembered marker only. Do not use tools.', [cause]], timeout=60)
+    observe(call, alias, 'idle', 'completed', timeout=120)
+    call('interrupt', [alias], timeout=60)
+    metadata = yaml.safe_load((root / '.graphtraj/runner/sessions' / alias / 'session.yml').read_text())
+    native = Path(metadata['rollout_path']).resolve()
+    assert native.is_relative_to(native_home)
+    original = [json.loads(line) for line in native.read_text().splitlines()]
+    native.unlink()
+    reply = bind(root, desktop_observer=True)({
+        'action': 'execute', 'feature': 'session_read',
+        'arguments': {'session_id': 'codex:' + launched['session'], 'limit': 1000},
+    })
+    assert not reply.failed, reply.document
+    events = reply.document['events']
+    assert not reply.document['has_more']
+    assert events[:len(before)] == before
+    assert [native_record(event) for event in events] == original
+    assert 'ARCHIVE_313_NATIVE' in json.dumps(original)
+    with SessionStore(archive_path) as archive:
+        archive.validate()
+        archive.export(root / 'codex-archive-export.sqlite3')
+
+
 @pytest.mark.skipif(os.environ.get('CODEX_MANAGED_REAL') != '1', reason='explicit real Codex acceptance probe')
 def test_real_registered_session(managed_project: ManagedProject) -> None:
     """Exercise public Runner ownership against the installed real Codex Adapter."""

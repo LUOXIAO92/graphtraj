@@ -137,6 +137,25 @@ def test_native_main_two_projects_reopen_and_attribution(
         project_query(root, alias='Main:codex:unrelated')
 
 
+def test_copied_main_keeps_canonical_identity_in_activity(
+    host: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Inherited metadata cannot make the verified Main's own output disappear."""
+    root, _ = host
+    monkeypatch.setattr('graphtraj.execution.desktop_activity.caller_runtime', lambda: None)
+    rows = [
+        {'type': 'session_meta', 'payload': {'id': 'main', 'source': 'cli', 'forked_from_id': 'ancestor'}},
+        {'type': 'session_meta', 'payload': {'id': 'ancestor', 'source': 'cli'}},
+        {'type': 'event_msg', 'payload': {'type': 'thread_settings_applied', 'thread_id': 'main',
+                                        'thread_settings': {}}},
+        turn(root, 'own-turn'), message('own fork output'),
+    ]
+    write_records(root / 'rollout.jsonl', rows)
+    assert native_hook(root, 'SessionStart', source='fork')['systemMessage']
+    output = project_query(root, alias='Main:codex:main')
+    assert [event['text'] for event in output['events'] if event['kind'] == 'message'] == ['own fork output']
+
+
 def test_member_cursor_reconnect_rotation_truncation_and_counts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The same dataset gives bounded hot/reopen reads and replay after physical replacement."""
     monkeypatch.setattr('graphtraj.execution.desktop_activity.caller_runtime', lambda: None)

@@ -70,7 +70,7 @@ async def latest_check_usage(client: CodexAppServer, association: dict) -> dict:
                 record = json.loads(line)
                 payload = record.get('payload', {})
                 kind = record.get('type')
-                if kind == 'session_meta':
+                if kind == 'session_meta' and identity is None:
                     identity = payload.get('id')
                 if (kind == 'turn_context' or (kind == 'event_msg' and payload.get('type') == 'task_started')):
                     if payload.get('turn_id') == turn['id']:
@@ -182,7 +182,7 @@ class CodexCheckUsage:
                     if not line.endswith(b'\n'):
                         return
                     record = json.loads(line)
-                    if record.get('type') == 'session_meta':
+                    if record.get('type') == 'session_meta' and identity is None:
                         identity = record['payload'].get('id')
                     total = _total(record)
                     if total is not None:

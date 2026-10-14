@@ -21,7 +21,9 @@ def session_record(path: Path, turn: str | None = None) -> tuple[dict, dict]:
         for line in stream:
             record = json.loads(line)
             payload = record.get('payload', {})
-            if record.get('type') == 'session_meta':
+            if record.get('type') == 'session_meta' and not metadata:
+                # Copied forks retain ancestral metadata after their own first
+                # canonical header. An ancestor must never replace this identity.
                 metadata = payload
             elif record.get('type') == 'turn_context':
                 current_turn = payload.get('turn_id')

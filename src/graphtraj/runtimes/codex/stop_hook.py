@@ -23,7 +23,7 @@ def native_event(event: dict) -> dict:
     from graphtraj.workspace.runner_project import discover_runner_directory, discover_project_root
 
     name = event.get('hook_event_name')
-    if name not in {'SessionStart', 'Stop'}:
+    if name not in {'SessionStart', 'Stop', 'SessionEnd'}:
         return {}
     root = discover_project_root(Path(event['cwd']))
     runner = discover_runner_directory(root)
@@ -62,6 +62,14 @@ def native_event(event: dict) -> dict:
     if is_bound_checker(runner, connection):
         return skipped(f'Session {session} is a recorded completion checker.')
     binding = session_binding(root, 'codex', session)
+    if name == 'SessionEnd':
+        # The native SessionEnd hook flushes the terminal record before calling
+        # us. It does not run a completion checker or establish new ownership.
+        saved = yaml.safe_load(binding.read_text(encoding='utf-8'))
+        if saved.get('connection') != connection:
+            raise ValueError('Native SessionEnd association is stale.')
+        _archive(root, session, event['transcript_path'])
+        return {}
     if name == 'SessionStart':
         bind_session(connection, root, activity_source=event.get('transcript_path'))
         _archive(root, session, event['transcript_path'])

@@ -150,3 +150,65 @@ def test_fork_retains_exact_returned_prefix_without_reading_parent(tmp_path: Pat
         assert events[1]['data'] == {'inherited': True}
         assert native_record(events[2]) == notice
         assert store.header['parentSession'] == 'codex:parent'
+
+
+def test_persistent_copied_fork_uses_child_settings_boundary(tmp_path: Path) -> None:
+    """A late first collection distinguishes inherited settings from child updates."""
+    rollout = tmp_path / 'fork.jsonl'
+    header = records('child')[0]
+    header['payload']['forked_from_id'] = 'parent'
+    inherited = records('parent') + [{'type': 'event_msg', 'payload': {
+        'type': 'thread_settings_applied', 'thread_id': 'parent', 'thread_settings': {},
+    }}]
+    write_records(rollout, [header, *inherited])
+    archive = CodexSessionArchive(tmp_path, 'project', 'main', 'child')
+    archive.collect(rollout)
+    assert not archive.path.exists()  # The unfinished native prefix remains replayable.
+    owned_settings = {'type': 'event_msg', 'payload': {
+        'type': 'thread_settings_applied', 'thread_id': 'child', 'thread_settings': {},
+    }}
+    child_content = records('child')[1:]
+    values = [header, *inherited, owned_settings, *child_content, owned_settings]
+    write_records(rollout, values)
+    archive.collect(rollout)
+    archive.collect(rollout)
+    with SessionStore(archive.path) as store:
+        store.validate()
+        events = store.page()['events']
+        cut = len(inherited) + 1
+        assert events[cut]['type'] == 'session/end-seed'
+        assert [native_record(event) for event in events if event['type'] != 'session/end-seed'] == values
+        assert len(events) == len(values) + 1
+        assert store.header['parentSession'] == 'codex:parent'
+
+
+def test_referenced_fork_copies_only_native_ordinal_prefix(tmp_path: Path) -> None:
+    """Parent growth and source cleanup cannot change a referenced child's prefix."""
+    parent_values = records('parent')
+    for ordinal, record in enumerate(parent_values):
+        record['ordinal'] = ordinal
+    parent_source = tmp_path / 'parent.jsonl'
+    write_records(parent_source, parent_values)
+    parent = CodexSessionArchive(tmp_path, 'project', 'parent-agent', 'parent')
+    parent.collect(parent_source)
+    child_values = records('child')[:2]
+    for ordinal, record in enumerate(child_values, start=3):
+        record['ordinal'] = ordinal
+    child_values[0]['payload'].update(forked_from_id='parent', history_mode='paginated', history_base={
+        'thread_id': 'parent', 'end_ordinal_exclusive': 3,
+        'end_byte_offset': len(''.join(json.dumps(item) + '\n' for item in parent_values[:3]).encode()),
+    }, forked_from_ordinal_exclusive=3)
+    child_source = tmp_path / 'child.jsonl'
+    write_records(child_source, child_values)
+    child = CodexSessionArchive(tmp_path, 'project', 'child-agent', 'child')
+    child.collect(child_source)
+    child.collect(child_source)
+    parent.path.unlink()
+    parent_source.unlink()
+    child_source.unlink()
+    with SessionStore(child.path) as store:
+        store.validate()
+        events = store.page()['events']
+        assert events[3]['type'] == 'session/end-seed'
+        assert [native_record(event) for event in events[:3]] == parent_values[:3]
+        assert [native_record(event) for event in events[4:]] == child_values

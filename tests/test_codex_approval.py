@@ -802,3 +802,58 @@ def test_resume_reference_preserves_captured_work_after_catalog_removal(
     assert resumed.context.session_document()['adapter_request']['model'] == 'work-model'
     assert request == before
     assert (directory / 'mapping.yml').read_bytes() == ownership
+
+
+@pytest.mark.parametrize('failure', [
+    'missing', 'empty', 'finish_reason_not_stop', 'decision_fields',
+    'request_id', 'decision', 'rationale',
+])
+def test_approval_diagnostics_classify_failure_without_disclosing_values(
+    tmp_path: Path,
+    peer: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failure: str,
+) -> None:
+    """Expose safe categories through native replies using only a controlled provider."""
+    request, directory = managed(tmp_path, peer, monkeypatch)
+    secret = 'PRIVATE-PROVIDER-CONTENT'
+    calls = []
+    if failure == 'missing':
+        monkeypatch.delenv('DEEPSEEK_API_KEY')
+    elif failure == 'empty':
+        monkeypatch.setenv('DEEPSEEK_API_KEY', '')
+
+    class Provider:
+        def open(self, http_request: object, timeout: int) -> BytesIO:
+            """Return controlled failures without making a network request."""
+            calls.append(True)
+            result = {'request_id': 'approval', 'decision': 'accept', 'rationale': 'allowed'}
+            if failure == 'decision_fields':
+                result[secret] = secret
+            elif failure in {'request_id', 'decision'}:
+                result[failure] = secret
+            elif failure == 'rationale':
+                result['rationale'] = {secret: secret}
+            finish = secret if failure == 'finish_reason_not_stop' else 'stop'
+            return BytesIO(json.dumps({'choices': [{'finish_reason': finish,
+                'message': {'content': json.dumps(result)}}]}).encode())
+
+    monkeypatch.setattr(approval, 'build_opener', lambda *args: Provider())
+    result = CodexManagedExecution(request, 'request: authorize printf only', directory,
+        lambda *_: None, {}, directory / 'events.jsonl').run()
+    reply = json.loads(next((tmp_path / 'native').glob('*.replies.jsonl')).read_text())
+    assert result['outcome'] == 'runtime-error'
+    assert reply['error']['code'] == -32603
+    message = reply['error']['message']
+    if failure in {'missing', 'empty'}:
+        diagnostic = json.loads(message.split('api_key_env ', 1)[1])
+        assert diagnostic == {'name': 'DEEPSEEK_API_KEY',
+                              'present': failure == 'empty', 'nonempty': False}
+        assert not calls
+    else:
+        category = failure if failure == 'finish_reason_not_stop' else 'invalid_' + failure
+        assert category in message
+        assert len(calls) == 1
+    published = json.dumps(reply) + json.dumps(result) + (directory / 'stderr.log').read_text()
+    assert secret not in published
+    assert 'test-key' not in published

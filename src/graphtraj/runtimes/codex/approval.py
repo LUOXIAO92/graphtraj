@@ -181,7 +181,13 @@ def _completion(route: dict, context: dict) -> dict:
     """Call the configured chat-completions endpoint once, without retries."""
     key = os.environ.get(route['api_key_env'])
     if not key:
-        raise ValueError('Approval API key environment variable is not set')
+        raise RuntimeAdapterError(
+            'RUNTIME_REQUEST_FAILED',
+            'Approval call failed: api_key_env ' + json.dumps({
+                'name': route['api_key_env'],
+                'present': route['api_key_env'] in os.environ, 'nonempty': bool(key),
+            }), terminal_confirmed=False,
+        )
     # JSON mode guarantees JSON syntax, not this request's response envelope.
     # Supply the exact envelope without deriving a decision or repairing a reply.
     schema = {
@@ -228,7 +234,10 @@ def _completion(route: dict, context: dict) -> dict:
         ) from error
     choice = result['choices'][0]
     if choice['finish_reason'] != 'stop':
-        raise ValueError('Approval completion was not finished')
+        raise RuntimeAdapterError(
+            'RUNTIME_REQUEST_FAILED', 'Approval call failed: finish_reason_not_stop',
+            terminal_confirmed=False,
+        )
     return json.loads(choice['message']['content'])
 
 
@@ -236,13 +245,22 @@ async def review_request(route: dict, context: dict) -> dict:
     """Return a validated decision; call failures use the native RPC error path."""
     try:
         result = await asyncio.wait_for(asyncio.to_thread(_completion, route, context), 30)
-        if (not isinstance(result, dict)
-                or set(result) != {'request_id', 'decision', 'rationale'}
-                or type(result['request_id']) is not type(context['request_id'])
-                or result['request_id'] != context['request_id']
-                or result['decision'] not in context['allowed_decisions']
-                or not isinstance(result['rationale'], str) or not result['rationale'].strip()):
-            raise ValueError('Invalid approval decision')
+        # Classify only the failed contract; never interpolate provider values.
+        invalid = None
+        if not isinstance(result, dict) or set(result) != {'request_id', 'decision', 'rationale'}:
+            invalid = 'decision_fields'
+        elif (type(result['request_id']) is not type(context['request_id'])
+              or result['request_id'] != context['request_id']):
+            invalid = 'request_id'
+        elif result['decision'] not in context['allowed_decisions']:
+            invalid = 'decision'
+        elif not isinstance(result['rationale'], str) or not result['rationale'].strip():
+            invalid = 'rationale'
+        if invalid is not None:
+            raise RuntimeAdapterError(
+                'RUNTIME_REQUEST_FAILED', 'Approval call failed: invalid_' + invalid,
+                terminal_confirmed=False,
+            )
         if context.get('method') == 'graphtraj/recoveryApproval' and result['decision'] == 'decline':
             return {'decision': 'decline', 'rationale': result['rationale']}
         return {'decision': result['decision']}

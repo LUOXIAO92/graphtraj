@@ -90,7 +90,7 @@ def test_python_binding_discovers_describes_reads_and_writes(project: Path) -> N
     parameters = call({"action": "describe", "feature": "task_graph", "schema": True})
     assert parameters.document == {"input_schema": tools.TOOLS["task_graph"].input_schema}
 
-    assert call({"action": "execute", "feature": "task_graph", "arguments": {}}).document == {"schema_version": 2, "tasks": []}
+    assert call({"action": "execute", "feature": "task_graph", "arguments": {}}).document["tasks"] == []
     written = call({"action": "execute", "feature": "task_register", "arguments": ISSUE})
     assert not written.failed
 
@@ -144,7 +144,7 @@ def test_launch_option_restricts_features(
     replies = [json.loads(line) for line in output.getvalue().splitlines()]
     assert [item["feature"] for item in replies[0]["result"]["features"]] == ["task_graph"]
     assert replies[1]["failed"] and "Unknown feature" in replies[1]["result"]["error"]
-    assert replies[2]["result"] == {"schema_version": 2, "tasks": []}
+    assert replies[2]["result"]["tasks"] == []
 
 
 def test_bridge_answers_bad_requests_and_keeps_serving(project: Path) -> None:
@@ -171,7 +171,7 @@ def test_bridge_answers_bad_requests_and_keeps_serving(project: Path) -> None:
     assert replies[3]["failed"] and "error" in replies[3]["result"]
     assert replies[4]["failed"] and "Unknown feature" in replies[4]["result"]["error"]
     assert Path(replies[5]["result"]["manual_ref"]).read_text() == "Fixture manual for task_graph."
-    assert replies[6]["result"] == {"schema_version": 2, "tasks": []}
+    assert replies[6]["result"]["tasks"] == []
     assert not replies[7]["failed"]
     assert Path(replies[7]["result"]["task_directory"]).is_dir()
     assert [task["task_id"] for task in replies[8]["result"]["tasks"]] == ["900"]
@@ -223,7 +223,7 @@ sys.stderr.write("mcp_imported={0}\\n".format("graphtraj.interfaces.mcp" in sys.
     assert replies[0] == {"failed": True, "error": "Parse error"}
     assert replies[1]["result"]["features"][0]["feature"] == "task_graph"
     assert Path(replies[2]["result"]["manual_ref"]).read_text() == "Fixture manual for task_graph."
-    assert replies[3]["result"] == {"schema_version": 2, "tasks": []}
+    assert replies[3]["result"]["tasks"] == []
     assert not replies[4]["failed"]
     # The write landed in the host's launch directory, not the test process one.
     assert (project / ".graphtraj/state/tasks/900-probe-task").is_dir()

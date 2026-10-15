@@ -45,7 +45,8 @@ def test_python_and_cli_register_validate_and_read_the_same_graph(
         "active": True, "ready": True, "dependencies": [], "replaced_by": [],
     }
     assert {key: node[key] for key in expected} == expected
-    assert node["schema_version"] == 2 and node["parent_id"] is None
+    assert node["parent_id"] is None
+    assert read_graph(state, details=["73"])["details"]["73"]["schema_version"] == 2
 
     for invalid in (issue, {**issue, "task_id": "../escape"}):
         before = read_graph(state)

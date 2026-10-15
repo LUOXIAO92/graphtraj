@@ -355,48 +355,178 @@ def revise_tasks(
         _unlock(lock)
 
 
-def read_graph(state: Path) -> dict[str, Any]:
-    """Project definitions and execution state without inferring old parentage."""
-    tasks = state / "tasks"
-    if not tasks.is_dir():
-        return {"schema_version": 2, "tasks": []}
-    lock = _lock(tasks, exclusive=False)
-    try:
-        states = _load_states(tasks)
-        records = {key: record for key, (_, record) in states.items()}
-        _validate_graph(records)
-        delivery = _delivery_facts(state, records)
-        rendered = []
-        for task_id in sorted(records, key=int):
-            record = dict(records[task_id])
-            children = [key for key, other in records.items() if other.get("parent_id") == task_id]
-            completed = sum(_result_complete(records, child) for child in children)
-            record.update(
-                children=children,
-                progress={"total": len(children), "completed": completed},
-                delivery=delivery[task_id],
-                ready=record["active"] and record["status"] in {"pending", "ready"}
-                and all(_result_complete(records, item) for item in record["dependencies"]),
-            )
-            rendered.append(record)
-        return {"schema_version": 2, "tasks": rendered}
-    finally:
-        _unlock(lock)
+def read_graph(
+    state: Path,
+    view: str = "current",
+    task_id: str | None = None,
+    details: list[str] | tuple[str, ...] = (),
+) -> dict[str, Any]:
+    """Project the light Task Graph from its current index.
+
+    Parameters
+    ----------
+    state : Path
+        Project state directory.
+    view : {"current", "full"}
+        ``full`` returns every Task. ``current`` expands unfinished work in the
+        scope plus its necessary inputs; every other Task is folded into its
+        nearest visible ancestor, and top-level Tasks stay as coarse nodes.
+    task_id : str or None
+        Scope of the ``current`` view: this Task and its descendants. None
+        uses the whole project.
+    details : list of str
+        Tasks whose full definitions and execution facts are read from disk.
+
+    Returns
+    -------
+    dict
+        ``tasks`` with readiness, progress, delivery and ``outcome``; the
+        ``current`` view adds ``edges`` between visible endpoints and each
+        visible Task's ``folded`` outcome counts.
+    """
+    from graphtraj.graph.task_index import read_index, task_directory
+
+    if view not in {"current", "full"}:
+        raise ValueError("Task graph view must be current or full")
+    index   = read_index(state)
+    records = index["tasks"]
+    for key in [*([task_id] if task_id is not None else []), *details]:
+        if key not in records:
+            raise ValueError("Task {0} is not registered".format(key))
+
+    delivery = _delivery_facts(index["deliveries"], records)
+    children: dict[str, list[str]] = {key: [] for key in records}
+    for key in sorted(records, key=int):
+        if records[key]["parent_id"] is not None:
+            children[records[key]["parent_id"]].append(key)
+    visible = set(records) if view == "full" else _visible(records, children, task_id)
+
+    rendered = []
+    for key in sorted(visible, key=int):
+        record = {field: value for field, value in records[key].items() if field != "stamp"}
+        record.update(
+            children=children[key],
+            progress={
+                "total":     len(children[key]),
+                "completed": sum(_result_complete(records, child) for child in children[key]),
+            },
+            delivery=delivery[key],
+            ready=record["active"] and record["status"] in {"pending", "ready"}
+            and all(_result_complete(records, item) for item in record["dependencies"]),
+            outcome=_outcome(record),
+        )
+        rendered.append(record)
+    graph = {"schema_version": 2, "revision": index["revision"], "view": view, "tasks": rendered}
+
+    if view == "current":
+        _fold(graph, records, delivery, visible)
+        graph["scope"] = task_id
+    if details:
+        graph["details"] = {
+            key: _load_state(task_directory(state, index, key) / "task.yml")[1]
+            for key in details
+        }
+    return graph
 
 
-def _delivery_facts(state: Path, records: dict[str, dict[str, Any]]) -> dict[str, list[dict]]:
-    """Project actual integration and summary acceptance from retained events.
+def _outcome(record: dict[str, Any]) -> str:
+    """Name a Task's result without presenting retired or halted work as done."""
+    if record["disposition"] != "active":
+        return record["disposition"]
+    return "completed" if record["status"] == "integrated" else record["status"]
+
+
+def _visible(
+    records: dict[str, dict[str, Any]],
+    children: dict[str, list[str]],
+    scope: str | None,
+) -> set[str]:
+    """Select the Tasks the current view expands.
+
+    Unfinished work means an active Task that is not integrated, so blocked or
+    escalated Tasks stay open while an adopted completed Task does not.
+    """
+    def unfinished(key: str) -> bool:
+        return records[key]["active"] and records[key]["status"] != "integrated"
+
+    region = [scope] if scope is not None else list(records)
+    if scope is not None:
+        for key in region:
+            region.extend(children[key])
+    shown = {key for key in region if unfinished(key)} | ({scope} if scope else set())
+
+    # Necessary inputs: every dependency stays visible; unfinished inputs and
+    # replacement chains are followed to the work they still wait for.
+    pending = list(shown)
+    while pending:
+        key = pending.pop()
+        for other in (*records[key]["dependencies"], *records[key]["replaced_by"]):
+            if other not in shown:
+                shown.add(other)
+                if unfinished(other) or records[other]["replaced_by"]:
+                    pending.append(other)
+
+    # Summaries give context to what is shown; top-level Tasks remain coarse nodes.
+    for key in list(shown):
+        parent = records[key]["parent_id"]
+        while parent is not None and parent not in shown:
+            shown.add(parent)
+            parent = records[parent]["parent_id"]
+    return shown | {key for key, record in records.items() if record["parent_id"] is None}
+
+
+def _fold(
+    graph: dict[str, Any],
+    records: dict[str, dict[str, Any]],
+    delivery: dict[str, list[dict]],
+    visible: set[str],
+) -> None:
+    """Project hidden Tasks and relationships onto visible ancestors.
+
+    Each relationship keeps its direction and kind between the nearest
+    visible ancestors of its real endpoints; relationships inside one folded
+    summary disappear. Native relationships are not changed.
+    """
+    def shown(key: str) -> str:
+        while key not in visible:
+            key = records[key]["parent_id"]
+        return key
+
+    relations = []
+    for key, record in records.items():
+        relations += [(item, key, "dependency") for item in record["dependencies"]]
+        relations += [(key, item, "replacement") for item in record["replaced_by"]]
+        relations += [
+            (key, fact["task_id"], "acceptance") for fact in delivery[key]
+            if fact["event"] == "task-completed" and fact["task_id"] != key
+        ]
+    edges = {
+        (shown(source), shown(target), kind) for source, target, kind in relations
+        if shown(source) != shown(target)
+    }
+    graph["edges"] = [
+        {"source": source, "target": target, "kind": kind}
+        for source, target, kind in sorted(edges, key=lambda edge: (int(edge[0]), int(edge[1]), edge[2]))
+    ]
+
+    folded: dict[str, dict[str, int]] = {}
+    for key in records.keys() - visible:
+        counts = folded.setdefault(shown(key), {})
+        outcome = _outcome(records[key])
+        counts[outcome] = counts.get(outcome, 0) + 1
+    for task in graph["tasks"]:
+        task["folded"] = folded.get(task["task_id"], {})
+
+
+def _delivery_facts(
+    latest: dict[str, dict], records: dict[str, dict[str, Any]]
+) -> dict[str, list[dict]]:
+    """Project actual integration and summary acceptance from indexed events.
 
     Membership alone does not establish receipt. Summary completion records
     identify the exact checked results; reopened or withdrawn tasks cannot
     inherit a current completion claim from their old events.
     """
-    from graphtraj.graph.delivery_worldline import read_worldline
-
-    latest: dict[str, dict] = {}
-    for event in read_worldline(state):
-        if event["event"] in {"task-integrated", "task-integration-conflict-resolved", "task-completed"}:
-            latest[event["task_id"]] = event
     result: dict[str, list[dict]] = {key: [] for key in records}
     for key, event in latest.items():
         record = records.get(key)
@@ -409,7 +539,7 @@ def _delivery_facts(state: Path, records: dict[str, dict[str, Any]]) -> dict[str
         )}
         result[key].append({**fact, "accepted_definition": event.get("current_definition")})
         if event["event"] == "task-completed":
-            for child, definition in event.get("checked_definitions", {}).items():
+            for child, definition in (event.get("checked_definitions") or {}).items():
                 child_record = records.get(child)
                 if child_record and child_record["active"] and child_record["status"] == "integrated":
                     result[child].append({**fact, "accepted_definition": definition})
@@ -577,70 +707,77 @@ def _load_states(tasks: Path) -> dict[str, tuple[Path, dict[str, Any]]]:
     """Merge each execution record with its single current immutable definition."""
     states: dict[str, tuple[Path, dict[str, Any]]] = {}
     for path in tasks.glob("*/task.yml"):
-        record = yaml.safe_load(path.read_text(encoding="utf-8"))
-        if not isinstance(record, dict) or set(record) != protocol.EXECUTION_FIELDS:
-            raise ValueError("Task state is invalid")
-        task_id = record["task_id"]
-        definition = (
-            Path(record["current_definition"])
-            if isinstance(record["current_definition"], str)
-            else None
-        )
-        valid_definition = (
-            definition == Path("task.md")
-            or (
-                definition is not None
-                and definition.parent == Path("definitions")
-                and _EVENT_DEFINITION.fullmatch(definition.name) is not None
-            )
-        )
-        definition_path = path.parent / definition if definition is not None else path
-        if valid_definition and definition_path.is_file() and not definition_path.is_symlink():
-            definition_record = protocol.read_definition(definition_path.read_text(encoding="utf-8"))
-            _validate_issue(definition_record)
-            if any(definition_record[key] != record[key] for key in ("task_id", "task_name", "schema_version")):
-                raise ValueError("Task definition identity differs from execution state")
-            record.update(definition_record, active=definition_record["disposition"] == "active")
-        if (
-            not isinstance(task_id, str)
-            or _TASK_ID.fullmatch(task_id) is None
-            or not isinstance(record["task_name"], str)
-            or _TASK_NAME.fullmatch(record["task_name"]) is None
-            or path.parent.name != "{0}-{1}".format(task_id, record["task_name"])
-            or task_id in states
-            or not valid_definition
-            or definition_path.is_symlink()
-            or not definition_path.is_file()
-            or not isinstance(record["active"], bool)
-            or not isinstance(record["replaced_by"], list)
-            or not isinstance(record["dependencies"], list)
-            or any(not isinstance(item, str) for item in record["replaced_by"])
-            or any(not isinstance(item, str) for item in record["dependencies"])
-            or not isinstance(record["status"], str)
-            or record["status"] not in _STATUSES
-            or (record["active_team_ordinal"] is not None and (
-                isinstance(record["active_team_ordinal"], bool)
-                or not isinstance(record["active_team_ordinal"], int)
-                or record["active_team_ordinal"] < 1
-            ))
-            or any(
-                value is not None and (not isinstance(value, str) or not value)
-                for value in (record["worktree"], record["branch"])
-            )
-            or (
-                record["current_candidate"] is not None
-                and (
-                    not isinstance(record["current_candidate"], str)
-                    or _COMMIT.fullmatch(record["current_candidate"]) is None
-                )
-            )
-        ):
+        task_id, record = _load_state(path)
+        if task_id in states:
             raise ValueError("Task state is invalid")
         states[task_id] = (path.parent, record)
     directories = {path for path in tasks.iterdir() if path.is_dir()}
     if directories != {directory for directory, _ in states.values()}:
         raise ValueError("Task state is invalid")
     return states
+
+
+def _load_state(path: Path) -> tuple[str, dict[str, Any]]:
+    """Merge one execution record with its single current immutable definition."""
+    record = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if not isinstance(record, dict) or set(record) != protocol.EXECUTION_FIELDS:
+        raise ValueError("Task state is invalid")
+    task_id = record["task_id"]
+    definition = (
+        Path(record["current_definition"])
+        if isinstance(record["current_definition"], str)
+        else None
+    )
+    valid_definition = (
+        definition == Path("task.md")
+        or (
+            definition is not None
+            and definition.parent == Path("definitions")
+            and _EVENT_DEFINITION.fullmatch(definition.name) is not None
+        )
+    )
+    definition_path = path.parent / definition if definition is not None else path
+    if valid_definition and definition_path.is_file() and not definition_path.is_symlink():
+        definition_record = protocol.read_definition(definition_path.read_text(encoding="utf-8"))
+        _validate_issue(definition_record)
+        if any(definition_record[key] != record[key] for key in ("task_id", "task_name", "schema_version")):
+            raise ValueError("Task definition identity differs from execution state")
+        record.update(definition_record, active=definition_record["disposition"] == "active")
+    if (
+        not isinstance(task_id, str)
+        or _TASK_ID.fullmatch(task_id) is None
+        or not isinstance(record["task_name"], str)
+        or _TASK_NAME.fullmatch(record["task_name"]) is None
+        or path.parent.name != "{0}-{1}".format(task_id, record["task_name"])
+        or not valid_definition
+        or definition_path.is_symlink()
+        or not definition_path.is_file()
+        or not isinstance(record["active"], bool)
+        or not isinstance(record["replaced_by"], list)
+        or not isinstance(record["dependencies"], list)
+        or any(not isinstance(item, str) for item in record["replaced_by"])
+        or any(not isinstance(item, str) for item in record["dependencies"])
+        or not isinstance(record["status"], str)
+        or record["status"] not in _STATUSES
+        or (record["active_team_ordinal"] is not None and (
+            isinstance(record["active_team_ordinal"], bool)
+            or not isinstance(record["active_team_ordinal"], int)
+            or record["active_team_ordinal"] < 1
+        ))
+        or any(
+            value is not None and (not isinstance(value, str) or not value)
+            for value in (record["worktree"], record["branch"])
+        )
+        or (
+            record["current_candidate"] is not None
+            and (
+                not isinstance(record["current_candidate"], str)
+                or _COMMIT.fullmatch(record["current_candidate"]) is None
+            )
+        )
+    ):
+        raise ValueError("Task state is invalid")
+    return task_id, record
 
 
 def _validate_graph(records: dict[str, dict[str, Any]]) -> None:

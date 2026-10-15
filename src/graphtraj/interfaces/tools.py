@@ -204,12 +204,27 @@ def register_tool(
 
 
 def read_current_graph(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> ToolResult:
-    """Return the current Task DAG and readiness view for the project."""
+    """Return the current Task DAG and readiness view for the project.
+
+    The current view defaults to the calling Session's own Task; Main and
+    the human desktop have none and see the whole project's open work.
+    """
+    from graphtraj.execution.runner_status import caller_alias, read_alias_mapping
+    from graphtraj.workspace.runner_project import discover_runner_directory
 
     if arguments.get("schema", False):
         return ToolResult(TASK_SCHEMA)
     configuration = load_project_configuration(cwd or Path.cwd())
-    return ToolResult(read_graph(configuration.state))
+    view          = arguments.get("view", "current")
+    task_id       = arguments.get("task_id")
+    if view == "current" and task_id is None:
+        runner = discover_runner_directory(configuration.harness_root)
+        caller = caller_alias(runner)
+        if caller is not None:
+            task_id = read_alias_mapping(runner, caller)[0]["task_id"]
+    return ToolResult(read_graph(
+        configuration.state, view, task_id, arguments.get("details", []),
+    ))
 
 
 def register_current_task(arguments: Mapping[str, Any]) -> ToolResult:
@@ -625,8 +640,18 @@ register_tool(
 register_tool(
     "task_graph",
     "Read the current Task DAG, states and dependency readiness for the project "
-    "in the server working directory. Equivalent to `graphtraj task graph`.",
-    {"type": "object", "properties": {"schema": {"type": "boolean", "default": False}}, "additionalProperties": False},
+    "in the server working directory from its light index. The default view expands "
+    "open work in the caller's scope and folds completed history; request view full, "
+    "another task_id, or details explicitly. Equivalent to `graphtraj task graph`.",
+    {"type": "object", "properties": {
+        "schema":  {"type": "boolean", "default": False},
+        "view":    {"enum": ["current", "full"], "default": "current",
+                    "description": "current expands open work in scope and folds history; full lists every Task."},
+        "task_id": {"type": "string",
+                    "description": "Scope of the current view; defaults to the caller's own Task."},
+        "details": {"type": "array", "items": {"type": "string"},
+                    "description": "Tasks whose full definitions and execution facts to include."},
+    }, "additionalProperties": False},
     read_current_graph,
     manual_ref="manuals/task-breakdown/guide.md",
     examples=({},),

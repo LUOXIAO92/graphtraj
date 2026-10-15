@@ -69,11 +69,17 @@ def revise_command(revision_file: Path, dry_run: bool) -> None:
 
 @task.command("graph", cls=OperationCommand, feature="task_graph")
 @click.option("--schema", is_flag=True)
-def graph_command(schema: bool) -> None:
+@click.option("--view", type=click.Choice(["current", "full"]), default="current")
+@click.option("--task-id", default=None)
+@click.option("--details", multiple=True)
+def graph_command(schema: bool, view: str, task_id: str | None, details: tuple[str, ...]) -> None:
     """Generate the current Task DAG and readiness view as YAML."""
 
+    arguments = {"schema": schema, "view": view, "details": list(details)}
+    if task_id is not None:
+        arguments["task_id"] = task_id
     try:
-        view = invoke_tool("task_graph", {"schema": schema}).document
+        view = invoke_tool("task_graph", arguments).document
     except (
         OSError,
         UnicodeError,

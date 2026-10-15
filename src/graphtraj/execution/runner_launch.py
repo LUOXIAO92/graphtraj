@@ -68,7 +68,7 @@ def _registered_task_names(state_directory: Path) -> dict[str, str]:
     """Return each registered Task's name, keyed by its stable identity."""
 
     try:
-        graph = read_graph(state_directory)
+        graph = read_graph(state_directory, "full")
     except (OSError, ValueError, yaml.YAMLError) as error:
         raise RunnerError(
             "TASK_FILE_INVALID", "The registered Task state is invalid."

@@ -45,7 +45,7 @@ export class GraphReader {
       });
       this.children.add(child);
       child.stdin?.on('error', () => { /* execFile reports a failed process. */ });
-      child.stdin?.end(JSON.stringify({ action: 'execute', feature: 'task_graph', arguments: {} }) + '\n');
+      child.stdin?.end(JSON.stringify({ action: 'execute', feature: 'task_graph', arguments: { view: 'full' } }) + '\n');
     });
   }
 

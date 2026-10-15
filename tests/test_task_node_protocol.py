@@ -75,8 +75,10 @@ class PublicProject:
         return document
 
     def graph(self) -> dict[str, dict]:
-        """Return publicly projected nodes by stable identity."""
-        return {node["task_id"]: node for node in self.call("task_graph", {})["tasks"]}
+        """Return publicly projected nodes with their explicitly read details."""
+        nodes = self.call("task_graph", {"view": "full"})["tasks"]
+        details = self.call("task_graph", {"view": "full", "details": [node["task_id"] for node in nodes]})
+        return {node["task_id"]: {**details.get("details", {})[node["task_id"]], **node} for node in nodes}
 
     def revision(self, definitions: list[dict], **options: object) -> dict:
         """Bind each definition to the version observed through the public graph."""
@@ -96,9 +98,13 @@ class PublicProject:
         }, success=success)
 
     def retained(self) -> dict[str, bytes]:
-        """Capture durable state to prove failed public calls wrote no facts."""
+        """Capture durable state to prove failed public calls wrote no facts.
+
+        The rebuildable Task index is a read projection, not a fact.
+        """
         return {path.relative_to(self.state).as_posix(): path.read_bytes()
-                for path in self.state.rglob("*") if path.is_file() and path.name != ".lock"}
+                for path in self.state.rglob("*")
+                if path.is_file() and path.name not in {".lock", "task-index.json"}}
 
 
 @pytest.fixture(params=["cli", "tool", "mcp"])

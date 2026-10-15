@@ -460,7 +460,7 @@ def test_installed_mcp_server_survives_a_rejected_alias_status_call(
     assert rejected["isError"] is True
     assert rejected["content"][0]["text"] == (yaml.safe_load(cli.stdout).get("error") or yaml.safe_load(cli.stdout)["tasks"][0]["error"])["message"]
     assert after["isError"] is False
-    assert after["structuredContent"] == {"schema_version": 2, "tasks": []}
+    assert after["structuredContent"]["tasks"] == []
 
 
 def test_installed_mcp_server_reports_a_missing_project_root_like_the_graph_tools(

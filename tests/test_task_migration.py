@@ -443,3 +443,19 @@ def test_historical_checker_can_be_established_native_root(
     result = run_process(command, cwd=tmp_path)
     shared = next(item for item in yaml.safe_load(result.stdout)['sessions'] if item.get('session') == 'shared')
     assert shared['identity_conflicts']
+
+
+def test_migration_keeps_nested_trace_runtime_yaml_opaque(
+    installed_commands: InstalledCommands, tmp_path: Path,
+) -> None:
+    """Captured Runner trees are historical evidence, including native YAML tags."""
+    _ticket_project(tmp_path)
+    relative = Path('tickets/2-child/teams/1/traces/member/runner/dsh-home/profiles/web/cordis.patch.yml')
+    path = tmp_path / '.graphtraj/state' / relative
+    path.parent.mkdir(parents=True)
+    content = b"disabled: !!js 'process.platform === win32'\nticket_id: original-native-value\n"
+    path.write_bytes(content)
+    result = _migrate(installed_commands, tmp_path)
+    assert result.returncode == 0, result.stderr
+    migrated = tmp_path / '.graphtraj/state/tasks' / relative.relative_to('tickets')
+    assert migrated.read_bytes() == content

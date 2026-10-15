@@ -245,11 +245,14 @@ def _convert_records(root: Path, counts: Counts, native_sources: set[str]) -> No
         parts = path.relative_to(root).parts
         if (path.is_symlink() or not path.is_file() or parts[0] == "runs"
                 or (root.name not in {"runner", "migration-runner"} and (parts[0] == "sessions" or "rounds" in parts or "integration" in parts))
-                or ("traces" in parts and "runner" not in parts)
+                or "traces" in parts
                 or str(path.resolve()) in native_sources):
             continue
         if path.suffix in {".yml", ".yaml"}:
-            original = yaml.safe_load(path.read_text(encoding="utf-8"))
+            try:
+                original = yaml.safe_load(path.read_text(encoding="utf-8"))
+            except yaml.YAMLError:
+                raise ValueError("Invalid GraphTraj YAML record: " + path.relative_to(root).as_posix()) from None
             if path.name in {"session.yml", "native-session.yml"} and isinstance(original, dict):
                 # These records belong to the Runtime except for the explicit
                 # retained ownership and source-location fields added by Runner.

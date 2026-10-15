@@ -42,7 +42,7 @@ def _project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Pat
 
         async def inspect_thread_reference(self, session: str) -> dict:
             calls.append(session)
-            return {'id': 'returned-other-id', 'path': '/never-read/unrelated.jsonl', 'cwd': str(root)}
+            return {'id': 'prefix', 'path': str(parent), 'cwd': str(root)}
 
         async def read_thread(self, session: str) -> dict:
             calls.append(session)
@@ -97,16 +97,17 @@ def test_prefix_capture_refuses_identity_mismatch_and_partial_boundary(tmp_path:
     assert result.exit_code != 0 and not destination.exists()
 
 
-def test_reference_diagnostic_does_not_read_a_mismatched_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Different requested/returned native identities stay visible without capture authority."""
+def test_reference_diagnostic_does_not_read_the_referenced_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Only metadata is read during diagnosis, with no capture authority implied."""
     root, parent, content, calls = _project(tmp_path, monkeypatch)
     before = _snapshot(root)
+    parent.unlink()
     result = CliRunner().invoke(main, ['migration-prefix', '--session', 'main',
         '--expect-prefix', 'prefix', '3', str(len(content)), '--diagnose'])
     assert result.exit_code == 0, result.output
     report = yaml.safe_load(result.output)
-    assert report['expected_id'] == 'prefix' and report['actual_id'] == 'returned-other-id'
-    assert report['identity_matches'] is False and report['referenced_file_read'] is False
+    assert report['expected_id'] == 'prefix' and report['actual_id'] == 'prefix'
+    assert report['identity_matches'] is True and report['referenced_file_read'] is False
     assert calls == ['main', 'prefix'] and _snapshot(root) == before
 
 
@@ -132,3 +133,74 @@ def test_native_diagnostic_filters_content_without_weakening_identity(tmp_path: 
     assert result['id'] == 'actual' and result['forkedFromId'] == 'origin'
     assert 'preview' not in result and 'turns' not in result
     assert calls == [('thread/read', {'threadId': 'requested', 'includeTurns': False})] * 2
+
+
+def test_same_main_physical_rollout_requires_native_and_header_identity(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A paginated storage segment is not a second logical Session or an arbitrary redirect."""
+    main_id = '11111111-1111-4111-8111-111111111111'
+    rollout_id = '22222222-2222-4222-8222-222222222222'
+    fork = '33333333-3333-4333-8333-333333333333'
+    root = tmp_path / 'project'
+    root.mkdir()
+    _ticket_project(root)
+    source = tmp_path / f'rollout-2026-10-12T05-52-41-{main_id}_{rollout_id}.jsonl'
+    metadata = {'id': main_id, 'session_id': main_id, 'cwd': str(root),
+                'history_mode': 'paginated', 'forked_from_id': fork}
+    rows = [{'type': 'session_meta', 'ordinal': 0, 'payload': metadata},
+            {'type': 'response_item', 'ordinal': 1, 'payload': {'encrypted_content': 'original'}}]
+    content = ''.join(json.dumps(row) + '\n' for row in rows).encode()
+    source.write_bytes(content + b'{"ordinal":2,"payload":"beyond-prefix"}\n')
+    child = tmp_path / 'current.jsonl'
+    child.write_text(json.dumps({'type': 'session_meta', 'ordinal': 2, 'payload': {
+        **metadata, 'history_base': {'thread_id': rollout_id,
+                                   'end_ordinal_exclusive': 2, 'end_byte_offset': len(content)}}}) + '\n')
+    binding = root / '.graphtraj/runner/main-sessions/owned/session.yml'
+    binding.parent.mkdir(parents=True)
+    binding.write_text(yaml.safe_dump({'runtime': 'codex', 'session': main_id, 'cwd': str(root),
+        'activity': {'trace_file': str(child)},
+        'connection': {'runtime': 'codex', 'session': main_id, 'codex_home': '/never-scanned'}}))
+    observed = {'id': main_id, 'sessionId': main_id, 'cwd': str(root), 'path': str(source),
+                'historyMode': 'paginated', 'forkedFromId': fork, 'source': 'vscode'}
+    calls = []
+
+    class Host:
+        """Supply exact logical metadata for an explicitly requested physical segment."""
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        async def read_thread(self, identity: str) -> dict:
+            assert identity == main_id
+            calls.append(identity)
+            return {'id': main_id, 'path': str(child)}
+
+        async def inspect_thread_reference(self, identity: str) -> dict:
+            assert identity == rollout_id
+            calls.append(identity)
+            return observed
+
+    monkeypatch.setattr('graphtraj.runtimes.codex.finalize.proxy', lambda connection: Host())
+    monkeypatch.chdir(root)
+    command = ['migration-prefix', '--session', main_id,
+               '--expect-prefix', rollout_id, '2', str(len(content))]
+    preview = CliRunner().invoke(main, command)
+    assert preview.exit_code == 0, preview.output
+    facts = yaml.safe_load(preview.output)
+    assert facts['source_logical_session'] == main_id and facts['source_rollout'] == rollout_id
+    assert facts['source_agent'] == 'main' and facts['forked_from_id'] == fork
+    captured = tmp_path / 'captured'
+    result = CliRunner().invoke(main, command + ['--capture', str(captured)])
+    assert result.exit_code == 0, result.output
+    assert yaml.safe_load(result.output)['complete'] is True
+    assert (captured / 'prefix.jsonl').read_bytes() == content
+    observed['id'] = fork
+    assert CliRunner().invoke(main, command).exit_code != 0
+    observed['id'] = main_id
+    observed['historyMode'] = 'copied'
+    assert CliRunner().invoke(main, command).exit_code != 0
+    observed['historyMode'] = 'paginated'
+    source.write_bytes(content.replace(main_id.encode(), fork.encode(), 1))
+    assert CliRunner().invoke(main, command).exit_code != 0
+    assert set(calls) == {main_id, rollout_id}

@@ -42,6 +42,9 @@ class PublicProject:
             if operation == "graph":
                 if arguments.get("schema"):
                     argv += ["--schema"]
+                argv += ["--view", arguments.get("view", "current")]
+                for key in arguments.get("details", []):
+                    argv += ["--details", key]
             else:
                 path = self.root / "request.yml"
                 path.write_text(yaml.safe_dump(arguments))

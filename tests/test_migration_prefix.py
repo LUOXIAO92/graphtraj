@@ -204,3 +204,93 @@ def test_same_main_physical_rollout_requires_native_and_header_identity(tmp_path
     source.write_bytes(content.replace(main_id.encode(), fork.encode(), 1))
     assert CliRunner().invoke(main, command).exit_code != 0
     assert set(calls) == {main_id, rollout_id}
+
+
+def test_chain_follows_only_owned_declared_segments_and_stops_cycles(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Bounded ranges join exactly; a physical cycle stops before querying it twice."""
+    main_id = '11111111-1111-4111-8111-111111111111'
+    parent_id = '33333333-3333-4333-8333-333333333333'
+    first_id = '44444444-4444-4444-8444-444444444444'
+    second_id = '55555555-5555-4555-8555-555555555555'
+    root = tmp_path / 'project'
+    root.mkdir()
+    _ticket_project(root)
+    first = tmp_path / f'rollout-2026-10-12T05-52-41-{parent_id}_{first_id}.jsonl'
+    second = tmp_path / f'rollout-2026-10-12T05-52-42-{main_id}_{second_id}.jsonl'
+    current = tmp_path / 'current.jsonl'
+
+    def write(path: Path, identity: str, ordinal: int, base: dict | None, fork: str | None) -> bytes:
+        """Write one immutable native segment with explicit global coordinates."""
+        metadata = {'id': identity, 'cwd': str(root), 'history_mode': 'paginated',
+                    'forked_from_id': fork, 'forked_from_ordinal_exclusive': 2 if fork else None}
+        if base:
+            metadata['history_base'] = base
+        rows = [{'type': 'session_meta', 'ordinal': ordinal, 'payload': metadata},
+                {'type': 'response_item', 'ordinal': ordinal + 1, 'payload': {'encrypted_content': 'retained'}}]
+        content = ''.join(json.dumps(row) + '\n' for row in rows).encode()
+        path.write_bytes(content)
+        return content
+
+    older = write(first, parent_id, 0, None, None)
+    newer = write(second, main_id, 2, {'thread_id': first_id, 'end_ordinal_exclusive': 2,
+                                     'end_byte_offset': len(older)}, parent_id)
+    write(current, main_id, 4, {'thread_id': second_id, 'end_ordinal_exclusive': 4,
+                               'end_byte_offset': len(newer)}, parent_id)
+    for identity, path in ((main_id, current), (parent_id, first)):
+        binding = root / '.graphtraj/runner/main-sessions' / identity / 'session.yml'
+        binding.parent.mkdir(parents=True)
+        binding.write_text(yaml.safe_dump({'runtime': 'codex', 'session': identity, 'cwd': str(root),
+            'activity': {'trace_file': str(path)},
+            'connection': {'runtime': 'codex', 'session': identity, 'codex_home': '/never-scanned'}}))
+    calls = []
+
+    class Host:
+        """Resolve only two physically declared, independently project-associated sources."""
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        async def read_thread(self, identity: str) -> dict:
+            assert identity == main_id
+            calls.append(identity)
+            return {'id': main_id, 'path': str(current)}
+
+        async def inspect_thread_reference(self, identity: str) -> dict:
+            assert identity in {first_id, second_id}
+            calls.append(identity)
+            logical, path, fork = ((parent_id, first, None) if identity == first_id
+                                   else (main_id, second, parent_id))
+            return {'id': logical, 'path': str(path), 'cwd': str(root), 'historyMode': 'paginated',
+                    'forkedFromId': fork}
+
+    monkeypatch.setattr('graphtraj.runtimes.codex.finalize.proxy', lambda connection: Host())
+    monkeypatch.chdir(root)
+    command = ['migration-prefix', '--session', main_id, '--chain',
+               '--expect-prefix', second_id, '4', str(len(newer))]
+    destination = tmp_path / 'chain'
+    result = CliRunner().invoke(main, command + ['--capture', str(destination)])
+    assert result.exit_code == 0, result.output
+    report = yaml.safe_load(result.output)
+    assert report['complete'] is True and report['captured_records'] == 4
+    assert report['logical_fork_cut'] == 2
+    assert [item['source_logical_session'] for item in report['segments']] == [main_id, parent_id]
+    assert (destination / (first_id + '.jsonl')).read_bytes() == older
+    assert (destination / (second_id + '.jsonl')).read_bytes() == newer
+    assert calls == [main_id, second_id, first_id]
+
+    # The header now names its own physical ID; preserve the failed partial
+    # capture and stop before a second query or any guessed alternative source.
+    newer = write(second, main_id, 2, {'thread_id': second_id, 'end_ordinal_exclusive': 2,
+                                     'end_byte_offset': len(older)}, parent_id)
+    write(current, main_id, 4, {'thread_id': second_id, 'end_ordinal_exclusive': 4,
+                               'end_byte_offset': len(newer)}, parent_id)
+    calls.clear()
+    destination = tmp_path / 'cycle'
+    result = CliRunner().invoke(main, ['migration-prefix', '--session', main_id, '--chain',
+        '--expect-prefix', second_id, '4', str(len(newer)), '--capture', str(destination)])
+    assert result.exit_code == 1
+    report = yaml.safe_load((destination / 'chain.yml').read_text())
+    assert report['complete'] is False and 'cycle' in report['missing']
+    assert calls == [main_id, second_id] and len(report['segments']) == 1

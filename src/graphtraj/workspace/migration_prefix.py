@@ -57,7 +57,7 @@ def declared_prefix(metadata: dict) -> dict:
     """Validate the native inheritance coordinates without equating fork and storage IDs."""
     base = metadata.get('history_base')
     if (not isinstance(base, dict) or not isinstance(base.get('thread_id'), str)
-            or not base['thread_id'] or base['thread_id'] == metadata.get('id')
+            or not base['thread_id']
             or any(type(base.get(key)) is not int or base[key] <= 0
                    for key in ('end_ordinal_exclusive', 'end_byte_offset'))):
         raise ValueError('Main does not declare a valid bounded history_base.')
@@ -194,3 +194,126 @@ def inspect_prefix(
     except BaseException:
         shutil.rmtree(capture)
         raise
+
+
+def capture_prefix_chain(cwd: Path, session: str, expected: tuple[str, int, int], destination: Path) -> dict:
+    """Capture only the decreasing chain declared by canonical source headers.
+
+    Every physical source must resolve through the same owning daemon, have a
+    matching canonical physical/logical name and header, and retain an existing
+    project association. No filename search, third-party path or guessed parent
+    is accepted. A partial result preserves acquired segments with complete=false.
+    """
+    from graphtraj.runtimes.codex.finalize import proxy
+    from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
+
+    configuration = load_project_configuration(cwd)
+    project = configuration.harness_root
+    if (project / '.graphtraj/migration-snapshot.yml').exists():
+        raise ValueError('Capture a declared chain only through the original lawful native host.')
+    inventory = session_sources(configuration.state, project / '.graphtraj/runner', project)
+    owned = {item['session']: item for item in inventory
+             if item.get('runtime') == 'codex' and item.get('agent') and not item.get('identity_conflicts')}
+    main = owned.get(session)
+    if main is None or main.get('kind') != 'main':
+        raise ValueError('An unambiguous associated Main is required.')
+    binding = yaml.safe_load(Path(main['association']).read_text(encoding='utf-8'))
+    connection = binding.get('connection', {})
+    if connection.get('runtime') != 'codex' or connection.get('session') != session:
+        raise ValueError('The original owning Main connection is unavailable.')
+    destination = destination.resolve()
+    if destination.exists() or destination.is_relative_to(project):
+        raise ValueError('Chain capture must use a new destination outside the source project.')
+    result = {'version': 1, 'project': str(project), 'session': session, 'agent': main['agent'],
+              'history_base': dict(zip(('thread_id', 'end_ordinal_exclusive', 'end_byte_offset'), expected)),
+              'segments': [], 'complete': False}
+
+    async def capture() -> None:
+        """Read only each real header's next edge and its bounded physical segment."""
+        async with proxy(connection) as client:
+            current = await client.read_thread(session)
+            path = Path(current.get('path') or '')
+            if current.get('id') != session or not path.is_absolute():
+                raise ValueError('Native Main source is unavailable.')
+            metadata, _ = _metadata(path, session)
+            base = declared_prefix(metadata)
+            if base != result['history_base']:
+                raise ValueError('Main declaration differs from the exact authorized initial prefix.')
+            result['forked_from_id'] = metadata.get('forked_from_id')
+            result['logical_fork_cut'] = metadata.get('forked_from_ordinal_exclusive')
+            visited = set()
+            destination.mkdir(mode=0o700, parents=True)
+            while True:
+                if base['thread_id'] in visited:
+                    raise ValueError('Declared physical inheritance chain contains a cycle.')
+                visited.add(base['thread_id'])
+                result['next_reference'] = base
+                observed = await client.inspect_thread_reference(base['thread_id'])
+                logical = observed.get('id')
+                owner = owned.get(logical)
+                source = Path(observed.get('path') or '')
+                if (owner is None or not source.is_absolute()
+                        or observed.get('cwd') != str(project) or observed.get('historyMode') != 'paginated'
+                        or rollout_identity(source) != (logical, base['thread_id'])):
+                    raise ValueError('Declared physical source lacks matching native/project ownership metadata.')
+                header, first_ordinal = _metadata(source, logical)
+                if (header.get('cwd') != str(project) or header.get('history_mode') != 'paginated'
+                        or header.get('forked_from_id') != observed.get('forkedFromId')
+                        or type(first_ordinal) is not int or not 0 <= first_ordinal < base['end_ordinal_exclusive']):
+                    raise ValueError('Declared source header conflicts with its native metadata or ordinal cut.')
+                local = destination / (base['thread_id'] + '.jsonl')
+                digest = hashlib.sha256()
+                remaining = base['end_byte_offset']
+                with source.open('rb') as reader, local.open('xb') as writer:
+                    local.chmod(0o600)
+                    while remaining:
+                        block = reader.read(min(1024 * 1024, remaining))
+                        if not block:
+                            raise ValueError('Declared source is shorter than its bounded prefix.')
+                        writer.write(block)
+                        digest.update(block)
+                        remaining -= len(block)
+                captured_header, captured_first = _metadata(local, logical)
+                if captured_header != header or captured_first != first_ordinal:
+                    raise ValueError('Native source header changed during bounded capture.')
+                ordinal = first_ordinal
+                with local.open('rb') as stream:
+                    for line in stream:
+                        record = json.loads(line)
+                        if not line.endswith(b'\n') or record.get('ordinal') != ordinal:
+                            raise ValueError('Captured segment has a split record or noncontiguous ordinals.')
+                        ordinal += 1
+                if ordinal != base['end_ordinal_exclusive']:
+                    raise ValueError('Captured byte cut does not reach the declared exclusive ordinal.')
+                result['segments'].append({
+                    'source': str(source), 'source_rollout': base['thread_id'],
+                    'source_logical_session': logical, 'source_agent': owner['agent'],
+                    'association': owner['association'], 'stored': local.name,
+                    'first_ordinal': first_ordinal, 'end_ordinal_exclusive': ordinal,
+                    'bytes': base['end_byte_offset'], 'sha256': digest.hexdigest(),
+                    'records': ordinal - first_ordinal, 'history_base': header.get('history_base'),
+                    'forked_from_id': header.get('forked_from_id'),
+                    'logical_fork_cut': header.get('forked_from_ordinal_exclusive')})
+                if first_ordinal == 0:
+                    if header.get('history_base'):
+                        raise ValueError('An ordinal-zero source unexpectedly declares another inherited prefix.')
+                    result['complete'] = True
+                    result.pop('next_reference', None)
+                    return
+                previous = declared_prefix(header)
+                if previous['end_ordinal_exclusive'] != first_ordinal:
+                    raise ValueError('The next declared segment does not meet the exact preceding ordinal boundary.')
+                base = previous
+
+    try:
+        asyncio.run(capture())
+    except (OSError, ValueError, RuntimeAdapterError) as error:
+        if not destination.exists():
+            raise
+        result['missing'] = str(error)
+    result['captured_records'] = sum(item['records'] for item in result['segments'])
+    result['captured_bytes'] = sum(item['bytes'] for item in result['segments'])
+    manifest = destination / 'chain.yml'
+    manifest.write_text(yaml.safe_dump(result, sort_keys=False), encoding='utf-8')
+    manifest.chmod(0o600)
+    return {**result, 'capture': str(destination)}

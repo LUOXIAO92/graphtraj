@@ -117,20 +117,31 @@ def connections_command(
               help="Refuse any different source ID or exclusive ordinal/byte boundary before querying it.")
 @click.option("--capture", type=click.Path(path_type=Path), help="Capture only its declared inherited prefix in a new directory.")
 @click.option("--diagnose", is_flag=True, help="Return only requested/actual reference metadata; do not read its file.")
+@click.option("--chain", is_flag=True, help="Capture only the verified decreasing chain declared by source headers.")
 def migration_prefix_command(
     session: str,
     expect_prefix: tuple[str, int, int],
     capture: Path | None,
     diagnose: bool,
+    chain: bool,
 ) -> None:
     """Read declared inheritance metadata through Main's existing native host."""
     from graphtraj.workspace.migration_prefix import inspect_prefix
 
     try:
-        result = inspect_prefix(Path.cwd(), session, expect_prefix, capture=capture, diagnose=diagnose)
+        if chain:
+            if capture is None or diagnose:
+                raise ValueError('Chain capture requires --capture and cannot be combined with --diagnose.')
+            from graphtraj.workspace.migration_prefix import capture_prefix_chain
+
+            result = capture_prefix_chain(Path.cwd(), session, expect_prefix, capture)
+        else:
+            result = inspect_prefix(Path.cwd(), session, expect_prefix, capture=capture, diagnose=diagnose)
     except (OSError, ValueError, yaml.YAMLError, RunnerError) as error:
         raise click.ClickException(str(error)) from error
     click.echo(yaml.safe_dump(result, sort_keys=False), nl=False)
+    if chain and not result['complete']:
+        raise click.exceptions.Exit(1)
 
 
 @main.command("migration-mappings")

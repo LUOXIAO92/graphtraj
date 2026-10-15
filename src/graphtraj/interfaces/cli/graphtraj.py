@@ -60,15 +60,20 @@ main.add_command(bind_command)
 
 
 @main.command("migrate-tickets")
-def migrate_tickets_command() -> None:
+@click.option("--preview", is_flag=True, help="List project sources and gaps without changing state.")
+@click.option("--restore", type=click.Path(path_type=Path), help="Restore a complete local pre-cutover backup.")
+def migrate_tickets_command(preview: bool, restore: Path | None) -> None:
     """Convert this project's retained Ticket state to the Task format once.
 
     Stop all Agents first. The previous state and Runner records are copied
     to .graphtraj/backups and restored automatically if conversion fails."""
-    from graphtraj.workspace.task_migration import migrate_project
+    from graphtraj.workspace.task_migration import migrate_project, restore_project
 
     try:
-        result = migrate_project(Path.cwd())
+        if preview and restore:
+            raise ValueError("Choose preview or restore, not both.")
+        result = (restore_project(Path.cwd(), restore) if restore
+                  else migrate_project(Path.cwd(), preview=preview))
     except (OSError, ValueError, yaml.YAMLError) as error:
         raise click.ClickException(str(error)) from error
     click.echo(yaml.safe_dump(result, sort_keys=False), nl=False)

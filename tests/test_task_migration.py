@@ -138,3 +138,220 @@ def test_legacy_definition_without_parent_facts_is_refused_without_changes(
     assert result.returncode != 0
     assert "7: schema_version, parent_id, disposition, retirement_reason" in result.stderr
     assert _snapshot(tmp_path) == before
+
+
+def test_preview_and_native_session_migration_preserve_sources(
+    installed_commands: InstalledCommands, tmp_path: Path,
+) -> None:
+    """Preview and apply collect only recorded project histories with exact bytes."""
+    import json
+
+    from graphtraj.sessions.storage import SessionStore, session_path
+
+    _ticket_project(tmp_path)
+    runner = tmp_path / '.graphtraj/runner'
+    state = tmp_path / '.graphtraj/state'
+    native = tmp_path / 'native'
+    native.mkdir()
+    records = {
+        'codex': [
+            {'type': 'session_meta', 'payload': {'id': 'c1'}, 'timestamp': '2026-10-15T00:00:00Z'},
+            {'type': 'response_item', 'payload': {'ticket_id': 'literal', 'encrypted_content': 'opaque'}},
+        ],
+        'pi': [
+            {'type': 'session', 'id': 'p1', 'version': 3, 'cwd': str(tmp_path), 'timestamp': 1},
+            {'type': 'message', 'id': 'm1', 'message': {'role': 'user', 'content': 'ticket-completed'}},
+        ],
+        'dsh': [
+            {'version': 4, 'id': 'd1', 'createdAt': 1, 'isSeeded': False},
+            {'type': 'user/message', 'seq': 0, 'time': 1, 'surfaceOp': 'append',
+             'data': {'id': 'm1', 'role': 'user', 'content': [{'type': 'text', 'text': 'ticket.md'}],
+                      'source': {'kind': 'user'}}},
+        ],
+        'claude': [
+            {'type': 'user', 'sessionId': 'a1', 'uuid': 'm1',
+             'message': {'role': 'user', 'content': 'state/tickets/example/ticket.md'}},
+        ],
+    }
+    for runtime, session in [('codex', 'c1'), ('pi', 'p1'), ('dsh', 'd1'), ('claude', 'a1')]:
+        source = native / (runtime + '.jsonl')
+        source.write_text(''.join(json.dumps(record) + '\n' for record in records[runtime]))
+        mapping = runner / 'sessions' / runtime / 'mapping.yml'
+        mapping.parent.mkdir(parents=True)
+        mapping.write_text(yaml.safe_dump({'alias': runtime, 'ticket_id': '2', 'runtime': runtime,
+                                          'session': session, 'trace_file': str(source)}))
+        (mapping.parent / 'session.yml').write_text(yaml.safe_dump({
+            'session': session, 'rollout_path': str(source)}))
+    missing = runner / 'main-sessions/missing/session.yml'
+    missing.parent.mkdir(parents=True)
+    missing.write_text(yaml.safe_dump({'runtime': 'codex', 'session': 'missing-main',
+                                      'cwd': str(tmp_path)}))
+    foreign = runner / 'main-sessions/foreign/session.yml'
+    foreign.parent.mkdir(parents=True)
+    foreign.write_text(yaml.safe_dump({'runtime': 'codex', 'session': 'foreign', 'cwd': '/unrelated'}))
+    # A regular native Trace must not be interpreted as a Harness event stream.
+    trace = state / 'tickets/2-child/teams/1/traces/old/events.jsonl'
+    trace.parent.mkdir(parents=True)
+    trace.write_text('{"event":"ticket-completed","payload":{"ticket_id":"verbatim"}}\n')
+    before = _snapshot(tmp_path)
+    preview = run_process([str(installed_commands.product), 'migrate-tickets', '--preview'], cwd=tmp_path)
+    assert preview.returncode == 0, preview.stderr
+    inventory = yaml.safe_load(preview.stdout)
+    assert len(inventory['sessions']) == 5
+    assert next(x for x in inventory['sessions'] if x['session'] == 'missing-main')['missing']
+    assert _snapshot(tmp_path) == before
+
+    result = _migrate(installed_commands, tmp_path)
+    assert result.returncode == 0, result.stderr
+    migrated = yaml.safe_load(result.stdout)
+    for item in migrated['sessions']:
+        if item.get('missing'):
+            continue
+        with SessionStore(session_path(state, item['runtime'] + ':' + item['session']), readonly=True) as store:
+            assert store.attachment(item['original_bytes']['sha256']) == Path(item['source']).read_bytes()
+            assert store.header['graphtraj']['agentId'] == item['agent']
+            assert store.next_seq > 0
+            assert store.pending() is None
+        mapping = runner / 'sessions' / item['runtime'] / 'mapping.yml'
+        assert yaml.safe_load(mapping.read_text())['task_id'] == '2'
+    assert (state / 'tasks/2-child/teams/1/traces/old/events.jsonl').read_bytes() == before[
+        '.graphtraj/state/tickets/2-child/teams/1/traces/old/events.jsonl']
+
+
+def test_structural_conversion_does_not_rewrite_payloads(
+    installed_commands: InstalledCommands, tmp_path: Path,
+) -> None:
+    """Identical spelling in user content does not make it structural metadata."""
+    paths = _ticket_project(tmp_path)
+    path = paths['session'] / 'mapping.yml'
+    record = yaml.safe_load(path.read_text())
+    untouched = {'instruction': 'ticket-completed', 'session': 'ticket.md',
+                 'payload': {'ticket_id': 'literal', 'event': 'ticket-integrated'},
+                 'title': 'tickets/2-child/ticket.md'}
+    record.update(untouched)
+    report = paths['report'].with_suffix('.yaml')
+    report.write_text(yaml.safe_dump({'ticket_id': 'user-example', 'event': 'ticket-completed'}))
+    report_bytes = report.read_bytes()
+    path.write_text(yaml.safe_dump(record))
+    result = _migrate(installed_commands, tmp_path)
+    assert result.returncode == 0, result.stderr
+    converted = yaml.safe_load(path.read_text())
+    assert {key: converted[key] for key in untouched} == untouched
+    assert Path(str(report).replace('/tickets/', '/tasks/')).read_bytes() == report_bytes
+
+
+def test_restore_returns_complete_original_state_and_allows_retry(
+    installed_commands: InstalledCommands, tmp_path: Path,
+) -> None:
+    """An explicit stopped-window restore restores original records and links."""
+    _ticket_project(tmp_path)
+    before = _snapshot(tmp_path)
+    first = _migrate(installed_commands, tmp_path)
+    assert first.returncode == 0, first.stderr
+    backup = yaml.safe_load(first.stdout)['backup']
+    restored = run_process([str(installed_commands.product), 'migrate-tickets', '--restore', backup], cwd=tmp_path)
+    assert restored.returncode == 0, restored.stderr
+    after = {key: value for key, value in _snapshot(tmp_path).items() if '/backups/' not in key}
+    assert after == before
+    assert _migrate(installed_commands, tmp_path).returncode == 0
+
+
+def test_retired_main_and_existing_archive_keep_native_identity(
+    installed_commands: InstalledCommands, tmp_path: Path,
+) -> None:
+    """Retired mappings and Main use actual sources; existing history is not duplicated."""
+    import json
+
+    from graphtraj.runtimes.codex.session_archive import CodexSessionArchive
+    from graphtraj.sessions.storage import SessionStore, session_path
+
+    _ticket_project(tmp_path)
+    state = tmp_path / '.graphtraj/state'
+    runner = tmp_path / '.graphtraj/runner'
+    native = tmp_path / 'main.jsonl'
+    native.write_text(json.dumps({'type': 'session_meta', 'payload': {'id': 'main-session'}}) + '\n')
+    CodexSessionArchive(state, str(tmp_path), 'main', 'main-session').collect(native)
+    main = runner / 'main-sessions/owned/session.yml'
+    main.parent.mkdir(parents=True)
+    main.write_text(yaml.safe_dump({'runtime': 'codex', 'session': 'main-session', 'cwd': str(tmp_path),
+                                    'activity': {'trace_file': str(native)}}))
+    checker = main.parent / 'checks/missing/session.yml'
+    checker.parent.mkdir(parents=True)
+    checker.write_text(yaml.safe_dump({'runtime': 'codex', 'session': 'missing-checker', 'parent': 'main-session'}))
+    retired = state / 'tickets/2-child/teams/1/traces/retired/runner/session.yml'
+    retired.parent.mkdir(parents=True)
+    child = tmp_path / 'child.jsonl'
+    child.write_text(json.dumps({'type': 'session_meta', 'payload': {'id': 'child-session'}}) + '\n')
+    retired.write_text(yaml.safe_dump({'session': 'child-session', 'rollout_path': str(child),
+                                     'retirement': {'mapping': {'runtime': 'codex', 'session': 'child-session',
+                                         'alias': 'retired', 'ticket_id': '2', 'trace_file': str(child)}}}))
+    result = _migrate(installed_commands, tmp_path)
+    assert result.returncode == 0, result.stderr
+    sessions = {item['session']: item for item in yaml.safe_load(result.stdout)['sessions']}
+    assert sessions['missing-checker']['missing']
+    assert sessions['child-session']['agent'] == 'retired'
+    with SessionStore(session_path(state, 'codex:main-session'), readonly=True) as store:
+        assert store.next_seq == 1
+        assert store.header['graphtraj']['agentId'] == 'main'
+
+
+def test_wrong_native_identity_rolls_back_without_losing_links(
+    installed_commands: InstalledCommands, tmp_path: Path,
+) -> None:
+    """An associated path is insufficient when its native identity contradicts the binding."""
+    import json
+
+    _ticket_project(tmp_path)
+    native = tmp_path / 'wrong.jsonl'
+    native.write_text(json.dumps({'type': 'session_meta', 'payload': {'id': 'foreign'}}) + '\n')
+    mapping = tmp_path / '.graphtraj/runner/sessions/owned/mapping.yml'
+    mapping.parent.mkdir(parents=True)
+    mapping.write_text(yaml.safe_dump({'alias': 'owned', 'ticket_id': '2', 'runtime': 'codex',
+                                      'session': 'owned', 'trace_file': str(native)}))
+    before = _snapshot(tmp_path)
+    result = _migrate(installed_commands, tmp_path)
+    assert result.returncode != 0
+    after = {key: value for key, value in _snapshot(tmp_path).items() if '/backups/' not in key}
+    assert after == before
+
+
+def test_migration_preserves_acceptance_and_different_remote_number(
+    installed_commands: InstalledCommands, tmp_path: Path,
+) -> None:
+    """Accepted delivery and explicit remote identity survive a fresh index build."""
+    from graphtraj.graph.delivery_worldline import append_project_worldline_event
+
+    _ticket_project(tmp_path)
+    state = tmp_path / '.graphtraj/state'
+    path = state / 'tickets/2-child/ticket.yml'
+    record = yaml.safe_load(path.read_text())
+    record.update(status='integrated', current_candidate='a' * 40)
+    path.write_text(yaml.safe_dump(record))
+    evidence = '.graphtraj/state/tickets/2-child/teams/1/rounds/1/engineer.md'
+    accepted = append_project_worldline_event(state, tmp_path, {
+        'event': 'ticket-integrated', 'ticket_id': '2', 'candidate': 'a' * 40,
+        'dev_commit': 'b' * 40, 'current_definition': REVISION,
+        'reason': 'ticket-completed', 'caused_by_event_ids': [], 'evidence_refs': [evidence],
+    })
+    backup = state / 'task-backups.yml'
+    backup.write_text(yaml.safe_dump({'backups': [{
+        'task_id': '2', 'adapter': 'github', 'host': 'github.com', 'repository': 'owner/project',
+        'issue': {'number': 9001, 'id': 100001, 'node_id': 'remote-node',
+                  'url': 'https://github.com/owner/project/issues/9001'},
+        'published': {'title': 'ticket.md', 'body': 'ticket-completed', 'state': 'closed'},
+    }]}))
+    original_mapping = backup.read_bytes()
+    result = _migrate(installed_commands, tmp_path)
+    assert result.returncode == 0, result.stderr
+    assert backup.read_bytes() == original_mapping
+    command = [str(installed_commands.product), 'task', 'graph', '--view', 'full']
+    first = run_process(command, cwd=tmp_path)
+    second = run_process(command, cwd=tmp_path)
+    assert first.returncode == second.returncode == 0
+    assert first.stdout == second.stdout
+    graph = yaml.safe_load(first.stdout)
+    child = next(task for task in graph['tasks'] if task['task_id'] == '2')
+    assert child['status'] == 'integrated'
+    assert child['delivery'][0]['event_id'] == accepted['event_id']
+    assert child['delivery'][0]['reason'] == 'ticket-completed'
+    assert child['delivery'][0]['evidence_refs'] == [evidence.replace('/tickets/', '/tasks/')]

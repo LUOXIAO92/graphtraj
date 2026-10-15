@@ -151,6 +151,45 @@ def collect_transcript(store: SessionStore, path: Path, *, child_id: str | None 
     return count
 
 
+def finish_transcript_collection(
+    store: SessionStore,
+    native_id: str,
+    *,
+    child: bool = False,
+    terminal: bool = False,
+) -> None:
+    """Publish a collected native prefix only when its ancestry is established.
+
+    Offline migration may supply a stopped transcript, but does not synthesize
+    a native hook. Recorded hooks still participate in fork classification.
+    """
+    if store.next_seq or not store.pending():
+        return
+    observations = store.pending()['event']['data']['observations']
+    inherited = []
+    parents = set()
+    local_message = False
+    fork_expected = False
+    for observation in observations:
+        record = observation['event']['data']['record']
+        if observation['source'] == 'hooks':
+            fork_expected |= record.get('source') == 'fork'
+            continue
+        fork = fork_source(record, native_id) if not child else None
+        if fork:
+            if local_message:
+                raise ValueError('Inherited records follow child-local messages; ancestry remains pending.')
+            parents.add('claude:' + fork['sessionId'])
+            inherited.append((observation['source'], observation['position']))
+        elif record.get('type') in {'user', 'assistant'}:
+            local_message = True
+    if len(parents) > 1:
+        raise ValueError('Conflicting native fork parents; ancestry remains pending.')
+    if (local_message or (terminal and inherited)) and (not fork_expected or inherited or child):
+        store.finish_initial_collection(parent_session=next(iter(parents), None),
+                                        inherited=inherited)
+
+
 def collect_hook(event: dict, cwd: Path) -> dict:
     """Collect exactly the transcript identified by an official native hook.
 
@@ -204,30 +243,9 @@ def collect_hook(event: dict, cwd: Path) -> dict:
             store.append(retained, source=hook_source, position=position)
         else:
             store.stage_initial_observation(retained, source=hook_source, position=position)
-            observations = store.pending()['event']['data']['observations']
-            inherited = []
-            parents = set()
-            local_message = False
-            fork_expected = False
-            for observation in observations:
-                record = observation['event']['data']['record']
-                if observation['source'] == 'hooks':
-                    fork_expected |= record.get('source') == 'fork'
-                    continue
-                fork = fork_source(record, native_id) if not child else None
-                if fork:
-                    if local_message:
-                        raise ValueError('Inherited records follow child-local messages; ancestry remains pending.')
-                    parents.add('claude:' + fork['sessionId'])
-                    inherited.append((observation['source'], observation['position']))
-                elif record.get('type') in {'user', 'assistant'}:
-                    local_message = True
-            if len(parents) > 1:
-                raise ValueError('Conflicting native fork parents; ancestry remains pending.')
-            terminal = kind in {'Stop', 'StopFailure', 'SessionEnd', 'SubagentStop'}
-            if (local_message or (terminal and inherited)) and (not fork_expected or inherited or child):
-                store.finish_initial_collection(parent_session=next(iter(parents), None),
-                                                inherited=inherited)
+            finish_transcript_collection(
+                store, native_id, child=bool(child),
+                terminal=kind in {'Stop', 'StopFailure', 'SessionEnd', 'SubagentStop'})
         return {'session_id': store.header['id'], 'source': source, 'records': count,
                 'missing': unavailable}
 

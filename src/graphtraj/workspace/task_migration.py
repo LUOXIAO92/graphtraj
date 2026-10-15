@@ -67,13 +67,15 @@ class Counts(dict):
         self[kind] = self.get(kind, 0) + 1
 
 
-def migrate_project(cwd: Path) -> dict[str, Any]:
+def migrate_project(cwd: Path, *, preview: bool = False) -> dict[str, Any]:
     """Convert one project's retained Ticket state and return a summary.
 
     Parameters
     ----------
     cwd : Path
-        Any directory inside the Harness Project whose ``.graphtraj`` is converted.
+        Harness Project Root whose ``.graphtraj`` is converted.
+    preview : bool
+        Return the associated sources and missing facts without writing state.
 
     Returns
     -------
@@ -96,6 +98,18 @@ def migrate_project(cwd: Path) -> dict[str, Any]:
     if (state / "tasks").exists():
         raise ValueError("Task state already exists; refusing to convert twice")
     missing = _missing_parent_facts(state / "tickets")
+    from graphtraj.workspace.session_migration import session_sources, archive_sources
+
+    sources = session_sources(state, runner, harness)
+    inventory = {
+        "project": str(harness), "state": str(state),
+        "tasks": sorted(p.name for p in (state / "tickets").iterdir() if p.is_dir()),
+        "missing_task_facts": missing, "sessions": sources,
+        "notices": ["Unassociated Runtime histories are not searched or imported.",
+                    "Preview does not read native transcript contents; apply validates native identity."],
+    }
+    if preview:
+        return inventory
     if missing:
         raise ValueError("Legacy definitions lack required Task facts; revise them to complete "
                          "v2 definitions first: " + "; ".join(
@@ -114,9 +128,11 @@ def migrate_project(cwd: Path) -> dict[str, Any]:
 
     counts = Counts()
     try:
+        archived = archive_sources(state, harness, sources)
+        native_sources = {item["resolved_source"] for item in sources if "resolved_source" in item}
         for root in (state, runner):
             if root.is_dir():
-                _convert_records(root, counts)
+                _convert_records(root, counts, native_sources)
         _convert_definitions(state / "tickets", counts)
         _move_layout(state, counts)
         for link in links:
@@ -125,10 +141,39 @@ def migrate_project(cwd: Path) -> dict[str, Any]:
                 link.unlink()
                 link.symlink_to(target, target_is_directory=True)
                 counts.add("worktree_links")
+        # A pre-cutover cache must never hide converted definitions or delivery facts.
+        (state / "task-index.json").unlink(missing_ok=True)
+        from graphtraj.graph.task_graph import read_graph
+
+        graph = read_graph(state, view="full")
+        inventory.update(sessions=archived, converted=dict(counts), graph=graph)
+        (backup / "migration.yml").write_text(yaml.safe_dump(inventory, sort_keys=False), encoding="utf-8")
     except BaseException:
         _restore(backup, state, runner, links)
         raise
-    return {"backup": backup.relative_to(harness).as_posix(), "converted": dict(counts)}
+    return {"backup": backup.relative_to(harness).as_posix(), "converted": dict(counts),
+            "sessions": archived, "tasks": len(graph["tasks"])}
+
+
+def restore_project(cwd: Path, backup: Path) -> dict[str, str]:
+    """Restore the complete pre-cutover state and Runner set while writes are stopped.
+
+    Only backups produced inside this project's backup directory are accepted.
+    The installed program is selected separately by the operator; backup state
+    is never used as a business read fallback.
+    """
+    configuration = load_project_configuration(cwd)
+    harness = configuration.harness_root
+    if not backup.is_absolute():
+        backup = harness / backup
+    backup = backup.resolve()
+    if backup.parent != (harness / ".graphtraj/backups").resolve():
+        raise ValueError("Choose a migration backup from this project's .graphtraj/backups directory.")
+    if not (backup / "state").is_dir() or not (backup / "worktree-links.yml").is_file():
+        raise ValueError("Incomplete migration backup; nothing restored.")
+    links = yaml.safe_load((backup / "worktree-links.yml").read_text(encoding="utf-8")) or {}
+    _restore(backup, configuration.state, harness / ".graphtraj/runner", [Path(link) for link in links])
+    return {"restored": str(backup), "next": "Use the previous installed version before resuming writes."}
 
 
 def _missing_parent_facts(tickets: Path) -> dict[str, list[str]]:
@@ -140,27 +185,52 @@ def _missing_parent_facts(tickets: Path) -> dict[str, list[str]]:
     missing = {}
     for path in sorted(tickets.glob("*/ticket.yml")):
         record = yaml.safe_load(path.read_text(encoding="utf-8"))
+        required = ["schema_version", "parent_id", "disposition", "retirement_reason"]
         if record.get("schema_version") != 2:
-            missing[str(record.get("ticket_id"))] = [
-                "schema_version", "parent_id", "disposition", "retirement_reason",
-            ]
+            missing[str(record.get("ticket_id"))] = required
+            continue
+        current = record.get("current_definition", "ticket.md")
+        definition = path.parent / current
+        if not definition.is_file():
+            missing[str(record.get("ticket_id"))] = ["current_definition"]
+            continue
+        split = split_execution_budget_front_matter(definition.read_text(encoding="utf-8"))
+        metadata = yaml.safe_load(split[1]) if split else None
+        facts = metadata.get("task", {}) if isinstance(metadata, dict) else {}
+        absent = [field for field in required if field not in facts]
+        if absent:
+            missing[str(record.get("ticket_id"))] = absent
     return dict(sorted(missing.items(), key=lambda item: int(item[0])))
 
 
-def _convert_records(root: Path, counts: Counts) -> None:
+def _convert_records(root: Path, counts: Counts, native_sources: set[str]) -> None:
     """Rewrite GraphTraj YAML and JSONL records under one retained root."""
     for path in sorted(root.rglob("*")):
-        if path.is_symlink() or not path.is_file() or "sessions" in path.relative_to(root).parts:
+        parts = path.relative_to(root).parts
+        if (path.is_symlink() or not path.is_file() or parts[0] == "runs"
+                or (root.name != "runner" and (parts[0] == "sessions" or "rounds" in parts or "integration" in parts))
+                or ("traces" in parts and "runner" not in parts)
+                or str(path.resolve()) in native_sources):
             continue
         if path.suffix in {".yml", ".yaml"}:
             original = yaml.safe_load(path.read_text(encoding="utf-8"))
-            converted = _value(original, counts)
+            if path.name in {"session.yml", "native-session.yml"} and isinstance(original, dict):
+                # These records belong to the Runtime except for the explicit
+                # retained ownership and source-location fields added by Runner.
+                converted = dict(original)
+                for field in ("retirement", "rollout_path", "activity"):
+                    if field in converted:
+                        converted[field] = _value(converted[field], counts, field=field)
+            else:
+                converted = _value(original, counts)
             if converted != original:
                 _write(path, yaml.safe_dump(converted, sort_keys=False))
                 counts.add("files")
-        elif path.suffix == ".jsonl" and (path.name in JSONL_NAMES or path.parent.name == "worldline"):
+        elif (path.suffix == ".jsonl"
+              and (path.name in JSONL_NAMES or path.parent.name == "worldline")
+              and not ("traces" in path.relative_to(root).parts and path.parent.name != "runner")):
             lines   = path.read_text(encoding="utf-8").splitlines()
-            # Only each record's top level is GraphTraj structure; payloads stay unchanged.
+            # Named structural fields are converted; user and native payloads stay unchanged.
             records = [_top_level(json.loads(line), counts) if line.strip() else line for line in lines]
             text    = "".join((json.dumps(item, ensure_ascii=False) if isinstance(item, dict) else item)
                               + "\n" for item in records)
@@ -173,20 +243,36 @@ def _top_level(record: Any, counts: Counts) -> Any:
     """Convert one line record's own keys and their structural values."""
     if not isinstance(record, dict):
         return record
-    return {_key(key, counts): _value(value, counts) for key, value in record.items()}
+    return {_key(key, counts): _value(value, counts, field=key) for key, value in record.items()}
 
 
-def _value(value: Any, counts: Counts) -> Any:
-    """Convert explicit keys, exact codes and state paths within one value."""
+# Only named structural values are translated. Native/user payloads may contain
+# identical strings and keys; their spelling does not make them Harness metadata.
+OPAQUE_FIELDS = {"body", "title", "instruction", "instructions", "prompt", "system_prompt",
+                 "developer_prompt", "text", "content", "payload", "data", "record",
+                 "message", "arguments", "reason", "conclusion", "native_init",
+                 "adapter_request", "context_evidence", "connection", "permissions", "configuration"}
+PATH_FIELDS = {"current_definition", "previous_definition", "checked_definitions", "definition", "report_file", "report_files", "report_paths",
+               "result_refs", "evidence_refs", "trace_file", "rollout_path", "ticket_file", "task_file",
+               "ticket_directory", "task_directory", "state_directory"}
+CODE_FIELDS = {"event", "status", "launch_status", "code"}
+
+
+def _value(value: Any, counts: Counts, *, field: str | None = None) -> Any:
+    """Convert named structural fields, preserving user and Runtime payloads."""
+    if field in OPAQUE_FIELDS:
+        return value
     if isinstance(value, dict):
-        return {_key(key, counts): _value(item, counts) for key, item in value.items()}
+        return {_key(key, counts): _value(item, counts, field=field if field in PATH_FIELDS else key)
+                for key, item in value.items()}
     if isinstance(value, list):
-        return [_value(item, counts) for item in value]
+        return [_value(item, counts, field=field) for item in value]
     if isinstance(value, str):
-        if value in VALUES:
+        if field in CODE_FIELDS and value in VALUES:
             counts.add("values")
             return VALUES[value]
-        return _path(value, counts)
+        if field in PATH_FIELDS:
+            return _path(value, counts)
     return value
 
 

@@ -43,13 +43,32 @@ def _task(
     dependencies: list[str] | None = None,
 ) -> dict[str, object]:
     return {
-        "task_id": task_id,
-        "task_name": name,
-        "source": f"https://github.com/example/project/issues/{task_id}", "schema_version": 2, "parent_id": None, "disposition": "active", "replaced_by": [], "retirement_reason": None,
-        "title": name.replace("-", " ").title(),
-        "body": f"Deliver {name}.",
-        "dependencies": dependencies or [],
+        "task_id":           task_id,
+        "task_name":         name,
+        "source":            f"https://github.com/example/project/issues/{task_id}",
+        "title":             name.replace("-", " ").title(),
+        "body":              f"Deliver {name}.",
+        "dependencies":      dependencies or [],
+        "schema_version":    2,
+        "parent_id":         None,
+        "disposition":       "active",
+        "replaced_by":       [],
+        "retirement_reason": None,
     }
+
+
+def _revised(
+    task: dict[str, object],
+    current_definition: str | None = "task.md",
+    **facts: object,
+) -> dict[str, object]:
+    """Return one revision entry based on the observed current definition."""
+    return {**task, **facts, "current_definition": current_definition}
+
+
+def _metadata(snapshot: str) -> dict[str, object]:
+    """Read the Task metadata stored ahead of a definition's exact body."""
+    return yaml.safe_load(snapshot.split("---\n", 2)[1])["task"]
 
 
 def _non_coding_task(
@@ -160,35 +179,33 @@ def test_installed_command_registers_an_accepted_task_without_an_engineer_tier(
     """Registration keeps difficulty and its budget without an Engineer tier."""
     project = temporary_git_repository
     state = _configure(project)
-    issue = _write(
-        project / "issue.yml",
-        {
-            **_task("77", "unified-engineer"),
-            "body": (
-                "---\n"
-                "difficulty: medium\n"
-                "difficulty_reason: One role source spans setup and dispatch\n"
-                "execution_budget:\n"
-                "  estimated_minutes:\n"
-                "    implementation: 10\n"
-                "    validation: 10\n"
-                "    review: 5\n"
-                "    total: 30\n"
-                "  planned_sessions:\n"
-                "    team_leader: 1\n"
-                "    engineer: 1\n"
-                "    standards_reviewer: 1\n"
-                "    spec_reviewer: 1\n"
-                "    delivery_state: 1\n"
-                "  correction_rounds: 1\n"
-                "  estimation_note: The accepted budget selects no Engineer role\n"
-                "  on_exceed: Notify the caller and preserve the running Session\n"
-                "---\n"
-                "\n"
-                "Deliver unified-engineer.\n"
-            ),
-        },
-    )
+    definition = {
+        **_task("77", "unified-engineer"),
+        "body": (
+            "---\n"
+            "difficulty: medium\n"
+            "difficulty_reason: One role source spans setup and dispatch\n"
+            "execution_budget:\n"
+            "  estimated_minutes:\n"
+            "    implementation: 10\n"
+            "    validation: 10\n"
+            "    review: 5\n"
+            "    total: 30\n"
+            "  planned_sessions:\n"
+            "    team_leader: 1\n"
+            "    engineer: 1\n"
+            "    standards_reviewer: 1\n"
+            "    spec_reviewer: 1\n"
+            "    delivery_state: 1\n"
+            "  correction_rounds: 1\n"
+            "  estimation_note: The accepted budget selects no Engineer role\n"
+            "  on_exceed: Notify the caller and preserve the running Session\n"
+            "---\n"
+            "\n"
+            "Deliver unified-engineer.\n"
+        ),
+    }
+    issue = _write(project / "issue.yml", definition)
 
     result = _run(
         installed_commands, project, "register", "--task-file", str(issue)
@@ -198,7 +215,7 @@ def test_installed_command_registers_an_accepted_task_without_an_engineer_tier(
     snapshot = (state / "tasks" / "77-unified-engineer" / "task.md").read_text(
         encoding="utf-8"
     )
-    assert snapshot.startswith("---\ndifficulty: medium\n")
+    assert snapshot.endswith("---\n" + definition["body"])
     assert "engineer_tier" not in snapshot
 
 
@@ -221,8 +238,7 @@ def test_installed_command_registers_non_coding_task_with_front_matter(
     snapshot = (state / "tasks" / "74-research-task" / "task.md").read_text(
         encoding="utf-8"
     )
-    assert snapshot.startswith("---\ntask_type: research\n---\n")
-    assert snapshot.endswith("Investigate research-task.\n")
+    assert snapshot.endswith("---\n---\ntask_type: research\n---\n\nInvestigate research-task.")
 
 
 def test_installed_command_revises_non_coding_task_with_front_matter(
@@ -245,13 +261,7 @@ def test_installed_command_revises_non_coding_task_with_front_matter(
             "caused_by_event_ids": [],
             "evidence_refs": ["research-revision.md"],
             "tasks": [
-                {
-                    **_non_coding_task(
-                        "74", "research-task", task_type="analysis"
-                    ),
-                    "active": True,
-                    "replaced_by": [],
-                }
+                _revised(_non_coding_task("74", "research-task", task_type="analysis"))
             ],
         },
     )
@@ -274,7 +284,7 @@ def test_installed_command_revises_non_coding_task_with_front_matter(
         / state_record["current_definition"]
     ).read_text(encoding="utf-8")
     assert state_record["current_definition"] == f"definitions/{event['event_id']}.md"
-    assert snapshot.startswith("---\ntask_type: analysis\n---\n")
+    assert snapshot.endswith("---\n---\ntask_type: analysis\n---\n\nInvestigate research-task.")
 
 
 def test_installed_command_revises_non_coding_task_with_source_front_matter(
@@ -296,10 +306,8 @@ def test_installed_command_revises_non_coding_task_with_source_front_matter(
     _register(installed_commands, project, task)
     directory = state / "tasks" / "74-research-task"
     initial_snapshot = (directory / "task.md").read_text(encoding="utf-8")
-    assert initial_snapshot.startswith(
-        "---\ntask_type: research\nSource: field-notes\n---\n"
-    )
-    assert "Source: https://github.com/example/project/issues/74" in initial_snapshot
+    assert initial_snapshot.endswith("---\n" + task["body"])
+    assert _metadata(initial_snapshot)["source"] == "https://github.com/example/project/issues/74"
 
     evidence = project / "source-revision.md"
     evidence.write_text("Research notes were extended.\n", encoding="utf-8")
@@ -310,12 +318,7 @@ def test_installed_command_revises_non_coding_task_with_source_front_matter(
             "caused_by_event_ids": [],
             "evidence_refs": ["source-revision.md"],
             "tasks": [
-                {
-                    **task,
-                    "body": task["body"] + "\n\nPreserve field notes.",
-                    "active": True,
-                    "replaced_by": [],
-                }
+                _revised({**task, "body": task["body"] + "\n\nPreserve field notes."})
             ],
         },
     )
@@ -331,10 +334,8 @@ def test_installed_command_revises_non_coding_task_with_source_front_matter(
     )
     assert state_record["current_definition"].startswith("definitions/")
     assert (directory / "task.md").read_text(encoding="utf-8") == initial_snapshot
-    assert revised_snapshot.startswith(
-        "---\ntask_type: research\nSource: field-notes\n---\n"
-    )
-    assert "Source: https://github.com/example/project/issues/74" in revised_snapshot
+    assert revised_snapshot.endswith("---\n" + task["body"] + "\n\nPreserve field notes.")
+    assert _metadata(revised_snapshot)["source"] == "https://github.com/example/project/issues/74"
 
 
 def test_installed_command_corrects_a_dependency_and_generates_current_readiness(
@@ -358,11 +359,7 @@ def test_installed_command_corrects_a_dependency_and_generates_current_readiness
             "caused_by_event_ids": [],
             "evidence_refs": ["validation.md"],
             "tasks": [
-                {
-                    **_task("2", "feature"),
-                    "active": True,
-                    "replaced_by": [],
-                }
+                _revised(_task("2", "feature"))
             ],
         },
     )
@@ -377,15 +374,15 @@ def test_installed_command_corrects_a_dependency_and_generates_current_readiness
     task_state = yaml.safe_load(
         (task_directory / "task.yml").read_text(encoding="utf-8")
     )
-    assert task_state["dependencies"] == []
+    assert _metadata((task_directory / task_state["current_definition"]).read_text(
+        encoding="utf-8"))["dependencies"] == []
     assert task_state["current_definition"] == (
         f"definitions/{event['event_id']}.md"
     )
     assert (task_directory / task_state["current_definition"]).is_file()
     initial_snapshot = (task_directory / "task.md").read_text(encoding="utf-8")
-    assert "# Task 2: Feature" in initial_snapshot
-    assert "Dependencies: 1" in initial_snapshot
-    assert initial_snapshot.endswith("Deliver feature.\n")
+    assert _metadata(initial_snapshot)["dependencies"] == ["1"]
+    assert initial_snapshot.endswith("---\nDeliver feature.")
     graph = _run(installed_commands, project, "graph")
     assert graph.returncode == 0, graph.stderr
     projection = yaml.safe_load(graph.stdout)
@@ -438,21 +435,11 @@ def test_installed_command_merges_two_tasks_into_one_new_task_atomically(
             "caused_by_event_ids": [],
             "evidence_refs": ["merge-validation.md"],
             "tasks": [
-                {
-                    **_task("1", "first-half"),
-                    "active": False,
-                    "replaced_by": ["3"],
-                },
-                {
-                    **_task("2", "second-half"),
-                    "active": False,
-                    "replaced_by": ["3"],
-                },
-                {
-                    **_task("3", "combined-task"),
-                    "active": True,
-                    "replaced_by": [],
-                },
+                _revised(_task("1", "first-half"), disposition="superseded",
+                         replaced_by=["3"], retirement_reason="Merged into Task 3."),
+                _revised(_task("2", "second-half"), disposition="superseded",
+                         replaced_by=["3"], retirement_reason="Merged into Task 3."),
+                _revised(_task("3", "combined-task"), None),
             ],
         },
     )
@@ -464,17 +451,15 @@ def test_installed_command_merges_two_tasks_into_one_new_task_atomically(
     assert result.returncode == 0, result.stderr
     event = yaml.safe_load(result.stdout)
     assert event["affected_task_ids"] == ["1", "2", "3"]
-    states = {
-        path.parent.name: yaml.safe_load(path.read_text(encoding="utf-8"))
-        for path in (state / "tasks").glob("*/task.yml")
-    }
-    assert states["1-first-half"]["active"] is False
-    assert states["1-first-half"]["replaced_by"] == ["3"]
-    assert states["2-second-half"]["active"] is False
-    assert states["2-second-half"]["replaced_by"] == ["3"]
-    assert states["3-combined-task"]["active"] is True
-    assert states["3-combined-task"]["current_definition"] == "task.md"
     graph = yaml.safe_load(_run(installed_commands, project, "graph").stdout)
+    tasks = {task["task_id"]: task for task in graph["tasks"]}
+    for task_id in ("1", "2"):
+        assert tasks[task_id]["active"] is False
+        assert tasks[task_id]["disposition"] == "superseded"
+        assert tasks[task_id]["replaced_by"] == ["3"]
+    assert tasks["3"]["active"] is True
+    assert tasks["3"]["current_definition"] == "task.md"
+    assert (state / "tasks/3-combined-task/task.md").is_file()
     assert [task["task_id"] for task in graph["tasks"] if task["ready"]] == [
         "3"
     ]
@@ -496,21 +481,11 @@ def test_revision_keeps_created_task_evidence_unique_and_worldline_readable(
             "caused_by_event_ids": [],
             "evidence_refs": [created_evidence],
             "tasks": [
-                {
-                    **_task("1", "first-half"),
-                    "active": False,
-                    "replaced_by": ["3"],
-                },
-                {
-                    **_task("2", "second-half"),
-                    "active": False,
-                    "replaced_by": ["3"],
-                },
-                {
-                    **_task("3", "combined-task"),
-                    "active": True,
-                    "replaced_by": [],
-                },
+                _revised(_task("1", "first-half"), disposition="superseded",
+                         replaced_by=["3"], retirement_reason="Merged into Task 3."),
+                _revised(_task("2", "second-half"), disposition="superseded",
+                         replaced_by=["3"], retirement_reason="Merged into Task 3."),
+                _revised(_task("3", "combined-task"), None),
             ],
         },
     )
@@ -528,7 +503,7 @@ def test_revision_keeps_created_task_evidence_unique_and_worldline_readable(
     assert event["evidence_refs"].count(created_evidence) == 1
 
 
-def test_revision_rejects_an_active_dependency_on_an_inactive_task_without_changes(
+def test_revision_rejects_a_dependency_on_an_unregistered_task_without_changes(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
 ) -> None:
@@ -556,11 +531,7 @@ def test_revision_rejects_an_active_dependency_on_an_inactive_task_without_chang
             "caused_by_event_ids": [],
             "evidence_refs": ["invalid-validation.md"],
             "tasks": [
-                {
-                    **_task("1", "foundation"),
-                    "active": False,
-                    "replaced_by": [],
-                }
+                _revised(_task("2", "feature", dependencies=["9"]))
             ],
         },
     )
@@ -570,10 +541,10 @@ def test_revision_rejects_an_active_dependency_on_an_inactive_task_without_chang
     )
 
     assert result.returncode == 1
-    assert "inactive" in result.stderr
+    assert "dangling" in result.stderr
     assert {path: path.read_bytes() for path in task_states} == task_states
     assert {path: path.read_bytes() for path in worldline} == worldline
-    assert not tuple((state / "tasks" / "1-foundation").glob("definitions/*"))
+    assert not tuple((state / "tasks" / "2-feature").glob("definitions/*"))
 
 
 def test_revision_with_missing_evidence_rolls_back_task_and_worldline(
@@ -594,12 +565,7 @@ def test_revision_with_missing_evidence_rolls_back_task_and_worldline(
             "caused_by_event_ids": [],
             "evidence_refs": ["missing.md"],
             "tasks": [
-                {
-                    **_task("1", "foundation", dependencies=[]),
-                    "title": "Corrected Foundation",
-                    "active": True,
-                    "replaced_by": [],
-                }
+                _revised({**_task("1", "foundation"), "title": "Corrected Foundation"})
             ],
         },
     )

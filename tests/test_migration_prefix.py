@@ -40,6 +40,10 @@ def _project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Pat
         async def __aexit__(self, *args):
             return None
 
+        async def inspect_thread_reference(self, session: str) -> dict:
+            calls.append(session)
+            return {'id': 'returned-other-id', 'path': '/never-read/unrelated.jsonl', 'cwd': str(root)}
+
         async def read_thread(self, session: str) -> dict:
             calls.append(session)
             assert session in {'main', 'prefix'}
@@ -91,3 +95,40 @@ def test_prefix_capture_refuses_identity_mismatch_and_partial_boundary(tmp_path:
     destination = tmp_path / 'broken'
     result = CliRunner().invoke(main, ['migration-prefix', '--expect-prefix', 'prefix', '3', str(len(content)), '--session', 'main', '--capture', str(destination)])
     assert result.exit_code != 0 and not destination.exists()
+
+
+def test_reference_diagnostic_does_not_read_a_mismatched_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Different requested/returned native identities stay visible without capture authority."""
+    root, parent, content, calls = _project(tmp_path, monkeypatch)
+    before = _snapshot(root)
+    result = CliRunner().invoke(main, ['migration-prefix', '--session', 'main',
+        '--expect-prefix', 'prefix', '3', str(len(content)), '--diagnose'])
+    assert result.exit_code == 0, result.output
+    report = yaml.safe_load(result.output)
+    assert report['expected_id'] == 'prefix' and report['actual_id'] == 'returned-other-id'
+    assert report['identity_matches'] is False and report['referenced_file_read'] is False
+    assert calls == ['main', 'prefix'] and _snapshot(root) == before
+
+
+def test_native_diagnostic_filters_content_without_weakening_identity(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Normal native identity reads still refuse a redirect; diagnosis emits no preview/turns."""
+    import asyncio
+    from graphtraj.runtimes.codex.app_server import CodexAppServer
+    from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
+
+    client = CodexAppServer(cwd=tmp_path, command=('unused',))
+    calls = []
+
+    async def reply(method: str, arguments: dict) -> dict:
+        calls.append((method, arguments))
+        return {'thread': {'id': 'actual', 'path': '/native/actual.jsonl', 'cwd': str(tmp_path),
+                           'preview': 'private conversation', 'turns': [{'text': 'private'}],
+                           'sessionId': 'native-hook', 'forkedFromId': 'origin'}}
+
+    monkeypatch.setattr(client, '_call', reply)
+    with pytest.raises(RuntimeAdapterError, match='different native Session'):
+        asyncio.run(client.read_thread('requested'))
+    result = asyncio.run(client.inspect_thread_reference('requested'))
+    assert result['id'] == 'actual' and result['forkedFromId'] == 'origin'
+    assert 'preview' not in result and 'turns' not in result
+    assert calls == [('thread/read', {'threadId': 'requested', 'includeTurns': False})] * 2

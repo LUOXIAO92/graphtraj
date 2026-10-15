@@ -46,6 +46,7 @@ def inspect_prefix(
     expected: tuple[str, int, int],
     *,
     capture: Path | None = None,
+    diagnose: bool = False,
 ) -> dict:
     """Inspect two exact native identities; optionally capture only the declared bytes.
 
@@ -56,6 +57,8 @@ def inspect_prefix(
     """
     from graphtraj.runtimes.codex.finalize import proxy
 
+    if diagnose and capture is not None:
+        raise ValueError('Choose metadata diagnosis or prefix capture, not both.')
     configuration = load_project_configuration(cwd)
     project = configuration.harness_root
     if (project / '.graphtraj/migration-snapshot.yml').exists():
@@ -70,7 +73,7 @@ def inspect_prefix(
     if connection.get('runtime') != 'codex' or connection.get('session') != session:
         raise ValueError('Main owning native connection is unavailable.')
 
-    async def read() -> tuple[dict, dict, Path, Path, dict]:
+    async def read() -> tuple[dict, dict, Path, Path | None, dict]:
         """Resolve only the associated Main and the one ID declared by its own header."""
         async with proxy(connection) as client:
             child = await client.read_thread(session)
@@ -81,6 +84,9 @@ def inspect_prefix(
             base = declared_prefix(metadata)
             if tuple(base[key] for key in ('thread_id', 'end_ordinal_exclusive', 'end_byte_offset')) != expected:
                 raise ValueError('Main declared a different inherited prefix; no referenced source queried: ' + json.dumps(base))
+            if diagnose:
+                observed = await client.inspect_thread_reference(base['thread_id'])
+                return metadata, base, child_path, None, observed
             parent = await client.read_thread(base['thread_id'])
             source = Path(parent.get('path') or '')
             if parent.get('id') != base['thread_id'] or not source.is_absolute():
@@ -89,6 +95,13 @@ def inspect_prefix(
             return metadata, base, child_path, source, parent_metadata
 
     metadata, base, child_path, source, parent_metadata = asyncio.run(read())
+    if diagnose:
+        return {'project': str(project), 'session': session, 'agent': item['agent'],
+                'forked_from_id': metadata.get('forked_from_id'), 'history_base': base,
+                'expected_id': base['thread_id'], 'actual_id': parent_metadata['id'],
+                'identity_matches': parent_metadata['id'] == base['thread_id'],
+                'native_metadata': parent_metadata, 'referenced_file_read': False,
+                'notice': 'Metadata only; returned identity/path does not authorize capture or change ownership.'}
     result = {'version': 1, 'project': str(project), 'session': session, 'agent': item['agent'],
               'main_source': str(child_path), 'forked_from_id': metadata.get('forked_from_id'),
               'history_base': base, 'source': str(source), 'available_bytes': source.stat().st_size,

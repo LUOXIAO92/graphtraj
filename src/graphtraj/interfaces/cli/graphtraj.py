@@ -116,12 +116,18 @@ def connections_command(
 @click.option("--expect-prefix", type=(str, int, int), required=True, metavar="THREAD ORDINAL BYTES",
               help="Refuse any different source ID or exclusive ordinal/byte boundary before querying it.")
 @click.option("--capture", type=click.Path(path_type=Path), help="Capture only its declared inherited prefix in a new directory.")
-def migration_prefix_command(session: str, expect_prefix: tuple[str, int, int], capture: Path | None) -> None:
+@click.option("--diagnose", is_flag=True, help="Return only requested/actual reference metadata; do not read its file.")
+def migration_prefix_command(
+    session: str,
+    expect_prefix: tuple[str, int, int],
+    capture: Path | None,
+    diagnose: bool,
+) -> None:
     """Read declared inheritance metadata through Main's existing native host."""
     from graphtraj.workspace.migration_prefix import inspect_prefix
 
     try:
-        result = inspect_prefix(Path.cwd(), session, expect_prefix, capture=capture)
+        result = inspect_prefix(Path.cwd(), session, expect_prefix, capture=capture, diagnose=diagnose)
     except (OSError, ValueError, yaml.YAMLError, RunnerError) as error:
         raise click.ClickException(str(error)) from error
     click.echo(yaml.safe_dump(result, sort_keys=False), nl=False)

@@ -74,6 +74,15 @@ native reviewer without a callable host route does not grant approval. HTTP
 review is not evidence that Codex's native automatic reviewer ran. Do not
 replace an unavailable route with a temporary script or internal Python call.
 
+For a Codex stdio MCP server using HTTP review, forward the configured key's
+environment-variable name through `mcp_servers.<name>.env_vars`; a variable
+available in your shell is not necessarily available to the MCP process.
+Keep key values out of configuration and reports. After changing the host
+configuration, use its normal reload or restart path and verify actual adoption.
+See [Codex MCP configuration](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
+An `api_key_env` error reports only the variable name and presence/nonempty
+booleans; it means review failed before sending an HTTP request.
+
 Read the actual recovery result, whether review was required or existing
 authority was reused. `stale` means the retained snapshot no
 longer matches the state to repair. `resume-failed` or `resume-stale` means the

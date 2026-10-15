@@ -159,7 +159,8 @@ def test_preview_and_native_session_migration_preserve_sources(
             {'type': 'response_item', 'payload': {'ticket_id': 'literal', 'encrypted_content': 'opaque'}},
         ],
         'pi': [
-            {'type': 'session', 'id': 'p1', 'version': 3, 'cwd': str(tmp_path), 'timestamp': 1},
+            {'type': 'session', 'id': 'p1', 'version': 3, 'cwd': str(tmp_path), 'timestamp': 1,
+             'parentSession': str(native / 'unassociated-parent.jsonl')},
             {'type': 'message', 'id': 'm1', 'message': {'role': 'user', 'content': 'ticket-completed'}},
         ],
         'dsh': [
@@ -173,6 +174,8 @@ def test_preview_and_native_session_migration_preserve_sources(
              'message': {'role': 'user', 'content': 'state/tickets/example/ticket.md'}},
         ],
     }
+    (native / 'unassociated-parent.jsonl').write_text(
+        json.dumps({'type': 'session', 'id': 'unassociated'}) + '\n' + json.dumps(records['pi'][1]) + '\n')
     for runtime, session in [('codex', 'c1'), ('pi', 'p1'), ('dsh', 'd1'), ('claude', 'a1')]:
         source = native / (runtime + '.jsonl')
         source.write_text(''.join(json.dumps(record) + '\n' for record in records[runtime]))
@@ -212,6 +215,9 @@ def test_preview_and_native_session_migration_preserve_sources(
             assert store.header['graphtraj']['agentId'] == item['agent']
             assert store.next_seq > 0
             assert store.pending() is None
+            if item['runtime'] == 'pi':
+                assert store.header['isSeeded'] is False
+                assert any(gap['path'] == 'parentSession' for gap in store.header['graphtraj']['missing'])
         mapping = runner / 'sessions' / item['runtime'] / 'mapping.yml'
         assert yaml.safe_load(mapping.read_text())['task_id'] == '2'
     assert (state / 'tasks/2-child/teams/1/traces/old/events.jsonl').read_bytes() == before[

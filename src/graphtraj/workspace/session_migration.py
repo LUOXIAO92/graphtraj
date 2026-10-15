@@ -144,6 +144,8 @@ def archive_sources(state: Path, project: Path, sources: list[dict]) -> list[dic
     are attachments, including any incomplete final line the collector defers.
     """
     result = []
+    parent_sources = {Path(item['resolved_source']) for item in sources
+                      if item.get('runtime') == 'pi' and 'resolved_source' in item}
     for item in sources:
         if 'missing' in item or item.get('archive_only'):
             result.append(item)
@@ -159,7 +161,8 @@ def archive_sources(state: Path, project: Path, sources: list[dict]) -> list[dic
             from graphtraj.runtimes.pi.collector import PiCollector
 
             collector = PiCollector(state, native, session, project=str(project),
-                                    agent=item['agent'], source=item['kind'], tasks=item['task_ids'])
+                                    agent=item['agent'], source=item['kind'], tasks=item['task_ids'],
+                                    parent_sources=parent_sources, attachment_root=project)
             collector.close()
         elif runtime == 'dsh':
             from graphtraj.runtimes.dsh.collection import collect

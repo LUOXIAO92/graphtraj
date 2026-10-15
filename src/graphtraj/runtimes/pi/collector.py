@@ -152,9 +152,16 @@ class PiCollector:
         tasks: list[str] | None = None,
         execution: str | None = None,
         header: dict | None = None,
+        parent_sources: set[Path] | None = None,
+        attachment_root: Path | None = None,
     ) -> None:
-        """Open the archive after the caller has verified native ownership."""
+        """Open an owned archive, optionally limiting offline source acquisition.
+
+        Migration supplies its associated parent files and project attachment
+        root; native paths in content cannot broaden that acquisition scope.
+        """
         self.native = native
+        self.attachment_root = attachment_root.resolve() if attachment_root else None
         self.session = session
         self.state = state.resolve()
         self.project = Path(project).resolve()
@@ -189,7 +196,10 @@ class PiCollector:
                 canonical['origin'] = 'subagent'
             if header.get('parentSession'):
                 try:
-                    parent, end = inherited_prefix(native, Path(header['parentSession']))
+                    parent_path = Path(header['parentSession']).resolve()
+                    if parent_sources is not None and parent_path not in parent_sources:
+                        raise ValueError('Native parent is not an associated project source.')
+                    parent, end = inherited_prefix(native, parent_path)
                     canonical.update(parentSession=parent, isSeeded=True)
                     metadata['native']['inheritedPrefixEnd'] = end
                 except (OSError, ValueError, KeyError):
@@ -230,7 +240,8 @@ class PiCollector:
                     private = (self.state, self.project / '.graphtraj', self.project / '.codex')
                     # Model-authored paths must not extend a managed Runtime's
                     # filesystem grants through the host-side archive writer.
-                    if candidate.is_relative_to(root) and not any(candidate.is_relative_to(p) for p in private):
+                    in_scope = self.attachment_root is None or candidate.is_relative_to(self.attachment_root)
+                    if in_scope and candidate.is_relative_to(root) and not any(candidate.is_relative_to(p) for p in private):
                         reference = self.store.copy_attachment(candidate)
                     else:
                         reference = {'missing': {'path': path, 'reason': 'Outside the captured Session directories; not acquired.'}}

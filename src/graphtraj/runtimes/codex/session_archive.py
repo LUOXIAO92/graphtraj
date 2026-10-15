@@ -369,6 +369,78 @@ class CodexSessionArchive:
                 store.stage_initial_observations(observations)
                 return self._promote_copied_prefix(store, parent)
 
+    def collect_history_prefix(self, segments: list[dict], base: dict) -> dict:
+        """Resolve verified physical segments using the distinct logical fork cut.
+
+        Segments are supplied newest-first, with contained local paths. Earlier
+        own records precede the current draft; only the explicit native logical
+        fork range is inherited. Each physical source keeps its own coordinates.
+        """
+        import hashlib
+
+        with SessionStore(self.path) as store:
+            owner = store.header['graphtraj']
+            if owner['projectId'] != self.project_id or owner['agentId'] != self.agent_id:
+                raise ValueError('Captured prefix does not own this project/Agent archive.')
+            if store.next_seq:
+                if store.position('history-base') != base['end_byte_offset']:
+                    raise ValueError('Canonical archive has no identical committed prefix.')
+                for segment in segments:
+                    if hashlib.sha256(store.attachment(segment['sha256'])).hexdigest() != segment['sha256']:
+                        raise ValueError('Previously committed physical source bytes differ.')
+                return {'changed': False, 'events': store.next_seq}
+            pending = store.pending()
+            if pending is None:
+                raise ValueError('A retained Main initial-collection draft is required.')
+            observations = pending['event']['data']['observations']
+            first = observations[0]['event']['data']['record']
+            metadata = first.get('payload', {})
+            logical_cut = metadata.get('forked_from_ordinal_exclusive')
+            if (first.get('type') != 'session_meta' or metadata.get('id') != self.session_id
+                    or metadata.get('history_base') != base
+                    or type(logical_cut) is not int or not 0 < logical_cut <= base['end_ordinal_exclusive']
+                    or store.header.get('parentSession') != 'codex:' + metadata.get('forked_from_id', '')
+                    or first.get('ordinal') != base['end_ordinal_exclusive']):
+                raise ValueError('Pending Main does not establish this physical prefix and logical fork boundary.')
+            for index, observation in enumerate(observations):
+                if observation['event']['data']['record'].get('ordinal') != base['end_ordinal_exclusive'] + index:
+                    raise ValueError('Retained Main observations have a native ordinal gap.')
+            earlier = []
+            inherited = []
+            for segment in reversed(segments):
+                prefix = segment['path']
+                source_key = 'history-base:' + segment['source_rollout']
+                first_event = len(earlier)
+                with prefix.open('rb') as stream:
+                    while line := stream.readline():
+                        start = stream.tell() - len(line)
+                        record = json.loads(line)
+                        ordinal = len(earlier)
+                        if not line.endswith(b'\n') or record.get('ordinal') != ordinal:
+                            raise ValueError('Captured chain lacks a contiguous native ordinal range.')
+                        event = self._rollout_event(store, record, start, 0)
+                        event['graphtraj']['native'].update(
+                            sessionId=segment['source_logical_session'],
+                            locator=f"rollout:{segment['source_rollout']}:byte:{start}",
+                            rolloutId=segment['source_rollout'], sourcePath=segment['source'])
+                        position = stream.tell()
+                        earlier.append({'event': event, 'source': source_key, 'position': position})
+                        if ordinal < logical_cut:
+                            inherited.append((source_key, position))
+                if len(earlier) != segment['end_ordinal_exclusive']:
+                    raise ValueError('Captured physical segment does not end at its declared ordinal.')
+                raw = store.copy_attachment(prefix)
+                if raw['sha256'] != segment['sha256']:
+                    raise ValueError('Captured source changed while importing its bytes.')
+                earlier[first_event]['event']['graphtraj']['attachments'].append({'nativePath': 'history_base', **raw})
+            if len(earlier) != base['end_ordinal_exclusive']:
+                raise ValueError('Captured chain does not reach the current Main prefix boundary.')
+            store.stage_initial_observations(earlier, before_existing=True)
+            store.finish_initial_collection(parent_session=store.header['parentSession'], inherited=inherited,
+                                            checkpoint=('history-base', base['end_byte_offset']))
+            return {'changed': True, 'events': store.next_seq, 'logical_inherited_records': logical_cut,
+                    'physical_prefix_records': len(earlier), 'local_records': len(observations)}
+
     def collect(self, rollout: Path) -> None:
         """Commit complete native records; retry unfinished input on the next call.
 

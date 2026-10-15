@@ -157,3 +157,17 @@ def migration_mappings_command(source: Path, evidence_ref: str, preview: bool) -
     except (OSError, ValueError, yaml.YAMLError) as error:
         raise click.ClickException(str(error)) from error
     click.echo(yaml.safe_dump(result, sort_keys=False), nl=False)
+
+
+@main.command("migration-prefix-adopt")
+@click.option("--session", required=True)
+@click.option("--manifest", type=click.Path(path_type=Path, exists=True, dir_okay=False), required=True)
+def migration_prefix_adopt_command(session: str, manifest: Path) -> None:
+    """Restore one pending Main from a complete locally captured declared chain."""
+    from graphtraj.workspace.migration_prefix import adopt_prefix_chain
+
+    try:
+        result = adopt_prefix_chain(Path.cwd(), session, manifest)
+    except (OSError, ValueError, yaml.YAMLError) as error:
+        raise click.ClickException(str(error)) from error
+    click.echo(yaml.safe_dump(result, sort_keys=False), nl=False)

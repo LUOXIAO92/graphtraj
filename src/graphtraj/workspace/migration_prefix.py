@@ -317,3 +317,97 @@ def capture_prefix_chain(cwd: Path, session: str, expected: tuple[str, int, int]
     manifest.write_text(yaml.safe_dump(result, sort_keys=False), encoding='utf-8')
     manifest.chmod(0o600)
     return {**result, 'capture': str(destination)}
+
+
+def adopt_prefix_chain(cwd: Path, session: str, manifest: Path) -> dict:
+    """Resolve one pending archive using only a fully verified local captured chain.
+
+    The exact pre-operation SQLite archive is exported first and restored on any
+    failed publication. Input/source bytes and other Task/Session state remain
+    unchanged. Retrying an identical successful prefix is idempotent.
+    """
+    from datetime import timezone
+    from graphtraj.sessions.storage import SessionStore, session_path
+    from graphtraj.runtimes.codex.session_archive import CodexSessionArchive
+
+    configuration = load_project_configuration(cwd)
+    state = configuration.state
+    if not (state / 'tasks').is_dir() or (state / 'tickets').exists():
+        raise ValueError('Complete Task-format migration before adopting a captured prefix.')
+    snapshot = configuration.harness_root / '.graphtraj/migration-snapshot.yml'
+    project = (yaml.safe_load(snapshot.read_text(encoding='utf-8'))['project'] if snapshot.is_file()
+               else str(configuration.harness_root))
+    chain = yaml.safe_load(manifest.read_text(encoding='utf-8'))
+    if (not isinstance(chain, dict) or chain.get('complete') is not True
+            or chain.get('project') != project or chain.get('session') != session):
+        raise ValueError('A complete captured chain for this exact project/Main is required.')
+    edge = dict(chain['history_base'])
+    segments = []
+    visited = set()
+    for item in chain['segments']:
+        if (edge is None or item['source_rollout'] in visited or item['source_rollout'] != edge['thread_id']
+                or item['end_ordinal_exclusive'] != edge['end_ordinal_exclusive']
+                or item['bytes'] != edge['end_byte_offset']
+                or not 0 <= item['first_ordinal'] < item['end_ordinal_exclusive']
+                or rollout_identity(Path(item['source'])) != (item['source_logical_session'], item['source_rollout'])):
+            raise ValueError('Captured manifest has a conflicting physical edge or ordinal boundary.')
+        visited.add(item['source_rollout'])
+        relative = Path(item['stored'])
+        path = manifest.parent / relative
+        if (relative.is_absolute() or '..' in relative.parts
+                or not path.resolve().is_relative_to(manifest.parent.resolve())):
+            raise ValueError('Captured source path escapes its authorized artifact.')
+        with path.open('rb') as stream:
+            if hashlib.file_digest(stream, 'sha256').hexdigest() != item['sha256']:
+                raise ValueError('Captured source hash differs from its manifest.')
+        if path.stat().st_size != item['bytes']:
+            raise ValueError('Captured source size differs from its declared byte cut.')
+        header, ordinal = _metadata(path, item['source_logical_session'])
+        if (ordinal != item['first_ordinal'] or header.get('cwd') != project
+                or header.get('history_mode') != 'paginated'
+                or header.get('history_base') != item['history_base']):
+            raise ValueError('Captured source header differs from its declared project/physical edge.')
+        segments.append({**item, 'path': path})
+        if ordinal == 0:
+            if header.get('history_base'):
+                raise ValueError('An ordinal-zero source cannot claim a further inherited prefix.')
+            edge = None
+        else:
+            edge = declared_prefix(header)
+            if edge['end_ordinal_exclusive'] != ordinal:
+                raise ValueError('Captured physical segments leave an ordinal gap.')
+    if not segments or edge is not None:
+        raise ValueError('Captured chain does not reach ordinal zero.')
+    archive = session_path(state, 'codex:' + session)
+    stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
+    backup = configuration.harness_root / '.graphtraj/backups' / ('session-prefix-' + stamp)
+    with SessionStore(archive, readonly=True) as store:
+        header = store.header
+        if header['graphtraj']['projectId'] != project or header['graphtraj']['agentId'] != chain['agent']:
+            raise ValueError('Captured chain does not match the retained real Agent/project identity.')
+        backup.mkdir(parents=True, mode=0o700)
+        store.export(backup / 'session.sqlite3')
+    # Keep the entire recovery input set locally, independent of the supplied
+    # capture directory or cleaned original Runtime files. Business reads use
+    # the resulting archive, never this backup as a fallback.
+    saved = {**chain, 'segments': []}
+    (backup / 'native-sources').mkdir(mode=0o700)
+    for segment in segments:
+        relative = 'native-sources/' + segment['sha256'] + '.jsonl'
+        shutil.copy2(segment['path'], backup / relative)
+        segment['path'] = backup / relative
+        saved['segments'].append({key: value for key, value in segment.items() if key != 'path'})
+        saved['segments'][-1]['stored'] = relative
+    (backup / 'source.yml').write_text(yaml.safe_dump(saved, sort_keys=False), encoding='utf-8')
+    try:
+        result = CodexSessionArchive(state, project, chain['agent'], session).collect_history_prefix(
+            segments, chain['history_base'])
+    except BaseException:
+        # The store is closed before replacing it; no process is resumed here.
+        temporary = archive.with_suffix('.restoring')
+        shutil.copy2(backup / 'session.sqlite3', temporary)
+        temporary.replace(archive)
+        raise
+    return {**result, 'session': session, 'agent': chain['agent'],
+            'segments': len(segments), 'backup': backup.relative_to(configuration.harness_root).as_posix(),
+            'logical_parent': header.get('parentSession'), 'pending': False}

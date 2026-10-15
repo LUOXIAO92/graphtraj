@@ -280,6 +280,68 @@ def test_chain_follows_only_owned_declared_segments_and_stops_cycles(tmp_path: P
     assert (destination / (second_id + '.jsonl')).read_bytes() == newer
     assert calls == [main_id, second_id, first_id]
 
+    # Only this small fixture is migrated; the retained real full-corpus
+    # evidence is reused. Recovery publishes the logical cut, not the storage cut.
+    from graphtraj.sessions.storage import SessionStore, session_path
+    from graphtraj.runtimes.codex.session_archive import CodexSessionArchive
+    from graphtraj.sessions.protocol import native_record
+    import shutil
+
+    migrated = CliRunner().invoke(main, ['migrate-tickets'])
+    assert migrated.exit_code == 0, migrated.output
+    archive = session_path(root / '.graphtraj/state', 'codex:' + main_id)
+    with SessionStore(archive, readonly=True) as store:
+        assert store.next_seq == 0 and len(store.pending()['event']['data']['observations']) == 2
+        original_pending = store.pending()
+    adopt = ['migration-prefix-adopt', '--session', main_id, '--manifest', str(destination / 'chain.yml')]
+    complete = SessionStore.finish_initial_collection
+
+    def interrupted(store, **arguments):
+        """Model failure after publication; the whole native command must restore its archive."""
+        complete(store, **arguments)
+        raise ValueError('simulated interruption after publication')
+
+    with monkeypatch.context() as fault:
+        fault.setattr(SessionStore, 'finish_initial_collection', interrupted)
+        failed = CliRunner().invoke(main, adopt)
+        assert failed.exit_code != 0
+    with SessionStore(archive, readonly=True) as store:
+        assert store.next_seq == 0 and store.pending() == original_pending
+    adopted = CliRunner().invoke(main, adopt)
+    assert adopted.exit_code == 0, adopted.output
+    assert yaml.safe_load(adopted.output)['logical_inherited_records'] == 2
+    retained_manifest = root / yaml.safe_load(adopted.output)['backup'] / 'source.yml'
+    repeated = CliRunner().invoke(main, adopt)
+    assert repeated.exit_code == 0 and yaml.safe_load(repeated.output)['changed'] is False
+    with SessionStore(archive, readonly=True) as store:
+        store.validate()
+        events = store.page()['events']
+        assert store.next_seq == 7 and store.pending() is None
+        assert events[2]['type'] == 'session/end-seed'
+        assert [native_record(event)['ordinal'] for event in events
+                if event['type'] != 'session/end-seed'] == list(range(6))
+        assert [event['graphtraj']['native']['sessionId'] for event in events[:2]] == [parent_id] * 2
+        assert store.header['parentSession'] == 'codex:' + parent_id
+        assert store.header['graphtraj']['agentId'] == 'main'
+        assert store.attachment(report['segments'][1]['sha256']) == older
+    assert not session_path(root / '.graphtraj/state', 'codex:' + second_id).exists()
+    shutil.rmtree(destination)
+    first.unlink()
+    second.unlink()
+    with current.open('a') as stream:
+        stream.write(json.dumps({'type': 'response_item', 'ordinal': 6,
+                                 'payload': {'text': 'new local record'}}) + '\n')
+    live = CodexSessionArchive(root / '.graphtraj/state', str(root), 'main', main_id)
+    live.collect(current)
+    live.collect(current)
+    with SessionStore(archive, readonly=True) as store:
+        assert store.next_seq == 8 and store.pending() is None
+        assert store.page()['events'][-1]['data']['record']['ordinal'] == 6
+    independent = CliRunner().invoke(main, ['migration-prefix-adopt', '--session', main_id,
+        '--manifest', str(retained_manifest)])
+    assert independent.exit_code == 0, independent.output
+    assert yaml.safe_load(independent.output)['changed'] is False
+
     # The header now names its own physical ID; preserve the failed partial
     # capture and stop before a second query or any guessed alternative source.
     newer = write(second, main_id, 2, {'thread_id': second_id, 'end_ordinal_exclusive': 2,

@@ -25,10 +25,10 @@ def session_sources(state: Path, runner: Path, project: Path) -> list[dict]:
     paths.update(runner.glob('main-sessions/*/checks/*/session.yml'))
     from graphtraj.execution.runner_status import is_legacy_hosted_mapping, is_session_mapping
 
+    records = {path: yaml.safe_load(path.read_text(encoding='utf-8')) or {} for path in sorted(paths)}
     sources = {}
     aliases = set()
-    for path in sorted(paths):
-        retained = yaml.safe_load(path.read_text(encoding='utf-8')) or {}
+    for path, retained in records.items():
         record = retained.get('retirement', {}).get('mapping', retained)
         identity_record = {**record, 'task_id': record.get('task_id', record.get('ticket_id'))}
         main = path.parent.parent.name == 'main-sessions'
@@ -69,7 +69,8 @@ def session_sources(state: Path, runner: Path, project: Path) -> list[dict]:
         item = {'runtime': runtime, 'session': session, 'agent': agent,
                 'task_ids': [task] if task else [], 'kind': 'main' if main else ('checker' if checker else 'member'),
                 'association': str(path), 'source': source}
-        item['associations'] = [{'path': str(path), 'kind': item['kind'], 'agent': agent,
+        root_owners = _recorded_root_owners(record, records, task_ids) if main and runtime == 'codex' else []
+        item['associations'] = [{'root_owners': root_owners, 'path': str(path), 'kind': item['kind'], 'agent': agent,
                                  'alias': record.get('alias'), 'parent': record.get('parent'),
                                  'hosted': record.get('hosted'), 'purpose': record.get('purpose'),
                                  'legacy_hosted': is_legacy_hosted_mapping(identity_record),
@@ -120,14 +121,17 @@ def session_sources(state: Path, runner: Path, project: Path) -> list[dict]:
                 association['kind'] == 'main'
                 or (association['legacy_hosted'] and association['purpose'] == 'main')
                 for association in associations))
-            if len(agents) > 1 and not withdrawn_main:
+            established_root = (any(association['root_owners'] for association in main_bindings)
+                                and all(association['kind'] in {'main', 'checker'} for association in associations))
+            if len(agents) > 1 and not withdrawn_main and not established_root:
                 conflicts.append('Different Agent identities claim the same native Session.')
-            if withdrawn_main:
-                # The existing authority rule says these withdrawn hosted records
-                # are not current Agent mappings. Keep their aliases as evidence.
+            if withdrawn_main or established_root:
+                # Reuse established native-root ownership or the withdrawn-hosted
+                # distinction; both historical association records stay as evidence.
                 chosen = item if item['kind'] == 'main' else previous
                 item = {**chosen, 'agent': main_bindings[0]['agent'],
-                        'identity_basis': 'Native Main binding with withdrawn hosted Main evidence.'}
+                        'identity_basis': ('Native Main connection exactly owns a complete retained root mapping; checker history retained.'
+                                           if established_root else 'Native Main binding with withdrawn hosted Main evidence.')}
             elif 'missing' in item and 'missing' not in previous:
                 item = dict(previous)
             item['task_ids'] = sorted(set(item['task_ids'] + previous['task_ids']))
@@ -155,16 +159,60 @@ def session_sources(state: Path, runner: Path, project: Path) -> list[dict]:
             owner = store.header['graphtraj']
             if owner['projectId'] != str(project):
                 continue
-            sources[('archive', store.header['id'])] = {
+            item = {
                 'runtime': owner['native']['runtime'], 'session': owner['native']['sessionId'],
-                'agent': owner['agentId'], 'task_ids': owner['taskIds'],
+                'agent': owner['agentId'], 'task_ids': owner['taskIds'], 'kind': owner.get('source', 'archive'),
                 'archive': str(path), 'archived_events': store.next_seq,
                 'pending': store.pending() is not None, 'archive_only': True,
                 'association': str(path)}
+            source = owner['native'].get('sourcePath')
+            if source:
+                item.update(source=source, archive_only=False)
+                try:
+                    item.update(resolved_source=str(Path(source).resolve(strict=True)), bytes=Path(source).stat().st_size)
+                except OSError as error:
+                    item['missing'] = type(error).__name__ + ': archived native source unavailable.'
+            sources[('archive', store.header['id'])] = item
     return list(sources.values())
 
 
-def archive_sources(state: Path, project: Path, sources: list[dict]) -> list[dict]:
+def _recorded_root_owners(binding: dict, records: dict[Path, dict], task_ids: set[str]) -> list[dict]:
+    """Apply Codex's existing root-ownership predicate to retained metadata only.
+
+    This is the same complete-mapping and exact-connection proof used by
+    owns_native_root/is_bound_checker. It does not contact a Runtime, establish
+    a caller, grant control authority, or expose connection credentials.
+    """
+    from graphtraj.execution.runner_status import ALIAS, NativeCaller, _valid_mapping, is_direct_owner
+
+    connection = binding.get('connection')
+    if (not isinstance(connection, dict) or connection.get('runtime') != 'codex'
+            or connection.get('session') != binding.get('session')
+            or not isinstance(connection.get('codex_home'), str) or not connection['codex_home']):
+        return []
+    owners = []
+    for path, retained in records.items():
+        mapping = retained.get('retirement', {}).get('mapping', retained)
+        normalized = {**mapping, 'task_id': mapping.get('task_id', mapping.get('ticket_id'))}
+        alias = normalized.get('alias')
+        location = path.parent.parent.name if path.parent.name == 'runner' else path.parent.name
+        if (not isinstance(alias, str) or not ALIAS.fullmatch(alias) or alias != location
+                or normalized.get('task_id') not in task_ids
+                or not _valid_mapping(normalized, alias) or normalized.get('parent') is not None):
+            continue
+        if is_direct_owner(NativeCaller(connection['session'], connection), normalized):
+            owners.append({'path': str(path), 'alias': alias, 'task_id': normalized['task_id'],
+                           'connection_matches': True, 'retired': 'retirement' in retained})
+    return owners
+
+
+def archive_sources(
+    state: Path,
+    project: Path,
+    sources: list[dict],
+    *,
+    source_paths: dict[str, Path] | None = None,
+) -> list[dict]:
     """Collect available associated transcripts using existing Runtime collectors.
 
     An unavailable file remains an explicit gap. Malformed or mismatched data
@@ -179,18 +227,23 @@ def archive_sources(state: Path, project: Path, sources: list[dict]) -> list[dic
             result.append(item)
             continue
         runtime, session = item['runtime'], item['session']
-        native = Path(item['source'])
+        original = Path(item['source'])
+        provenance = Path(item.get('resolved_source', str(original)))
+        native = source_paths.get(str(original)) if source_paths is not None else original
+        if native is None:
+            result.append({**item, 'missing': 'Source bytes were not captured; original paths are not read.'})
+            continue
         if runtime == 'codex':
             from graphtraj.runtimes.codex.session_archive import CodexSessionArchive
 
             CodexSessionArchive(state, str(project), item['agent'], session,
-                                tuple(item['task_ids'])).collect(native)
+                                tuple(item['task_ids']), source_paths=source_paths).collect(provenance)
         elif runtime == 'pi':
             from graphtraj.runtimes.pi.collector import PiCollector
 
             collector = PiCollector(state, native, session, project=str(project),
                                     agent=item['agent'], source=item['kind'], tasks=item['task_ids'],
-                                    parent_sources=parent_sources, attachment_root=project)
+                                    parent_sources=parent_sources, attachment_root=project, source_paths=source_paths)
             collector.close()
         elif runtime == 'dsh':
             from graphtraj.runtimes.dsh.collection import collect
@@ -202,7 +255,7 @@ def archive_sources(state: Path, project: Path, sources: list[dict]) -> list[dic
                 records = [{'event': json.loads(line)} for line in stream]
             origin, tasks = item['kind'], item['task_ids']
             if item.get('archive'):
-                with SessionStore(Path(item['archive']), readonly=True) as store:
+                with SessionStore(session_path(state, runtime + ':' + session), readonly=True) as store:
                     owner = store.header['graphtraj']
                     origin, tasks = owner['source'], owner['taskIds']
             collect(state, header, records, project_id=str(project), agent_id=item['agent'],
@@ -213,8 +266,8 @@ def archive_sources(state: Path, project: Path, sources: list[dict]) -> list[dic
             )
 
             with open_archive(state, project, session, item['agent'], source=item['kind'],
-                              task_ids=item['task_ids']) as store:
-                collect_transcript(store, native)
+                              task_ids=item['task_ids'], project_identity=str(project)) as store:
+                collect_transcript(store, native, source_path=provenance)
                 finish_transcript_collection(store, session, terminal=True)
         else:
             result.append({**item, 'missing': 'Unsupported historical Runtime; source retained unchanged.'})

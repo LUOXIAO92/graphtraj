@@ -399,3 +399,47 @@ def test_preview_distinguishes_withdrawn_hosted_main_from_real_conflict(
     assert shared['identity_conflicts'] and len(shared['associations']) == 2
     assert _migrate(installed_commands, tmp_path).returncode != 0
     assert _snapshot(tmp_path) == before
+
+
+def test_historical_checker_can_be_established_native_root(
+    installed_commands: InstalledCommands, tmp_path: Path,
+) -> None:
+    """A complete root's exact native owner is not revoked by its checker history."""
+    import json
+
+    _ticket_project(tmp_path)
+    runner = tmp_path / '.graphtraj/runner'
+    source = tmp_path / 'main.jsonl'
+    source.write_text(json.dumps({'type': 'session_meta', 'payload': {'id': 'shared'}}) + '\n')
+    connection = {'runtime': 'codex', 'session': 'shared', 'codex_home': '/not-scanned'}
+    main = runner / 'main-sessions/main/session.yml'
+    main.parent.mkdir(parents=True)
+    main.write_text(yaml.safe_dump({'runtime': 'codex', 'session': 'shared', 'cwd': str(tmp_path),
+                                   'connection': connection, 'activity': {'trace_file': str(source)}}))
+    owner = runner / 'main-sessions/old-parent/session.yml'
+    owner.parent.mkdir(parents=True)
+    owner.write_text(yaml.safe_dump({'runtime': 'codex', 'session': 'old-parent', 'cwd': str(tmp_path)}))
+    checker = owner.parent / 'checks/shared/session.yml'
+    checker.parent.mkdir(parents=True)
+    checker.write_text(yaml.safe_dump({'runtime': 'codex', 'session': 'shared', 'parent': 'old-parent'}))
+    root = runner / 'sessions/2-child-handover0-engineer@engineer/mapping.yml'
+    root.parent.mkdir(parents=True)
+    mapping = {'alias': '2-child-handover0-engineer@engineer', 'runtime': 'codex', 'session': 'owned-root',
+               'ticket_id': '2', 'team_generation': 1, 'role': 'engineer', 'parent': None,
+               'retained_batch_file': 'batch.yml', 'worktree_path': str(tmp_path),
+               'trace_file': str(tmp_path / 'absent-root.jsonl'), 'worker_pid': 1, 'runtime_pid': 2,
+               'parent_connection': connection}
+    root.write_text(yaml.safe_dump(mapping))
+    command = [str(installed_commands.product), 'migrate-tickets', '--preview']
+    result = run_process(command, cwd=tmp_path)
+    assert result.returncode == 0, result.stderr
+    shared = next(item for item in yaml.safe_load(result.stdout)['sessions'] if item.get('session') == 'shared')
+    assert shared['agent'] == 'main' and not shared.get('identity_conflicts')
+    assert {entry['kind'] for entry in shared['associations']} == {'main', 'checker'}
+    assert next(entry for entry in shared['associations'] if entry['kind'] == 'main')['root_owners']
+    # A different native connection is not equivalent ownership evidence.
+    mapping['parent_connection'] = {**connection, 'codex_home': '/different-not-scanned'}
+    root.write_text(yaml.safe_dump(mapping))
+    result = run_process(command, cwd=tmp_path)
+    shared = next(item for item in yaml.safe_load(result.stdout)['sessions'] if item.get('session') == 'shared')
+    assert shared['identity_conflicts']

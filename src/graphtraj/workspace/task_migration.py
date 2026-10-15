@@ -92,7 +92,13 @@ def migrate_project(cwd: Path, *, preview: bool = False) -> dict[str, Any]:
     configuration = load_project_configuration(cwd)
     harness       = configuration.harness_root
     state         = configuration.state
-    runner        = harness / ".graphtraj" / "runner"
+    from graphtraj.workspace.migration_snapshot import MANIFEST, capture_sources, source_map
+
+    snapshot_file = harness / MANIFEST
+    snapshot = yaml.safe_load(snapshot_file.read_text(encoding="utf-8")) if snapshot_file.is_file() else None
+    project = Path(snapshot["project"]) if snapshot else harness
+    runner = harness / ".graphtraj" / ("migration-runner" if snapshot else "runner")
+    available = source_map(harness, snapshot) if snapshot else None
     if not (state / "tickets").is_dir():
         raise ValueError("No Ticket state exists to convert")
     if (state / "tasks").exists():
@@ -100,14 +106,18 @@ def migrate_project(cwd: Path, *, preview: bool = False) -> dict[str, Any]:
     missing = _missing_parent_facts(state / "tickets")
     from graphtraj.workspace.session_migration import session_sources, archive_sources
 
-    sources = session_sources(state, runner, harness)
+    sources = snapshot["sources"] if snapshot else session_sources(state, runner, project)
     inventory = {
-        "project": str(harness), "state": str(state),
+        "project": str(project), "harness": str(harness), "state": str(state),
+        "snapshot": snapshot is not None,
         "tasks": sorted(p.name for p in (state / "tickets").iterdir() if p.is_dir()),
         "missing_task_facts": missing, "sessions": sources,
         "notices": ["Unassociated Runtime histories are not searched or imported.",
                     "Preview does not read native transcript contents; apply validates native identity."],
     }
+    if snapshot:
+        inventory["captured_sources"] = snapshot["files"]
+        inventory["missing_links"] = snapshot.get("missing_links", [])
     if preview:
         return inventory
     conflicts = [item for item in sources if item.get("identity_conflicts")]
@@ -125,19 +135,26 @@ def migrate_project(cwd: Path, *, preview: bool = False) -> dict[str, Any]:
     shutil.copytree(state, backup / "state", symlinks=True)
     if runner.is_dir():
         shutil.copytree(runner, backup / "runner", symlinks=True)
+    captured = capture_sources(backup / "native-sources", sources, project, available)
+    for item in captured["files"]:
+        if item.get("stored"):
+            item["stored"] = "native-sources/" + item["stored"]
+    captured.update(project=str(project), snapshot=snapshot is not None)
+    (backup / "native-sources.yml").write_text(yaml.safe_dump(captured, sort_keys=False), encoding="utf-8")
     links = _worktree_links(configuration.agent_worktrees)
     (backup / "worktree-links.yml").write_text(
         yaml.safe_dump({str(link): os.readlink(link) for link in links}), encoding="utf-8")
 
     counts = Counts()
     try:
-        archived = archive_sources(state, harness, sources)
+        archived = archive_sources(state, project, sources, source_paths=source_map(backup, captured))
         native_sources = {item["resolved_source"] for item in sources if "resolved_source" in item}
         for root in (state, runner):
             if root.is_dir():
                 _convert_records(root, counts, native_sources)
         _convert_definitions(state / "tickets", counts)
         _move_layout(state, counts)
+        _convert_state_links(state, runner, counts)
         for link in links:
             target = _path(os.readlink(link), counts)
             if target != os.readlink(link):
@@ -155,7 +172,7 @@ def migrate_project(cwd: Path, *, preview: bool = False) -> dict[str, Any]:
         _restore(backup, state, runner, links)
         raise
     return {"backup": backup.relative_to(harness).as_posix(), "converted": dict(counts),
-            "sessions": archived, "tasks": len(graph["tasks"])}
+            "sessions": archived, "tasks": len(graph["tasks"]), "graph": graph}
 
 
 def restore_project(cwd: Path, backup: Path) -> dict[str, str]:
@@ -175,7 +192,12 @@ def restore_project(cwd: Path, backup: Path) -> dict[str, str]:
     if not (backup / "state").is_dir() or not (backup / "worktree-links.yml").is_file():
         raise ValueError("Incomplete migration backup; nothing restored.")
     links = yaml.safe_load((backup / "worktree-links.yml").read_text(encoding="utf-8")) or {}
-    _restore(backup, configuration.state, harness / ".graphtraj/runner", [Path(link) for link in links])
+    from graphtraj.workspace.migration_snapshot import MANIFEST, restore_sources
+
+    snapshot = (harness / MANIFEST).is_file()
+    runner = harness / ".graphtraj" / ("migration-runner" if snapshot else "runner")
+    _restore(backup, configuration.state, runner, [Path(link) for link in links])
+    restore_sources(backup, configuration.state, runner, allow_original=not snapshot)
     return {"restored": str(backup), "next": "Use the previous installed version before resuming writes."}
 
 
@@ -211,7 +233,7 @@ def _convert_records(root: Path, counts: Counts, native_sources: set[str]) -> No
     for path in sorted(root.rglob("*")):
         parts = path.relative_to(root).parts
         if (path.is_symlink() or not path.is_file() or parts[0] == "runs"
-                or (root.name != "runner" and (parts[0] == "sessions" or "rounds" in parts or "integration" in parts))
+                or (root.name not in {"runner", "migration-runner"} and (parts[0] == "sessions" or "rounds" in parts or "integration" in parts))
                 or ("traces" in parts and "runner" not in parts)
                 or str(path.resolve()) in native_sources):
             continue
@@ -334,6 +356,29 @@ def _move_layout(state: Path, counts: Counts) -> None:
                 os.replace(directory / old, directory / new)
                 counts.add("files_renamed")
     os.replace(state / "tickets", state / "tasks")
+
+
+def _convert_state_links(state: Path, runner: Path, counts: Counts) -> None:
+    """Retarget only links into the renamed Task layout, never native external paths."""
+    for root in (state, runner):
+        for link in root.rglob('*'):
+            if not link.is_symlink():
+                continue
+            original = os.readlink(link)
+            target = Path(os.path.abspath(link.parent / original))
+            if not target.is_relative_to(state):
+                continue
+            parts = list(target.relative_to(state).parts)
+            if not parts or parts[0] not in {'tickets', 'tasks'}:
+                continue
+            parts[0] = 'tasks'
+            if len(parts) == 3 and parts[-1] in {'ticket.md', 'ticket.yml'}:
+                parts[-1] = parts[-1].replace('ticket', 'task')
+            updated = state.joinpath(*parts)
+            if updated != target:
+                link.unlink()
+                link.symlink_to(os.path.relpath(updated, link.parent))
+                counts.add('state_links')
 
 
 def _worktree_links(worktrees: Path) -> list[Path]:

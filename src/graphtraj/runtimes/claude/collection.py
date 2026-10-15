@@ -40,15 +40,17 @@ def open_archive(
     child_id: str | None = None,
     fork_parent: str | None = None,
     task_ids: list[str] | None = None,
+    project_identity: str | None = None,
 ) -> SessionStore:
     """Open a stable archive without changing its original collection metadata."""
     identity = 'claude:' + native_id + (':agent:' + child_id if child_id else '')
     path = session_path(state, identity)
     if path.exists():
         return SessionStore(path)
+    origin = project_identity if project_identity is not None else str(project.resolve())
     header = {'version': 4, 'id': identity, 'createdAt': int(time.time() * 1000),
-              'isSeeded': False, 'cwd': str(project.resolve()), 'graphtraj': {
-                  'version': 1, 'projectId': str(project.resolve()), 'agentId': agent_id,
+              'isSeeded': False, 'cwd': origin, 'graphtraj': {
+                  'version': 1, 'projectId': origin, 'agentId': agent_id,
                   'taskIds': task_ids or [], 'native': {'runtime': 'claude', 'sessionId': native_id,
                                            'locator': 'collection', 'source': source},
                   'missing': [{'path': 'createdAt', 'reason': 'Collection creation time; native creation time unavailable.'},
@@ -112,14 +114,20 @@ def fork_source(record: dict, native_id: str) -> dict | None:
     return None
 
 
-def collect_transcript(store: SessionStore, path: Path, *, child_id: str | None = None) -> int:
+def collect_transcript(
+    store: SessionStore,
+    path: Path,
+    *,
+    child_id: str | None = None,
+    source_path: Path | None = None,
+) -> int:
     """Read complete JSONL records once, committing each record and byte cursor.
 
     An incomplete trailing line is replayed on the next hook. No directory scan
     or unrelated Session import is performed. Source paths are retained solely
     as provenance; the archive contains the actual record values.
     """
-    source = 'transcript:' + str(path.resolve())
+    source = 'transcript:' + (str(source_path) if source_path is not None else str(path.resolve()))
     count = 0
     with path.open('rb') as stream:
         stream.seek(max(0, store.position(source)))

@@ -77,6 +77,8 @@ class CodexSessionArchive:
         agent_id: str,
         session_id: str,
         task_ids: tuple[str, ...] = (),
+        *,
+        source_paths: dict[str, Path] | None = None,
     ) -> None:
         """Capture authorized associations without opening a native transcript."""
         self.path = session_path(state, 'codex:' + session_id)
@@ -85,6 +87,7 @@ class CodexSessionArchive:
         self.agent_id = agent_id
         self.session_id = session_id
         self.task_ids = task_ids
+        self.source_paths = source_paths
 
     def seed_fork(self, thread: dict, *, history_excluded: bool = False) -> None:
         """Retain the history returned atomically by native thread/fork.
@@ -247,7 +250,7 @@ class CodexSessionArchive:
                 source = owner['native'].get('sourcePath')
                 if source:
                     CodexSessionArchive(self.state, self.project_id, owner['agentId'],
-                                        owner['native']['sessionId']).collect(Path(source))
+                                        owner['native']['sessionId'], source_paths=self.source_paths).collect(Path(source))
             events = []
             after = -1
             while len(events) < cutoff:
@@ -349,6 +352,14 @@ class CodexSessionArchive:
         Each call closes its database so shutdown and cleanup do not own archive
         lifetime. A malformed complete line fails visibly without skipping it.
         """
+        provenance = str(rollout)
+        if self.source_paths is not None:
+            captured = self.source_paths.get(provenance)
+            if captured is None:
+                raise FileNotFoundError('Native source is not in the captured project set.')
+            rollout = captured
+        else:
+            provenance = str(rollout.resolve())
         with rollout.open('rb') as stream:
             first = stream.readline()
             if not first.endswith(b'\n'):
@@ -373,7 +384,7 @@ class CodexSessionArchive:
                     'graphtraj': {'version': 1, 'projectId': self.project_id,
                                  'agentId': self.agent_id, 'taskIds': list(self.task_ids),
                                  'native': {'runtime': 'codex', 'sessionId': self.session_id,
-                                            'locator': 'byte:0', 'sourcePath': str(rollout.resolve())},
+                                            'locator': 'byte:0', 'sourcePath': provenance},
                                  'missing': missing},
                 }
                 if parent and base:

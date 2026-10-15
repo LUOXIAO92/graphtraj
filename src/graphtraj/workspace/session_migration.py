@@ -23,11 +23,14 @@ def session_sources(state: Path, runner: Path, project: Path) -> list[dict]:
     paths.update(tasks.glob('*/teams/*/traces/*/runner/session.yml'))
     paths.update(runner.glob('main-sessions/*/session.yml'))
     paths.update(runner.glob('main-sessions/*/checks/*/session.yml'))
+    from graphtraj.execution.runner_status import is_legacy_hosted_mapping, is_session_mapping
+
     sources = {}
     aliases = set()
     for path in sorted(paths):
         retained = yaml.safe_load(path.read_text(encoding='utf-8')) or {}
         record = retained.get('retirement', {}).get('mapping', retained)
+        identity_record = {**record, 'task_id': record.get('task_id', record.get('ticket_id'))}
         main = path.parent.parent.name == 'main-sessions'
         checker = path.parent.parent.name == 'checks'
         task = record.get('ticket_id', record.get('task_id'))
@@ -66,16 +69,25 @@ def session_sources(state: Path, runner: Path, project: Path) -> list[dict]:
         item = {'runtime': runtime, 'session': session, 'agent': agent,
                 'task_ids': [task] if task else [], 'kind': 'main' if main else ('checker' if checker else 'member'),
                 'association': str(path), 'source': source}
+        item['associations'] = [{'path': str(path), 'kind': item['kind'], 'agent': agent,
+                                 'alias': record.get('alias'), 'parent': record.get('parent'),
+                                 'hosted': record.get('hosted'), 'purpose': record.get('purpose'),
+                                 'legacy_hosted': is_legacy_hosted_mapping(identity_record),
+                                 'current_mapping': is_session_mapping(identity_record)}]
         archived = session_path(state, runtime + ':' + session)
         if archived.exists():
             with SessionStore(archived, readonly=True) as store:
                 owner = store.header['graphtraj']
                 if owner['projectId'] != str(project):
-                    raise ValueError('Archived Session belongs to another project.')
-                if not main and not checker and agent != owner['agentId']:
-                    raise ValueError('Archived Session has a conflicting Agent association.')
+                    item['identity_conflicts'] = ['Archived Session belongs to another project.']
+                if (not main and not checker and agent != owner['agentId']
+                        and not is_legacy_hosted_mapping(identity_record)):
+                    item['identity_conflicts'] = ['Archived Session has a conflicting Agent association.']
+                item['archive_agent'] = owner['agentId']
                 # Existing canonical provenance is retained, never reconstructed.
-                item['agent'] = agent = owner['agentId']
+                if main or checker:
+                    item['agent'] = agent = owner['agentId']
+                    item['associations'][0]['agent'] = agent
                 item['archive'] = str(archived)
                 item['archived_events'] = store.next_seq
                 item['pending'] = store.pending() is not None
@@ -100,12 +112,28 @@ def session_sources(state: Path, runner: Path, project: Path) -> list[dict]:
         identity = (runtime, session)
         previous = sources.get(identity)
         if previous:
-            if previous['agent'] != agent:
-                raise ValueError(f'Conflicting Agent associations for {runtime}:{session}')
+            associations = previous['associations'] + item['associations']
+            conflicts = previous.get('identity_conflicts', []) + item.get('identity_conflicts', [])
+            agents = {association['agent'] for association in associations}
+            main_bindings = [association for association in associations if association['kind'] == 'main']
+            withdrawn_main = (main_bindings and all(
+                association['kind'] == 'main'
+                or (association['legacy_hosted'] and association['purpose'] == 'main')
+                for association in associations))
+            if len(agents) > 1 and not withdrawn_main:
+                conflicts.append('Different Agent identities claim the same native Session.')
+            if withdrawn_main:
+                # The existing authority rule says these withdrawn hosted records
+                # are not current Agent mappings. Keep their aliases as evidence.
+                chosen = item if item['kind'] == 'main' else previous
+                item = {**chosen, 'agent': main_bindings[0]['agent'],
+                        'identity_basis': 'Native Main binding with withdrawn hosted Main evidence.'}
+            elif 'missing' in item and 'missing' not in previous:
+                item = dict(previous)
             item['task_ids'] = sorted(set(item['task_ids'] + previous['task_ids']))
-            if 'missing' in item and 'missing' not in previous:
-                previous['task_ids'] = item['task_ids']
-                continue
+            item['associations'] = associations
+            if conflicts:
+                item['identity_conflicts'] = list(dict.fromkeys(conflicts))
         sources[identity] = item
     # Team membership without a surviving binding is a gap, not an invented ID.
     for team_path in sorted(tasks.glob('*/teams/*/team.yml')):

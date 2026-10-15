@@ -361,3 +361,41 @@ def test_migration_preserves_acceptance_and_different_remote_number(
     assert child['delivery'][0]['event_id'] == accepted['event_id']
     assert child['delivery'][0]['reason'] == 'ticket-completed'
     assert child['delivery'][0]['evidence_refs'] == [evidence.replace('/tickets/', '/tasks/')]
+
+
+def test_preview_distinguishes_withdrawn_hosted_main_from_real_conflict(
+    installed_commands: InstalledCommands, tmp_path: Path,
+) -> None:
+    """Shared historical Main provenance is not an ordinary Agent identity collision."""
+    import json
+
+    _ticket_project(tmp_path)
+    source = tmp_path / 'main.jsonl'
+    source.write_text(json.dumps({'type': 'session_meta', 'payload': {'id': 'shared'}}) + '\n')
+    runner = tmp_path / '.graphtraj/runner'
+    main = runner / 'main-sessions/main/session.yml'
+    main.parent.mkdir(parents=True)
+    main.write_text(yaml.safe_dump({'runtime': 'codex', 'session': 'shared', 'cwd': str(tmp_path),
+                                   'activity': {'trace_file': str(source)}}))
+    old = runner / 'sessions/old-main/mapping.yml'
+    old.parent.mkdir(parents=True)
+    mapping = {'runtime': 'codex', 'session': 'shared', 'ticket_id': '2',
+               'alias': 'old-main', 'hosted': True, 'purpose': 'main', 'trace_file': str(source)}
+    old.write_text(yaml.safe_dump(mapping))
+    command = [str(installed_commands.product), 'migrate-tickets', '--preview']
+    result = run_process(command, cwd=tmp_path)
+    assert result.returncode == 0, result.stderr
+    shared = next(item for item in yaml.safe_load(result.stdout)['sessions'] if item.get('session') == 'shared')
+    assert shared['agent'] == 'main' and len(shared['associations']) == 2
+    assert not shared.get('identity_conflicts')
+    # Without the recorded withdrawn-hosted classification this is a real
+    # unresolved conflict. Preview still yields metadata; apply changes nothing.
+    mapping.pop('hosted')
+    old.write_text(yaml.safe_dump(mapping))
+    before = _snapshot(tmp_path)
+    conflict = run_process(command, cwd=tmp_path)
+    assert conflict.returncode == 0, conflict.stderr
+    shared = next(item for item in yaml.safe_load(conflict.stdout)['sessions'] if item.get('session') == 'shared')
+    assert shared['identity_conflicts'] and len(shared['associations']) == 2
+    assert _migrate(installed_commands, tmp_path).returncode != 0
+    assert _snapshot(tmp_path) == before

@@ -110,6 +110,9 @@ def migrate_project(cwd: Path, *, preview: bool = False) -> dict[str, Any]:
     }
     if preview:
         return inventory
+    conflicts = [item for item in sources if item.get("identity_conflicts")]
+    if conflicts:
+        raise ValueError("Conflicting Session associations; inspect migrate-tickets --preview metadata before applying.")
     if missing:
         raise ValueError("Legacy definitions lack required Task facts; revise them to complete "
                          "v2 definitions first: " + "; ".join(

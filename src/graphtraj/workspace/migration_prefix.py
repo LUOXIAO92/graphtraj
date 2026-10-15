@@ -7,9 +7,10 @@ import hashlib
 import json
 from pathlib import Path
 import shutil
-from uuid import UUID
 
 import yaml
+
+from graphtraj.runtimes.codex.physical_history import rollout_identity, locate_physical_rollout, open_physical_rollout
 
 from graphtraj.configuration.project_configuration import load_project_configuration
 from graphtraj.workspace.session_migration import session_sources
@@ -30,27 +31,6 @@ def _metadata(path: Path, session: str) -> tuple[dict, int | None]:
         raise ValueError('Native Session header is incomplete.')
     return metadata, record.get('ordinal')
 
-
-def rollout_identity(path: Path) -> tuple[str, str]:
-    """Read Codex's documented logical/physical IDs from a canonical basename.
-
-    This is only one check: native metadata and the actual first header must
-    independently agree before any bounded content acquisition is allowed.
-    """
-    name = path.name
-    if not name.startswith('rollout-') or not name.endswith('.jsonl'):
-        raise ValueError('Declared physical source lacks a canonical uncompressed rollout name.')
-    core = name[8:-6]
-    try:
-        datetime.strptime(core[:19], '%Y-%m-%dT%H-%M-%S')
-        if core[19:20] != '-':
-            raise ValueError
-        ids = core[20:].split('_')
-        if len(ids) not in (1, 2):
-            raise ValueError
-        return str(UUID(ids[0])), str(UUID(ids[-1]))
-    except (ValueError, IndexError):
-        raise ValueError('Invalid canonical logical/physical rollout identity.') from None
 
 
 def declared_prefix(metadata: dict) -> dict:
@@ -196,13 +176,19 @@ def inspect_prefix(
         raise
 
 
-def capture_prefix_chain(cwd: Path, session: str, expected: tuple[str, int, int], destination: Path) -> dict:
+def capture_prefix_chain(
+    cwd: Path,
+    session: str,
+    expected: tuple[str, int, int],
+    destination: Path,
+    retained: Path | None = None,
+) -> dict:
     """Capture only the decreasing chain declared by canonical source headers.
 
-    Every physical source must resolve through the same owning daemon, have a
-    matching canonical physical/logical name and header, and retain an existing
-    project association. No filename search, third-party path or guessed parent
-    is accepted. A partial result preserves acquired segments with complete=false.
+    A continuation verifies and copies retained segments, then locates only exact
+    declared physical IDs inside the owning connection's sessions directory.
+    Native logical ownership and header/boundary checks remain mandatory.
+    A partial result preserves acquired segments with complete=false.
     """
     from graphtraj.runtimes.codex.finalize import proxy
     from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
@@ -228,6 +214,8 @@ def capture_prefix_chain(cwd: Path, session: str, expected: tuple[str, int, int]
               'history_base': dict(zip(('thread_id', 'end_ordinal_exclusive', 'end_byte_offset'), expected)),
               'segments': [], 'complete': False}
 
+    previous_capture = verify_partial_chain(project, session, retained) if retained else None
+
     async def capture() -> None:
         """Read only each real header's next edge and its bounded physical segment."""
         async with proxy(connection) as client:
@@ -235,44 +223,93 @@ def capture_prefix_chain(cwd: Path, session: str, expected: tuple[str, int, int]
             path = Path(current.get('path') or '')
             if current.get('id') != session or not path.is_absolute():
                 raise ValueError('Native Main source is unavailable.')
-            metadata, _ = _metadata(path, session)
+            if retained is not None:
+                if current.get('cwd') != str(project) or current.get('historyMode') != 'paginated':
+                    raise ValueError('Owning Main metadata does not match this paginated project Session.')
+                with open_physical_rollout(Path(connection['codex_home']), path) as stream:
+                    record = json.loads(stream.readline())
+                metadata = record.get('payload', {})
+                if (record.get('type') != 'session_meta' or metadata.get('id') != session
+                        or metadata.get('cwd') != str(project) or metadata.get('history_mode') != 'paginated'):
+                    raise ValueError('Owning Main header does not match its native project identity.')
+            else:
+                metadata, _ = _metadata(path, session)
             base = declared_prefix(metadata)
             if base != result['history_base']:
                 raise ValueError('Main declaration differs from the exact authorized initial prefix.')
             result['forked_from_id'] = metadata.get('forked_from_id')
             result['logical_fork_cut'] = metadata.get('forked_from_ordinal_exclusive')
             visited = set()
+            if previous_capture is not None and (previous_capture['history_base'] != base
+                                                 or previous_capture.get('agent') != main['agent']):
+                raise ValueError('Retained chain differs from the current Main declaration.')
             destination.mkdir(mode=0o700, parents=True)
+            if previous_capture is not None:
+                for item in previous_capture['segments']:
+                    owner = owned.get(item['source_logical_session'])
+                    if (owner is None or item.get('source_agent') != owner['agent']
+                            or rollout_identity(Path(item['source'])) != (
+                                item['source_logical_session'], item['source_rollout'])):
+                        raise ValueError('Retained source no longer has matching physical/project ownership.')
+                    local = destination / (item['source_rollout'] + '.jsonl')
+                    shutil.copyfile(retained.parent / item['stored'], local)
+                    local.chmod(0o600)
+                    with local.open('rb') as stream:
+                        if hashlib.file_digest(stream, 'sha256').hexdigest() != item['sha256']:
+                            raise ValueError('Retained source changed during continuation copy.')
+                    result['segments'].append({**item, 'stored': local.name})
+                    visited.add(item['source_rollout'])
+                base = previous_capture['next_reference']
+                result['reused_segments'] = len(result['segments'])
             while True:
                 if base['thread_id'] in visited:
                     raise ValueError('Declared physical inheritance chain contains a cycle.')
                 visited.add(base['thread_id'])
                 result['next_reference'] = base
-                observed = await client.inspect_thread_reference(base['thread_id'])
+                if retained is not None:
+                    source = locate_physical_rollout(Path(connection['codex_home']), base['thread_id'])
+                    logical, _ = rollout_identity(source)
+                    if logical not in owned:
+                        raise ValueError('Declared physical source has no existing project Session association.')
+                    observed = await client.inspect_thread_reference(logical)
+                    if observed.get('id') != logical:
+                        raise ValueError('Native logical ownership differs from the physical source identity.')
+                else:
+                    observed = await client.inspect_thread_reference(base['thread_id'])
+                    source = Path(observed.get('path') or '')
                 logical = observed.get('id')
                 owner = owned.get(logical)
-                source = Path(observed.get('path') or '')
                 if (owner is None or not source.is_absolute()
                         or observed.get('cwd') != str(project) or observed.get('historyMode') != 'paginated'
                         or rollout_identity(source) != (logical, base['thread_id'])):
                     raise ValueError('Declared physical source lacks matching native/project ownership metadata.')
-                header, first_ordinal = _metadata(source, logical)
-                if (header.get('cwd') != str(project) or header.get('history_mode') != 'paginated'
-                        or header.get('forked_from_id') != observed.get('forkedFromId')
-                        or type(first_ordinal) is not int or not 0 <= first_ordinal < base['end_ordinal_exclusive']):
-                    raise ValueError('Declared source header conflicts with its native metadata or ordinal cut.')
                 local = destination / (base['thread_id'] + '.jsonl')
                 digest = hashlib.sha256()
                 remaining = base['end_byte_offset']
-                with source.open('rb') as reader, local.open('xb') as writer:
-                    local.chmod(0o600)
-                    while remaining:
-                        block = reader.read(min(1024 * 1024, remaining))
-                        if not block:
-                            raise ValueError('Declared source is shorter than its bounded prefix.')
-                        writer.write(block)
-                        digest.update(block)
-                        remaining -= len(block)
+                source_reader = (open_physical_rollout(Path(connection['codex_home']), source)
+                                 if retained is not None else source.open('rb'))
+                with source_reader as reader:
+                    line = reader.readline()
+                    record = json.loads(line)
+                    header = record.get('payload', {})
+                    first_ordinal = record.get('ordinal')
+                    if (not line.endswith(b'\n') or record.get('type') != 'session_meta'
+                            or header.get('id') != logical or header.get('cwd') != str(project)
+                            or header.get('history_mode') != 'paginated'
+                            or header.get('forked_from_id') != observed.get('forkedFromId')
+                            or type(first_ordinal) is not int
+                            or not 0 <= first_ordinal < base['end_ordinal_exclusive']):
+                        raise ValueError('Declared source header conflicts with native ownership or ordinal cut.')
+                    reader.seek(0)
+                    with local.open('xb') as writer:
+                        local.chmod(0o600)
+                        while remaining:
+                            block = reader.read(min(1024 * 1024, remaining))
+                            if not block:
+                                raise ValueError('Declared source is shorter than its bounded prefix.')
+                            writer.write(block)
+                            digest.update(block)
+                            remaining -= len(block)
                 captured_header, captured_first = _metadata(local, logical)
                 if captured_header != header or captured_first != first_ordinal:
                     raise ValueError('Native source header changed during bounded capture.')
@@ -412,16 +449,8 @@ def adopt_prefix_chain(cwd: Path, session: str, manifest: Path) -> dict:
             'segments': len(segments), 'backup': backup.relative_to(configuration.harness_root).as_posix(),
             'logical_parent': header.get('parentSession'), 'pending': False}
 
-def diagnose_next_prefix(cwd: Path, session: str, manifest: Path) -> dict:
-    """Diagnose only a verified partial capture's next declared native reference.
-
-    Retained bytes authenticate the chain and boundary before any daemon query.
-    The returned native source is never opened, even when its identity matches.
-    """
-    from graphtraj.runtimes.codex.finalize import proxy
-
-    configuration = load_project_configuration(cwd)
-    project = configuration.harness_root
+def verify_partial_chain(project: Path, session: str, manifest: Path) -> dict:
+    """Verify retained bytes and the exact next header declaration without source access."""
     chain = yaml.safe_load(manifest.read_text(encoding='utf-8'))
     if (not isinstance(chain, dict) or chain.get('project') != str(project)
             or chain.get('session') != session or chain.get('complete') is not False
@@ -461,6 +490,22 @@ def diagnose_next_prefix(cwd: Path, session: str, manifest: Path) -> dict:
             raise ValueError('Retained declaration does not meet the preceding boundary.')
     if edge != chain.get('next_reference') or edge['thread_id'] in visited:
         raise ValueError('Next reference conflicts with the retained declaration or forms a cycle.')
+
+    return chain
+
+
+def diagnose_next_prefix(cwd: Path, session: str, manifest: Path) -> dict:
+    """Diagnose only a verified partial capture's next declared native reference.
+
+    Retained bytes authenticate the chain and boundary before any daemon query.
+    The returned native source is never opened, even when its identity matches.
+    """
+    from graphtraj.runtimes.codex.finalize import proxy
+
+    configuration = load_project_configuration(cwd)
+    project = configuration.harness_root
+    chain = verify_partial_chain(project, session, manifest)
+    edge = chain['next_reference']
 
     inventory = session_sources(configuration.state, project / '.graphtraj/runner', project)
     owned = {item['session']: item for item in inventory

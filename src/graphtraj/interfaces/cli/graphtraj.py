@@ -185,3 +185,23 @@ def migration_prefix_next_command(session: str, manifest: Path) -> None:
     except (OSError, ValueError, yaml.YAMLError, RunnerError) as error:
         raise click.ClickException(str(error)) from error
     click.echo(yaml.safe_dump(result, sort_keys=False), nl=False)
+
+
+@main.command("migration-prefix-continue")
+@click.option("--session", required=True)
+@click.option("--manifest", type=click.Path(path_type=Path, exists=True, dir_okay=False), required=True)
+@click.option("--capture", type=click.Path(path_type=Path), required=True)
+def migration_prefix_continue_command(session: str, manifest: Path, capture: Path) -> None:
+    """Continue a verified capture by exact physical names in the owning sessions directory."""
+    from graphtraj.workspace.migration_prefix import capture_prefix_chain
+
+    try:
+        chain = yaml.safe_load(manifest.read_text(encoding='utf-8'))
+        base = chain['history_base']
+        expected = (base['thread_id'], base['end_ordinal_exclusive'], base['end_byte_offset'])
+        result = capture_prefix_chain(Path.cwd(), session, expected, capture, retained=manifest)
+    except (OSError, ValueError, KeyError, TypeError, yaml.YAMLError, RunnerError) as error:
+        raise click.ClickException(str(error)) from error
+    click.echo(yaml.safe_dump(result, sort_keys=False), nl=False)
+    if not result['complete']:
+        raise click.exceptions.Exit(1)

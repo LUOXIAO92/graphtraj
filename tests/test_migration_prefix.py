@@ -416,3 +416,149 @@ def test_next_diagnostic_reuses_capture_and_reports_physical_mismatch(tmp_path: 
     segment.write_bytes(data.replace(b'paginated', b'altered!!'))
     assert CliRunner().invoke(main, command).exit_code != 0
     assert calls == ['main', main_id]
+
+
+def _retained_local_chain(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict:
+    """Provide a same-logical-ID old physical segment and an already captured newer segment."""
+    import hashlib
+
+    tmp_path = tmp_path.resolve()
+    logical = '11111111-1111-4111-8111-111111111111'
+    newer_id = '22222222-2222-4222-8222-222222222222'
+    selected_id = '33333333-3333-4333-8333-333333333333'
+    root = tmp_path / 'project'
+    root.mkdir()
+    _ticket_project(root)
+    home = tmp_path / 'runtime'
+    directory = home / 'sessions/2026/10/12'
+    directory.mkdir(parents=True)
+    source = directory / f'rollout-2026-10-12T05-52-41-{logical}.jsonl'
+    current = directory / f'rollout-2026-10-12T05-52-42-{logical}_{selected_id}.jsonl'
+
+    def records(start: int, base: dict | None) -> bytes:
+        """Keep original ordinals and ciphertext exactly, without treating storage cuts as fork cuts."""
+        header = {'id': logical, 'cwd': str(root), 'history_mode': 'paginated'}
+        if base:
+            header['history_base'] = base
+        return (json.dumps({'type': 'session_meta', 'ordinal': start, 'payload': header}) + '\n'
+                + json.dumps({'type': 'response_item', 'ordinal': start + 1,
+                              'payload': {'encrypted_content': 'retained-exactly'}}) + '\n').encode()
+
+    older = records(0, None)
+    source.write_bytes(older + b'not-part-of-authorized-prefix')
+    next_edge = {'thread_id': logical, 'end_ordinal_exclusive': 2, 'end_byte_offset': len(older)}
+    newer = records(2, next_edge)
+    initial = {'thread_id': newer_id, 'end_ordinal_exclusive': 4, 'end_byte_offset': len(newer)}
+    current.write_bytes(records(4, initial))
+    retained = tmp_path / 'retained'
+    retained.mkdir()
+    (retained / 'newer.jsonl').write_bytes(newer)
+    # This captured segment's original file is deliberately absent.
+    chain = {'version': 1, 'project': str(root), 'session': logical, 'agent': 'main',
+             'complete': False, 'history_base': initial, 'next_reference': next_edge,
+             'segments': [{'stored': 'newer.jsonl', 'source_rollout': newer_id,
+                           'source_logical_session': logical, 'source_agent': 'main',
+                           'source': str(directory / f'rollout-2026-10-12T05-52-40-{logical}_{newer_id}.jsonl'),
+                           'first_ordinal': 2, 'end_ordinal_exclusive': 4, 'bytes': len(newer),
+                           'sha256': hashlib.sha256(newer).hexdigest(), 'history_base': next_edge,
+                           'records': 2}]}
+    manifest = retained / 'chain.yml'
+    manifest.write_text(yaml.safe_dump(chain))
+    binding = root / '.graphtraj/runner/main-sessions/owned/session.yml'
+    binding.parent.mkdir(parents=True)
+    binding.write_text(yaml.safe_dump({'runtime': 'codex', 'session': logical, 'cwd': str(root),
+        'activity': {'trace_file': str(current)},
+        'connection': {'runtime': 'codex', 'session': logical, 'codex_home': str(home)}}))
+    calls = []
+
+    class Host:
+        """The daemon resolves the logical ID to its newer selected physical file."""
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        async def read_thread(self, identity: str) -> dict:
+            calls.append(identity)
+            assert identity == logical
+            return {'id': logical, 'path': str(current), 'cwd': str(root), 'historyMode': 'paginated'}
+
+        async def inspect_thread_reference(self, identity: str) -> dict:
+            return await self.read_thread(identity)
+
+    monkeypatch.setattr('graphtraj.runtimes.codex.finalize.proxy', lambda connection: Host())
+    monkeypatch.chdir(root)
+    command = ['migration-prefix-continue', '--session', logical, '--manifest', str(manifest)]
+    return locals()
+
+
+def test_public_continuation_locates_exact_physical_id_without_recapturing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Reuse immutable captures and read only the exact physical match inside sessions."""
+    fixture = _retained_local_chain(tmp_path, monkeypatch)
+    source, home = fixture['source'], fixture['home']
+    outside = tmp_path / 'outside'
+    outside.mkdir()
+    (outside / source.name).write_text('not-authorized')
+    (home / 'sessions/linked').symlink_to(outside, target_is_directory=True)
+    (home / 'archived_sessions').mkdir()
+    (home / 'archived_sessions' / source.name).write_text('not-authorized')
+    (source.parent / 'rollout-2026-10-12T05-52-41-99999999-9999-4999-8999-999999999999.jsonl').write_text('not-json')
+    before = _snapshot(fixture['retained'])
+    original = source.read_bytes()
+    destination = tmp_path / 'continued'
+    result = CliRunner().invoke(main, fixture['command'] + ['--capture', str(destination)])
+    assert result.exit_code == 0, result.output
+    facts = yaml.safe_load(result.output)
+    assert facts['complete'] is True and facts['reused_segments'] == 1
+    assert facts['captured_records'] == 4 and len(facts['segments']) == 2
+    assert facts['segments'][-1]['source_rollout'] == fixture['logical']
+    assert (destination / (fixture['logical'] + '.jsonl')).read_bytes() == fixture['older']
+    assert (destination / (fixture['newer_id'] + '.jsonl')).read_bytes() == fixture['newer']
+    assert _snapshot(fixture['retained']) == before and source.read_bytes() == original
+    assert fixture['calls'] == [fixture['logical'], fixture['logical']]
+    assert 'retained-exactly' not in result.output
+
+
+@pytest.mark.parametrize('failure', ['duplicate', 'symlink_file', 'symlink_root', 'wrong_header', 'wrong_project', 'split_cut', 'cycle'])
+def test_public_continuation_refuses_ambiguous_or_unowned_sources(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure: str,
+) -> None:
+    """Do not choose among matches or promote a source with contradictory identity/bounds."""
+    fixture = _retained_local_chain(tmp_path, monkeypatch)
+    source = fixture['source']
+    original = source.read_bytes()
+    if failure == 'duplicate':
+        duplicate = source.parent / ('rollout-2026-10-12T05-52-43-' + fixture['logical'] + '.jsonl')
+        duplicate.write_bytes(original)
+    elif failure == 'symlink_file':
+        outside = tmp_path / 'outside.jsonl'
+        outside.write_bytes(original)
+        source.unlink()
+        source.symlink_to(outside)
+    elif failure == 'symlink_root':
+        sessions = fixture['home'] / 'sessions'
+        moved = fixture['home'] / 'moved'
+        sessions.rename(moved)
+        sessions.symlink_to(moved, target_is_directory=True)
+    elif failure == 'wrong_header':
+        source.write_bytes(original.replace(fixture['logical'].encode(), fixture['newer_id'].encode(), 1))
+    elif failure == 'wrong_project':
+        source.write_bytes(original.replace(str(fixture['root']).encode(), b'/unrelated', 1))
+    elif failure == 'split_cut':
+        source.write_bytes(fixture['older'][:-1] + b'x')
+    else:
+        header, text = fixture['older'].split(b'\n', 1)
+        record = json.loads(header)
+        record['payload']['history_base'] = fixture['next_edge']
+        source.write_bytes(json.dumps(record).encode() + b'\n' + text)
+    before = _snapshot(fixture['retained'])
+    result = CliRunner().invoke(main, fixture['command'] + ['--capture', str(tmp_path / 'failed')])
+    assert result.exit_code != 0, result.output
+    if failure == 'symlink_root':
+        assert not (tmp_path / 'failed').exists()
+    else:
+        facts = yaml.safe_load(result.output)
+        assert facts['complete'] is False and facts['reused_segments'] == 1
+    assert _snapshot(fixture['retained']) == before
+    assert 'retained-exactly' not in result.output

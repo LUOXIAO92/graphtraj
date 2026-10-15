@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import os
+import math
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Callable, Collection, Iterator, Mapping
 
 from graphtraj.execution.runner_connection import connection_operation, worker_connection
 from graphtraj.execution.runner_models import RunnerError
+from graphtraj.execution.runner_process import OPERATION_TIMEOUT_SECONDS
 from graphtraj.execution.runner_status import process_caller_alias, read_alias_mapping, runtime_caller
 from graphtraj.interfaces.gateway import handle_request
 from graphtraj.interfaces.tools import ToolResult
@@ -103,8 +105,16 @@ def forward_request(request: Mapping[str, Any], cwd: Path) -> ToolResult | None:
         return None
     if not address:
         raise RunnerError('operation-unavailable', 'The Session CLI host connection is unavailable.')
+    response_timeout = OPERATION_TIMEOUT_SECONDS
+    if request.get('action') == 'execute' and request.get('feature') == 'parent_status':
+        arguments = request.get('arguments', {})
+        observation = arguments.get('timeout_seconds', 0) if isinstance(arguments, Mapping) else 0
+        # Invalid arguments still reach the authenticated gateway for rejection;
+        # they must never extend the client's transport deadline.
+        if type(observation) in (int, float) and math.isfinite(observation) and observation >= 0:
+            response_timeout += observation
     response = connection_operation(address, {
         'cwd': str(cwd.resolve()),
         'request': request,
-    }, authenticate=True)
+    }, authenticate=True, response_timeout=response_timeout)
     return ToolResult(response['document'], failed=response['failed'])

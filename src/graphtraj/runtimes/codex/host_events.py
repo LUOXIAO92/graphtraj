@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
-from contextlib import contextmanager
+import time
+from contextlib import ExitStack, contextmanager
 from contextvars import ContextVar
 from datetime import datetime, timezone
 from pathlib import Path
@@ -158,7 +160,7 @@ def current_connection() -> dict | None:
 def send_event(connection: Mapping[str, Any], event: dict[str, str]) -> dict:
     """Use a bounded proxy connection to the existing service for this event only."""
     from graphtraj.runtimes.codex.app_server import CodexAppServer
-    from graphtraj.workspace.runner_project import runtime_executable
+    from graphtraj.workspace.runner_project import discover_project_root, runtime_executable
 
     if (set(event) != {'source', 'alias', 'event', 'message'}
             or event['source'] != 'graphtraj'
@@ -168,7 +170,7 @@ def send_event(connection: Mapping[str, Any], event: dict[str, str]) -> dict:
            for key in ('session', 'codex_home')):
         raise RuntimeAdapterError('operation-failed', 'Invalid owning Codex connection')
 
-    async def forward() -> dict:
+    async def forward(receipts: ExitStack) -> dict:
         """Closing the proxy leaves the daemon and its original thread running."""
         async with CodexAppServer(
             cwd=Path.cwd(),
@@ -176,6 +178,41 @@ def send_event(connection: Mapping[str, Any], event: dict[str, str]) -> dict:
             environment={'CODEX_HOME': connection['codex_home']},
             experimental_api=True,
         ) as client:
-            return await client.send_host_event(connection['session'], event)
+            from graphtraj.execution.main_finalize import session_binding
+            from graphtraj.execution.runner_models import RunnerError
 
-    return asyncio.run(forward())
+            # Capture before submission: a delayed acknowledgement must never
+            # invalidate a newer fork that already includes this notification.
+            pending = []
+            try:
+                # Completion senders run in their assigned Worktree, whereas
+                # Main's binding belongs to the containing Harness Project.
+                root = discover_project_root(Path.cwd())
+                directory = session_binding(root, 'codex', connection['session']).parent
+            except RunnerError:
+                directory = None  # This host has no project completion binding.
+            if directory is not None:
+                for path in directory.glob('pending-*/turn'):
+                    try:
+                        # Open the existing address before sending. Cleanup may
+                        # unlink it during the request; an open descriptor cannot
+                        # recreate it or accidentally target the next check.
+                        stream = receipts.enter_context(os.fdopen(
+                            os.open(path, os.O_RDWR | os.O_APPEND), 'r+', encoding='utf-8',
+                        ))
+                        pending.append((stream, stream.readline().strip()))
+                    except FileNotFoundError:
+                        pass  # The check ended before submission.
+            submitted_at = time.time()
+            result = await client.send_host_event(connection['session'], event)
+            accepted_at = time.time()
+            for stream, turn in pending:
+                if result['turn']['id'] != turn:
+                    continue
+                stream.write(json.dumps({'turn': turn, 'submitted_at': submitted_at,
+                                         'accepted_at': accepted_at}) + '\n')
+                stream.flush()
+            return result
+
+    with ExitStack() as receipts:
+        return asyncio.run(forward(receipts))

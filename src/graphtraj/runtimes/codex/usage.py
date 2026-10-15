@@ -35,19 +35,22 @@ async def latest_check_usage(client: CodexAppServer, association: dict) -> dict:
         if child.get('runtime') != 'codex' or child.get('parent') != owner.get('session'):
             return {'status': 'association-mismatch'}
         execution = yaml.safe_load(latest.read_text())
-        if execution.get('session') == child['session'] and 'response_usage' in execution:
+        if execution.get('session') == child['session'] and 'usage' in execution:
             if execution.get('parent') != owner.get('session'):
                 return {'status': 'association-mismatch'}
             configuration = execution.get('configuration', {})
             return {'status': 'observed', 'session': child['session'],
                     'parent': execution['parent'], 'parent_turn': execution.get('parent_turn'),
                     'turn': execution.get('turn'), 'usage': execution.get('usage'),
-                    'response_usage': execution['response_usage'],
+                    'response_usage': execution.get('response_usage'),
                     'configuration': configuration_facts(configuration),
                     'parent_configuration': configuration_facts(execution.get('parent_configuration', {})),
                     'native_identity': {key: configuration.get('thread', {})[key] for key in (
                         'id', 'sessionId', 'forkedFromId', 'ephemeral', 'historyMode', 'cliVersion',
                     ) if key in configuration.get('thread', {})},
+                    'cancellation': {key: execution['cancellation'][key] for key in (
+                        'turn', 'submitted_at', 'accepted_at', 'confirmed_at',
+                    ) if key in execution.get('cancellation', {})},
                     'outcome': execution.get('outcome')}
         thread = await client.read_thread(child['session'])
         state = await client.read_host_status(child['session'])

@@ -21,6 +21,10 @@ Run `graphtraj task register --task-file <task.yml>` with:
   have a reason and no replacements. Both retain their parent.
 
 Read `graphtraj task graph --schema` for the common task projection schema.
+The default graph expands open work in the caller's Task, or the whole project
+for Main, and folds completed history into summaries. Use `--view full` to list
+all Tasks, `--task-id <id>` to select another scope, or `--details <id>` to include
+full definitions and execution facts.
 Children, progress and `active` are derived. Existing Tasks use their
 `current_definition`; `task.md` is the immutable initial
 definition. Do not register an existing Task again.

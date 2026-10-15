@@ -111,10 +111,13 @@ not required for every kind of work.
 These commands give you an overview from the project root:
 
 ```sh
-graphtraj task graph    # Tasks, dependencies and readiness
+graphtraj task graph      # Open work with folded history
 agent-runner status      # Agent tree and current activity
 graphtraj worldline read # Recorded project events
 ```
+
+Use `--view full` to list every Task, `--task-id <id>` to select a scope,
+or `--details <id>` to include definitions and execution facts.
 
 For direct CLI use, start with `graphtraj --help` and `agent-runner --help`.
 Individual command help includes its input schema; the

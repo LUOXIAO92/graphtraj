@@ -195,27 +195,43 @@ class SessionStore:
         The existing draft is queryable and exported with the archive. This seam
         cannot reopen initialization after any canonical event has committed.
         """
-        event = snapshot_event(event)
+        return bool(self.stage_initial_observations([
+            {'event': event, 'source': source, 'position': position}]))
+
+    def stage_initial_observations(self, observations: list[dict]) -> int:
+        """Atomically retain a batch, deduplicating each durable source cursor.
+
+        Offline imports serialize the growing initial draft once per batch,
+        instead of once per native line. A failed batch advances no cursors.
+        """
         with self._transaction():
             if self.next_seq:
                 raise ValueError('Canonical collection has already started.')
-            if not self._fresh(source, position):
-                return False
             pending = self.pending()
             if pending and pending['event']['type'] != INITIAL_COLLECTION_TYPE:
                 raise ValueError('Another unfinished collection occupies the draft.')
-            draft = pending['event'] if pending else {
-                'type': INITIAL_COLLECTION_TYPE, 'seq': 0, 'time': event['time'],
-                'data': {'observations': []}, 'graphtraj': {
-                    'version': 1, 'initialHeader': self.header,
-                    'missing': [{'path': 'parentSession/isSeeded',
-                                 'reason': 'Native ancestry and inherited cut not yet confirmed.'}]}}
-            draft['data']['observations'].append({
-                'source': source, 'position': position, 'event': event})
-            self.db.execute('INSERT OR REPLACE INTO draft VALUES (1, ?, ?)',
-                            ('initial-collection', _json(draft)))
-            self._advance(source, position)
-        return True
+            draft = pending['event'] if pending else None
+            added = 0
+            for observation in observations:
+                source, position = observation['source'], observation['position']
+                if not self._fresh(source, position):
+                    continue
+                event = snapshot_event(observation['event'])
+                if draft is None:
+                    draft = {
+                        'type': INITIAL_COLLECTION_TYPE, 'seq': 0, 'time': event['time'],
+                        'data': {'observations': []}, 'graphtraj': {
+                            'version': 1, 'initialHeader': self.header,
+                            'missing': [{'path': 'parentSession/isSeeded',
+                                         'reason': 'Native ancestry and inherited cut not yet confirmed.'}]}}
+                draft['data']['observations'].append({
+                    'source': source, 'position': position, 'event': event})
+                self._advance(source, position)
+                added += 1
+            if added:
+                self.db.execute('INSERT OR REPLACE INTO draft VALUES (1, ?, ?)',
+                                ('initial-collection', _json(draft)))
+        return added
 
     def finish_initial_collection(
         self,

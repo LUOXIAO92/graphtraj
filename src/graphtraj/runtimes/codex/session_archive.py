@@ -286,10 +286,12 @@ class CodexSessionArchive:
                 event['seq'] = seq
         if store.pending() is not None:
             inherited = []
+            observations = []
             for index, event in enumerate(events):
                 position = base['end_byte_offset'] if index == len(events) - 1 else index
-                store.stage_initial_observation(event, source='history-base', position=position)
+                observations.append({'event': event, 'source': 'history-base', 'position': position})
                 inherited.append(('history-base', position))
+            store.stage_initial_observations(observations)
             store.finish_initial_collection(parent_session=store.header['parentSession'], inherited=inherited)
         else:
             events.append({'type': 'session/end-seed', 'seq': len(events),
@@ -347,18 +349,24 @@ class CodexSessionArchive:
         if self._promote_copied_prefix(store, parent):
             return True
         stream.seek(max(store.position('rollout'), 0))
+        observations = []
         while True:
             start = stream.tell()
             line = stream.readline()
             if not line.endswith(b'\n'):
+                store.stage_initial_observations(observations)
                 return False
             record = json.loads(line)
             event = self._rollout_event(store, record, start, 0)
-            store.stage_initial_observation(event, source='rollout', position=stream.tell())
+            observations.append({'event': event, 'source': 'rollout', 'position': stream.tell()})
+            if self.source_paths is None or len(observations) >= 256:
+                store.stage_initial_observations(observations)
+                observations.clear()
             payload = record.get('payload', {})
             if (record.get('type') == 'event_msg'
                     and payload.get('type') == 'thread_settings_applied'
                     and payload.get('thread_id') == self.session_id):
+                store.stage_initial_observations(observations)
                 return self._promote_copied_prefix(store, parent)
 
     def collect(self, rollout: Path) -> None:
@@ -416,6 +424,7 @@ class CodexSessionArchive:
                         if self.source_paths is None or store.next_seq:
                             raise
                         stream.seek(max(0, store.position('rollout')))
+                        observations = []
                         while True:
                             start = stream.tell()
                             line = stream.readline()
@@ -423,7 +432,11 @@ class CodexSessionArchive:
                                 break
                             event = self._rollout_event(store, json.loads(line), start, 0)
                             event['graphtraj']['missing'].append({'path': 'history_base', 'reason': str(error)})
-                            store.stage_initial_observation(event, source='rollout', position=stream.tell())
+                            observations.append({'event': event, 'source': 'rollout', 'position': stream.tell()})
+                            if len(observations) >= 256:
+                                store.stage_initial_observations(observations)
+                                observations.clear()
+                        store.stage_initial_observations(observations)
                         return
                 position = store.position('rollout')
                 if rollout.stat().st_size < position:

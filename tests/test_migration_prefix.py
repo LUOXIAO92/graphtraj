@@ -55,7 +55,7 @@ def test_public_prefix_preview_and_capture_do_not_write_originals(tmp_path: Path
     root, parent, content, calls = _project(tmp_path, monkeypatch)
     original = _snapshot(root)
     original_parent = parent.read_bytes()
-    preview = CliRunner().invoke(main, ['migration-prefix', '--session', 'main'])
+    preview = CliRunner().invoke(main, ['migration-prefix', '--expect-prefix', 'prefix', '3', str(len(content)), '--session', 'main'])
     assert preview.exit_code == 0, preview.output
     metadata = yaml.safe_load(preview.output)
     assert metadata['history_base']['thread_id'] == 'prefix'
@@ -63,27 +63,31 @@ def test_public_prefix_preview_and_capture_do_not_write_originals(tmp_path: Path
     assert metadata['source_agent'] is None and calls == ['main', 'prefix']
     assert 'inherited' not in preview.output and 'exact-ciphertext' not in preview.output
     destination = tmp_path / 'capture'
-    result = CliRunner().invoke(main, ['migration-prefix', '--session', 'main', '--capture', str(destination)])
+    result = CliRunner().invoke(main, ['migration-prefix', '--expect-prefix', 'prefix', '3', str(len(content)), '--session', 'main', '--capture', str(destination)])
     assert result.exit_code == 0, result.output
     saved = yaml.safe_load(result.output)
     assert saved['complete'] is True and saved['records'] == 3
     assert (destination / 'prefix.jsonl').read_bytes() == content
     assert _snapshot(root) == original and parent.read_bytes() == original_parent
     assert calls == ['main', 'prefix', 'main', 'prefix']
-    assert CliRunner().invoke(main, ['migration-prefix', '--session', 'unassociated']).exit_code != 0
+    assert CliRunner().invoke(main, ['migration-prefix', '--expect-prefix', 'prefix', '3', str(len(content)), '--session', 'unassociated']).exit_code != 0
     assert calls == ['main', 'prefix', 'main', 'prefix']
+    result = CliRunner().invoke(main, ['migration-prefix', '--session', 'main',
+        '--expect-prefix', 'different-source', '3', str(len(content))])
+    assert result.exit_code != 0 and calls[-1] == 'main'
+    assert calls.count('prefix') == 2
 
 
 def test_prefix_capture_refuses_identity_mismatch_and_partial_boundary(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A declared source does not authorize unrelated IDs, split records or project writes."""
     root, parent, content, calls = _project(tmp_path, monkeypatch)
     for destination in (root / 'nested', tmp_path):
-        result = CliRunner().invoke(main, ['migration-prefix', '--session', 'main', '--capture', str(destination)])
+        result = CliRunner().invoke(main, ['migration-prefix', '--expect-prefix', 'prefix', '3', str(len(content)), '--session', 'main', '--capture', str(destination)])
         assert result.exit_code != 0
     parent.write_bytes(content.replace(b'"prefix"', b'"others"', 1))
-    result = CliRunner().invoke(main, ['migration-prefix', '--session', 'main'])
+    result = CliRunner().invoke(main, ['migration-prefix', '--expect-prefix', 'prefix', '3', str(len(content)), '--session', 'main'])
     assert result.exit_code != 0 and 'does not identify' in result.output
     parent.write_bytes(content[:-1] + b'x')
     destination = tmp_path / 'broken'
-    result = CliRunner().invoke(main, ['migration-prefix', '--session', 'main', '--capture', str(destination)])
+    result = CliRunner().invoke(main, ['migration-prefix', '--expect-prefix', 'prefix', '3', str(len(content)), '--session', 'main', '--capture', str(destination)])
     assert result.exit_code != 0 and not destination.exists()

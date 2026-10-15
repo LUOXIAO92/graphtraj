@@ -4,7 +4,6 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
-import os
 from pathlib import Path
 import shutil
 
@@ -41,7 +40,13 @@ def declared_prefix(metadata: dict) -> dict:
     return {key: base[key] for key in ('thread_id', 'end_ordinal_exclusive', 'end_byte_offset')}
 
 
-def inspect_prefix(cwd: Path, session: str, *, capture: Path | None = None) -> dict:
+def inspect_prefix(
+    cwd: Path,
+    session: str,
+    expected: tuple[str, int, int],
+    *,
+    capture: Path | None = None,
+) -> dict:
     """Inspect two exact native identities; optionally capture only the declared bytes.
 
     The existing owning daemon supplies paths through metadata-only thread/read.
@@ -74,6 +79,8 @@ def inspect_prefix(cwd: Path, session: str, *, capture: Path | None = None) -> d
                 raise ValueError('Owning native host did not supply the Main source path.')
             metadata = _metadata(child_path, session)
             base = declared_prefix(metadata)
+            if tuple(base[key] for key in ('thread_id', 'end_ordinal_exclusive', 'end_byte_offset')) != expected:
+                raise ValueError('Main declared a different inherited prefix; no referenced source queried: ' + json.dumps(base))
             parent = await client.read_thread(base['thread_id'])
             source = Path(parent.get('path') or '')
             if parent.get('id') != base['thread_id'] or not source.is_absolute():

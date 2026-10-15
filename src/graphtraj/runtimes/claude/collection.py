@@ -121,7 +121,7 @@ def collect_transcript(
     child_id: str | None = None,
     source_path: Path | None = None,
 ) -> int:
-    """Read complete JSONL records once, committing each record and byte cursor.
+    """Read complete JSONL records once with durable event and byte cursors.
 
     An incomplete trailing line is replayed on the next hook. No directory scan
     or unrelated Session import is performed. Source paths are retained solely
@@ -129,6 +129,7 @@ def collect_transcript(
     """
     source = 'transcript:' + (str(source_path) if source_path is not None else str(path.resolve()))
     count = 0
+    observations = []
     with path.open('rb') as stream:
         stream.seek(max(0, store.position(source)))
         while line := stream.readline():
@@ -150,12 +151,17 @@ def collect_transcript(
             event = native_event(store, record, source + ':' + str(position))
             fork = fork_source(record, native) if not child_id else None
             if store.next_seq == 0:
-                store.stage_initial_observation(event, source=source, position=position)
+                observations.append({'event': event, 'source': source, 'position': position})
+                if source_path is None or len(observations) >= 256:
+                    store.stage_initial_observations(observations)
+                    observations.clear()
             elif fork:
                 raise ValueError('Late inherited history after canonical publication requires unresolved ancestry handling.')
             else:
                 store.append(event, source=source, position=position)
             count += 1
+    if observations:
+        store.stage_initial_observations(observations)
     return count
 
 

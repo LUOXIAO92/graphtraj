@@ -192,3 +192,51 @@ def test_snapshot_preserves_pi_parent_attachments_and_other_runtime_cursors(
     with SessionStore(session_path(state, 'dsh:d1'), readonly=True) as store:
         assert store.page()['events'][0]['data']['content'][0]['text'] == 'dsh-original'
         assert store.header['graphtraj']['projectId'] == str(origin)
+
+
+def test_referenced_forks_are_ordered_and_missing_parent_history_is_retained(
+    installed_commands: InstalledCommands, tmp_path: Path,
+) -> None:
+    """Import a known parent first; preserve child observations when its parent is unavailable."""
+    for available in (False, True):
+        origin = tmp_path / ('origin-' + str(available))
+        origin.mkdir()
+        _ticket_project(origin)
+        parent = tmp_path / ('parent-' + str(available) + '.jsonl')
+        child = tmp_path / ('child-' + str(available) + '.jsonl')
+        parent_records = [
+            {'type': 'session_meta', 'ordinal': 0, 'payload': {'id': 'p'}},
+            {'type': 'response_item', 'ordinal': 1, 'payload': {'text': 'parent-original'}},
+        ]
+        parent_bytes = ''.join(json.dumps(record) + '\n' for record in parent_records).encode()
+        parent.write_bytes(parent_bytes)
+        child_records = [
+            {'type': 'session_meta', 'ordinal': 2, 'payload': {'id': 'c', 'forked_from_id': 'p',
+             'history_base': {'thread_id': 'p', 'end_ordinal_exclusive': 2, 'end_byte_offset': len(parent_bytes)}}},
+            {'type': 'response_item', 'ordinal': 3, 'payload': {'encrypted_content': 'original-ciphertext'}},
+        ]
+        child.write_text(''.join(json.dumps(record) + '\n' for record in child_records))
+        values = [('a-child', 'c', child)] + ([('z-parent', 'p', parent)] if available else [])
+        for alias, session, path in values:
+            mapping = origin / '.graphtraj/runner/sessions' / alias / 'mapping.yml'
+            mapping.parent.mkdir(parents=True)
+            mapping.write_text(yaml.safe_dump({'alias': alias, 'session': session, 'runtime': 'codex',
+                                              'ticket_id': '2', 'trace_file': str(path)}))
+        copy = tmp_path / ('copy-' + str(available))
+        result = run_process([str(installed_commands.product), 'migrate-tickets', '--snapshot', str(copy)], cwd=origin)
+        assert result.returncode == 0, result.stderr
+        shutil.rmtree(origin)
+        parent.unlink()
+        child.unlink()
+        result = _migrate(installed_commands, copy)
+        assert result.returncode == 0, result.stderr
+        with SessionStore(session_path(copy / '.graphtraj/state', 'codex:c'), readonly=True) as store:
+            if available:
+                store.validate()
+                assert store.next_seq == 5 and store.pending() is None
+                assert store.page()['events'][2]['type'] == 'session/end-seed'
+            else:
+                assert store.next_seq == 0
+                pending = store.pending()['event']['data']['observations']
+                assert [item['event']['data']['record'] for item in pending] == child_records
+                assert any(gap['path'] == 'history_base' for gap in pending[0]['event']['graphtraj']['missing'])

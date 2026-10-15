@@ -149,6 +149,17 @@ def migrate_project(cwd: Path, *, preview: bool = False) -> dict[str, Any]:
     try:
         archived = archive_sources(state, project, sources, source_paths=source_map(backup, captured))
         native_sources = {item["resolved_source"] for item in sources if "resolved_source" in item}
+        if snapshot:
+            # A source may also have a retained in-tree copy. Preserve that raw
+            # record too; original absolute provenance is not its copied location.
+            for item in sources:
+                for name in ("source", "resolved_source"):
+                    if not item.get(name):
+                        continue
+                    original = Path(item[name])
+                    for old, copied in ((snapshot["state_source"], state), (snapshot["runner_source"], runner)):
+                        if original.is_relative_to(old):
+                            native_sources.add(str(copied / original.relative_to(old)))
         for root in (state, runner):
             if root.is_dir():
                 _convert_records(root, counts, native_sources)

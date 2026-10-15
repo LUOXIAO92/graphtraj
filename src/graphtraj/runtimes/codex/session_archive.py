@@ -61,6 +61,10 @@ def _attachments(store: SessionStore, value: object, path: str = '') -> list[dic
     return found
 
 
+class HistoryUnavailable(ValueError):
+    """The declared inherited prefix is not available in this project's archive."""
+
+
 class CodexSessionArchive:
     """Incrementally archive one trusted native Session, independently of Tasks.
 
@@ -237,10 +241,13 @@ class CodexSessionArchive:
         whichever records the parent has acquired since the fork. No Runtime
         Home search or unrelated Session import is authorized by the reference.
         """
-        if store.position('history-base') >= 0:
+        if store.position('history-base') >= base['end_byte_offset'] and store.next_seq:
             return
         cutoff = base['end_ordinal_exclusive']
-        with SessionStore(session_path(self.state, 'codex:' + base['thread_id']), readonly=True) as parent:
+        parent_path = session_path(self.state, 'codex:' + base['thread_id'])
+        if not parent_path.is_file():
+            raise HistoryUnavailable('Declared parent archive is unavailable in this project.')
+        with SessionStore(parent_path, readonly=True) as parent:
             owner = parent.header['graphtraj']
             if owner['projectId'] != self.project_id:
                 raise ValueError('Native inherited history belongs to another project.')
@@ -248,7 +255,7 @@ class CodexSessionArchive:
                 # A still-open Main may have flushed its terminal record after
                 # Stop. Refresh only this already-owned source, never scan Home.
                 source = owner['native'].get('sourcePath')
-                if source:
+                if source and (self.source_paths is None or source in self.source_paths):
                     CodexSessionArchive(self.state, self.project_id, owner['agentId'],
                                         owner['native']['sessionId'], source_paths=self.source_paths).collect(Path(source))
             events = []
@@ -260,7 +267,7 @@ class CodexSessionArchive:
                         continue
                     record = native_record(event)
                     if type(record.get('ordinal')) is not int:
-                        raise ValueError('Native inherited ordinal prefix is unavailable.')
+                        raise HistoryUnavailable('Native inherited ordinal prefix is unavailable.')
                     if record['ordinal'] >= cutoff:
                         continue
                     for attachment in event.get('graphtraj', {}).get('attachments', []):
@@ -274,12 +281,20 @@ class CodexSessionArchive:
                 after = page['after']
             events.sort(key=lambda event: native_record(event)['ordinal'])
             if [native_record(event)['ordinal'] for event in events] != list(range(cutoff)):
-                raise ValueError('Native inherited prefix has not been collected in this project.')
+                raise HistoryUnavailable('Native inherited prefix has not been collected in this project.')
             for seq, event in enumerate(events):
                 event['seq'] = seq
-        events.append({'type': 'session/end-seed', 'seq': len(events),
-                       'time': store.header['createdAt'], 'data': {'inherited': True}})
-        store.append_many(events, source='history-base', position=base['end_byte_offset'])
+        if store.pending() is not None:
+            inherited = []
+            for index, event in enumerate(events):
+                position = base['end_byte_offset'] if index == len(events) - 1 else index
+                store.stage_initial_observation(event, source='history-base', position=position)
+                inherited.append(('history-base', position))
+            store.finish_initial_collection(parent_session=store.header['parentSession'], inherited=inherited)
+        else:
+            events.append({'type': 'session/end-seed', 'seq': len(events),
+                           'time': store.header['createdAt'], 'data': {'inherited': True}})
+            store.append_many(events, source='history-base', position=base['end_byte_offset'])
 
     def _rollout_event(
         self,
@@ -395,7 +410,21 @@ class CodexSessionArchive:
                 if header['projectId'] != self.project_id or header['agentId'] != self.agent_id:
                     raise ValueError('Codex archive already belongs to another project or Agent.')
                 if metadata.get('forked_from_id') and metadata.get('history_base'):
-                    self._seed_reference(store, metadata['history_base'])
+                    try:
+                        self._seed_reference(store, metadata['history_base'])
+                    except HistoryUnavailable as error:
+                        if self.source_paths is None or store.next_seq:
+                            raise
+                        stream.seek(max(0, store.position('rollout')))
+                        while True:
+                            start = stream.tell()
+                            line = stream.readline()
+                            if not line.endswith(b'\n'):
+                                break
+                            event = self._rollout_event(store, json.loads(line), start, 0)
+                            event['graphtraj']['missing'].append({'path': 'history_base', 'reason': str(error)})
+                            store.stage_initial_observation(event, source='rollout', position=stream.tell())
+                        return
                 position = store.position('rollout')
                 if rollout.stat().st_size < position:
                     raise ValueError('Codex rollout was truncated before its committed cursor.')

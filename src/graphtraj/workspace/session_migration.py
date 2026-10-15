@@ -206,6 +206,47 @@ def _recorded_root_owners(binding: dict, records: dict[Path, dict], task_ids: se
     return owners
 
 
+def _source_order(sources: list[dict], source_paths: dict[str, Path] | None) -> list[dict]:
+    """Import explicitly referenced Codex parents before their children, without discovery."""
+    if source_paths is None:
+        return sources
+    positions = {(item.get('runtime'), item.get('session')): index for index, item in enumerate(sources)
+                 if item.get('session')}
+    parents = {}
+    for index, item in enumerate(sources):
+        path = source_paths.get(item.get('source'))
+        if item.get('runtime') != 'codex' or path is None or item.get('missing'):
+            continue
+        with path.open('rb') as stream:
+            first = stream.readline()
+        if not first.endswith(b'\n'):
+            continue
+        metadata = json.loads(first).get('payload', {})
+        base = metadata.get('history_base')
+        if isinstance(base, dict):
+            parent = positions.get(('codex', base.get('thread_id')))
+            if parent is not None:
+                parents[index] = parent
+    ordered, visited, visiting = [], set(), set()
+
+    def visit(index: int) -> None:
+        """Append each source after its explicit dependency exactly once."""
+        if index in visited:
+            return
+        if index in visiting:
+            raise ValueError('Native history references form a cycle.')
+        visiting.add(index)
+        if index in parents:
+            visit(parents[index])
+        visiting.remove(index)
+        visited.add(index)
+        ordered.append(sources[index])
+
+    for index in range(len(sources)):
+        visit(index)
+    return ordered
+
+
 def archive_sources(
     state: Path,
     project: Path,
@@ -222,62 +263,65 @@ def archive_sources(
     result = []
     parent_sources = {Path(item['resolved_source']) for item in sources
                       if item.get('runtime') == 'pi' and 'resolved_source' in item}
-    for item in sources:
+    for item in _source_order(sources, source_paths):
         if 'missing' in item or item.get('archive_only'):
             result.append(item)
             continue
         runtime, session = item['runtime'], item['session']
-        original = Path(item['source'])
-        provenance = Path(item.get('resolved_source', str(original)))
-        native = source_paths.get(str(original)) if source_paths is not None else original
-        if native is None:
-            result.append({**item, 'missing': 'Source bytes were not captured; original paths are not read.'})
-            continue
-        if runtime == 'codex':
-            from graphtraj.runtimes.codex.session_archive import CodexSessionArchive
+        try:
+            original = Path(item['source'])
+            provenance = Path(item.get('resolved_source', str(original)))
+            native = source_paths.get(str(original)) if source_paths is not None else original
+            if native is None:
+                result.append({**item, 'missing': 'Source bytes were not captured; original paths are not read.'})
+                continue
+            if runtime == 'codex':
+                from graphtraj.runtimes.codex.session_archive import CodexSessionArchive
 
-            CodexSessionArchive(state, str(project), item['agent'], session,
-                                tuple(item['task_ids']), source_paths=source_paths).collect(provenance)
-        elif runtime == 'pi':
-            from graphtraj.runtimes.pi.collector import PiCollector
+                CodexSessionArchive(state, str(project), item['agent'], session,
+                                    tuple(item['task_ids']), source_paths=source_paths).collect(provenance)
+            elif runtime == 'pi':
+                from graphtraj.runtimes.pi.collector import PiCollector
 
-            collector = PiCollector(state, native, session, project=str(project),
-                                    agent=item['agent'], source=item['kind'], tasks=item['task_ids'],
-                                    parent_sources=parent_sources, attachment_root=project, source_paths=source_paths)
-            collector.close()
-        elif runtime == 'dsh':
-            from graphtraj.runtimes.dsh.collection import collect
+                collector = PiCollector(state, native, session, project=str(project),
+                                        agent=item['agent'], source=item['kind'], tasks=item['task_ids'],
+                                        parent_sources=parent_sources, attachment_root=project, source_paths=source_paths)
+                collector.close()
+            elif runtime == 'dsh':
+                from graphtraj.runtimes.dsh.collection import collect
 
-            with native.open(encoding='utf-8') as stream:
-                header = json.loads(next(stream))
-                if header.get('id') != session:
-                    raise ValueError('DSH migration source belongs to another Session.')
-                records = [{'event': json.loads(line)} for line in stream]
-            origin, tasks = item['kind'], item['task_ids']
-            if item.get('archive'):
-                with SessionStore(session_path(state, runtime + ':' + session), readonly=True) as store:
-                    owner = store.header['graphtraj']
-                    origin, tasks = owner['source'], owner['taskIds']
-            collect(state, header, records, project_id=str(project), agent_id=item['agent'],
-                    task_ids=tasks, source=origin)
-        elif runtime == 'claude':
-            from graphtraj.runtimes.claude.collection import (
-                collect_transcript, finish_transcript_collection, open_archive,
-            )
+                with native.open(encoding='utf-8') as stream:
+                    header = json.loads(next(stream))
+                    if header.get('id') != session:
+                        raise ValueError('DSH migration source belongs to another Session.')
+                    records = [{'event': json.loads(line)} for line in stream]
+                origin, tasks = item['kind'], item['task_ids']
+                if item.get('archive'):
+                    with SessionStore(session_path(state, runtime + ':' + session), readonly=True) as store:
+                        owner = store.header['graphtraj']
+                        origin, tasks = owner['source'], owner['taskIds']
+                collect(state, header, records, project_id=str(project), agent_id=item['agent'],
+                        task_ids=tasks, source=origin)
+            elif runtime == 'claude':
+                from graphtraj.runtimes.claude.collection import (
+                    collect_transcript, finish_transcript_collection, open_archive,
+                )
 
-            with open_archive(state, project, session, item['agent'], source=item['kind'],
-                              task_ids=item['task_ids'], project_identity=str(project)) as store:
-                collect_transcript(store, native, source_path=provenance)
-                finish_transcript_collection(store, session, terminal=True)
-        else:
-            result.append({**item, 'missing': 'Unsupported historical Runtime; source retained unchanged.'})
-            continue
-        path = session_path(state, runtime + ':' + session)
-        if not path.exists():
-            result.append({**item, 'missing': 'No complete native header; source retained unchanged.'})
-            continue
-        with SessionStore(path) as store:
-            raw = store.copy_attachment(native)
-            result.append({**item, 'archive': str(path), 'original_bytes': raw,
-                           'events': store.next_seq, 'pending': store.pending() is not None})
+                with open_archive(state, project, session, item['agent'], source=item['kind'],
+                                  task_ids=item['task_ids'], project_identity=str(project)) as store:
+                    collect_transcript(store, native, source_path=provenance)
+                    finish_transcript_collection(store, session, terminal=True)
+            else:
+                result.append({**item, 'missing': 'Unsupported historical Runtime; source retained unchanged.'})
+                continue
+            path = session_path(state, runtime + ':' + session)
+            if not path.exists():
+                result.append({**item, 'missing': 'No complete native header; source retained unchanged.'})
+                continue
+            with SessionStore(path) as store:
+                raw = store.copy_attachment(native)
+                result.append({**item, 'archive': str(path), 'original_bytes': raw,
+                               'events': store.next_seq, 'pending': store.pending() is not None})
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            raise ValueError(f"Session {runtime}:{session}: {error}") from error
     return result

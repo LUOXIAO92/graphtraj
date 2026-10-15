@@ -131,3 +131,18 @@ def migration_prefix_command(
     except (OSError, ValueError, yaml.YAMLError, RunnerError) as error:
         raise click.ClickException(str(error)) from error
     click.echo(yaml.safe_dump(result, sort_keys=False), nl=False)
+
+
+@main.command("migration-mappings")
+@click.option("--file", "source", type=click.Path(path_type=Path, exists=True, dir_okay=False), required=True)
+@click.option("--evidence-ref", required=True)
+@click.option("--preview", is_flag=True)
+def migration_mappings_command(source: Path, evidence_ref: str, preview: bool) -> None:
+    """Adopt explicitly confirmed remote identities after Task-format migration."""
+    from graphtraj.workspace.migration_mappings import adopt_mappings
+
+    try:
+        result = adopt_mappings(Path.cwd(), source, evidence_ref, preview=preview)
+    except (OSError, ValueError, yaml.YAMLError) as error:
+        raise click.ClickException(str(error)) from error
+    click.echo(yaml.safe_dump(result, sort_keys=False), nl=False)

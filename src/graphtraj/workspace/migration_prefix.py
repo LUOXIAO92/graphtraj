@@ -289,7 +289,7 @@ def capture_prefix_chain(
                 source_reader = (open_physical_rollout(Path(connection['codex_home']), source)
                                  if retained is not None else source.open('rb'))
                 with source_reader as reader:
-                    line = reader.readline()
+                    line = reader.readline(base['end_byte_offset'])
                     record = json.loads(line)
                     header = record.get('payload', {})
                     first_ordinal = record.get('ordinal')
